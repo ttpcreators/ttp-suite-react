@@ -6,6 +6,7 @@ import { parseAmount, formatEuro, useAppState, type AppState } from "@/lib/appSt
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { EncryptedText } from "@/components/ui/encrypted-text";
 import ProgressMetricCard from "@/components/ui/progress-metric-card";
+import { LocationTag } from "@/components/ui/location-tag";
 
 const MONTH_NAMES = [
   "janv.", "févr.", "mars", "avr.", "mai", "juin",
@@ -33,7 +34,6 @@ type Data = {
 };
 
 const TODAY = new Date().toISOString().slice(0, 10);
-const MONTH = new Date().toLocaleDateString("fr-FR", { month: "long" }).toUpperCase();
 
 function evDate(e: Ev): string {
   if (e.date) return e.date;
@@ -228,10 +228,7 @@ export function Apercu() {
             <EncryptedText text="Aperçu financier" />
           </div>
         </div>
-        <div className="flex items-center gap-1.5 rounded-lg bg-surface px-3 py-2 text-[10px] font-semibold shadow-sm">
-          <span className="ttp-pulse h-[7px] w-[7px] rounded-full bg-signal" />
-          LIVE · {MONTH}
-        </div>
+        <LocationTag city="Lyon" country="France" timezone="CET" />
       </div>
 
       <ProgressMetricCard
