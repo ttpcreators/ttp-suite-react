@@ -5,6 +5,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { Sidebar } from "@/components/Sidebar";
 import { NAV, findItem, type NavItem, type ViewId } from "@/lib/nav";
 import { supabase } from "@/lib/supabase";
+import { Roster } from "@/views/Roster";
 
 function MobileMenu({
   items,
@@ -33,6 +34,10 @@ function MobileMenu({
 
 function ViewContent({ active }: { active: ViewId }) {
   const item = findItem(active);
+
+  if (active === "roster") {
+    return <Roster />;
+  }
 
   if (active === "apercu") {
     return (
