@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, LogOut } from "lucide-react";
 import { NAV, type ViewId } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
@@ -8,11 +8,13 @@ export function Sidebar({
   onSelect,
   dark,
   onToggleTheme,
+  onLogout,
 }: {
   active: ViewId;
   onSelect: (id: ViewId) => void;
   dark: boolean;
   onToggleTheme: () => void;
+  onLogout: () => void;
 }) {
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-border bg-card">
@@ -67,8 +69,8 @@ export function Sidebar({
         ))}
       </nav>
 
-      {/* theme toggle */}
-      <div className="border-t border-border p-3">
+      {/* theme toggle + logout */}
+      <div className="flex flex-col gap-0.5 border-t border-border p-3">
         <button
           type="button"
           onClick={onToggleTheme}
@@ -76,6 +78,14 @@ export function Sidebar({
         >
           {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           <span>{dark ? "Thème clair" : "Thème sombre"}</span>
+        </button>
+        <button
+          type="button"
+          onClick={onLogout}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <LogOut className="h-4 w-4" />
+          <span>Déconnexion</span>
         </button>
       </div>
     </aside>

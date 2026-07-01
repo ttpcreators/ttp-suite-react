@@ -1,11 +1,32 @@
-import { useEffect, useState } from "react";
-import { ChevronRight, Moon, Sun } from "lucide-react";
+import { useEffect, useState, type ComponentType } from "react";
+import { ChevronRight, Moon, Sun, Loader2 } from "lucide-react";
+import type { Session } from "@supabase/supabase-js";
 import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
-import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { Sidebar } from "@/components/Sidebar";
+import { Login } from "@/components/Login";
 import { NAV, findItem, type NavItem, type ViewId } from "@/lib/nav";
 import { supabase } from "@/lib/supabase";
 import { Roster } from "@/views/Roster";
+import { Apercu } from "@/views/Apercu";
+import { Facturation } from "@/views/Facturation";
+import { Briefs } from "@/views/Briefs";
+import { Todo } from "@/views/Todo";
+import { Planning } from "@/views/Planning";
+import { Documents } from "@/views/Documents";
+import { Contacts } from "@/views/Contacts";
+import { Prospection } from "@/views/Prospection";
+
+const VIEWS: Partial<Record<ViewId, ComponentType>> = {
+  apercu: Apercu,
+  facturation: Facturation,
+  roster: Roster,
+  briefs: Briefs,
+  todo: Todo,
+  planning: Planning,
+  documents: Documents,
+  contacts: Contacts,
+  prospection: Prospection,
+};
 
 function MobileMenu({
   items,
@@ -34,46 +55,9 @@ function MobileMenu({
 
 function ViewContent({ active }: { active: ViewId }) {
   const item = findItem(active);
+  const View = VIEWS[active];
 
-  if (active === "roster") {
-    return <Roster />;
-  }
-
-  if (active === "apercu") {
-    return (
-      <>
-        <div className="mb-8">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Badges de statut (animés — partout dans l'app)
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <AnimatedBadge status="success" size="sm">Actif</AnimatedBadge>
-            <AnimatedBadge status="warning" size="sm">En attente</AnimatedBadge>
-            <AnimatedBadge status="danger" size="sm">En retard</AnimatedBadge>
-            <AnimatedBadge status="neutral" size="sm">Brouillon</AnimatedBadge>
-            <AnimatedBadge status="info" size="sm">Validé</AnimatedBadge>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {["CA encaissé", "En attente", "Taux d'engagement", "Objectif"].map(
-            (label, i) => (
-              <div
-                key={label}
-                className="rounded-xl border border-border bg-card p-5 shadow-sm"
-              >
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {label}
-                </div>
-                <div className="mt-2 text-2xl font-bold tracking-tight">
-                  {["32 400 €", "8 200 €", "4,8 %", "88 %"][i]}
-                </div>
-              </div>
-            ),
-          )}
-        </div>
-      </>
-    );
-  }
+  if (View) return <View />;
 
   return (
     <div className="grid min-h-[40vh] place-items-center rounded-xl border border-dashed border-border bg-card/50">
@@ -91,22 +75,22 @@ function ViewContent({ active }: { active: ViewId }) {
 }
 
 export default function App() {
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [active, setActive] = useState<ViewId>("apercu");
   const [dark, setDark] = useState(false);
   const [mobileTab, setMobileTab] = useState<string | null>(null);
-  const [conn, setConn] = useState<"loading" | "ok" | "err">("loading");
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
   }, [dark]);
 
-  // Test réel de la connexion Supabase (vue publique du roster, accessible en anon)
+  // Session Supabase : bascule login <-> app
   useEffect(() => {
-    supabase
-      .from("public_roster")
-      .select("name")
-      .limit(1)
-      .then(({ error }) => setConn(error ? "err" : "ok"));
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) =>
+      setSession(s),
+    );
+    return () => sub.subscription.unsubscribe();
   }, []);
 
   const select = (id: ViewId) => {
@@ -114,6 +98,7 @@ export default function App() {
     setMobileTab(null);
   };
   const toggleTheme = () => setDark((d) => !d);
+  const logout = () => supabase.auth.signOut();
 
   const mobileItems = NAV.map((f) => ({
     id: f.id,
@@ -125,20 +110,27 @@ export default function App() {
   const title = findItem(active)?.label ?? "Aperçu";
   const family = NAV.find((f) => f.items.some((i) => i.id === active));
 
-  const connBadge =
-    conn === "loading" ? (
-      <AnimatedBadge status="loading" size="sm">Connexion…</AnimatedBadge>
-    ) : conn === "ok" ? (
-      <AnimatedBadge status="success" size="sm">Base connectée</AnimatedBadge>
-    ) : (
-      <AnimatedBadge status="danger" size="sm">Hors ligne</AnimatedBadge>
+  // --- écran de chargement / login ---
+  if (session === undefined) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
     );
+  }
+  if (!session) return <Login />;
 
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Desktop sidebar */}
       <div className="hidden md:block">
-        <Sidebar active={active} onSelect={select} dark={dark} onToggleTheme={toggleTheme} />
+        <Sidebar
+          active={active}
+          onSelect={select}
+          dark={dark}
+          onToggleTheme={toggleTheme}
+          onLogout={logout}
+        />
       </div>
 
       {/* Main column */}
@@ -159,7 +151,6 @@ export default function App() {
             <span className="font-medium">{title}</span>
           </div>
           <div className="flex items-center gap-2">
-            {connBadge}
             <button
               type="button"
               onClick={toggleTheme}
