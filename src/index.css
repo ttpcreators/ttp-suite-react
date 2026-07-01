@@ -23,6 +23,18 @@
   --border: #e4e4e7;
   --input: #e4e4e7;
   --ring: #16a34a;
+  /* Tokens fidèles à l'app d'origine */
+  --panel: #f4f4f5;
+  --surface: #ffffff;
+  --faint: #a1a1aa;
+  --rowhover: #f4f4f5;
+  --signal: #16a34a;
+  --signaltext: #15803d;
+  --signalsoft: #f0fdf4;
+  --indigo: #6366f1;
+  --amber: #f59e0b;
+  --cyan: #71717a;
+  --onsignal: #ffffff;
 }
 
 .dark {
@@ -32,8 +44,8 @@
   --card-foreground: #fafafa;
   --popover: #18181b;
   --popover-foreground: #fafafa;
-  --primary: #22c55e;
-  --primary-foreground: #052e16;
+  --primary: #16a34a;
+  --primary-foreground: #ffffff;
   --secondary: #27272a;
   --secondary-foreground: #fafafa;
   --muted: #27272a;
@@ -44,7 +56,19 @@
   --destructive-foreground: #ffffff;
   --border: #27272a;
   --input: #27272a;
-  --ring: #22c55e;
+  --ring: #16a34a;
+  /* Tokens fidèles à l'app d'origine (dark) */
+  --panel: #18181b;
+  --surface: #18181b;
+  --faint: #71717a;
+  --rowhover: #27272a;
+  --signal: #16a34a;
+  --signaltext: #4ade80;
+  --signalsoft: #052e16;
+  --indigo: #818cf8;
+  --amber: #fbbf24;
+  --cyan: #a1a1aa;
+  --onsignal: #ffffff;
 }
 
 @theme inline {
@@ -71,6 +95,17 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-panel: var(--panel);
+  --color-surface: var(--surface);
+  --color-faint: var(--faint);
+  --color-rowhover: var(--rowhover);
+  --color-signal: var(--signal);
+  --color-signaltext: var(--signaltext);
+  --color-signalsoft: var(--signalsoft);
+  --color-indigo: var(--indigo);
+  --color-amber: var(--amber);
+  --color-cyan: var(--cyan);
+  --color-onsignal: var(--onsignal);
 }
 
 * {
@@ -89,4 +124,32 @@ body {
   color: var(--foreground);
   font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Pastille pulsante des items de nav actifs (comme l'app d'origine) */
+@keyframes ttp-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.25;
+    transform: scale(0.6);
+  }
+}
+.ttp-pulse {
+  animation: ttp-pulse 1.6s infinite;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }

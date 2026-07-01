@@ -1,11 +1,12 @@
 import { useEffect, useState, type ComponentType } from "react";
-import { ChevronRight, Moon, Sun, Loader2 } from "lucide-react";
+import { ChevronRight, Moon, Sun, Loader2, Search } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
 import { Sidebar } from "@/components/Sidebar";
 import { Login } from "@/components/Login";
 import { NAV, findItem, type NavItem, type ViewId } from "@/lib/nav";
 import { supabase } from "@/lib/supabase";
+import { SearchContext } from "@/lib/search";
 import { Roster } from "@/views/Roster";
 import { Apercu } from "@/views/Apercu";
 import { Facturation } from "@/views/Facturation";
@@ -15,6 +16,8 @@ import { Planning } from "@/views/Planning";
 import { Documents } from "@/views/Documents";
 import { Contacts } from "@/views/Contacts";
 import { Prospection } from "@/views/Prospection";
+
+const BASE = import.meta.env.BASE_URL;
 
 const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   apercu: Apercu,
@@ -56,18 +59,16 @@ function MobileMenu({
 function ViewContent({ active }: { active: ViewId }) {
   const item = findItem(active);
   const View = VIEWS[active];
-
   if (View) return <View />;
-
   return (
-    <div className="grid min-h-[40vh] place-items-center rounded-xl border border-dashed border-border bg-card/50">
+    <div className="grid min-h-[40vh] place-items-center rounded-xl border border-dashed border-border bg-surface/50">
       <div className="text-center">
         {item && <item.icon className="mx-auto h-8 w-8 text-muted-foreground" />}
         <div className="mt-3 text-sm font-medium">
           {item?.label} — migration en cours
         </div>
         <div className="mt-1 text-xs text-muted-foreground">
-          Cette vue sera branchée sur tes vraies données à la prochaine phase.
+          Cette vue sera branchée sur tes vraies données très bientôt.
         </div>
       </div>
     </div>
@@ -79,12 +80,12 @@ export default function App() {
   const [active, setActive] = useState<ViewId>("apercu");
   const [dark, setDark] = useState(false);
   const [mobileTab, setMobileTab] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
   }, [dark]);
 
-  // Session Supabase : bascule login <-> app
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) =>
@@ -96,6 +97,7 @@ export default function App() {
   const select = (id: ViewId) => {
     setActive(id);
     setMobileTab(null);
+    setQuery("");
   };
   const toggleTheme = () => setDark((d) => !d);
   const logout = () => supabase.auth.signOut();
@@ -108,9 +110,7 @@ export default function App() {
   }));
 
   const title = findItem(active)?.label ?? "Aperçu";
-  const family = NAV.find((f) => f.items.some((i) => i.id === active));
 
-  // --- écran de chargement / login ---
   if (session === undefined) {
     return (
       <div className="grid min-h-screen place-items-center bg-background">
@@ -121,68 +121,85 @@ export default function App() {
   if (!session) return <Login />;
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* Desktop sidebar */}
-      <div className="hidden md:block">
-        <Sidebar
-          active={active}
-          onSelect={select}
-          dark={dark}
-          onToggleTheme={toggleTheme}
-          onLogout={logout}
-        />
-      </div>
+    <SearchContext.Provider value={{ query, setQuery }}>
+      <div className="h-screen bg-background p-2 md:p-[14px]">
+        <div className="flex h-full overflow-hidden rounded-[22px]">
+          {/* Desktop sidebar */}
+          <div className="hidden md:block">
+            <Sidebar active={active} onSelect={select} onLogout={logout} />
+          </div>
 
-      {/* Main column */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar */}
-        <header className="flex items-center justify-between border-b border-border px-5 py-3.5">
-          {/* mobile logo */}
-          <div className="flex items-center gap-3 md:hidden">
-            <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-              T
-            </div>
-            <span className="text-sm font-semibold">TTP Suite</span>
-          </div>
-          {/* desktop breadcrumb */}
-          <div className="hidden items-center gap-2 text-sm md:flex">
-            <span className="text-muted-foreground">{family?.label}</span>
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="font-medium">{title}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="grid h-9 w-9 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
-              aria-label="Basculer le thème"
-            >
-              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </button>
-          </div>
-        </header>
+          {/* Main panel */}
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] bg-panel">
+            {/* Top bar */}
+            <header className="flex flex-shrink-0 items-center gap-4 px-4 py-3.5 md:px-6">
+              {/* mobile logo */}
+              <div className="flex items-center gap-2 md:hidden">
+                <div className="h-8 w-8 overflow-hidden rounded-lg bg-[#14181E]">
+                  <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
+                </div>
+              </div>
 
-        {/* View */}
-        <main className="flex-1 overflow-y-auto px-5 py-6 pb-32 md:px-8 md:pb-8">
-          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-            {title}
-          </h1>
-          <div className="mt-6">
-            <ViewContent active={active} />
-          </div>
-        </main>
-      </div>
+              {/* search pill */}
+              <div className="relative min-w-0 flex-1 md:max-w-[340px]">
+                <div className="flex min-w-0 items-center gap-2.5 rounded-lg bg-surface px-4 py-2.5 shadow-sm">
+                  <Search className="h-4 w-4 shrink-0 text-faint" />
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Rechercher…"
+                    className="min-w-0 flex-1 border-none bg-transparent text-xs text-foreground outline-none placeholder:text-faint"
+                  />
+                </div>
+              </div>
 
-      {/* Mobile bottom nav */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center md:hidden">
-        <div className="pointer-events-auto">
-          <ExpandableTabs
-            items={mobileItems}
-            value={mobileTab}
-            onValueChange={setMobileTab}
-          />
+              {/* right cluster */}
+              <div className="ml-auto flex items-center gap-2.5">
+                <div className="hidden items-center gap-2.5 rounded-lg bg-surface py-1.5 pl-2 pr-3.5 shadow-sm sm:flex">
+                  <div className="h-8 w-8 overflow-hidden rounded-lg bg-[#14181E]">
+                    <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
+                  </div>
+                  <div className="leading-tight">
+                    <div className="whitespace-nowrap text-xs font-medium text-foreground">
+                      Marc &amp; Gianni
+                    </div>
+                    <div className="whitespace-nowrap text-[10px] text-faint">
+                      Direction · TTP
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className="grid h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"
+                  aria-label="Basculer le thème"
+                >
+                  {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </button>
+              </div>
+            </header>
+
+            {/* Content */}
+            <main className="flex-1 overflow-y-auto px-4 pb-28 pt-1.5 md:px-6 md:pb-7">
+              <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">
+                {title}
+              </h1>
+              <ViewContent active={active} />
+            </main>
+          </div>
+        </div>
+
+        {/* Mobile bottom nav */}
+        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center md:hidden">
+          <div className="pointer-events-auto">
+            <ExpandableTabs
+              items={mobileItems}
+              value={mobileTab}
+              onValueChange={setMobileTab}
+            />
+          </div>
         </div>
       </div>
-    </div>
+    </SearchContext.Provider>
   );
 }
