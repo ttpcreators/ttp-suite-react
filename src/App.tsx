@@ -10,7 +10,7 @@ import { Login } from "@/components/Login";
 import { NAV, findItem, type NavItem, type ViewId } from "@/lib/nav";
 import { supabase } from "@/lib/supabase";
 import { SearchContext } from "@/lib/search";
-import { Roster } from "@/views/Roster";
+import { RosterTabs } from "@/views/RosterTabs";
 import { Apercu } from "@/views/Apercu";
 import { Facturation } from "@/views/Facturation";
 import { Briefs } from "@/views/Briefs";
@@ -18,8 +18,14 @@ import { Todo } from "@/views/Todo";
 import { Planning } from "@/views/Planning";
 import { Documents } from "@/views/Documents";
 import { Contacts } from "@/views/Contacts";
+import { Contrats } from "@/views/Contrats";
 import { Prospection } from "@/views/Prospection";
 import { Acces } from "@/views/Acces";
+import { Objectifs } from "@/views/Objectifs";
+import { Debrief } from "@/views/Debrief";
+import { Checklist } from "@/views/Checklist";
+import { Mediakit } from "@/views/Mediakit";
+import { Templates } from "@/views/Templates";
 import { CreatorDetail } from "@/views/CreatorDetail";
 import { Portal } from "@/views/Portal";
 
@@ -33,8 +39,14 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   planning: Planning,
   documents: Documents,
   contacts: Contacts,
+  contrats: Contrats,
   prospection: Prospection,
   acces: Acces,
+  objectifs: Objectifs,
+  debrief: Debrief,
+  checklist: Checklist,
+  mediakit: Mediakit,
+  templates: Templates,
 };
 
 function MobileMenu({
@@ -70,7 +82,7 @@ function ViewContent({
   onOpenCreator: (name: string) => void;
 }) {
   const item = findItem(active);
-  if (active === "roster") return <Roster onOpen={onOpenCreator} />;
+  if (active === "roster") return <RosterTabs onOpen={onOpenCreator} />;
   const View = VIEWS[active];
   if (View) return <View />;
   return (

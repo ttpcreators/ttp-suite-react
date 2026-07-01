@@ -1,5 +1,6 @@
 import { type ReactNode } from "react";
 import { Plus, X } from "lucide-react";
+import { Select, SelectTrigger, SelectContent, SelectItem } from "./select";
 
 const inputCls =
   "w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15";
@@ -69,13 +70,16 @@ export function SelectField({
 }) {
   return (
     <Field label={label} className={className}>
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="h-[42px] w-full rounded-lg bg-surface" placeholder="Sélectionner…" />
+        <SelectContent>
+          {options.map((o, i) => (
+            <SelectItem key={o.value} index={i} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </Field>
   );
 }

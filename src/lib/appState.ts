@@ -49,6 +49,40 @@ export function invalidateAppState() {
 }
 
 /**
+ * Écrit une clé dans le blob __app_state__ (read-modify-write de tout le blob,
+ * comme l'ancienne app). Réservé à l'AGENCE (RLS). Renvoie true si OK.
+ */
+export async function saveAppStateKey(key: string, value: unknown): Promise<boolean> {
+  const { data } = await supabase
+    .from("module_rows")
+    .select("id,a")
+    .eq("module", "__app_state__")
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const row = data && (data[0] as { id: string; a: string } | undefined);
+  let obj: Record<string, unknown> = {};
+  if (row) {
+    try {
+      const parsed = JSON.parse(row.a);
+      if (parsed && typeof parsed === "object") obj = parsed as Record<string, unknown>;
+    } catch {
+      /* blob illisible → on repart d'un objet vide */
+    }
+  }
+  obj[key] = value;
+  const json = JSON.stringify(obj);
+  const res = row
+    ? await supabase.from("module_rows").update({ a: json }).eq("id", row.id)
+    : await supabase.from("module_rows").insert({ module: "__app_state__", a: json });
+  if (res.error) {
+    console.warn("[blob] save", key, res.error.message);
+    return false;
+  }
+  _cache = obj as AppState;
+  return true;
+}
+
+/**
  * Hook : sélectionne une tranche du blob d'état.
  * `select` est appelé une fois, au chargement.
  */
