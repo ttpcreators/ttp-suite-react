@@ -217,7 +217,23 @@ export function Login() {
       email: email.trim().toLowerCase(),
       password,
     });
-    if (error) setError("Identifiants incorrects.");
+    if (error) {
+      const m = (error.message || "").toLowerCase();
+      const status = (error as { status?: number }).status ?? 0;
+      if (
+        status === 402 ||
+        status >= 500 ||
+        m.includes("egress") ||
+        m.includes("restricted") ||
+        m.includes("quota") ||
+        m.includes("unavailable") ||
+        m.includes("failed to fetch")
+      ) {
+        setError("Service temporairement indisponible (Supabase). Réessaie dans un moment.");
+      } else {
+        setError("Identifiants incorrects.");
+      }
+    }
     setIsLoading(false);
   };
 
