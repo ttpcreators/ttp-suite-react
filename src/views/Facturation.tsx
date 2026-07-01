@@ -2,10 +2,20 @@ import { useEffect, useState } from "react";
 import { FileText, Eye, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
-import { cn } from "@/lib/utils";
+import { cn, titleCase } from "@/lib/utils";
 import { parseAmount, formatEuro } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import type { AnimatedBadgeStatus } from "@/components/ui/be-ui-animated-badge";
+import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
+import { toast } from "@/components/ui/toast";
+import {
+  AddButton,
+  InlineForm,
+  TextField,
+  SelectField,
+  DeleteButton,
+} from "@/components/ui/form";
+import { useCreators } from "@/lib/useCreators";
 
 type InvoiceStatus = "payee" | "attente" | "retard" | "brouillon";
 
@@ -30,10 +40,25 @@ const STATUS_META: Record<
   brouillon: { badge: "neutral", label: "Brouillon" },
 };
 
+const STATUS_OPTIONS: { value: InvoiceStatus; label: string }[] = [
+  { value: "brouillon", label: "Brouillon" },
+  { value: "attente", label: "En attente" },
+  { value: "payee", label: "Payée" },
+  { value: "retard", label: "En retard" },
+];
+
 export function Facturation() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState(false);
   const { query } = useSearch();
+  const creators = useCreators();
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [brand, setBrand] = useState("");
+  const [amountInput, setAmountInput] = useState("");
+  const [due, setDue] = useState("");
+  const [status, setStatus] = useState<InvoiceStatus>("brouillon");
+  const [creator, setCreator] = useState("");
 
   useEffect(() => {
     supabase
@@ -114,8 +139,85 @@ export function Facturation() {
     matchQuery(query, r.ref, r.party, r.creator, r.status),
   );
 
+  const submit = async () => {
+    const brandTrim = brand.trim();
+    if (!brandTrim) {
+      toast("Renseigne la marque");
+      return;
+    }
+    const amount =
+      (Number(String(amountInput).replace(/[^0-9]/g, "")) || 0).toLocaleString(
+        "fr-FR",
+      ) + " €";
+    const party = creator
+      ? `${brandTrim} × ${titleCase(creator).split(" ")[0]}`
+      : brandTrim;
+    const row = {
+      ref: `${new Date().getFullYear()}-${String(180 + rows.length).padStart(3, "0")}`,
+      party,
+      amount,
+      date: due.trim() || "—",
+      status,
+      creator: creator || null,
+      sort_order: nextOrder(rows),
+    };
+    const created = await dbInsert("invoices", row);
+    if (!created) {
+      toast("Erreur — réessaie");
+      return;
+    }
+    setRows([created as unknown as Row, ...rows]);
+    toast("Facture ajoutée ✓");
+    setFormOpen(false);
+    setBrand("");
+    setAmountInput("");
+    setDue("");
+    setStatus("brouillon");
+    setCreator("");
+  };
+
   return (
     <>
+      {/* Barre d'en-tête */}
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="text-sm text-muted-foreground">
+          {rows.length} facture{rows.length > 1 ? "s" : ""}
+        </div>
+        <AddButton label="Facture" onClick={() => setFormOpen(true)} />
+      </div>
+
+      {/* Formulaire d'ajout */}
+      <InlineForm
+        open={formOpen}
+        title="Nouvelle facture"
+        onClose={() => setFormOpen(false)}
+        onSubmit={submit}
+      >
+        <TextField label="Marque" value={brand} onChange={setBrand} />
+        <TextField
+          label="Montant"
+          value={amountInput}
+          onChange={setAmountInput}
+          placeholder="ex 3000"
+        />
+        <TextField label="Échéance" value={due} onChange={setDue} />
+        <SelectField
+          label="Statut"
+          value={status}
+          onChange={(v) => setStatus(v as InvoiceStatus)}
+          options={STATUS_OPTIONS}
+        />
+        <SelectField
+          label="Créateur"
+          value={creator}
+          onChange={setCreator}
+          options={[
+            { value: "", label: "—" },
+            ...creators.map((c) => ({ value: c.name, label: c.name })),
+          ]}
+        />
+      </InlineForm>
+
       {/* Cartes de totaux */}
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {cards.map((c) => (
@@ -153,7 +255,7 @@ export function Facturation() {
               Aucune facture
             </div>
             <div className="mt-1.5 text-xs text-faint">
-              Crée ta première facture avec « + Nouvelle facture ».
+              Crée ta première facture avec « + Facture ».
             </div>
           </div>
         ) : query.trim() && filtered.length === 0 ? (
@@ -210,6 +312,14 @@ export function Facturation() {
                       <Download className="h-3.5 w-3.5" />
                     </button>
                   </span>
+                  <DeleteButton
+                    onClick={async () => {
+                      if (await dbDelete("invoices", r.id)) {
+                        setRows(rows.filter((x) => x.id !== r.id));
+                        toast("Supprimé");
+                      }
+                    }}
+                  />
                 </span>
               </div>
             );

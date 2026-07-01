@@ -3,8 +3,12 @@ import { supabase } from "@/lib/supabase";
 import { cn, titleCase, initials } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
+import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
+import { toast } from "@/components/ui/toast";
+import { AddButton, InlineForm, TextField, DeleteButton } from "@/components/ui/form";
 
 type CreatorRow = {
+  id: string;
   name: string;
   handle: string | null;
   niche: string | null;
@@ -18,6 +22,7 @@ type CreatorRow = {
 };
 
 type Creator = {
+  id: string;
   name: string;
   handle: string;
   niche: string;
@@ -27,10 +32,12 @@ type Creator = {
   ca: string;
   status: string;
   photo: string;
+  sort_order: number | null;
 };
 
 function mapCreator(r: CreatorRow): Creator {
   return {
+    id: r.id,
     name: r.name,
     handle: r.handle ?? "",
     niche: r.niche ?? "",
@@ -40,6 +47,7 @@ function mapCreator(r: CreatorRow): Creator {
     ca: r.ca ?? "—",
     status: (r.status ?? "actif").toLowerCase(),
     photo: r.photo_url ?? "",
+    sort_order: r.sort_order,
   };
 }
 
@@ -49,10 +57,15 @@ const STATUS_LABEL: Record<string, string> = {
   pause: "PAUSE",
 };
 
-export function Roster() {
+export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
   const [rows, setRows] = useState<Creator[] | null>(null);
   const [error, setError] = useState(false);
   const { query } = useSearch();
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [handle, setHandle] = useState("");
+  const [niche, setNiche] = useState("");
 
   useEffect(() => {
     supabase
@@ -83,19 +96,62 @@ export function Roster() {
     );
   }
 
+  const submit = async () => {
+    if (!name.trim()) {
+      toast("Renseigne le nom du créateur");
+      return;
+    }
+    const row = {
+      name: name.trim(),
+      handle: handle.trim() || null,
+      niche: niche.trim() || null,
+      sort_order: nextOrder(rows),
+    };
+    const created = await dbInsert("creators", row);
+    if (!created) {
+      toast("Erreur — réessaie");
+      return;
+    }
+    setRows([mapCreator(created as unknown as CreatorRow), ...rows]);
+    toast("Créateur ajouté ✓");
+    setFormOpen(false);
+    setName("");
+    setHandle("");
+    setNiche("");
+  };
+
   const filtered = rows.filter((c) =>
     matchQuery(query, c.name, c.handle, c.niche, c.platform),
   );
 
   const cols =
-    "grid-cols-[2.4fr_1fr_0.9fr_0.8fr_1.1fr_0.9fr] gap-3";
+    "grid-cols-[2.4fr_1fr_0.9fr_0.8fr_1.1fr_0.9fr_auto] gap-3";
 
   return (
     <>
-      <div className="mb-4 text-sm text-muted-foreground">
-        {rows.length} créateur{rows.length > 1 ? "s" : ""} représenté
-        {rows.length > 1 ? "s" : ""}
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="text-sm text-muted-foreground">
+          {rows.length} créateur{rows.length > 1 ? "s" : ""} représenté
+          {rows.length > 1 ? "s" : ""}
+        </div>
+        <AddButton label="Créateur" onClick={() => setFormOpen(true)} />
       </div>
+
+      <InlineForm
+        open={formOpen}
+        title="Nouveau créateur"
+        onClose={() => setFormOpen(false)}
+        onSubmit={submit}
+      >
+        <TextField label="Nom" value={name} onChange={setName} />
+        <TextField
+          label="Handle"
+          value={handle}
+          onChange={setHandle}
+          placeholder="@pseudo"
+        />
+        <TextField label="Niche" value={niche} onChange={setNiche} />
+      </InlineForm>
 
       {query.trim() && filtered.length === 0 ? (
         <div className="rounded-xl border border-border bg-card shadow-sm">
@@ -118,6 +174,7 @@ export function Roster() {
             <span className="text-right">ER</span>
             <span className="text-right">CA · Mois</span>
             <span className="text-right">Statut</span>
+            <span />
           </div>
 
           {filtered.map((c) => {
@@ -130,9 +187,10 @@ export function Roster() {
                   : "success";
             return (
               <div
-                key={c.name}
+                key={c.id}
+                onClick={() => onOpen?.(c.name)}
                 className={cn(
-                  "rounded-xl px-4 py-2.5 transition-colors hover:bg-rowhover",
+                  "cursor-pointer rounded-xl px-4 py-2.5 transition-colors hover:bg-rowhover",
                   "flex items-center gap-3 md:grid",
                   cols,
                 )}
@@ -188,6 +246,18 @@ export function Roster() {
                       {titleCase(label.toLowerCase())}
                     </AnimatedBadge>
                   </div>
+                </div>
+
+                {/* Action supprimer */}
+                <div className="flex shrink-0 items-center justify-end md:col-start-7">
+                  <DeleteButton
+                    onClick={async () => {
+                      if (await dbDelete("creators", c.id)) {
+                        setRows(rows.filter((r) => r.id !== c.id));
+                        toast("Supprimé");
+                      }
+                    }}
+                  />
                 </div>
               </div>
             );

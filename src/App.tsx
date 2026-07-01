@@ -4,6 +4,7 @@ import type { Session } from "@supabase/supabase-js";
 import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
 import { GooeyInput } from "@/components/ui/gooey-input";
 import { EncryptedText } from "@/components/ui/encrypted-text";
+import { Toaster } from "@/components/ui/toast";
 import { Sidebar } from "@/components/Sidebar";
 import { Login } from "@/components/Login";
 import { NAV, findItem, type NavItem, type ViewId } from "@/lib/nav";
@@ -18,19 +19,22 @@ import { Planning } from "@/views/Planning";
 import { Documents } from "@/views/Documents";
 import { Contacts } from "@/views/Contacts";
 import { Prospection } from "@/views/Prospection";
+import { Acces } from "@/views/Acces";
+import { CreatorDetail } from "@/views/CreatorDetail";
+import { Portal } from "@/views/Portal";
 
 const BASE = import.meta.env.BASE_URL;
 
 const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   apercu: Apercu,
   facturation: Facturation,
-  roster: Roster,
   briefs: Briefs,
   todo: Todo,
   planning: Planning,
   documents: Documents,
   contacts: Contacts,
   prospection: Prospection,
+  acces: Acces,
 };
 
 function MobileMenu({
@@ -58,8 +62,15 @@ function MobileMenu({
   );
 }
 
-function ViewContent({ active }: { active: ViewId }) {
+function ViewContent({
+  active,
+  onOpenCreator,
+}: {
+  active: ViewId;
+  onOpenCreator: (name: string) => void;
+}) {
   const item = findItem(active);
+  if (active === "roster") return <Roster onOpen={onOpenCreator} />;
   const View = VIEWS[active];
   if (View) return <View />;
   return (
@@ -83,6 +94,9 @@ export default function App() {
   const [dark, setDark] = useState(false);
   const [mobileTab, setMobileTab] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [detailCreator, setDetailCreator] = useState<string | null>(null);
+  const [space, setSpace] = useState<"agency" | "portal">("agency");
+  const [portalCreator, setPortalCreator] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -100,9 +114,21 @@ export default function App() {
     setActive(id);
     setMobileTab(null);
     setQuery("");
+    setDetailCreator(null);
+    setSpace("agency");
   };
   const toggleTheme = () => setDark((d) => !d);
   const logout = () => supabase.auth.signOut();
+  const openDetail = (name: string) => setDetailCreator(name);
+  const openPortal = (name: string) => {
+    setPortalCreator(name);
+    setDetailCreator(null);
+    setSpace("portal");
+  };
+  const changeSpace = (s: "agency" | "portal") => {
+    setSpace(s);
+    setDetailCreator(null);
+  };
 
   const mobileItems = NAV.map((f) => ({
     id: f.id,
@@ -128,7 +154,13 @@ export default function App() {
         <div className="flex h-full overflow-hidden rounded-[22px]">
           {/* Desktop sidebar */}
           <div className="hidden h-full md:block">
-            <Sidebar active={active} onSelect={select} onLogout={logout} />
+            <Sidebar
+              active={active}
+              onSelect={select}
+              onLogout={logout}
+              space={space}
+              onSpaceChange={changeSpace}
+            />
           </div>
 
           {/* Main panel */}
@@ -178,12 +210,28 @@ export default function App() {
 
             {/* Content */}
             <main className="flex-1 overflow-y-auto px-4 pb-28 pt-1.5 md:px-6 md:pb-7">
-              {active !== "apercu" && (
-                <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">
-                  <EncryptedText key={active} text={title} />
-                </h1>
+              {space === "portal" ? (
+                <Portal
+                  creator={portalCreator}
+                  onPick={setPortalCreator}
+                  onExit={() => setSpace("agency")}
+                />
+              ) : detailCreator ? (
+                <CreatorDetail
+                  name={detailCreator}
+                  onBack={() => setDetailCreator(null)}
+                  onOpenPortal={openPortal}
+                />
+              ) : (
+                <>
+                  {active !== "apercu" && (
+                    <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">
+                      <EncryptedText key={active} text={title} />
+                    </h1>
+                  )}
+                  <ViewContent active={active} onOpenCreator={openDetail} />
+                </>
               )}
-              <ViewContent active={active} />
             </main>
           </div>
         </div>
@@ -199,6 +247,7 @@ export default function App() {
           </div>
         </div>
       </div>
+      <Toaster />
     </SearchContext.Provider>
   );
 }

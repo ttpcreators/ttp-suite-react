@@ -2,6 +2,10 @@ import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
+import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
+import { toast } from "@/components/ui/toast";
+import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/components/ui/form";
+import { useCreators } from "@/lib/useCreators";
 import { useEffect, useMemo, useState } from "react";
 import { Calendar, Clock } from "lucide-react";
 
@@ -28,6 +32,16 @@ const EVENT_TYPES: Record<string, { label: string; tone: EventTone }> = {
   voyage: { label: "Voyage", tone: "cyan" },
   deadline: { label: "Deadline", tone: "cyan" },
 };
+
+const TYPE_OPTIONS = [
+  { value: "call", label: "Call" },
+  { value: "reunion", label: "Réunion" },
+  { value: "collab", label: "Collab" },
+  { value: "shoot", label: "Shoot" },
+  { value: "event", label: "Event" },
+  { value: "voyage", label: "Voyage" },
+  { value: "deadline", label: "Deadline" },
+];
 
 const TONE_DOT: Record<EventTone, string> = {
   indigo: "bg-indigo",
@@ -72,6 +86,14 @@ export function Planning() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<boolean>(false);
   const { query } = useSearch();
+  const creators = useCreators();
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [type, setType] = useState("call");
+  const [who, setWho] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -98,6 +120,38 @@ export function Planning() {
       active = false;
     };
   }, []);
+
+  const submit = async () => {
+    if (!title.trim()) {
+      toast("Renseigne le titre");
+      return;
+    }
+    const row = {
+      day: Number((date || "").split("-")[2]) || 1,
+      date: date || null,
+      time: time || "—",
+      title: title.trim(),
+      type,
+      who: who || null,
+      sort_order: nextOrder(rows ?? []),
+    };
+    const created = await dbInsert("events", row);
+    if (!created) {
+      toast("Erreur — réessaie");
+      return;
+    }
+    const next = [created as unknown as Row, ...(rows ?? [])].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
+    setRows(next);
+    toast("Événement ajouté ✓");
+    setFormOpen(false);
+    setTitle("");
+    setDate("");
+    setTime("");
+    setType("call");
+    setWho("");
+  };
 
   const filtered = (rows ?? []).filter((row) =>
     matchQuery(query, row.title, row.who, row.type),
@@ -151,6 +205,37 @@ export function Planning() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Header bar */}
+      <div className="mb-0 flex items-center justify-between gap-3">
+        <div className="text-sm text-muted-foreground">
+          {rows === null
+            ? "Chargement…"
+            : `${rows.length} événement${rows.length > 1 ? "s" : ""} à venir`}
+        </div>
+        <AddButton label="Événement" onClick={() => setFormOpen(true)} />
+      </div>
+
+      <InlineForm
+        open={formOpen}
+        title="Nouvel événement"
+        onClose={() => setFormOpen(false)}
+        onSubmit={submit}
+      >
+        <TextField label="Titre" value={title} onChange={setTitle} placeholder="Titre" />
+        <TextField label="Date" value={date} onChange={setDate} placeholder="AAAA-MM-JJ" />
+        <TextField label="Heure" value={time} onChange={setTime} placeholder="14:30" />
+        <SelectField label="Type" value={type} onChange={setType} options={TYPE_OPTIONS} />
+        <SelectField
+          label="Avec qui"
+          value={who}
+          onChange={setWho}
+          options={[
+            { value: "", label: "—" },
+            ...creators.map((c) => ({ value: c.name, label: c.name })),
+          ]}
+        />
+      </InlineForm>
+
       {/* Calendar grid */}
       <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
         <div className="mb-4 flex items-center gap-2">
@@ -299,6 +384,16 @@ export function Planning() {
                   <AnimatedBadge status={TONE_STATUS[meta.tone]} size="sm">
                     {meta.label}
                   </AnimatedBadge>
+
+                  {/* Delete */}
+                  <DeleteButton
+                    onClick={async () => {
+                      if (await dbDelete("events", String(row.id))) {
+                        setRows((rows ?? []).filter((r) => r.id !== row.id));
+                        toast("Supprimé");
+                      }
+                    }}
+                  />
                 </li>
               );
             })}

@@ -9,10 +9,14 @@ export function Sidebar({
   active,
   onSelect,
   onLogout,
+  space,
+  onSpaceChange,
 }: {
   active: ViewId;
   onSelect: (id: ViewId) => void;
   onLogout: () => void;
+  space: "agency" | "portal";
+  onSpaceChange: (s: "agency" | "portal") => void;
 }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggle = (id: string) =>
@@ -33,12 +37,30 @@ export function Sidebar({
 
       {/* space switch */}
       <div className="mx-[6px] mb-[6px] flex rounded-[11px] bg-panel p-[3px]">
-        <div className="flex-1 rounded-[8px] bg-surface py-2 text-center text-[10px] font-semibold tracking-[.5px] shadow-sm">
+        <button
+          type="button"
+          onClick={() => onSpaceChange("agency")}
+          className={cn(
+            "flex-1 rounded-[8px] py-2 text-center text-[10px] font-semibold tracking-[.5px] transition-colors",
+            space === "agency"
+              ? "bg-surface text-foreground shadow-sm"
+              : "text-faint hover:text-foreground",
+          )}
+        >
           AGENCE
-        </div>
-        <div className="flex-1 cursor-pointer rounded-[8px] py-2 text-center text-[10px] font-semibold tracking-[.5px] text-faint transition-colors hover:text-foreground">
+        </button>
+        <button
+          type="button"
+          onClick={() => onSpaceChange("portal")}
+          className={cn(
+            "flex-1 rounded-[8px] py-2 text-center text-[10px] font-semibold tracking-[.5px] transition-colors",
+            space === "portal"
+              ? "bg-surface text-foreground shadow-sm"
+              : "text-faint hover:text-foreground",
+          )}
+        >
           CRÉATEURS
-        </div>
+        </button>
       </div>
 
       {/* sections + items */}
