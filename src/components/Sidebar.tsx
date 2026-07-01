@@ -19,7 +19,7 @@ export function Sidebar({
     setCollapsed((c) => ({ ...c, [id]: !c[id] }));
 
   return (
-    <aside className="flex w-[236px] shrink-0 flex-col pb-4 pl-[18px] pr-[10px] pt-2">
+    <aside className="flex h-full w-[236px] shrink-0 flex-col pb-4 pl-[18px] pr-[10px] pt-2">
       {/* logo */}
       <div className="flex items-center gap-[11px] px-2 py-[14px]">
         <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-[#14181E]">

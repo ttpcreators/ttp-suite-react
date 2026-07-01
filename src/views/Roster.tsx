@@ -14,7 +14,6 @@ type CreatorRow = {
   ca: string | null;
   status: string | null;
   photo_url: string | null;
-  photoUrl: string | null;
   sort_order: number | null;
 };
 
@@ -40,7 +39,7 @@ function mapCreator(r: CreatorRow): Creator {
     er: r.er ?? "—",
     ca: r.ca ?? "—",
     status: (r.status ?? "actif").toLowerCase(),
-    photo: r.photo_url ?? r.photoUrl ?? "",
+    photo: r.photo_url ?? "",
   };
 }
 

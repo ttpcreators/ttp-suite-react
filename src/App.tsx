@@ -126,7 +126,7 @@ export default function App() {
       <div className="h-screen bg-background p-2 md:p-[14px]">
         <div className="flex h-full overflow-hidden rounded-[22px]">
           {/* Desktop sidebar */}
-          <div className="hidden md:block">
+          <div className="hidden h-full md:block">
             <Sidebar active={active} onSelect={select} onLogout={logout} />
           </div>
 
@@ -177,9 +177,11 @@ export default function App() {
 
             {/* Content */}
             <main className="flex-1 overflow-y-auto px-4 pb-28 pt-1.5 md:px-6 md:pb-7">
-              <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">
-                {title}
-              </h1>
+              {active !== "apercu" && (
+                <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">
+                  {title}
+                </h1>
+              )}
               <ViewContent active={active} />
             </main>
           </div>
