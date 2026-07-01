@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { EncryptedText } from "@/components/ui/encrypted-text";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -112,7 +113,7 @@ export function Login() {
             </div>
 
             <h1 className="mb-[28px] text-[52px] font-light leading-none tracking-[-1.5px]">
-              Connexion
+              <EncryptedText text="Connexion" />
             </h1>
 
             <div className="flex flex-col gap-[30px] sm:flex-row">

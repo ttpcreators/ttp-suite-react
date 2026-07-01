@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { titleCase, initials } from "@/lib/utils";
 import { parseAmount, formatEuro, useAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
+import { EncryptedText } from "@/components/ui/encrypted-text";
 
 type Invoice = { ref: string; party: string; amount: string; date: string; status: string; creator: string | null };
 type Ev = { date: string | null; day: number | null; time: string | null; title: string; type: string; who: string | null };
@@ -198,8 +199,12 @@ export function Apercu() {
     <div>
       <div className="mb-5 flex items-start justify-between">
         <div>
-          <div className="mb-1.5 text-sm text-foreground">Hello Marc ✌️</div>
-          <div className="text-[26px] font-semibold tracking-tight md:text-[30px]">Aperçu financier</div>
+          <div className="mb-1.5 text-sm text-foreground">
+            <EncryptedText text="Hello Marc" /> ✌️
+          </div>
+          <div className="text-[26px] font-semibold tracking-tight md:text-[30px]">
+            <EncryptedText text="Aperçu financier" />
+          </div>
         </div>
         <div className="flex items-center gap-1.5 rounded-lg bg-surface px-3 py-2 text-[10px] font-semibold shadow-sm">
           <span className="ttp-pulse h-[7px] w-[7px] rounded-full bg-signal" />

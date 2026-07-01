@@ -3,6 +3,7 @@ import { ChevronRight, Moon, Sun, Loader2 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
 import { GooeyInput } from "@/components/ui/gooey-input";
+import { EncryptedText } from "@/components/ui/encrypted-text";
 import { Sidebar } from "@/components/Sidebar";
 import { Login } from "@/components/Login";
 import { NAV, findItem, type NavItem, type ViewId } from "@/lib/nav";
@@ -179,7 +180,7 @@ export default function App() {
             <main className="flex-1 overflow-y-auto px-4 pb-28 pt-1.5 md:px-6 md:pb-7">
               {active !== "apercu" && (
                 <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">
-                  {title}
+                  <EncryptedText key={active} text={title} />
                 </h1>
               )}
               <ViewContent active={active} />
