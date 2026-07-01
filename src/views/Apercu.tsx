@@ -12,9 +12,12 @@ const MONTH_NAMES = [
   "janv.", "févr.", "mars", "avr.", "mai", "juin",
   "juil.", "août", "sept.", "oct.", "nov.", "déc.",
 ];
-const monthLabel = (ym: string) => {
-  const [y, mo] = ym.split("-");
-  return `${MONTH_NAMES[Number(mo) - 1] ?? mo} ${y}`;
+const fmtInvDate = (dstr: string) => {
+  const full = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dstr || "");
+  if (full) return `${full[3]} ${MONTH_NAMES[Number(full[2]) - 1] ?? full[2]} ${full[1]}`;
+  const ym = /^(\d{4})-(\d{2})$/.exec(dstr || "");
+  if (ym) return `${MONTH_NAMES[Number(ym[2]) - 1] ?? ym[2]} ${ym[1]}`;
+  return dstr;
 };
 
 type Invoice = { ref: string; party: string; amount: string; date: string; status: string; creator: string | null };
@@ -205,16 +208,19 @@ export function Apercu() {
 
   const recent = d.invoices.slice(0, 5);
 
-  const monthly = (() => {
-    const map = new Map<string, number>();
-    for (const inv of d.invoices) {
-      const m = (inv.date || "").slice(0, 7);
-      if (!/^\d{4}-\d{2}$/.test(m)) continue;
-      map.set(m, (map.get(m) || 0) + parseAmount(inv.amount));
-    }
-    return [...map.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([m, v]) => ({ value: v, date: m }));
+  // CA cumulé, facture par facture (trié par date d'échéance si dispo)
+  const caSeries = (() => {
+    const sorted = d.invoices
+      .filter((inv) => parseAmount(inv.amount) > 0)
+      .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    let cum = 0;
+    return sorted.map((inv, i) => {
+      cum += parseAmount(inv.amount);
+      return {
+        value: cum,
+        date: inv.date && inv.date !== "—" ? inv.date : `Facture ${i + 1}`,
+      };
+    });
   })();
 
   return (
@@ -232,15 +238,15 @@ export function Apercu() {
       </div>
 
       <ProgressMetricCard
-        title="Chiffre d'affaires facturé"
-        data={monthly}
+        title="Chiffre d'affaires cumulé"
+        data={caSeries}
         accent="emerald"
         size="sm"
         valueFormatter={(n) => formatEuro(n)}
-        dateFormatter={monthLabel}
+        dateFormatter={fmtInvDate}
         periodOptions={[
-          { label: "6 mois", points: 6 },
-          { label: "12 mois", points: 12 },
+          { label: "10 dernières", points: 10 },
+          { label: "30 dernières", points: 30 },
           { label: "Tout" },
         ]}
         period="Tout"

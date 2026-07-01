@@ -17,6 +17,34 @@ import {
 } from "@/components/ui/form";
 import { useCreators } from "@/lib/useCreators";
 
+const esc = (s: unknown) =>
+  String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c] ?? c);
+
+function invoiceHTML(
+  r: { ref: string; party: string; amount: string; date: string; creator: string | null },
+  statusLabel: string,
+): string {
+  const today = new Date().toLocaleDateString("fr-FR");
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Facture ${esc(r.ref)}</title>
+<style>*{box-sizing:border-box}body{font-family:'Inter',-apple-system,Arial,sans-serif;color:#18181b;max-width:720px;margin:0 auto;padding:48px 28px;background:#fff}
+.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #16a34a;padding-bottom:18px;margin-bottom:8px}
+h1{font-size:30px;letter-spacing:-1px;margin:0}.muted{color:#71717a;font-size:13px;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin-top:26px}th,td{padding:12px 0;border-bottom:1px solid #e4e4e7;text-align:left;font-size:14px}
+th{color:#71717a;font-weight:600;width:180px}.badge{display:inline-block;padding:5px 12px;border-radius:20px;background:#f0fdf4;color:#15803d;font-size:11px;font-weight:700}
+.total{margin-top:30px;text-align:right;font-size:13px;color:#71717a}.total b{display:block;font-size:30px;letter-spacing:-1px;color:#18181b;margin-top:4px}
+.foot{margin-top:48px;font-size:11px;color:#a1a1aa;border-top:1px solid #e4e4e7;padding-top:16px}</style></head><body>
+<div class="head"><div><h1>FACTURE</h1><div class="muted">Réf. ${esc(r.ref)}</div></div>
+<div style="text-align:right"><strong style="font-size:15px">TTP Creators</strong><div class="muted">Lyon · France<br>partnerships@ttpcreators.pro</div></div></div>
+<table><tr><th>Client</th><td>${esc(r.party)}</td></tr>
+${r.creator ? `<tr><th>Créateur</th><td>${esc(titleCase(r.creator))}</td></tr>` : ""}
+<tr><th>Date d'émission</th><td>${today}</td></tr>
+<tr><th>Échéance</th><td>${esc(r.date)}</td></tr>
+<tr><th>Statut</th><td><span class="badge">${esc(statusLabel)}</span></td></tr></table>
+<div class="total">Montant total<b>${esc(r.amount)}</b></div>
+<div class="foot">Document généré par TTP Suite · TVA non applicable, art. 293 B du CGI · Paiement à 30 jours fin de mois.</div>
+</body></html>`;
+}
+
 type InvoiceStatus = "payee" | "attente" | "retard" | "brouillon";
 
 type Row = {
@@ -300,6 +328,15 @@ export function Facturation() {
                     <button
                       type="button"
                       title="Aperçu de la facture"
+                      onClick={() => {
+                        const w = window.open("", "_blank", "width=820,height=920");
+                        if (w) {
+                          w.document.write(invoiceHTML(r, meta.label));
+                          w.document.close();
+                        } else {
+                          toast("Autorise les pop-ups pour l'aperçu");
+                        }
+                      }}
                       className="flex h-[26px] w-[26px] items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                     >
                       <Eye className="h-3.5 w-3.5" />
@@ -307,6 +344,18 @@ export function Facturation() {
                     <button
                       type="button"
                       title="Télécharger la facture"
+                      onClick={() => {
+                        const blob = new Blob([invoiceHTML(r, meta.label)], {
+                          type: "text/html;charset=utf-8",
+                        });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `facture-${r.ref}.html`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        toast("Facture téléchargée ✓");
+                      }}
                       className="flex h-[26px] w-[26px] items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                     >
                       <Download className="h-3.5 w-3.5" />

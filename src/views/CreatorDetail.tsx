@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, initials } from "@/lib/utils";
 import { dbUpdate } from "@/lib/db";
@@ -58,6 +58,7 @@ export function CreatorDetail({
     siren: "",
     birth: "",
   });
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -87,7 +88,44 @@ export function CreatorDetail({
   const save = async () => {
     if (!c) return;
     const ok = await dbUpdate("creators", c.id, { ...form });
-    toast(ok ? "Infos enregistrées ✓" : "Erreur — réessaie");
+    if (!ok) {
+      toast("Erreur — réessaie");
+      return;
+    }
+    setC({ ...c, ...form });
+    setEditing(false);
+    toast("Infos enregistrées ✓");
+  };
+
+  const cancel = () => {
+    if (c)
+      setForm({
+        ville: c.ville ?? "",
+        phone: c.phone ?? "",
+        email: c.email ?? "",
+        address: c.address ?? "",
+        siren: c.siren ?? "",
+        birth: c.birth ?? "",
+      });
+    setEditing(false);
+  };
+
+  const copyAll = () => {
+    const text = [
+      titleCase(name),
+      [c?.handle, c?.niche].filter(Boolean).join(" · "),
+      form.email && `Email : ${form.email}`,
+      form.phone && `Tél : ${form.phone}`,
+      form.ville && `Ville : ${form.ville}`,
+      form.address && `Adresse : ${form.address}`,
+      form.siren && `SIREN : ${form.siren}`,
+      form.birth && `Naissance : ${form.birth}`,
+      c?.commission && `Commission : ${c.commission}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    navigator.clipboard?.writeText(text);
+    toast("Infos copiées ✓");
   };
 
   const field = (label: string, key: keyof Coord) => (
@@ -101,6 +139,31 @@ export function CreatorDetail({
       />
     </div>
   );
+
+  const copyRow = (label: string, value: string) => {
+    const v = value?.trim() ?? "";
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-lg bg-panel px-3 py-2.5">
+        <div className="min-w-0">
+          <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</div>
+          <div className="truncate text-sm">{v || "—"}</div>
+        </div>
+        {v && (
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard?.writeText(v);
+              toast(`${label} copié ✓`);
+            }}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+            title={`Copier ${label.toLowerCase()}`}
+          >
+            <Copy className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    );
+  };
 
   const stat = (label: string, val: string | null) => (
     <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
@@ -155,26 +218,70 @@ export function CreatorDetail({
       <div className="mb-4 rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="text-sm font-semibold">Coordonnées &amp; informations</div>
-          {c?.commission && (
-            <div className="rounded-lg bg-signalsoft px-3 py-1.5 text-xs font-semibold text-signaltext">
-              Commission {c.commission}
+          <div className="flex items-center gap-2">
+            {c?.commission && (
+              <div className="hidden rounded-lg bg-signalsoft px-3 py-1.5 text-xs font-semibold text-signaltext sm:block">
+                Commission {c.commission}
+              </div>
+            )}
+            {editing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={save}
+                  className="flex items-center gap-1.5 rounded-lg bg-signal px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-onsignal transition-opacity hover:opacity-90"
+                >
+                  <Check className="h-3.5 w-3.5" /> Enregistrer
+                </button>
+                <button
+                  type="button"
+                  onClick={cancel}
+                  className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                  title="Annuler"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              >
+                <Pencil className="h-3.5 w-3.5" /> Modifier
+              </button>
+            )}
+          </div>
+        </div>
+
+        {editing ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {field("Ville", "ville")}
+            {field("Téléphone", "phone")}
+            {field("Email", "email")}
+            {field("Adresse", "address")}
+            {field("SIREN", "siren")}
+            {field("Naissance", "birth")}
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {copyRow("Ville", form.ville ?? "")}
+              {copyRow("Téléphone", form.phone ?? "")}
+              {copyRow("Email", form.email ?? "")}
+              {copyRow("Adresse", form.address ?? "")}
+              {copyRow("SIREN", form.siren ?? "")}
+              {copyRow("Naissance", form.birth ?? "")}
             </div>
-          )}
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {field("Ville", "ville")}
-          {field("Téléphone", "phone")}
-          {field("Email", "email")}
-          {field("Adresse", "address")}
-          {field("SIREN", "siren")}
-          {field("Naissance", "birth")}
-        </div>
-        <button
-          onClick={save}
-          className="mt-4 rounded-lg bg-signal px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-onsignal transition-opacity hover:opacity-90"
-        >
-          Enregistrer
-        </button>
+            <button
+              type="button"
+              onClick={copyAll}
+              className="mt-3 flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            >
+              <Copy className="h-3.5 w-3.5" /> Copier toutes les infos
+            </button>
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
