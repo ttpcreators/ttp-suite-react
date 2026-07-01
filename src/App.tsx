@@ -1,7 +1,8 @@
 import { useEffect, useState, type ComponentType } from "react";
-import { ChevronRight, Moon, Sun, Loader2, Search } from "lucide-react";
+import { ChevronRight, Moon, Sun, Loader2 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
+import { GooeyInput } from "@/components/ui/gooey-input";
 import { Sidebar } from "@/components/Sidebar";
 import { Login } from "@/components/Login";
 import { NAV, findItem, type NavItem, type ViewId } from "@/lib/nav";
@@ -140,18 +141,13 @@ export default function App() {
                 </div>
               </div>
 
-              {/* search pill */}
-              <div className="relative min-w-0 flex-1 md:max-w-[340px]">
-                <div className="flex min-w-0 items-center gap-2.5 rounded-lg bg-surface px-4 py-2.5 shadow-sm">
-                  <Search className="h-4 w-4 shrink-0 text-faint" />
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Rechercher…"
-                    className="min-w-0 flex-1 border-none bg-transparent text-xs text-foreground outline-none placeholder:text-faint"
-                  />
-                </div>
-              </div>
+              {/* gooey search (Aceternity) */}
+              <GooeyInput
+                value={query}
+                onValueChange={setQuery}
+                placeholder="Rechercher…"
+                className="justify-start"
+              />
 
               {/* right cluster */}
               <div className="ml-auto flex items-center gap-2.5">

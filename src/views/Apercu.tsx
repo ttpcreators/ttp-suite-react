@@ -1,57 +1,37 @@
-import { supabase } from "@/lib/supabase";
-import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { useSearch, matchQuery } from "@/lib/search";
+import { parseAmount, formatEuro } from "@/lib/appState";
+import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
+import type { AnimatedBadgeStatus } from "@/components/ui/be-ui-animated-badge";
+import { Wallet, Clock3, AlertTriangle, ReceiptEuro } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+type InvoiceStatus = "payee" | "attente" | "retard" | "brouillon";
 
 type Row = {
   ref: string;
   party: string;
   amount: string;
   date: string;
-  status: string;
-  creator: string;
+  status: InvoiceStatus;
+  creator: string | null;
 };
 
-type BadgeStatus = "success" | "warning" | "danger" | "neutral" | "info" | "loading";
-
-function parseAmount(x: string): number {
-  return Number(String(x).replace(/[^0-9]/g, "")) || 0;
-}
-
-function formatAmount(n: number): string {
-  return `${n.toLocaleString("fr-FR").replace(/ /g, " ")} €`;
-}
-
-function statusBadge(status: string): BadgeStatus {
-  switch (status) {
-    case "payee":
-      return "success";
-    case "attente":
-      return "warning";
-    case "retard":
-      return "danger";
-    default:
-      return "neutral";
-  }
-}
-
-function statusLabel(status: string): string {
-  switch (status) {
-    case "payee":
-      return "Payée";
-    case "attente":
-      return "En attente";
-    case "retard":
-      return "En retard";
-    case "brouillon":
-      return "Brouillon";
-    default:
-      return status;
-  }
-}
+const STATUS_META: Record<
+  InvoiceStatus,
+  { badge: AnimatedBadgeStatus; label: string }
+> = {
+  payee: { badge: "success", label: "Payée" },
+  attente: { badge: "warning", label: "En attente" },
+  retard: { badge: "danger", label: "En retard" },
+  brouillon: { badge: "neutral", label: "Brouillon" },
+};
 
 export function Apercu() {
   const [rows, setRows] = useState<Row[] | null>(null);
-  const [error, setError] = useState<boolean>(false);
+  const [error, setError] = useState(false);
+  const { query } = useSearch();
 
   useEffect(() => {
     let active = true;
@@ -73,9 +53,17 @@ export function Apercu() {
     };
   }, []);
 
-  if (rows === null) {
+  if (error) {
     return (
-      <div className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
+      <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
+        Impossible de charger les données.
+      </div>
+    );
+  }
+
+  if (!rows) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <AnimatedBadge status="loading" size="sm">
           Chargement…
         </AnimatedBadge>
@@ -83,25 +71,7 @@ export function Apercu() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
-        <p className="text-sm text-muted-foreground">
-          Impossible de charger les données.
-        </p>
-      </div>
-    );
-  }
-
-  if (rows.length === 0) {
-    return (
-      <div className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
-        <p className="text-sm text-muted-foreground">Aucune facture pour le moment.</p>
-      </div>
-    );
-  }
-
-  const sumByStatus = (status: string): number =>
+  const sumByStatus = (status: InvoiceStatus): number =>
     rows
       .filter((r) => r.status === status)
       .reduce((acc, r) => acc + parseAmount(r.amount), 0);
@@ -111,62 +81,98 @@ export function Apercu() {
   const retard = sumByStatus("retard");
   const total = rows.reduce((acc, r) => acc + parseAmount(r.amount), 0);
 
-  const stats: { label: string; value: number }[] = [
-    { label: "CA encaissé", value: encaisse },
-    { label: "En attente", value: attente },
-    { label: "En retard", value: retard },
-    { label: "Total facturé", value: total },
+  const kpis: {
+    label: string;
+    value: number;
+    icon: LucideIcon;
+    accent: string;
+  }[] = [
+    { label: "CA encaissé", value: encaisse, icon: Wallet, accent: "text-signaltext" },
+    { label: "En attente", value: attente, icon: Clock3, accent: "text-amber" },
+    { label: "En retard", value: retard, icon: AlertTriangle, accent: "text-amber" },
+    { label: "Total facturé", value: total, icon: ReceiptEuro, accent: "text-muted-foreground" },
   ];
 
   const recent = rows.slice(-5).reverse();
+  const filtered = recent.filter((r) =>
+    matchQuery(query, r.ref, r.party, r.creator, r.status),
+  );
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((s) => (
-          <div
-            key={s.label}
-            className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm"
-          >
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {s.label}
-            </p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">
-              {formatAmount(s.value)}
-            </p>
-          </div>
-        ))}
+      {/* Rangée de cartes KPI */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {kpis.map((k) => {
+          const Icon = k.icon;
+          return (
+            <div
+              key={k.label}
+              className="rounded-xl border border-border bg-card p-5 shadow-sm"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-faint">
+                  {k.label}
+                </span>
+                <Icon className={`h-4 w-4 ${k.accent}`} strokeWidth={2} />
+              </div>
+              <div className="mt-3 whitespace-nowrap text-2xl font-bold tracking-tight text-foreground">
+                {formatEuro(k.value)}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
+      {/* Factures récentes */}
       <div className="rounded-xl border border-border bg-card shadow-sm">
-        <div className="px-4 py-3">
-          <h2 className="text-sm font-semibold text-foreground">Factures récentes</h2>
+        <div className="flex items-center justify-between px-5 py-4">
+          <h2 className="text-sm font-semibold text-foreground">
+            Factures récentes
+          </h2>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-faint">
+            5 dernières
+          </span>
         </div>
-        <ul>
-          {recent.map((r) => (
-            <li
-              key={r.ref}
-              className="flex items-center justify-between border-t border-border px-4 py-3 hover:bg-muted/60"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-foreground">
-                  {r.party}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {r.ref} · {r.date}
-                </p>
-              </div>
-              <div className="flex items-center gap-3 pl-3">
-                <span className="text-sm font-semibold text-foreground">
-                  {formatAmount(parseAmount(r.amount))}
-                </span>
-                <AnimatedBadge status={statusBadge(r.status)} size="sm">
-                  {statusLabel(r.status)}
-                </AnimatedBadge>
-              </div>
-            </li>
-          ))}
-        </ul>
+
+        {rows.length === 0 ? (
+          <div className="border-t border-border px-5 py-8 text-center text-sm text-muted-foreground">
+            Aucune facture pour le moment.
+          </div>
+        ) : query.trim() && filtered.length === 0 ? (
+          <div className="border-t border-border px-5 py-8 text-center text-sm text-muted-foreground">
+            Aucun résultat pour « {query} »
+          </div>
+        ) : (
+          <ul>
+            {filtered.map((r) => {
+              const meta = STATUS_META[r.status] ?? STATUS_META.brouillon;
+              return (
+                <li
+                  key={r.ref}
+                  className="flex items-center gap-3 border-t border-border px-5 py-3 transition-colors hover:bg-rowhover"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-foreground">
+                      {r.party}
+                    </div>
+                    <div className="mt-0.5 truncate text-[11px] text-faint">
+                      #{r.ref} · {r.date}
+                      {r.creator ? ` · ${r.creator}` : ""}
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold text-foreground">
+                    {formatEuro(parseAmount(r.amount))}
+                  </span>
+                  <div className="hidden shrink-0 sm:block">
+                    <AnimatedBadge status={meta.badge} size="sm">
+                      {meta.label}
+                    </AnimatedBadge>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     </div>
   );

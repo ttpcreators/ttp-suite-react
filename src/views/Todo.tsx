@@ -100,37 +100,40 @@ export function Todo() {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-border bg-card shadow-sm px-4 sm:px-5">
       {filtered.map((row, index) => {
         const badge = priorityBadge[row.priority];
         return (
           <div
             key={row.id}
             className={cn(
-              "flex items-start gap-3 px-4 py-3 hover:bg-muted/60",
+              "flex items-center gap-3 py-3",
               index > 0 && "border-t border-border"
             )}
           >
-            <div className="mt-0.5 h-4 w-4 shrink-0 rounded border border-border bg-background" />
+            {/* Case à cocher décorative */}
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border-[1.5px] border-faint" />
 
+            {/* Texte + description */}
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-foreground truncate">
+              <p className="truncate text-[13px] font-medium text-foreground">
                 {row.text}
               </p>
               {row.descr && (
-                <p className="text-xs text-muted-foreground truncate">
+                <p className="mt-0.5 truncate text-[11px] leading-relaxed text-faint">
                   {row.descr}
                 </p>
               )}
             </div>
 
+            {/* Méta : origine + créateur + priorité */}
             <div className="flex shrink-0 items-center gap-2">
               {row.source === "creator" && (
-                <span className="rounded-lg bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                <span className="hidden rounded-md bg-signalsoft px-2 py-[3px] text-[8px] font-semibold uppercase tracking-wider text-signaltext sm:inline">
                   Du créateur
                 </span>
               )}
-              <span className="rounded-lg bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <span className="hidden rounded-md bg-rowhover px-2 py-[3px] text-[8px] font-semibold uppercase tracking-wider text-muted-foreground sm:inline">
                 {row.creator ? titleCase(row.creator) : "Agence"}
               </span>
               <AnimatedBadge status={badge.status} size="sm">

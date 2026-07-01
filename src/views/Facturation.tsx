@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
+import { FileText, Eye, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
+import { cn } from "@/lib/utils";
+import { parseAmount, formatEuro } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import type { AnimatedBadgeStatus } from "@/components/ui/be-ui-animated-badge";
 
@@ -26,14 +29,6 @@ const STATUS_META: Record<
   retard: { badge: "danger", label: "En retard" },
   brouillon: { badge: "neutral", label: "Brouillon" },
 };
-
-function parseAmount(value: string): number {
-  return Number(String(value).replace(/[^0-9]/g, "")) || 0;
-}
-
-function formatAmount(value: number): string {
-  return `${value.toLocaleString("fr-FR").replace(/ | /g, " ")} €`;
-}
 
 export function Facturation() {
   const [rows, setRows] = useState<Row[] | null>(null);
@@ -74,18 +69,45 @@ export function Facturation() {
       const amount = parseAmount(r.amount);
       acc.total += amount;
       if (r.status === "payee") acc.payee += amount;
-      else if (r.status === "attente") acc.attente += amount;
-      else if (r.status === "retard") acc.retard += amount;
+      else if (r.status === "attente") {
+        acc.attente += amount;
+        acc.attenteCount += 1;
+      } else if (r.status === "retard") acc.retard += amount;
       return acc;
     },
-    { payee: 0, attente: 0, retard: 0, total: 0 },
+    { payee: 0, attente: 0, retard: 0, total: 0, attenteCount: 0 },
   );
 
-  const cards: { label: string; value: number; badge: AnimatedBadgeStatus }[] = [
-    { label: "Encaissé", value: totals.payee, badge: "success" },
-    { label: "En attente", value: totals.attente, badge: "warning" },
-    { label: "En retard", value: totals.retard, badge: "danger" },
-    { label: "Total facturé", value: totals.total, badge: "info" },
+  const cards: {
+    label: string;
+    value: number;
+    hint: string;
+    hintClass: string;
+  }[] = [
+    {
+      label: "Facturé · total",
+      value: totals.total,
+      hint: `${rows.length} facture${rows.length > 1 ? "s" : ""}`,
+      hintClass: "text-muted-foreground",
+    },
+    {
+      label: "Encaissé",
+      value: totals.payee,
+      hint: "payé",
+      hintClass: "text-signaltext",
+    },
+    {
+      label: "En attente",
+      value: totals.attente,
+      hint: `${totals.attenteCount} en cours`,
+      hintClass: "text-indigo",
+    },
+    {
+      label: "En retard",
+      value: totals.retard,
+      hint: "à relancer",
+      hintClass: "text-amber",
+    },
   ];
 
   const filtered = rows.filter((r) =>
@@ -94,62 +116,106 @@ export function Facturation() {
 
   return (
     <>
+      {/* Cartes de totaux */}
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {cards.map((c) => (
           <div
             key={c.label}
-            className="rounded-xl border border-border bg-card p-4 shadow-sm"
+            className="rounded-xl border border-border bg-surface p-4 shadow-sm"
           >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-muted-foreground">{c.label}</span>
-              <AnimatedBadge status={c.badge} size="sm" />
+            <div className="text-[9px] font-semibold uppercase tracking-wider text-faint">
+              {c.label}
             </div>
-            <div className="mt-2 text-lg font-semibold text-foreground">
-              {formatAmount(c.value)}
+            <div className="mt-2 whitespace-nowrap text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+              {formatEuro(c.value)}
+            </div>
+            <div className={cn("mt-1 text-[10px] font-semibold", c.hintClass)}>
+              {c.hint}
             </div>
           </div>
         ))}
       </div>
 
-      {rows.length === 0 ? (
-        <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
-          Aucune facture pour le moment.
+      {/* Liste des factures */}
+      <div className="overflow-hidden rounded-xl border border-border bg-surface p-2 shadow-sm">
+        {/* En-tête colonnes (desktop) */}
+        <div className="hidden grid-cols-[0.9fr_2.2fr_1.2fr_1.1fr_1.3fr] gap-3 px-4 py-3 text-[9px] font-semibold uppercase tracking-wider text-faint md:grid">
+          <span>Réf.</span>
+          <span>Marque × Créateur</span>
+          <span className="text-right">Montant</span>
+          <span className="text-center">Échéance</span>
+          <span className="text-right">Statut</span>
         </div>
-      ) : query.trim() && filtered.length === 0 ? (
-        <div className="rounded-xl border border-border bg-card shadow-sm">
+
+        {rows.length === 0 ? (
+          <div className="px-4 py-8 text-center">
+            <div className="text-sm font-medium text-foreground">
+              Aucune facture
+            </div>
+            <div className="mt-1.5 text-xs text-faint">
+              Crée ta première facture avec « + Nouvelle facture ».
+            </div>
+          </div>
+        ) : query.trim() && filtered.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
             Aucun résultat pour « {query} »
           </div>
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          {filtered.map((r, i) => (
-            <div
-              key={r.id}
-              className={
-                "flex items-center gap-3.5 px-4 py-3 transition-colors hover:bg-muted/60" +
-                (i > 0 ? " border-t border-border" : "")
-              }
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">
-                  #{r.ref} · {r.party}
-                </div>
-                <div className="truncate text-xs text-muted-foreground">
-                  Échéance {r.date}
-                  {r.creator ? ` · ${r.creator}` : ""}
-                </div>
+        ) : (
+          filtered.map((r) => {
+            const meta = STATUS_META[r.status];
+            return (
+              <div
+                key={r.id}
+                className="grid grid-cols-1 items-center gap-1 rounded-xl px-4 py-3 transition-colors hover:bg-rowhover md:grid-cols-[0.9fr_2.2fr_1.2fr_1.1fr_1.3fr] md:gap-3"
+              >
+                {/* Réf. */}
+                <span className="flex items-center gap-2 text-[11px] font-medium text-faint">
+                  <FileText className="h-3.5 w-3.5 md:hidden" />#{r.ref}
+                </span>
+
+                {/* Marque × Créateur */}
+                <span className="truncate text-sm font-medium text-foreground">
+                  {r.party}
+                </span>
+
+                {/* Montant */}
+                <span className="text-sm font-semibold text-foreground md:text-right">
+                  {formatEuro(parseAmount(r.amount))}
+                </span>
+
+                {/* Échéance */}
+                <span className="text-[11px] font-medium text-muted-foreground md:text-center">
+                  <span className="md:hidden">Échéance </span>
+                  {r.date}
+                </span>
+
+                {/* Statut + actions */}
+                <span className="mt-1 flex items-center justify-start gap-2 md:mt-0 md:justify-end">
+                  <AnimatedBadge status={meta.badge} size="sm">
+                    {meta.label}
+                  </AnimatedBadge>
+                  <span className="hidden items-center gap-1 md:flex">
+                    <button
+                      type="button"
+                      title="Aperçu de la facture"
+                      className="flex h-[26px] w-[26px] items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Télécharger la facture"
+                      className="flex h-[26px] w-[26px] items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                </span>
               </div>
-              <div className="shrink-0 text-sm font-semibold text-foreground">
-                {formatAmount(parseAmount(r.amount))}
-              </div>
-              <AnimatedBadge status={STATUS_META[r.status].badge} size="sm">
-                {STATUS_META[r.status].label}
-              </AnimatedBadge>
-            </div>
-          ))}
-        </div>
-      )}
+            );
+          })
+        )}
+      </div>
     </>
   );
 }

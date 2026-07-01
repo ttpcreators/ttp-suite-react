@@ -66,48 +66,54 @@ export function Contacts() {
   );
 
   return (
-    <div className="rounded-xl border border-border bg-card shadow-sm">
-      <div className="px-4 py-3">
-        <span className="text-sm font-semibold text-foreground">
-          {rows.length} contacts
-        </span>
+    <>
+      <div className="mb-4 text-sm text-muted-foreground">
+        {rows.length} contact{rows.length > 1 ? "s" : ""}
       </div>
 
-      {rows.length === 0 ? (
-        <div className="border-t border-border px-4 py-3">
-          <p className="text-xs text-muted-foreground">Aucun contact</p>
-        </div>
-      ) : query.trim() && filtered.length === 0 ? (
-        <div className="border-t border-border px-4 py-8 text-center text-sm text-muted-foreground">
-          Aucun résultat pour « {query} »
-        </div>
-      ) : (
-        filtered.map((row) => (
-          <div
-            key={row.id}
-            className="flex items-start gap-3 border-t border-border px-4 py-3 hover:bg-muted/60"
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-semibold text-foreground">
-              {initials(row.person)}
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-sm font-semibold text-foreground">
-                  {row.brand}
-                </span>
-                <span className="shrink-0 rounded-lg bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                  {row.tag}
-                </span>
-              </div>
-              <p className="truncate text-xs text-muted-foreground">
-                {row.person} · {row.role}
-              </p>
-              <p className="truncate text-xs text-muted-foreground">{row.email}</p>
-            </div>
+      <div className="rounded-xl border border-border bg-card px-5 shadow-sm">
+        {rows.length === 0 ? (
+          <div className="py-8 text-center text-xs text-muted-foreground">
+            Aucun contact
           </div>
-        ))
-      )}
-    </div>
+        ) : query.trim() && filtered.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            Aucun résultat pour « {query} »
+          </div>
+        ) : (
+          filtered.map((row) => (
+            <div
+              key={row.id}
+              className="flex cursor-pointer items-center gap-3.5 border-b border-border py-3.5 last:border-b-0 hover:bg-rowhover"
+            >
+              {/* Avatar */}
+              <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[9px] bg-surface text-[11px] font-bold text-foreground">
+                {initials(row.person)}
+              </div>
+
+              {/* Marque + person · role */}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-semibold text-foreground">
+                  {row.brand}
+                </div>
+                <div className="mt-0.5 truncate text-[11px] font-normal text-faint">
+                  {row.person} · {row.role}
+                </div>
+              </div>
+
+              {/* Email — masqué sur mobile */}
+              <div className="hidden max-w-[200px] truncate text-[11px] font-medium text-muted-foreground sm:block">
+                {row.email}
+              </div>
+
+              {/* Pastille tag */}
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {row.tag}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+    </>
   );
 }
