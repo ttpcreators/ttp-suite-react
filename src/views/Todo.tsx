@@ -29,6 +29,7 @@ type Row = {
   source: Source;
   done: boolean;
   sort_order: number;
+  created_at: string | null;
 };
 
 const priorityBadge: Record<
@@ -39,6 +40,10 @@ const priorityBadge: Record<
   moyenne: { status: "warning", label: "Moyenne" },
   basse: { status: "neutral", label: "Basse" },
 };
+
+// Formate created_at en fr-FR ; rien si absent.
+const formatCreatedAt = (created_at: string | null): string | null =>
+  created_at ? new Date(created_at).toLocaleDateString("fr-FR") : null;
 
 // Filtre créateur : null = tous, "__agency__" = agence, sinon nom du créateur.
 type CreatorFilter = null | "__agency__" | string;
@@ -67,7 +72,7 @@ export function Todo() {
     (async () => {
       const { data, error } = await supabase
         .from("todos")
-        .select("id, text, descr, tag, due, creator, priority, source, done, sort_order")
+        .select("id, text, descr, tag, due, creator, priority, source, done, sort_order, created_at")
         .eq("done", false)
         .order("sort_order");
       if (!active) return;
@@ -319,6 +324,11 @@ export function Todo() {
                       {row.descr}
                     </p>
                   )}
+                  {formatCreatedAt(row.created_at) && (
+                    <p className="mt-0.5 truncate text-[10px] leading-relaxed text-faint">
+                      créée le {formatCreatedAt(row.created_at)}
+                    </p>
+                  )}
                 </div>
 
                 {/* Méta : origine + créateur + priorité */}
@@ -421,6 +431,14 @@ export function Todo() {
                       : "Agence"}
                   </p>
                 </DetailBlock>
+
+                {formatCreatedAt(selectedTodo.created_at) && (
+                  <DetailBlock label="Créée le">
+                    <p className="text-[13px] text-foreground">
+                      {formatCreatedAt(selectedTodo.created_at)}
+                    </p>
+                  </DetailBlock>
+                )}
               </div>
             </div>
           </div>

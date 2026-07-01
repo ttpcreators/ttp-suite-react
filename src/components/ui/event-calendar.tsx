@@ -484,9 +484,15 @@ function WeekView({
 // ─── Vue Liste ───────────────────────────────────────────────────────────────
 
 function ListView({ events, onEventClick }: { events: Ev[]; onEventClick: (e: Ev) => void }) {
+  const [filter, setFilter] = useState<"avenir" | "passe" | "tous">("avenir");
+  const today = new Date().toISOString().slice(0, 10);
   const groups = useMemo(() => {
-    const sorted = [...events].sort((a, b) => {
-      if (a.date !== b.date) return a.date.localeCompare(b.date);
+    const shown = events.filter((e) =>
+      filter === "tous" ? true : filter === "avenir" ? e.date >= today : e.date < today,
+    );
+    const sorted = [...shown].sort((a, b) => {
+      if (a.date !== b.date)
+        return filter === "passe" ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date);
       return a.time.localeCompare(b.time);
     });
     const m = new Map<string, Ev[]>();
@@ -496,19 +502,37 @@ function ListView({ events, onEventClick }: { events: Ev[]; onEventClick: (e: Ev
       m.set(e.date, arr);
     }
     return [...m.entries()];
-  }, [events]);
+  }, [events, filter, today]);
 
-  if (groups.length === 0) {
-    return (
-      <div className="rounded-2xl border border-border bg-surface p-8 text-center text-sm text-muted-foreground shadow-sm">
-        Aucun événement.
-      </div>
-    );
-  }
+  const FILTERS: { id: "avenir" | "passe" | "tous"; label: string }[] = [
+    { id: "avenir", label: "À venir" },
+    { id: "passe", label: "Passés" },
+    { id: "tous", label: "Tous" },
+  ];
 
   return (
     <div className="flex flex-col gap-4">
-      {groups.map(([date, evs]) => (
+      <div className="flex w-fit gap-1 rounded-xl bg-panel p-1">
+        {FILTERS.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => setFilter(f.id)}
+            className={cn(
+              "rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors",
+              filter === f.id ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+      {groups.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-surface p-8 text-center text-sm text-muted-foreground shadow-sm">
+          Aucun événement {filter === "passe" ? "passé" : filter === "avenir" ? "à venir" : ""}.
+        </div>
+      ) : (
+        groups.map(([date, evs]) => (
         <div key={date} className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
           <div className="border-b border-border bg-panel px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-faint">
             {formatListDay(date)}
@@ -536,7 +560,8 @@ function ListView({ events, onEventClick }: { events: Ev[]; onEventClick: (e: Ev
             ))}
           </div>
         </div>
-      ))}
+        ))
+      )}
     </div>
   );
 }
