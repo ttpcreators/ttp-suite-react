@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
+import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useEffect, useState } from "react";
 
@@ -25,6 +26,7 @@ function weekdayAbbr(date: string): string {
 export function Planning() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<boolean>(false);
+  const { query } = useSearch();
 
   useEffect(() => {
     let active = true;
@@ -52,6 +54,10 @@ export function Planning() {
     };
   }, []);
 
+  const filtered = (rows ?? []).filter((row) =>
+    matchQuery(query, row.title, row.who, row.type),
+  );
+
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm">
       {rows === null ? (
@@ -68,9 +74,13 @@ export function Planning() {
         <div className="px-4 py-3 text-sm text-muted-foreground">
           Aucun événement à venir
         </div>
+      ) : query.trim() && filtered.length === 0 ? (
+        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+          Aucun résultat pour « {query} »
+        </div>
       ) : (
         <ul>
-          {rows.map((row, index) => (
+          {filtered.map((row, index) => (
             <li
               key={row.id}
               className={cn(

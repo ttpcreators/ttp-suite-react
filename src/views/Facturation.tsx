@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import type { AnimatedBadgeStatus } from "@/components/ui/be-ui-animated-badge";
 
@@ -37,6 +38,7 @@ function formatAmount(value: number): string {
 export function Facturation() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState(false);
+  const { query } = useSearch();
 
   useEffect(() => {
     supabase
@@ -86,6 +88,10 @@ export function Facturation() {
     { label: "Total facturé", value: totals.total, badge: "info" },
   ];
 
+  const filtered = rows.filter((r) =>
+    matchQuery(query, r.ref, r.party, r.creator, r.status),
+  );
+
   return (
     <>
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -109,9 +115,15 @@ export function Facturation() {
         <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
           Aucune facture pour le moment.
         </div>
+      ) : query.trim() && filtered.length === 0 ? (
+        <div className="rounded-xl border border-border bg-card shadow-sm">
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+            Aucun résultat pour « {query} »
+          </div>
+        </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          {rows.map((r, i) => (
+          {filtered.map((r, i) => (
             <div
               key={r.id}
               className={

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, initials } from "@/lib/utils";
+import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 
 type Creator = {
@@ -15,6 +16,7 @@ type Creator = {
 export function Roster() {
   const [rows, setRows] = useState<Creator[] | null>(null);
   const [error, setError] = useState(false);
+  const { query } = useSearch();
 
   useEffect(() => {
     supabase
@@ -43,14 +45,25 @@ export function Roster() {
     );
   }
 
+  const filtered = rows.filter((c) =>
+    matchQuery(query, c.name, c.handle, c.niche, c.platform),
+  );
+
   return (
     <>
       <div className="mb-4 text-sm text-muted-foreground">
         {rows.length} créateur{rows.length > 1 ? "s" : ""} représenté
         {rows.length > 1 ? "s" : ""}
       </div>
+      {query.trim() && filtered.length === 0 ? (
+        <div className="rounded-xl border border-border bg-card shadow-sm">
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+            Aucun résultat pour « {query} »
+          </div>
+        </div>
+      ) : (
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        {rows.map((c, i) => (
+        {filtered.map((c, i) => (
           <div
             key={c.name}
             className={
@@ -88,6 +101,7 @@ export function Roster() {
           </div>
         ))}
       </div>
+      )}
     </>
   );
 }

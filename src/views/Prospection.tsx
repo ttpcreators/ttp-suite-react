@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
+import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useEffect, useState } from "react";
 
@@ -16,6 +17,7 @@ type Row = {
 export function Prospection() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState(false);
+  const { query } = useSearch();
 
   useEffect(() => {
     let active = true;
@@ -60,7 +62,21 @@ export function Prospection() {
     );
   }
 
-  const stages = rows.reduce<string[]>((acc, row) => {
+  const filtered = rows.filter((row) =>
+    matchQuery(query, row.brand, row.contact, row.stage),
+  );
+
+  if (query.trim() && filtered.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-card shadow-sm">
+        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+          Aucun résultat pour « {query} »
+        </div>
+      </div>
+    );
+  }
+
+  const stages = filtered.reduce<string[]>((acc, row) => {
     const stage = row.stage ?? "Sans étape";
     if (!acc.includes(stage)) acc.push(stage);
     return acc;
@@ -69,7 +85,7 @@ export function Prospection() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       {stages.map((stage) => {
-        const cards = rows.filter((row) => (row.stage ?? "Sans étape") === stage);
+        const cards = filtered.filter((row) => (row.stage ?? "Sans étape") === stage);
         return (
           <div
             key={stage}

@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { initials } from "@/lib/utils";
+import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useEffect, useState } from "react";
 
@@ -18,6 +19,7 @@ type Row = {
 export function Contacts() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState(false);
+  const { query } = useSearch();
 
   useEffect(() => {
     let active = true;
@@ -59,6 +61,10 @@ export function Contacts() {
     );
   }
 
+  const filtered = rows.filter((row) =>
+    matchQuery(query, row.brand, row.person, row.role, row.email, row.tag)
+  );
+
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm">
       <div className="px-4 py-3">
@@ -71,8 +77,12 @@ export function Contacts() {
         <div className="border-t border-border px-4 py-3">
           <p className="text-xs text-muted-foreground">Aucun contact</p>
         </div>
+      ) : query.trim() && filtered.length === 0 ? (
+        <div className="border-t border-border px-4 py-8 text-center text-sm text-muted-foreground">
+          Aucun résultat pour « {query} »
+        </div>
       ) : (
-        rows.map((row) => (
+        filtered.map((row) => (
           <div
             key={row.id}
             className="flex items-start gap-3 border-t border-border px-4 py-3 hover:bg-muted/60"

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useEffect, useState } from "react";
 
@@ -33,6 +34,7 @@ function statusMeta(status: string): { variant: BadgeStatus; label: string } {
 export function Briefs() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState(false);
+  const { query } = useSearch();
 
   useEffect(() => {
     let active = true;
@@ -80,9 +82,23 @@ export function Briefs() {
     );
   }
 
+  const filtered = rows.filter((row) =>
+    matchQuery(query, row.brand, row.creator, row.deliverables, row.status)
+  );
+
+  if (query.trim() && filtered.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-card shadow-sm">
+        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+          Aucun résultat pour « {query} »
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-      {rows.map((row) => {
+      {filtered.map((row) => {
         const meta = statusMeta(row.status);
         return (
           <div

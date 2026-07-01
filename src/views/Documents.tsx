@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
+import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useEffect, useState } from "react";
 import { FileTextIcon } from "lucide-react";
@@ -18,6 +19,7 @@ type Row = {
 export function Documents() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState(false);
+  const { query } = useSearch();
 
   useEffect(() => {
     let active = true;
@@ -49,6 +51,10 @@ export function Documents() {
     });
   };
 
+  const filtered = (rows ?? []).filter((row) =>
+    matchQuery(query, row.name, row.type, row.creator)
+  );
+
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm">
       {rows === null ? (
@@ -67,9 +73,13 @@ export function Documents() {
         <div className="px-4 py-3 text-sm text-muted-foreground">
           Aucun document
         </div>
+      ) : query.trim() && filtered.length === 0 ? (
+        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+          Aucun résultat pour « {query} »
+        </div>
       ) : (
         <ul>
-          {rows.map((row, index) => (
+          {filtered.map((row, index) => (
             <li
               key={row.id}
               className={cn(

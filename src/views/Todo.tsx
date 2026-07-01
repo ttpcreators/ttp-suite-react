@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
+import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useEffect, useState } from "react";
 
@@ -31,6 +32,7 @@ const priorityBadge: Record<
 export function Todo() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState(false);
+  const { query } = useSearch();
 
   useEffect(() => {
     let active = true;
@@ -83,9 +85,23 @@ export function Todo() {
     );
   }
 
+  const filtered = rows.filter((row) =>
+    matchQuery(query, row.text, row.descr, row.creator, row.tag)
+  );
+
+  if (query.trim() && filtered.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-card shadow-sm">
+        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+          Aucun résultat pour « {query} »
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-      {rows.map((row, index) => {
+      {filtered.map((row, index) => {
         const badge = priorityBadge[row.priority];
         return (
           <div
