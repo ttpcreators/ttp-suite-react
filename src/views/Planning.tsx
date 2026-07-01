@@ -1,279 +1,105 @@
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { cn } from "@/lib/utils";
-import { useSearch, matchQuery } from "@/lib/search";
-import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
+import { EventCalendar, type Ev } from "@/components/ui/event-calendar";
+import { dbInsert, dbUpdate, dbDelete } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
-import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/components/ui/form";
-import { GlassCalendar } from "@/components/ui/glass-calendar";
+import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useCreators } from "@/lib/useCreators";
-import { useEffect, useMemo, useState } from "react";
-import { Clock } from "lucide-react";
-import { format } from "date-fns";
-import { fr } from "date-fns/locale";
-
-type Row = {
-  id: string | number;
-  day: number;
-  date: string;
-  time: string;
-  title: string;
-  type: string;
-  who: string;
-  sort_order: number;
-};
-
-type EventTone = "indigo" | "cyan" | "signal";
-type BadgeStatus = "info" | "success" | "neutral";
-
-const EVENT_TYPES: Record<string, { label: string; tone: EventTone }> = {
-  call: { label: "Call", tone: "indigo" },
-  reunion: { label: "Réunion", tone: "cyan" },
-  collab: { label: "Collab", tone: "signal" },
-  shoot: { label: "Shoot", tone: "indigo" },
-  event: { label: "Event", tone: "signal" },
-  voyage: { label: "Voyage", tone: "cyan" },
-  deadline: { label: "Deadline", tone: "cyan" },
-};
-
-const TYPE_OPTIONS = [
-  { value: "call", label: "Call" },
-  { value: "reunion", label: "Réunion" },
-  { value: "collab", label: "Collab" },
-  { value: "shoot", label: "Shoot" },
-  { value: "event", label: "Event" },
-  { value: "voyage", label: "Voyage" },
-  { value: "deadline", label: "Deadline" },
-];
-
-const TONE_DOT: Record<EventTone, string> = {
-  indigo: "bg-indigo",
-  cyan: "bg-cyan",
-  signal: "bg-signal",
-};
-
-const TONE_STATUS: Record<EventTone, BadgeStatus> = {
-  indigo: "info",
-  cyan: "neutral",
-  signal: "success",
-};
-
-const WEEKDAYS_SHORT = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
-
-function eventMeta(type: string) {
-  return EVENT_TYPES[type] ?? EVENT_TYPES.call;
-}
-
-function weekdayAbbr(date: string): string {
-  const d = new Date(date + "T00:00:00");
-  if (Number.isNaN(d.getTime())) return "";
-  return (WEEKDAYS_SHORT[d.getDay()] ?? "").toUpperCase();
-}
 
 export function Planning() {
-  const [rows, setRows] = useState<Row[] | null>(null);
-  const [error, setError] = useState<boolean>(false);
-  const { query } = useSearch();
+  const [rows, setRows] = useState<Ev[] | null>(null);
+  const [error, setError] = useState(false);
   const creators = useCreators();
 
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [formOpen, setFormOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
-  const [type, setType] = useState("call");
-  const [who, setWho] = useState("");
-
   useEffect(() => {
-    let active = true;
+    let alive = true;
     supabase
       .from("events")
-      .select("id, day, date, time, title, type, who, sort_order")
+      .select("id,day,date,time,title,type,who")
       .order("sort_order")
       .then(({ data, error }) => {
-        if (!active) return;
+        if (!alive) return;
         if (error) {
           setError(true);
           setRows([]);
           return;
         }
-        const list = ((data as Row[] | null) ?? [])
-          .filter((r) => !!r.date)
-          .sort((a, b) => a.date.localeCompare(b.date));
+        const list = ((data as Record<string, unknown>[]) ?? []).map((r) => ({
+          id: String(r.id),
+          date: (r.date as string) ?? "",
+          time: (r.time as string) ?? "—",
+          title: (r.title as string) ?? "",
+          type: (r.type as string) ?? "call",
+          who: (r.who as string | null) ?? null,
+        })) as Ev[];
         setRows(list);
       });
     return () => {
-      active = false;
+      alive = false;
     };
   }, []);
 
-  const eventDates = useMemo(
-    () => new Set((rows ?? []).map((r) => r.date)),
-    [rows],
-  );
+  if (error)
+    return (
+      <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
+        Impossible de charger le planning.
+      </div>
+    );
+  if (!rows)
+    return (
+      <AnimatedBadge status="loading" size="sm">
+        Chargement du planning…
+      </AnimatedBadge>
+    );
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const selectedStr = format(selectedDate, "yyyy-MM-dd");
-  const selectedDayEvents = (rows ?? []).filter((r) => r.date === selectedStr);
-  const upcoming = (rows ?? [])
-    .filter((r) => r.date >= todayStr)
-    .filter((row) => matchQuery(query, row.title, row.who, row.type));
-
-  const submit = async () => {
-    if (!title.trim()) {
+  const onCreate = async (e: Omit<Ev, "id">) => {
+    if (!e.title.trim()) {
       toast("Renseigne le titre");
       return;
     }
     const row = {
-      day: Number((date || "").split("-")[2]) || 1,
-      date: date || null,
-      time: time || "—",
-      title: title.trim(),
-      type,
-      who: who || null,
-      sort_order: nextOrder(rows ?? []),
+      day: Number((e.date || "").split("-")[2]) || 1,
+      date: e.date || null,
+      time: e.time || "—",
+      title: e.title,
+      type: e.type,
+      who: e.who || null,
+      sort_order: rows.length + 1,
     };
     const created = await dbInsert("events", row);
     if (!created) {
       toast("Erreur — réessaie");
       return;
     }
-    const next = [created as unknown as Row, ...(rows ?? [])].sort((a, b) =>
-      a.date.localeCompare(b.date),
-    );
-    setRows(next);
+    setRows([{ ...e, id: String((created as { id: string }).id) }, ...rows]);
     toast("Événement ajouté ✓");
-    setFormOpen(false);
-    setTitle("");
-    setDate("");
-    setTime("");
-    setType("call");
-    setWho("");
   };
 
-  const openForm = () => {
-    setDate(selectedStr);
-    setFormOpen(true);
+  const onUpdate = async (id: string, patch: Partial<Ev>) => {
+    const dbPatch: Record<string, unknown> = { ...patch };
+    if (patch.date) dbPatch.day = Number(patch.date.split("-")[2]) || 1;
+    if (await dbUpdate("events", id, dbPatch)) {
+      setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
+      toast("Événement modifié ✓");
+    } else {
+      toast("Erreur");
+    }
   };
 
-  const renderEvent = (row: Row, index: number) => {
-    const meta = eventMeta(row.type);
-    return (
-      <li
-        key={row.id}
-        className={cn(
-          "flex items-center gap-3 px-1 py-3 sm:gap-4",
-          index > 0 && "border-t border-border",
-        )}
-      >
-        <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-rowhover text-center">
-          <span className="text-[15px] font-bold leading-none text-foreground">{row.day}</span>
-          <span className="mt-0.5 text-[8px] font-semibold text-muted-foreground/70">
-            {weekdayAbbr(row.date)}
-          </span>
-        </div>
-        <div className="hidden w-12 shrink-0 items-center gap-1 text-xs font-semibold text-muted-foreground sm:flex">
-          <Clock className="h-3 w-3" />
-          {row.time}
-        </div>
-        <span className={cn("hidden h-1.5 w-1.5 shrink-0 rounded-full sm:block", TONE_DOT[meta.tone])} />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-medium text-foreground">{row.title}</div>
-          <div className="mt-0.5 flex items-center gap-2 text-[11px] text-faint sm:hidden">
-            <span>{row.time}</span>
-            {row.who && (
-              <>
-                <span>·</span>
-                <span className="truncate">{row.who}</span>
-              </>
-            )}
-          </div>
-          {row.who && (
-            <div className="mt-0.5 hidden truncate text-[10px] text-faint sm:block">{row.who}</div>
-          )}
-        </div>
-        <AnimatedBadge status={TONE_STATUS[meta.tone]} size="sm">
-          {meta.label}
-        </AnimatedBadge>
-        <DeleteButton
-          onClick={async () => {
-            if (await dbDelete("events", String(row.id))) {
-              setRows((prev) => (prev ?? []).filter((r) => r.id !== row.id));
-              toast("Supprimé");
-            }
-          }}
-        />
-      </li>
-    );
+  const onDelete = async (id: string) => {
+    if (await dbDelete("events", id)) {
+      setRows((prev) => (prev ?? []).filter((r) => r.id !== id));
+      toast("Supprimé");
+    }
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-sm text-muted-foreground">
-          {rows === null
-            ? "Chargement…"
-            : `${upcoming.length} événement${upcoming.length > 1 ? "s" : ""} à venir`}
-        </div>
-        <AddButton label="Événement" onClick={openForm} />
-      </div>
-
-      <InlineForm open={formOpen} title="Nouvel événement" onClose={() => setFormOpen(false)} onSubmit={submit}>
-        <TextField label="Titre" value={title} onChange={setTitle} placeholder="Titre" />
-        <TextField label="Date" value={date} onChange={setDate} placeholder="AAAA-MM-JJ" />
-        <TextField label="Heure" value={time} onChange={setTime} placeholder="14:30" />
-        <SelectField label="Type" value={type} onChange={setType} options={TYPE_OPTIONS} />
-        <SelectField
-          label="Avec qui"
-          value={who}
-          onChange={setWho}
-          options={[{ value: "", label: "—" }, ...creators.map((c) => ({ value: c.name, label: c.name }))]}
-        />
-      </InlineForm>
-
-      {/* Glass calendar */}
-      <GlassCalendar
-        selectedDate={selectedDate}
-        onDateSelect={setSelectedDate}
-        eventDates={eventDates}
-        onNewEvent={openForm}
-      />
-
-      {/* Selected day */}
-      <div className="rounded-2xl border border-border bg-card px-4 shadow-sm sm:px-5">
-        <div className="px-1 pb-1 pt-4 text-sm font-semibold capitalize text-foreground">
-          {format(selectedDate, "EEEE d MMMM", { locale: fr })}
-        </div>
-        {selectedDayEvents.length === 0 ? (
-          <div className="px-1 py-3 pb-4 text-sm text-muted-foreground">
-            Aucun événement ce jour-là.
-          </div>
-        ) : (
-          <ul className="pb-3">{selectedDayEvents.map((r, i) => renderEvent(r, i))}</ul>
-        )}
-      </div>
-
-      {/* Upcoming */}
-      <div className="rounded-2xl border border-border bg-card px-4 shadow-sm sm:px-5">
-        <div className="px-1 pb-1 pt-4 text-sm font-semibold text-foreground">Prochains jours</div>
-        {rows === null ? (
-          <div className="px-1 py-3 pb-4">
-            <AnimatedBadge status="loading" size="sm">
-              Chargement…
-            </AnimatedBadge>
-          </div>
-        ) : error ? (
-          <div className="px-1 py-3 pb-4 text-sm text-muted-foreground">
-            Impossible de charger le planning.
-          </div>
-        ) : upcoming.length === 0 ? (
-          <div className="px-1 py-3 pb-4 text-sm text-muted-foreground">
-            {query.trim() ? `Aucun résultat pour « ${query} »` : "Aucun événement à venir"}
-          </div>
-        ) : (
-          <ul className="pb-3">{upcoming.map((r, i) => renderEvent(r, i))}</ul>
-        )}
-      </div>
-    </div>
+    <EventCalendar
+      events={rows}
+      onCreate={onCreate}
+      onUpdate={onUpdate}
+      onDelete={onDelete}
+      creators={creators}
+    />
   );
 }

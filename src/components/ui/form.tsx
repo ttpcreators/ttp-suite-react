@@ -11,7 +11,7 @@ export function AddButton({ label, onClick }: { label: string; onClick: () => vo
     <button
       type="button"
       onClick={onClick}
-      className="flex shrink-0 items-center gap-1.5 rounded-lg bg-signal px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-onsignal transition-opacity hover:opacity-90"
+      className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
     >
       <Plus className="h-3.5 w-3.5" /> {label}
     </button>
@@ -119,7 +119,7 @@ export function InlineForm({
         {children}
         <button
           type="submit"
-          className="h-[42px] shrink-0 rounded-lg bg-signal px-5 text-[11px] font-semibold uppercase tracking-wide text-onsignal transition-opacity hover:opacity-90"
+          className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
         >
           {submitLabel}
         </button>

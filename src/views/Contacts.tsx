@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { Copy, X } from "lucide-react";
-import { initials } from "@/lib/utils";
+import { cn, initials } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
@@ -12,7 +12,7 @@ import {
   SelectField,
   DeleteButton,
 } from "@/components/ui/form";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Row = {
   id: string;
@@ -33,6 +33,8 @@ const TAG_OPTIONS = [
   { value: "PME", label: "PME" },
   { value: "Autre", label: "Autre" },
 ];
+
+const ALL_TAGS = "__all__";
 
 function CopyField({ label, value }: { label: string; value: string }) {
   const v = value && value.trim() ? value.trim() : "";
@@ -73,6 +75,8 @@ export function Contacts() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
 
+  const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS);
+
   useEffect(() => {
     let active = true;
     supabase
@@ -92,6 +96,25 @@ export function Contacts() {
       active = false;
     };
   }, []);
+
+  // Liste dynamique des tags réellement présents (préserve l'ordre des TAG_OPTIONS,
+  // puis ajoute les tags custom découverts dans les rows).
+  const tagList = useMemo(() => {
+    const present = new Set(
+      (rows ?? [])
+        .map((r) => (r.tag ?? "").trim())
+        .filter((t) => t.length > 0)
+    );
+    const ordered: string[] = [];
+    for (const opt of TAG_OPTIONS) {
+      if (present.has(opt.value)) {
+        ordered.push(opt.value);
+        present.delete(opt.value);
+      }
+    }
+    for (const extra of present) ordered.push(extra);
+    return ordered;
+  }, [rows]);
 
   if (error) {
     return (
@@ -146,17 +169,57 @@ export function Contacts() {
     setPhone("");
   };
 
-  const filtered = currentRows.filter((row) =>
-    matchQuery(query, row.brand, row.person, row.role, row.email, row.tag)
-  );
+  // Le filtre par tag se combine avec la recherche existante.
+  const filtered = currentRows.filter((row) => {
+    const tagOk = tagFilter === ALL_TAGS || (row.tag ?? "").trim() === tagFilter;
+    if (!tagOk) return false;
+    return matchQuery(query, row.brand, row.person, row.role, row.email, row.tag);
+  });
+
+  const pillBase =
+    "shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition-colors";
 
   return (
     <>
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="text-sm text-muted-foreground">
-          {currentRows.length} contact{currentRows.length > 1 ? "s" : ""}
+          {filtered.length} contact{filtered.length > 1 ? "s" : ""}
+          {(tagFilter !== ALL_TAGS || query.trim()) && (
+            <span className="text-faint"> / {currentRows.length}</span>
+          )}
         </div>
         <AddButton label="Contact" onClick={() => setFormOpen(true)} />
+      </div>
+
+      {/* Barre de filtres par tag */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setTagFilter(ALL_TAGS)}
+          className={cn(
+            pillBase,
+            tagFilter === ALL_TAGS
+              ? "bg-foreground text-background"
+              : "border border-border bg-surface text-muted-foreground hover:bg-rowhover"
+          )}
+        >
+          Tous
+        </button>
+        {tagList.map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTagFilter(t)}
+            className={cn(
+              pillBase,
+              tagFilter === t
+                ? "bg-foreground text-background"
+                : "border border-border bg-surface text-muted-foreground hover:bg-rowhover"
+            )}
+          >
+            {t}
+          </button>
+        ))}
       </div>
 
       <InlineForm
@@ -187,9 +250,11 @@ export function Contacts() {
           <div className="py-8 text-center text-xs text-muted-foreground">
             Aucun contact
           </div>
-        ) : query.trim() && filtered.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
-            Aucun résultat pour « {query} »
+            {query.trim()
+              ? `Aucun résultat pour « ${query} »`
+              : "Aucun contact pour ce filtre"}
           </div>
         ) : (
           filtered.map((row) => (

@@ -5,6 +5,8 @@ import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
 import { GooeyInput } from "@/components/ui/gooey-input";
 import { EncryptedText } from "@/components/ui/encrypted-text";
 import { Toaster } from "@/components/ui/toast";
+import { Notifications } from "@/components/ui/notifications";
+import { useNotifications } from "@/lib/useNotifications";
 import { Sidebar } from "@/components/Sidebar";
 import { Login } from "@/components/Login";
 import { NAV, findItem, type NavItem, type ViewId } from "@/lib/nav";
@@ -175,6 +177,7 @@ export default function App() {
     content: <MobileMenu items={f.items} onSelect={select} />,
   }));
 
+  const notifs = useNotifications();
   const title = findItem(active)?.label ?? "Aperçu";
 
   if (session === undefined || (session && profile === undefined)) {
@@ -247,6 +250,7 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+                <Notifications items={notifs} />
                 <button
                   type="button"
                   onClick={toggleTheme}

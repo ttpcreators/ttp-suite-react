@@ -1,20 +1,25 @@
 import { useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, ChevronLeft } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
+import { AddButton, InlineForm, TextField, DeleteButton } from "@/components/ui/form";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
-/** Étape d'une phase : id STABLE (persisté dans le blob `checklistDone`). */
+/** Une checklist nommée : `done` mappe { stepId: true } pour les étapes cochées. */
+export type Checklist = {
+  id: string;
+  name: string;
+  done: Record<string, boolean>;
+};
+
+/** Étape d'une phase : id STABLE (persisté dans `done`). */
 type Step = { id: string; label: string; who: "Agence" | "Créateur" };
 type Phase = { title: string; steps: Step[] };
 
-/** Map { stepId: true } persistée dans le blob agence. */
-type DoneMap = Record<string, boolean>;
-
 /**
- * Phases & étapes par défaut d'une collaboration.
+ * Phases & étapes par défaut d'une collaboration (template partagé).
  * Chaque étape porte un id stable (`prefixe-index`) pour survivre aux réordonnancements.
  */
 const PHASES: Phase[] = [
@@ -61,34 +66,70 @@ const PHASES: Phase[] = [
 
 const TOTAL_STEPS = PHASES.reduce((n, p) => n + p.steps.length, 0);
 
-export function Checklist() {
-  const { data, loading } = useAppState<DoneMap>(
-    (s: AppState) => (s["checklistDone"] as DoneMap) ?? {}
+/** Nombre d'étapes cochées (bornées au template) d'une checklist. */
+function doneCountOf(ck: Checklist): number {
+  return PHASES.reduce(
+    (n, p) => n + p.steps.filter((st) => ck.done[st.id]).length,
+    0
   );
-  const [done, setDone] = useState<DoneMap>({});
+}
+
+const DEFAULT_CHECKLISTS: Checklist[] = [
+  { id: "default", name: "Collaboration type", done: {} },
+];
+
+export function Checklist() {
+  const { data, loading } = useAppState<Checklist[]>(
+    (s: AppState) => (s["checklists"] as Checklist[]) ?? DEFAULT_CHECKLISTS
+  );
+  const [lists, setLists] = useState<Checklist[]>(DEFAULT_CHECKLISTS);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [name, setName] = useState("");
 
   // Synchronise l'état local dès que le blob est chargé.
   useEffect(() => {
-    if (data) setDone(data);
+    if (data) setLists(data);
   }, [data]);
 
-  const doneCount = PHASES.reduce(
-    (n, p) => n + p.steps.filter((st) => done[st.id]).length,
-    0
-  );
-  const pct = TOTAL_STEPS ? Math.round((doneCount / TOTAL_STEPS) * 100) : 0;
-
-  const toggle = async (id: string) => {
-    const next: DoneMap = { ...done, [id]: !done[id] };
-    if (!next[id]) delete next[id]; // on ne garde que les étapes cochées
-    setDone(next);
-    await saveAppStateKey("checklistDone", next);
+  const persist = async (next: Checklist[]) => {
+    setLists(next);
+    await saveAppStateKey("checklists", next);
   };
 
-  const reset = async () => {
-    const next: DoneMap = {};
-    setDone(next);
-    await saveAppStateKey("checklistDone", next);
+  const addChecklist = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const ck: Checklist = { id: "ck" + Date.now(), name: trimmed, done: {} };
+    await persist([...lists, ck]);
+    setName("");
+    setFormOpen(false);
+    toast("Checklist créée");
+  };
+
+  const removeChecklist = async (id: string) => {
+    const next = lists.filter((c) => c.id !== id);
+    await persist(next);
+    if (selectedId === id) setSelectedId(null);
+    toast("Checklist supprimée");
+  };
+
+  const toggleStep = async (id: string) => {
+    const next = lists.map((c) => {
+      if (c.id !== selectedId) return c;
+      const done = { ...c.done };
+      if (done[id]) delete done[id];
+      else done[id] = true;
+      return { ...c, done };
+    });
+    await persist(next);
+  };
+
+  const resetSelected = async () => {
+    const next = lists.map((c) =>
+      c.id === selectedId ? { ...c, done: {} } : c
+    );
+    await persist(next);
     toast("Checklist réinitialisée");
   };
 
@@ -102,14 +143,104 @@ export function Checklist() {
     );
   }
 
+  const selected = lists.find((c) => c.id === selectedId) ?? null;
+
+  /* ─────────────────────────── VUE LISTE ─────────────────────────── */
+  if (!selected) {
+    return (
+      <div>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-foreground">
+              Checklists
+            </div>
+            <div className="mt-0.5 text-[11px] text-faint">
+              {lists.length} checklist{lists.length > 1 ? "s" : ""}
+            </div>
+          </div>
+          <AddButton label="Nouvelle checklist" onClick={() => setFormOpen(true)} />
+        </div>
+
+        <InlineForm
+          open={formOpen}
+          title="Nouvelle checklist"
+          submitLabel="Créer"
+          onClose={() => {
+            setFormOpen(false);
+            setName("");
+          }}
+          onSubmit={addChecklist}
+        >
+          <TextField
+            label="Nom"
+            value={name}
+            onChange={setName}
+            placeholder="Nom de la checklist"
+          />
+        </InlineForm>
+
+        {lists.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border bg-panel/50 px-5 py-10 text-center text-[13px] text-muted-foreground">
+            Aucune checklist. Crée-en une pour démarrer.
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {lists.map((ck) => {
+              const dc = doneCountOf(ck);
+              const pct = TOTAL_STEPS ? Math.round((dc / TOTAL_STEPS) * 100) : 0;
+              return (
+                <button
+                  key={ck.id}
+                  type="button"
+                  onClick={() => setSelectedId(ck.id)}
+                  className="group flex flex-col gap-3 rounded-2xl border border-border bg-panel p-5 text-left shadow-sm transition-colors hover:bg-rowhover"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-foreground">
+                        {ck.name}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-faint tabular-nums">
+                        {dc} / {TOTAL_STEPS} étapes
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-bold tabular-nums text-foreground">
+                        {pct}%
+                      </span>
+                      <DeleteButton onClick={() => removeChecklist(ck.id)} />
+                    </div>
+                  </div>
+                  <Progress value={pct} className="h-2" />
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /* ─────────────────────────── VUE DÉTAIL ─────────────────────────── */
+  const doneCount = doneCountOf(selected);
+  const pct = TOTAL_STEPS ? Math.round((doneCount / TOTAL_STEPS) * 100) : 0;
+
   return (
     <div>
+      <button
+        type="button"
+        onClick={() => setSelectedId(null)}
+        className="mb-4 inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" /> Toutes les checklists
+      </button>
+
       {/* Barre d'avancement globale */}
       <div className="mb-5 rounded-2xl border border-border bg-panel shadow-sm p-5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-foreground">
-              Avancement de la collaboration
+              {selected.name}
             </div>
             <div className="mt-0.5 text-[11px] text-faint">
               {doneCount} / {TOTAL_STEPS} étapes bouclées
@@ -122,7 +253,7 @@ export function Checklist() {
             {doneCount > 0 && (
               <button
                 type="button"
-                onClick={reset}
+                onClick={resetSelected}
                 className="rounded-lg border border-border px-3 py-2 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover"
               >
                 RÉINITIALISER
@@ -136,7 +267,7 @@ export function Checklist() {
       {/* Phases */}
       <div className="space-y-4">
         {PHASES.map((phase) => {
-          const phaseDone = phase.steps.filter((st) => done[st.id]).length;
+          const phaseDone = phase.steps.filter((st) => selected.done[st.id]).length;
           return (
             <div
               key={phase.title}
@@ -153,12 +284,12 @@ export function Checklist() {
 
               <ul className="space-y-1">
                 {phase.steps.map((step) => {
-                  const checked = !!done[step.id];
+                  const checked = !!selected.done[step.id];
                   return (
                     <li key={step.id}>
                       <button
                         type="button"
-                        onClick={() => toggle(step.id)}
+                        onClick={() => toggleStep(step.id)}
                         className="group flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-rowhover"
                       >
                         {/* Case animée */}
@@ -183,9 +314,7 @@ export function Checklist() {
                         <span
                           className={cn(
                             "min-w-0 flex-1 truncate text-[13px] font-medium transition-colors",
-                            checked
-                              ? "text-faint line-through"
-                              : "text-foreground"
+                            checked ? "text-faint line-through" : "text-foreground"
                           )}
                         >
                           {step.label}
