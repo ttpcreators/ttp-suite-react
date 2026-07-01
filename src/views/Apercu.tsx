@@ -5,6 +5,16 @@ import { titleCase, initials } from "@/lib/utils";
 import { parseAmount, formatEuro, useAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { EncryptedText } from "@/components/ui/encrypted-text";
+import ProgressMetricCard from "@/components/ui/progress-metric-card";
+
+const MONTH_NAMES = [
+  "janv.", "févr.", "mars", "avr.", "mai", "juin",
+  "juil.", "août", "sept.", "oct.", "nov.", "déc.",
+];
+const monthLabel = (ym: string) => {
+  const [y, mo] = ym.split("-");
+  return `${MONTH_NAMES[Number(mo) - 1] ?? mo} ${y}`;
+};
 
 type Invoice = { ref: string; party: string; amount: string; date: string; status: string; creator: string | null };
 type Ev = { date: string | null; day: number | null; time: string | null; title: string; type: string; who: string | null };
@@ -195,6 +205,18 @@ export function Apercu() {
 
   const recent = d.invoices.slice(0, 5);
 
+  const monthly = (() => {
+    const map = new Map<string, number>();
+    for (const inv of d.invoices) {
+      const m = (inv.date || "").slice(0, 7);
+      if (!/^\d{4}-\d{2}$/.test(m)) continue;
+      map.set(m, (map.get(m) || 0) + parseAmount(inv.amount));
+    }
+    return [...map.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([m, v]) => ({ value: v, date: m }));
+  })();
+
   return (
     <div>
       <div className="mb-5 flex items-start justify-between">
@@ -211,6 +233,22 @@ export function Apercu() {
           LIVE · {MONTH}
         </div>
       </div>
+
+      <ProgressMetricCard
+        title="Chiffre d'affaires facturé"
+        data={monthly}
+        accent="emerald"
+        size="sm"
+        valueFormatter={(n) => formatEuro(n)}
+        dateFormatter={monthLabel}
+        periodOptions={[
+          { label: "6 mois", points: 6 },
+          { label: "12 mois", points: 12 },
+          { label: "Tout" },
+        ]}
+        period="Tout"
+        className="mb-4"
+      />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
         <Card index={0} className="md:col-span-12">

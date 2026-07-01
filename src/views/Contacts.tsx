@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { Copy, X } from "lucide-react";
 import { initials } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -33,11 +34,37 @@ const TAG_OPTIONS = [
   { value: "Autre", label: "Autre" },
 ];
 
+function CopyField({ label, value }: { label: string; value: string }) {
+  const v = value && value.trim() ? value.trim() : "";
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-panel px-3 py-2.5">
+      <div className="min-w-0">
+        <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</div>
+        <div className="truncate text-sm text-foreground">{v || "—"}</div>
+      </div>
+      {v && (
+        <button
+          type="button"
+          onClick={() => {
+            navigator.clipboard?.writeText(v);
+            toast(`${label} copié ✓`);
+          }}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+          title={`Copier ${label.toLowerCase()}`}
+        >
+          <Copy className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function Contacts() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState(false);
   const { query } = useSearch();
 
+  const [selected, setSelected] = useState<Row | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [brand, setBrand] = useState("");
   const [person, setPerson] = useState("");
@@ -168,6 +195,7 @@ export function Contacts() {
           filtered.map((row) => (
             <div
               key={row.id}
+              onClick={() => setSelected(row)}
               className="flex cursor-pointer items-center gap-3.5 border-b border-border py-3.5 last:border-b-0 hover:bg-rowhover"
             >
               {/* Avatar */}
@@ -208,6 +236,68 @@ export function Contacts() {
           ))
         )}
       </div>
+
+      {/* Fiche détail contact */}
+      {selected && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setSelected(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start gap-3">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-muted text-sm font-bold text-foreground">
+                {initials(selected.person)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-base font-semibold">{selected.brand}</div>
+                <div className="truncate text-xs text-faint">
+                  {selected.person} · {selected.role}
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full bg-rowhover px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {selected.tag}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="shrink-0 text-faint transition-colors hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <CopyField label="Marque / Entreprise" value={selected.brand} />
+              <CopyField label="Personne" value={selected.person} />
+              <CopyField label="Rôle" value={selected.role} />
+              <CopyField label="Email" value={selected.email} />
+              <CopyField label="Téléphone" value={selected.phone} />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const text = [
+                  selected.brand,
+                  `${selected.person} · ${selected.role}`,
+                  selected.email,
+                  selected.phone,
+                ]
+                  .filter((s) => s && s.trim() && s.trim() !== "·")
+                  .join("\n");
+                navigator.clipboard?.writeText(text);
+                toast("Fiche copiée ✓");
+              }}
+              className="mt-4 w-full rounded-lg bg-signal py-2.5 text-[11px] font-semibold uppercase tracking-wide text-onsignal transition-opacity hover:opacity-90"
+            >
+              Copier toute la fiche
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
