@@ -48,7 +48,7 @@ export function Portal({
     let alive = true;
     supabase.from("creators").select("name,handle,niche,followers,er,ca,photo_url").eq("name", name).limit(1).then(({ data }) => alive && setC((data?.[0] as Creator) ?? null));
     supabase.from("briefs").select("brand,deliverables,due,status").eq("who", name).then(({ data }) => alive && setBriefs((data as Br[]) ?? []));
-    supabase.from("events").select("date,day,time,title,type").ilike("who", `%${name}%`).then(({ data }) => alive && setEvents((data as Ev[]) ?? []));
+    supabase.from("events").select("date,day,time,title,type").eq("who", name).then(({ data }) => alive && setEvents((data as Ev[]) ?? []));
     supabase.from("documents").select("name,type,size,created_at").eq("creator", name).then(({ data }) => alive && setDocs((data as Doc[]) ?? []));
     return () => {
       alive = false;

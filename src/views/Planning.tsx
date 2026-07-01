@@ -57,9 +57,11 @@ export function Planning() {
       toast("Renseigne le titre");
       return;
     }
+    // date par défaut = aujourd'hui (sinon l'événement n'apparaît nulle part)
+    const dateVal = e.date && e.date.trim() ? e.date : new Date().toISOString().slice(0, 10);
     const row = {
-      day: Number((e.date || "").split("-")[2]) || 1,
-      date: e.date || null,
+      day: Number(dateVal.split("-")[2]) || 1,
+      date: dateVal,
       time: e.time || "—",
       title: e.title,
       type: e.type,
@@ -71,7 +73,7 @@ export function Planning() {
       toast("Erreur — réessaie");
       return;
     }
-    setRows([{ ...e, id: String((created as { id: string }).id) }, ...rows]);
+    setRows([{ ...e, date: dateVal, id: String((created as { id: string }).id) }, ...rows]);
     toast("Événement ajouté ✓");
   };
 

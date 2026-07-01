@@ -222,9 +222,9 @@ export function Login() {
   };
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
+    <div className="flex min-h-screen flex-col overflow-x-hidden lg:flex-row">
       {/* Left : characters */}
-      <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-primary/90 via-primary to-primary/80 p-12 text-primary-foreground lg:flex">
+      <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-primary/90 via-primary to-primary/80 p-12 text-primary-foreground lg:flex lg:w-1/2">
         <div className="relative z-20 flex items-center gap-2 text-lg font-semibold">
           <div className="h-8 w-8 overflow-hidden rounded-lg bg-white/10">
             <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
@@ -304,8 +304,8 @@ export function Login() {
       </div>
 
       {/* Right : form */}
-      <div className="flex items-center justify-center bg-background p-8">
-        <div className="w-full max-w-[420px]">
+      <div className="flex w-full min-w-0 items-center justify-center bg-background px-6 py-10 sm:p-8 lg:w-1/2">
+        <div className="mx-auto w-full max-w-[360px]">
           <div className="mb-12 flex items-center justify-center gap-2 text-lg font-semibold lg:hidden">
             <div className="h-8 w-8 overflow-hidden rounded-lg bg-[#14181E]">
               <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
@@ -354,14 +354,27 @@ export function Login() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-y-2">
               <div className="flex items-center gap-2">
                 <Checkbox id="remember" defaultChecked />
                 <Label htmlFor="remember" className="cursor-pointer font-normal">
-                  Se souvenir de moi
+                  Se souvenir
                 </Label>
               </div>
-              <span className="cursor-pointer text-sm font-medium text-primary hover:underline">Mot de passe oublié ?</span>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!email.trim()) {
+                    setError("Entre d'abord ton email.");
+                    return;
+                  }
+                  await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase());
+                  setError("Email de réinitialisation envoyé ✓");
+                }}
+                className="cursor-pointer text-sm font-medium text-primary hover:underline"
+              >
+                Mot de passe oublié ?
+              </button>
             </div>
 
             {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}

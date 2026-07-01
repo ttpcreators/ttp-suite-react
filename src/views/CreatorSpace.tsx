@@ -130,7 +130,7 @@ export function CreatorSpace({
     supabase.from("todos").select("id,text,descr,due,priority,done,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setTodos((data as Todo[]) ?? []));
     supabase.from("ideas").select("id,text,status,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
     supabase.from("briefs").select("id,brand,deliverables,due,status").eq("who", name).then(({ data }) => alive && setBriefs((data as Brief[]) ?? []));
-    supabase.from("events").select("id,date,day,time,title,type").ilike("who", `%${name}%`).then(({ data }) => alive && setEvents((data as Ev[]) ?? []));
+    supabase.from("events").select("id,date,day,time,title,type").eq("who", name).then(({ data }) => alive && setEvents((data as Ev[]) ?? []));
     supabase.from("documents").select("id,name,type,size,created_at").eq("creator", name).then(({ data }) => alive && setDocs((data as Doc[]) ?? []));
     supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).then(({ data }) => alive && setInvoices((data as Invoice[]) ?? []));
     return () => {
