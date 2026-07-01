@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
@@ -129,12 +130,7 @@ export function Checklist() {
             )}
           </div>
         </div>
-        <div className="h-2.5 overflow-hidden rounded-full bg-rowhover">
-          <div
-            className="h-full rounded-full bg-signal transition-[width] duration-500 ease-out"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
+        <Progress value={pct} className="h-2.5" />
       </div>
 
       {/* Phases */}

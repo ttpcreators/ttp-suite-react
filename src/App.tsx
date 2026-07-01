@@ -28,6 +28,7 @@ import { Mediakit } from "@/views/Mediakit";
 import { Templates } from "@/views/Templates";
 import { CreatorDetail } from "@/views/CreatorDetail";
 import { Portal } from "@/views/Portal";
+import { CreatorSpace } from "@/views/CreatorSpace";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -109,6 +110,9 @@ export default function App() {
   const [detailCreator, setDetailCreator] = useState<string | null>(null);
   const [space, setSpace] = useState<"agency" | "portal">("agency");
   const [portalCreator, setPortalCreator] = useState<string | null>(null);
+  const [profile, setProfile] = useState<
+    { role: string; creator_name: string | null } | null | undefined
+  >(undefined);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -121,6 +125,28 @@ export default function App() {
     );
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  // Rôle de l'utilisateur connecté (agence vs créateur)
+  useEffect(() => {
+    if (!session) {
+      setProfile(session === null ? null : undefined);
+      return;
+    }
+    let alive = true;
+    supabase
+      .from("profiles")
+      .select("role,creator_name")
+      .eq("user_id", session.user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!alive) return;
+        const row = data as { role: string; creator_name: string | null } | null;
+        setProfile(row ?? { role: "agency", creator_name: null });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [session]);
 
   const select = (id: ViewId) => {
     setActive(id);
@@ -151,7 +177,7 @@ export default function App() {
 
   const title = findItem(active)?.label ?? "Aperçu";
 
-  if (session === undefined) {
+  if (session === undefined || (session && profile === undefined)) {
     return (
       <div className="grid min-h-screen place-items-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -159,6 +185,18 @@ export default function App() {
     );
   }
   if (!session) return <Login />;
+
+  // Espace CRÉATEUR : vue dédiée quand un créateur se connecte
+  if (profile?.role === "creator" && profile.creator_name) {
+    return (
+      <CreatorSpace
+        name={profile.creator_name}
+        dark={dark}
+        onToggleTheme={toggleTheme}
+        onLogout={logout}
+      />
+    );
+  }
 
   return (
     <SearchContext.Provider value={{ query, setQuery }}>

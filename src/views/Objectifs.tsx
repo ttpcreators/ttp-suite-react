@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Target } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import {
   useAppState,
   saveAppStateKey,
@@ -176,12 +177,7 @@ export function Objectifs() {
                   <span className="truncate text-[13px] font-semibold text-foreground md:w-44">
                     {o.name}
                   </span>
-                  <span className="h-2 flex-1 overflow-hidden rounded-full bg-rowhover">
-                    <span
-                      className="block h-full rounded-full bg-signal transition-all"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </span>
+                  <Progress value={pct} className="h-2 flex-1" />
                   <div className="flex items-center justify-between gap-4 md:justify-end">
                     <span className="w-12 shrink-0 text-right text-[13px] font-semibold text-foreground">
                       {pct}%
