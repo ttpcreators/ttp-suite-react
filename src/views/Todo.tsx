@@ -370,8 +370,8 @@ export function Todo() {
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-border bg-card shadow-sm px-4 sm:px-5">
-          {filtered.map((row, index) => {
+        <div className="flex flex-col gap-3">
+          {filtered.map((row) => {
             const badge = priorityBadge[row.priority];
             const toggleDone = async (next: boolean) => {
               if (await dbUpdate("todos", row.id, { done: next })) {
@@ -398,10 +398,7 @@ export function Todo() {
                     setSelectedTodo(row);
                   }
                 }}
-                className={cn(
-                  "flex cursor-pointer items-center gap-3 py-3 transition-colors hover:bg-rowhover/40",
-                  index > 0 && "border-t border-border"
-                )}
+                className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:bg-rowhover"
               >
                 {/* Case à cocher animée (barre progressive) */}
                 <Checkbox
