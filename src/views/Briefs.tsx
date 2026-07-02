@@ -306,8 +306,8 @@ export function Briefs() {
           {/* Toggle vue */}
           <div className="flex gap-1 rounded-lg bg-panel p-0.5">
             {([
-              { id: "board", label: "Colonnes", icon: Columns3 },
               { id: "list", label: "Liste", icon: ListIcon },
+              { id: "board", label: "Colonnes", icon: Columns3 },
             ] as const).map((v) => (
               <button
                 key={v.id}
