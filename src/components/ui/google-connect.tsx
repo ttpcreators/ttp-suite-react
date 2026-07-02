@@ -3,7 +3,7 @@
  *
  * Rôle : bouton « Connecter Google Agenda » (déconnecté) ou, une fois connecté,
  * l'email du compte + date de dernière sync + boutons « Synchroniser maintenant »
- * et « Déconnecter ». DA : bouton principal en `primary` bleu.
+ * et « Déconnecter ».
  *
  * Toute la logique réseau vit dans `@/lib/googleCalendar` ; ce composant ne fait
  * qu'orchestrer l'UI et gérer les états de chargement / erreurs.
@@ -63,12 +63,14 @@ export function GoogleConnect() {
     setLoading(false);
   }, []);
 
-  // Montage : consomme le retour OAuth (?google=connected) puis charge le statut.
+  // Montage : consomme le retour OAuth (?google=connected|error) puis charge le statut.
   useEffect(() => {
-    const { justConnected } = consumeOAuthReturn();
+    const { justConnected, error } = consumeOAuthReturn();
     void refresh();
     if (justConnected) {
       toast("Google Agenda connecté");
+    } else if (error) {
+      toast("Échec de la connexion Google — réessaie");
     }
   }, [refresh]);
 
@@ -77,13 +79,9 @@ export function GoogleConnect() {
     setConnecting(true);
     try {
       await connect(); // redirige — ne revient pas en cas de succès
-    } catch (e) {
+    } catch {
       setConnecting(false);
-      toast(
-        e instanceof Error && e.message.includes("VITE_GOOGLE_CLIENT_ID")
-          ? "Configuration Google manquante (CLIENT_ID)"
-          : "Impossible de démarrer la connexion Google",
-      );
+      toast("Impossible de démarrer la connexion Google");
     }
   }, []);
 

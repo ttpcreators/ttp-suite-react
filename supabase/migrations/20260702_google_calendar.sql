@@ -44,11 +44,16 @@ returns trigger
 language plpgsql
 as $$
 declare
-  v_role text := current_setting('request.jwt.claim.role', true);
+  -- Discrimine l'origine de l'écriture. Le rôle Postgres effectif est le plus
+  -- fiable : les Edge Functions (sync serveur) se connectent en 'service_role',
+  -- l'app front en 'authenticated'. On complète avec la claim JWT (défense en
+  -- profondeur) au cas où current_user serait masqué.
+  v_pg_role  text := current_user;
+  v_jwt_role text := current_setting('request.jwt.claim.role', true);
 begin
-  -- Le service_role de la sync serveur passe request.jwt.claim.role = 'service_role'
-  -- (ou aucune claim). Toute autre valeur (authenticated) = mutation UI/front.
-  if v_role is distinct from 'service_role' then
+  -- Écriture serveur (sync) UNIQUEMENT si le rôle effectif est service_role.
+  -- Toute autre origine (authenticated = UI/front) est traitée comme 'agence'.
+  if v_pg_role <> 'service_role' and coalesce(v_jwt_role, '') <> 'service_role' then
     -- Mutation applicative (agence via l'app) : origine 'agence', horodatage now().
     new.sync_source := 'agence';
     new.updated_at := now();

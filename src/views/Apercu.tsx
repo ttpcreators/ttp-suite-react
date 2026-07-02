@@ -108,7 +108,7 @@ export function Apercu() {
     let alive = true;
     Promise.all([
       supabase.from("invoices").select("ref,party,amount,date,status,creator").order("sort_order"),
-      supabase.from("events").select("day,date,time,title,type,who").or("deleted.is.null,deleted.eq.false").order("sort_order"),
+      supabase.from("events").select("day,date,time,title,type,who").order("sort_order"),
       supabase.from("prospects").select("brand,contact,value,stage").order("sort_order"),
       supabase.from("todos").select("text,tag,creator,priority,done").order("sort_order"),
       supabase.from("briefs").select("brand,creator,deliverables,due,status").order("sort_order"),

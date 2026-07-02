@@ -142,7 +142,7 @@ export function CreatorSpace({
     supabase.from("todos").select("id,text,descr,due,priority,done,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setTodos((data as Todo[]) ?? []));
     supabase.from("ideas").select("id,text,status,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
     supabase.from("briefs").select("id,brand,deliverables,due,status").eq("who", name).then(({ data }) => alive && setBriefs((data as Brief[]) ?? []));
-    supabase.from("events").select("id,date,day,time,title,type,who").or("deleted.is.null,deleted.eq.false").then(({ data }) => {
+    supabase.from("events").select("id,date,day,time,title,type,who").then(({ data }) => {
       if (!alive) return;
       const rows = (data as (Ev & { who: string | null })[]) ?? [];
       setEvents(rows.filter((e) => (e.who ?? "").split(", ").includes(name)));
