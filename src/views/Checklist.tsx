@@ -4,6 +4,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { AddButton, InlineForm, TextField, DeleteButton } from "@/components/ui/form";
+import { ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
@@ -88,6 +89,7 @@ export function Checklist() {
   const [name, setName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [pendingDel, setPendingDel] = useState<null | { message: string; run: () => void }>(null);
 
   // Synchronise l'état local dès que le blob est chargé.
   useEffect(() => {
@@ -96,7 +98,8 @@ export function Checklist() {
 
   const persist = async (next: Checklist[]) => {
     setLists(next);
-    await saveAppStateKey("checklists", next);
+    const ok = await saveAppStateKey("checklists", next);
+    if (!ok) toast("Erreur — réessaie");
   };
 
   const addChecklist = async () => {
@@ -229,7 +232,7 @@ export function Checklist() {
                       <span className="text-lg font-bold tabular-nums text-foreground">
                         {pct}%
                       </span>
-                      <DeleteButton onClick={() => removeChecklist(ck.id)} />
+                      <DeleteButton onClick={() => setPendingDel({ message: `Supprimer la checklist « ${ck.name} » ? Cette action est irréversible.`, run: () => removeChecklist(ck.id) })} />
                     </div>
                   </div>
                   <Progress value={pct} className="h-2" />
@@ -385,6 +388,19 @@ export function Checklist() {
           );
         })}
       </div>
+      {pendingDel && (
+        <ConfirmDialog
+          title="Supprimer la checklist"
+          message={pendingDel.message}
+          confirmLabel="Supprimer"
+          danger
+          onCancel={() => setPendingDel(null)}
+          onConfirm={() => {
+            pendingDel.run();
+            setPendingDel(null);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -216,7 +216,7 @@ export function Briefs() {
             <ActionMenu
               items={[
                 { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(row) },
-                { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: () => del(row) },
+                { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: () => del(row), confirm: { title: "Mettre à la corbeille", message: `Déplacer le brief « ${row.brand} » vers la corbeille ? Tu pourras le restaurer.`, confirmLabel: "Mettre à la corbeille" } },
               ]}
             />
           </div>

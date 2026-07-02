@@ -6,6 +6,7 @@ import { dbUpdate } from "@/lib/db";
 import { useAppState, saveAppStateKey } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
 import { SelectField } from "@/components/ui/form";
+import { ConfirmDialog } from "@/components/ui/action-menu";
 import { cn, titleCase } from "@/lib/utils";
 
 /**
@@ -132,6 +133,7 @@ export function Engagement() {
     (s) => ((s as Record<string, unknown>).engagementHistory as HistEntry[]) ?? [],
   );
   const [history, setHistory] = useState<HistEntry[]>([]);
+  const [pendingDel, setPendingDel] = useState<null | { message: string; run: () => void }>(null);
   useEffect(() => {
     if (histData) setHistory(histData);
   }, [histData]);
@@ -393,7 +395,7 @@ export function Engagement() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => delHist(h.id)}
+                  onClick={() => setPendingDel({ message: "Supprimer cette mesure de l'historique ? Cette action est irréversible.", run: () => delHist(h.id) })}
                   title="Supprimer"
                   className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
                 >
@@ -403,6 +405,19 @@ export function Engagement() {
             ))}
           </div>
         </div>
+      )}
+      {pendingDel && (
+        <ConfirmDialog
+          title="Supprimer la mesure"
+          message={pendingDel.message}
+          confirmLabel="Supprimer"
+          danger
+          onCancel={() => setPendingDel(null)}
+          onConfirm={() => {
+            pendingDel.run();
+            setPendingDel(null);
+          }}
+        />
       )}
     </div>
   );

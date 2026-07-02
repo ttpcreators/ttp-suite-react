@@ -5,6 +5,7 @@ import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
 import { TextField, SelectField } from "@/components/ui/form";
+import { ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
@@ -88,6 +89,7 @@ export function RepresentationContract() {
   const [creatorName, setCreatorName] = useState("");
   const [config, setConfig] = useState<Cfg>(() => defaultConfig("exclusif"));
   const [caseName, setCaseName] = useState("Standard");
+  const [pendingDel, setPendingDel] = useState<null | { message: string; run: () => void }>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Général: true, Talent: true, Durée: true, Commission: true });
@@ -232,7 +234,7 @@ export function RepresentationContract() {
               {cases.map((cs) => (
                 <span key={cs.id} className={cn("flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium", cs.name === caseName ? "border-primary bg-primary/10 text-primary" : "border-border bg-surface text-muted-foreground")}>
                   <button type="button" onClick={() => loadCase(cs)} className="transition-colors hover:text-foreground">{cs.name}</button>
-                  <button type="button" onClick={() => deleteCase(cs.id)} className="text-faint transition-colors hover:text-rose-500" title="Supprimer"><X className="h-3 w-3" /></button>
+                  <button type="button" onClick={() => setPendingDel({ message: `Supprimer le cas « ${cs.name} » ? Cette action est irréversible.`, run: () => deleteCase(cs.id) })} className="text-faint transition-colors hover:text-rose-500" title="Supprimer"><X className="h-3 w-3" /></button>
                 </span>
               ))}
             </div>
@@ -326,6 +328,19 @@ export function RepresentationContract() {
         }>
           <iframe title="Contrat de représentation" srcDoc={preview} className="h-[64vh] w-full rounded-lg border border-border bg-white" />
         </Modal>
+      )}
+      {pendingDel && (
+        <ConfirmDialog
+          title="Supprimer le cas"
+          message={pendingDel.message}
+          confirmLabel="Supprimer"
+          danger
+          onCancel={() => setPendingDel(null)}
+          onConfirm={() => {
+            pendingDel.run();
+            setPendingDel(null);
+          }}
+        />
       )}
     </div>
   );

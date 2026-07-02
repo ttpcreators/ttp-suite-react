@@ -10,6 +10,7 @@ import {
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, DeleteButton } from "@/components/ui/form";
+import { ConfirmDialog } from "@/components/ui/action-menu";
 
 /** Un objectif du mois : intitulé, CA réalisé, cible, progression (%) et ton. */
 type Objective = {
@@ -44,6 +45,7 @@ export function Objectifs() {
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [ca, setCa] = useState("");
+  const [pendingDel, setPendingDel] = useState<null | { message: string; run: () => void }>(null);
 
   const avgPct =
     list.length > 0
@@ -185,13 +187,26 @@ export function Objectifs() {
                     <span className="shrink-0 whitespace-nowrap text-right text-[11px] text-faint">
                       {o.ca} / {o.target}
                     </span>
-                    <DeleteButton onClick={() => remove(index)} />
+                    <DeleteButton onClick={() => setPendingDel({ message: `Supprimer l'objectif « ${o.name} » ? Cette action est irréversible.`, run: () => remove(index) })} />
                   </div>
                 </li>
               );
             })}
           </ul>
         </div>
+      )}
+      {pendingDel && (
+        <ConfirmDialog
+          title="Supprimer l'objectif"
+          message={pendingDel.message}
+          confirmLabel="Supprimer"
+          danger
+          onCancel={() => setPendingDel(null)}
+          onConfirm={() => {
+            pendingDel.run();
+            setPendingDel(null);
+          }}
+        />
       )}
     </div>
   );
