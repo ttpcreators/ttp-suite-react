@@ -9,8 +9,9 @@ import {
   InlineForm,
   TextField,
   SelectField,
-  DeleteButton,
 } from "@/components/ui/form";
+import { ActionMenu } from "@/components/ui/action-menu";
+import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -276,7 +277,18 @@ export function Prospection() {
                       <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
                         {card.brand}
                       </span>
-                      <DeleteButton onClick={() => removeCard(card.id)} />
+                      <ActionMenu
+                        items={[
+                          {
+                            key: "delete",
+                            label: "Supprimer",
+                            icon: Trash2,
+                            danger: true,
+                            onClick: () => removeCard(card.id),
+                            confirm: { title: "Supprimer le prospect", message: `Supprimer « ${card.brand} » ? Cette action est irréversible.` },
+                          },
+                        ]}
+                      />
                     </div>
                     {card.contact && (
                       <p className="mt-1.5 truncate text-[10px] text-muted-foreground">

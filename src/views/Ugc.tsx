@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Pencil, Copy } from "lucide-react";
+import { Pencil, Copy, Trash2 } from "lucide-react";
 import { useAppState, saveAppStateKey } from "@/lib/appState";
 import { useSearch, matchQuery } from "@/lib/search";
-import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/components/ui/form";
+import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
+import { ActionMenu } from "@/components/ui/action-menu";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
@@ -185,28 +186,13 @@ export function Ugc() {
                     {u.notes && <div className="mt-1 line-clamp-2 text-[11px] text-faint">{u.notes}</div>}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    {contact && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard?.writeText(contact);
-                          toast("Contact copié ✓");
-                        }}
-                        className="grid h-9 w-9 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                        title="Copier le contact"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => openEdit(u)}
-                      className="grid h-9 w-9 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                      title="Modifier"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    <DeleteButton onClick={() => del(u.id)} />
+                    <ActionMenu
+                      items={[
+                        ...(contact ? [{ key: "copy", label: "Copier le contact", icon: Copy, onClick: () => { navigator.clipboard?.writeText(contact); toast("Contact copié ✓"); } }] : []),
+                        { key: "edit", label: "Modifier", icon: Pencil, onClick: () => openEdit(u) },
+                        { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => del(u.id), confirm: { title: "Supprimer le créateur UGC", message: `Supprimer « ${u.name} » ? Cette action est irréversible.` } },
+                      ]}
+                    />
                   </div>
                 </div>
                 {contact && (

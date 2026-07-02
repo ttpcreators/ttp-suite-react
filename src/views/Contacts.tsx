@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
-import { Copy, X, Download, Upload } from "lucide-react";
+import { Copy, X, Download, Upload, Trash2 } from "lucide-react";
+import { ActionMenu } from "@/components/ui/action-menu";
 import { cn, initials } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -10,7 +11,6 @@ import {
   InlineForm,
   TextField,
   SelectField,
-  DeleteButton,
 } from "@/components/ui/form";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
@@ -478,14 +478,26 @@ export function Contacts() {
                 {row.tag}
               </span>
 
-              {/* Suppression */}
-              <DeleteButton
-                onClick={async () => {
-                  if (await dbDelete("contacts", row.id)) {
-                    setRows(currentRows.filter((r) => r.id !== row.id));
-                    toast("Supprimé");
-                  }
-                }}
+              {/* Actions */}
+              <ActionMenu
+                items={[
+                  ...(row.email
+                    ? [{ key: "copy", label: "Copier l'email", icon: Copy, onClick: () => { navigator.clipboard?.writeText(row.email); toast("Email copié ✓"); } }]
+                    : []),
+                  {
+                    key: "delete",
+                    label: "Supprimer",
+                    icon: Trash2,
+                    danger: true,
+                    onClick: async () => {
+                      if (await dbDelete("contacts", row.id)) {
+                        setRows(currentRows.filter((r) => r.id !== row.id));
+                        toast("Supprimé");
+                      }
+                    },
+                    confirm: { title: "Supprimer le contact", message: `Supprimer « ${row.brand} » ? Cette action est irréversible.` },
+                  },
+                ]}
               />
             </div>
           ))

@@ -7,8 +7,9 @@ import {
   AddButton,
   InlineForm,
   TextField,
-  DeleteButton,
 } from "@/components/ui/form";
+import { ActionMenu } from "@/components/ui/action-menu";
+import { Trash2 } from "lucide-react";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useEffect, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
@@ -186,7 +187,18 @@ export function Idees() {
                       onChange={(v) => updateStatus(row.id, v)}
                     />
                   </div>
-                  <DeleteButton onClick={() => removeRow(row.id)} />
+                  <ActionMenu
+                    items={[
+                      {
+                        key: "delete",
+                        label: "Supprimer",
+                        icon: Trash2,
+                        danger: true,
+                        onClick: () => removeRow(row.id),
+                        confirm: { title: "Supprimer l'idée", message: `Supprimer « ${row.text} » ? Cette action est irréversible.` },
+                      },
+                    ]}
+                  />
                 </div>
               </div>
             </div>

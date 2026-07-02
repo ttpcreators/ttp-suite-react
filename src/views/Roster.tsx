@@ -6,7 +6,9 @@ import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
-import { AddButton, InlineForm, TextField, DeleteButton } from "@/components/ui/form";
+import { AddButton, InlineForm, TextField } from "@/components/ui/form";
+import { ActionMenu } from "@/components/ui/action-menu";
+import { Trash2 } from "lucide-react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 
@@ -252,13 +254,22 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
 
                 {/* Action supprimer */}
                 <div className="flex shrink-0 items-center justify-end md:col-start-7">
-                  <DeleteButton
-                    onClick={async () => {
-                      if (await dbDelete("creators", c.id)) {
-                        setRows(rows.filter((r) => r.id !== c.id));
-                        toast("Supprimé");
-                      }
-                    }}
+                  <ActionMenu
+                    items={[
+                      {
+                        key: "delete",
+                        label: "Supprimer",
+                        icon: Trash2,
+                        danger: true,
+                        onClick: async () => {
+                          if (await dbDelete("creators", c.id)) {
+                            setRows(rows.filter((r) => r.id !== c.id));
+                            toast("Supprimé");
+                          }
+                        },
+                        confirm: { title: "Supprimer le créateur", message: `Supprimer « ${titleCase(c.name)} » du roster ? Cette action est irréversible.` },
+                      },
+                    ]}
                   />
                 </div>
               </div>

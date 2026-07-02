@@ -9,8 +9,8 @@ import {
   InlineForm,
   TextField,
   SelectField,
-  DeleteButton,
 } from "@/components/ui/form";
+import { ActionMenu } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -22,7 +22,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { useEffect, useState, type ReactNode } from "react";
-import { X, Pencil } from "lucide-react";
+import { X, Pencil, Trash2 } from "lucide-react";
 
 type Priority = "haute" | "moyenne" | "basse";
 type Source = "agency" | "creator";
@@ -449,13 +449,22 @@ export function Todo() {
                   <AnimatedBadge status={badge.status} size="sm">
                     {badge.label}
                   </AnimatedBadge>
-                  <DeleteButton
-                    onClick={async () => {
-                      if (await dbDelete("todos", row.id)) {
-                        removeRow(row.id);
-                        toast("Supprimé");
-                      }
-                    }}
+                  <ActionMenu
+                    items={[
+                      {
+                        key: "delete",
+                        label: "Supprimer",
+                        icon: Trash2,
+                        danger: true,
+                        onClick: async () => {
+                          if (await dbDelete("todos", row.id)) {
+                            removeRow(row.id);
+                            toast("Supprimé");
+                          }
+                        },
+                        confirm: { title: "Supprimer la tâche", message: `Supprimer « ${row.text} » ? Cette action est irréversible.` },
+                      },
+                    ]}
                   />
                 </div>
               </div>
