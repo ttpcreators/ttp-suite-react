@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ChevronRight, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +53,13 @@ function Group({
   activeId: string;
   onSelect: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(true);
+  // Au chargement : groupes repliés (effet aéré) ; seul le groupe de la page
+  // active reste ouvert. Se rouvre si un de ses items devient actif (recherche…).
+  const containsActive = group.items.some((i) => i.id === activeId);
+  const [open, setOpen] = useState(containsActive);
+  useEffect(() => {
+    if (containsActive) setOpen(true);
+  }, [containsActive]);
   return (
     <div className="flex flex-col">
       <button
