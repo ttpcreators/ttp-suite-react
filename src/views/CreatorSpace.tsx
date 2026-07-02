@@ -308,7 +308,7 @@ export function CreatorSpace({
   const stat = (label: string, val: string | null) => (
     <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
       <div className="text-[9px] font-semibold uppercase tracking-wider text-faint">{label}</div>
-      <div className="mt-1.5 whitespace-nowrap text-xl font-bold tracking-tight">{val || "—"}</div>
+      <div className="mt-1.5 truncate text-xl font-bold tracking-tight">{val || "—"}</div>
     </div>
   );
 

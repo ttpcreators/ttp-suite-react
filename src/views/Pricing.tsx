@@ -295,7 +295,7 @@ export function Pricing() {
           <>
             <div className="mt-4">
               <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Fourchette conseillée</div>
-              <div className="mt-1 whitespace-nowrap text-3xl font-bold tracking-tight text-background">
+              <div className="mt-1 text-2xl font-bold tracking-tight text-background sm:text-3xl">
                 {formatEuro(calc.min)} <span className="text-faint">–</span> {formatEuro(calc.max)}
               </div>
               <div className="mt-2 flex items-baseline gap-2">

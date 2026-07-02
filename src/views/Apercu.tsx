@@ -263,8 +263,8 @@ export function Apercu() {
 
   return (
     <div>
-      <div className="mb-5 flex items-start justify-between">
-        <div>
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
           <div className="mb-1.5 text-sm text-foreground">
             Hello Marc ✌️
           </div>

@@ -303,35 +303,35 @@ export function Debrief() {
           value={brand}
           onChange={setBrand}
           placeholder="Ex : Sézane × Léna"
-          className="min-w-[200px] flex-[2]"
+          className="sm:min-w-[200px] flex-[2]"
         />
         <SelectField
           label="Créateur"
           value={creator}
           onChange={setCreator}
           options={creatorOptions}
-          className="min-w-[170px] flex-1"
+          className="sm:min-w-[170px] flex-1"
         />
         <TextField
           label="Période"
           value={period}
           onChange={setPeriod}
           placeholder="Mars 2026"
-          className="min-w-[130px] flex-none"
+          className="sm:min-w-[130px] flex-1"
         />
         <TextField
           label="Budget"
           value={budget}
           onChange={setBudget}
           placeholder="3 000 €"
-          className="min-w-[120px] flex-none"
+          className="sm:min-w-[120px] flex-1"
         />
         <TextField
           label="CA généré"
           value={revenue}
           onChange={setRevenue}
           placeholder="12 000 €"
-          className="min-w-[120px] flex-none"
+          className="sm:min-w-[120px] flex-1"
         />
         <TextField
           label="Synthèse (optionnel)"
