@@ -47,7 +47,7 @@ const DEFAULT_PERIODS: PeriodOption[] = [
   { label: "30 derniers jours" },
 ];
 
-const REGION_W = 62;
+const REGION_W = 78;
 const NEUTRAL_PCT = 0.5;
 
 const SIZES: Record<

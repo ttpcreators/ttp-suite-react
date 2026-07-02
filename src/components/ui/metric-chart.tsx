@@ -56,8 +56,11 @@ export function MetricChart({
   const [active, setActive] = useState<number>(Math.max(0, Math.min(defaultIndex, n - 1)));
 
   const allVals = series.flatMap((s) => s.data.map((d) => d.value));
-  const min = allVals.length ? Math.min(...allVals) : 0;
+  const dataMin = allVals.length ? Math.min(...allVals) : 0;
   const max = allVals.length ? Math.max(...allVals) : 1;
+  // Base ancrée à 0 pour des données positives → barres/aire remplissent la
+  // hauteur (évite le grand vide quand les 1res valeurs cumulées sont petites).
+  const min = dataMin >= 0 ? 0 : dataMin;
   const range = max - min || 1;
   const H = 100;
   const W = 100;
