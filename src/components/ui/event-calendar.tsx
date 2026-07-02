@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, X, Trash2 } from "lucide-react";
 import { TextField, SelectField } from "@/components/ui/form";
+import { ConfirmDialog } from "@/components/ui/action-menu";
 import { cn } from "@/lib/utils";
 
 export type Ev = {
@@ -495,7 +496,7 @@ function WeekView({
 
 function ListView({ events, onEventClick }: { events: Ev[]; onEventClick: (e: Ev) => void }) {
   const [filter, setFilter] = useState<"avenir" | "passe" | "tous">("avenir");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayKey();
   const groups = useMemo(() => {
     const shown = events.filter((e) =>
       filter === "tous" ? true : filter === "avenir" ? e.date >= today : e.date < today,
@@ -595,6 +596,7 @@ function EventModal({
 }) {
   const isEdit = draft.id !== null;
   const canSave = draft.title.trim().length > 0 && draft.date.length > 0;
+  const [showConfirm, setShowConfirm] = useState(false);
 
   return (
     <div
@@ -664,7 +666,7 @@ function EventModal({
           {isEdit ? (
             <button
               type="button"
-              onClick={onDelete}
+              onClick={() => setShowConfirm(true)}
               className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#E5484D] transition-colors hover:bg-rowhover"
             >
               <Trash2 className="h-3.5 w-3.5" /> Supprimer
@@ -689,6 +691,19 @@ function EventModal({
             </button>
           </div>
         </div>
+        {showConfirm && (
+          <ConfirmDialog
+            title="Supprimer l'événement"
+            message="Cette action est irréversible."
+            confirmLabel="Supprimer"
+            danger
+            onCancel={() => setShowConfirm(false)}
+            onConfirm={() => {
+              setShowConfirm(false);
+              onDelete();
+            }}
+          />
+        )}
       </form>
     </div>
   );

@@ -305,9 +305,17 @@ const SelectContent = forwardRef<HTMLDivElement, SelectContentProps>(
     const focusRect = focusedIndex !== null ? itemRects[focusedIndex] : null;
     const isHoveringOther = activeIndex !== null && activeIndex !== checkedIndex;
 
+    // Position clampée dans le viewport (évite le débordement à droite sur mobile).
+    const gap = 8;
+    const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
+    const boxWidth = Math.min(Math.max(triggerRect.width, 180), vw - gap * 2);
+    let leftPos = triggerRect.left;
+    if (leftPos + boxWidth > vw - gap) leftPos = vw - gap - boxWidth;
+    if (leftPos < gap) leftPos = gap;
+
     return createPortal(
       <SelectContentContext.Provider value={{ registerItem, activeIndex, checkedIndex }}>
-        <div style={{ position: "fixed", top: triggerRect.bottom + 6, left: triggerRect.left, minWidth: triggerRect.width, zIndex: 50 }}>
+        <div style={{ position: "fixed", top: triggerRect.bottom + 6, left: leftPos, minWidth: Math.min(triggerRect.width, boxWidth), maxWidth: boxWidth, zIndex: 50 }}>
           <motion.div
             ref={(node) => {
               (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = node;

@@ -146,8 +146,9 @@ export default function App() {
       .select("role,creator_name")
       .eq("user_id", session.user.id)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (!alive) return;
+        if (error) console.error("Chargement du profil échoué:", error);
         const row = data as { role: string; creator_name: string | null } | null;
         setProfile(row ?? { role: "agency", creator_name: null });
       });

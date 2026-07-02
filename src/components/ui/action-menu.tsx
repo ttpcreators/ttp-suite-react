@@ -86,7 +86,9 @@ export function ActionMenu({ items, buttonClassName, align = "right" }: { items:
   };
 
   const W = 210;
-  const left = rect ? (align === "left" ? rect.left : Math.max(8, rect.right - W)) : 0;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
+  const base = rect ? (align === "left" ? rect.left : rect.right - W) : 0;
+  const left = rect ? Math.min(Math.max(8, base), Math.max(8, vw - W - 8)) : 0;
 
   return (
     <>
@@ -106,8 +108,8 @@ export function ActionMenu({ items, buttonClassName, align = "right" }: { items:
           <>
             <div className="fixed inset-0 z-[70]" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
             <div
-              className="fixed z-[71] overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-xl"
-              style={{ top: rect.bottom + 6, left, width: W }}
+              className="fixed z-[71] overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-xl"
+              style={{ top: rect.bottom + 6, left, width: W, maxHeight: "60vh" }}
             >
               {items.map((it) => (
                 <button

@@ -404,8 +404,8 @@ export function Login() {
                     setError("Entre d'abord ton email.");
                     return;
                   }
-                  await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase());
-                  setError("Email de réinitialisation envoyé ✓");
+                  const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase());
+                  setError(resetErr ? "Une erreur est survenue. Réessaie dans un moment." : "Email de réinitialisation envoyé ✓");
                 }}
                 className="cursor-pointer text-sm font-medium text-primary hover:underline"
               >

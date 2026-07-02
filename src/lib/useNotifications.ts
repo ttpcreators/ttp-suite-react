@@ -16,6 +16,11 @@ export function useNotifications(): NotificationItem[] {
       supabase.from("events").select("date,time,title").or("deleted.is.null,deleted.eq.false").gte("date", todayStr).order("date").limit(3),
     ]).then(([inv, br, ev]) => {
       if (!alive) return;
+      if (inv.error || br.error || ev.error) {
+        console.error("Chargement des notifications échoué:", { inv: inv.error, br: br.error, ev: ev.error });
+        setItems([]);
+        return;
+      }
       const out: NotificationItem[] = [];
       ((inv.data as { party: string; amount: string }[]) ?? []).forEach((i, k) =>
         out.push({
