@@ -170,7 +170,7 @@ export function Idees() {
               key={row.id}
               className="rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:bg-rowhover"
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-foreground">{row.text}</div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
@@ -178,8 +178,8 @@ export function Idees() {
                     {row.source === "creator" ? "Proposée par le créateur" : "Ajoutée par l'agence"}
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <div className="w-[160px]">
+                <div className="flex items-center gap-2 sm:shrink-0">
+                  <div className="flex-1 sm:w-[160px] sm:flex-none">
                     <StatusSelect
                       value={row.status ?? "À faire"}
                       options={STATUS_OPTS}

@@ -692,48 +692,69 @@ export function Facturation() {
           filtered.map((r) => {
             const meta = STATUS_META[r.status];
             const rate = details[r.id]?.commissionRate ?? commissionFor(r.creator);
+            const del = async () => {
+              if (await dbDelete("invoices", r.id)) {
+                setRows(invoices.filter((x) => x.id !== r.id));
+                toast("Supprimé");
+              }
+            };
+            const actions = (
+              <>
+                <button type="button" title="Modifier" onClick={() => openEdit(r)} className={iconBtn}><Pencil className="h-3.5 w-3.5" /></button>
+                <button
+                  type="button"
+                  title="Aperçu"
+                  onClick={() => setPreview({ html: buildHTML(r), ref: r.ref, email: detailsFor(r).clientEmail, brand: r.party })}
+                  className={iconBtn}
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" title="Envoyer au client" onClick={() => sendInvoice(r)} className={iconBtn}><Send className="h-3.5 w-3.5" /></button>
+                <button type="button" title="Télécharger" onClick={() => downloadInvoice(r)} className={iconBtn}><Download className="h-3.5 w-3.5" /></button>
+              </>
+            );
+            const margeChip = (
+              <span className="inline-block whitespace-nowrap rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                Marge {fmtRate(rate)} %
+              </span>
+            );
             return (
-              <div
-                key={r.id}
-                className="grid grid-cols-1 items-center gap-1 rounded-xl px-4 py-3 transition-colors hover:bg-rowhover md:grid-cols-[0.8fr_2fr_1.1fr_1fr_1fr_1.4fr] md:gap-3"
-              >
-                <span className="flex items-center gap-2 text-[11px] font-medium text-faint">
-                  <FileText className="h-3.5 w-3.5 md:hidden" />#{r.ref}
-                </span>
-                <span className="truncate text-sm font-medium text-foreground">{r.party}</span>
-                <span className="text-sm font-semibold text-foreground md:text-right">{formatEuro(parseAmount(r.amount))}</span>
-                <span className="md:text-center">
-                  <span className="inline-block whitespace-nowrap rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                    <span className="md:hidden">Marge agence </span>{fmtRate(rate)} %
+              <div key={r.id} className="border-b border-border last:border-b-0">
+                {/* Desktop : ligne type tableau */}
+                <div className="hidden items-center gap-3 rounded-xl px-4 py-3 transition-colors hover:bg-rowhover md:grid md:grid-cols-[0.8fr_2fr_1.1fr_1fr_1fr_1.4fr]">
+                  <span className="text-[11px] font-medium text-faint">#{r.ref}</span>
+                  <span className="truncate text-sm font-medium text-foreground">{r.party}</span>
+                  <span className="text-right text-sm font-semibold text-foreground">{formatEuro(parseAmount(r.amount))}</span>
+                  <span className="text-center">{margeChip}</span>
+                  <span className="text-center text-[11px] font-medium text-muted-foreground">{frDate(r.date)}</span>
+                  <span className="flex items-center justify-end gap-2">
+                    <AnimatedBadge status={meta.badge} size="sm">{meta.label}</AnimatedBadge>
+                    <span className="flex items-center gap-1">{actions}</span>
+                    <DeleteButton onClick={del} />
                   </span>
-                </span>
-                <span className="text-[11px] font-medium text-muted-foreground md:text-center">
-                  <span className="md:hidden">Échéance </span>{frDate(r.date)}
-                </span>
-                <span className="mt-1 flex items-center justify-start gap-2 md:mt-0 md:justify-end">
-                  <AnimatedBadge status={meta.badge} size="sm">{meta.label}</AnimatedBadge>
-                  <span className="hidden items-center gap-1 md:flex">
-                    <button type="button" title="Modifier" onClick={() => openEdit(r)} className={iconBtn}><Pencil className="h-3.5 w-3.5" /></button>
-                    <button
-                      type="button"
-                      title="Aperçu"
-                      onClick={() => setPreview({ html: buildHTML(r), ref: r.ref, email: detailsFor(r).clientEmail, brand: r.party })}
-                      className={iconBtn}
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                    </button>
-                    <button type="button" title="Envoyer au client" onClick={() => sendInvoice(r)} className={iconBtn}><Send className="h-3.5 w-3.5" /></button>
-                    <button type="button" title="Télécharger" onClick={() => downloadInvoice(r)} className={iconBtn}><Download className="h-3.5 w-3.5" /></button>
-                  </span>
-                  <DeleteButton
-                    onClick={async () => {
-                      if (await dbDelete("invoices", r.id)) {
-                        setRows(rows.filter((x) => x.id !== r.id));
-                        toast("Supprimé");
-                      }
-                    }}
-                  />
-                </span>
+                </div>
+
+                {/* Mobile : carte compacte */}
+                <div className="flex flex-col gap-2 px-3 py-3 md:hidden">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 text-[10px] font-medium text-faint">
+                        <FileText className="h-3 w-3" /> #{r.ref}
+                      </div>
+                      <div className="mt-0.5 truncate text-[15px] font-semibold text-foreground">{r.party}</div>
+                    </div>
+                    <AnimatedBadge status={meta.badge} size="sm">{meta.label}</AnimatedBadge>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-lg font-bold tracking-tight text-foreground">{formatEuro(parseAmount(r.amount))}</span>
+                    {margeChip}
+                  </div>
+                  <div className="text-[11px] font-medium text-muted-foreground">Échéance · {frDate(r.date)}</div>
+                  <div className="mt-0.5 flex items-center gap-1 border-t border-border pt-2.5">
+                    {actions}
+                    <span className="ml-auto"><DeleteButton onClick={del} /></span>
+                  </div>
+                </div>
               </div>
             );
           })

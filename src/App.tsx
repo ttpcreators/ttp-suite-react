@@ -3,7 +3,6 @@ import { ChevronRight, Moon, Sun, Loader2 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
 import { GlobalSearch } from "@/components/GlobalSearch";
-import { EncryptedText } from "@/components/ui/encrypted-text";
 import { Toaster } from "@/components/ui/toast";
 import { Notifications } from "@/components/ui/notifications";
 import { useNotifications } from "@/lib/useNotifications";
@@ -292,7 +291,7 @@ export default function App() {
                 <>
                   {active !== "apercu" && (
                     <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">
-                      <EncryptedText key={active} text={title} />
+                      {title}
                     </h1>
                   )}
                   <ViewContent active={active} onOpenCreator={openDetail} />

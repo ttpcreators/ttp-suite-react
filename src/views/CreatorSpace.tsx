@@ -19,7 +19,6 @@ import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/components/ui/form";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { EncryptedText } from "@/components/ui/encrypted-text";
 import { EventCalendar, type Ev as CalEv } from "@/components/ui/event-calendar";
 import { parseAmount, formatEuro } from "@/lib/appState";
 import { useLiveKey } from "@/lib/useLive";
@@ -404,7 +403,7 @@ export function CreatorSpace({
             <div>
               <div className="text-sm text-faint">Bonjour</div>
               <div className="text-[26px] font-semibold tracking-tight md:text-[30px]">
-                <EncryptedText text={firstName} /> 👋
+                {firstName} 👋
               </div>
             </div>
           </div>

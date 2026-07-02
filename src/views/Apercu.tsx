@@ -4,7 +4,6 @@ import { supabase } from "@/lib/supabase";
 import { titleCase, initials } from "@/lib/utils";
 import { parseAmount, formatEuro, useAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { EncryptedText } from "@/components/ui/encrypted-text";
 import { LocationTag } from "@/components/ui/location-tag";
 import { MiniChart } from "@/components/ui/mini-chart";
 import { useLiveKey } from "@/lib/useLive";
@@ -206,10 +205,10 @@ export function Apercu() {
       <div className="mb-5 flex items-start justify-between">
         <div>
           <div className="mb-1.5 text-sm text-foreground">
-            <EncryptedText text="Hello Marc" /> ✌️
+            Hello Marc ✌️
           </div>
           <div className="text-[26px] font-semibold tracking-tight md:text-[30px]">
-            <EncryptedText text="Aperçu financier" />
+            Aperçu financier
           </div>
         </div>
         <LocationTag city="Lyon" country="France" timezone="CET" />

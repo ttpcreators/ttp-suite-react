@@ -6,6 +6,7 @@ import { titleCase } from "@/lib/utils";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
+import { StatCard } from "@/components/ui/stat-card";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import {
   BarChart,
@@ -21,7 +22,7 @@ import {
 } from "recharts";
 
 type CreatorRow = { name: string; followers: string | null; er: string | null; reach: string | null; ca: string | null; status: string | null };
-type InvRow = { amount: string; status: string; creator: string | null };
+type InvRow = { amount: string; status: string; creator: string | null; date: string | null };
 type CountRow = { id: string };
 
 type StatsData = {
@@ -63,16 +64,46 @@ function parsePct(s: string | null): number {
   return parseFloat(s.replace(",", ".").replace(/[^0-9.]/g, "")) || 0;
 }
 
-function Kpi({ icon: Icon, label, value, hint, hintClass }: { icon: typeof Users; label: string; value: string; hint?: string; hintClass?: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
-      <div className="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-wider text-faint">
-        <Icon className="h-3.5 w-3.5" /> {label}
-      </div>
-      <div className="mt-2 whitespace-nowrap text-xl font-bold tracking-tight text-foreground sm:text-2xl">{value}</div>
-      {hint && <div className={"mt-1 text-[10px] font-semibold " + (hintClass ?? "text-muted-foreground")}>{hint}</div>}
-    </div>
-  );
+/** "dd/mm", "dd/mm/yyyy" ou "YYYY-MM-DD" → clé de mois "YYYY-MM" (ou null). */
+function invMonthKey(s: string | null): string | null {
+  if (!s) return null;
+  const iso = /^(\d{4})-(\d{2})-\d{2}/.exec(s.trim());
+  if (iso) return `${iso[1]}-${iso[2]}`;
+  const dm = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/.exec(s.trim());
+  if (dm) {
+    const mm = dm[2].padStart(2, "0");
+    let yy = dm[3] ?? String(new Date().getFullYear());
+    if (yy.length === 2) yy = "20" + yy;
+    return `${yy}-${mm}`;
+  }
+  return null;
+}
+/** Tous les mois entre deux clés "YYYY-MM" inclus. */
+function monthsBetween(start: string, end: string): string[] {
+  const [ys, ms] = start.split("-").map(Number);
+  const [ye, me] = end.split("-").map(Number);
+  const out: string[] = [];
+  let y = ys;
+  let m = ms;
+  for (let guard = 0; guard < 120 && (y < ye || (y === ye && m <= me)); guard++) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  return out;
+}
+/** Variation % du dernier point vs l'avant-dernier (null si non calculable honnêtement). */
+function momDelta(series: number[]): number | null {
+  if (series.length < 2) return null;
+  const prev = series[series.length - 2];
+  const last = series[series.length - 1];
+  if (prev <= 0) return null;
+  return ((last - prev) / prev) * 100;
+}
+const MONTHS_FR = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"];
+function monthLabel(key: string): string {
+  const [, m] = key.split("-").map(Number);
+  return MONTHS_FR[m - 1] ?? key;
 }
 
 function ChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
@@ -95,7 +126,7 @@ export function Stats() {
     (async () => {
       const [cr, inv, br, co, td, id] = await Promise.all([
         supabase.from("creators").select("name,followers,er,reach,ca,status"),
-        supabase.from("invoices").select("amount,status,creator"),
+        supabase.from("invoices").select("amount,status,creator,date"),
         supabase.from("briefs").select("id"),
         supabase.from("contacts").select("id"),
         supabase.from("todos").select("id"),
@@ -146,6 +177,26 @@ export function Stats() {
   }
   const totalCA = byStatus.payee + byStatus.attente + byStatus.retard + byStatus.brouillon;
 
+  // Série mensuelle RÉELLE du CA (depuis les échéances de factures parseables) → sparkline + variation MoM.
+  const monthAgg = new Map<string, { tot: number; paid: number }>();
+  for (const iv of data.invoices) {
+    const k = invMonthKey(iv.date);
+    if (!k) continue;
+    const a = parseAmount(iv.amount);
+    const cur = monthAgg.get(k) ?? { tot: 0, paid: 0 };
+    cur.tot += a;
+    if (iv.status === "payee") cur.paid += a;
+    monthAgg.set(k, cur);
+  }
+  const monthKeys = [...monthAgg.keys()].sort();
+  const months = monthKeys.length >= 2 ? monthsBetween(monthKeys[0], monthKeys[monthKeys.length - 1]).slice(-8) : monthKeys;
+  const caSeries = months.map((m) => monthAgg.get(m)?.tot ?? 0);
+  const paidSeries = months.map((m) => monthAgg.get(m)?.paid ?? 0);
+  const hasCaSeries = caSeries.length >= 2 && caSeries.some((v) => v > 0);
+  const caDelta = hasCaSeries ? momDelta(caSeries) : null;
+  const paidDelta = hasCaSeries ? momDelta(paidSeries) : null;
+  const lastMonthLbl = months.length ? monthLabel(months[months.length - 1]) : "";
+
   const statusData = [
     { name: "Payé", value: byStatus.payee, color: COLORS.green },
     { name: "En attente", value: byStatus.attente, color: COLORS.amber },
@@ -184,14 +235,32 @@ export function Stats() {
     <div className="space-y-4">
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi icon={Receipt} label="CA facturé" value={formatEuro(totalCA)} hint={`${data.invoices.length} facture${data.invoices.length > 1 ? "s" : ""}`} />
-        <Kpi icon={Wallet} label="Encaissé" value={formatEuro(byStatus.payee)} hint="payé" hintClass="text-signaltext" />
-        <Kpi icon={Clock} label="En attente + retard" value={formatEuro(byStatus.attente + byStatus.retard)} hint="à suivre" hintClass="text-amber" />
-        <Kpi icon={Users} label="Créateurs actifs" value={`${activeCreators}`} hint={`${data.creators.length} au total`} />
-        <Kpi icon={TrendingUp} label="Followers cumulés" value={fmtCompact(totalFollowers)} hint="tous créateurs" />
-        <Kpi icon={Activity} label="Engagement moyen" value={`${avgEr.toFixed(1).replace(".", ",")} %`} hint={`${erVals.length} mesuré${erVals.length > 1 ? "s" : ""}`} />
-        <Kpi icon={FileText} label="Briefs" value={`${data.briefs}`} hint={`${data.ideas} idées · ${data.todos} à faire`} />
-        <Kpi icon={ContactIcon} label="Contacts" value={`${data.contacts}`} hint="réseau agence" />
+        <StatCard
+          icon={Receipt}
+          label="CA facturé"
+          value={formatEuro(totalCA)}
+          delta={caDelta}
+          deltaLabel={hasCaSeries ? `évolution mensuelle · ${lastMonthLbl}` : undefined}
+          spark={hasCaSeries ? caSeries : undefined}
+          sparkColor="#2b7fff"
+          hint={`${data.invoices.length} facture${data.invoices.length > 1 ? "s" : ""}`}
+        />
+        <StatCard
+          icon={Wallet}
+          label="Encaissé"
+          value={formatEuro(byStatus.payee)}
+          delta={paidDelta}
+          deltaLabel={hasCaSeries ? "vs mois précédent" : undefined}
+          spark={hasCaSeries ? paidSeries : undefined}
+          sparkColor="#16a34a"
+          hint="payé"
+        />
+        <StatCard icon={Clock} label="En attente + retard" value={formatEuro(byStatus.attente + byStatus.retard)} hint="à suivre" />
+        <StatCard icon={Users} label="Créateurs actifs" value={`${activeCreators}`} hint={`${data.creators.length} au total`} />
+        <StatCard icon={TrendingUp} label="Followers cumulés" value={fmtCompact(totalFollowers)} hint="tous créateurs" />
+        <StatCard icon={Activity} label="Engagement moyen" value={`${avgEr.toFixed(1).replace(".", ",")} %`} hint={`${erVals.length} mesuré${erVals.length > 1 ? "s" : ""}`} />
+        <StatCard icon={FileText} label="Briefs" value={`${data.briefs}`} hint={`${data.ideas} idées · ${data.todos} à faire`} />
+        <StatCard icon={ContactIcon} label="Contacts" value={`${data.contacts}`} hint="réseau agence" />
       </div>
 
       {/* Graphiques */}
