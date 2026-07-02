@@ -20,6 +20,7 @@ import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
+import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { EventCalendar, type Ev as CalEv } from "@/components/ui/event-calendar";
 import { parseAmount, formatEuro } from "@/lib/appState";
@@ -66,6 +67,13 @@ const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "planning", label: "Planning", icon: CalendarDays },
   { id: "documents", label: "Documents", icon: Files },
   { id: "facturation", label: "Facturation", icon: Receipt },
+];
+
+const BRIEF_STATUS: StatusOption[] = [
+  { value: "attente", label: "En attente", dot: "bg-amber" },
+  { value: "valider", label: "À valider", dot: "bg-primary" },
+  { value: "cours", label: "En cours", dot: "bg-cyan" },
+  { value: "terminé", label: "Terminé", dot: "bg-signal" },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -157,6 +165,12 @@ export function CreatorSpace({
   }, [name, live]);
 
   const firstName = titleCase(name).split(" ")[0];
+
+  // Le créateur peut faire évoluer le statut de ses briefs (synchro agence via la table).
+  const setBriefStatus = async (id: string, status: string) => {
+    setBriefs((prev) => prev.map((b) => (b.id === id ? { ...b, status } : b)));
+    if (!(await dbUpdate("briefs", id, { status }))) toast("Erreur — réessaie");
+  };
 
   const addTodo = async () => {
     if (!tdText.trim()) {
@@ -681,14 +695,14 @@ export function CreatorSpace({
                 <div className="p-6 text-sm text-muted-foreground">Aucun brief pour le moment.</div>
               ) : (
                 briefs.map((b, i) => (
-                  <div key={b.id} className={"flex items-center gap-3 px-4 py-3 " + (i > 0 ? "border-t border-border" : "")}>
+                  <div key={b.id} className={"flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3 " + (i > 0 ? "border-t border-border" : "")}>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold">{b.brand}</div>
                       <div className="truncate text-xs text-faint">{b.deliverables} · échéance {b.due}</div>
                     </div>
-                    <AnimatedBadge status={b.status === "cours" ? "info" : b.status === "valider" ? "warning" : "neutral"} size="sm">
-                      {b.status === "cours" ? "En cours" : b.status === "valider" ? "À valider" : "En attente"}
-                    </AnimatedBadge>
+                    <div className="w-full sm:w-[150px] sm:shrink-0">
+                      <StatusSelect value={b.status ?? "attente"} options={BRIEF_STATUS} onChange={(v) => setBriefStatus(b.id, v)} />
+                    </div>
                   </div>
                 ))
               )}
