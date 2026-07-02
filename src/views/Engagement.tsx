@@ -326,7 +326,7 @@ export function Engagement() {
         </div>
 
         {/* Barème propre à la plateforme */}
-        <div className="mt-5 grid grid-cols-3 gap-2 border-t border-border pt-4">
+        <div className="mt-5 grid grid-cols-1 gap-2 border-t border-border pt-4 min-[380px]:grid-cols-3">
           {[
             { k: "Moyen", r: `< ${p.bon} %`, tone: "amber" as const },
             { k: "Bon", r: `${p.bon} – ${p.excellent} %`, tone: "signal" as const },

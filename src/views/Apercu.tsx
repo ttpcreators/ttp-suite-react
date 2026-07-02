@@ -128,7 +128,7 @@ export function Apercu() {
     ])
       .then(([inv, ev, pr, td, br, cr]) => {
         if (!alive) return;
-        if (inv.error && ev.error && cr.error) {
+        if (inv.error || ev.error || pr.error || td.error || br.error || cr.error) {
           setErr(true);
           return;
         }

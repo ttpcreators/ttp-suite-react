@@ -179,11 +179,12 @@ export function Contacts() {
 
   useEffect(() => {
     let active = true;
-    supabase
-      .from("contacts")
-      .select("id, brand, person, role, tone, tag, email, phone, sort_order")
-      .order("sort_order")
-      .then(({ data, error }) => {
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("contacts")
+          .select("id, brand, person, role, tone, tag, email, phone, sort_order")
+          .order("sort_order");
         if (!active) return;
         if (error) {
           setError(true);
@@ -193,7 +194,13 @@ export function Contacts() {
         const list = (data as Row[]) ?? [];
         setCache("contacts", list);
         setRows(list);
-      });
+      } catch {
+        if (active) {
+          setError(true);
+          setRows([]);
+        }
+      }
+    })();
     return () => {
       active = false;
     };

@@ -12,12 +12,14 @@ import {
   Sun,
   Pencil,
   Check,
+  Trash2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
-import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/components/ui/form";
+import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
+import { ActionMenu } from "@/components/ui/action-menu";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { EventCalendar, type Ev as CalEv } from "@/components/ui/event-calendar";
 import { parseAmount, formatEuro } from "@/lib/appState";
@@ -594,13 +596,22 @@ export function CreatorSpace({
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
-                        <DeleteButton
-                          onClick={async () => {
-                            if (await dbDelete("todos", t.id)) {
-                              setTodos((prev) => prev.filter((x) => x.id !== t.id));
-                              toast("Supprimé");
-                            }
-                          }}
+                        <ActionMenu
+                          items={[
+                            {
+                              key: "delete",
+                              label: "Supprimer",
+                              icon: Trash2,
+                              danger: true,
+                              onClick: async () => {
+                                if (await dbDelete("todos", t.id)) {
+                                  setTodos((prev) => prev.filter((x) => x.id !== t.id));
+                                  toast("Supprimé");
+                                }
+                              },
+                              confirm: { title: "Supprimer la tâche", message: `Supprimer « ${t.text} » ? Cette action est irréversible.` },
+                            },
+                          ]}
                         />
                       </div>
                       <InlineForm
@@ -639,13 +650,22 @@ export function CreatorSpace({
                       <span className="h-2 w-2 shrink-0 rounded-full bg-indigo" />
                       <div className="min-w-0 flex-1 truncate text-sm">{x.text}</div>
                       <AnimatedBadge status="neutral" size="sm">{x.status ?? "À faire"}</AnimatedBadge>
-                      <DeleteButton
-                        onClick={async () => {
-                          if (await dbDelete("ideas", x.id)) {
-                            setIdeas((prev) => prev.filter((y) => y.id !== x.id));
-                            toast("Supprimé");
-                          }
-                        }}
+                      <ActionMenu
+                        items={[
+                          {
+                            key: "delete",
+                            label: "Supprimer",
+                            icon: Trash2,
+                            danger: true,
+                            onClick: async () => {
+                              if (await dbDelete("ideas", x.id)) {
+                                setIdeas((prev) => prev.filter((y) => y.id !== x.id));
+                                toast("Supprimé");
+                              }
+                            },
+                            confirm: { title: "Supprimer l'idée", message: `Supprimer « ${x.text} » ? Cette action est irréversible.` },
+                          },
+                        ]}
                       />
                     </div>
                   ))

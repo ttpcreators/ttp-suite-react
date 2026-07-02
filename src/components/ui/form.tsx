@@ -20,7 +20,7 @@ export function AddButton({ label, onClick }: { label: string; onClick: () => vo
 
 export function Field({ label, children, className = "" }: { label: string; children: ReactNode; className?: string }) {
   return (
-    <label className={"flex min-w-[150px] flex-1 flex-col gap-1.5 " + className}>
+    <label className={"flex min-w-0 flex-1 flex-col gap-1.5 sm:min-w-[150px] " + className}>
       <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</span>
       {children}
     </label>
