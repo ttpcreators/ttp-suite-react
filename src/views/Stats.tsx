@@ -187,6 +187,8 @@ export function Stats() {
         setError(true);
         return;
       }
+      if (br.error || co.error || td.error || id.error)
+        console.error("Stats — compteurs partiels:", { br: br.error, co: co.error, td: td.error, id: id.error });
       const next: StatsData = {
         creators: (cr.data as CreatorRow[]) ?? [],
         invoices: (inv.data as InvRow[]) ?? [],

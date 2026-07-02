@@ -257,8 +257,9 @@ export function Mediakit() {
       .select("*")
       .eq("name", selected)
       .limit(1)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (!alive) return;
+        if (error) console.error("Chargement du média kit échoué:", error);
         setCreator((data?.[0] as Creator) ?? null);
         setLoading(false);
       });

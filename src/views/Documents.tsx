@@ -190,8 +190,14 @@ export function Documents() {
   };
 
   const del = async (row: Row) => {
-    if (!(await dbDelete("documents", row.id))) return;
-    if (row.path) supabase.storage.from("documents").remove([row.path]);
+    if (!(await dbDelete("documents", row.id))) {
+      toast("Erreur — réessaie");
+      return;
+    }
+    if (row.path) {
+      const { error: rmErr } = await supabase.storage.from("documents").remove([row.path]);
+      if (rmErr) console.error("Suppression du fichier stocké échouée:", rmErr);
+    }
     setRows((prev) => (prev ?? []).filter((r) => r.id !== row.id));
     toast("Supprimé");
   };

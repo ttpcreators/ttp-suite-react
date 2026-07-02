@@ -115,8 +115,9 @@ export function CreatorDetail({
 
   useEffect(() => {
     let alive = true;
-    supabase.from("creators").select("*").eq("name", name).limit(1).then(({ data }) => {
+    supabase.from("creators").select("*").eq("name", name).limit(1).then(({ data, error }) => {
       if (!alive) return;
+      if (error) console.error("Chargement de la fiche créateur échoué:", error);
       const row = (data?.[0] as Creator) ?? null;
       setC(row);
       if (row && !editingRef.current)
@@ -132,10 +133,10 @@ export function CreatorDetail({
           tiktok: row.tiktok ?? "",
         });
     });
-    supabase.from("invoices").select("ref,party,amount,date").eq("creator", name).then(({ data }) => alive && setInv((data as Inv[]) ?? []));
-    supabase.from("todos").select("id,text,done").eq("creator", name).then(({ data }) => alive && setTd((data as Td[]) ?? []));
-    supabase.from("briefs").select("brand,deliverables,due").eq("who", name).then(({ data }) => alive && setBr((data as Br[]) ?? []));
-    supabase.from("ideas").select("text").eq("creator", name).then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
+    supabase.from("invoices").select("ref,party,amount,date").eq("creator", name).then(({ data, error }) => { if (error) console.error("Factures créateur:", error); if (alive) setInv((data as Inv[]) ?? []); });
+    supabase.from("todos").select("id,text,done").eq("creator", name).then(({ data, error }) => { if (error) console.error("À faire créateur:", error); if (alive) setTd((data as Td[]) ?? []); });
+    supabase.from("briefs").select("brand,deliverables,due").eq("who", name).then(({ data, error }) => { if (error) console.error("Briefs créateur:", error); if (alive) setBr((data as Br[]) ?? []); });
+    supabase.from("ideas").select("text").eq("creator", name).then(({ data, error }) => { if (error) console.error("Idées créateur:", error); if (alive) setIdeas((data as Idea[]) ?? []); });
     return () => {
       alive = false;
     };
@@ -391,7 +392,7 @@ export function CreatorDetail({
             <div className="text-xs text-muted-foreground">Aucune facture.</div>
           ) : (
             inv.map((v, i) => (
-              <div key={i} className="flex items-center justify-between border-b border-border py-2 last:border-0">
+              <div key={`${v.ref}-${i}`} className="flex items-center justify-between border-b border-border py-2 last:border-0">
                 <div className="min-w-0">
                   <div className="truncate text-xs font-medium">{v.party}</div>
                   <div className="text-[10px] text-faint">#{v.ref} · {v.date}</div>
@@ -420,7 +421,7 @@ export function CreatorDetail({
             <div className="text-xs text-muted-foreground">Aucun brief.</div>
           ) : (
             br.map((b, i) => (
-              <div key={i} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
+              <div key={`${b.brand}-${i}`} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
                 <span className="h-2 w-2 shrink-0 rounded-full bg-signal" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xs font-medium">{b.brand}</div>
@@ -436,7 +437,7 @@ export function CreatorDetail({
             <div className="text-xs text-muted-foreground">Aucune idée.</div>
           ) : (
             ideas.map((x, i) => (
-              <div key={i} className="flex items-center gap-2.5 py-1.5">
+              <div key={`${x.text}-${i}`} className="flex items-center gap-2.5 py-1.5">
                 <span className="h-2 w-2 shrink-0 rounded-full bg-indigo" />
                 <span className="text-xs">{x.text}</span>
               </div>
