@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Users, Contact, ListChecks, Receipt, FileText, Search as SearchIcon, X, type LucideIcon } from "lucide-react";
+import { Users, Contact, ListChecks, Receipt, FileText, Search as SearchIcon, X, Trash2, type LucideIcon } from "lucide-react";
 import { useGlobalSearch, type SearchHit } from "@/lib/useGlobalSearch";
 import { titleCase } from "@/lib/utils";
-import type { ViewId } from "@/lib/nav";
+import { ALL_ITEMS, type ViewId } from "@/lib/nav";
 
 const KIND_META: Record<SearchHit["kind"], { icon: LucideIcon; label: string; view: ViewId | null }> = {
   creator: { icon: Users, label: "Créateur", view: null },
@@ -12,6 +12,31 @@ const KIND_META: Record<SearchHit["kind"], { icon: LucideIcon; label: string; vi
   brief: { icon: FileText, label: "Brief", view: "briefs" },
   prospect: { icon: SearchIcon, label: "Prospect", view: "prospection" },
 };
+
+// Pages navigables depuis la recherche (nav agence + Corbeille).
+const PAGES: { id: ViewId; label: string; icon: LucideIcon }[] = [
+  ...ALL_ITEMS,
+  { id: "corbeille", label: "Corbeille", icon: Trash2 },
+];
+// Synonymes pour retrouver une page même sans taper son nom exact.
+const PAGE_ALIASES: Partial<Record<ViewId, string[]>> = {
+  apercu: ["dashboard", "accueil", "tableau de bord"],
+  reversements: ["paie", "paiement", "reverser", "reversement", "salaire createur"],
+  relances: ["impaye", "retard", "relancer", "relance facture"],
+  echeances: ["echeance", "expiration", "renouvellement contrat", "fin de contrat"],
+  facturation: ["facture", "devis"],
+  planning: ["agenda", "calendrier", "rendez-vous", "rdv"],
+  mediakit: ["media kit", "kit"],
+  contrats: ["contrat"],
+  prospection: ["prospect", "deal", "pipeline"],
+  roster: ["createurs", "talents"],
+  objectifs: ["objectif", "goal"],
+  stats: ["statistiques", "analytics"],
+  debrief: ["bilan", "rapport"],
+  acces: ["mot de passe", "identifiants", "login"],
+  corbeille: ["poubelle", "supprime"],
+};
+const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 export function GlobalSearch({
   query,
@@ -27,6 +52,18 @@ export function GlobalSearch({
   const [open, setOpen] = useState(false);
   const { hits, loading } = useGlobalSearch(query);
   const show = open && query.trim().length >= 2;
+
+  const q = norm(query.trim());
+  const pageHits =
+    q.length >= 2
+      ? PAGES.filter((p) => norm(p.label).includes(q) || (PAGE_ALIASES[p.id] ?? []).some((a) => norm(a).includes(q))).slice(0, 5)
+      : [];
+
+  const gotoPage = (id: ViewId) => {
+    onGoto(id);
+    setQuery("");
+    setOpen(false);
+  };
 
   const pick = (h: SearchHit) => {
     setOpen(false);
@@ -52,7 +89,15 @@ export function GlobalSearch({
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          placeholder="Rechercher…"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              if (pageHits[0]) gotoPage(pageHits[0].id);
+              else if (hits[0]) pick(hits[0]);
+            } else if (e.key === "Escape") {
+              setOpen(false);
+            }
+          }}
+          placeholder="Rechercher une page, un créateur, une facture…"
           className="h-full min-w-0 flex-1 bg-transparent text-sm text-background outline-none placeholder:text-background/50"
         />
         {query && (
@@ -74,12 +119,34 @@ export function GlobalSearch({
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-[60vh] overflow-y-auto rounded-xl border border-border bg-surface p-1.5 shadow-xl">
-            {loading && hits.length === 0 ? (
+            {loading && hits.length === 0 && pageHits.length === 0 ? (
               <div className="px-3 py-4 text-xs text-muted-foreground">Recherche…</div>
-            ) : hits.length === 0 ? (
+            ) : hits.length === 0 && pageHits.length === 0 ? (
               <div className="px-3 py-4 text-xs text-muted-foreground">Aucun résultat pour « {query.trim()} ».</div>
             ) : (
-              hits.map((h, i) => {
+              <>
+                {pageHits.length > 0 && (
+                  <>
+                    <div className="px-3 pb-1 pt-1 text-[9px] font-semibold uppercase tracking-wide text-faint">Pages</div>
+                    {pageHits.map((p) => (
+                      <button
+                        key={`pg-${p.id}`}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => gotoPage(p.id)}
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-rowhover"
+                      >
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-panel text-muted-foreground">
+                          <p.icon className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{p.label}</span>
+                        <span className="shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-[9px] font-semibold uppercase text-primary">Page</span>
+                      </button>
+                    ))}
+                    {hits.length > 0 && <div className="mx-2 my-1 h-px bg-border/60" />}
+                  </>
+                )}
+                {hits.map((h, i) => {
                 const M = KIND_META[h.kind];
                 const label = h.kind === "creator" ? titleCase(h.label) : h.label;
                 const sub = h.kind === "todo" && h.sub ? titleCase(h.sub) : h.sub;
@@ -103,7 +170,8 @@ export function GlobalSearch({
                     </span>
                   </button>
                 );
-              })
+                })}
+              </>
             )}
           </div>
         </>
