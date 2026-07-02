@@ -19,7 +19,8 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import type { AnimatedBadgeStatus } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
-import { AddButton, TextField, SelectField, DeleteButton } from "@/components/ui/form";
+import { AddButton, TextField, SelectField } from "@/components/ui/form";
+import { ActionMenu, type ActionItem } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -343,8 +344,6 @@ const primaryBtn =
   "rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90";
 const ghostBtn =
   "rounded-lg border border-border bg-surface px-4 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground";
-const iconBtn =
-  "flex h-[26px] w-[26px] items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground";
 
 // ─── Vue ─────────────────────────────────────────────────────────────────────
 
@@ -698,21 +697,13 @@ export function Facturation() {
                 toast("Supprimé");
               }
             };
-            const actions = (
-              <>
-                <button type="button" title="Modifier" onClick={() => openEdit(r)} className={iconBtn}><Pencil className="h-3.5 w-3.5" /></button>
-                <button
-                  type="button"
-                  title="Aperçu"
-                  onClick={() => setPreview({ html: buildHTML(r), ref: r.ref, email: detailsFor(r).clientEmail, brand: r.party })}
-                  className={iconBtn}
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                </button>
-                <button type="button" title="Envoyer au client" onClick={() => sendInvoice(r)} className={iconBtn}><Send className="h-3.5 w-3.5" /></button>
-                <button type="button" title="Télécharger" onClick={() => downloadInvoice(r)} className={iconBtn}><Download className="h-3.5 w-3.5" /></button>
-              </>
-            );
+            const menuItems: ActionItem[] = [
+              { key: "edit", label: "Modifier", icon: Pencil, onClick: () => openEdit(r) },
+              { key: "preview", label: "Aperçu", icon: Eye, onClick: () => setPreview({ html: buildHTML(r), ref: r.ref, email: detailsFor(r).clientEmail, brand: r.party }) },
+              { key: "send", label: "Envoyer au client", icon: Send, onClick: () => sendInvoice(r) },
+              { key: "download", label: "Télécharger", icon: Download, onClick: () => downloadInvoice(r) },
+              { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: del, confirm: { title: "Supprimer la facture", message: `Supprimer la facture ${r.ref} (${r.party}) ? Cette action est irréversible.` } },
+            ];
             const margeChip = (
               <span className="inline-block whitespace-nowrap rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
                 Marge {fmtRate(rate)} %
@@ -729,8 +720,7 @@ export function Facturation() {
                   <span className="text-center text-[11px] font-medium text-muted-foreground">{frDate(r.date)}</span>
                   <span className="flex items-center justify-end gap-2">
                     <AnimatedBadge status={meta.badge} size="sm">{meta.label}</AnimatedBadge>
-                    <span className="flex items-center gap-1">{actions}</span>
-                    <DeleteButton onClick={del} />
+                    <ActionMenu items={menuItems} />
                   </span>
                 </div>
 
@@ -749,10 +739,9 @@ export function Facturation() {
                     <span className="text-lg font-bold tracking-tight text-foreground">{formatEuro(parseAmount(r.amount))}</span>
                     {margeChip}
                   </div>
-                  <div className="text-[11px] font-medium text-muted-foreground">Échéance · {frDate(r.date)}</div>
-                  <div className="mt-0.5 flex items-center gap-1 border-t border-border pt-2.5">
-                    {actions}
-                    <span className="ml-auto"><DeleteButton onClick={del} /></span>
+                  <div className="mt-0.5 flex items-center justify-between border-t border-border pt-2.5">
+                    <span className="text-[11px] font-medium text-muted-foreground">Échéance · {frDate(r.date)}</span>
+                    <ActionMenu items={menuItems} />
                   </div>
                 </div>
               </div>

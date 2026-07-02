@@ -3,13 +3,14 @@ import { cn } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { useLiveKey } from "@/lib/useLive";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { AddButton, InlineForm, SelectField, DeleteButton } from "@/components/ui/form";
+import { AddButton, InlineForm, SelectField } from "@/components/ui/form";
+import { ActionMenu } from "@/components/ui/action-menu";
 import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { useCreators } from "@/lib/useCreators";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useEffect, useRef, useState } from "react";
-import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, type LucideIcon } from "lucide-react";
+import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, Trash2, type LucideIcon } from "lucide-react";
 
 type Row = {
   id: string;
@@ -272,35 +273,25 @@ export function Documents() {
                     {meta.label}
                   </span>
 
-                  {row.path && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => preview(row)}
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                        title="Prévisualiser"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => share(row)}
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                        title="Partager le lien"
-                      >
-                        <Share2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openDoc(row)}
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                        title="Télécharger"
-                      >
-                        <Download className="h-4 w-4" />
-                      </button>
-                    </>
-                  )}
-                  <DeleteButton onClick={() => del(row)} />
+                  <ActionMenu
+                    items={[
+                      ...(row.path
+                        ? [
+                            { key: "preview", label: "Prévisualiser", icon: Eye, onClick: () => preview(row) },
+                            { key: "share", label: "Partager le lien", icon: Share2, onClick: () => share(row) },
+                            { key: "download", label: "Télécharger", icon: Download, onClick: () => openDoc(row) },
+                          ]
+                        : []),
+                      {
+                        key: "delete",
+                        label: "Supprimer",
+                        icon: Trash2,
+                        danger: true,
+                        onClick: () => del(row),
+                        confirm: { title: "Supprimer le document", message: `Supprimer « ${row.name} » ? Cette action est irréversible.` },
+                      },
+                    ]}
+                  />
                 </li>
               );
             })}

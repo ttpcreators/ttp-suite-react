@@ -19,6 +19,8 @@ export function Planning() {
     supabase
       .from("events")
       .select("id,day,date,time,title,type,who")
+      // Exclut les tombstones (deleted=true) — events supprimés en attente de purge.
+      .or("deleted.is.null,deleted.eq.false")
       .order("sort_order")
       .then(({ data, error }) => {
         if (!alive) return;

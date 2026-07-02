@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileBarChart, Pencil, Share2, Download, LayoutGrid, List, Table2 } from "lucide-react";
+import { FileBarChart, Pencil, Share2, Download, LayoutGrid, List, Table2, Trash2 } from "lucide-react";
 import {
   useAppState,
   saveAppStateKey,
@@ -9,7 +9,8 @@ import {
 } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
-import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/components/ui/form";
+import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
+import { ActionMenu } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
 import { cn, titleCase } from "@/lib/utils";
 
@@ -228,22 +229,15 @@ export function Debrief() {
     toast("Debrief téléchargé ✓");
   }
 
-  const iconBtn =
-    "grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground";
-
   const actions = (d: Debrief, index: number) => (
-    <>
-      <button type="button" onClick={() => startEdit(index)} className={iconBtn} title="Modifier">
-        <Pencil className="h-4 w-4" />
-      </button>
-      <button type="button" onClick={() => shareDebrief(d)} className={iconBtn} title="Partager">
-        <Share2 className="h-4 w-4" />
-      </button>
-      <button type="button" onClick={() => downloadDebrief(d)} className={iconBtn} title="Télécharger">
-        <Download className="h-4 w-4" />
-      </button>
-      <DeleteButton onClick={() => remove(index)} />
-    </>
+    <ActionMenu
+      items={[
+        { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(index) },
+        { key: "share", label: "Partager", icon: Share2, onClick: () => shareDebrief(d) },
+        { key: "download", label: "Télécharger", icon: Download, onClick: () => downloadDebrief(d) },
+        { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => remove(index), confirm: { title: "Supprimer le debrief", message: `Supprimer le debrief « ${d.brand} » ? Cette action est irréversible.` } },
+      ]}
+    />
   );
 
   return (

@@ -1,0 +1,41 @@
+# ============================================================================
+# Supabase config — project ref: zizvggziggswhrbuyhuo
+# ----------------------------------------------------------------------------
+# verify_jwt PAR FONCTION. CRITIQUE : sans ces blocs, le défaut verify_jwt=true
+# rejette (401 plateforme, avant votre code) :
+#   - google-oauth-callback  (redirect navigateur GET, aucun JWT)
+#   - google-webhook         (appelé par Google, aucun JWT)
+#   - google-watch-renew     (pg_cron avec CRON_SECRET, pas un JWT Supabase)
+#   - google-sync            (appels internes CRON_SECRET, pas un JWT)
+# Ces 4 fonctions font leur auth applicative (state signé / channel token /
+# CRON_SECRET / JWT-ou-CRON) DANS le code.
+# ============================================================================
+
+project_id = "zizvggziggswhrbuyhuo"
+
+# --- Fonctions publiques (auth applicative interne) -------------------------
+[functions.google-oauth-callback]
+verify_jwt = false
+
+[functions.google-webhook]
+verify_jwt = false
+
+[functions.google-watch-renew]
+verify_jwt = false
+
+# google-sync : verify_jwt=false OBLIGATOIRE (sinon les appels CRON_SECRET,
+# non-JWT, sont rejetés). L'auth est faite dans le code : JWT agence via
+# getUser()+profiles.role='agency' OU Bearer CRON_SECRET (temps constant).
+[functions.google-sync]
+verify_jwt = false
+
+# --- Fonctions appelées par le front (JWT agence exigé) ---------------------
+# verify_jwt=true : la plateforme valide le JWT ; le code exige EN PLUS le rôle agence.
+[functions.google-connect-url]
+verify_jwt = true
+
+[functions.google-status]
+verify_jwt = true
+
+[functions.google-disconnect]
+verify_jwt = true
