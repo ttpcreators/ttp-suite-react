@@ -27,13 +27,16 @@ type Creator = {
   siren: string | null;
   birth: string | null;
   commission: string | null;
+  instagram: string | null;
+  tiktok: string | null;
+  email_pro: string | null;
 };
 type Inv = { ref: string; party: string; amount: string; date: string };
 type Td = { id: string; text: string; done: boolean };
 type Br = { brand: string; deliverables: string | null; due: string | null };
 type Idea = { text: string };
 
-type Coord = Pick<Creator, "ville" | "phone" | "email" | "address" | "siren" | "birth">;
+type Coord = Pick<Creator, "ville" | "phone" | "email" | "address" | "siren" | "birth" | "email_pro" | "instagram" | "tiktok">;
 
 const statusBadge = (s: string | null) =>
   s === "pause" ? "warning" : s === "inactif" ? "neutral" : "success";
@@ -59,6 +62,9 @@ export function CreatorDetail({
     address: "",
     siren: "",
     birth: "",
+    email_pro: "",
+    instagram: "",
+    tiktok: "",
   });
   const [editing, setEditing] = useState(false);
 
@@ -80,6 +86,9 @@ export function CreatorDetail({
           address: row.address ?? "",
           siren: row.siren ?? "",
           birth: row.birth ?? "",
+          email_pro: row.email_pro ?? "",
+          instagram: row.instagram ?? "",
+          tiktok: row.tiktok ?? "",
         });
     });
     supabase.from("invoices").select("ref,party,amount,date").eq("creator", name).then(({ data }) => alive && setInv((data as Inv[]) ?? []));
@@ -112,6 +121,9 @@ export function CreatorDetail({
         address: c.address ?? "",
         siren: c.siren ?? "",
         birth: c.birth ?? "",
+        email_pro: c.email_pro ?? "",
+        instagram: c.instagram ?? "",
+        tiktok: c.tiktok ?? "",
       });
     setEditing(false);
   };
@@ -120,7 +132,10 @@ export function CreatorDetail({
     const text = [
       titleCase(name),
       [c?.handle, c?.niche].filter(Boolean).join(" · "),
-      form.email && `Email : ${form.email}`,
+      form.email && `Email perso : ${form.email}`,
+      form.email_pro && `Email pro : ${form.email_pro}`,
+      form.instagram && `Instagram : ${form.instagram}`,
+      form.tiktok && `TikTok : ${form.tiktok}`,
       form.phone && `Tél : ${form.phone}`,
       form.ville && `Ville : ${form.ville}`,
       form.address && `Adresse : ${form.address}`,
@@ -264,7 +279,10 @@ export function CreatorDetail({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {field("Ville", "ville")}
             {field("Téléphone", "phone")}
-            {field("Email", "email")}
+            {field("Email perso", "email")}
+            {field("Email pro", "email_pro")}
+            {field("Instagram", "instagram")}
+            {field("TikTok", "tiktok")}
             {field("Adresse", "address")}
             {field("SIREN", "siren")}
             {field("Naissance", "birth")}
@@ -274,7 +292,10 @@ export function CreatorDetail({
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {copyRow("Ville", form.ville ?? "")}
               {copyRow("Téléphone", form.phone ?? "")}
-              {copyRow("Email", form.email ?? "")}
+              {copyRow("Email perso", form.email ?? "")}
+              {copyRow("Email pro", form.email_pro ?? "")}
+              {copyRow("Instagram", form.instagram ?? "")}
+              {copyRow("TikTok", form.tiktok ?? "")}
               {copyRow("Adresse", form.address ?? "")}
               {copyRow("SIREN", form.siren ?? "")}
               {copyRow("Naissance", form.birth ?? "")}

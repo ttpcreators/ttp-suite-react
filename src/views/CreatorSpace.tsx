@@ -45,6 +45,9 @@ type Creator = {
   siren: string | null;
   birth: string | null;
   commission: string | null;
+  instagram: string | null;
+  tiktok: string | null;
+  email_pro: string | null;
 };
 type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; sort_order?: number };
 type Idea = { id: string; text: string; status: string | null; sort_order?: number };
@@ -133,7 +136,7 @@ export function CreatorSpace({
     let alive = true;
     supabase
       .from("creators")
-      .select("id,name,handle,niche,followers,er,ca,reach,photo_url,status,ville,phone,email,address,siren,birth,commission")
+      .select("*")
       .eq("name", name)
       .limit(1)
       .then(({ data }) => alive && setCreator((data?.[0] as Creator) ?? null));
@@ -207,6 +210,9 @@ export function CreatorSpace({
       ville: creator.ville ?? "",
       phone: creator.phone ?? "",
       email: creator.email ?? "",
+      email_pro: creator.email_pro ?? "",
+      instagram: creator.instagram ?? "",
+      tiktok: creator.tiktok ?? "",
       address: creator.address ?? "",
       siren: creator.siren ?? "",
       birth: creator.birth ?? "",
@@ -224,6 +230,9 @@ export function CreatorSpace({
       ville: (form.ville ?? "").trim(),
       phone: (form.phone ?? "").trim(),
       email: (form.email ?? "").trim(),
+      email_pro: (form.email_pro ?? "").trim(),
+      instagram: (form.instagram ?? "").trim(),
+      tiktok: (form.tiktok ?? "").trim(),
       address: (form.address ?? "").trim(),
       siren: (form.siren ?? "").trim(),
       birth: (form.birth ?? "").trim(),
@@ -449,7 +458,10 @@ export function CreatorSpace({
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                       {editInput("Ville", "ville")}
                       {editInput("Téléphone", "phone")}
-                      {editInput("Email", "email")}
+                      {editInput("Email perso", "email")}
+                      {editInput("Email pro", "email_pro")}
+                      {editInput("Instagram", "instagram")}
+                      {editInput("TikTok", "tiktok")}
                       {editInput("Adresse", "address")}
                       {editInput("SIREN", "siren")}
                       {editInput("Naissance", "birth", "JJ/MM/AAAA")}
@@ -467,12 +479,15 @@ export function CreatorSpace({
                     <div>
                       {infoRow("Ville", creator?.ville ?? null)}
                       {infoRow("Téléphone", creator?.phone ?? null)}
-                      {infoRow("Email", creator?.email ?? null)}
+                      {infoRow("Email perso", creator?.email ?? null)}
+                      {infoRow("Email pro", creator?.email_pro ?? null)}
                     </div>
                     <div>
                       {infoRow("Adresse", creator?.address ?? null)}
                       {infoRow("SIREN", creator?.siren ?? null)}
                       {infoRow("Naissance", creator?.birth ?? null)}
+                      {infoRow("Instagram", creator?.instagram ?? null)}
+                      {infoRow("TikTok", creator?.tiktok ?? null)}
                     </div>
                   </div>
                 )}
