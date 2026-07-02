@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { useAppState } from "@/lib/appState";
 import type { AppState } from "@/lib/appState";
 import { useCreators } from "@/lib/useCreators";
-import { cn, titleCase } from "@/lib/utils";
+import { titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import {
