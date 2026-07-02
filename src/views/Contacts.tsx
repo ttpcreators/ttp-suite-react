@@ -21,6 +21,8 @@ type Row = {
   id: string;
   brand: string;
   person: string;
+  first_name?: string | null;
+  last_name?: string | null;
   role: string;
   tone: string;
   tag: string;
@@ -167,7 +169,8 @@ export function Contacts() {
   const [selected, setSelected] = useState<Row | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [brand, setBrand] = useState("");
-  const [person, setPerson] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [role, setRole] = useState("");
   const [tag, setTag] = useState("Marque");
   const [email, setEmail] = useState("");
@@ -183,7 +186,7 @@ export function Contacts() {
       try {
         const { data, error } = await supabase
           .from("contacts")
-          .select("id, brand, person, role, tone, tag, email, phone, sort_order")
+          .select("*")
           .order("sort_order");
         if (!active) return;
         if (error) {
@@ -252,9 +255,14 @@ export function Contacts() {
       toast("Renseigne la marque / entreprise");
       return;
     }
+    const first = firstName.trim();
+    const last = lastName.trim();
+    const person = [first, last].filter(Boolean).join(" ");
     const row = {
       brand: brand.trim(),
-      person: person.trim() || "—",
+      person: person || "—",
+      first_name: first || null,
+      last_name: last || null,
       role: role.trim(),
       tag,
       email: email.trim(),
@@ -271,7 +279,8 @@ export function Contacts() {
     toast("Contact ajouté ✓");
     setFormOpen(false);
     setBrand("");
-    setPerson("");
+    setFirstName("");
+    setLastName("");
     setRole("");
     setTag("Marque");
     setEmail("");
@@ -326,7 +335,7 @@ export function Contacts() {
       const { data, error } = await supabase
         .from("contacts")
         .insert(payload)
-        .select("id, brand, person, role, tone, tag, email, phone, sort_order");
+        .select("*");
       if (error) {
         toast("Échec de l'import — vérifie le fichier");
         return;
@@ -431,7 +440,8 @@ export function Contacts() {
           value={brand}
           onChange={setBrand}
         />
-        <TextField label="Personne" value={person} onChange={setPerson} />
+        <TextField label="Prénom" value={firstName} onChange={setFirstName} className="sm:min-w-[130px]" />
+        <TextField label="Nom de famille" value={lastName} onChange={setLastName} className="sm:min-w-[130px]" />
         <TextField label="Rôle" value={role} onChange={setRole} />
         <SelectField
           label="Tag"
@@ -546,7 +556,14 @@ export function Contacts() {
 
             <div className="flex flex-col gap-2">
               <CopyField label="Marque / Entreprise" value={selected.brand} />
-              <CopyField label="Personne" value={selected.person} />
+              {selected.first_name || selected.last_name ? (
+                <>
+                  {selected.first_name && <CopyField label="Prénom" value={selected.first_name} />}
+                  {selected.last_name && <CopyField label="Nom de famille" value={selected.last_name} />}
+                </>
+              ) : (
+                <CopyField label="Personne" value={selected.person} />
+              )}
               <CopyField label="Rôle" value={selected.role} />
               <CopyField label="Email" value={selected.email} />
               <CopyField label="Téléphone" value={selected.phone} />
