@@ -280,7 +280,7 @@ function CreatorPicker({
 }) {
   const value = selected ?? creators[0]?.name ?? "";
   return (
-    <div className="mb-4">
+    <div className="mb-4 w-fit max-w-full">
       <Select value={value} onValueChange={onSelect}>
         <SelectTrigger
           className="h-9 w-auto min-w-[190px] rounded-full bg-surface"
