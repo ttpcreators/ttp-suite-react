@@ -6,6 +6,10 @@ import { parseAmount, formatEuro, useAppState, type AppState } from "@/lib/appSt
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { LocationTag } from "@/components/ui/location-tag";
 import { MiniChart } from "@/components/ui/mini-chart";
+import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
+import { invMonthKey, monthLabel, momDelta, fmtCompact } from "@/lib/timeSeries";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { TrendingUp, TrendingDown } from "lucide-react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { Globe, type GlobeMarker } from "@/components/ui/cobe-globe";
@@ -79,6 +83,36 @@ function Bars({ heights, color, h }: { heights: number[]; color: string; h: numb
         />
       ))}
     </div>
+  );
+}
+
+/** Graphique CA mensuel : aire + dégradé (même DA que la page Stats). */
+function RevenueArea({ points }: { points: { label: string; ca: number }[] }) {
+  return (
+    <ChartContainer config={{}} className="mt-4 h-[160px]">
+      <AreaChart data={points} margin={{ top: 8, right: 6, left: -18, bottom: 0 }}>
+        <defs>
+          <linearGradient id="apercuCA" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#2b7fff" stopOpacity={0.24} />
+            <stop offset="100%" stopColor="#2b7fff" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.6} vertical={false} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickMargin={8} interval="preserveStartEnd" minTickGap={14} />
+        <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(Number(v))} width={42} />
+        <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ stroke: "#2b7fff", strokeWidth: 1, strokeOpacity: 0.4 }} />
+        <Area
+          type="monotone"
+          dataKey="ca"
+          name="Facturé"
+          stroke="#2b7fff"
+          strokeWidth={2.5}
+          fill="url(#apercuCA)"
+          dot={false}
+          activeDot={{ r: 4, fill: "#2b7fff", stroke: "var(--color-surface)", strokeWidth: 2 }}
+        />
+      </AreaChart>
+    </ChartContainer>
   );
 }
 
@@ -213,6 +247,20 @@ export function Apercu() {
 
   const recent = d.invoices.slice(0, 5);
 
+  // Série mensuelle du CA facturé (aire + dégradé). Repli sur le MiniChart si trop peu de données.
+  const caMonthAgg = new Map<string, number>();
+  for (const iv of d.invoices) {
+    const k = invMonthKey(iv.date);
+    if (!k) continue;
+    caMonthAgg.set(k, (caMonthAgg.get(k) ?? 0) + parseAmount(iv.amount));
+  }
+  const monthlyCA = [...caMonthAgg.keys()]
+    .sort()
+    .slice(-8)
+    .map((k) => ({ label: monthLabel(k), ca: caMonthAgg.get(k) ?? 0 }));
+  const hasMonthlyCA = monthlyCA.length >= 2 && monthlyCA.some((p) => p.ca > 0);
+  const caDelta = hasMonthlyCA ? momDelta(monthlyCA.map((p) => p.ca)) : null;
+
   return (
     <div>
       <div className="mb-5 flex items-start justify-between">
@@ -227,17 +275,43 @@ export function Apercu() {
         <LocationTag city="Lyon" country="France" timezone="CET" />
       </div>
 
-      <MiniChart
-        title="Montants facturés"
-        unit=" €"
-        valueFormatter={(n) => formatEuro(n)}
-        data={d.invoices
-          .slice()
-          .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
-          .slice(-8)
-          .map((inv) => ({ label: (inv.party || "—").split(/[×x·]/)[0].trim().split(" ")[0], value: parseAmount(inv.amount) }))}
-        className="mb-4"
-      />
+      {hasMonthlyCA ? (
+        <div className="mb-4 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-foreground">Chiffre d'affaires facturé</div>
+              <div className="mt-0.5 text-[11px] text-faint">Évolution mensuelle</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="text-[22px] font-bold tracking-tight">{formatEuro(facture)}</div>
+              {caDelta != null && (
+                <span
+                  className={
+                    "flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold " +
+                    (caDelta >= 0 ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/12 text-rose-500")
+                  }
+                >
+                  {caDelta >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                  {Math.abs(caDelta).toFixed(1).replace(".", ",")} %
+                </span>
+              )}
+            </div>
+          </div>
+          <RevenueArea points={monthlyCA} />
+        </div>
+      ) : (
+        <MiniChart
+          title="Montants facturés"
+          unit=" €"
+          valueFormatter={(n) => formatEuro(n)}
+          data={d.invoices
+            .slice()
+            .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
+            .slice(-8)
+            .map((inv) => ({ label: (inv.party || "—").split(/[×x·]/)[0].trim().split(" ")[0], value: parseAmount(inv.amount) }))}
+          className="mb-4"
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
         <Card index={0} className="md:col-span-12">
