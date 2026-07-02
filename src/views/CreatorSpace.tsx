@@ -20,7 +20,7 @@ import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/components/ui/form";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { EncryptedText } from "@/components/ui/encrypted-text";
-import { GlassCalendar } from "@/components/ui/glass-calendar";
+import { EventCalendar, type Ev as CalEv } from "@/components/ui/event-calendar";
 import { parseAmount, formatEuro } from "@/lib/appState";
 import { useLiveKey } from "@/lib/useLive";
 import { AvatarUpload } from "@/components/ui/avatar-upload";
@@ -560,15 +560,15 @@ export function CreatorSpace({
                 <TextField label="Échéance" value={tdDue} onChange={setTdDue} placeholder="JJ/MM" />
                 <SelectField label="Priorité" value={tdPrio} onChange={setTdPrio} options={PRIORITY_OPTIONS} />
               </InlineForm>
-              <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+              <div className="flex flex-col gap-3">
                 {filteredTodos.length === 0 ? (
-                  <div className="p-6 text-sm text-muted-foreground">
+                  <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">
                     {todoFilter === "terminees" ? "Aucune tâche terminée." : "Aucune tâche."}
                   </div>
                 ) : (
-                  filteredTodos.map((t, i) => (
-                    <div key={t.id} className={i > 0 ? "border-t border-border" : ""}>
-                      <div className="flex items-center gap-3 px-4 py-3">
+                  filteredTodos.map((t) => (
+                    <div key={t.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                      <div className="flex items-center gap-3">
                         <button
                           type="button"
                           onClick={() => toggleTodo(t)}
@@ -631,12 +631,12 @@ export function CreatorSpace({
               <InlineForm open={idOpen} title="Nouvelle idée" onClose={() => setIdOpen(false)} onSubmit={addIdea}>
                 <TextField label="Idée de contenu" value={idText} onChange={setIdText} />
               </InlineForm>
-              <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+              <div className="flex flex-col gap-3">
                 {ideas.length === 0 ? (
-                  <div className="p-6 text-sm text-muted-foreground">Aucune idée. Ajoute la première 💡</div>
+                  <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">Aucune idée. Ajoute la première 💡</div>
                 ) : (
-                  ideas.map((x, i) => (
-                    <div key={x.id} className={"flex items-center gap-3 px-4 py-3 " + (i > 0 ? "border-t border-border" : "")}>
+                  ideas.map((x) => (
+                    <div key={x.id} className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
                       <span className="h-2 w-2 shrink-0 rounded-full bg-indigo" />
                       <div className="min-w-0 flex-1 truncate text-sm">{x.text}</div>
                       <AnimatedBadge status="neutral" size="sm">{x.status ?? "À faire"}</AnimatedBadge>
@@ -676,29 +676,49 @@ export function CreatorSpace({
             </div>
           )}
 
-          {/* Planning */}
+          {/* Planning — même calendrier que l'espace agence */}
           {tab === "planning" && (
-            <div className="flex flex-col gap-4">
-              <GlassCalendar eventDates={new Set(events.map((e) => e.date ?? ""))} />
-              <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-                {events.length === 0 ? (
-                  <div className="p-6 text-sm text-muted-foreground">Aucun événement.</div>
-                ) : (
-                  events.map((e, i) => (
-                    <div key={e.id} className={"flex items-center gap-3 px-4 py-3 " + (i > 0 ? "border-t border-border" : "")}>
-                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-panel text-xs font-semibold">
-                        {(e.date ?? "").slice(8, 10) || e.day || "•"}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium">{e.title}</div>
-                        <div className="text-xs text-faint">{e.time && e.time !== "—" ? e.time : "Toute la journée"}</div>
-                      </div>
-                      <span className="rounded-md bg-rowhover px-2 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">{e.type}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+            <EventCalendar
+              events={events.map((e) => ({ id: e.id, date: e.date ?? "", time: e.time ?? "—", title: e.title, type: e.type, who: name })) as CalEv[]}
+              creators={[]}
+              onCreate={async (e) => {
+                if (!e.title.trim()) {
+                  toast("Renseigne le titre");
+                  return;
+                }
+                const dateVal = e.date && e.date.trim() ? e.date : new Date().toISOString().slice(0, 10);
+                const day = Number(dateVal.split("-")[2]) || 1;
+                const created = await dbInsert("events", {
+                  day,
+                  date: dateVal,
+                  time: e.time || "—",
+                  title: e.title,
+                  type: e.type,
+                  who: name,
+                  sort_order: events.length + 1,
+                });
+                if (!created) {
+                  toast("Erreur — réessaie");
+                  return;
+                }
+                setEvents([{ id: String((created as { id: string }).id), date: dateVal, day, time: e.time || "—", title: e.title, type: e.type }, ...events]);
+                toast("Événement ajouté ✓");
+              }}
+              onUpdate={async (id, patch) => {
+                const dbPatch: Record<string, unknown> = { ...patch };
+                if (patch.date) dbPatch.day = Number(patch.date.split("-")[2]) || 1;
+                if (await dbUpdate("events", id, dbPatch)) {
+                  setEvents((prev) => prev.map((r) => (r.id === id ? ({ ...r, ...patch } as Ev) : r)));
+                  toast("Événement modifié ✓");
+                }
+              }}
+              onDelete={async (id) => {
+                if (await dbDelete("events", id)) {
+                  setEvents((prev) => prev.filter((r) => r.id !== id));
+                  toast("Supprimé");
+                }
+              }}
+            />
           )}
 
           {/* Documents */}

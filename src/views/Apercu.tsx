@@ -5,23 +5,10 @@ import { titleCase, initials } from "@/lib/utils";
 import { parseAmount, formatEuro, useAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { EncryptedText } from "@/components/ui/encrypted-text";
-import ProgressMetricCard from "@/components/ui/progress-metric-card";
 import { LocationTag } from "@/components/ui/location-tag";
 import { MiniChart } from "@/components/ui/mini-chart";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
-
-const MONTH_NAMES = [
-  "janv.", "févr.", "mars", "avr.", "mai", "juin",
-  "juil.", "août", "sept.", "oct.", "nov.", "déc.",
-];
-const fmtInvDate = (dstr: string) => {
-  const full = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dstr || "");
-  if (full) return `${full[3]} ${MONTH_NAMES[Number(full[2]) - 1] ?? full[2]} ${full[1]}`;
-  const ym = /^(\d{4})-(\d{2})$/.exec(dstr || "");
-  if (ym) return `${MONTH_NAMES[Number(ym[2]) - 1] ?? ym[2]} ${ym[1]}`;
-  return dstr;
-};
 
 type Invoice = { ref: string; party: string; amount: string; date: string; status: string; creator: string | null };
 type Ev = { date: string | null; day: number | null; time: string | null; title: string; type: string; who: string | null };
@@ -214,25 +201,6 @@ export function Apercu() {
 
   const recent = d.invoices.slice(0, 5);
 
-  // CA cumulé, facture par facture (trié par date d'échéance si dispo)
-  const caSeries = (() => {
-    const sorted = d.invoices
-      .filter((inv) => parseAmount(inv.amount) > 0)
-      .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-    let cum = 0;
-    return sorted.map((inv, i) => {
-      cum += parseAmount(inv.amount);
-      return {
-        value: cum,
-        date: inv.date && inv.date !== "—" ? inv.date : `Facture ${i + 1}`,
-      };
-    });
-  })();
-  // Vrai total = dernière valeur cumulée (= somme des factures), pas la somme
-  // des valeurs cumulées. Delta = montant de la dernière facture ajoutée.
-  const caTotal = caSeries.length ? caSeries[caSeries.length - 1].value : 0;
-  const caStep = caSeries.length >= 2 ? caTotal - caSeries[caSeries.length - 2].value : caTotal;
-
   return (
     <div>
       <div className="mb-5 flex items-start justify-between">
@@ -246,26 +214,6 @@ export function Apercu() {
         </div>
         <LocationTag city="Lyon" country="France" timezone="CET" />
       </div>
-
-      <ProgressMetricCard
-        title="Chiffre d'affaires cumulé"
-        data={caSeries}
-        total={formatEuro(caTotal)}
-        delta={(caStep >= 0 ? "+" : "−") + formatEuro(Math.abs(caStep))}
-        deltaLabel="dernière facture"
-        showStats={false}
-        accent="emerald"
-        size="sm"
-        valueFormatter={(n) => formatEuro(n)}
-        dateFormatter={fmtInvDate}
-        periodOptions={[
-          { label: "10 dernières", points: 10 },
-          { label: "30 dernières", points: 30 },
-          { label: "Tout" },
-        ]}
-        period="Tout"
-        className="mb-4"
-      />
 
       <MiniChart
         title="Montants facturés"
