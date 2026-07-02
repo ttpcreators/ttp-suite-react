@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Users, Contact, ListChecks, Receipt, FileText, Search as SearchIcon, type LucideIcon } from "lucide-react";
-import { GooeyInput } from "@/components/ui/gooey-input";
+import { useState } from "react";
+import { Users, Contact, ListChecks, Receipt, FileText, Search as SearchIcon, X, type LucideIcon } from "lucide-react";
 import { useGlobalSearch, type SearchHit } from "@/lib/useGlobalSearch";
 import { titleCase } from "@/lib/utils";
 import type { ViewId } from "@/lib/nav";
@@ -26,23 +25,8 @@ export function GlobalSearch({
   onGoto: (id: ViewId) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [fieldWidth, setFieldWidth] = useState(200);
   const { hits, loading } = useGlobalSearch(query);
   const show = open && query.trim().length >= 2;
-
-  // Le GooeyInput a une largeur en pixels fixe : on la synchronise sur la
-  // largeur réelle du conteneur pour que la pilule remplisse toute la barre et
-  // que le dropdown (left-0 right-0) tombe pile dessous, même largeur, à 390px.
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const update = () => setFieldWidth(el.clientWidth);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   const pick = (h: SearchHit) => {
     setOpen(false);
@@ -56,23 +40,36 @@ export function GlobalSearch({
   };
 
   return (
-    <div
-      ref={wrapRef}
-      className="relative w-full max-w-[220px] sm:max-w-xl"
-      onFocusCapture={() => setOpen(true)}
-    >
-      <GooeyInput
-        value={query}
-        onValueChange={(v) => {
-          setQuery(v);
-          setOpen(true);
-        }}
-        placeholder="Rechercher…"
-        className="w-full justify-start"
-        collapsedWidth={fieldWidth}
-        expandedWidth={fieldWidth}
-        expandedOffset={0}
-      />
+    <div className="relative w-full max-w-[220px] sm:max-w-md md:max-w-xl">
+      {/* Champ contrôlé (pilule sombre) — 100% synchro avec la requête */}
+      <div className="flex h-11 items-center gap-2.5 rounded-full bg-foreground px-4 text-background shadow-sm ring-1 ring-border/50">
+        <SearchIcon className="h-4 w-4 shrink-0 opacity-80" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder="Rechercher…"
+          className="h-full min-w-0 flex-1 bg-transparent text-sm text-background outline-none placeholder:text-background/50"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setOpen(false);
+            }}
+            className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-background/60 transition-colors hover:text-background"
+            aria-label="Effacer la recherche"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
       {show && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
