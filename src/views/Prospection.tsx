@@ -12,6 +12,8 @@ import {
   DeleteButton,
 } from "@/components/ui/form";
 import { useEffect, useState } from "react";
+import { useLiveKey } from "@/lib/useLive";
+import { getCache, setCache } from "@/lib/viewCache";
 
 type Row = {
   id: string;
@@ -38,9 +40,12 @@ const DOT_CLASS: Record<NonNullable<Row["tone"]>, string> = {
 const STAGE_OPTIONS = STAGE_ORDER.map((s) => ({ value: s, label: s }));
 
 export function Prospection() {
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [rows, setRows] = useState<Row[] | null>(() =>
+    getCache<Row[]>("prospects"),
+  );
   const [error, setError] = useState(false);
   const { query } = useSearch();
+  const live = useLiveKey();
 
   const [formOpen, setFormOpen] = useState(false);
   const [brand, setBrand] = useState("");
@@ -61,12 +66,14 @@ export function Prospection() {
           setRows([]);
           return;
         }
-        setRows((data as Row[]) ?? []);
+        const list = (data as Row[]) ?? [];
+        setCache("prospects", list);
+        setRows(list);
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [live]);
 
   const submit = async () => {
     if (!brand.trim()) {

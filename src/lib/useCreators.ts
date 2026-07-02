@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
+import { useLive } from "./useLive";
 
 export type CreatorLite = {
   id: string;
@@ -34,7 +35,7 @@ export function invalidateCreators() {
 
 /** Liste des créateurs (pour les sélecteurs « pour qui ? » et le portail). */
 export function useCreators() {
-  const [creators, setCreators] = useState<CreatorLite[]>([]);
+  const [creators, setCreators] = useState<CreatorLite[]>(_cache ?? []);
   useEffect(() => {
     let alive = true;
     getCreators().then((c) => alive && setCreators(c));
@@ -42,5 +43,10 @@ export function useCreators() {
       alive = false;
     };
   }, []);
+  // Se resynchronise (nouveau créateur, photo, etc.) sur chaque tick global.
+  useLive(() => {
+    invalidateCreators();
+    getCreators().then(setCreators);
+  });
   return creators;
 }

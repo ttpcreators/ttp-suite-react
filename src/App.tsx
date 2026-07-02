@@ -2,7 +2,7 @@ import { useEffect, useState, type ComponentType } from "react";
 import { ChevronRight, Moon, Sun, Loader2 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
-import { GooeyInput } from "@/components/ui/gooey-input";
+import { GlobalSearch } from "@/components/GlobalSearch";
 import { EncryptedText } from "@/components/ui/encrypted-text";
 import { Toaster } from "@/components/ui/toast";
 import { Notifications } from "@/components/ui/notifications";
@@ -16,6 +16,7 @@ import { RosterTabs } from "@/views/RosterTabs";
 import { Apercu } from "@/views/Apercu";
 import { Facturation } from "@/views/Facturation";
 import { Briefs } from "@/views/Briefs";
+import { Idees } from "@/views/Idees";
 import { Todo } from "@/views/Todo";
 import { Planning } from "@/views/Planning";
 import { Documents } from "@/views/Documents";
@@ -38,6 +39,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   apercu: Apercu,
   facturation: Facturation,
   briefs: Briefs,
+  ideas: Idees,
   todo: Todo,
   planning: Planning,
   documents: Documents,
@@ -160,6 +162,14 @@ export default function App() {
   const toggleTheme = () => setDark((d) => !d);
   const logout = () => supabase.auth.signOut();
   const openDetail = (name: string) => setDetailCreator(name);
+  // Navigation depuis la recherche globale : garde la requête pour que la vue
+  // cible filtre dessus (contrairement à `select` qui remet à zéro).
+  const gotoSearch = (id: ViewId) => {
+    setActive(id);
+    setDetailCreator(null);
+    setSpace("agency");
+    setMobileTab(null);
+  };
   const openPortal = (name: string) => {
     setPortalCreator(name);
     setDetailCreator(null);
@@ -227,12 +237,12 @@ export default function App() {
                 </div>
               </div>
 
-              {/* gooey search (Aceternity) */}
-              <GooeyInput
-                value={query}
-                onValueChange={setQuery}
-                placeholder="Rechercher…"
-                className="justify-start"
+              {/* recherche globale (filtre + navigation) */}
+              <GlobalSearch
+                query={query}
+                setQuery={setQuery}
+                onOpenCreator={openDetail}
+                onGoto={gotoSearch}
               />
 
               {/* right cluster */}

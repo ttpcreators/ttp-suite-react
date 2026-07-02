@@ -239,6 +239,33 @@ export function Login() {
 
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden lg:flex-row">
+      {/* Mobile hero (branded, auto-blink mascotte) */}
+      <div className="relative flex flex-col items-center gap-3 overflow-hidden bg-gradient-to-br from-primary/90 via-primary to-primary/80 px-6 pb-8 pt-11 text-primary-foreground lg:hidden">
+        <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-10 -left-8 h-40 w-40 rounded-full bg-white/5 blur-2xl" />
+        <div className="relative z-10 flex items-center gap-2 text-base font-semibold">
+          <div className="h-8 w-8 overflow-hidden rounded-lg bg-white/15">
+            <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
+          </div>
+          <span>TTP Suite</span>
+        </div>
+        <div className="relative z-10 mt-1 flex h-16 items-end gap-1.5">
+          <div className="flex h-12 w-16 items-center justify-center gap-2 rounded-t-[40px] bg-[#FF9B6B]">
+            <Pupil size={9} pupilColor="#2D2D2D" forceLookX={0} forceLookY={0} />
+            <Pupil size={9} pupilColor="#2D2D2D" forceLookX={0} forceLookY={0} />
+          </div>
+          <div className="flex h-16 w-9 items-start justify-center gap-1.5 rounded-t-lg bg-[#6C3FF5] pt-3">
+            <EyeBall size={12} pupilSize={5} eyeColor="white" pupilColor="#2D2D2D" isBlinking={isPurpleBlinking} forceLookX={0} forceLookY={0} />
+            <EyeBall size={12} pupilSize={5} eyeColor="white" pupilColor="#2D2D2D" isBlinking={isPurpleBlinking} forceLookX={0} forceLookY={0} />
+          </div>
+          <div className="flex h-14 w-12 items-center justify-center gap-1.5 rounded-t-[28px] bg-[#E8D754]">
+            <Pupil size={8} pupilColor="#2D2D2D" forceLookX={0} forceLookY={0} />
+            <Pupil size={8} pupilColor="#2D2D2D" forceLookX={0} forceLookY={0} />
+          </div>
+        </div>
+        <div className="relative z-10 text-xs font-medium text-primary-foreground/70">Trust the Process</div>
+      </div>
+
       {/* Left : characters */}
       <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-primary/90 via-primary to-primary/80 p-12 text-primary-foreground lg:flex lg:w-1/2">
         <div className="relative z-20 flex items-center gap-2 text-lg font-semibold">
@@ -322,14 +349,7 @@ export function Login() {
       {/* Right : form */}
       <div className="flex w-full min-w-0 items-center justify-center bg-background px-6 py-10 sm:p-8 lg:w-1/2">
         <div className="mx-auto w-full max-w-[360px]">
-          <div className="mb-12 flex items-center justify-center gap-2 text-lg font-semibold lg:hidden">
-            <div className="h-8 w-8 overflow-hidden rounded-lg bg-[#14181E]">
-              <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
-            </div>
-            <span>TTP Suite</span>
-          </div>
-
-          <div className="mb-10 text-center">
+          <div className="mb-10 mt-2 text-center lg:mt-0">
             <h1 className="mb-2 text-3xl font-bold tracking-tight">Bon retour 👋</h1>
             <p className="text-sm text-muted-foreground">Connecte-toi à ton espace TTP</p>
           </div>

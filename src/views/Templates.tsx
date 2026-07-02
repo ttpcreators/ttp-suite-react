@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy } from "lucide-react";
+import { Copy, Search } from "lucide-react";
 import { useSearch, matchQuery } from "@/lib/search";
 import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
@@ -99,11 +99,31 @@ export function Templates() {
   const [category, setCategory] = useState(CATEGORY_ORDER[0]);
   const [body, setBody] = useState("");
 
+  // Filtres de vue locaux à la page (catégorie active + recherche locale).
+  const [activeCategory, setActiveCategory] = useState<string>("Tous");
+  const [localQuery, setLocalQuery] = useState("");
+
   // custom du blob (chargé une fois) + éventuels ajouts locaux de la session.
   const customList = local ?? custom ?? [];
   const all = [...DEFAULT_TEMPLATES, ...customList];
 
-  const filtered = all.filter((t) => matchQuery(query, t.title, t.body, t.category));
+  // Catégories distinctes présentes dans l'ensemble des modèles (pour les chips).
+  const allCategories = Array.from(new Set(all.map((t) => t.category))).sort((a, b) => {
+    const ia = CATEGORY_ORDER.indexOf(a);
+    const ib = CATEGORY_ORDER.indexOf(b);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+
+  const lq = localQuery.trim().toLowerCase();
+  const filtered = all.filter(
+    (t) =>
+      // recherche globale existante
+      matchQuery(query, t.title, t.body, t.category) &&
+      // filtre catégorie (chips)
+      (activeCategory === "Tous" || t.category === activeCategory) &&
+      // recherche locale par titre/contenu
+      (lq === "" || t.title.toLowerCase().includes(lq) || t.body.toLowerCase().includes(lq)),
+  );
 
   // Regroupement par catégorie, catégories connues d'abord.
   const categories = Array.from(new Set(filtered.map((t) => t.category))).sort((a, b) => {
@@ -169,6 +189,50 @@ export function Templates() {
         />
       </InlineForm>
 
+      {!loading && (
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveCategory("Tous")}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                activeCategory === "Tous"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-rowhover text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Tous
+            </button>
+            {allCategories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setActiveCategory(cat)}
+                className={cn(
+                  "rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                  activeCategory === cat
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-rowhover text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+          <div className="relative sm:w-64">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
+            <input
+              type="text"
+              value={localQuery}
+              onChange={(e) => setLocalQuery(e.target.value)}
+              placeholder="Rechercher un template…"
+              className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-xs text-foreground placeholder:text-faint outline-none transition-colors focus:border-primary"
+            />
+          </div>
+        </div>
+      )}
+
       {loading && (
         <div className="rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm">
           <AnimatedBadge status="loading" size="sm">
@@ -179,7 +243,9 @@ export function Templates() {
 
       {!loading && filtered.length === 0 && (
         <div className="rounded-2xl border border-border bg-surface px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">
-          {query.trim() ? "Aucun modèle ne correspond à votre recherche." : "Aucun modèle pour le moment."}
+          {query.trim() || localQuery.trim() || activeCategory !== "Tous"
+            ? "Aucun modèle ne correspond à votre recherche."
+            : "Aucun modèle pour le moment."}
         </div>
       )}
 

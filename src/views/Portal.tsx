@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, FileText, CalendarDays, Files, LayoutDashboard } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { titleCase, initials } from "@/lib/utils";
+import { titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
+import { CreatorAvatar } from "@/components/ui/creator-avatar";
+import { useLiveKey } from "@/lib/useLive";
 
 type Creator = {
   name: string;
@@ -42,18 +44,19 @@ export function Portal({
   const [briefs, setBriefs] = useState<Br[]>([]);
   const [events, setEvents] = useState<Ev[]>([]);
   const [docs, setDocs] = useState<Doc[]>([]);
+  const live = useLiveKey();
 
   useEffect(() => {
     if (!name) return;
     let alive = true;
     supabase.from("creators").select("name,handle,niche,followers,er,ca,photo_url").eq("name", name).limit(1).then(({ data }) => alive && setC((data?.[0] as Creator) ?? null));
     supabase.from("briefs").select("brand,deliverables,due,status").eq("who", name).then(({ data }) => alive && setBriefs((data as Br[]) ?? []));
-    supabase.from("events").select("date,day,time,title,type").eq("who", name).then(({ data }) => alive && setEvents((data as Ev[]) ?? []));
+    supabase.from("events").select("date,day,time,title,type,who").then(({ data }) => alive && setEvents(((data as (Ev & { who: string | null })[]) ?? []).filter((e) => (e.who ?? "").split(", ").includes(name))));
     supabase.from("documents").select("name,type,size,created_at").eq("creator", name).then(({ data }) => alive && setDocs((data as Doc[]) ?? []));
     return () => {
       alive = false;
     };
-  }, [name]);
+  }, [name, live]);
 
   if (!name)
     return (
@@ -93,13 +96,7 @@ export function Portal({
 
       {/* creator header */}
       <div className="mb-5 flex items-center gap-4">
-        {c?.photo_url ? (
-          <img src={c.photo_url} alt={titleCase(name)} className="h-14 w-14 rounded-2xl object-cover" />
-        ) : (
-          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-muted text-base font-semibold text-muted-foreground">
-            {initials(name)}
-          </div>
-        )}
+        <CreatorAvatar name={name} photoUrl={c?.photo_url ?? null} className="h-14 w-14 rounded-2xl" />
         <div>
           <div className="text-xl font-semibold tracking-tight">{titleCase(name)}</div>
           <div className="text-sm text-faint">{[c?.handle, c?.niche].filter(Boolean).join(" · ") || "—"}</div>

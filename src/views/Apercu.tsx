@@ -7,6 +7,9 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { EncryptedText } from "@/components/ui/encrypted-text";
 import ProgressMetricCard from "@/components/ui/progress-metric-card";
 import { LocationTag } from "@/components/ui/location-tag";
+import { MiniChart } from "@/components/ui/mini-chart";
+import { useLiveKey } from "@/lib/useLive";
+import { getCache, setCache } from "@/lib/viewCache";
 
 const MONTH_NAMES = [
   "janv.", "févr.", "mars", "avr.", "mai", "juin",
@@ -108,8 +111,9 @@ const invLabel = (s: string) =>
   s === "payee" ? "Payée" : s === "attente" ? "En attente" : s === "retard" ? "En retard" : "Brouillon";
 
 export function Apercu() {
-  const [d, setData] = useState<Data | null>(null);
+  const [d, setData] = useState<Data | null>(() => getCache<Data>("apercu"));
   const [err, setErr] = useState(false);
+  const live = useLiveKey();
   const { data: obj } = useAppState<Record<string, unknown> | null>(
     (s: AppState) => (s["objByMonth"] as Record<string, unknown>) ?? null,
   );
@@ -130,20 +134,22 @@ export function Apercu() {
           setErr(true);
           return;
         }
-        setData({
+        const next: Data = {
           invoices: (inv.data as Invoice[]) ?? [],
           events: (ev.data as Ev[]) ?? [],
           prospects: (pr.data as Prospect[]) ?? [],
           todos: (td.data as Todo[]) ?? [],
           briefs: (br.data as Brief[]) ?? [],
           creators: (cr.data as Creator[]) ?? [],
-        });
+        };
+        setCache("apercu", next);
+        setData(next);
       })
       .catch(() => alive && setErr(true));
     return () => {
       alive = false;
     };
-  }, []);
+  }, [live]);
 
   if (err)
     return (
@@ -253,6 +259,18 @@ export function Apercu() {
         className="mb-4"
       />
 
+      <MiniChart
+        title="Montants facturés"
+        unit=" €"
+        valueFormatter={(n) => formatEuro(n)}
+        data={d.invoices
+          .slice()
+          .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
+          .slice(-8)
+          .map((inv) => ({ label: (inv.party || "—").split(/[×x·]/)[0].trim().split(" ")[0], value: parseAmount(inv.amount) }))}
+        className="mb-4"
+      />
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
         <Card index={0} className="md:col-span-12">
           <div className="mb-3.5 text-sm font-semibold">Prochains rendez-vous</div>
@@ -316,8 +334,8 @@ export function Apercu() {
             </div>
             <div className="text-right text-[8px] leading-tight text-muted-foreground">Marge<br />agence</div>
           </div>
-          <div className="mt-3.5">
-            <Bars heights={H(2, 11)} color="bg-foreground/80" h={42} />
+          <div className="mt-auto pt-3.5">
+            <Bars heights={H(2, 11)} color="bg-primary/60" h={42} />
           </div>
         </Card>
 

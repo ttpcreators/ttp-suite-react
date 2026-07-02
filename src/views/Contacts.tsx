@@ -13,6 +13,8 @@ import {
   DeleteButton,
 } from "@/components/ui/form";
 import { useEffect, useMemo, useState } from "react";
+import { useLiveKey } from "@/lib/useLive";
+import { getCache, setCache } from "@/lib/viewCache";
 
 type Row = {
   id: string;
@@ -62,9 +64,10 @@ function CopyField({ label, value }: { label: string; value: string }) {
 }
 
 export function Contacts() {
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("contacts"));
   const [error, setError] = useState(false);
   const { query } = useSearch();
+  const live = useLiveKey();
 
   const [selected, setSelected] = useState<Row | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -90,12 +93,14 @@ export function Contacts() {
           setRows([]);
           return;
         }
-        setRows((data as Row[]) ?? []);
+        const list = (data as Row[]) ?? [];
+        setCache("contacts", list);
+        setRows(list);
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [live]);
 
   // Liste dynamique des tags réellement présents (préserve l'ordre des TAG_OPTIONS,
   // puis ajoute les tags custom découverts dans les rows).

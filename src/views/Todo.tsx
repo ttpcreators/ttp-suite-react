@@ -12,8 +12,11 @@ import {
   DeleteButton,
 } from "@/components/ui/form";
 import { useCreators } from "@/lib/useCreators";
+import { useLiveKey } from "@/lib/useLive";
+import { getCache, setCache } from "@/lib/viewCache";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useEffect, useState, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { X, Pencil } from "lucide-react";
 
 type Priority = "haute" | "moyenne" | "basse";
 type Source = "agency" | "creator";
@@ -50,11 +53,20 @@ type CreatorFilter = null | "__agency__" | string;
 // Filtre priorité : null = toutes, sinon la priorité.
 type PriorityFilter = null | Priority;
 
+// Filtre de vue par statut (comme CreatorSpace).
+type TodoFilter = "encours" | "terminees" | "toutes";
+const TODO_FILTERS: { id: TodoFilter; label: string }[] = [
+  { id: "encours", label: "En cours" },
+  { id: "terminees", label: "Terminées" },
+  { id: "toutes", label: "Toutes" },
+];
+
 export function Todo() {
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("todos"));
   const [error, setError] = useState(false);
   const { query } = useSearch();
   const creators = useCreators();
+  const live = useLiveKey();
 
   const [formOpen, setFormOpen] = useState(false);
   const [text, setText] = useState("");
@@ -65,7 +77,54 @@ export function Todo() {
 
   const [creatorFilter, setCreatorFilter] = useState<CreatorFilter>(null);
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>(null);
+  const [todoFilter, setTodoFilter] = useState<TodoFilter>("encours");
   const [selectedTodo, setSelectedTodo] = useState<Row | null>(null);
+
+  // Édition de la tâche sélectionnée (dans le panneau de détail).
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState("");
+  const [editDescr, setEditDescr] = useState("");
+  const [editDue, setEditDue] = useState("");
+  const [editPriority, setEditPriority] = useState<Priority>("moyenne");
+  const [editCreator, setEditCreator] = useState("");
+
+  // Ouvre le mode édition en pré-remplissant depuis la tâche sélectionnée.
+  const openEdit = (row: Row) => {
+    setEditText(row.text);
+    setEditDescr(row.descr ?? "");
+    setEditDue(row.due && row.due !== "—" ? row.due : "");
+    setEditPriority(row.priority);
+    setEditCreator(row.creator ?? "");
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    if (!selectedTodo) return;
+    if (!editText.trim()) {
+      toast("Renseigne la tâche");
+      return;
+    }
+    const patch = {
+      text: editText.trim(),
+      descr: editDescr.trim() || null,
+      tag: editCreator ? "CRÉATEUR" : "AGENCE",
+      due: editDue.trim() || "—",
+      creator: editCreator || null,
+      priority: editPriority,
+    };
+    if (!(await dbUpdate("todos", selectedTodo.id, patch))) {
+      toast("Erreur — réessaie");
+      return;
+    }
+    setRows((prev) =>
+      (prev ?? []).map((r) =>
+        r.id === selectedTodo.id ? { ...r, ...patch } : r
+      )
+    );
+    setSelectedTodo((prev) => (prev ? { ...prev, ...patch } : prev));
+    setEditing(false);
+    toast("Tâche modifiée ✓");
+  };
 
   useEffect(() => {
     let active = true;
@@ -73,7 +132,6 @@ export function Todo() {
       const { data, error } = await supabase
         .from("todos")
         .select("id, text, descr, tag, due, creator, priority, source, done, sort_order, created_at")
-        .eq("done", false)
         .order("sort_order");
       if (!active) return;
       if (error) {
@@ -81,12 +139,14 @@ export function Todo() {
         setRows([]);
         return;
       }
-      setRows((data as Row[]) ?? []);
+      const list = (data as Row[]) ?? [];
+      setCache("todos", list);
+      setRows(list);
     })();
     return () => {
       active = false;
     };
-  }, []);
+  }, [live]);
 
   const submit = async () => {
     if (!text.trim()) {
@@ -124,8 +184,10 @@ export function Todo() {
     setSelectedTodo((prev) => (prev?.id === id ? null : prev));
   };
 
-  // Combine recherche + filtre créateur + filtre priorité.
+  // Combine filtre statut + recherche + filtre créateur + filtre priorité.
   const filtered = (rows ?? []).filter((row) => {
+    if (todoFilter === "encours" && row.done) return false;
+    if (todoFilter === "terminees" && !row.done) return false;
     if (!matchQuery(query, row.text, row.descr, row.creator, row.tag)) return false;
     if (creatorFilter === "__agency__") {
       if (row.creator) return false;
@@ -162,7 +224,10 @@ export function Todo() {
         <div className="text-sm text-muted-foreground">
           {rows === null
             ? "Chargement…"
-            : `${rows.length} tâche${rows.length > 1 ? "s" : ""} en cours`}
+            : (() => {
+                const openCount = rows.filter((r) => !r.done).length;
+                return `${openCount} tâche${openCount > 1 ? "s" : ""} en cours`;
+              })()}
         </div>
         <AddButton label="Tâche" onClick={() => setFormOpen(true)} />
       </div>
@@ -205,6 +270,26 @@ export function Todo() {
       {/* Barre de filtres */}
       {rows !== null && rows.length > 0 && (
         <div className="mb-4 flex flex-col gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            {TODO_FILTERS.map((f) => {
+              const active = todoFilter === f.id;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setTodoFilter(f.id)}
+                  className={cn(
+                    "rounded-full px-3 py-1.5 text-[10px] font-semibold transition-colors",
+                    active
+                      ? "bg-primary text-primary-foreground"
+                      : "border border-border bg-surface text-muted-foreground hover:bg-rowhover"
+                  )}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {creatorPills.map((pill) => {
               const active = creatorFilter === pill.value;
@@ -280,10 +365,17 @@ export function Todo() {
         <div className="rounded-2xl border border-border bg-card shadow-sm px-4 sm:px-5">
           {filtered.map((row, index) => {
             const badge = priorityBadge[row.priority];
-            const markDone = async () => {
-              if (await dbUpdate("todos", row.id, { done: true })) {
-                removeRow(row.id);
-                toast("Fait ✓");
+            const toggleDone = async (next: boolean) => {
+              if (await dbUpdate("todos", row.id, { done: next })) {
+                setRows((prev) =>
+                  (prev ?? []).map((r) =>
+                    r.id === row.id ? { ...r, done: next } : r
+                  )
+                );
+                setSelectedTodo((prev) =>
+                  prev?.id === row.id ? { ...prev, done: next } : prev
+                );
+                toast(next ? "Fait ✓" : "À refaire");
               }
             };
             return (
@@ -303,22 +395,30 @@ export function Todo() {
                   index > 0 && "border-t border-border"
                 )}
               >
-                {/* Case à cocher */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    markDone();
-                  }}
-                  title="Marquer comme fait"
-                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border-[1.5px] border-faint transition-colors hover:border-signal"
+                {/* Case à cocher animée (barre progressive) */}
+                <Checkbox
+                  id={`todo-${row.id}`}
+                  checked={row.done}
+                  onClick={(e) => e.stopPropagation()}
+                  onCheckedChange={(v) => toggleDone(v === true)}
+                  title={row.done ? "Marquer à refaire" : "Marquer comme fait"}
+                  className="peer shrink-0"
                 />
 
                 {/* Texte + description */}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-medium text-foreground">
+                  <label
+                    htmlFor={`todo-${row.id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className={cn(
+                      "relative inline-block max-w-full cursor-pointer truncate align-top text-[13px] font-medium text-foreground transition-colors after:absolute after:left-0 after:top-1/2 after:h-px after:bg-current after:transition-all after:duration-300 after:content-['']",
+                      row.done
+                        ? "text-muted-foreground after:w-full"
+                        : "after:w-0"
+                    )}
+                  >
                     {row.text}
-                  </p>
+                  </label>
                   {row.descr && (
                     <p className="mt-0.5 truncate text-[11px] leading-relaxed text-faint">
                       {row.descr}
@@ -363,7 +463,10 @@ export function Todo() {
       {selectedTodo && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setSelectedTodo(null)}
+          onClick={() => {
+            setSelectedTodo(null);
+            setEditing(false);
+          }}
         >
           <div
             className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-sm"
@@ -371,18 +474,100 @@ export function Todo() {
           >
             <div className="mb-4 flex items-start justify-between gap-3">
               <h2 className="text-base font-semibold leading-snug text-foreground">
-                {selectedTodo.text}
+                {editing ? "Modifier la tâche" : selectedTodo.text}
               </h2>
-              <button
-                type="button"
-                onClick={() => setSelectedTodo(null)}
-                className="shrink-0 text-faint transition-colors hover:text-foreground"
-                title="Fermer"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex shrink-0 items-center gap-1">
+                {!editing && (
+                  <button
+                    type="button"
+                    onClick={() => openEdit(selectedTodo)}
+                    className="text-faint transition-colors hover:text-foreground"
+                    title="Modifier"
+                  >
+                    <Pencil className="h-[18px] w-[18px]" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedTodo(null);
+                    setEditing(false);
+                  }}
+                  className="text-faint transition-colors hover:text-foreground"
+                  title="Fermer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
+            {editing ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  saveEdit();
+                }}
+                className="flex flex-col gap-4"
+              >
+                <div className="flex flex-wrap items-end gap-3">
+                  <TextField
+                    label="Tâche"
+                    value={editText}
+                    onChange={setEditText}
+                    className="min-w-full"
+                  />
+                  <TextField
+                    label="Description"
+                    value={editDescr}
+                    onChange={setEditDescr}
+                    className="min-w-full"
+                  />
+                  <TextField
+                    label="Échéance"
+                    value={editDue}
+                    onChange={setEditDue}
+                    placeholder="JJ/MM ou —"
+                  />
+                  <SelectField
+                    label="Priorité"
+                    value={editPriority}
+                    onChange={(v) => setEditPriority(v as Priority)}
+                    options={[
+                      { value: "haute", label: "Haute" },
+                      { value: "moyenne", label: "Moyenne" },
+                      { value: "basse", label: "Basse" },
+                    ]}
+                  />
+                  <SelectField
+                    label="Pour qui"
+                    value={editCreator}
+                    onChange={setEditCreator}
+                    options={[
+                      { value: "", label: "Agence (tous)" },
+                      ...creators.map((c) => ({
+                        value: c.name,
+                        label: titleCase(c.name),
+                      })),
+                    ]}
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditing(false)}
+                    className="h-[42px] shrink-0 rounded-lg border border-border bg-surface px-5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                  >
+                    Enregistrer
+                  </button>
+                </div>
+              </form>
+            ) : (
             <div className="flex flex-col gap-4">
               <DetailBlock label="Description">
                 {selectedTodo.descr ? (
@@ -441,6 +626,7 @@ export function Todo() {
                 )}
               </div>
             </div>
+            )}
           </div>
         </div>
       )}

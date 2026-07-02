@@ -5,11 +5,14 @@ import { dbInsert, dbUpdate, dbDelete } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useCreators } from "@/lib/useCreators";
+import { useLiveKey } from "@/lib/useLive";
+import { getCache, setCache } from "@/lib/viewCache";
 
 export function Planning() {
-  const [rows, setRows] = useState<Ev[] | null>(null);
+  const [rows, setRows] = useState<Ev[] | null>(() => getCache<Ev[]>("events"));
   const [error, setError] = useState(false);
   const creators = useCreators();
+  const live = useLiveKey();
 
   useEffect(() => {
     let alive = true;
@@ -26,18 +29,19 @@ export function Planning() {
         }
         const list = ((data as Record<string, unknown>[]) ?? []).map((r) => ({
           id: String(r.id),
-          date: (r.date as string) ?? "",
+          date: ((r.date as string) && (r.date as string).trim()) ? (r.date as string) : new Date().toISOString().slice(0,10),
           time: (r.time as string) ?? "—",
           title: (r.title as string) ?? "",
           type: (r.type as string) ?? "call",
           who: (r.who as string | null) ?? null,
         })) as Ev[];
+        setCache("events", list);
         setRows(list);
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [live]);
 
   if (error)
     return (

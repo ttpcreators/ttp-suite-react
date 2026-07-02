@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLive } from "./useLive";
 import { supabase } from "./supabase";
 
 /**
@@ -30,6 +31,10 @@ async function loadAppState(): Promise<AppState> {
   }
 }
 
+// Compteur d'écritures : une écriture optimiste en cours "gagne" contre un
+// refetch concurrent (évite qu'un tick live annule visuellement une modif).
+let _writeGen = 0;
+
 /** Charge le blob (mémoïsé). Toutes les vues partagent la même requête. */
 export function getAppState(): Promise<AppState> {
   if (_cache) return Promise.resolve(_cache);
@@ -53,6 +58,7 @@ export function invalidateAppState() {
  * comme l'ancienne app). Réservé à l'AGENCE (RLS). Renvoie true si OK.
  */
 export async function saveAppStateKey(key: string, value: unknown): Promise<boolean> {
+  _writeGen++; // marque une écriture en cours (prioritaire sur les refetch)
   const { data } = await supabase
     .from("module_rows")
     .select("id,a")
@@ -87,8 +93,11 @@ export async function saveAppStateKey(key: string, value: unknown): Promise<bool
  * `select` est appelé une fois, au chargement.
  */
 export function useAppState<T = AppState>(select?: (s: AppState) => T) {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Init synchrone depuis le cache → pas de flash "Chargement…" au retour sur une vue.
+  const [data, setData] = useState<T | null>(() =>
+    _cache ? (select ? select(_cache) : (_cache as unknown as T)) : null,
+  );
+  const [loading, setLoading] = useState(!_cache);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -109,6 +118,20 @@ export function useAppState<T = AppState>(select?: (s: AppState) => T) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Re-synchronise les réglages partagés (objectifs, pricing, checklist…) à
+  // chaque tick global : ce qu'un poste modifie apparaît sur les autres.
+  useLive(() => {
+    const gen = _writeGen;
+    invalidateAppState();
+    getAppState()
+      .then((s) => {
+        // Ignore ce refetch si une écriture optimiste a démarré entre-temps
+        // (sinon on annulerait visuellement la modif en cours).
+        if (_writeGen === gen) setData(select ? select(s) : (s as unknown as T));
+      })
+      .catch(() => {});
+  });
 
   return { data, loading, error };
 }

@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { titleCase, initials } from "@/lib/utils";
+import { titleCase } from "@/lib/utils";
 import { dbUpdate } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
+import { useLiveKey } from "@/lib/useLive";
+import { AvatarUpload } from "@/components/ui/avatar-upload";
 
 type Creator = {
   id: string;
@@ -60,13 +62,17 @@ export function CreatorDetail({
   });
   const [editing, setEditing] = useState(false);
 
+  const live = useLiveKey();
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+
   useEffect(() => {
     let alive = true;
     supabase.from("creators").select("*").eq("name", name).limit(1).then(({ data }) => {
       if (!alive) return;
       const row = (data?.[0] as Creator) ?? null;
       setC(row);
-      if (row)
+      if (row && !editingRef.current)
         setForm({
           ville: row.ville ?? "",
           phone: row.phone ?? "",
@@ -83,7 +89,7 @@ export function CreatorDetail({
     return () => {
       alive = false;
     };
-  }, [name]);
+  }, [name, live]);
 
   const save = async () => {
     if (!c) return;
@@ -182,13 +188,13 @@ export function CreatorDetail({
       </button>
 
       <div className="mb-5 flex flex-wrap items-center gap-4">
-        {c?.photo_url ? (
-          <img src={c.photo_url} alt={titleCase(name)} className="h-16 w-16 rounded-2xl object-cover" />
-        ) : (
-          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-muted text-lg font-semibold text-muted-foreground">
-            {initials(name)}
-          </div>
-        )}
+        <AvatarUpload
+          creatorId={c?.id}
+          name={name}
+          photoUrl={c?.photo_url ?? null}
+          size={64}
+          onUploaded={(url) => setC((prev) => (prev ? { ...prev, photo_url: url } : prev))}
+        />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="text-2xl font-semibold tracking-tight">{titleCase(name)}</div>

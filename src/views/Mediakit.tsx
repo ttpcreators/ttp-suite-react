@@ -4,8 +4,9 @@ import { supabase } from "@/lib/supabase";
 import { useAppState } from "@/lib/appState";
 import type { AppState } from "@/lib/appState";
 import { useCreators } from "@/lib/useCreators";
-import { cn, titleCase, initials } from "@/lib/utils";
+import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
+import { CreatorAvatar } from "@/components/ui/creator-avatar";
 
 /** Ligne `creators` (colonnes utiles au média kit). */
 type Creator = {
@@ -164,17 +165,11 @@ export function Mediakit() {
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="flex items-center gap-4">
-            {creator.photo_url ? (
-              <img
-                src={creator.photo_url}
-                alt={titleCase(creator.name)}
-                className="h-[76px] w-[76px] rounded-2xl object-cover"
-              />
-            ) : (
-              <div className="grid h-[76px] w-[76px] place-items-center rounded-2xl bg-muted text-xl font-semibold text-muted-foreground">
-                {initials(creator.name)}
-              </div>
-            )}
+            <CreatorAvatar
+              name={creator.name}
+              photoUrl={creator.photo_url}
+              className="h-[76px] w-[76px] rounded-2xl text-xl"
+            />
             <div className="min-w-0">
               <div className="text-2xl font-semibold tracking-tight md:text-3xl">
                 {titleCase(creator.name)}
@@ -292,22 +287,11 @@ function CreatorPicker({
                 : "border border-border bg-surface text-foreground hover:bg-rowhover",
             )}
           >
-            {c.photo_url ? (
-              <img
-                src={c.photo_url}
-                alt=""
-                className="h-6 w-6 rounded-full object-cover"
-              />
-            ) : (
-              <span
-                className={cn(
-                  "grid h-6 w-6 place-items-center rounded-full text-[9px]",
-                  active ? "bg-background/20" : "bg-muted text-muted-foreground",
-                )}
-              >
-                {initials(c.name)}
-              </span>
-            )}
+            <CreatorAvatar
+              name={c.name}
+              photoUrl={c.photo_url}
+              className="h-6 w-6 rounded-full text-[9px]"
+            />
             {c.name.split(" ")[0]}
           </button>
         );

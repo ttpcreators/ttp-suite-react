@@ -14,7 +14,7 @@ import {
   Check,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { titleCase, initials } from "@/lib/utils";
+import { titleCase } from "@/lib/utils";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/components/ui/form";
@@ -22,6 +22,8 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { EncryptedText } from "@/components/ui/encrypted-text";
 import { GlassCalendar } from "@/components/ui/glass-calendar";
 import { parseAmount, formatEuro } from "@/lib/appState";
+import { useLiveKey } from "@/lib/useLive";
+import { AvatarUpload } from "@/components/ui/avatar-upload";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -119,6 +121,14 @@ export function CreatorSpace({
   const [idOpen, setIdOpen] = useState(false);
   const [idText, setIdText] = useState("");
 
+  // todo inline edit
+  const [tdEditId, setTdEditId] = useState<string | null>(null);
+  const [teText, setTeText] = useState("");
+  const [teDesc, setTeDesc] = useState("");
+  const [tePrio, setTePrio] = useState("moyenne");
+
+  const live = useLiveKey();
+
   useEffect(() => {
     let alive = true;
     supabase
@@ -130,13 +140,17 @@ export function CreatorSpace({
     supabase.from("todos").select("id,text,descr,due,priority,done,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setTodos((data as Todo[]) ?? []));
     supabase.from("ideas").select("id,text,status,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
     supabase.from("briefs").select("id,brand,deliverables,due,status").eq("who", name).then(({ data }) => alive && setBriefs((data as Brief[]) ?? []));
-    supabase.from("events").select("id,date,day,time,title,type").eq("who", name).then(({ data }) => alive && setEvents((data as Ev[]) ?? []));
+    supabase.from("events").select("id,date,day,time,title,type,who").then(({ data }) => {
+      if (!alive) return;
+      const rows = (data as (Ev & { who: string | null })[]) ?? [];
+      setEvents(rows.filter((e) => (e.who ?? "").split(", ").includes(name)));
+    });
     supabase.from("documents").select("id,name,type,size,created_at").eq("creator", name).then(({ data }) => alive && setDocs((data as Doc[]) ?? []));
     supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).then(({ data }) => alive && setInvoices((data as Invoice[]) ?? []));
     return () => {
       alive = false;
     };
-  }, [name]);
+  }, [name, live]);
 
   const firstName = titleCase(name).split(" ")[0];
 
@@ -244,6 +258,29 @@ export function CreatorSpace({
     }
   };
 
+  const startEditTodo = (t: Todo) => {
+    setTdEditId(t.id);
+    setTeText(t.text);
+    setTeDesc(t.descr ?? "");
+    setTePrio(t.priority ?? "moyenne");
+  };
+
+  const saveEditTodo = async () => {
+    if (!tdEditId) return;
+    if (!teText.trim()) {
+      toast("Écris ta tâche");
+      return;
+    }
+    const patch = { text: teText.trim(), descr: teDesc.trim(), priority: tePrio };
+    if (!(await dbUpdate("todos", tdEditId, patch))) {
+      toast("Erreur — réessaie");
+      return;
+    }
+    setTodos((prev) => prev.map((x) => (x.id === tdEditId ? { ...x, ...patch } : x)));
+    toast("Tâche modifiée ✓");
+    setTdEditId(null);
+  };
+
   const stat = (label: string, val: string | null) => (
     <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
       <div className="text-[9px] font-semibold uppercase tracking-wider text-faint">{label}</div>
@@ -306,13 +343,13 @@ export function CreatorSpace({
         <main className="flex-1 px-4 pb-8 pt-1.5 md:px-6">
           {/* Greeting */}
           <div className="mb-5 flex items-center gap-4">
-            {creator?.photo_url ? (
-              <img src={creator.photo_url} alt={firstName} className="h-14 w-14 rounded-2xl object-cover" />
-            ) : (
-              <div className="grid h-14 w-14 place-items-center rounded-2xl bg-muted text-base font-semibold text-muted-foreground">
-                {initials(name)}
-              </div>
-            )}
+            <AvatarUpload
+              creatorId={creator?.id}
+              name={name}
+              photoUrl={creator?.photo_url ?? null}
+              size={56}
+              onUploaded={(url) => setCreator((c) => (c ? { ...c, photo_url: url } : c))}
+            />
             <div>
               <div className="text-sm text-faint">Bonjour</div>
               <div className="text-[26px] font-semibold tracking-tight md:text-[30px]">
@@ -473,33 +510,53 @@ export function CreatorSpace({
                   </div>
                 ) : (
                   filteredTodos.map((t, i) => (
-                    <div key={t.id} className={"flex items-center gap-3 px-4 py-3 " + (i > 0 ? "border-t border-border" : "")}>
-                      <button
-                        type="button"
-                        onClick={() => toggleTodo(t)}
-                        className={
-                          "grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors " +
-                          (t.done ? "border-signal bg-signal text-onsignal" : "border-faint hover:border-signal")
-                        }
-                        aria-label={t.done ? "Marquer à refaire" : "Marquer fait"}
-                      >
-                        {t.done && <Check className="h-3.5 w-3.5" />}
-                      </button>
-                      <div className="min-w-0 flex-1">
-                        <div className={"truncate text-sm font-medium " + (t.done ? "text-muted-foreground line-through" : "")}>{t.text}</div>
-                        {t.descr && <div className="truncate text-xs text-faint">{t.descr}</div>}
-                      </div>
-                      <AnimatedBadge status={prioBadge(t.priority)} size="sm">
-                        {titleCase(t.priority ?? "moyenne")}
-                      </AnimatedBadge>
-                      <DeleteButton
-                        onClick={async () => {
-                          if (await dbDelete("todos", t.id)) {
-                            setTodos((prev) => prev.filter((x) => x.id !== t.id));
-                            toast("Supprimé");
+                    <div key={t.id} className={i > 0 ? "border-t border-border" : ""}>
+                      <div className="flex items-center gap-3 px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => toggleTodo(t)}
+                          className={
+                            "grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors " +
+                            (t.done ? "border-signal bg-signal text-onsignal" : "border-faint hover:border-signal")
                           }
-                        }}
-                      />
+                          aria-label={t.done ? "Marquer à refaire" : "Marquer fait"}
+                        >
+                          {t.done && <Check className="h-3.5 w-3.5" />}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <div className={"truncate text-sm font-medium " + (t.done ? "text-muted-foreground line-through" : "")}>{t.text}</div>
+                          {t.descr && <div className="truncate text-xs text-faint">{t.descr}</div>}
+                        </div>
+                        <AnimatedBadge status={prioBadge(t.priority)} size="sm">
+                          {titleCase(t.priority ?? "moyenne")}
+                        </AnimatedBadge>
+                        <button
+                          type="button"
+                          onClick={() => (tdEditId === t.id ? setTdEditId(null) : startEditTodo(t))}
+                          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-panel text-muted-foreground shadow-sm transition-colors hover:bg-rowhover hover:text-foreground"
+                          aria-label="Modifier la tâche"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <DeleteButton
+                          onClick={async () => {
+                            if (await dbDelete("todos", t.id)) {
+                              setTodos((prev) => prev.filter((x) => x.id !== t.id));
+                              toast("Supprimé");
+                            }
+                          }}
+                        />
+                      </div>
+                      <InlineForm
+                        open={tdEditId === t.id}
+                        title="Modifier la tâche"
+                        onClose={() => setTdEditId(null)}
+                        onSubmit={saveEditTodo}
+                      >
+                        <TextField label="Tâche" value={teText} onChange={setTeText} />
+                        <TextField label="Description" value={teDesc} onChange={setTeDesc} />
+                        <SelectField label="Priorité" value={tePrio} onChange={setTePrio} options={PRIORITY_OPTIONS} />
+                      </InlineForm>
                     </div>
                   ))
                 )}

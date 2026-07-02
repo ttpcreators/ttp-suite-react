@@ -19,6 +19,7 @@ import {
   Briefcase,
   Handshake,
   Wrench,
+  Lightbulb,
   type LucideIcon,
 } from "lucide-react";
 
@@ -29,6 +30,7 @@ export type ViewId =
   | "roster"
   | "mediakit"
   | "briefs"
+  | "ideas"
   | "todo"
   | "planning"
   | "documents"
@@ -74,6 +76,7 @@ export const NAV: NavFamily[] = [
     icon: Briefcase,
     items: [
       { id: "briefs", label: "Briefs", icon: FileText },
+      { id: "ideas", label: "Idées", icon: Lightbulb },
       { id: "todo", label: "À faire", icon: ListChecks },
       { id: "planning", label: "Planning", icon: CalendarDays },
       { id: "documents", label: "Documents", icon: Files },

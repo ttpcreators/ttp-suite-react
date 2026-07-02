@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { cn, titleCase, initials } from "@/lib/utils";
+import { cn, titleCase } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
+import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, DeleteButton } from "@/components/ui/form";
+import { useLiveKey } from "@/lib/useLive";
+import { getCache, setCache } from "@/lib/viewCache";
 
 type CreatorRow = {
   id: string;
@@ -58,9 +61,10 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
-  const [rows, setRows] = useState<Creator[] | null>(null);
+  const [rows, setRows] = useState<Creator[] | null>(() => getCache<Creator[]>("roster"));
   const [error, setError] = useState(false);
   const { query } = useSearch();
+  const live = useLiveKey();
 
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
@@ -74,9 +78,13 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
       .order("sort_order")
       .then(({ data, error }) => {
         if (error) setError(true);
-        else setRows(((data as CreatorRow[]) ?? []).map(mapCreator));
+        else {
+          const list = ((data as CreatorRow[]) ?? []).map(mapCreator);
+          setCache("roster", list);
+          setRows(list);
+        }
       });
-  }, []);
+  }, [live]);
 
   if (error) {
     return (
@@ -197,17 +205,11 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
               >
                 {/* Créateur : avatar carré + nom titleCase + @handle */}
                 <div className="flex min-w-0 flex-1 items-center gap-3 md:flex-none">
-                  {c.photo ? (
-                    <img
-                      src={c.photo}
-                      alt={titleCase(c.name)}
-                      className="h-10 w-10 shrink-0 rounded-xl object-cover"
-                    />
-                  ) : (
-                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface text-xs font-semibold text-muted-foreground">
-                      {initials(c.name)}
-                    </div>
-                  )}
+                  <CreatorAvatar
+                    name={c.name}
+                    photoUrl={c.photo}
+                    className="h-10 w-10 shrink-0 rounded-xl"
+                  />
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold text-foreground">
                       {titleCase(c.name)}

@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { FileText, Eye, Download } from "lucide-react";
+import { FileText, Eye, Download, Pencil } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { cn, titleCase } from "@/lib/utils";
 import { parseAmount, formatEuro } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import type { AnimatedBadgeStatus } from "@/components/ui/be-ui-animated-badge";
-import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
+import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import {
   AddButton,
@@ -16,6 +16,8 @@ import {
   DeleteButton,
 } from "@/components/ui/form";
 import { useCreators } from "@/lib/useCreators";
+import { useLiveKey } from "@/lib/useLive";
+import { getCache, setCache } from "@/lib/viewCache";
 
 const esc = (s: unknown) =>
   String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c] ?? c);
@@ -76,10 +78,11 @@ const STATUS_OPTIONS: { value: InvoiceStatus; label: string }[] = [
 ];
 
 export function Facturation() {
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("invoices"));
   const [error, setError] = useState(false);
   const { query } = useSearch();
   const creators = useCreators();
+  const live = useLiveKey();
 
   const [formOpen, setFormOpen] = useState(false);
   const [brand, setBrand] = useState("");
@@ -88,6 +91,13 @@ export function Facturation() {
   const [status, setStatus] = useState<InvoiceStatus>("brouillon");
   const [creator, setCreator] = useState("");
 
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editParty, setEditParty] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editStatus, setEditStatus] = useState<InvoiceStatus>("brouillon");
+  const [editCreator, setEditCreator] = useState("");
+
   useEffect(() => {
     supabase
       .from("invoices")
@@ -95,9 +105,13 @@ export function Facturation() {
       .order("sort_order")
       .then(({ data, error }) => {
         if (error) setError(true);
-        else setRows((data as Row[]) ?? []);
+        else {
+          const list = (data as Row[]) ?? [];
+          setCache("invoices", list);
+          setRows(list);
+        }
       });
-  }, []);
+  }, [live]);
 
   if (error) {
     return (
@@ -180,8 +194,12 @@ export function Facturation() {
     const party = creator
       ? `${brandTrim} × ${titleCase(creator).split(" ")[0]}`
       : brandTrim;
+    const maxNum = rows.reduce(
+      (m, r) => Math.max(m, Number(String(r.ref).split("-").pop()) || 0),
+      180,
+    );
     const row = {
-      ref: `${new Date().getFullYear()}-${String(180 + rows.length).padStart(3, "0")}`,
+      ref: `${new Date().getFullYear()}-${String(maxNum + 1).padStart(3, "0")}`,
       party,
       amount,
       date: due.trim() || "—",
@@ -202,6 +220,38 @@ export function Facturation() {
     setDue("");
     setStatus("brouillon");
     setCreator("");
+  };
+
+  const openEdit = (r: Row) => {
+    setEditId(r.id);
+    setEditParty(r.party);
+    setEditAmount(r.amount);
+    setEditDate(r.date);
+    setEditStatus(r.status);
+    setEditCreator(r.creator ?? "");
+  };
+
+  const saveEdit = async () => {
+    if (!editId) return;
+    const partyTrim = editParty.trim();
+    if (!partyTrim) {
+      toast("Renseigne le client");
+      return;
+    }
+    const patch = {
+      party: partyTrim,
+      amount: editAmount.trim() || "—",
+      date: editDate.trim() || "—",
+      status: editStatus,
+      creator: editCreator || null,
+    };
+    if (!(await dbUpdate("invoices", editId, patch))) {
+      toast("Erreur — réessaie");
+      return;
+    }
+    setRows(rows.map((x) => (x.id === editId ? { ...x, ...patch } : x)));
+    toast("Facture modifiée ✓");
+    setEditId(null);
   };
 
   return (
@@ -240,7 +290,7 @@ export function Facturation() {
           value={creator}
           onChange={setCreator}
           options={[
-            { value: "", label: "—" },
+            { value: "", label: "— Aucun —" },
             ...creators.map((c) => ({ value: c.name, label: c.name })),
           ]}
         />
@@ -294,8 +344,39 @@ export function Facturation() {
           filtered.map((r) => {
             const meta = STATUS_META[r.status];
             return (
+              <div key={r.id}>
+              <InlineForm
+                open={editId === r.id}
+                title={`Modifier · ${r.ref}`}
+                onClose={() => setEditId(null)}
+                onSubmit={saveEdit}
+                submitLabel="Enregistrer"
+              >
+                <TextField label="Client" value={editParty} onChange={setEditParty} />
+                <TextField
+                  label="Montant"
+                  value={editAmount}
+                  onChange={setEditAmount}
+                  placeholder="ex 3 000 €"
+                />
+                <TextField label="Échéance" value={editDate} onChange={setEditDate} />
+                <SelectField
+                  label="Statut"
+                  value={editStatus}
+                  onChange={(v) => setEditStatus(v as InvoiceStatus)}
+                  options={STATUS_OPTIONS}
+                />
+                <SelectField
+                  label="Créateur"
+                  value={editCreator}
+                  onChange={setEditCreator}
+                  options={[
+                    { value: "", label: "— Aucun —" },
+                    ...creators.map((c) => ({ value: c.name, label: c.name })),
+                  ]}
+                />
+              </InlineForm>
               <div
-                key={r.id}
                 className="grid grid-cols-1 items-center gap-1 rounded-xl px-4 py-3 transition-colors hover:bg-rowhover md:grid-cols-[0.9fr_2.2fr_1.2fr_1.1fr_1.3fr] md:gap-3"
               >
                 {/* Réf. */}
@@ -325,6 +406,14 @@ export function Facturation() {
                     {meta.label}
                   </AnimatedBadge>
                   <span className="hidden items-center gap-1 md:flex">
+                    <button
+                      type="button"
+                      title="Modifier la facture"
+                      onClick={() => openEdit(r)}
+                      className="flex h-[26px] w-[26px] items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
                     <button
                       type="button"
                       title="Aperçu de la facture"
@@ -370,6 +459,7 @@ export function Facturation() {
                     }}
                   />
                 </span>
+              </div>
               </div>
             );
           })

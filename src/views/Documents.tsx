@@ -1,7 +1,9 @@
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
+import { useLiveKey } from "@/lib/useLive";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
+import { getCache, setCache } from "@/lib/viewCache";
 import { useEffect, useState } from "react";
 import {
   PencilLine,
@@ -60,9 +62,12 @@ const metaFor = (type: string): TypeMeta =>
   DOC_TYPE_META[type] ?? DOC_TYPE_META.autre;
 
 export function Documents() {
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [rows, setRows] = useState<Row[] | null>(() =>
+    getCache<Row[]>("documents")
+  );
   const [error, setError] = useState(false);
   const { query } = useSearch();
+  const live = useLiveKey();
 
   useEffect(() => {
     let active = true;
@@ -77,12 +82,14 @@ export function Documents() {
         setRows([]);
         return;
       }
-      setRows((data as Row[]) ?? []);
+      const list = (data as Row[]) ?? [];
+      setCache("documents", list);
+      setRows(list);
     })();
     return () => {
       active = false;
     };
-  }, []);
+  }, [live]);
 
   const formatDate = (value: string) => {
     const d = new Date(value);

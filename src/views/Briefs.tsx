@@ -2,12 +2,14 @@ import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn } from "@/lib/utils";
-import { CalendarClock, Wallet, Target, Package } from "lucide-react";
+import { CalendarClock, Wallet, Target, Package, Pencil, X } from "lucide-react";
 import { useEffect, useState, type ReactElement } from "react";
-import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
+import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/components/ui/form";
 import { useCreators } from "@/lib/useCreators";
+import { useLiveKey } from "@/lib/useLive";
+import { getCache, setCache } from "@/lib/viewCache";
 
 type Row = {
   id: string;
@@ -38,10 +40,11 @@ function statusMeta(status: string): { variant: BadgeStatus; label: string; dot:
 }
 
 export function Briefs() {
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("briefs"));
   const [error, setError] = useState(false);
   const { query } = useSearch();
   const creators = useCreators();
+  const live = useLiveKey();
 
   const [formOpen, setFormOpen] = useState(false);
   const [brand, setBrand] = useState("");
@@ -49,7 +52,14 @@ export function Briefs() {
   const [deliverables, setDeliverables] = useState("");
   const [due, setDue] = useState("");
   const [budget, setBudget] = useState("");
+  const [objectif, setObjectif] = useState("");
   const [status, setStatus] = useState("attente");
+
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editBrand, setEditBrand] = useState("");
+  const [editDeliverables, setEditDeliverables] = useState("");
+  const [editDue, setEditDue] = useState("");
+  const [editObjectif, setEditObjectif] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -64,12 +74,14 @@ export function Briefs() {
         setRows([]);
         return;
       }
-      setRows((data as Row[]) ?? []);
+      const list = (data as Row[]) ?? [];
+      setCache("briefs", list);
+      setRows(list);
     })();
     return () => {
       active = false;
     };
-  }, []);
+  }, [live]);
 
   const submit = async () => {
     if (!brand.trim()) {
@@ -86,7 +98,7 @@ export function Briefs() {
       tone: "cyan",
       consignes: "",
       budget: budget || "—",
-      objectif: "—",
+      objectif: objectif.trim() || "—",
       sort_order: nextOrder(rows ?? []),
     };
     const created = await dbInsert("briefs", row);
@@ -102,7 +114,48 @@ export function Briefs() {
     setDeliverables("");
     setDue("");
     setBudget("");
+    setObjectif("");
     setStatus("attente");
+  };
+
+  const startEdit = (row: Row) => {
+    setEditId(row.id);
+    setEditBrand(row.brand);
+    setEditDeliverables(row.deliverables === "—" ? "" : row.deliverables);
+    setEditDue(row.due === "—" ? "" : row.due);
+    setEditObjectif(row.objectif === "—" ? "" : row.objectif);
+  };
+
+  const cancelEdit = () => {
+    setEditId(null);
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!editBrand.trim()) {
+      toast("Renseigne la marque");
+      return;
+    }
+    const patch = {
+      brand: editBrand.trim(),
+      deliverables: editDeliverables.trim() || "—",
+      due: editDue.trim() || "—",
+      objectif: editObjectif.trim() || "—",
+    };
+    if (!(await dbUpdate("briefs", id, patch))) {
+      toast("Erreur — réessaie");
+      return;
+    }
+    setRows((rows ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    toast("Brief mis à jour ✓");
+    setEditId(null);
+  };
+
+  const changeStatus = async (id: string, next: string) => {
+    if (!(await dbUpdate("briefs", id, { status: next }))) {
+      toast("Erreur — réessaie");
+      return;
+    }
+    setRows((rows ?? []).map((r) => (r.id === id ? { ...r, status: next } : r)));
   };
 
   const creatorOptions = [
@@ -114,6 +167,7 @@ export function Briefs() {
     { value: "attente", label: "En attente" },
     { value: "valider", label: "À valider" },
     { value: "cours", label: "En cours" },
+    { value: "terminé", label: "Terminé" },
   ];
 
   const filtered = (rows ?? []).filter((row) =>
@@ -136,6 +190,7 @@ export function Briefs() {
       <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />
       <TextField label="Échéance" value={due} onChange={setDue} />
       <TextField label="Budget" value={budget} onChange={setBudget} />
+      <TextField label="Objectif" value={objectif} onChange={setObjectif} />
       <SelectField label="Statut" value={status} onChange={setStatus} options={statusOptions} />
     </InlineForm>
   );
@@ -174,6 +229,45 @@ export function Briefs() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((row) => {
           const meta = statusMeta(row.status);
+          const editing = editId === row.id;
+          if (editing) {
+            return (
+              <div
+                key={row.id}
+                className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-sm"
+              >
+                <div className="mb-3.5 flex items-center justify-between">
+                  <div className="text-sm font-semibold">Modifier le brief</div>
+                  <button
+                    type="button"
+                    onClick={cancelEdit}
+                    className="text-faint transition-colors hover:text-foreground"
+                    title="Annuler"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="flex flex-col gap-3">
+                  <TextField label="Marque" value={editBrand} onChange={setEditBrand} />
+                  <TextField
+                    label="Livrables"
+                    value={editDeliverables}
+                    onChange={setEditDeliverables}
+                    placeholder="ex 3 posts · 1 reel"
+                  />
+                  <TextField label="Échéance" value={editDue} onChange={setEditDue} />
+                  <TextField label="Objectif" value={editObjectif} onChange={setEditObjectif} />
+                  <button
+                    type="button"
+                    onClick={() => saveEdit(row.id)}
+                    className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                  >
+                    Enregistrer
+                  </button>
+                </div>
+              </div>
+            );
+          }
           return (
             <div
               key={row.id}
@@ -195,6 +289,14 @@ export function Briefs() {
                   <AnimatedBadge status={meta.variant} size="sm">
                     {meta.label}
                   </AnimatedBadge>
+                  <button
+                    type="button"
+                    onClick={() => startEdit(row)}
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                    title="Modifier"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
                   <DeleteButton
                     onClick={async () => {
                       if (await dbDelete("briefs", row.id)) {
@@ -235,6 +337,15 @@ export function Briefs() {
                     {row.objectif || "—"}
                   </div>
                 </div>
+              </div>
+
+              <div className="mt-3">
+                <SelectField
+                  label="Statut"
+                  value={row.status}
+                  onChange={(v) => changeStatus(row.id, v)}
+                  options={statusOptions}
+                />
               </div>
 
               <div className="mt-4 flex items-center gap-1.5 border-t border-border pt-3 text-[11px] text-muted-foreground">

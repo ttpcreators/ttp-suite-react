@@ -4,13 +4,13 @@
 
 :root {
   --radius: 0.75rem;
-  --background: #fafafa;
+  --background: #eaebef;
   --foreground: #18181b;
   --card: #ffffff;
   --card-foreground: #18181b;
   --popover: #ffffff;
   --popover-foreground: #18181b;
-  --primary: #3d0000;
+  --primary: #0069fe;
   --primary-foreground: #ffffff;
   --secondary: #f4f4f5;
   --secondary-foreground: #18181b;
@@ -22,8 +22,8 @@
   --destructive-foreground: #ffffff;
   --border: #e4e4e7;
   --input: #e4e4e7;
-  --ring: #3d0000;
-  --burgundy: #3d0000;
+  --ring: #0069fe;
+  --burgundy: #0069fe;
   /* Tokens fidèles à l'app d'origine */
   --panel: #f4f4f5;
   --surface: #ffffff;
@@ -39,13 +39,13 @@
 }
 
 .dark {
-  --background: #09090b;
+  --background: #000000;
   --foreground: #fafafa;
   --card: #18181b;
   --card-foreground: #fafafa;
   --popover: #18181b;
   --popover-foreground: #fafafa;
-  --primary: #a83246;
+  --primary: #2b7fff;
   --primary-foreground: #ffffff;
   --secondary: #27272a;
   --secondary-foreground: #fafafa;
@@ -57,8 +57,8 @@
   --destructive-foreground: #ffffff;
   --border: #27272a;
   --input: #27272a;
-  --ring: #a83246;
-  --burgundy: #a83246;
+  --ring: #2b7fff;
+  --burgundy: #2b7fff;
   /* Tokens fidèles à l'app d'origine (dark) */
   --panel: #18181b;
   --surface: #18181b;

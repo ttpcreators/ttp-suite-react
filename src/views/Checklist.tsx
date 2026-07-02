@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, ChevronLeft } from "lucide-react";
+import { Check, ChevronLeft, Pencil } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -86,6 +86,8 @@ export function Checklist() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
 
   // Synchronise l'état local dès que le blob est chargé.
   useEffect(() => {
@@ -112,6 +114,25 @@ export function Checklist() {
     await persist(next);
     if (selectedId === id) setSelectedId(null);
     toast("Checklist supprimée");
+  };
+
+  const startEdit = (ck: Checklist) => {
+    setEditingId(ck.id);
+    setEditName(ck.name);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditName("");
+  };
+
+  const saveEdit = async (id: string) => {
+    const trimmed = editName.trim();
+    if (!trimmed) return;
+    const next = lists.map((c) => (c.id === id ? { ...c, name: trimmed } : c));
+    await persist(next);
+    cancelEdit();
+    toast("Titre modifié");
   };
 
   const toggleStep = async (id: string) => {
@@ -238,10 +259,34 @@ export function Checklist() {
       {/* Barre d'avancement globale */}
       <div className="mb-5 rounded-2xl border border-border bg-panel shadow-sm p-5">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold text-foreground">
-              {selected.name}
-            </div>
+          <div className="min-w-0 flex-1">
+            {editingId === selected.id ? (
+              <input
+                autoFocus
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveEdit(selected.id);
+                  if (e.key === "Escape") cancelEdit();
+                }}
+                onBlur={() => saveEdit(selected.id)}
+                className="w-full rounded-lg border border-border bg-panel px-2 py-1 text-sm font-semibold text-foreground outline-none focus:border-primary"
+              />
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <div className="truncate text-sm font-semibold text-foreground">
+                  {selected.name}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => startEdit(selected)}
+                  className="shrink-0 rounded-md p-1 text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                  aria-label="Modifier le titre"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
             <div className="mt-0.5 text-[11px] text-faint">
               {doneCount} / {TOTAL_STEPS} étapes bouclées
             </div>
