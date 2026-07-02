@@ -210,7 +210,7 @@ export function Contrats() {
                     "rounded-full px-3 py-1.5 text-[9px] font-semibold transition-colors",
                     active
                       ? "bg-primary text-primary-foreground"
-                      : "bg-rowhover text-muted-foreground hover:text-foreground",
+                      : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
                   )}
                 >
                   {first}

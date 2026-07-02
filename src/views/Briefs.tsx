@@ -36,7 +36,7 @@ const STATUS_FILTERS = [
 const chipBase =
   "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors";
 const chipActive = "bg-primary text-primary-foreground";
-const chipInactive = "bg-rowhover text-muted-foreground hover:text-foreground";
+const chipInactive = "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground";
 
 function matchesStatusFilter(status: string, filter: string): boolean {
   if (filter === ALL_STATUS) return true;

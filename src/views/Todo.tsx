@@ -282,7 +282,7 @@ export function Todo() {
                     "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
                     active
                       ? "bg-primary text-primary-foreground"
-                      : "bg-rowhover text-muted-foreground hover:text-foreground"
+                      : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground"
                   )}
                 >
                   {f.label}
@@ -302,7 +302,7 @@ export function Todo() {
                     "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
                     active
                       ? "bg-primary text-primary-foreground"
-                      : "bg-rowhover text-muted-foreground hover:text-foreground"
+                      : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground"
                   )}
                 >
                   {pill.label}
@@ -322,7 +322,7 @@ export function Todo() {
                     "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
                     active
                       ? "bg-primary text-primary-foreground"
-                      : "bg-rowhover text-muted-foreground hover:text-foreground"
+                      : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground"
                   )}
                 >
                   {pill.label}

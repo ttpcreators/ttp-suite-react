@@ -210,7 +210,7 @@ export function Idees() {
 const chipBase =
   "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors";
 const chipActive = "bg-primary text-primary-foreground";
-const chipInactive = "bg-rowhover text-muted-foreground hover:text-foreground";
+const chipInactive = "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground";
 
 function cnRow(index: number): string {
   return cn("px-4 py-3", index > 0 && "border-t border-border");
