@@ -7,6 +7,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { TextField } from "@/components/ui/form";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
+import { RepresentationContract } from "@/views/RepresentationContract";
 
 type CtType = "marque" | "repr" | "ugc";
 
@@ -296,26 +297,41 @@ export function Contrats() {
     toast("Cas supprimé");
   };
 
+  const typeToggle = (
+    <>
+      <div className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-faint">Type de contrat</div>
+      <div className="flex flex-wrap gap-2">
+        {(Object.keys(TYPE_META) as CtType[]).map((k) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setCtType(k)}
+            className={cn(
+              "whitespace-nowrap rounded-xl px-3.5 py-2.5 text-[10px] font-semibold transition-colors",
+              k === ctType ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:bg-rowhover",
+            )}
+          >
+            {TYPE_META[k].chip}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+
+  if (ctType === "repr") {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">{typeToggle}</div>
+        <RepresentationContract />
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_1.15fr]">
       {/* ============ FORMULAIRE ============ */}
       <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-        <div className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-faint">Type de contrat</div>
-        <div className="flex flex-wrap gap-2">
-          {(Object.keys(TYPE_META) as CtType[]).map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setCtType(k)}
-              className={cn(
-                "whitespace-nowrap rounded-xl px-3.5 py-2.5 text-[10px] font-semibold transition-colors",
-                k === ctType ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:bg-rowhover",
-              )}
-            >
-              {TYPE_META[k].chip}
-            </button>
-          ))}
-        </div>
+        {typeToggle}
 
         {/* Créateur */}
         <div className="mb-2 mt-5 text-[9px] font-semibold uppercase tracking-wider text-faint">Créateur</div>
