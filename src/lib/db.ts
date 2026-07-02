@@ -22,7 +22,11 @@ export async function dbUpdate(
   id: string,
   patch: Record<string, unknown>,
 ): Promise<boolean> {
-  const { error } = await supabase.from(table).update(patch).eq("id", id);
+  // Sync Google Agenda : toute modif UI d'un `event` doit repasser en
+  // sync_source='agence' pour être re-poussée vers Google (le trigger DB le
+  // force aussi ; on le pose ici pour cohérence du cache optimiste).
+  const finalPatch = table === "events" ? { ...patch, sync_source: "agence" } : patch;
+  const { error } = await supabase.from(table).update(finalPatch).eq("id", id);
   if (error) {
     console.warn(`[db] update ${table}:`, error.message);
     return false;
@@ -31,6 +35,21 @@ export async function dbUpdate(
 }
 
 export async function dbDelete(table: string, id: string): Promise<boolean> {
+  // Sync Google Agenda : sur `events`, on ne supprime PAS physiquement (sinon la
+  // suppression ne serait jamais propagée à Google). On pose un tombstone
+  // (deleted=true) que le push transforme en suppression Google, puis pg_cron purge.
+  if (table === "events") {
+    const { error } = await supabase
+      .from("events")
+      .update({ deleted: true, deleted_at: new Date().toISOString(), sync_source: "agence" })
+      .eq("id", id);
+    if (error) {
+      console.warn(`[db] soft-delete events:`, error.message);
+      return false;
+    }
+    return true;
+  }
+
   const { error } = await supabase.from(table).delete().eq("id", id);
   if (error) {
     console.warn(`[db] delete ${table}:`, error.message);

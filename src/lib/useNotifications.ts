@@ -13,7 +13,7 @@ export function useNotifications(): NotificationItem[] {
     Promise.all([
       supabase.from("invoices").select("party,amount,status").eq("status", "retard"),
       supabase.from("briefs").select("brand,creator,status").eq("status", "valider"),
-      supabase.from("events").select("date,time,title").gte("date", todayStr).order("date").limit(3),
+      supabase.from("events").select("date,time,title").or("deleted.is.null,deleted.eq.false").gte("date", todayStr).order("date").limit(3),
     ]).then(([inv, br, ev]) => {
       if (!alive) return;
       const out: NotificationItem[] = [];

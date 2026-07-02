@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { EventCalendar, type Ev } from "@/components/ui/event-calendar";
+import { GoogleConnect } from "@/components/ui/google-connect";
 import { dbInsert, dbUpdate, dbDelete } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -19,6 +20,7 @@ export function Planning() {
     supabase
       .from("events")
       .select("id,day,date,time,title,type,who")
+      .or("deleted.is.null,deleted.eq.false")
       .order("sort_order")
       .then(({ data, error }) => {
         if (!alive) return;
@@ -100,12 +102,15 @@ export function Planning() {
   };
 
   return (
-    <EventCalendar
-      events={rows}
-      onCreate={onCreate}
-      onUpdate={onUpdate}
-      onDelete={onDelete}
-      creators={creators}
-    />
+    <div className="space-y-4">
+      <GoogleConnect />
+      <EventCalendar
+        events={rows}
+        onCreate={onCreate}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        creators={creators}
+      />
+    </div>
   );
 }
