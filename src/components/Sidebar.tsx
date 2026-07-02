@@ -1,4 +1,4 @@
-import { LogOut } from "lucide-react";
+import { LogOut, Trash2 } from "lucide-react";
 import { NAV, type ViewId } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { SidebarNav, type SbGroup } from "@/components/ui/dashboard-sidebar";
@@ -65,14 +65,32 @@ export function Sidebar({
   );
 
   const footer = (
-    <button
-      type="button"
-      onClick={onLogout}
-      className="group flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-    >
-      <LogOut className="h-4 w-4 text-faint group-hover:text-foreground/70" strokeWidth={1.75} />
-      <span className="text-[13px] tracking-wide">Se déconnecter</span>
-    </button>
+    <div className="flex flex-col gap-0.5">
+      <button
+        type="button"
+        onClick={() => onSelect("corbeille")}
+        className={cn(
+          "group flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] transition-colors",
+          active === "corbeille"
+            ? "bg-rowhover font-medium text-foreground"
+            : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
+        )}
+      >
+        <Trash2
+          className={cn("h-4 w-4", active === "corbeille" ? "text-primary" : "text-faint group-hover:text-foreground/70")}
+          strokeWidth={1.75}
+        />
+        <span className="text-[13px] tracking-wide">Corbeille</span>
+      </button>
+      <button
+        type="button"
+        onClick={onLogout}
+        className="group flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+      >
+        <LogOut className="h-4 w-4 text-faint group-hover:text-foreground/70" strokeWidth={1.75} />
+        <span className="text-[13px] tracking-wide">Se déconnecter</span>
+      </button>
+    </div>
   );
 
   return (

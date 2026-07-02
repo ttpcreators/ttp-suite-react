@@ -1,7 +1,8 @@
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
+import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
+import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import {
   AddButton,
@@ -98,9 +99,10 @@ export function Idees() {
   };
 
   const removeRow = async (id: string) => {
-    if (await dbDelete("ideas", id)) {
-      setRows((prev) => (prev ?? []).filter((r) => r.id !== id));
-      toast("Supprimée");
+    const r = (rows ?? []).find((x) => x.id === id);
+    if (await dbTrash("ideas", id, r?.text ?? "Idée", r?.creator ?? undefined)) {
+      setRows((prev) => (prev ?? []).filter((x) => x.id !== id));
+      toast("Déplacée dans la corbeille");
     }
   };
 

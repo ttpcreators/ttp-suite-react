@@ -2,7 +2,8 @@ import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
+import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
+import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import {
   AddButton,
@@ -457,12 +458,12 @@ export function Todo() {
                         icon: Trash2,
                         danger: true,
                         onClick: async () => {
-                          if (await dbDelete("todos", row.id)) {
+                          if (await dbTrash("todos", row.id, row.text, row.creator ?? undefined)) {
                             removeRow(row.id);
-                            toast("Supprimé");
+                            toast("Déplacé dans la corbeille");
                           }
                         },
-                        confirm: { title: "Supprimer la tâche", message: `Supprimer « ${row.text} » ? Cette action est irréversible.` },
+                        confirm: { title: "Supprimer la tâche", message: `Supprimer « ${row.text} » ? Tu pourras la restaurer depuis la corbeille.` },
                       },
                     ]}
                   />

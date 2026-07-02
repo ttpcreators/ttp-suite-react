@@ -17,7 +17,8 @@ import { cn, titleCase } from "@/lib/utils";
 import { parseAmount, formatEuro, useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import type { AnimatedBadgeStatus } from "@/components/ui/be-ui-animated-badge";
-import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
+import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
+import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import { AddButton, TextField, SelectField } from "@/components/ui/form";
 import { ActionMenu, type ActionItem } from "@/components/ui/action-menu";
@@ -692,9 +693,9 @@ export function Facturation() {
             const meta = STATUS_META[r.status];
             const rate = details[r.id]?.commissionRate ?? commissionFor(r.creator);
             const del = async () => {
-              if (await dbDelete("invoices", r.id)) {
+              if (await dbTrash("invoices", r.id, r.party, formatEuro(parseAmount(r.amount)))) {
                 setRows(invoices.filter((x) => x.id !== r.id));
-                toast("Supprimé");
+                toast("Déplacé dans la corbeille");
               }
             };
             const menuItems: ActionItem[] = [

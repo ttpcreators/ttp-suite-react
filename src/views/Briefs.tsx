@@ -2,10 +2,10 @@ import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn } from "@/lib/utils";
-import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, RotateCcw, ArrowLeft } from "lucide-react";
+import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactElement } from "react";
-import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
-import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
+import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
+import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
@@ -26,11 +26,6 @@ type Row = {
   sort_order: number;
 };
 type BadgeStatus = "success" | "warning" | "danger" | "neutral" | "info" | "loading";
-
-/** Brief supprimé, conservé dans la corbeille (blob app_state) pour restauration. */
-type TrashBrief = Record<string, unknown> & { _trashId: string; _deletedAt: string };
-let _tid = 0;
-const trashUid = () => `t${Date.now().toString(36)}${(_tid += 1)}`;
 
 const STATUS_OPTS: StatusOption[] = [
   { value: "attente", label: "En attente", dot: "bg-amber" },
@@ -77,12 +72,6 @@ export function Briefs() {
   const [editDeliverables, setEditDeliverables] = useState("");
   const [editDue, setEditDue] = useState("");
   const [editObjectif, setEditObjectif] = useState("");
-
-  // Corbeille (blob app_state) : briefs supprimés, restaurables.
-  const { data: trashData } = useAppState<TrashBrief[]>((s: AppState) => (s["deletedBriefs"] as TrashBrief[]) ?? []);
-  const [localTrash, setLocalTrash] = useState<TrashBrief[] | null>(null);
-  const trash = localTrash ?? trashData ?? [];
-  const [showTrash, setShowTrash] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -173,37 +162,10 @@ export function Briefs() {
     if (!(await dbUpdate("briefs", id, { status: next }))) toast("Erreur — réessaie");
   };
   const del = async (row: Row) => {
-    // Corbeille : on sauvegarde la ligne complète avant suppression pour pouvoir la restaurer.
-    const { data } = await supabase.from("briefs").select("*").eq("id", row.id).limit(1);
-    const full: Record<string, unknown> = (data?.[0] as Record<string, unknown>) ?? { ...row };
-    const item: TrashBrief = { ...full, _trashId: trashUid(), _deletedAt: new Date().toISOString() };
-    const nextTrash = [item, ...trash];
-    setLocalTrash(nextTrash);
-    await saveAppStateKey("deletedBriefs", nextTrash);
-    if (await dbDelete("briefs", row.id)) {
+    if (await dbTrash("briefs", row.id, row.brand, row.creator || undefined)) {
       setRows((rows ?? []).filter((r) => r.id !== row.id));
-      toast("Brief déplacé dans la corbeille");
+      toast("Déplacé dans la corbeille");
     }
-  };
-  const restoreBrief = async (item: TrashBrief) => {
-    const data: Record<string, unknown> = { ...item };
-    for (const k of ["id", "created_at", "updated_at", "deleted", "deleted_at", "_trashId", "_deletedAt"]) delete data[k];
-    const created = await dbInsert("briefs", { ...data, sort_order: nextOrder(rows ?? []) });
-    if (!created) {
-      toast("Erreur — réessaie");
-      return;
-    }
-    setRows([created as unknown as Row, ...(rows ?? [])]);
-    const nextTrash = trash.filter((t) => t._trashId !== item._trashId);
-    setLocalTrash(nextTrash);
-    await saveAppStateKey("deletedBriefs", nextTrash);
-    toast("Brief restauré ✓");
-  };
-  const purgeBrief = async (item: TrashBrief) => {
-    const nextTrash = trash.filter((t) => t._trashId !== item._trashId);
-    setLocalTrash(nextTrash);
-    await saveAppStateKey("deletedBriefs", nextTrash);
-    toast("Supprimé définitivement");
   };
 
   const creatorOptions = [{ value: "", label: "—" }, ...creators.map((c) => ({ value: c.name, label: c.name }))];
@@ -360,19 +322,7 @@ export function Briefs() {
             ))}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowTrash((v) => !v)}
-            className={cn(
-              "flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-              showTrash ? "text-primary" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
-            )}
-          >
-            <Trash2 className="h-3.5 w-3.5" /> Corbeille{trash.length > 0 ? ` (${trash.length})` : ""}
-          </button>
-          <AddButton label="Brief" onClick={() => setFormOpen(true)} />
-        </div>
+        <AddButton label="Brief" onClick={() => setFormOpen(true)} />
       </div>
 
       <InlineForm open={formOpen} title="Nouveau brief" onClose={() => setFormOpen(false)} onSubmit={submit}>
@@ -385,58 +335,7 @@ export function Briefs() {
         <SelectField label="Statut" value={status} onChange={setStatus} options={STATUS_OPTS.map((s) => ({ value: s.value, label: s.label }))} />
       </InlineForm>
 
-      {showTrash ? (
-        <div>
-          <button
-            type="button"
-            onClick={() => setShowTrash(false)}
-            className="mb-4 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" /> Retour aux briefs
-          </button>
-          {trash.length === 0 ? (
-            <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center text-sm text-muted-foreground shadow-sm">
-              La corbeille est vide.
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {trash.map((item) => (
-                <div key={item._trashId} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-foreground">{String(item.brand ?? "—")}</div>
-                    <div className="mt-0.5 truncate text-[11px] text-faint">
-                      {[String(item.creator ?? ""), `supprimé le ${new Date(item._deletedAt).toLocaleDateString("fr-FR")}`].filter((s) => s && s !== "supprimé le Invalid Date").join(" · ")}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => restoreBrief(item)}
-                      className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" /> Restaurer
-                    </button>
-                    <ActionMenu
-                      items={[
-                        {
-                          key: "purge",
-                          label: "Supprimer définitivement",
-                          icon: Trash2,
-                          danger: true,
-                          onClick: () => purgeBrief(item),
-                          confirm: { title: "Suppression définitive", message: `Supprimer définitivement « ${String(item.brand ?? "ce brief")} » ? Impossible à annuler.` },
-                        },
-                      ]}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        content
-      )}
+      {content}
     </div>
   );
 }

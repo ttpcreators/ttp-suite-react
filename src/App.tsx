@@ -32,6 +32,7 @@ import { Templates } from "@/views/Templates";
 import { CreatorDetail } from "@/views/CreatorDetail";
 import { Portal } from "@/views/Portal";
 import { CreatorSpace } from "@/views/CreatorSpace";
+import { Corbeille } from "@/views/Corbeille";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -53,6 +54,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   checklist: Checklist,
   mediakit: Mediakit,
   templates: Templates,
+  corbeille: Corbeille,
 };
 
 function MobileMenu({
@@ -189,7 +191,7 @@ export default function App() {
   }));
 
   const notifs = useNotifications();
-  const title = findItem(active)?.label ?? "Aperçu";
+  const title = findItem(active)?.label ?? (active === "corbeille" ? "Corbeille" : "Aperçu");
 
   if (session === undefined || (session && profile === undefined)) {
     return (

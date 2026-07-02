@@ -4,7 +4,8 @@ import { cn, titleCase } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
+import { dbInsert, nextOrder } from "@/lib/db";
+import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
@@ -262,12 +263,12 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                         icon: Trash2,
                         danger: true,
                         onClick: async () => {
-                          if (await dbDelete("creators", c.id)) {
+                          if (await dbTrash("creators", c.id, titleCase(c.name), c.handle || undefined)) {
                             setRows(rows.filter((r) => r.id !== c.id));
-                            toast("Supprimé");
+                            toast("Déplacé dans la corbeille");
                           }
                         },
-                        confirm: { title: "Supprimer le créateur", message: `Supprimer « ${titleCase(c.name)} » du roster ? Cette action est irréversible.` },
+                        confirm: { title: "Supprimer le créateur", message: `Supprimer « ${titleCase(c.name)} » du roster ? Tu pourras le restaurer depuis la corbeille.` },
                       },
                     ]}
                   />

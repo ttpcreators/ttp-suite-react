@@ -42,7 +42,8 @@ export type ViewId =
   | "debrief"
   | "templates"
   | "checklist"
-  | "acces";
+  | "acces"
+  | "corbeille";
 
 export type NavItem = { id: ViewId; label: string; icon: LucideIcon };
 export type NavFamily = {

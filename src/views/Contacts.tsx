@@ -4,7 +4,8 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { cn, initials } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
+import { dbInsert, nextOrder } from "@/lib/db";
+import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import {
   AddButton,
@@ -490,12 +491,12 @@ export function Contacts() {
                     icon: Trash2,
                     danger: true,
                     onClick: async () => {
-                      if (await dbDelete("contacts", row.id)) {
+                      if (await dbTrash("contacts", row.id, row.brand, row.person)) {
                         setRows(currentRows.filter((r) => r.id !== row.id));
-                        toast("Supprimé");
+                        toast("Déplacé dans la corbeille");
                       }
                     },
-                    confirm: { title: "Supprimer le contact", message: `Supprimer « ${row.brand} » ? Cette action est irréversible.` },
+                    confirm: { title: "Supprimer le contact", message: `Supprimer « ${row.brand} » ? Tu pourras le restaurer depuis la corbeille.` },
                   },
                 ]}
               />

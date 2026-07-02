@@ -2,7 +2,8 @@ import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
+import { dbInsert, nextOrder } from "@/lib/db";
+import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import {
   AddButton,
@@ -233,9 +234,10 @@ export function Prospection() {
   ];
 
   const removeCard = async (id: string) => {
-    if (await dbDelete("prospects", id)) {
-      setRows(rows.filter((r) => r.id !== id));
-      toast("Supprimé");
+    const r = rows.find((x) => x.id === id);
+    if (await dbTrash("prospects", id, r?.brand ?? "Prospect", r?.contact ?? undefined)) {
+      setRows(rows.filter((x) => x.id !== id));
+      toast("Déplacé dans la corbeille");
     }
   };
 
