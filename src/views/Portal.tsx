@@ -5,6 +5,7 @@ import { titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
+import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { useLiveKey } from "@/lib/useLive";
 
 type Creator = {
@@ -78,20 +79,19 @@ export function Portal({
         <button onClick={onExit} className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint transition-colors hover:text-foreground">
           <ArrowLeft className="h-3.5 w-3.5" /> Espace agence
         </button>
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           Portail de
-          <select
-            value={name}
-            onChange={(e) => onPick(e.target.value)}
-            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground outline-none focus:border-primary"
-          >
-            {creators.map((cr) => (
-              <option key={cr.id} value={cr.name}>
-                {titleCase(cr.name)}
-              </option>
-            ))}
-          </select>
-        </label>
+          <Select value={name} onValueChange={onPick}>
+            <SelectTrigger className="h-9 w-auto min-w-[170px] rounded-lg bg-surface" placeholder="Créateur" />
+            <SelectContent>
+              {creators.map((cr, i) => (
+                <SelectItem key={cr.id} index={i} value={cr.name}>
+                  {titleCase(cr.name)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* creator header */}

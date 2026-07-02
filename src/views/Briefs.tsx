@@ -55,7 +55,7 @@ export function Briefs() {
   const creators = useCreators();
   const live = useLiveKey();
 
-  const [view, setView] = useState<"board" | "list">("board");
+  const [view, setView] = useState<"board" | "list">("list");
   const [formOpen, setFormOpen] = useState(false);
   const [brand, setBrand] = useState("");
   const [creator, setCreator] = useState("");
@@ -270,7 +270,7 @@ export function Briefs() {
     content = <div className="rounded-xl border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">Aucun brief pour le moment. Ajoute le premier 📋</div>;
   } else if (view === "board") {
     content = (
-      <div className="flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:thin]">
+      <div className="flex items-start gap-4 overflow-x-auto pb-4 [-ms-overflow-style:none] [scrollbar-width:thin]">
         {STATUS_OPTS.map((col) => {
           const items = filtered.filter((r) => colKey(r.status) === col.value);
           return (
@@ -280,7 +280,7 @@ export function Briefs() {
                 <span className="text-[12px] font-semibold text-foreground">{col.label}</span>
                 <span className="ml-auto rounded-full bg-rowhover px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">{items.length}</span>
               </div>
-              <div className="flex flex-1 flex-col gap-3 rounded-2xl bg-panel/60 p-2">
+              <div className="flex flex-col gap-3 rounded-2xl bg-panel/60 p-2 min-h-[120px]">
                 {items.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-[11px] text-faint">Vide</div>
                 ) : (

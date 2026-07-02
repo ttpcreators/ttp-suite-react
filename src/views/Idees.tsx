@@ -151,41 +151,31 @@ export function Idees() {
         <TextField label="Idée" value={text} onChange={setText} />
       </InlineForm>
 
-      <div className="rounded-xl border border-border bg-card shadow-sm">
-        {rows === null && (
-          <div className="px-4 py-3">
-            <AnimatedBadge status="loading" size="sm">
-              Chargement…
-            </AnimatedBadge>
-          </div>
-        )}
-
-        {filtered !== null && filtered.length === 0 && (
-          <div className="px-4 py-3 text-sm text-muted-foreground">
-            {error
-              ? "Impossible de charger les idées."
-              : rows !== null && rows.length > 0
-                ? "Aucune idée pour ce filtre."
-                : "Aucune idée pour le moment."}
-          </div>
-        )}
-
-        {filtered !== null &&
-          filtered.length > 0 &&
-          filtered.map((row, index) => (
-            <div key={row.id} className={cnRow(index)}>
+      {rows === null ? (
+        <div className="rounded-2xl border border-border bg-card px-4 py-3 shadow-sm">
+          <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>
+        </div>
+      ) : filtered !== null && filtered.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
+          {error
+            ? "Impossible de charger les idées."
+            : rows.length > 0
+              ? "Aucune idée pour ce filtre."
+              : "Aucune idée pour le moment. Ajoute la première 💡"}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {(filtered ?? []).map((row) => (
+            <div
+              key={row.id}
+              className="rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:bg-rowhover"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-foreground">
-                    {row.text}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {row.creator ? titleCase(row.creator) : "Toutes"}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {row.source === "creator"
-                      ? "Proposée par le créateur"
-                      : "Ajoutée par l'agence"}
+                  <div className="text-sm font-medium text-foreground">{row.text}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {row.creator ? titleCase(row.creator) : "Toutes"} ·{" "}
+                    {row.source === "creator" ? "Proposée par le créateur" : "Ajoutée par l'agence"}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -201,7 +191,8 @@ export function Idees() {
               </div>
             </div>
           ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -210,7 +201,3 @@ const chipBase =
   "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors";
 const chipActive = "bg-primary text-primary-foreground";
 const chipInactive = "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground";
-
-function cnRow(index: number): string {
-  return cn("px-4 py-3", index > 0 && "border-t border-border");
-}
