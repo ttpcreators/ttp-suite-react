@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Users, TrendingUp, Receipt, Wallet, Clock, FileText, Contact as ContactIcon, Activity } from "lucide-react";
+import { Users, TrendingUp, TrendingDown, Receipt, Wallet, Clock, FileText, Contact as ContactIcon, Activity } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { parseAmount, formatEuro } from "@/lib/appState";
-import { titleCase } from "@/lib/utils";
+import { titleCase, cn } from "@/lib/utils";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -11,6 +11,8 @@ import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import {
   BarChart,
   Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -116,6 +118,100 @@ function ChartCard({ title, subtitle, children }: { title: string; subtitle?: st
   );
 }
 
+type RevenuePoint = { label: string; ca: number; paid: number };
+
+/** Graphique vedette du chiffre d'affaires : aire + dégradé, sélecteur de période,
+ *  total sur la fenêtre choisie + badge de variation mensuelle. */
+function RevenueChart({ points }: { points: RevenuePoint[] }) {
+  const [period, setPeriod] = useState<number>(points.length > 12 ? 12 : 0); // 0 = tout
+  const view = period === 0 ? points : points.slice(-period);
+  const total = view.reduce((s, p) => s + p.ca, 0);
+  const paidTotal = view.reduce((s, p) => s + p.paid, 0);
+  const delta = momDelta(view.map((p) => p.ca));
+  const periods: { k: number; label: string }[] = [
+    { k: 6, label: "6 mois" },
+    { k: 12, label: "12 mois" },
+    { k: 0, label: "Tout" },
+  ];
+  return (
+    <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-foreground">Chiffre d'affaires</div>
+          <div className="mt-0.5 text-[11px] text-faint">Évolution mensuelle · facturé vs encaissé</div>
+        </div>
+        <div className="flex rounded-lg border border-border bg-card p-0.5">
+          {periods.map((p) => (
+            <button
+              key={p.k}
+              type="button"
+              onClick={() => setPeriod(p.k)}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
+                period === p.k ? "bg-primary text-primary-foreground" : "text-faint hover:text-foreground",
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <div className="text-3xl font-bold tracking-tight text-foreground">{formatEuro(total)}</div>
+        {delta != null && (
+          <span
+            className={cn(
+              "flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+              delta >= 0 ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/12 text-rose-500",
+            )}
+          >
+            {delta >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+            {Math.abs(delta).toFixed(1).replace(".", ",")} %
+          </span>
+        )}
+        <span className="text-[11px] text-faint">dont {formatEuro(paidTotal)} encaissé</span>
+      </div>
+
+      <ChartContainer config={{}} className="mt-4 h-[280px]">
+        <AreaChart data={view} margin={{ top: 16, right: 12, left: -6, bottom: 0 }}>
+          <defs>
+            <linearGradient id="caGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={COLORS.primary} stopOpacity={0.22} />
+              <stop offset="100%" stopColor={COLORS.primary} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.7} vertical={false} />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickMargin={10} interval="preserveStartEnd" minTickGap={16} />
+          <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(Number(v))} width={44} />
+          <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ stroke: COLORS.primary, strokeWidth: 1, strokeOpacity: 0.4 }} />
+          <Area
+            type="monotone"
+            dataKey="ca"
+            name="Facturé"
+            stroke={COLORS.primary}
+            strokeWidth={2.5}
+            fill="url(#caGradient)"
+            dot={false}
+            activeDot={{ r: 5, fill: COLORS.primary, stroke: "var(--color-surface)", strokeWidth: 2 }}
+          />
+          <Area
+            type="monotone"
+            dataKey="paid"
+            name="Encaissé"
+            stroke={COLORS.green}
+            strokeWidth={2}
+            strokeDasharray="5 4"
+            fill="transparent"
+            dot={false}
+            activeDot={{ r: 4, fill: COLORS.green, stroke: "var(--color-surface)", strokeWidth: 2 }}
+          />
+        </AreaChart>
+      </ChartContainer>
+    </div>
+  );
+}
+
 export function Stats() {
   const [data, setData] = useState<StatsData | null>(() => getCache<StatsData>("statsData"));
   const [error, setError] = useState(false);
@@ -189,13 +285,22 @@ export function Stats() {
     monthAgg.set(k, cur);
   }
   const monthKeys = [...monthAgg.keys()].sort();
-  const months = monthKeys.length >= 2 ? monthsBetween(monthKeys[0], monthKeys[monthKeys.length - 1]).slice(-8) : monthKeys;
+  const fullMonths = monthKeys.length >= 2 ? monthsBetween(monthKeys[0], monthKeys[monthKeys.length - 1]) : monthKeys;
+  const months = fullMonths.slice(-8);
   const caSeries = months.map((m) => monthAgg.get(m)?.tot ?? 0);
   const paidSeries = months.map((m) => monthAgg.get(m)?.paid ?? 0);
   const hasCaSeries = caSeries.length >= 2 && caSeries.some((v) => v > 0);
   const caDelta = hasCaSeries ? momDelta(caSeries) : null;
   const paidDelta = hasCaSeries ? momDelta(paidSeries) : null;
   const lastMonthLbl = months.length ? monthLabel(months[months.length - 1]) : "";
+
+  // Série complète (toutes les échéances) pour le graphique vedette avec sélecteur de période.
+  const revenuePoints = fullMonths.map((m) => ({
+    label: monthLabel(m),
+    ca: monthAgg.get(m)?.tot ?? 0,
+    paid: monthAgg.get(m)?.paid ?? 0,
+  }));
+  const hasRevenue = revenuePoints.length >= 2 && revenuePoints.some((p) => p.ca > 0);
 
   const statusData = [
     { name: "Payé", value: byStatus.payee, color: COLORS.green },
@@ -262,6 +367,9 @@ export function Stats() {
         <StatCard icon={FileText} label="Briefs" value={`${data.briefs}`} hint={`${data.ideas} idées · ${data.todos} à faire`} />
         <StatCard icon={ContactIcon} label="Contacts" value={`${data.contacts}`} hint="réseau agence" />
       </div>
+
+      {/* Graphique vedette : chiffre d'affaires */}
+      {hasRevenue && <RevenueChart points={revenuePoints} />}
 
       {/* Graphiques */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
