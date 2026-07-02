@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { Copy, Check, Building2 } from "lucide-react";
-import { cn, initials } from "@/lib/utils";
+import { cn, initials, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { TextField } from "@/components/ui/form";
+import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 
 type CtType = "marque" | "repr" | "ugc";
@@ -197,27 +198,19 @@ export function Contrats() {
             Aucun créateur dans le roster — le contrat utilisera « [Créateur] ».
           </div>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {creators.map((c) => {
-              const first = c.name.split(" ")[0];
-              const active = c.name === ctName;
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setCreatorName(c.name)}
-                  className={cn(
-                    "rounded-full px-3 py-1.5 text-[9px] font-semibold transition-colors",
-                    active
-                      ? "bg-primary text-primary-foreground"
-                      : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
-                  )}
-                >
-                  {first}
-                </button>
-              );
-            })}
-          </div>
+          <Select value={ctName} onValueChange={setCreatorName}>
+            <SelectTrigger
+              className="h-9 w-auto min-w-[190px] rounded-full bg-surface"
+              placeholder="Choisir un créateur"
+            />
+            <SelectContent>
+              {creators.map((c, i) => (
+                <SelectItem key={c.id} index={i} value={c.name}>
+                  {titleCase(c.name)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
 
         {/* Champs marque / montant / livrables (marque & ugc) */}

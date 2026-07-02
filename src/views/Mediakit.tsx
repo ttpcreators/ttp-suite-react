@@ -7,6 +7,12 @@ import { useCreators } from "@/lib/useCreators";
 import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
 
 /** Ligne `creators` (colonnes utiles au média kit). */
 type Creator = {
@@ -262,7 +268,7 @@ export function Mediakit() {
   );
 }
 
-/** Rangée de chips de sélection de créateur. */
+/** Sélecteur déroulant compact de créateur (picker : valeur = créateur sélectionné). */
 function CreatorPicker({
   creators,
   selected,
@@ -272,30 +278,22 @@ function CreatorPicker({
   selected: string | null;
   onSelect: (name: string) => void;
 }) {
+  const value = selected ?? creators[0]?.name ?? "";
   return (
-    <div className="mb-4 flex flex-wrap gap-2">
-      {creators.map((c) => {
-        const active = c.name === selected;
-        return (
-          <button
-            key={c.id}
-            onClick={() => onSelect(c.name)}
-            className={cn(
-              "flex items-center gap-2 rounded-full py-1 pl-1 pr-3.5 text-[11px] font-semibold transition-colors",
-              active
-                ? "bg-primary text-primary-foreground"
-                : "border border-border bg-surface text-foreground hover:bg-rowhover",
-            )}
-          >
-            <CreatorAvatar
-              name={c.name}
-              photoUrl={c.photo_url}
-              className="h-6 w-6 rounded-full text-[9px]"
-            />
-            {c.name.split(" ")[0]}
-          </button>
-        );
-      })}
+    <div className="mb-4">
+      <Select value={value} onValueChange={onSelect}>
+        <SelectTrigger
+          className="h-9 w-auto min-w-[190px] rounded-full bg-surface"
+          placeholder="Choisir un créateur"
+        />
+        <SelectContent>
+          {creators.map((c, i) => (
+            <SelectItem key={c.id} index={i} value={c.name}>
+              {titleCase(c.name)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

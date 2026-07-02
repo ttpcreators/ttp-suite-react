@@ -15,6 +15,12 @@ import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { useEffect, useState, type ReactNode } from "react";
 import { X, Pencil } from "lucide-react";
 
@@ -204,12 +210,13 @@ export function Todo() {
     filtered.length === 0 &&
     !(query.trim() && filtered.length === 0);
 
-  // Pills créateur : Tous / Agence / chaque créateur.
-  const creatorPills: { label: string; value: CreatorFilter }[] = [
-    { label: "Tous", value: null },
-    { label: "Agence", value: "__agency__" },
-    ...creators.map((c) => ({ label: titleCase(c.name), value: c.name })),
-  ];
+  // Filtre créateur en Select : le Select ne manipule que des strings, on
+  // encode donc null via le sentinel "__all__" (le state garde bien null).
+  const ALL = "__all__";
+  const creatorSelectValue =
+    creatorFilter === null ? ALL : creatorFilter;
+  const onCreatorSelect = (v: string) =>
+    setCreatorFilter(v === ALL ? null : (v as CreatorFilter));
 
   const priorityPills: { label: string; value: PriorityFilter }[] = [
     { label: "Toutes", value: null },
@@ -291,24 +298,25 @@ export function Todo() {
             })}
           </div>
           <div className="flex flex-wrap gap-2">
-            {creatorPills.map((pill) => {
-              const active = creatorFilter === pill.value;
-              return (
-                <button
-                  key={pill.value ?? "__all__"}
-                  type="button"
-                  onClick={() => setCreatorFilter(pill.value)}
-                  className={cn(
-                    "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-                    active
-                      ? "bg-primary text-primary-foreground"
-                      : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground"
-                  )}
-                >
-                  {pill.label}
-                </button>
-              );
-            })}
+            <Select value={creatorSelectValue} onValueChange={onCreatorSelect}>
+              <SelectTrigger
+                className="h-9 w-auto min-w-[190px] rounded-full bg-surface"
+                placeholder="Tous les créateurs"
+              />
+              <SelectContent>
+                <SelectItem index={0} value={ALL}>
+                  Tous
+                </SelectItem>
+                <SelectItem index={1} value="__agency__">
+                  Agence
+                </SelectItem>
+                {creators.map((c, i) => (
+                  <SelectItem key={c.id} index={i + 2} value={c.name}>
+                    {titleCase(c.name)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex flex-wrap gap-2">
             {priorityPills.map((pill) => {
