@@ -33,6 +33,9 @@ import { CreatorDetail } from "@/views/CreatorDetail";
 import { Portal } from "@/views/Portal";
 import { CreatorSpace } from "@/views/CreatorSpace";
 import { Corbeille } from "@/views/Corbeille";
+import { Reversements } from "@/views/Reversements";
+import { Relances } from "@/views/Relances";
+import { Echeances } from "@/views/Echeances";
 import { AgencyAvatar } from "@/components/ui/agency-avatar";
 
 const BASE = import.meta.env.BASE_URL;
@@ -41,6 +44,9 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   apercu: Apercu,
   stats: Stats,
   facturation: Facturation,
+  reversements: Reversements,
+  relances: Relances,
+  echeances: Echeances,
   briefs: Briefs,
   ideas: Idees,
   todo: Todo,

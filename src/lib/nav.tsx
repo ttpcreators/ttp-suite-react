@@ -21,6 +21,9 @@ import {
   Handshake,
   Wrench,
   Lightbulb,
+  Wallet,
+  AlarmClock,
+  CalendarClock,
   type LucideIcon,
 } from "lucide-react";
 
@@ -29,6 +32,9 @@ export type ViewId =
   | "stats"
   | "objectifs"
   | "facturation"
+  | "reversements"
+  | "relances"
+  | "echeances"
   | "roster"
   | "mediakit"
   | "briefs"
@@ -63,6 +69,8 @@ export const NAV: NavFamily[] = [
       { id: "stats", label: "Stats", icon: TrendingUp },
       { id: "objectifs", label: "Objectifs", icon: Target },
       { id: "facturation", label: "Facturation", icon: Receipt },
+      { id: "reversements", label: "Reversements", icon: Wallet },
+      { id: "relances", label: "Relances", icon: AlarmClock },
     ],
   },
   {
@@ -94,6 +102,7 @@ export const NAV: NavFamily[] = [
       { id: "contacts", label: "Contacts", icon: Contact },
       { id: "prospection", label: "Prospection", icon: Search },
       { id: "contrats", label: "Contrats", icon: ScrollText },
+      { id: "echeances", label: "Échéances", icon: CalendarClock },
     ],
   },
   {
