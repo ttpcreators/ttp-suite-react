@@ -130,7 +130,7 @@ export function Pricing() {
                 min={0}
                 value={qty[i] || 0}
                 onChange={(e) => setQ(i, parseInt(e.target.value, 10))}
-                className="w-16 rounded-lg border border-white/15 bg-white/10 px-2.5 py-1.5 text-right text-[13px] font-bold text-background outline-none [appearance:textfield] focus:border-signal [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                className="w-16 rounded-lg border border-white/15 bg-white/10 px-2.5 py-1.5 text-right text-[13px] font-bold text-background outline-none [appearance:textfield] focus:border-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
             </div>
           ))}
@@ -142,7 +142,7 @@ export function Pricing() {
             className={
               "grid h-[18px] w-[18px] place-items-center rounded-md text-[10px] font-bold transition-colors " +
               (excl
-                ? "bg-signal text-signaltext"
+                ? "bg-primary text-primary-foreground"
                 : "border-[1.5px] border-faint text-transparent")
             }
           >

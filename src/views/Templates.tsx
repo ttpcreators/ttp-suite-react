@@ -196,7 +196,7 @@ export function Templates() {
               type="button"
               onClick={() => setActiveCategory("Tous")}
               className={cn(
-                "rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
                 activeCategory === "Tous"
                   ? "bg-primary text-primary-foreground"
                   : "bg-rowhover text-muted-foreground hover:text-foreground",
@@ -210,7 +210,7 @@ export function Templates() {
                 type="button"
                 onClick={() => setActiveCategory(cat)}
                 className={cn(
-                  "rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                  "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
                   activeCategory === cat
                     ? "bg-primary text-primary-foreground"
                     : "bg-rowhover text-muted-foreground hover:text-foreground",

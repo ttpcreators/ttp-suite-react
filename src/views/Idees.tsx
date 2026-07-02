@@ -30,6 +30,9 @@ const STATUS_OPTIONS = [
   { value: "Publiée", label: "Publiée" },
 ];
 
+const STATUS_FILTERS = ["À explorer", "À faire", "En cours", "Publiée"];
+const ALL_STATUS = "__all__";
+
 export function Idees() {
   const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("ideas"));
   const [error, setError] = useState<boolean>(false);
@@ -37,6 +40,7 @@ export function Idees() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [text, setText] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>(ALL_STATUS);
 
   useEffect(() => {
     let active = true;
@@ -99,6 +103,13 @@ export function Idees() {
     }
   };
 
+  const filtered =
+    rows === null
+      ? null
+      : statusFilter === ALL_STATUS
+        ? rows
+        : rows.filter((r) => (r.status ?? "À faire") === statusFilter);
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -108,6 +119,27 @@ export function Idees() {
             : `${rows.length} idée${rows.length > 1 ? "s" : ""}`}
         </div>
         <AddButton label="Idée" onClick={() => setFormOpen(true)} />
+      </div>
+
+      {/* Barre de filtres par statut */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setStatusFilter(ALL_STATUS)}
+          className={cn(chipBase, statusFilter === ALL_STATUS ? chipActive : chipInactive)}
+        >
+          Tous
+        </button>
+        {STATUS_FILTERS.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setStatusFilter(s)}
+            className={cn(chipBase, statusFilter === s ? chipActive : chipInactive)}
+          >
+            {s}
+          </button>
+        ))}
       </div>
 
       <InlineForm
@@ -128,17 +160,19 @@ export function Idees() {
           </div>
         )}
 
-        {rows !== null && rows.length === 0 && (
+        {filtered !== null && filtered.length === 0 && (
           <div className="px-4 py-3 text-sm text-muted-foreground">
             {error
               ? "Impossible de charger les idées."
-              : "Aucune idée pour le moment."}
+              : rows !== null && rows.length > 0
+                ? "Aucune idée pour ce filtre."
+                : "Aucune idée pour le moment."}
           </div>
         )}
 
-        {rows !== null &&
-          rows.length > 0 &&
-          rows.map((row, index) => (
+        {filtered !== null &&
+          filtered.length > 0 &&
+          filtered.map((row, index) => (
             <div key={row.id} className={cnRow(index)}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -172,6 +206,11 @@ export function Idees() {
     </div>
   );
 }
+
+const chipBase =
+  "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors";
+const chipActive = "bg-primary text-primary-foreground";
+const chipInactive = "bg-rowhover text-muted-foreground hover:text-foreground";
 
 function cnRow(index: number): string {
   return cn("px-4 py-3", index > 0 && "border-t border-border");

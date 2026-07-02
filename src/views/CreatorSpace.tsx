@@ -302,7 +302,7 @@ export function CreatorSpace({
         value={(form[k] as string) ?? ""}
         onChange={(e) => setField(k, e.target.value)}
         placeholder={placeholder}
-        className="rounded-lg border border-border bg-panel px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-signal"
+        className="rounded-lg border border-border bg-panel px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary"
       />
     </label>
   );
@@ -559,7 +559,7 @@ export function CreatorSpace({
                           onClick={() => toggleTodo(t)}
                           className={
                             "grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors " +
-                            (t.done ? "border-signal bg-signal text-onsignal" : "border-faint hover:border-signal")
+                            (t.done ? "border-primary bg-primary text-primary-foreground" : "border-faint hover:border-primary")
                           }
                           aria-label={t.done ? "Marquer à refaire" : "Marquer fait"}
                         >

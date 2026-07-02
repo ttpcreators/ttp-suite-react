@@ -252,7 +252,7 @@ export function Mediakit() {
           </div>
           <button
             onClick={copyKit}
-            className="flex items-center gap-2 rounded-lg bg-signal px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-signaltext transition-opacity hover:opacity-90"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
           >
             <Copy className="h-3.5 w-3.5" /> Copier le média kit
           </button>
@@ -283,7 +283,7 @@ function CreatorPicker({
             className={cn(
               "flex items-center gap-2 rounded-full py-1 pl-1 pr-3.5 text-[11px] font-semibold transition-colors",
               active
-                ? "bg-foreground text-background"
+                ? "bg-primary text-primary-foreground"
                 : "border border-border bg-surface text-foreground hover:bg-rowhover",
             )}
           >

@@ -25,6 +25,29 @@ type Row = {
 
 type BadgeStatus = "success" | "warning" | "danger" | "neutral" | "info" | "loading";
 
+const ALL_STATUS = "__all__";
+const STATUS_FILTERS = [
+  { value: "attente", label: "En attente" },
+  { value: "valider", label: "À valider" },
+  { value: "cours", label: "En cours" },
+  { value: "terminé", label: "Terminé" },
+];
+
+const chipBase =
+  "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors";
+const chipActive = "bg-primary text-primary-foreground";
+const chipInactive = "bg-rowhover text-muted-foreground hover:text-foreground";
+
+function matchesStatusFilter(status: string, filter: string): boolean {
+  if (filter === ALL_STATUS) return true;
+  const s = String(status).toLowerCase();
+  if (filter === "attente") return s.includes("attente");
+  if (filter === "valider") return s.includes("valider");
+  if (filter === "cours") return s.includes("cours");
+  if (filter === "terminé") return s.includes("termine");
+  return s === filter.toLowerCase();
+}
+
 function statusMeta(status: string): { variant: BadgeStatus; label: string; dot: string } {
   const s = String(status).toLowerCase();
   if (s.includes("valider") || s.includes("attente")) {
@@ -54,6 +77,7 @@ export function Briefs() {
   const [budget, setBudget] = useState("");
   const [objectif, setObjectif] = useState("");
   const [status, setStatus] = useState("attente");
+  const [statusFilter, setStatusFilter] = useState<string>(ALL_STATUS);
 
   const [editId, setEditId] = useState<string | null>(null);
   const [editBrand, setEditBrand] = useState("");
@@ -170,8 +194,10 @@ export function Briefs() {
     { value: "terminé", label: "Terminé" },
   ];
 
-  const filtered = (rows ?? []).filter((row) =>
-    matchQuery(query, row.brand, row.creator, row.deliverables, row.status)
+  const filtered = (rows ?? []).filter(
+    (row) =>
+      matchesStatusFilter(row.status, statusFilter) &&
+      matchQuery(query, row.brand, row.creator, row.deliverables, row.status)
   );
 
   const header = (
@@ -180,6 +206,28 @@ export function Briefs() {
         {rows === null ? "Chargement…" : `${rows.length} brief${rows.length > 1 ? "s" : ""}`}
       </div>
       <AddButton label="Brief" onClick={() => setFormOpen(true)} />
+    </div>
+  );
+
+  const filterBar = (
+    <div className="mb-4 flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={() => setStatusFilter(ALL_STATUS)}
+        className={cn(chipBase, statusFilter === ALL_STATUS ? chipActive : chipInactive)}
+      >
+        Tous
+      </button>
+      {STATUS_FILTERS.map((f) => (
+        <button
+          key={f.value}
+          type="button"
+          onClick={() => setStatusFilter(f.value)}
+          className={cn(chipBase, statusFilter === f.value ? chipActive : chipInactive)}
+        >
+          {f.label}
+        </button>
+      ))}
     </div>
   );
 
@@ -216,11 +264,13 @@ export function Briefs() {
         <p className="text-sm text-muted-foreground">Aucun brief pour le moment.</p>
       </div>
     );
-  } else if (query.trim() && filtered.length === 0) {
+  } else if (filtered.length === 0) {
     content = (
       <div className="rounded-xl border border-border bg-card shadow-sm">
         <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-          Aucun résultat pour « {query} »
+          {query.trim()
+            ? `Aucun résultat pour « ${query} »`
+            : "Aucun brief pour ce filtre"}
         </div>
       </div>
     );
@@ -362,6 +412,7 @@ export function Briefs() {
   return (
     <div>
       {header}
+      {filterBar}
       {form}
       {content}
     </div>

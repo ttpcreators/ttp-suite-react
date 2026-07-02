@@ -342,8 +342,8 @@ export function Checklist() {
                           className={cn(
                             "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md border-[1.5px] transition-all duration-200",
                             checked
-                              ? "scale-100 border-signal bg-signal text-signaltext"
-                              : "border-faint text-transparent group-hover:border-signal"
+                              ? "scale-100 border-primary bg-primary text-primary-foreground"
+                              : "border-faint text-transparent group-hover:border-primary"
                           )}
                         >
                           <Check

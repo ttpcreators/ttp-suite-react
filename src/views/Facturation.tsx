@@ -90,6 +90,7 @@ export function Facturation() {
   const [due, setDue] = useState("");
   const [status, setStatus] = useState<InvoiceStatus>("brouillon");
   const [creator, setCreator] = useState("");
+  const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "Tous">("Tous");
 
   const [editId, setEditId] = useState<string | null>(null);
   const [editParty, setEditParty] = useState("");
@@ -177,9 +178,16 @@ export function Facturation() {
     },
   ];
 
-  const filtered = rows.filter((r) =>
-    matchQuery(query, r.ref, r.party, r.creator, r.status),
+  const filtered = rows.filter(
+    (r) =>
+      matchQuery(query, r.ref, r.party, r.creator, r.status) &&
+      (statusFilter === "Tous" || r.status === statusFilter),
   );
+
+  const statusChips: { value: InvoiceStatus | "Tous"; label: string }[] = [
+    { value: "Tous", label: "Tous" },
+    ...STATUS_OPTIONS,
+  ];
 
   const submit = async () => {
     const brandTrim = brand.trim();
@@ -316,6 +324,28 @@ export function Facturation() {
         ))}
       </div>
 
+      {/* Barre de filtres par statut */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {statusChips.map((chip) => {
+          const active = statusFilter === chip.value;
+          return (
+            <button
+              key={chip.value}
+              type="button"
+              onClick={() => setStatusFilter(chip.value)}
+              className={cn(
+                "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                active
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-rowhover text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {chip.label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Liste des factures */}
       <div className="overflow-hidden rounded-xl border border-border bg-surface p-2 shadow-sm">
         {/* En-tête colonnes (desktop) */}
@@ -339,6 +369,10 @@ export function Facturation() {
         ) : query.trim() && filtered.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
             Aucun résultat pour « {query} »
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+            Aucune facture pour ce statut.
           </div>
         ) : (
           filtered.map((r) => {

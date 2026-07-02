@@ -270,7 +270,7 @@ export function Todo() {
       {/* Barre de filtres */}
       {rows !== null && rows.length > 0 && (
         <div className="mb-4 flex flex-col gap-2.5">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-2">
             {TODO_FILTERS.map((f) => {
               const active = todoFilter === f.id;
               return (
@@ -279,10 +279,10 @@ export function Todo() {
                   type="button"
                   onClick={() => setTodoFilter(f.id)}
                   className={cn(
-                    "rounded-full px-3 py-1.5 text-[10px] font-semibold transition-colors",
+                    "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
                     active
                       ? "bg-primary text-primary-foreground"
-                      : "border border-border bg-surface text-muted-foreground hover:bg-rowhover"
+                      : "bg-rowhover text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {f.label}
@@ -290,7 +290,7 @@ export function Todo() {
               );
             })}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-2">
             {creatorPills.map((pill) => {
               const active = creatorFilter === pill.value;
               return (
@@ -299,10 +299,10 @@ export function Todo() {
                   type="button"
                   onClick={() => setCreatorFilter(pill.value)}
                   className={cn(
-                    "rounded-full px-3 py-1.5 text-[10px] font-semibold transition-colors",
+                    "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
                     active
-                      ? "bg-foreground text-surface"
-                      : "border border-border bg-surface text-muted-foreground hover:bg-rowhover"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-rowhover text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {pill.label}
@@ -310,7 +310,7 @@ export function Todo() {
               );
             })}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-2">
             {priorityPills.map((pill) => {
               const active = priorityFilter === pill.value;
               return (
@@ -319,10 +319,10 @@ export function Todo() {
                   type="button"
                   onClick={() => setPriorityFilter(pill.value)}
                   className={cn(
-                    "rounded-lg px-3 py-1.5 text-[10px] font-semibold transition-colors",
+                    "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
                     active
-                      ? "bg-foreground text-surface"
-                      : "text-muted-foreground hover:bg-rowhover"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-rowhover text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {pill.label}

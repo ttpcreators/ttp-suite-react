@@ -34,7 +34,7 @@ export function Notifications({ items = [] }: { items?: NotificationItem[] }) {
         >
           <Bell className="h-4 w-4" />
           {notifications.length > 0 && (
-            <span className="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-signal px-1 text-[10px] font-bold text-onsignal">
+            <span className="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
               {notifications.length}
             </span>
           )}

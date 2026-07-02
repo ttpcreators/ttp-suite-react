@@ -235,7 +235,7 @@ export function CreatorDetail({
                 <button
                   type="button"
                   onClick={save}
-                  className="flex items-center gap-1.5 rounded-lg bg-signal px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-onsignal transition-opacity hover:opacity-90"
+                  className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
                 >
                   <Check className="h-3.5 w-3.5" /> Enregistrer
                 </button>
@@ -314,7 +314,7 @@ export function CreatorDetail({
           ) : (
             td.map((t) => (
               <div key={t.id} className="flex items-center gap-2.5 py-1.5">
-                <span className={"h-4 w-4 shrink-0 rounded-[5px] border " + (t.done ? "border-signal bg-signal" : "border-faint")} />
+                <span className={"h-4 w-4 shrink-0 rounded-[5px] border " + (t.done ? "border-primary bg-primary" : "border-faint")} />
                 <span className={"text-xs " + (t.done ? "text-faint line-through" : "")}>{t.text}</span>
               </div>
             ))

@@ -52,6 +52,7 @@ export function Prospection() {
   const [contact, setContact] = useState("");
   const [value, setValue] = useState("");
   const [stage, setStage] = useState(STAGE_ORDER[0]);
+  const [stageFilter, setStageFilter] = useState("Tous");
 
   useEffect(() => {
     let active = true;
@@ -169,8 +170,42 @@ export function Prospection() {
     );
   }
 
-  const filtered = rows.filter((row) =>
-    matchQuery(query, row.brand, row.contact, row.stage),
+  // Stages présents dans les données, dans l'ordre canonique du pipeline puis
+  // toute étape hors liste (pour les chips de filtre).
+  const presentStages = new Set(rows.map((row) => row.stage ?? "Sans étape"));
+  const stageChips = [
+    "Tous",
+    ...STAGE_ORDER.filter((s) => presentStages.has(s)),
+    ...[...presentStages].filter((s) => !STAGE_ORDER.includes(s)),
+  ];
+
+  const stageBar = (
+    <div className="mb-4 flex flex-wrap gap-2">
+      {stageChips.map((chip) => {
+        const active = stageFilter === chip;
+        return (
+          <button
+            key={chip}
+            type="button"
+            onClick={() => setStageFilter(chip)}
+            className={cn(
+              "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+              active
+                ? "bg-primary text-primary-foreground"
+                : "bg-rowhover text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {chip}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const filtered = rows.filter(
+    (row) =>
+      matchQuery(query, row.brand, row.contact, row.stage) &&
+      (stageFilter === "Tous" || (row.stage ?? "Sans étape") === stageFilter),
   );
 
   if (query.trim() && filtered.length === 0) {
@@ -178,6 +213,7 @@ export function Prospection() {
       <div>
         {header}
         {form}
+        {stageBar}
         <div className="rounded-2xl border border-border bg-surface shadow-sm">
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
             Aucun résultat pour « {query} »
@@ -206,6 +242,7 @@ export function Prospection() {
     <div>
       {header}
       {form}
+      {stageBar}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5 items-start">
         {stages.map((stage) => {
           const cards = filtered.filter(

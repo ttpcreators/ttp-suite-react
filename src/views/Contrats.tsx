@@ -179,7 +179,7 @@ export function Contrats() {
               className={cn(
                 "whitespace-nowrap rounded-xl px-3.5 py-2.5 text-[10px] font-semibold transition-colors",
                 k === ctType
-                  ? "bg-foreground text-background"
+                  ? "bg-primary text-primary-foreground"
                   : "border border-border text-muted-foreground hover:bg-rowhover",
               )}
             >
@@ -209,7 +209,7 @@ export function Contrats() {
                   className={cn(
                     "rounded-full px-3 py-1.5 text-[9px] font-semibold transition-colors",
                     active
-                      ? "bg-signal text-onsignal"
+                      ? "bg-primary text-primary-foreground"
                       : "bg-rowhover text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -271,7 +271,7 @@ export function Contrats() {
               <span
                 className={cn(
                   "grid h-4 w-4 place-items-center rounded",
-                  excl ? "bg-signal text-onsignal" : "border border-border",
+                  excl ? "bg-primary text-primary-foreground" : "border border-border",
                 )}
               >
                 {excl && <Check className="h-3 w-3" />}
@@ -364,7 +364,7 @@ export function Contrats() {
           <button
             type="button"
             onClick={copyContract}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-signal py-3 text-[10px] font-semibold uppercase tracking-wide text-onsignal transition-opacity hover:opacity-90"
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-3 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
           >
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             {copied ? "Copié ✓" : "Copier le contrat"}

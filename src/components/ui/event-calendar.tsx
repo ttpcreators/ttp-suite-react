@@ -268,7 +268,7 @@ export function EventCalendar({
               className={cn(
                 "rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
                 view === v
-                  ? "bg-signal text-onsignal"
+                  ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
               )}
             >
@@ -361,7 +361,7 @@ function MonthView({
                 className={cn(
                   "grid h-6 w-6 place-items-center self-end rounded-full text-[11px] font-medium tabular-nums",
                   inMonth ? "text-foreground" : "text-faint",
-                  isToday && "border border-signal bg-signal/10 text-signal",
+                  isToday && "border border-primary bg-primary/10 text-primary",
                 )}
               >
                 {d.getDate()}
@@ -434,7 +434,7 @@ function WeekView({
             key={key}
             className={cn(
               "flex flex-col rounded-2xl border bg-surface shadow-sm",
-              isToday ? "border-signal" : "border-border",
+              isToday ? "border-primary" : "border-border",
             )}
           >
             <button
@@ -442,11 +442,11 @@ function WeekView({
               onClick={() => onCellClick(key)}
               className={cn(
                 "flex items-center justify-between rounded-t-2xl border-b border-border px-3 py-2 text-left transition-colors hover:bg-rowhover",
-                isToday && "bg-signal/10",
+                isToday && "bg-primary/10",
               )}
             >
               <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">{DAYS_FR[i]}</span>
-              <span className={cn("text-sm font-semibold tabular-nums", isToday ? "text-signal" : "text-foreground")}>
+              <span className={cn("text-sm font-semibold tabular-nums", isToday ? "text-primary" : "text-foreground")}>
                 {d.getDate()}
               </span>
             </button>
@@ -673,7 +673,7 @@ function EventModal({
             <button
               type="submit"
               disabled={!canSave}
-              className="rounded-lg bg-signal px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-onsignal transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               Enregistrer
             </button>

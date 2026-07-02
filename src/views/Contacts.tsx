@@ -182,7 +182,9 @@ export function Contacts() {
   });
 
   const pillBase =
-    "shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition-colors";
+    "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors";
+  const pillActive = "bg-primary text-primary-foreground";
+  const pillInactive = "bg-rowhover text-muted-foreground hover:text-foreground";
 
   return (
     <>
@@ -197,16 +199,11 @@ export function Contacts() {
       </div>
 
       {/* Barre de filtres par tag */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => setTagFilter(ALL_TAGS)}
-          className={cn(
-            pillBase,
-            tagFilter === ALL_TAGS
-              ? "bg-foreground text-background"
-              : "border border-border bg-surface text-muted-foreground hover:bg-rowhover"
-          )}
+          className={cn(pillBase, tagFilter === ALL_TAGS ? pillActive : pillInactive)}
         >
           Tous
         </button>
@@ -215,12 +212,7 @@ export function Contacts() {
             key={t}
             type="button"
             onClick={() => setTagFilter(t)}
-            className={cn(
-              pillBase,
-              tagFilter === t
-                ? "bg-foreground text-background"
-                : "border border-border bg-surface text-muted-foreground hover:bg-rowhover"
-            )}
+            className={cn(pillBase, tagFilter === t ? pillActive : pillInactive)}
           >
             {t}
           </button>
@@ -361,7 +353,7 @@ export function Contacts() {
                 navigator.clipboard?.writeText(text);
                 toast("Fiche copiée ✓");
               }}
-              className="mt-4 w-full rounded-lg bg-signal py-2.5 text-[11px] font-semibold uppercase tracking-wide text-onsignal transition-opacity hover:opacity-90"
+              className="mt-4 w-full rounded-lg bg-primary py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
             >
               Copier toute la fiche
             </button>

@@ -122,7 +122,7 @@ export function Engagement() {
                 className={cn(
                   "rounded-xl px-3.5 py-2 text-[11px] font-semibold transition-colors",
                   active
-                    ? "bg-foreground text-surface"
+                    ? "bg-primary text-primary-foreground"
                     : "border border-border text-muted-foreground hover:bg-rowhover"
                 )}
               >
