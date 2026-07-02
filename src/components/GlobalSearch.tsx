@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Users, Contact, ListChecks, Receipt, FileText, Search as SearchIcon, type LucideIcon } from "lucide-react";
 import { GooeyInput } from "@/components/ui/gooey-input";
 import { useGlobalSearch, type SearchHit } from "@/lib/useGlobalSearch";
@@ -26,8 +26,23 @@ export function GlobalSearch({
   onGoto: (id: ViewId) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [fieldWidth, setFieldWidth] = useState(200);
   const { hits, loading } = useGlobalSearch(query);
   const show = open && query.trim().length >= 2;
+
+  // Le GooeyInput a une largeur en pixels fixe : on la synchronise sur la
+  // largeur réelle du conteneur pour que la pilule remplisse toute la barre et
+  // que le dropdown (left-0 right-0) tombe pile dessous, même largeur, à 390px.
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const update = () => setFieldWidth(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const pick = (h: SearchHit) => {
     setOpen(false);
@@ -41,7 +56,11 @@ export function GlobalSearch({
   };
 
   return (
-    <div className="relative w-full max-w-xl" onFocusCapture={() => setOpen(true)}>
+    <div
+      ref={wrapRef}
+      className="relative w-full max-w-[220px] sm:max-w-xl"
+      onFocusCapture={() => setOpen(true)}
+    >
       <GooeyInput
         value={query}
         onValueChange={(v) => {
@@ -49,12 +68,15 @@ export function GlobalSearch({
           setOpen(true);
         }}
         placeholder="Rechercher…"
-        className="justify-start"
+        className="w-full justify-start"
+        collapsedWidth={fieldWidth}
+        expandedWidth={fieldWidth}
+        expandedOffset={0}
       />
       {show && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-[calc(100%+8px)] z-50 max-h-[60vh] w-full overflow-y-auto rounded-xl border border-border bg-surface p-1.5 shadow-xl">
+          <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-[60vh] overflow-y-auto rounded-xl border border-border bg-surface p-1.5 shadow-xl">
             {loading && hits.length === 0 ? (
               <div className="px-3 py-4 text-xs text-muted-foreground">Recherche…</div>
             ) : hits.length === 0 ? (

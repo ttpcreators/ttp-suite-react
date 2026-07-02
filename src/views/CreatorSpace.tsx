@@ -308,39 +308,81 @@ export function CreatorSpace({
   );
 
   return (
-    <div className="min-h-screen bg-background p-2 md:p-[14px]">
-      <div className="mx-auto flex max-w-4xl flex-col overflow-hidden rounded-[22px] bg-panel">
-        {/* Header */}
-        <header className="flex items-center justify-between gap-3 px-4 py-3.5 md:px-6">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 overflow-hidden rounded-lg bg-[#14181E]">
+    <div className="h-screen bg-background p-2 md:p-[14px]">
+      <div className="flex h-full overflow-hidden rounded-[22px]">
+        {/* Sidebar desktop (façon espace agence) */}
+        <aside className="hidden w-[240px] shrink-0 flex-col p-3 md:flex">
+          <div className="flex items-center gap-3 px-1.5 py-2.5">
+            <div className="h-8 w-8 overflow-hidden rounded-lg bg-[#14181E]">
               <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
             </div>
-            <div>
-              <div className="text-sm font-semibold leading-tight">Espace créateur</div>
+            <div className="min-w-0">
+              <div className="truncate text-[13px] font-semibold leading-tight">Espace créateur</div>
               <div className="text-[11px] text-faint">TTP Creators</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <nav className="mt-3 flex flex-1 flex-col gap-0.5 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                className={
+                  "group flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-[9px] text-left text-[13px] transition-colors " +
+                  (tab === t.id ? "bg-rowhover font-medium text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")
+                }
+              >
+                <t.icon
+                  className={"h-4 w-4 shrink-0 " + (tab === t.id ? "text-primary" : "text-faint group-hover:text-foreground/70")}
+                  strokeWidth={1.75}
+                />
+                {t.label}
+              </button>
+            ))}
+          </nav>
+          <div className="mt-auto flex flex-col gap-0.5 border-t border-border pt-3">
             <button
               type="button"
               onClick={onToggleTheme}
-              className="grid h-9 w-9 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"
-              aria-label="Thème"
+              className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
-              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {dark ? <Sun className="h-4 w-4 text-faint" /> : <Moon className="h-4 w-4 text-faint" />}
+              <span className="text-[13px]">{dark ? "Mode clair" : "Mode sombre"}</span>
             </button>
             <button
               type="button"
               onClick={onLogout}
-              className="flex h-9 items-center gap-2 rounded-lg bg-surface px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
+              className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
-              <LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Déconnexion</span>
+              <LogOut className="h-4 w-4 text-faint" />
+              <span className="text-[13px]">Se déconnecter</span>
             </button>
           </div>
-        </header>
+        </aside>
 
-        <main className="flex-1 px-4 pb-8 pt-1.5 md:px-6">
+        {/* Panneau principal */}
+        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto rounded-[22px] bg-panel px-4 pb-8 pt-4 md:px-6 md:pt-6">
+          {/* Barre du haut (mobile) */}
+          <div className="mb-5 flex items-center justify-between gap-3 md:hidden">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 overflow-hidden rounded-lg bg-[#14181E]">
+                <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold leading-tight">Espace créateur</div>
+                <div className="text-[11px] text-faint">TTP Creators</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={onToggleTheme} className="grid h-9 w-9 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover" aria-label="Thème">
+                {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </button>
+              <button type="button" onClick={onLogout} className="grid h-9 w-9 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover" aria-label="Déconnexion">
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
           {/* Greeting */}
           <div className="mb-5 flex items-center gap-4">
             <AvatarUpload
@@ -358,19 +400,19 @@ export function CreatorSpace({
             </div>
           </div>
 
-          {/* Tabs */}
-          <div className="mb-5 flex gap-1 overflow-x-auto rounded-xl bg-surface p-1">
+          {/* Tabs (mobile uniquement) */}
+          <div className="mb-5 flex gap-1 overflow-x-auto rounded-xl bg-surface p-1 md:hidden">
             {TABS.map((t) => (
               <button
                 key={t.id}
                 type="button"
                 onClick={() => setTab(t.id)}
                 className={
-                  "flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 py-2.5 text-xs font-semibold transition-colors " +
+                  "flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 py-2.5 text-xs font-semibold transition-colors " +
                   (tab === t.id ? "bg-panel text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")
                 }
               >
-                <t.icon className="h-4 w-4" /> <span className="hidden sm:inline">{t.label}</span>
+                <t.icon className="h-4 w-4" /> <span>{t.label}</span>
               </button>
             ))}
           </div>

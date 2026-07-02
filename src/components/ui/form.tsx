@@ -137,7 +137,7 @@ export function DeleteButton({ onClick }: { onClick: () => void }) {
         e.stopPropagation();
         onClick();
       }}
-      className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
       title="Supprimer"
     >
       <X className="h-4 w-4" />

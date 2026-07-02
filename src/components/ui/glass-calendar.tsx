@@ -171,13 +171,13 @@ export const GlassCalendar = React.forwardRef<HTMLDivElement, GlassCalendarProps
 
         {/* Footer */}
         <div className="mt-4 flex items-center justify-between gap-4">
-          <span className="text-sm font-medium capitalize text-white/70">
+          <span className="min-w-0 flex-1 truncate text-sm font-medium capitalize text-white/70">
             {format(selectedDate, "EEEE d MMMM", { locale: fr })}
           </span>
           <button
             type="button"
             onClick={onNewEvent}
-            className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white shadow-md transition-colors hover:bg-white/20"
+            className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white shadow-md transition-colors hover:bg-white/20"
           >
             <Plus className="h-4 w-4" />
             <span>Nouvel événement</span>

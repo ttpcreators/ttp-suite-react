@@ -54,7 +54,7 @@ const SIZES: Record<
   CardSize,
   { minH: string; pad: string; footer: string; title: string; headline: string }
 > = {
-  sm: { minH: "min-h-[260px]", pad: "px-6 pt-5", footer: "px-6 py-3", title: "text-[15px]", headline: "text-[46px]" },
+  sm: { minH: "min-h-[260px]", pad: "px-6 pt-5", footer: "px-6 py-3", title: "text-[15px]", headline: "text-[30px] sm:text-[46px]" },
   md: { minH: "min-h-[380px]", pad: "px-8 pt-7", footer: "px-8 py-4", title: "text-[17px]", headline: "text-[72px]" },
   lg: { minH: "min-h-[460px]", pad: "px-10 pt-9", footer: "px-10 py-5", title: "text-[19px]", headline: "text-[88px]" },
 };
@@ -231,8 +231,8 @@ export default function ProgressMetricCard({
       </div>
 
       <div className={`pointer-events-none relative z-10 flex flex-1 flex-col ${sz.pad}`}>
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <h3 className={`${sz.title} font-semibold tracking-tight text-foreground`}>{title}</h3>
             <ViewToggle value={view} onChange={setView} />
           </div>

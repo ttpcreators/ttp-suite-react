@@ -20,7 +20,7 @@ export function ViewToggle({
           type="button"
           onClick={() => onChange(v)}
           className={cn(
-            "grid h-6 w-6 place-items-center rounded-md transition-colors",
+            "grid h-8 w-8 sm:h-6 sm:w-6 place-items-center rounded-md transition-colors",
             value === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
           )}
           aria-label={v === "curve" ? "Courbe" : "Barres"}
