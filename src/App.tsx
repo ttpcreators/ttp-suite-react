@@ -33,6 +33,7 @@ import { CreatorDetail } from "@/views/CreatorDetail";
 import { Portal } from "@/views/Portal";
 import { CreatorSpace } from "@/views/CreatorSpace";
 import { Corbeille } from "@/views/Corbeille";
+import { AgencyAvatar } from "@/components/ui/agency-avatar";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -251,9 +252,7 @@ export default function App() {
               {/* right cluster */}
               <div className="ml-auto flex items-center gap-2.5">
                 <div className="hidden items-center gap-2.5 rounded-lg bg-surface py-1.5 pl-2 pr-3.5 shadow-sm sm:flex">
-                  <div className="h-8 w-8 overflow-hidden rounded-lg bg-[#14181E]">
-                    <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
-                  </div>
+                  <AgencyAvatar />
                   <div className="leading-tight">
                     <div className="whitespace-nowrap text-xs font-medium text-foreground">
                       Marc &amp; Gianni
