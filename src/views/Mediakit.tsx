@@ -1,18 +1,14 @@
-import { useEffect, useState } from "react";
-import { Copy } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Copy, Pencil, Eye, FileText, Plus, Trash2, X, ExternalLink } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useAppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey } from "@/lib/appState";
 import type { AppState } from "@/lib/appState";
 import { useCreators } from "@/lib/useCreators";
-import { titleCase } from "@/lib/utils";
+import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
+import { TextField } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 
 /** Ligne `creators` (colonnes utiles au média kit). */
 type Creator = {
@@ -25,7 +21,11 @@ type Creator = {
   reach: string | null;
   ca: string | null;
   photo_url: string | null;
+  instagram: string | null;
+  tiktok: string | null;
 };
+
+type ContentLink = { id: string; title: string; platform: string; url: string; views: string };
 
 /** Override éditable stocké dans le blob `mediaKitData` (indexé par position roster). */
 type MkOverride = {
@@ -33,36 +33,183 @@ type MkOverride = {
   age?: string;
   agePct?: string;
   gender?: string;
+  location?: string;
+  avgViews?: string;
+  collabs?: string;
+  services?: string;
+  content?: ContentLink[];
 };
 type MediaKitData = Record<number, MkOverride>;
 
 const DEFAULT_AGE = "18–34 ans";
 const DEFAULT_AGE_PCT = "64%";
 const DEFAULT_GENDER = "Femmes 65% · Hommes 35%";
+const DEFAULT_LOCATION = "France 72% · Belgique 11% · Suisse 7%";
 
-/** _mkGet : override non vide, sinon défaut. */
-function mkGet<K extends keyof MkOverride>(
-  ov: MkOverride,
-  key: K,
-  def: string,
-): string {
+let _uid = 0;
+const uid = () => `mk${Date.now().toString(36)}${(_uid += 1)}`;
+
+function mkGet<K extends keyof MkOverride>(ov: MkOverride, key: K, def: string): string {
   const v = ov[key];
-  return v !== undefined && v !== "" ? v : def;
+  return typeof v === "string" && v !== "" ? v : def;
 }
+
+function splitList(s: string): string[] {
+  return s
+    .split(/[\n,;]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+const esc = (s: unknown) =>
+  String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c] ?? c);
+
+// ─── Média kit HTML (exportable / imprimable en PDF) ─────────────────────────
+
+function mediaKitHTML(o: {
+  creator: Creator;
+  bio: string;
+  stats: { label: string; value: string }[];
+  age: string;
+  agePct: string;
+  gender: string;
+  location: string;
+  avgViews: string;
+  brands: string[];
+  services: string;
+  content: ContentLink[];
+  fem: number;
+}): string {
+  const { creator, bio, stats, age, agePct, gender, location, avgViews, brands, services, content, fem } = o;
+  const meta = [creator.handle, creator.niche, creator.platform].filter(Boolean).map(esc).join(" · ");
+
+  const statCells = stats
+    .map(
+      (s) =>
+        `<div class="stat"><div class="stat-l">${esc(s.label)}</div><div class="stat-v">${esc(s.value)}</div></div>`,
+    )
+    .join("");
+
+  const contentRows =
+    content.length > 0
+      ? `<div class="block"><div class="block-t">Contenus & réalisations</div><div class="content">${content
+          .map(
+            (c) =>
+              `<a class="cl" href="${esc(c.url)}" target="_blank" rel="noreferrer"><div class="cl-t">${esc(
+                c.title || "Contenu",
+              )}</div><div class="cl-m">${[c.platform, c.views].filter(Boolean).map(esc).join(" · ")}</div><div class="cl-u">${esc(
+                c.url,
+              )}</div></a>`,
+          )
+          .join("")}</div></div>`
+      : "";
+
+  const brandsRow =
+    brands.length > 0
+      ? `<div class="block"><div class="block-t">Ils ont collaboré</div><div class="chips">${brands
+          .map((b) => `<span class="chip">${esc(b)}</span>`)
+          .join("")}</div></div>`
+      : "";
+
+  const servicesRow =
+    services && services.trim()
+      ? `<div class="block"><div class="block-t">Offres</div><div class="muted">${esc(services)}</div></div>`
+      : "";
+
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Media kit — ${esc(creator.name)}</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#18181b;max-width:820px;margin:0 auto;padding:44px 40px;background:#fff;font-size:13px;line-height:1.5}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:2px solid #0069FE;padding-bottom:20px}
+h1{font-size:30px;letter-spacing:-.6px;margin:0}
+.meta{color:#71717a;margin-top:6px;font-size:13px}
+.right{text-align:right}
+.tag{font-size:13px;font-weight:800;letter-spacing:.02em}
+.faint{color:#a1a1aa;font-size:10px;text-transform:uppercase;letter-spacing:.14em;margin-top:6px;font-weight:700}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:24px}
+.stat{background:#f4f4f5;border-radius:12px;padding:16px}
+.stat-l{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;font-weight:700}
+.stat-v{font-size:22px;font-weight:800;letter-spacing:-.5px;margin-top:6px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.card{background:#f4f4f5;border-radius:12px;padding:20px}
+.card-t{font-size:14px;font-weight:700;margin-bottom:12px}
+.bar{display:flex;height:10px;border-radius:6px;overflow:hidden;background:#e4e4e7}
+.bar>i{display:block}
+.muted{color:#71717a}
+.block{margin-top:22px}
+.block-t{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;font-weight:700;margin-bottom:8px}
+.content{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cl{display:block;border:1px solid #ececef;border-radius:10px;padding:12px 14px;text-decoration:none;color:inherit}
+.cl-t{font-weight:600;font-size:13px}
+.cl-m{color:#71717a;font-size:11px;margin-top:2px}
+.cl-u{color:#0069FE;font-size:11px;margin-top:6px;word-break:break-all}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:#eef2ff;color:#3730a3;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600}
+.legal{margin-top:32px;border-top:1px solid #ececef;padding-top:14px;font-size:11px;color:#a1a1aa}
+@media print{body{padding:0}.cl{-webkit-print-color-adjust:exact}}
+</style></head><body>
+<div class="top">
+  <div><h1>${esc(titleCase(creator.name))}</h1><div class="meta">${meta}</div></div>
+  <div class="right"><div class="tag">TTP AGENCY</div><div class="faint">Media kit · 2026</div></div>
+</div>
+
+<div class="stats">${statCells}</div>
+
+<div class="cols">
+  <div class="card"><div class="card-t">Audience</div>
+    <div class="bar"><i style="width:${fem}%;background:#0069FE"></i><i style="width:${100 - fem}%;background:#c7c7cc"></i></div>
+    <div class="muted" style="margin-top:8px">${esc(gender)}</div>
+    <div style="margin-top:14px"><span class="block-t" style="display:block">Âge dominant</span><b>${esc(age)} · ${esc(agePct)}</b></div>
+    <div style="margin-top:12px"><span class="block-t" style="display:block">Localisation</span><b>${esc(location)}</b></div>
+    ${avgViews ? `<div style="margin-top:12px"><span class="block-t" style="display:block">Vues moyennes</span><b>${esc(avgViews)}</b></div>` : ""}
+  </div>
+  <div class="card"><div class="card-t">Bio</div><p class="muted">${esc(bio)}</p></div>
+</div>
+
+${contentRows}
+${brandsRow}
+${servicesRow}
+
+<div class="legal">Contact agence · partnerships@ttpcreators.pro · Lyon, France · TTP Agency — Trust the Process</div>
+</body></html>`;
+}
+
+// ─── Modal ───────────────────────────────────────────────────────────────────
+
+function Modal({ title, onClose, children, footer, wide }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
+  return (
+    <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm sm:p-6" onClick={onClose}>
+      <div className={cn("my-2 w-full rounded-2xl border border-border bg-card shadow-2xl", wide ? "max-w-3xl" : "max-w-lg")} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
+          <div className="text-sm font-semibold text-foreground">{title}</div>
+          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
+        {footer && <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+const primaryBtn = "rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90";
+const ghostBtn = "rounded-lg border border-border bg-surface px-4 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground";
+
+// ─── Vue ─────────────────────────────────────────────────────────────────────
 
 export function Mediakit() {
   const creators = useCreators();
-  const { data: mkData } = useAppState<MediaKitData>(
-    (s: AppState) => (s["mediaKitData"] as MediaKitData) ?? {},
-  );
+  const { data: mkData } = useAppState<MediaKitData>((s: AppState) => (s["mediaKitData"] as MediaKitData) ?? {});
+  const [localData, setLocalData] = useState<MediaKitData | null>(null);
+  const data = localData ?? mkData ?? {};
 
-  // Sélecteur créateur : défaut le 1er.
   const [selected, setSelected] = useState<string | null>(null);
   useEffect(() => {
     if (selected == null && creators.length > 0) setSelected(creators[0].name);
   }, [creators, selected]);
 
-  // Fiche complète du créateur choisi.
   const [creator, setCreator] = useState<Creator | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -84,11 +231,12 @@ export function Mediakit() {
     };
   }, [selected]);
 
-  // Overrides éventuels (indexés par position dans le roster).
   const selIndex = creators.findIndex((c) => c.name === selected);
-  const ov: MkOverride = (mkData && selIndex >= 0 && mkData[selIndex]) || {};
+  const ov: MkOverride = (data && selIndex >= 0 && data[selIndex]) || {};
 
-  // État de chargement.
+  const [editDraft, setEditDraft] = useState<MkOverride | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
   if (creators.length === 0 || (selected && loading && !creator)) {
     return (
       <div className="grid place-items-center rounded-2xl border border-border bg-surface p-16 text-sm text-muted-foreground shadow-sm">
@@ -97,15 +245,10 @@ export function Mediakit() {
     );
   }
 
-  // État vide (aucun créateur trouvé en base pour la sélection).
   if (!creator) {
     return (
       <div>
-        <CreatorPicker
-          creators={creators}
-          selected={selected}
-          onSelect={setSelected}
-        />
+        <CreatorPicker creators={creators} selected={selected} onSelect={setSelected} />
         <div className="grid place-items-center rounded-2xl border border-border bg-surface p-16 text-sm text-muted-foreground shadow-sm">
           Aucune fiche créateur pour cette sélection.
         </div>
@@ -114,14 +257,15 @@ export function Mediakit() {
   }
 
   const fn = creator.name.split(" ")[0];
-  const bio = mkGet(
-    ov,
-    "bio",
-    `${fn}, créateur ${(creator.niche ?? "lifestyle").toLowerCase()} représenté(e) par TTP Agency. Contenus premium, audience engagée et collaborations à forte conversion.`,
-  );
+  const bio = mkGet(ov, "bio", `${fn}, créateur ${(creator.niche ?? "lifestyle").toLowerCase()} représenté(e) par TTP Agency. Contenus premium, audience engagée et collaborations à forte conversion.`);
   const age = mkGet(ov, "age", DEFAULT_AGE);
   const agePct = mkGet(ov, "agePct", DEFAULT_AGE_PCT);
   const gender = mkGet(ov, "gender", DEFAULT_GENDER);
+  const location = mkGet(ov, "location", DEFAULT_LOCATION);
+  const avgViews = mkGet(ov, "avgViews", "");
+  const services = mkGet(ov, "services", "");
+  const brands = splitList(mkGet(ov, "collabs", ""));
+  const content: ContentLink[] = ov.content ?? [];
   const femM = /(\d+)%/.exec(gender);
   const fem = femM ? Number(femM[1]) : 65;
 
@@ -129,23 +273,26 @@ export function Mediakit() {
     { label: "Abonnés", value: creator.followers || "—" },
     { label: "Engagement", value: creator.er || "—" },
     { label: "Reach / mois", value: creator.reach || "—" },
-    { label: "CA / mois", value: creator.ca || "—" },
+    { label: avgViews ? "Vues moy." : "CA / mois", value: avgViews || creator.ca || "—" },
   ];
 
+  const buildHTML = () =>
+    mediaKitHTML({ creator, bio, stats, age, agePct, gender, location, avgViews, brands, services, content, fem });
+
   const copyKit = async () => {
-    const meta = [creator.handle, creator.niche, creator.platform]
-      .filter(Boolean)
-      .join(" · ");
     const summary = [
       `MEDIA KIT · ${titleCase(creator.name)}`,
-      meta,
+      [creator.handle, creator.niche, creator.platform].filter(Boolean).join(" · "),
       "",
       stats.map((s) => `${s.label} : ${s.value}`).join("\n"),
       "",
       `Audience : ${age} · ${agePct}`,
       gender,
+      `Localisation : ${location}`,
       "",
       bio,
+      content.length ? "\nContenus :\n" + content.map((c) => `• ${c.title} — ${c.url}`).join("\n") : "",
+      brands.length ? "\nCollaborations : " + brands.join(", ") : "",
       "",
       "— TTP Agency · Trust the process",
     ]
@@ -159,49 +306,67 @@ export function Mediakit() {
     }
   };
 
+  const downloadPDF = () => {
+    const blob = new Blob([buildHTML()], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `media-kit-${creator.name.toLowerCase().replace(/\s+/g, "-")}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast("Média kit téléchargé ✓ (ouvre-le puis Imprimer → PDF)");
+  };
+
+  const openEdit = () => setEditDraft({ bio, age, agePct, gender, location, avgViews, collabs: mkGet(ov, "collabs", ""), services, content: [...content] });
+
+  const saveEdit = async () => {
+    if (!editDraft || selIndex < 0) return;
+    const cleaned: MkOverride = { ...editDraft, content: (editDraft.content ?? []).filter((c) => c.title.trim() || c.url.trim()) };
+    const next = { ...data, [selIndex]: cleaned };
+    setLocalData(next);
+    setEditDraft(null);
+    const ok = await saveAppStateKey("mediaKitData", next);
+    toast(ok ? "Média kit enregistré ✓" : "Erreur — réessaie");
+  };
+
   return (
     <div>
-      <CreatorPicker
-        creators={creators}
-        selected={selected}
-        onSelect={setSelected}
-      />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <CreatorPicker creators={creators} selected={selected} onSelect={setSelected} />
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={openEdit} className={cn(ghostBtn, "flex items-center gap-1.5")}>
+            <Pencil className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Modifier</span>
+          </button>
+          <button type="button" onClick={() => setPreview(buildHTML())} className={cn(ghostBtn, "flex items-center gap-1.5")}>
+            <Eye className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Aperçu</span>
+          </button>
+          <button type="button" onClick={downloadPDF} className={cn(primaryBtn, "flex items-center gap-1.5")}>
+            <FileText className="h-3.5 w-3.5" /> PDF
+          </button>
+        </div>
+      </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-surface p-6 shadow-sm md:p-8">
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="flex items-center gap-4">
-            <CreatorAvatar
-              name={creator.name}
-              photoUrl={creator.photo_url}
-              className="h-[76px] w-[76px] rounded-2xl text-xl"
-            />
+            <CreatorAvatar name={creator.name} photoUrl={creator.photo_url} className="h-[76px] w-[76px] rounded-2xl text-xl" />
             <div className="min-w-0">
-              <div className="text-2xl font-semibold tracking-tight md:text-3xl">
-                {titleCase(creator.name)}
-              </div>
+              <div className="text-2xl font-semibold tracking-tight md:text-3xl">{titleCase(creator.name)}</div>
               <div className="mt-1.5 flex flex-wrap items-center gap-2.5">
-                <span className="text-sm text-muted-foreground">
-                  {creator.handle || "—"}
-                </span>
+                <span className="text-sm text-muted-foreground">{creator.handle || "—"}</span>
                 {creator.niche && (
-                  <span className="rounded-full bg-signalsoft px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-signaltext">
-                    {creator.niche}
-                  </span>
+                  <span className="rounded-full bg-signalsoft px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-signaltext">{creator.niche}</span>
                 )}
-                {creator.platform && (
-                  <span className="text-xs text-faint">{creator.platform}</span>
-                )}
+                {creator.platform && <span className="text-xs text-faint">{creator.platform}</span>}
               </div>
             </div>
           </div>
           <div className="text-right">
-            <div className="text-xs font-bold tracking-tight text-foreground">
-              TTP AGENCY
-            </div>
-            <div className="mt-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-faint">
-              Media kit · 2026
-            </div>
+            <div className="text-xs font-bold tracking-tight text-foreground">TTP AGENCY</div>
+            <div className="mt-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-faint">Media kit · 2026</div>
           </div>
         </div>
 
@@ -209,12 +374,8 @@ export function Mediakit() {
         <div className="mt-6 grid grid-cols-2 gap-3.5 md:grid-cols-4">
           {stats.map((s) => (
             <div key={s.label} className="rounded-xl bg-panel p-[18px]">
-              <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">
-                {s.label}
-              </div>
-              <div className="mt-2 whitespace-nowrap text-2xl font-bold tracking-tight">
-                {s.value}
-              </div>
+              <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{s.label}</div>
+              <div className="mt-2 whitespace-nowrap text-2xl font-bold tracking-tight">{s.value}</div>
             </div>
           ))}
         </div>
@@ -222,53 +383,192 @@ export function Mediakit() {
         {/* Audience + Bio */}
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="rounded-xl bg-panel p-[22px]">
-            <div className="mb-4 text-sm font-semibold text-foreground">
-              Audience
-            </div>
-            <div className="mb-2 text-[9px] font-semibold uppercase tracking-wide text-faint">
-              Répartition
-            </div>
+            <div className="mb-4 text-sm font-semibold text-foreground">Audience</div>
+            <div className="mb-2 text-[9px] font-semibold uppercase tracking-wide text-faint">Répartition</div>
             <div className="flex h-2.5 overflow-hidden rounded-md bg-border">
-              <div className="bg-signal" style={{ width: `${fem}%` }} />
+              <div className="bg-primary" style={{ width: `${fem}%` }} />
               <div className="bg-muted-foreground" style={{ width: `${100 - fem}%` }} />
             </div>
-            <div className="mt-2 text-[11px] font-medium text-muted-foreground">
-              {gender}
-            </div>
-            <div className="mb-1.5 mt-4 text-[9px] font-semibold uppercase tracking-wide text-faint">
-              Âge dominant
-            </div>
-            <div className="text-sm font-semibold text-foreground">
-              {age} · {agePct}
+            <div className="mt-2 text-[11px] font-medium text-muted-foreground">{gender}</div>
+            <div className="mt-4 grid grid-cols-2 gap-4">
+              <div>
+                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Âge dominant</div>
+                <div className="text-sm font-semibold text-foreground">{age} · {agePct}</div>
+              </div>
+              <div>
+                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Localisation</div>
+                <div className="text-sm font-semibold text-foreground">{location}</div>
+              </div>
             </div>
           </div>
 
           <div className="rounded-xl bg-panel p-[22px]">
             <div className="mb-3 text-sm font-semibold text-foreground">Bio</div>
-            <p className="text-[13px] leading-relaxed text-muted-foreground">
-              {bio}
-            </p>
+            <p className="text-[13px] leading-relaxed text-muted-foreground">{bio}</p>
+            {services && (
+              <>
+                <div className="mb-1.5 mt-4 text-[9px] font-semibold uppercase tracking-wide text-faint">Offres</div>
+                <p className="text-[13px] text-muted-foreground">{services}</p>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Footer + action */}
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
-          <div className="text-[11px] font-medium text-faint">
-            Contact agence · partnerships@ttpcreators.pro · Lyon, France
+        {/* Contenus (liens cliquables) */}
+        {content.length > 0 && (
+          <div className="mt-4">
+            <div className="mb-2 text-sm font-semibold text-foreground">Contenus &amp; réalisations</div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {content.map((c) => (
+                <a
+                  key={c.id}
+                  href={c.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="group flex items-start justify-between gap-3 rounded-xl border border-border bg-surface p-3.5 transition-colors hover:border-primary hover:bg-rowhover"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-semibold text-foreground">{c.title || "Contenu"}</div>
+                    <div className="mt-0.5 truncate text-[11px] text-faint">{[c.platform, c.views].filter(Boolean).join(" · ")}</div>
+                    <div className="mt-1 truncate text-[11px] text-primary">{c.url}</div>
+                  </div>
+                  <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-faint transition-colors group-hover:text-primary" />
+                </a>
+              ))}
+            </div>
           </div>
-          <button
-            onClick={copyKit}
-            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
-          >
-            <Copy className="h-3.5 w-3.5" /> Copier le média kit
+        )}
+
+        {/* Marques */}
+        {brands.length > 0 && (
+          <div className="mt-4">
+            <div className="mb-2 text-sm font-semibold text-foreground">Ils ont collaboré</div>
+            <div className="flex flex-wrap gap-2">
+              {brands.map((b, i) => (
+                <span key={i} className="rounded-full border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-muted-foreground">{b}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
+          <div className="text-[11px] font-medium text-faint">Contact agence · partnerships@ttpcreators.pro · Lyon, France</div>
+          <button onClick={copyKit} className="flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <Copy className="h-3.5 w-3.5" /> Copier le texte
           </button>
         </div>
       </div>
+
+      {/* ── Éditeur ── */}
+      {editDraft && (
+        <Modal
+          title={`Média kit · ${titleCase(creator.name)}`}
+          onClose={() => setEditDraft(null)}
+          wide
+          footer={
+            <>
+              <button type="button" className={ghostBtn} onClick={() => setEditDraft(null)}>Annuler</button>
+              <button type="button" className={primaryBtn} onClick={saveEdit}>Enregistrer</button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-5">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Bio</span>
+              <textarea
+                value={editDraft.bio ?? ""}
+                onChange={(e) => setEditDraft({ ...editDraft, bio: e.target.value })}
+                rows={3}
+                className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              />
+            </label>
+
+            <div className="flex flex-wrap items-end gap-3">
+              <TextField label="Genre (audience)" value={editDraft.gender ?? ""} onChange={(v) => setEditDraft({ ...editDraft, gender: v })} className="min-w-[200px] flex-1" />
+              <TextField label="Âge dominant" value={editDraft.age ?? ""} onChange={(v) => setEditDraft({ ...editDraft, age: v })} className="min-w-[130px] flex-1" />
+              <TextField label="% âge" value={editDraft.agePct ?? ""} onChange={(v) => setEditDraft({ ...editDraft, agePct: v })} className="min-w-[90px] flex-none" />
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <TextField label="Localisation" value={editDraft.location ?? ""} onChange={(v) => setEditDraft({ ...editDraft, location: v })} className="min-w-[200px] flex-[2]" />
+              <TextField label="Vues moyennes" value={editDraft.avgViews ?? ""} onChange={(v) => setEditDraft({ ...editDraft, avgViews: v })} className="min-w-[130px] flex-1" />
+            </div>
+            <TextField label="Offres / services (ex : Reel 800€ · Story 300€)" value={editDraft.services ?? ""} onChange={(v) => setEditDraft({ ...editDraft, services: v })} className="w-full" />
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Marques (séparées par des virgules ou retours ligne)</span>
+              <textarea
+                value={editDraft.collabs ?? ""}
+                onChange={(e) => setEditDraft({ ...editDraft, collabs: e.target.value })}
+                rows={2}
+                className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              />
+            </label>
+
+            {/* Contenus */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Contenus (liens)</span>
+                <button
+                  type="button"
+                  onClick={() => setEditDraft({ ...editDraft, content: [...(editDraft.content ?? []), { id: uid(), title: "", platform: "", url: "", views: "" }] })}
+                  className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Ajouter un lien
+                </button>
+              </div>
+              <div className="flex flex-col gap-2">
+                {(editDraft.content ?? []).map((c) => (
+                  <div key={c.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2">
+                    <input value={c.title} onChange={(e) => setEditDraft({ ...editDraft, content: (editDraft.content ?? []).map((x) => (x.id === c.id ? { ...x, title: e.target.value } : x)) })} placeholder="Titre" className="min-w-[120px] flex-[2] rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary" />
+                    <input value={c.platform} onChange={(e) => setEditDraft({ ...editDraft, content: (editDraft.content ?? []).map((x) => (x.id === c.id ? { ...x, platform: e.target.value } : x)) })} placeholder="Plateforme" className="min-w-[100px] flex-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary" />
+                    <input value={c.views} onChange={(e) => setEditDraft({ ...editDraft, content: (editDraft.content ?? []).map((x) => (x.id === c.id ? { ...x, views: e.target.value } : x)) })} placeholder="Vues" className="w-20 shrink-0 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary" />
+                    <input value={c.url} onChange={(e) => setEditDraft({ ...editDraft, content: (editDraft.content ?? []).map((x) => (x.id === c.id ? { ...x, url: e.target.value } : x)) })} placeholder="https://…" className="min-w-full flex-[3] rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary" />
+                    <button type="button" onClick={() => setEditDraft({ ...editDraft, content: (editDraft.content ?? []).filter((x) => x.id !== c.id) })} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-rose-500" title="Supprimer">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Aperçu ── */}
+      {preview && (
+        <Modal
+          title={`Aperçu · ${titleCase(creator.name)}`}
+          onClose={() => setPreview(null)}
+          wide
+          footer={
+            <>
+              <button type="button" className={ghostBtn} onClick={() => setPreview(null)}>Fermer</button>
+              <button
+                type="button"
+                className={cn(ghostBtn, "flex items-center gap-1.5")}
+                onClick={() => {
+                  const w = window.open("", "_blank");
+                  if (w) {
+                    w.document.write(preview);
+                    w.document.close();
+                    w.focus();
+                    w.print();
+                  } else toast("Autorise les pop-ups pour imprimer");
+                }}
+              >
+                <FileText className="h-3.5 w-3.5" /> Imprimer / PDF
+              </button>
+            </>
+          }
+        >
+          <iframe title={`Media kit ${creator.name}`} srcDoc={preview} className="h-[64vh] w-full rounded-lg border border-border bg-white" />
+        </Modal>
+      )}
     </div>
   );
 }
 
-/** Sélecteur déroulant compact de créateur (picker : valeur = créateur sélectionné). */
+/** Sélecteur déroulant compact de créateur. */
 function CreatorPicker({
   creators,
   selected,
@@ -280,12 +580,9 @@ function CreatorPicker({
 }) {
   const value = selected ?? creators[0]?.name ?? "";
   return (
-    <div className="mb-4 w-fit max-w-full">
+    <div className="w-fit max-w-full">
       <Select value={value} onValueChange={onSelect}>
-        <SelectTrigger
-          className="h-9 w-auto min-w-[190px] rounded-full bg-surface"
-          placeholder="Choisir un créateur"
-        />
+        <SelectTrigger className="h-9 w-auto min-w-[190px] rounded-full bg-surface" placeholder="Choisir un créateur" />
         <SelectContent>
           {creators.map((c, i) => (
             <SelectItem key={c.id} index={i} value={c.name}>
