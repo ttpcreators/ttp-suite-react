@@ -47,8 +47,10 @@ export interface SyncResult {
  * conserve import.meta.env.BASE_URL pour que le callback redirige au bon endroit.
  */
 export function appOrigin(): string {
-  const base = (import.meta.env.BASE_URL || "/").replace(/\/+$/, "");
-  return (window.location.origin + base).replace(/\/+$/, "");
+  // URL de la page courante (origine + chemin), sans query ni hash. Robuste quel
+  // que soit le `base` Vite (relatif "./" sur GitHub Pages) — l'ancienne version
+  // fabriquait une origine malformée ("…github.io.") rejetée par le serveur.
+  return window.location.origin + window.location.pathname;
 }
 
 /* ------------------------------------------------------------------ *

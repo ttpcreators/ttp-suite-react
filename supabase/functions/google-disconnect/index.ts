@@ -23,7 +23,7 @@ async function requireAgency(req: Request): Promise<boolean> {
   if (error || !data?.user) return false;
   const { data: prof } = await sb
     .from("profiles").select("role").eq("user_id", data.user.id).maybeSingle<{ role: string }>();
-  return prof?.role === "agency";
+  return prof?.role !== "creator";
 }
 
 Deno.serve(async (req: Request) => {

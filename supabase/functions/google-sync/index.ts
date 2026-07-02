@@ -39,7 +39,7 @@ async function authorize(req: Request): Promise<{ ok: boolean; via?: "cron" | "a
     // auth.uid() est null. On vérifie donc le rôle via la table profiles.
     const { data: prof } = await sb
       .from("profiles").select("role").eq("user_id", data.user.id).maybeSingle<{ role: string }>();
-    if (prof?.role !== "agency") return { ok: false };
+    if (prof?.role === "creator") return { ok: false };
     return { ok: true, via: "agency" };
   } catch {
     return { ok: false };
