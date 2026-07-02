@@ -8,6 +8,18 @@ import { LocationTag } from "@/components/ui/location-tag";
 import { MiniChart } from "@/components/ui/mini-chart";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
+import { Globe, type GlobeMarker } from "@/components/ui/cobe-globe";
+
+// Villes marquées sur le globe (Lyon = siège agence + quelques hubs).
+const GLOBE_MARKERS: GlobeMarker[] = [
+  { location: [45.76, 4.83], size: 0.08 }, // Lyon
+  { location: [48.85, 2.35], size: 0.05 }, // Paris
+  { location: [51.51, -0.13], size: 0.04 }, // Londres
+  { location: [40.71, -74.0], size: 0.04 }, // New York
+  { location: [25.2, 55.27], size: 0.04 }, // Dubaï
+  { location: [35.68, 139.65], size: 0.04 }, // Tokyo
+  { location: [-23.55, -46.63], size: 0.04 }, // São Paulo
+];
 
 type Invoice = { ref: string; party: string; amount: string; date: string; status: string; creator: string | null };
 type Ev = { date: string | null; day: number | null; time: string | null; title: string; type: string; who: string | null };
@@ -185,6 +197,7 @@ export function Apercu() {
     .sort((a, b) => parseAmount(b.ca) - parseAmount(a.ca))
     .slice(0, 4);
 
+  const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
   let objPct = "—";
   const cur = obj && (obj["0"] as { ca?: string; target?: string }[] | undefined);
   if (Array.isArray(cur) && cur.length) {
@@ -277,9 +290,19 @@ export function Apercu() {
           </div>
         </Card>
 
-        <Card index={3} className="flex flex-col items-center justify-center text-center md:col-span-2">
-          <div className="text-[22px] font-bold tracking-tight">{objPct}</div>
-          <div className="mt-1 text-[9px] text-muted-foreground">Objectif mensuel</div>
+        <Card index={3} className="relative flex items-center justify-center overflow-hidden md:col-span-2">
+          <Globe
+            className="w-full max-w-[190px]"
+            dark={isDark ? 1 : 0}
+            baseColor={isDark ? [0.14, 0.14, 0.17] : [0.9, 0.91, 0.94]}
+            glowColor={isDark ? [0.05, 0.05, 0.08] : [0.9, 0.92, 0.96]}
+            markerColor={[0.17, 0.5, 1]}
+            markers={GLOBE_MARKERS}
+          />
+          <div className="pointer-events-none absolute bottom-3 left-4">
+            <div className="text-[8px] font-semibold uppercase tracking-wide text-faint">Objectif mensuel</div>
+            <div className="text-sm font-bold text-foreground">{objPct}</div>
+          </div>
         </Card>
         <Card index={4} className="flex flex-col md:col-span-2">
           <div className="flex items-baseline justify-between">
