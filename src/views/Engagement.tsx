@@ -5,6 +5,7 @@ import { useCreators, invalidateCreators } from "@/lib/useCreators";
 import { dbUpdate } from "@/lib/db";
 import { useAppState, saveAppStateKey } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
+import { SelectField } from "@/components/ui/form";
 import { cn, titleCase } from "@/lib/utils";
 
 /**
@@ -262,23 +263,19 @@ export function Engagement() {
 
       {/* Créateur + champs */}
       <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Créateur (optionnel)</span>
-          <select
+        <div className="md:max-w-xs">
+          <SelectField
+            label="Créateur (optionnel)"
             value={creatorId}
-            onChange={(e) => {
-              setCreatorId(e.target.value);
+            onChange={(v) => {
+              setCreatorId(v);
               setSavedOk(false);
             }}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15 md:max-w-xs"
-          >
-            <option value="">— Aucun (calcul libre)</option>
-            {creators.map((c) => (
-              <option key={c.id} value={c.id}>
-                {titleCase(c.name)}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: "— Aucun (calcul libre)" },
+              ...creators.map((c) => ({ value: c.id, label: titleCase(c.name) })),
+            ]}
+          />
         </div>
 
         {/* Métriques (dynamiques selon la plateforme) + base */}

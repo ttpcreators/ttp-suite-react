@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
@@ -40,6 +40,47 @@ type Coord = Pick<Creator, "ville" | "phone" | "email" | "address" | "siren" | "
 
 const statusBadge = (s: string | null) =>
   s === "pause" ? "warning" : s === "inactif" ? "neutral" : "success";
+
+/** Icônes réseaux en SVG inline (lucide a retiré les logos de marque). */
+function InstagramIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+    </svg>
+  );
+}
+function TikTokIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+      <path d="M16.6 5.82A4.28 4.28 0 0 1 15.54 3h-3.09v12.4a2.59 2.59 0 1 1-2.59-2.59c.27 0 .53.04.77.12v-3.2a5.67 5.67 0 0 0-.77-.05A5.68 5.68 0 1 0 15.54 15.4V9.01a7.35 7.35 0 0 0 4.3 1.38V7.3a4.28 4.28 0 0 1-3.24-1.48z" />
+    </svg>
+  );
+}
+function YoutubeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z" />
+      <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+      <path d="M18.9 1.5h3.3l-7.2 8.2L23.7 22.5h-6.6l-5.2-6.8-6 6.8H2.6l7.7-8.8L2.3 1.5h6.8l4.7 6.2 5.1-6.2zm-1.2 18.9h1.8L7.4 3.4H5.5l12.2 17z" />
+    </svg>
+  );
+}
+
+/** Construit une URL de profil à partir d'un @handle ou d'une URL déjà complète. */
+function socialUrl(base: string, raw: string | null | undefined): string | null {
+  const v = (raw ?? "").trim();
+  if (!v) return null;
+  if (/^https?:\/\//i.test(v)) return v;
+  return base + v.replace(/^@/, "").replace(/\s+/g, "");
+}
 
 export function CreatorDetail({
   name,
@@ -193,6 +234,22 @@ export function CreatorDetail({
     </div>
   );
 
+  // Liens réseaux cliquables (depuis les @handles ou la plateforme principale).
+  const platform = (c?.platform ?? "").toLowerCase();
+  const socialLinks: { label: string; url: string; icon: ReactNode }[] = [];
+  const ig = socialUrl("https://instagram.com/", c?.instagram || (platform.includes("insta") ? c?.handle : null));
+  if (ig) socialLinks.push({ label: "Instagram", url: ig, icon: <InstagramIcon className="h-4 w-4" /> });
+  const tt = socialUrl("https://www.tiktok.com/@", c?.tiktok || (platform.includes("tiktok") ? c?.handle : null));
+  if (tt) socialLinks.push({ label: "TikTok", url: tt, icon: <TikTokIcon className="h-4 w-4" /> });
+  if (platform.includes("youtube") && c?.handle) {
+    const yt = socialUrl("https://youtube.com/@", c.handle);
+    if (yt) socialLinks.push({ label: "YouTube", url: yt, icon: <YoutubeIcon className="h-4 w-4" /> });
+  }
+  if ((platform.includes("twitter") || platform === "x" || platform.includes(" x")) && c?.handle) {
+    const xu = socialUrl("https://x.com/", c.handle);
+    if (xu) socialLinks.push({ label: "X", url: xu, icon: <XIcon className="h-4 w-4" /> });
+  }
+
   return (
     <div>
       <button
@@ -220,6 +277,22 @@ export function CreatorDetail({
           <div className="mt-1 text-sm text-faint">
             {[c?.handle, c?.niche, c?.platform].filter(Boolean).join(" · ") || "—"}
           </div>
+          {socialLinks.length > 0 && (
+            <div className="mt-2.5 flex items-center gap-1.5">
+              {socialLinks.map((s) => (
+                <a
+                  key={s.label}
+                  href={s.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`Ouvrir ${s.label}`}
+                  className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-surface text-muted-foreground transition-colors hover:border-primary hover:bg-rowhover hover:text-primary"
+                >
+                  {s.icon}
+                </a>
+              ))}
+            </div>
+          )}
         </div>
         <button
           onClick={() => onOpenPortal(name)}
