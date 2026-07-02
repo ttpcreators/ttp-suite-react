@@ -54,7 +54,7 @@ const SIZES: Record<
   CardSize,
   { minH: string; pad: string; footer: string; title: string; headline: string }
 > = {
-  sm: { minH: "min-h-[260px]", pad: "px-6 pt-5", footer: "px-6 py-3", title: "text-[15px]", headline: "text-[30px] sm:text-[46px]" },
+  sm: { minH: "min-h-[220px] sm:min-h-[260px]", pad: "px-4 pt-4 sm:px-6 sm:pt-5", footer: "px-4 py-2.5 sm:px-6 sm:py-3", title: "text-[14px] sm:text-[15px]", headline: "text-[28px] sm:text-[46px]" },
   md: { minH: "min-h-[380px]", pad: "px-8 pt-7", footer: "px-8 py-4", title: "text-[17px]", headline: "text-[72px]" },
   lg: { minH: "min-h-[460px]", pad: "px-10 pt-9", footer: "px-10 py-5", title: "text-[19px]", headline: "text-[88px]" },
 };

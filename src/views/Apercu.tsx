@@ -228,6 +228,10 @@ export function Apercu() {
       };
     });
   })();
+  // Vrai total = dernière valeur cumulée (= somme des factures), pas la somme
+  // des valeurs cumulées. Delta = montant de la dernière facture ajoutée.
+  const caTotal = caSeries.length ? caSeries[caSeries.length - 1].value : 0;
+  const caStep = caSeries.length >= 2 ? caTotal - caSeries[caSeries.length - 2].value : caTotal;
 
   return (
     <div>
@@ -246,6 +250,10 @@ export function Apercu() {
       <ProgressMetricCard
         title="Chiffre d'affaires cumulé"
         data={caSeries}
+        total={formatEuro(caTotal)}
+        delta={(caStep >= 0 ? "+" : "−") + formatEuro(Math.abs(caStep))}
+        deltaLabel="dernière facture"
+        showStats={false}
         accent="emerald"
         size="sm"
         valueFormatter={(n) => formatEuro(n)}
