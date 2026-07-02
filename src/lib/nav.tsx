@@ -12,6 +12,7 @@ import {
   Search,
   ScrollText,
   BarChart3,
+  TrendingUp,
   LayoutTemplate,
   CheckCircle2,
   KeyRound,
@@ -25,6 +26,7 @@ import {
 
 export type ViewId =
   | "apercu"
+  | "stats"
   | "objectifs"
   | "facturation"
   | "roster"
@@ -57,6 +59,7 @@ export const NAV: NavFamily[] = [
     icon: Gauge,
     items: [
       { id: "apercu", label: "Aperçu", icon: LayoutDashboard },
+      { id: "stats", label: "Stats", icon: TrendingUp },
       { id: "objectifs", label: "Objectifs", icon: Target },
       { id: "facturation", label: "Facturation", icon: Receipt },
     ],

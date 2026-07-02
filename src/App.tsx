@@ -14,6 +14,7 @@ import { supabase } from "@/lib/supabase";
 import { SearchContext } from "@/lib/search";
 import { RosterTabs } from "@/views/RosterTabs";
 import { Apercu } from "@/views/Apercu";
+import { Stats } from "@/views/Stats";
 import { Facturation } from "@/views/Facturation";
 import { Briefs } from "@/views/Briefs";
 import { Idees } from "@/views/Idees";
@@ -37,6 +38,7 @@ const BASE = import.meta.env.BASE_URL;
 
 const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   apercu: Apercu,
+  stats: Stats,
   facturation: Facturation,
   briefs: Briefs,
   ideas: Idees,
