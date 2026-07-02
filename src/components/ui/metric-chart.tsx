@@ -81,7 +81,14 @@ export function MetricChart({
   const pts = primary.data.map((d, i) => ({ x: x(i), y: y(d.value) }));
   const linePath = smoothPath(pts);
   const areaPath = `${linePath} L ${W} ${H} L 0 ${H} Z`;
-  const tipLeft = Math.min(86, Math.max(14, x(active)));
+  // Positionnement du tooltip : au-dessus du point si le point est assez bas,
+  // sinon EN DESSOUS (évite d'être coupé par le haut de la carte / de chevaucher
+  // les contrôles du header). Clamp horizontal pour ne pas déborder à droite.
+  const tipY = y(primary.data[active].value);
+  const tipAbove = tipY > 32;
+  const tipLeft = Math.min(82, Math.max(18, x(active)));
+  const tipTop = tipAbove ? Math.max(4, tipY - 6) : Math.min(92, tipY + 8);
+  const tipTransform = tipAbove ? "translate(-50%, -100%)" : "translate(-50%, 0)";
 
   return (
     <div ref={ref} className="relative h-full w-full" onMouseMove={onMove}>
@@ -146,8 +153,8 @@ export function MetricChart({
         style={{ left: `${x(active)}%`, top: `${y(primary.data[active].value)}%`, background: primary.color }}
       />
       <div
-        className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs shadow-lg"
-        style={{ left: `${tipLeft}%`, top: `${Math.max(10, y(primary.data[active].value) - 4)}%` }}
+        className="pointer-events-none absolute z-20 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs shadow-lg"
+        style={{ left: `${tipLeft}%`, top: `${tipTop}%`, transform: tipTransform }}
       >
         <div className="whitespace-nowrap font-semibold text-foreground">
           {valueFormatter(primary.data[active].value)}
