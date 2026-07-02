@@ -385,6 +385,8 @@ export function Todo() {
                   prev?.id === row.id ? { ...prev, done: next } : prev
                 );
                 toast(next ? "Fait ✓" : "À refaire");
+              } else {
+                toast("Erreur — réessaie");
               }
             };
             return (
@@ -461,6 +463,8 @@ export function Todo() {
                           if (await dbTrash("todos", row.id, row.text, row.creator ?? undefined)) {
                             removeRow(row.id);
                             toast("Déplacé dans la corbeille");
+                          } else {
+                            toast("Erreur — réessaie");
                           }
                         },
                         confirm: { title: "Supprimer la tâche", message: `Supprimer « ${row.text} » ? Tu pourras la restaurer depuis la corbeille.` },

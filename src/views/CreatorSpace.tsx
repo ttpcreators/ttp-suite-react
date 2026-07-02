@@ -148,7 +148,10 @@ export function CreatorSpace({
       .select("*")
       .eq("name", name)
       .limit(1)
-      .then(({ data }) => alive && setCreator((data?.[0] as Creator) ?? null));
+      .then(({ data, error }) => {
+        if (error) console.error("Espace créateur — chargement de la fiche échoué:", error);
+        if (alive) setCreator((data?.[0] as Creator) ?? null);
+      });
     supabase.from("todos").select("id,text,descr,due,priority,done,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setTodos((data as Todo[]) ?? []));
     supabase.from("ideas").select("id,text,status,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
     supabase.from("briefs").select("id,brand,deliverables,due,status").eq("who", name).then(({ data }) => alive && setBriefs((data as Brief[]) ?? []));
@@ -743,12 +746,16 @@ export function CreatorSpace({
                 if (await dbUpdate("events", id, dbPatch)) {
                   setEvents((prev) => prev.map((r) => (r.id === id ? ({ ...r, ...patch } as Ev) : r)));
                   toast("Événement modifié ✓");
+                } else {
+                  toast("Erreur — réessaie");
                 }
               }}
               onDelete={async (id) => {
                 if (await dbDelete("events", id)) {
                   setEvents((prev) => prev.filter((r) => r.id !== id));
                   toast("Supprimé");
+                } else {
+                  toast("Erreur — réessaie");
                 }
               }}
             />

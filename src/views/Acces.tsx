@@ -80,11 +80,18 @@ function AccountRow({ a }: { a: AccessAccount }) {
 }
 
 export function Acces() {
-  const { data: accounts, loading } = useAppState<AccessAccount[]>(
+  const { data: accounts, loading, error } = useAppState<AccessAccount[]>(
     (s: AppState) => (s["accessAccounts"] as AccessAccount[]) ?? [],
   );
   const { query } = useSearch();
 
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
+        Impossible de charger les accès. Réessaie plus tard.
+      </div>
+    );
+  }
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
