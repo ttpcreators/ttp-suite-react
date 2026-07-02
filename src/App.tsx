@@ -28,6 +28,7 @@ import { Objectifs } from "@/views/Objectifs";
 import { Debrief } from "@/views/Debrief";
 import { Checklist } from "@/views/Checklist";
 import { Mediakit } from "@/views/Mediakit";
+import { Ugc } from "@/views/Ugc";
 import { Templates } from "@/views/Templates";
 import { CreatorDetail } from "@/views/CreatorDetail";
 import { Portal } from "@/views/Portal";
@@ -51,6 +52,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   debrief: Debrief,
   checklist: Checklist,
   mediakit: Mediakit,
+  ugc: Ugc,
   templates: Templates,
 };
 

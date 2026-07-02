@@ -20,6 +20,7 @@ import {
   Handshake,
   Wrench,
   Lightbulb,
+  Clapperboard,
   type LucideIcon,
 } from "lucide-react";
 
@@ -29,6 +30,7 @@ export type ViewId =
   | "facturation"
   | "roster"
   | "mediakit"
+  | "ugc"
   | "briefs"
   | "ideas"
   | "todo"
@@ -68,6 +70,7 @@ export const NAV: NavFamily[] = [
     items: [
       { id: "roster", label: "Roster", icon: Users },
       { id: "mediakit", label: "Media kit", icon: ImageIcon },
+      { id: "ugc", label: "Roster UGC", icon: Clapperboard },
     ],
   },
   {
