@@ -2,11 +2,12 @@ import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn } from "@/lib/utils";
-import { CalendarClock, Wallet, Target, Package, Pencil, X } from "lucide-react";
+import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon } from "lucide-react";
 import { useEffect, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/components/ui/form";
+import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -22,44 +23,29 @@ type Row = {
   objectif: string;
   sort_order: number;
 };
-
 type BadgeStatus = "success" | "warning" | "danger" | "neutral" | "info" | "loading";
 
-const ALL_STATUS = "__all__";
-const STATUS_FILTERS = [
-  { value: "attente", label: "En attente" },
-  { value: "valider", label: "À valider" },
-  { value: "cours", label: "En cours" },
-  { value: "terminé", label: "Terminé" },
+const STATUS_OPTS: StatusOption[] = [
+  { value: "attente", label: "En attente", dot: "bg-amber" },
+  { value: "valider", label: "À valider", dot: "bg-primary" },
+  { value: "cours", label: "En cours", dot: "bg-cyan" },
+  { value: "terminé", label: "Terminé", dot: "bg-signal" },
 ];
 
-const chipBase =
-  "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors";
-const chipActive = "bg-primary text-primary-foreground";
-const chipInactive = "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground";
-
-function matchesStatusFilter(status: string, filter: string): boolean {
-  if (filter === ALL_STATUS) return true;
+/** Colonne (canonique) d'un brief selon son statut stocké. */
+function colKey(status: string): string {
   const s = String(status).toLowerCase();
-  if (filter === "attente") return s.includes("attente");
-  if (filter === "valider") return s.includes("valider");
-  if (filter === "cours") return s.includes("cours");
-  if (filter === "terminé") return s.includes("termine");
-  return s === filter.toLowerCase();
+  if (s.includes("termine")) return "terminé";
+  if (s.includes("cours")) return "cours";
+  if (s.includes("valider")) return "valider";
+  return "attente";
 }
-
-function statusMeta(status: string): { variant: BadgeStatus; label: string; dot: string } {
-  const s = String(status).toLowerCase();
-  if (s.includes("valider") || s.includes("attente")) {
-    return { variant: "warning", label: "À valider", dot: "bg-amber" };
-  }
-  if (s.includes("cours")) {
-    return { variant: "info", label: "En cours", dot: "bg-cyan" };
-  }
-  if (s.includes("termine")) {
-    return { variant: "success", label: "Terminé", dot: "bg-signal" };
-  }
-  return { variant: "neutral", label: status, dot: "bg-muted-foreground" };
+function statusMeta(status: string): { variant: BadgeStatus; label: string } {
+  const k = colKey(status);
+  if (k === "terminé") return { variant: "success", label: "Terminé" };
+  if (k === "cours") return { variant: "info", label: "En cours" };
+  if (k === "valider") return { variant: "warning", label: "À valider" };
+  return { variant: "warning", label: "En attente" };
 }
 
 export function Briefs() {
@@ -69,6 +55,7 @@ export function Briefs() {
   const creators = useCreators();
   const live = useLiveKey();
 
+  const [view, setView] = useState<"board" | "list">("board");
   const [formOpen, setFormOpen] = useState(false);
   const [brand, setBrand] = useState("");
   const [creator, setCreator] = useState("");
@@ -77,7 +64,6 @@ export function Briefs() {
   const [budget, setBudget] = useState("");
   const [objectif, setObjectif] = useState("");
   const [status, setStatus] = useState("attente");
-  const [statusFilter, setStatusFilter] = useState<string>(ALL_STATUS);
 
   const [editId, setEditId] = useState<string | null>(null);
   const [editBrand, setEditBrand] = useState("");
@@ -149,11 +135,6 @@ export function Briefs() {
     setEditDue(row.due === "—" ? "" : row.due);
     setEditObjectif(row.objectif === "—" ? "" : row.objectif);
   };
-
-  const cancelEdit = () => {
-    setEditId(null);
-  };
-
   const saveEdit = async (id: string) => {
     if (!editBrand.trim()) {
       toast("Renseigne la marque");
@@ -173,75 +154,108 @@ export function Briefs() {
     toast("Brief mis à jour ✓");
     setEditId(null);
   };
-
   const changeStatus = async (id: string, next: string) => {
-    if (!(await dbUpdate("briefs", id, { status: next }))) {
-      toast("Erreur — réessaie");
-      return;
+    // MAJ optimiste → la carte se déplace immédiatement dans la bonne colonne.
+    setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, status: next } : r)));
+    if (!(await dbUpdate("briefs", id, { status: next }))) toast("Erreur — réessaie");
+  };
+  const del = async (id: string) => {
+    if (await dbDelete("briefs", id)) {
+      setRows((rows ?? []).filter((r) => r.id !== id));
+      toast("Supprimé");
     }
-    setRows((rows ?? []).map((r) => (r.id === id ? { ...r, status: next } : r)));
   };
 
-  const creatorOptions = [
-    { value: "", label: "—" },
-    ...creators.map((c) => ({ value: c.name, label: c.name })),
-  ];
+  const creatorOptions = [{ value: "", label: "—" }, ...creators.map((c) => ({ value: c.name, label: c.name }))];
 
-  const statusOptions = [
-    { value: "attente", label: "En attente" },
-    { value: "valider", label: "À valider" },
-    { value: "cours", label: "En cours" },
-    { value: "terminé", label: "Terminé" },
-  ];
+  const filtered = (rows ?? []).filter((row) => matchQuery(query, row.brand, row.creator, row.deliverables, row.status));
 
-  const filtered = (rows ?? []).filter(
-    (row) =>
-      matchesStatusFilter(row.status, statusFilter) &&
-      matchQuery(query, row.brand, row.creator, row.deliverables, row.status)
-  );
+  // ---- rendu d'une carte (compacte pour le board, riche pour la liste) ----
+  const renderCard = (row: Row, compact: boolean): ReactElement => {
+    if (editId === row.id) {
+      return (
+        <div key={row.id} className="flex flex-col rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-sm font-semibold">Modifier</div>
+            <button type="button" onClick={() => setEditId(null)} className="text-faint hover:text-foreground" title="Annuler">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex flex-col gap-3">
+            <TextField label="Marque" value={editBrand} onChange={setEditBrand} />
+            <TextField label="Livrables" value={editDeliverables} onChange={setEditDeliverables} placeholder="ex 3 posts · 1 reel" />
+            <TextField label="Échéance" value={editDue} onChange={setEditDue} />
+            <TextField label="Objectif" value={editObjectif} onChange={setEditObjectif} />
+            <button
+              type="button"
+              onClick={() => saveEdit(row.id)}
+              className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              Enregistrer
+            </button>
+          </div>
+        </div>
+      );
+    }
+    const meta = statusMeta(row.status);
+    return (
+      <div key={row.id} className="flex flex-col rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:bg-rowhover">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="truncate text-[14px] font-semibold tracking-tight text-foreground">{row.brand}</h2>
+            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{row.creator || "—"}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {!compact && (
+              <AnimatedBadge status={meta.variant} size="sm">
+                {meta.label}
+              </AnimatedBadge>
+            )}
+            <button
+              type="button"
+              onClick={() => startEdit(row)}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+              title="Modifier"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <DeleteButton onClick={() => del(row.id)} />
+          </div>
+        </div>
 
-  const header = (
-    <div className="mb-4 flex items-center justify-between gap-3">
-      <div className="text-sm text-muted-foreground">
-        {rows === null ? "Chargement…" : `${rows.length} brief${rows.length > 1 ? "s" : ""}`}
+        <div className="mt-3 rounded-xl bg-panel px-3 py-2">
+          <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">
+            <Package className="h-3 w-3" /> Livrables
+          </div>
+          <div className="mt-1 text-[12px] font-medium leading-snug text-foreground">{row.deliverables || "—"}</div>
+        </div>
+
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="rounded-xl bg-panel px-3 py-2">
+            <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">
+              <Wallet className="h-3 w-3" /> Budget
+            </div>
+            <div className="mt-1 truncate text-[12px] font-medium text-foreground">{row.budget || "—"}</div>
+          </div>
+          <div className="rounded-xl bg-panel px-3 py-2">
+            <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">
+              <Target className="h-3 w-3" /> Objectif
+            </div>
+            <div className="mt-1 truncate text-[12px] font-medium text-foreground">{row.objectif || "—"}</div>
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <StatusSelect value={colKey(row.status)} options={STATUS_OPTS} onChange={(v) => changeStatus(row.id, v)} />
+        </div>
+
+        <div className="mt-3 flex items-center gap-1.5 border-t border-border pt-2.5 text-[11px] text-muted-foreground">
+          <CalendarClock className="h-3.5 w-3.5 shrink-0 text-faint" />
+          <span className="truncate">Échéance {row.due || "—"}</span>
+        </div>
       </div>
-      <AddButton label="Brief" onClick={() => setFormOpen(true)} />
-    </div>
-  );
-
-  const filterBar = (
-    <div className="mb-4 flex flex-wrap gap-2">
-      <button
-        type="button"
-        onClick={() => setStatusFilter(ALL_STATUS)}
-        className={cn(chipBase, statusFilter === ALL_STATUS ? chipActive : chipInactive)}
-      >
-        Tous
-      </button>
-      {STATUS_FILTERS.map((f) => (
-        <button
-          key={f.value}
-          type="button"
-          onClick={() => setStatusFilter(f.value)}
-          className={cn(chipBase, statusFilter === f.value ? chipActive : chipInactive)}
-        >
-          {f.label}
-        </button>
-      ))}
-    </div>
-  );
-
-  const form = (
-    <InlineForm open={formOpen} title="Nouveau brief" onClose={() => setFormOpen(false)} onSubmit={submit}>
-      <TextField label="Marque" value={brand} onChange={setBrand} />
-      <SelectField label="Créateur" value={creator} onChange={setCreator} options={creatorOptions} />
-      <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />
-      <TextField label="Échéance" value={due} onChange={setDue} />
-      <TextField label="Budget" value={budget} onChange={setBudget} />
-      <TextField label="Objectif" value={objectif} onChange={setObjectif} />
-      <SelectField label="Statut" value={status} onChange={setStatus} options={statusOptions} />
-    </InlineForm>
-  );
+    );
+  };
 
   let content: ReactElement;
   if (rows === null) {
@@ -251,169 +265,77 @@ export function Briefs() {
       </div>
     );
   } else if (error) {
-    content = (
-      <div className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
-        <p className="text-sm text-muted-foreground">
-          Une erreur est survenue lors du chargement des briefs.
-        </p>
-      </div>
-    );
+    content = <div className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-sm">Erreur de chargement.</div>;
   } else if (rows.length === 0) {
+    content = <div className="rounded-xl border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">Aucun brief pour le moment. Ajoute le premier 📋</div>;
+  } else if (view === "board") {
     content = (
-      <div className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
-        <p className="text-sm text-muted-foreground">Aucun brief pour le moment.</p>
-      </div>
-    );
-  } else if (filtered.length === 0) {
-    content = (
-      <div className="rounded-xl border border-border bg-card shadow-sm">
-        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-          {query.trim()
-            ? `Aucun résultat pour « ${query} »`
-            : "Aucun brief pour ce filtre"}
-        </div>
-      </div>
-    );
-  } else {
-    content = (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {filtered.map((row) => {
-          const meta = statusMeta(row.status);
-          const editing = editId === row.id;
-          if (editing) {
-            return (
-              <div
-                key={row.id}
-                className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-sm"
-              >
-                <div className="mb-3.5 flex items-center justify-between">
-                  <div className="text-sm font-semibold">Modifier le brief</div>
-                  <button
-                    type="button"
-                    onClick={cancelEdit}
-                    className="text-faint transition-colors hover:text-foreground"
-                    title="Annuler"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <div className="flex flex-col gap-3">
-                  <TextField label="Marque" value={editBrand} onChange={setEditBrand} />
-                  <TextField
-                    label="Livrables"
-                    value={editDeliverables}
-                    onChange={setEditDeliverables}
-                    placeholder="ex 3 posts · 1 reel"
-                  />
-                  <TextField label="Échéance" value={editDue} onChange={setEditDue} />
-                  <TextField label="Objectif" value={editObjectif} onChange={setEditObjectif} />
-                  <button
-                    type="button"
-                    onClick={() => saveEdit(row.id)}
-                    className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
-                  >
-                    Enregistrer
-                  </button>
-                </div>
-              </div>
-            );
-          }
+      <div className="flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:thin]">
+        {STATUS_OPTS.map((col) => {
+          const items = filtered.filter((r) => colKey(r.status) === col.value);
           return (
-            <div
-              key={row.id}
-              className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-sm transition-colors hover:bg-rowhover"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className={cn("h-[7px] w-[7px] shrink-0 rounded-full", meta.dot)} />
-                    <h2 className="truncate text-[15px] font-semibold tracking-tight text-foreground">
-                      {row.brand}
-                    </h2>
-                  </div>
-                  <p className="mt-1.5 truncate text-xs text-muted-foreground">
-                    {row.creator || "—"} · échéance {row.due || "—"}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <AnimatedBadge status={meta.variant} size="sm">
-                    {meta.label}
-                  </AnimatedBadge>
-                  <button
-                    type="button"
-                    onClick={() => startEdit(row)}
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                    title="Modifier"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <DeleteButton
-                    onClick={async () => {
-                      if (await dbDelete("briefs", row.id)) {
-                        setRows((rows ?? []).filter((r) => r.id !== row.id));
-                        toast("Supprimé");
-                      }
-                    }}
-                  />
-                </div>
+            <div key={col.value} className="flex w-[280px] shrink-0 flex-col">
+              <div className="mb-3 flex items-center gap-2 px-1">
+                <span className={cn("size-2 rounded-full", col.dot)} />
+                <span className="text-[12px] font-semibold text-foreground">{col.label}</span>
+                <span className="ml-auto rounded-full bg-rowhover px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">{items.length}</span>
               </div>
-
-              <div className="mt-4 rounded-xl bg-panel px-4 py-3">
-                <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
-                  <Package className="h-3 w-3" />
-                  Livrables
-                </div>
-                <div className="mt-1.5 text-[13px] font-medium leading-snug text-foreground">
-                  {row.deliverables || "—"}
-                </div>
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-panel px-4 py-3">
-                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
-                    <Wallet className="h-3 w-3" />
-                    Budget
-                  </div>
-                  <div className="mt-1.5 truncate text-[13px] font-medium text-foreground">
-                    {row.budget || "—"}
-                  </div>
-                </div>
-                <div className="rounded-xl bg-panel px-4 py-3">
-                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
-                    <Target className="h-3 w-3" />
-                    Objectif
-                  </div>
-                  <div className="mt-1.5 truncate text-[13px] font-medium text-foreground">
-                    {row.objectif || "—"}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3">
-                <SelectField
-                  label="Statut"
-                  value={row.status}
-                  onChange={(v) => changeStatus(row.id, v)}
-                  options={statusOptions}
-                />
-              </div>
-
-              <div className="mt-4 flex items-center gap-1.5 border-t border-border pt-3 text-[11px] text-muted-foreground">
-                <CalendarClock className="h-3.5 w-3.5 shrink-0 text-faint" />
-                <span className="truncate">Échéance {row.due || "—"}</span>
+              <div className="flex flex-1 flex-col gap-3 rounded-2xl bg-panel/60 p-2">
+                {items.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-[11px] text-faint">Vide</div>
+                ) : (
+                  items.map((r) => renderCard(r, true))
+                )}
               </div>
             </div>
           );
         })}
       </div>
     );
+  } else if (filtered.length === 0) {
+    content = <div className="rounded-xl border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">{query.trim() ? `Aucun résultat pour « ${query} »` : "Aucun brief."}</div>;
+  } else {
+    content = <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">{filtered.map((r) => renderCard(r, false))}</div>;
   }
 
   return (
     <div>
-      {header}
-      {filterBar}
-      {form}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="text-sm text-muted-foreground">{rows === null ? "Chargement…" : `${rows.length} brief${rows.length > 1 ? "s" : ""}`}</div>
+          {/* Toggle vue */}
+          <div className="flex gap-1 rounded-lg bg-panel p-0.5">
+            {([
+              { id: "board", label: "Colonnes", icon: Columns3 },
+              { id: "list", label: "Liste", icon: ListIcon },
+            ] as const).map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => setView(v.id)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
+                  view === v.id ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <v.icon className="h-3.5 w-3.5" /> {v.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <AddButton label="Brief" onClick={() => setFormOpen(true)} />
+      </div>
+
+      <InlineForm open={formOpen} title="Nouveau brief" onClose={() => setFormOpen(false)} onSubmit={submit}>
+        <TextField label="Marque" value={brand} onChange={setBrand} />
+        <SelectField label="Créateur" value={creator} onChange={setCreator} options={creatorOptions} />
+        <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />
+        <TextField label="Échéance" value={due} onChange={setDue} />
+        <TextField label="Budget" value={budget} onChange={setBudget} />
+        <TextField label="Objectif" value={objectif} onChange={setObjectif} />
+        <SelectField label="Statut" value={status} onChange={setStatus} options={STATUS_OPTS.map((s) => ({ value: s.value, label: s.label }))} />
+      </InlineForm>
+
       {content}
     </div>
   );

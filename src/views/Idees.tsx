@@ -7,9 +7,9 @@ import {
   AddButton,
   InlineForm,
   TextField,
-  SelectField,
   DeleteButton,
 } from "@/components/ui/form";
+import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useEffect, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -23,11 +23,11 @@ type Row = {
   sort_order: number | null;
 };
 
-const STATUS_OPTIONS = [
-  { value: "À explorer", label: "À explorer" },
-  { value: "À faire", label: "À faire" },
-  { value: "En cours", label: "En cours" },
-  { value: "Publiée", label: "Publiée" },
+const STATUS_OPTS: StatusOption[] = [
+  { value: "À explorer", label: "À explorer", dot: "bg-indigo" },
+  { value: "À faire", label: "À faire", dot: "bg-primary" },
+  { value: "En cours", label: "En cours", dot: "bg-cyan" },
+  { value: "Publiée", label: "Publiée", dot: "bg-signal" },
 ];
 
 const STATUS_FILTERS = ["À explorer", "À faire", "En cours", "Publiée"];
@@ -189,12 +189,11 @@ export function Idees() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <div className="w-[150px]">
-                    <SelectField
-                      label="Statut"
+                  <div className="w-[160px]">
+                    <StatusSelect
                       value={row.status ?? "À faire"}
+                      options={STATUS_OPTS}
                       onChange={(v) => updateStatus(row.id, v)}
-                      options={STATUS_OPTIONS}
                     />
                   </div>
                   <DeleteButton onClick={() => removeRow(row.id)} />
