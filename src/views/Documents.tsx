@@ -9,7 +9,7 @@ import { toast } from "@/components/ui/toast";
 import { useCreators } from "@/lib/useCreators";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useEffect, useRef, useState } from "react";
-import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, type LucideIcon } from "lucide-react";
+import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, type LucideIcon } from "lucide-react";
 
 type Row = {
   id: string;
@@ -48,6 +48,14 @@ function slug(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9.]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
+type FileKind = "image" | "pdf" | "other";
+function fileKind(name: string): FileKind {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  if (["png", "jpg", "jpeg", "gif", "webp", "avif", "svg", "bmp"].includes(ext)) return "image";
+  if (ext === "pdf") return "pdf";
+  return "other";
+}
+
 export function Documents() {
   const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("documents"));
   const [error, setError] = useState(false);
@@ -60,6 +68,7 @@ export function Documents() {
   const [docCreator, setDocCreator] = useState("");
   const [fileName, setFileName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string; kind: FileKind } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -136,6 +145,47 @@ export function Documents() {
       return;
     }
     window.open(data.signedUrl, "_blank");
+  };
+
+  const preview = async (row: Row) => {
+    if (!row.path) {
+      toast("Fichier indisponible");
+      return;
+    }
+    const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.path, 3600);
+    if (error || !data?.signedUrl) {
+      toast("Aperçu indisponible");
+      return;
+    }
+    setPreviewDoc({ name: row.name, url: data.signedUrl, kind: fileKind(row.name) });
+  };
+
+  const share = async (row: Row) => {
+    if (!row.path) {
+      toast("Fichier indisponible");
+      return;
+    }
+    // Lien signé longue durée (7 j) — partageable
+    const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.path, 60 * 60 * 24 * 7);
+    if (error || !data?.signedUrl) {
+      toast("Lien de partage indisponible");
+      return;
+    }
+    const url = data.signedUrl;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: row.name, url });
+        return;
+      } catch {
+        /* annulé → on retombe sur le presse-papiers */
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast("Lien copié (valable 7 j) ✓");
+    } catch {
+      window.prompt("Copie ce lien de partage :", url);
+    }
   };
 
   const del = async (row: Row) => {
@@ -223,14 +273,32 @@ export function Documents() {
                   </span>
 
                   {row.path && (
-                    <button
-                      type="button"
-                      onClick={() => openDoc(row)}
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                      title="Télécharger"
-                    >
-                      <Download className="h-4 w-4" />
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => preview(row)}
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                        title="Prévisualiser"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => share(row)}
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                        title="Partager le lien"
+                      >
+                        <Share2 className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openDoc(row)}
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                        title="Télécharger"
+                      >
+                        <Download className="h-4 w-4" />
+                      </button>
+                    </>
                   )}
                   <DeleteButton onClick={() => del(row)} />
                 </li>
@@ -239,6 +307,63 @@ export function Documents() {
           </ul>
         )}
       </div>
+
+      {previewDoc && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setPreviewDoc(null)}
+        >
+          <div
+            className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+              <span className="truncate text-[13px] font-semibold text-foreground">{previewDoc.name}</span>
+              <div className="flex shrink-0 items-center gap-1">
+                <a
+                  href={previewDoc.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                  title="Ouvrir dans un onglet"
+                >
+                  <Download className="h-4 w-4" />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDoc(null)}
+                  className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                  title="Fermer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-panel p-3">
+              {previewDoc.kind === "image" ? (
+                <img src={previewDoc.url} alt={previewDoc.name} className="max-h-[74vh] w-auto rounded-lg object-contain" />
+              ) : previewDoc.kind === "pdf" ? (
+                <iframe title={previewDoc.name} src={previewDoc.url} className="h-[74vh] w-full rounded-lg bg-white" />
+              ) : (
+                <div className="flex flex-col items-center gap-3 py-10 text-center">
+                  <FileText className="h-10 w-10 text-faint" />
+                  <p className="max-w-xs text-sm text-muted-foreground">
+                    Aperçu non disponible pour ce type de fichier.
+                  </p>
+                  <a
+                    href={previewDoc.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                  >
+                    Ouvrir le fichier
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

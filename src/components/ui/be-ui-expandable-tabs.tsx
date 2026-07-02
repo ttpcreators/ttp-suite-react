@@ -192,40 +192,53 @@ function sameWidths(a: Record<string, number>, b: Record<string, number>) {
   return aKeys.every((key) => a[key] === b[key]);
 }
 
-function useContentSize() {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [size, setSize] = useState<Size | null>(null);
+function sameSizeMap(a: Record<string, Size>, b: Record<string, Size>) {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every((key) => sameSize(a[key], b[key]));
+}
+
+/**
+ * Mesure la taille de CHAQUE panneau de groupe individuellement (et non la
+ * taille max de tous superposés). Ainsi un groupe avec peu d'items n'hérite pas
+ * de la hauteur du plus gros groupe → plus de gros espace vide.
+ */
+function useItemSizes(items: ExpandableTabsItem[]) {
+  const refs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [sizes, setSizes] = useState<Record<string, Size>>({});
+
+  const setItemMeasureRef = useCallback(
+    (id: string) => (node: HTMLDivElement | null) => {
+      refs.current[id] = node;
+    },
+    [],
+  );
 
   const measure = useCallback(() => {
-    const el = ref.current;
-
-    if (!el) return;
-
-    const next = {
-      width: el.offsetWidth,
-      height: el.offsetHeight,
-    };
-
-    setSize((current) => (sameSize(current, next) ? current : next));
-  }, []);
+    const next: Record<string, Size> = {};
+    for (const item of items) {
+      const node = refs.current[item.id];
+      if (node) next[item.id] = { width: node.offsetWidth, height: node.offsetHeight };
+    }
+    setSizes((current) => (sameSizeMap(current, next) ? current : next));
+  }, [items]);
 
   useLayoutEffect(() => {
     measure();
   }, [measure]);
 
   useEffect(() => {
-    const el = ref.current;
-
-    if (!el || typeof ResizeObserver === "undefined") return;
-
+    if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
-
-    observer.observe(el);
-
+    for (const item of items) {
+      const node = refs.current[item.id];
+      if (node) observer.observe(node);
+    }
     return () => observer.disconnect();
-  }, [measure]);
+  }, [items, measure]);
 
-  return [ref, size] as const;
+  return { setItemMeasureRef, sizes };
 }
 
 function useLabelWidths(items: ExpandableTabsItem[]) {
@@ -291,7 +304,7 @@ export function ExpandableTabs({
 }: ExpandableTabsProps) {
   const reduce = useReducedMotion();
   const rootRef = useRef<HTMLDivElement>(null);
-  const [sizerRef, size] = useContentSize();
+  const { setItemMeasureRef, sizes } = useItemSizes(items);
   const { setLabelMeasureRef, widths: labelWidths } = useLabelWidths(items);
 
   const controlled = value !== undefined;
@@ -341,10 +354,13 @@ export function ExpandableTabs({
     height: BAR_H + ROOT_BORDER,
   };
 
-  const openSize = size
+  // Chaque panneau est mesuré AVEC son chrome (cf. wrappers cachés ci-dessous),
+  // donc on réutilise la formule d'origine mais sur le groupe actif uniquement.
+  const activeSize = active ? sizes[active.id] : null;
+  const openSize = activeSize
     ? {
-        width: Math.max(size.width + ROOT_BORDER, closedSize.width),
-        height: Math.max(size.height + ROOT_BORDER, closedSize.height),
+        width: Math.max(activeSize.width + ROOT_BORDER, closedSize.width),
+        height: Math.max(activeSize.height + ROOT_BORDER, closedSize.height),
       }
     : closedSize;
 
@@ -386,19 +402,16 @@ export function ExpandableTabs({
           classNames?.root,
         )}
       >
-        <div
-          ref={sizerRef}
-          aria-hidden
-          className={cn(
-            "pointer-events-none invisible absolute left-0 top-0 grid w-max px-2 pt-2",
-            classNames?.panel,
-          )}
-          style={{
-            paddingBottom: BAR_H + PANEL_DOCK_GAP,
-          }}
-        >
+        {/* Mesureurs cachés : un par groupe, avec le même chrome que le panneau
+            visible, pour dimensionner le shell au groupe actif (pas au plus gros). */}
+        <div aria-hidden className="pointer-events-none invisible absolute left-0 top-0">
           {items.map((item) => (
-            <div key={item.id} className="col-start-1 row-start-1 w-max">
+            <div
+              key={item.id}
+              ref={setItemMeasureRef(item.id)}
+              className={cn("absolute left-0 top-0 w-max px-2 pt-2", classNames?.panel)}
+              style={{ paddingBottom: BAR_H + PANEL_DOCK_GAP }}
+            >
               {item.content}
             </div>
           ))}

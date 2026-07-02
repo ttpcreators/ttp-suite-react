@@ -24,25 +24,25 @@ const TYPE_OPTIONS = [
   { value: "deadline", label: "Deadline" },
 ];
 
-// Couleur (fond de puce) par type
+// Couleur (fond de puce) par type — une couleur DISTINCTE par type (code couleur)
 const TYPE_BG: Record<string, string> = {
-  call: "bg-indigo",
+  call: "bg-primary",
   reunion: "bg-cyan",
   collab: "bg-signal",
-  shoot: "bg-indigo",
-  event: "bg-signal",
-  voyage: "bg-cyan",
-  deadline: "bg-amber",
+  shoot: "bg-violet-500",
+  event: "bg-pink-500",
+  voyage: "bg-amber",
+  deadline: "bg-rose-500",
 };
 
 const TYPE_TEXT: Record<string, string> = {
-  call: "text-indigo",
+  call: "text-primary",
   reunion: "text-cyan",
   collab: "text-signal",
-  shoot: "text-indigo",
-  event: "text-signal",
-  voyage: "text-cyan",
-  deadline: "text-amber",
+  shoot: "text-violet-500",
+  event: "text-pink-500",
+  voyage: "text-amber",
+  deadline: "text-rose-500",
 };
 
 function typeBg(t: string) {
@@ -276,6 +276,16 @@ export function EventCalendar({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Légende — code couleur des types d'événement */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-border bg-surface px-3 py-2 shadow-sm">
+        {TYPE_OPTIONS.map((t) => (
+          <span key={t.value} className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+            <span className={cn("size-2.5 shrink-0 rounded-full", typeBg(t.value))} />
+            {t.label}
+          </span>
+        ))}
       </div>
 
       {view === "month" && (
@@ -622,16 +632,16 @@ function EventModal({
           />
           <div className="flex flex-wrap gap-3">
             <TextField
-              label="Date (AAAA-MM-JJ)"
+              label="Date"
+              type="date"
               value={draft.date}
               onChange={(v) => setDraft({ ...draft, date: v })}
-              placeholder="2026-07-01"
             />
             <TextField
               label="Heure"
-              value={draft.time}
+              type="time"
+              value={draft.time === "—" ? "" : draft.time}
               onChange={(v) => setDraft({ ...draft, time: v })}
-              placeholder="14:30"
             />
           </div>
           <div className="flex flex-wrap gap-3">

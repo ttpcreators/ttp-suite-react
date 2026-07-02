@@ -8,7 +8,7 @@ type EncryptedTextProps = {
   className?: string;
   /**
    * Time in milliseconds between revealing each subsequent real character.
-   * Lower is faster. Defaults to 50ms per character.
+   * Lower is faster. Defaults to 95ms per character (animation plus longue).
    */
   revealDelayMs?: number;
   /** Optional custom character set to use for the gibberish effect. */
@@ -48,7 +48,7 @@ function generateGibberishPreservingSpaces(
 export const EncryptedText: React.FC<EncryptedTextProps> = ({
   text,
   className,
-  revealDelayMs = 50,
+  revealDelayMs = 95,
   charset = DEFAULT_CHARSET,
   flipDelayMs = 50,
   encryptedClassName,

@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { Copy, X } from "lucide-react";
+import { Copy, X, Download, Upload } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -12,7 +12,7 @@ import {
   SelectField,
   DeleteButton,
 } from "@/components/ui/form";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 
@@ -37,6 +37,100 @@ const TAG_OPTIONS = [
 ];
 
 const ALL_TAGS = "__all__";
+
+// ─── CSV : export + import réels ─────────────────────────────────────────────
+
+const CSV_HEADERS = ["Marque", "Personne", "Rôle", "Tag", "Email", "Téléphone"] as const;
+type CsvField = "brand" | "person" | "role" | "tag" | "email" | "phone";
+const CSV_FIELDS: CsvField[] = ["brand", "person", "role", "tag", "email", "phone"];
+
+function normHeader(s: string): string {
+  return s.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+const FIELD_ALIASES: Record<CsvField, string[]> = {
+  brand: ["marque", "entreprise", "marque / entreprise", "brand", "company", "societe"],
+  person: ["personne", "person", "nom", "contact", "name"],
+  role: ["role", "poste", "fonction", "title", "titre"],
+  tag: ["tag", "type", "categorie", "category"],
+  email: ["email", "e-mail", "mail", "courriel"],
+  phone: ["telephone", "phone", "tel", "mobile", "numero"],
+};
+
+/** Échappe une valeur pour une cellule CSV. */
+function csvCell(v: string): string {
+  const s = v ?? "";
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** Génère le contenu CSV (avec BOM UTF-8 pour Excel). */
+function buildCsv(rows: Row[]): string {
+  const lines = [CSV_HEADERS.join(",")];
+  for (const r of rows) {
+    lines.push([r.brand, r.person, r.role, r.tag, r.email, r.phone].map((v) => csvCell(v ?? "")).join(","));
+  }
+  return "﻿" + lines.join("\r\n");
+}
+
+/** Parse un CSV en lignes de cellules (gère guillemets, virgules, points-virgules, sauts de ligne). */
+function parseCsv(text: string): string[][] {
+  const clean = text.replace(/^﻿/, "");
+  // Détection du séparateur sur la 1re ligne (virgule / point-virgule / tabulation).
+  const firstLine = clean.split(/\r?\n/, 1)[0] ?? "";
+  const counts: [string, number][] = [
+    [",", (firstLine.match(/,/g) || []).length],
+    [";", (firstLine.match(/;/g) || []).length],
+    ["\t", (firstLine.match(/\t/g) || []).length],
+  ];
+  const delim = counts.sort((a, b) => b[1] - a[1])[0][1] > 0 ? counts[0][0] : ",";
+
+  const rows: string[][] = [];
+  let field = "";
+  let row: string[] = [];
+  let inQuotes = false;
+  for (let i = 0; i < clean.length; i++) {
+    const c = clean[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (clean[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === delim) {
+      row.push(field); field = "";
+    } else if (c === "\n") {
+      row.push(field); rows.push(row); row = []; field = "";
+    } else if (c !== "\r") {
+      field += c;
+    }
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+  return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
+}
+
+/** Transforme les lignes CSV en objets contact (mappe l'entête si présent, sinon positionnel). */
+function csvToContacts(text: string): Partial<Record<CsvField, string>>[] {
+  const rows = parseCsv(text);
+  if (rows.length === 0) return [];
+  const header = rows[0].map(normHeader);
+  // L'entête correspond-il à des champs connus ?
+  const colMap: (CsvField | null)[] = header.map((h) => {
+    for (const f of CSV_FIELDS) if (FIELD_ALIASES[f].includes(h)) return f;
+    return null;
+  });
+  const hasHeader = colMap.some((c) => c !== null);
+  const dataRows = hasHeader ? rows.slice(1) : rows;
+  const map = hasHeader ? colMap : CSV_FIELDS.map((f) => f); // positionnel
+
+  return dataRows.map((cells) => {
+    const obj: Partial<Record<CsvField, string>> = {};
+    cells.forEach((cell, i) => {
+      const f = map[i];
+      if (f) obj[f] = cell.trim();
+    });
+    return obj;
+  });
+}
 
 function CopyField({ label, value }: { label: string; value: string }) {
   const v = value && value.trim() ? value.trim() : "";
@@ -79,6 +173,8 @@ export function Contacts() {
   const [phone, setPhone] = useState("");
 
   const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS);
+  const [importing, setImporting] = useState(false);
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -174,6 +270,72 @@ export function Contacts() {
     setPhone("");
   };
 
+  // Export : télécharge un vrai fichier .csv (respecte le filtre/recherche courants).
+  const exportCsv = () => {
+    const toExport = filtered.length ? filtered : currentRows;
+    if (toExport.length === 0) {
+      toast("Aucun contact à exporter");
+      return;
+    }
+    const csv = buildCsv(toExport);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `contacts-ttp-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast(`${toExport.length} contact${toExport.length > 1 ? "s" : ""} exporté${toExport.length > 1 ? "s" : ""} ✓`);
+  };
+
+  // Import : lit un fichier .csv, crée réellement les contacts en base.
+  const importCsv = async (file: File) => {
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const parsed = csvToContacts(text).filter((c) => (c.brand ?? "").trim() || (c.person ?? "").trim());
+      if (parsed.length === 0) {
+        toast("Aucune ligne exploitable dans ce CSV");
+        return;
+      }
+      let order = nextOrder(currentRows);
+      const validTags = new Set(TAG_OPTIONS.map((t) => t.value));
+      const payload = parsed.map((c) => {
+        const rawTag = (c.tag ?? "").trim();
+        return {
+          brand: (c.brand ?? "").trim() || (c.person ?? "").trim() || "—",
+          person: (c.person ?? "").trim() || "—",
+          role: (c.role ?? "").trim(),
+          tag: validTags.has(rawTag) ? rawTag : rawTag || "Autre",
+          email: (c.email ?? "").trim(),
+          phone: (c.phone ?? "").trim(),
+          tone: "indigo",
+          sort_order: order++,
+        };
+      });
+      const { data, error } = await supabase
+        .from("contacts")
+        .insert(payload)
+        .select("id, brand, person, role, tone, tag, email, phone, sort_order");
+      if (error) {
+        toast("Échec de l'import — vérifie le fichier");
+        return;
+      }
+      const inserted = (data as Row[]) ?? [];
+      const merged = [...inserted, ...currentRows];
+      setCache("contacts", merged);
+      setRows(merged);
+      toast(`${inserted.length} contact${inserted.length > 1 ? "s" : ""} importé${inserted.length > 1 ? "s" : ""} ✓`);
+    } catch {
+      toast("Fichier illisible");
+    } finally {
+      setImporting(false);
+      if (csvInputRef.current) csvInputRef.current.value = "";
+    }
+  };
+
   // Le filtre par tag se combine avec la recherche existante.
   const filtered = currentRows.filter((row) => {
     const tagOk = tagFilter === ALL_TAGS || (row.tag ?? "").trim() === tagFilter;
@@ -195,7 +357,38 @@ export function Contacts() {
             <span className="text-faint"> / {currentRows.length}</span>
           )}
         </div>
-        <AddButton label="Contact" onClick={() => setFormOpen(true)} />
+        <div className="flex items-center gap-2">
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) importCsv(f);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => csvInputRef.current?.click()}
+            disabled={importing}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+            title="Importer un fichier CSV"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{importing ? "Import…" : "Importer"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={exportCsv}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            title="Exporter en CSV"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Exporter</span>
+          </button>
+          <AddButton label="Contact" onClick={() => setFormOpen(true)} />
+        </div>
       </div>
 
       {/* Barre de filtres par tag */}
