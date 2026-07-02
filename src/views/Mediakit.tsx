@@ -26,6 +26,7 @@ type Creator = {
 };
 
 type ContentLink = { id: string; title: string; platform: string; url: string; views: string };
+type Package = { id: string; name: string; price: string; desc: string };
 
 /** Override éditable stocké dans le blob `mediaKitData` (indexé par position roster). */
 type MkOverride = {
@@ -35,9 +36,12 @@ type MkOverride = {
   gender?: string;
   location?: string;
   avgViews?: string;
+  growth?: string;
+  formats?: string;
   collabs?: string;
   services?: string;
   content?: ContentLink[];
+  packages?: Package[];
 };
 type MediaKitData = Record<number, MkOverride>;
 
@@ -45,6 +49,12 @@ const DEFAULT_AGE = "18–34 ans";
 const DEFAULT_AGE_PCT = "64%";
 const DEFAULT_GENDER = "Femmes 65% · Hommes 35%";
 const DEFAULT_LOCATION = "France 72% · Belgique 11% · Suisse 7%";
+const DEFAULT_FORMATS = "Reels · Stories · UGC · Post collab · YouTube intégration";
+const DEFAULT_PACKAGES: Package[] = [
+  { id: "pk-reel", name: "Reel dédié", price: "sur devis", desc: "Concept + tournage + montage, publication feed + story de rappel." },
+  { id: "pk-story", name: "Pack Stories", price: "sur devis", desc: "3 à 5 stories avec lien / sticker et call-to-action." },
+  { id: "pk-ugc", name: "UGC", price: "sur devis", desc: "Contenu livré à la marque, droits d'usage inclus (sans diffusion)." },
+];
 
 let _uid = 0;
 const uid = () => `mk${Date.now().toString(36)}${(_uid += 1)}`;
@@ -75,12 +85,14 @@ function mediaKitHTML(o: {
   gender: string;
   location: string;
   avgViews: string;
+  formats: string[];
   brands: string[];
   services: string;
+  packages: Package[];
   content: ContentLink[];
   fem: number;
 }): string {
-  const { creator, bio, stats, age, agePct, gender, location, avgViews, brands, services, content, fem } = o;
+  const { creator, bio, stats, age, agePct, gender, location, avgViews, formats, brands, services, packages, content, fem } = o;
   const meta = [creator.handle, creator.niche, creator.platform].filter(Boolean).map(esc).join(" · ");
 
   const statCells = stats
@@ -89,6 +101,13 @@ function mediaKitHTML(o: {
         `<div class="stat"><div class="stat-l">${esc(s.label)}</div><div class="stat-v">${esc(s.value)}</div></div>`,
     )
     .join("");
+
+  const formatsRow =
+    formats.length > 0
+      ? `<div class="block"><div class="block-t">Formats de contenu</div><div class="chips">${formats
+          .map((f) => `<span class="chip fmt">${esc(f)}</span>`)
+          .join("")}</div></div>`
+      : "";
 
   const contentRows =
     content.length > 0
@@ -111,10 +130,19 @@ function mediaKitHTML(o: {
           .join("")}</div></div>`
       : "";
 
-  const servicesRow =
-    services && services.trim()
-      ? `<div class="block"><div class="block-t">Offres</div><div class="muted">${esc(services)}</div></div>`
-      : "";
+  const packagesRow =
+    packages.length > 0
+      ? `<div class="block"><div class="block-t">Offres & tarifs</div><div class="pkgs">${packages
+          .map(
+            (p) =>
+              `<div class="pkg"><div class="pkg-h"><span class="pkg-n">${esc(p.name || "Offre")}</span><span class="pkg-p">${esc(
+                p.price || "sur devis",
+              )}</span></div>${p.desc ? `<div class="pkg-d">${esc(p.desc)}</div>` : ""}</div>`,
+          )
+          .join("")}</div></div>`
+      : services && services.trim()
+        ? `<div class="block"><div class="block-t">Offres</div><div class="muted">${esc(services)}</div></div>`
+        : "";
 
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Media kit — ${esc(creator.name)}</title>
@@ -146,8 +174,15 @@ h1{font-size:30px;letter-spacing:-.6px;margin:0}
 .cl-u{color:#0069FE;font-size:11px;margin-top:6px;word-break:break-all}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{background:#eef2ff;color:#3730a3;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600}
+.chip.fmt{background:#f4f4f5;color:#3f3f46}
+.pkgs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.pkg{border:1px solid #ececef;border-radius:12px;padding:14px 16px;background:#fafafa}
+.pkg-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.pkg-n{font-weight:700;font-size:13px}
+.pkg-p{font-weight:800;color:#0069FE;font-size:13px;white-space:nowrap}
+.pkg-d{color:#71717a;font-size:11px;margin-top:6px;line-height:1.45}
 .legal{margin-top:32px;border-top:1px solid #ececef;padding-top:14px;font-size:11px;color:#a1a1aa}
-@media print{body{padding:0}.cl{-webkit-print-color-adjust:exact}}
+@media print{body{padding:0}.cl,.pkg,.chip{-webkit-print-color-adjust:exact;print-color-adjust:exact}.pkgs{grid-template-columns:repeat(3,1fr)}}
 </style></head><body>
 <div class="top">
   <div><h1>${esc(titleCase(creator.name))}</h1><div class="meta">${meta}</div></div>
@@ -167,9 +202,10 @@ h1{font-size:30px;letter-spacing:-.6px;margin:0}
   <div class="card"><div class="card-t">Bio</div><p class="muted">${esc(bio)}</p></div>
 </div>
 
+${formatsRow}
 ${contentRows}
 ${brandsRow}
-${servicesRow}
+${packagesRow}
 
 <div class="legal">Contact agence · partnerships@ttpcreators.pro · Lyon, France · TTP Agency — Trust the Process</div>
 </body></html>`;
@@ -263,21 +299,25 @@ export function Mediakit() {
   const gender = mkGet(ov, "gender", DEFAULT_GENDER);
   const location = mkGet(ov, "location", DEFAULT_LOCATION);
   const avgViews = mkGet(ov, "avgViews", "");
+  const growth = mkGet(ov, "growth", "");
   const services = mkGet(ov, "services", "");
   const brands = splitList(mkGet(ov, "collabs", ""));
+  const formats = splitList(mkGet(ov, "formats", DEFAULT_FORMATS));
   const content: ContentLink[] = ov.content ?? [];
+  const packages: Package[] =
+    ov.packages && ov.packages.length ? ov.packages : services.trim() ? [] : DEFAULT_PACKAGES;
   const femM = /(\d+)%/.exec(gender);
   const fem = femM ? Number(femM[1]) : 65;
 
   const stats: { label: string; value: string }[] = [
     { label: "Abonnés", value: creator.followers || "—" },
     { label: "Engagement", value: creator.er || "—" },
-    { label: "Reach / mois", value: creator.reach || "—" },
-    { label: avgViews ? "Vues moy." : "CA / mois", value: avgViews || creator.ca || "—" },
+    { label: avgViews ? "Vues moy." : "Reach / mois", value: avgViews || creator.reach || "—" },
+    { label: growth ? "Croissance" : "CA / mois", value: growth || creator.ca || "—" },
   ];
 
   const buildHTML = () =>
-    mediaKitHTML({ creator, bio, stats, age, agePct, gender, location, avgViews, brands, services, content, fem });
+    mediaKitHTML({ creator, bio, stats, age, agePct, gender, location, avgViews, formats, brands, services, packages, content, fem });
 
   const copyKit = async () => {
     const summary = [
@@ -291,8 +331,10 @@ export function Mediakit() {
       `Localisation : ${location}`,
       "",
       bio,
+      formats.length ? "\nFormats : " + formats.join(", ") : "",
       content.length ? "\nContenus :\n" + content.map((c) => `• ${c.title} — ${c.url}`).join("\n") : "",
       brands.length ? "\nCollaborations : " + brands.join(", ") : "",
+      packages.length ? "\nOffres & tarifs :\n" + packages.map((p) => `• ${p.name} — ${p.price || "sur devis"}`).join("\n") : "",
       "",
       "— TTP Agency · Trust the process",
     ]
@@ -319,11 +361,29 @@ export function Mediakit() {
     toast("Média kit téléchargé ✓ (ouvre-le puis Imprimer → PDF)");
   };
 
-  const openEdit = () => setEditDraft({ bio, age, agePct, gender, location, avgViews, collabs: mkGet(ov, "collabs", ""), services, content: [...content] });
+  const openEdit = () =>
+    setEditDraft({
+      bio,
+      age,
+      agePct,
+      gender,
+      location,
+      avgViews,
+      growth,
+      formats: mkGet(ov, "formats", DEFAULT_FORMATS),
+      collabs: mkGet(ov, "collabs", ""),
+      services,
+      content: [...content],
+      packages: packages.map((p) => ({ ...p })),
+    });
 
   const saveEdit = async () => {
     if (!editDraft || selIndex < 0) return;
-    const cleaned: MkOverride = { ...editDraft, content: (editDraft.content ?? []).filter((c) => c.title.trim() || c.url.trim()) };
+    const cleaned: MkOverride = {
+      ...editDraft,
+      content: (editDraft.content ?? []).filter((c) => c.title.trim() || c.url.trim()),
+      packages: (editDraft.packages ?? []).filter((p) => p.name.trim() || p.price.trim() || p.desc.trim()),
+    };
     const next = { ...data, [selIndex]: cleaned };
     setLocalData(next);
     setEditDraft(null);
@@ -405,10 +465,14 @@ export function Mediakit() {
           <div className="rounded-xl bg-panel p-[22px]">
             <div className="mb-3 text-sm font-semibold text-foreground">Bio</div>
             <p className="text-[13px] leading-relaxed text-muted-foreground">{bio}</p>
-            {services && (
+            {formats.length > 0 && (
               <>
-                <div className="mb-1.5 mt-4 text-[9px] font-semibold uppercase tracking-wide text-faint">Offres</div>
-                <p className="text-[13px] text-muted-foreground">{services}</p>
+                <div className="mb-2 mt-4 text-[9px] font-semibold uppercase tracking-wide text-faint">Formats de contenu</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {formats.map((f, i) => (
+                    <span key={i} className="rounded-full bg-surface px-2.5 py-1 text-[11px] font-medium text-muted-foreground">{f}</span>
+                  ))}
+                </div>
               </>
             )}
           </div>
@@ -451,6 +515,29 @@ export function Mediakit() {
           </div>
         )}
 
+        {/* Offres & tarifs */}
+        {packages.length > 0 ? (
+          <div className="mt-4">
+            <div className="mb-2 text-sm font-semibold text-foreground">Offres &amp; tarifs</div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {packages.map((p) => (
+                <div key={p.id} className="rounded-xl border border-border bg-panel p-4">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="text-[13px] font-semibold text-foreground">{p.name || "Offre"}</div>
+                    <div className="whitespace-nowrap text-[13px] font-bold text-primary">{p.price || "sur devis"}</div>
+                  </div>
+                  {p.desc && <div className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">{p.desc}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : services ? (
+          <div className="mt-4">
+            <div className="mb-2 text-sm font-semibold text-foreground">Offres</div>
+            <p className="text-[13px] text-muted-foreground">{services}</p>
+          </div>
+        ) : null}
+
         {/* Footer */}
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
           <div className="text-[11px] font-medium text-faint">Contact agence · partnerships@ttpcreators.pro · Lyon, France</div>
@@ -490,10 +577,11 @@ export function Mediakit() {
               <TextField label="% âge" value={editDraft.agePct ?? ""} onChange={(v) => setEditDraft({ ...editDraft, agePct: v })} className="min-w-[90px] flex-none" />
             </div>
             <div className="flex flex-wrap items-end gap-3">
-              <TextField label="Localisation" value={editDraft.location ?? ""} onChange={(v) => setEditDraft({ ...editDraft, location: v })} className="min-w-[200px] flex-[2]" />
-              <TextField label="Vues moyennes" value={editDraft.avgViews ?? ""} onChange={(v) => setEditDraft({ ...editDraft, avgViews: v })} className="min-w-[130px] flex-1" />
+              <TextField label="Localisation" value={editDraft.location ?? ""} onChange={(v) => setEditDraft({ ...editDraft, location: v })} className="min-w-[180px] flex-[2]" />
+              <TextField label="Vues moyennes" value={editDraft.avgViews ?? ""} onChange={(v) => setEditDraft({ ...editDraft, avgViews: v })} className="min-w-[110px] flex-1" />
+              <TextField label="Croissance (ex : +12% / mois)" value={editDraft.growth ?? ""} onChange={(v) => setEditDraft({ ...editDraft, growth: v })} className="min-w-[110px] flex-1" />
             </div>
-            <TextField label="Offres / services (ex : Reel 800€ · Story 300€)" value={editDraft.services ?? ""} onChange={(v) => setEditDraft({ ...editDraft, services: v })} className="w-full" />
+            <TextField label="Formats de contenu (séparés par des virgules)" value={editDraft.formats ?? ""} onChange={(v) => setEditDraft({ ...editDraft, formats: v })} className="w-full" />
             <label className="flex flex-col gap-1.5">
               <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Marques (séparées par des virgules ou retours ligne)</span>
               <textarea
@@ -524,6 +612,32 @@ export function Mediakit() {
                     <input value={c.views} onChange={(e) => setEditDraft({ ...editDraft, content: (editDraft.content ?? []).map((x) => (x.id === c.id ? { ...x, views: e.target.value } : x)) })} placeholder="Vues" className="w-20 shrink-0 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary" />
                     <input value={c.url} onChange={(e) => setEditDraft({ ...editDraft, content: (editDraft.content ?? []).map((x) => (x.id === c.id ? { ...x, url: e.target.value } : x)) })} placeholder="https://…" className="min-w-full flex-[3] rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary" />
                     <button type="button" onClick={() => setEditDraft({ ...editDraft, content: (editDraft.content ?? []).filter((x) => x.id !== c.id) })} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-rose-500" title="Supprimer">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Offres & tarifs */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Offres &amp; tarifs</span>
+                <button
+                  type="button"
+                  onClick={() => setEditDraft({ ...editDraft, packages: [...(editDraft.packages ?? []), { id: uid(), name: "", price: "", desc: "" }] })}
+                  className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Ajouter une offre
+                </button>
+              </div>
+              <div className="flex flex-col gap-2">
+                {(editDraft.packages ?? []).map((p) => (
+                  <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2">
+                    <input value={p.name} onChange={(e) => setEditDraft({ ...editDraft, packages: (editDraft.packages ?? []).map((x) => (x.id === p.id ? { ...x, name: e.target.value } : x)) })} placeholder="Offre (ex : Reel dédié)" className="min-w-[140px] flex-[2] rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary" />
+                    <input value={p.price} onChange={(e) => setEditDraft({ ...editDraft, packages: (editDraft.packages ?? []).map((x) => (x.id === p.id ? { ...x, price: e.target.value } : x)) })} placeholder="Prix (800€ · sur devis)" className="w-36 shrink-0 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary" />
+                    <input value={p.desc} onChange={(e) => setEditDraft({ ...editDraft, packages: (editDraft.packages ?? []).map((x) => (x.id === p.id ? { ...x, desc: e.target.value } : x)) })} placeholder="Description" className="min-w-full flex-[3] rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary" />
+                    <button type="button" onClick={() => setEditDraft({ ...editDraft, packages: (editDraft.packages ?? []).filter((x) => x.id !== p.id) })} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-rose-500" title="Supprimer">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
