@@ -6,6 +6,21 @@ import { dbUpdate } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useLiveKey } from "@/lib/useLive";
+import { useAppState, type AppState } from "@/lib/appState";
+
+type CtDeadline = { creator: string; start: string; months: number; type?: string };
+function ctEndDate(start: string, months: number): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(start);
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1 + (months || 0), Number(m[3]));
+}
+function daysUntil(d: Date): number {
+  const t = new Date();
+  return Math.round((d.getTime() - new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime()) / 86400000);
+}
+function frDateShort(d: Date): string {
+  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
 import { AvatarUpload } from "@/components/ui/avatar-upload";
 
 type Creator = {
@@ -111,8 +126,22 @@ export function CreatorDetail({
   const [editing, setEditing] = useState(false);
 
   const live = useLiveKey();
+  const { data: deadlines } = useAppState<CtDeadline[]>((s: AppState) => (s["contractDeadlines"] as CtDeadline[]) ?? []);
   const editingRef = useRef(editing);
   editingRef.current = editing;
+
+  // Date de fin du dernier contrat suivi (connecté à la page Échéances).
+  let contractEnd: Date | null = null;
+  let contractType = "";
+  for (const d of deadlines ?? []) {
+    if ((d.creator ?? "").toLowerCase() !== name.toLowerCase()) continue;
+    const e = ctEndDate(d.start, d.months);
+    if (e && (!contractEnd || e > contractEnd)) {
+      contractEnd = e;
+      contractType = d.type ?? "";
+    }
+  }
+  const contractLeft = contractEnd ? daysUntil(contractEnd) : null;
 
   useEffect(() => {
     let alive = true;
@@ -320,6 +349,24 @@ export function CreatorDetail({
             {c?.commission && (
               <div className="hidden rounded-lg bg-signalsoft px-3 py-1.5 text-xs font-semibold text-signaltext sm:block">
                 Commission {c.commission}
+              </div>
+            )}
+            {contractEnd && (
+              <div
+                className={
+                  "hidden rounded-lg px-3 py-1.5 text-xs font-semibold sm:block " +
+                  (contractLeft != null && contractLeft < 0
+                    ? "bg-rose-500/12 text-rose-500"
+                    : contractLeft != null && contractLeft <= 30
+                      ? "bg-rose-500/12 text-rose-500"
+                      : contractLeft != null && contractLeft <= 60
+                        ? "bg-amber/15 text-amber"
+                        : "bg-rowhover text-muted-foreground")
+                }
+                title={contractType ? `Contrat ${contractType}` : "Contrat"}
+              >
+                Contrat → {frDateShort(contractEnd)}
+                {contractLeft != null && (contractLeft < 0 ? " · expiré" : contractLeft <= 60 ? ` · ${contractLeft} j` : "")}
               </div>
             )}
             {editing ? (
