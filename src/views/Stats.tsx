@@ -166,9 +166,37 @@ function RevenueChart({ points }: { points: RevenuePoint[] }) {
   );
 }
 
+/** Carte de comparaison : valeur courante + variation vs période de référence. */
+function CompareCard({ label, current, previous, delta, curLbl, prevLbl }: { label: string; current: string; previous: string; delta: number | null; curLbl: string; prevLbl: string }) {
+  return (
+    <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</div>
+        {delta != null && (
+          <span
+            className={
+              "flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold " +
+              (delta >= 0 ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/12 text-rose-500")
+            }
+          >
+            {delta >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+            {delta >= 0 ? "+" : ""}
+            {delta.toFixed(0)} %
+          </span>
+        )}
+      </div>
+      <div className="mt-2 text-2xl font-bold tracking-tight text-foreground">{current}</div>
+      <div className="mt-1 text-[11px] text-faint">
+        {curLbl} · {prevLbl} : <span className="font-medium text-muted-foreground">{previous}</span>
+      </div>
+    </div>
+  );
+}
+
 export function Stats() {
   const [data, setData] = useState<StatsData | null>(() => getCache<StatsData>("statsData"));
   const [error, setError] = useState(false);
+  const [compareMode, setCompareMode] = useState<"mom" | "yoyMonth" | "yoy">("mom");
   const live = useLiveKey();
 
   useEffect(() => {
@@ -258,6 +286,43 @@ export function Stats() {
   }));
   const hasRevenue = revenuePoints.length >= 2 && revenuePoints.some((p) => p.ca > 0);
 
+  // ── Comparaison de période (mois vs mois dernier / même mois N-1 / année) ──
+  const monthCount = new Map<string, number>();
+  const yearAgg = new Map<string, { tot: number; paid: number; count: number }>();
+  for (const iv of data.invoices) {
+    const k = invMonthKey(iv.date);
+    if (!k) continue;
+    monthCount.set(k, (monthCount.get(k) ?? 0) + 1);
+    const y = k.slice(0, 4);
+    const a = parseAmount(iv.amount);
+    const cy = yearAgg.get(y) ?? { tot: 0, paid: 0, count: 0 };
+    cy.tot += a;
+    if (iv.status === "payee") cy.paid += a;
+    cy.count += 1;
+    yearAgg.set(y, cy);
+  }
+  const now = new Date();
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const curMonthKey = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+  const pmDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevMonthKey = `${pmDate.getFullYear()}-${pad2(pmDate.getMonth() + 1)}`;
+  const sameMonthLYKey = `${now.getFullYear() - 1}-${pad2(now.getMonth() + 1)}`;
+  const curYearKey = String(now.getFullYear());
+  const prevYearKey = String(now.getFullYear() - 1);
+  const cmpConf =
+    compareMode === "mom"
+      ? { curKey: curMonthKey, prevKey: prevMonthKey, curLbl: monthLabel(curMonthKey), prevLbl: monthLabel(prevMonthKey), src: "month" as const }
+      : compareMode === "yoyMonth"
+        ? { curKey: curMonthKey, prevKey: sameMonthLYKey, curLbl: `${monthLabel(curMonthKey)} ${curYearKey}`, prevLbl: `${monthLabel(sameMonthLYKey)} ${prevYearKey}`, src: "month" as const }
+        : { curKey: curYearKey, prevKey: prevYearKey, curLbl: curYearKey, prevLbl: prevYearKey, src: "year" as const };
+  const getAgg = (key: string) =>
+    cmpConf.src === "month"
+      ? { tot: monthAgg.get(key)?.tot ?? 0, paid: monthAgg.get(key)?.paid ?? 0, count: monthCount.get(key) ?? 0 }
+      : { tot: yearAgg.get(key)?.tot ?? 0, paid: yearAgg.get(key)?.paid ?? 0, count: yearAgg.get(key)?.count ?? 0 };
+  const cmpCur = getAgg(cmpConf.curKey);
+  const cmpPrev = getAgg(cmpConf.prevKey);
+  const pctDelta = (a: number, b: number): number | null => (b > 0 ? ((a - b) / b) * 100 : null);
+
   const statusData = [
     { name: "Payé", value: byStatus.payee, color: COLORS.green },
     { name: "En attente", value: byStatus.attente, color: COLORS.amber },
@@ -322,6 +387,39 @@ export function Stats() {
         <StatCard icon={Activity} label="Engagement moyen" value={`${avgEr.toFixed(1).replace(".", ",")} %`} hint={`${erVals.length} mesuré${erVals.length > 1 ? "s" : ""}`} />
         <StatCard icon={FileText} label="Briefs" value={`${data.briefs}`} hint={`${data.ideas} idées · ${data.todos} à faire`} />
         <StatCard icon={ContactIcon} label="Contacts" value={`${data.contacts}`} hint="réseau agence" />
+      </div>
+
+      {/* Comparaison de période */}
+      <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm font-semibold text-foreground">Comparaison</div>
+          <div className="flex flex-wrap gap-0.5 rounded-lg border border-border bg-card p-0.5">
+            {(
+              [
+                ["mom", "Mois vs mois dernier"],
+                ["yoyMonth", "vs même mois N-1"],
+                ["yoy", "Année vs an dernier"],
+              ] as const
+            ).map(([k, lbl]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setCompareMode(k)}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  compareMode === k ? "bg-primary text-primary-foreground" : "text-faint hover:text-foreground",
+                )}
+              >
+                {lbl}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <CompareCard label="CA facturé" current={formatEuro(cmpCur.tot)} previous={formatEuro(cmpPrev.tot)} delta={pctDelta(cmpCur.tot, cmpPrev.tot)} curLbl={cmpConf.curLbl} prevLbl={cmpConf.prevLbl} />
+          <CompareCard label="Encaissé" current={formatEuro(cmpCur.paid)} previous={formatEuro(cmpPrev.paid)} delta={pctDelta(cmpCur.paid, cmpPrev.paid)} curLbl={cmpConf.curLbl} prevLbl={cmpConf.prevLbl} />
+          <CompareCard label="Factures" current={String(cmpCur.count)} previous={String(cmpPrev.count)} delta={pctDelta(cmpCur.count, cmpPrev.count)} curLbl={cmpConf.curLbl} prevLbl={cmpConf.prevLbl} />
+        </div>
       </div>
 
       {/* Graphique vedette : chiffre d'affaires */}
