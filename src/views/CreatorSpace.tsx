@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
-import { frDate } from "@/lib/dates";
+import { frDate, toISODate } from "@/lib/dates";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
@@ -234,7 +234,7 @@ export function CreatorSpace({
       tiktok: creator.tiktok ?? "",
       address: creator.address ?? "",
       siren: creator.siren ?? "",
-      birth: creator.birth ?? "",
+      birth: toISODate(creator.birth),
       followers: creator.followers ?? "",
       er: creator.er ?? "",
       ca: creator.ca ?? "",
@@ -323,10 +323,11 @@ export function CreatorSpace({
     </div>
   );
 
-  const editInput = (label: string, k: keyof Creator, placeholder?: string) => (
+  const editInput = (label: string, k: keyof Creator, placeholder?: string, type?: string) => (
     <label className="flex flex-col gap-1">
       <span className="text-[11px] font-medium uppercase tracking-wide text-faint">{label}</span>
       <input
+        type={type}
         value={(form[k] as string) ?? ""}
         onChange={(e) => setField(k, e.target.value)}
         placeholder={placeholder}
@@ -483,7 +484,7 @@ export function CreatorSpace({
                       {editInput("TikTok", "tiktok")}
                       {editInput("Adresse", "address")}
                       {editInput("SIREN", "siren")}
-                      {editInput("Naissance", "birth", "JJ/MM/AAAA")}
+                      {editInput("Naissance", "birth", undefined, "date")}
                     </div>
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">Statistiques</div>
                     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -504,7 +505,7 @@ export function CreatorSpace({
                     <div>
                       {infoRow("Adresse", creator?.address ?? null)}
                       {infoRow("SIREN", creator?.siren ?? null)}
-                      {infoRow("Naissance", creator?.birth ?? null)}
+                      {infoRow("Naissance", frDate(creator?.birth))}
                       {infoRow("Instagram", creator?.instagram ?? null)}
                       {infoRow("TikTok", creator?.tiktok ?? null)}
                     </div>

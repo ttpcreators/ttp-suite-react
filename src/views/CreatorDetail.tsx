@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
-import { frDate } from "@/lib/dates";
+import { frDate, toISODate } from "@/lib/dates";
 import { dbUpdate } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -67,7 +67,6 @@ function coordOf(c: Creator | null): Coord {
     email: c?.email ?? "",
     address: c?.address ?? "",
     siren: c?.siren ?? "",
-    birth: c?.birth ?? "",
     email_pro: c?.email_pro ?? "",
     instagram: c?.instagram ?? "",
     tiktok: c?.tiktok ?? "",
@@ -75,6 +74,7 @@ function coordOf(c: Creator | null): Coord {
     handle: c?.handle ?? "",
     niche: c?.niche ?? "",
     platform: c?.platform ?? "",
+    birth: toISODate(c?.birth),
   };
 }
 
@@ -246,7 +246,7 @@ export function CreatorDetail({
       form.ville && `Ville : ${form.ville}`,
       form.address && `Adresse : ${form.address}`,
       form.siren && `SIREN : ${form.siren}`,
-      form.birth && `Naissance : ${form.birth}`,
+      form.birth && `Naissance : ${frDate(form.birth)}`,
       c?.commission && `Commission : ${c.commission}`,
     ]
       .filter(Boolean)
@@ -255,10 +255,11 @@ export function CreatorDetail({
     toast("Infos copiées ✓");
   };
 
-  const field = (label: string, key: keyof Coord) => (
+  const field = (label: string, key: keyof Coord, type?: string) => (
     <div>
       <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</div>
       <input
+        type={type}
         value={form[key] ?? ""}
         onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
         placeholder="—"
@@ -464,7 +465,7 @@ export function CreatorDetail({
               {field("TikTok", "tiktok")}
               {field("Adresse", "address")}
               {field("SIREN", "siren")}
-              {field("Naissance", "birth")}
+              {field("Naissance", "birth", "date")}
               {field("Commission (%)", "commission")}
             </div>
           </div>
@@ -479,7 +480,7 @@ export function CreatorDetail({
               {copyRow("TikTok", form.tiktok ?? "")}
               {copyRow("Adresse", form.address ?? "")}
               {copyRow("SIREN", form.siren ?? "")}
-              {copyRow("Naissance", form.birth ?? "")}
+              {copyRow("Naissance", frDate(form.birth))}
             </div>
             <button
               type="button"
