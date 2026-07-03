@@ -489,16 +489,22 @@ export function Stats() {
             <div className="grid h-[240px] place-items-center text-sm text-faint">Aucune facture</div>
           ) : (
             <>
-              <ChartContainer config={{}} className="h-[240px]">
-                <PieChart>
-                  <Tooltip content={<ChartTooltip unit=" €" />} />
-                  <Pie data={statusData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={90} paddingAngle={2} strokeWidth={0}>
-                    {statusData.map((d) => (
-                      <Cell key={d.name} fill={d.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ChartContainer>
+              <div className="relative">
+                <ChartContainer config={{}} className="h-[240px]">
+                  <PieChart>
+                    <Tooltip content={<ChartTooltip unit=" €" />} />
+                    <Pie data={statusData} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={3} cornerRadius={6} strokeWidth={0}>
+                      {statusData.map((d) => (
+                        <Cell key={d.name} fill={d.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ChartContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Total</div>
+                  <div className="text-lg font-bold tracking-tight text-foreground">{formatEuro(totalCA)}</div>
+                </div>
+              </div>
               <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-1.5">
                 {statusData.map((d) => (
                   <span key={d.name} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -514,13 +520,21 @@ export function Stats() {
         <ChartCard title="Volume d'activité" subtitle="Éléments par module">
           <ChartContainer config={{}} className="h-[240px]">
             <BarChart data={volumeData} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
-              <CartesianGrid vertical={false} stroke="var(--color-border)" strokeOpacity={0.5} />
-              <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
-              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} allowDecimals={false} />
-              <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(148,163,184,0.12)" }} />
-              <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                {volumeData.map((d) => (
-                  <Cell key={d.name} fill={d.color} />
+              <defs>
+                {volumeData.map((d, i) => (
+                  <linearGradient key={i} id={`vol-${i}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={d.color} stopOpacity={0.95} />
+                    <stop offset="100%" stopColor={d.color} stopOpacity={0.5} />
+                  </linearGradient>
+                ))}
+              </defs>
+              <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="4 8" strokeOpacity={0.6} />
+              <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickMargin={8} />
+              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} allowDecimals={false} width={28} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(148,163,184,0.1)" }} />
+              <Bar dataKey="value" radius={[7, 7, 0, 0]} maxBarSize={46}>
+                {volumeData.map((d, i) => (
+                  <Cell key={d.name} fill={`url(#vol-${i})`} />
                 ))}
               </Bar>
             </BarChart>
@@ -533,13 +547,19 @@ export function Stats() {
             <div className="grid h-[260px] place-items-center text-sm text-faint">Aucune donnée</div>
           ) : (
             <ChartContainer config={{}} className="h-[260px]">
-              <BarChart data={topCreators} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
-                <CartesianGrid horizontal={false} stroke="var(--color-border)" strokeOpacity={0.5} />
+              <BarChart data={topCreators} layout="vertical" margin={{ top: 4, right: 22, left: 8, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="topGrad" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor={COLORS.primary} stopOpacity={0.55} />
+                    <stop offset="100%" stopColor={COLORS.primary} stopOpacity={1} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid horizontal={false} stroke="var(--color-border)" strokeDasharray="4 8" strokeOpacity={0.6} />
                 <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(v)} />
                 <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} width={70} />
-                <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ fill: "rgba(148,163,184,0.12)" }} />
-                <Bar dataKey="ca" fill={COLORS.primary} radius={[0, 6, 6, 0]}>
-                  <LabelList dataKey="ca" position="right" formatter={(v) => fmtCompact(Number(v))} style={{ fontSize: 10, fill: "#94a3b8" }} />
+                <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ fill: "rgba(148,163,184,0.1)" }} />
+                <Bar dataKey="ca" fill="url(#topGrad)" radius={[0, 7, 7, 0]} maxBarSize={26}>
+                  <LabelList dataKey="ca" position="right" formatter={(v) => fmtCompact(Number(v))} style={{ fontSize: 10, fontWeight: 600, fill: "#94a3b8" }} />
                 </Bar>
               </BarChart>
             </ChartContainer>
@@ -553,11 +573,17 @@ export function Stats() {
           ) : (
             <ChartContainer config={{}} className="h-[260px]">
               <BarChart data={followersData} margin={{ top: 12, right: 8, left: -12, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="var(--color-border)" strokeOpacity={0.5} />
+                <defs>
+                  <linearGradient id="folGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={COLORS.indigo} stopOpacity={0.95} />
+                    <stop offset="100%" stopColor={COLORS.indigo} stopOpacity={0.45} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="4 8" strokeOpacity={0.6} />
                 <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} interval={0} angle={-20} textAnchor="end" height={44} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(v)} />
-                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(148,163,184,0.12)" }} />
-                <Bar dataKey="followers" fill={COLORS.indigo} radius={[6, 6, 0, 0]} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(v)} width={38} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(148,163,184,0.1)" }} />
+                <Bar dataKey="followers" fill="url(#folGrad)" radius={[7, 7, 0, 0]} maxBarSize={56} />
               </BarChart>
             </ChartContainer>
           )}
