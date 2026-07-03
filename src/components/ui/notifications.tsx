@@ -23,9 +23,10 @@ function PushRow() {
     setTesting(true);
     try {
       const r = await sendTest();
-      if (!r.ok) toast("Échec de l'envoi — réessaie");
-      else if (r.sent === 0) toast("Aucun appareil abonné pour l'instant");
-      else toast("Notification test envoyée 🎉");
+      if (!r.ok) toast(`Échec de l'appel${r.detail ? ` : ${r.detail}` : " — réessaie"}`);
+      else if (r.total === 0) toast("Aucun appareil abonné — active d'abord sur ce téléphone");
+      else if (r.sent === 0) toast(`Envoi refusé${r.detail ? ` : ${r.detail}` : ""}`);
+      else toast(`Notification test envoyée (${r.sent}) 🎉`);
     } finally {
       setTesting(false);
     }

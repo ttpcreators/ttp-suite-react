@@ -128,11 +128,11 @@ export function usePush() {
   }, [busy]);
 
   /** Déclenche une notification de test (via l'Edge Function daily-digest, mode test). */
-  const sendTest = useCallback(async (): Promise<{ ok: boolean; sent: number }> => {
+  const sendTest = useCallback(async (): Promise<{ ok: boolean; sent: number; total: number; detail: string | null }> => {
     const { data, error } = await supabase.functions.invoke("daily-digest", { body: { test: true } });
-    if (error) return { ok: false, sent: 0 };
-    const sent = (data as { sent?: number } | null)?.sent ?? 0;
-    return { ok: true, sent };
+    if (error) return { ok: false, sent: 0, total: 0, detail: error.message ?? null };
+    const d = (data as { sent?: number; total?: number; firstError?: string | null } | null) ?? {};
+    return { ok: true, sent: d.sent ?? 0, total: d.total ?? 0, detail: d.firstError ?? null };
   }, []);
 
   return { state, busy, enable, disable, refresh, sendTest };

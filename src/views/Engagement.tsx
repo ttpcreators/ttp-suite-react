@@ -30,8 +30,10 @@ type Platform = {
   excellent: number; // seuil "Excellent" (%)
 };
 
-// Taux d'engagement PAR ABONNÉS : interactions ÷ abonnés × 100.
-// Méthode fiable quand on n'a PAS accès au reach / aux vues (données publiques).
+// Taux d'engagement MENSUEL (cumul 30 jours) : interactions 30 j ÷ abonnés × 100.
+// Les stats saisies sont TOUJOURS des cumuls sur 30 jours (Insights) → les seuils
+// sont calibrés pour un mois entier (≈ seuil par post × rythme de publication moyen),
+// PAS pour une publication seule.
 const PLATFORMS: Platform[] = [
   {
     key: "instagram",
@@ -42,9 +44,9 @@ const PLATFORMS: Platform[] = [
       { key: "saves", label: "Enregistrements" },
       { key: "shares", label: "Partages" },
     ],
-    formula: "(likes + commentaires + enreg. + partages) ÷ abonnés × 100",
-    bon: 3,
-    excellent: 6,
+    formula: "(likes + commentaires + enreg. + partages) sur 30 j ÷ abonnés × 100",
+    bon: 45,
+    excellent: 90,
   },
   {
     key: "tiktok",
@@ -54,9 +56,9 @@ const PLATFORMS: Platform[] = [
       { key: "comments", label: "Commentaires" },
       { key: "saves", label: "Enregistrements" },
     ],
-    formula: "(likes + commentaires + enreg.) ÷ abonnés × 100",
-    bon: 5,
-    excellent: 10,
+    formula: "(likes + commentaires + enreg.) sur 30 j ÷ abonnés × 100",
+    bon: 75,
+    excellent: 150,
   },
   {
     key: "youtube",
@@ -65,9 +67,9 @@ const PLATFORMS: Platform[] = [
       { key: "likes", label: "Likes" },
       { key: "comments", label: "Commentaires" },
     ],
-    formula: "(likes + commentaires) ÷ abonnés × 100",
-    bon: 2,
-    excellent: 5,
+    formula: "(likes + commentaires) sur 30 j ÷ abonnés × 100",
+    bon: 8,
+    excellent: 20,
   },
   {
     key: "x",
@@ -77,9 +79,9 @@ const PLATFORMS: Platform[] = [
       { key: "reposts", label: "Reposts" },
       { key: "replies", label: "Réponses" },
     ],
-    formula: "(likes + reposts + réponses) ÷ abonnés × 100",
-    bon: 1,
-    excellent: 3,
+    formula: "(likes + reposts + réponses) sur 30 j ÷ abonnés × 100",
+    bon: 15,
+    excellent: 45,
   },
 ];
 
@@ -91,23 +93,6 @@ function fmtInt(n: number): string {
   return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
-/**
- * Détermine le dénominateur du taux d'engagement à partir des saisies.
- * - Reach total renseigné → taux exact : interactions ÷ reach.
- * - Sinon → moyenne par publication : interactions ÷ (abonnés × nb publications).
- *   (Les stats couvrent une période, pas une seule pub → il FAUT diviser par le nb de posts.)
- */
-function baseInfo(vals: Record<string, string>, followersStr: string) {
-  const reachN = num(vals["reach"]);
-  const postsN = Math.max(1, Math.round(num(vals["posts"])) || 1);
-  if (reachN > 0) return { baseN: reachN, label: "Reach", usingReach: true, posts: postsN };
-  return {
-    baseN: num(followersStr) * postsN,
-    label: postsN > 1 ? `Abonnés × ${postsN} pub.` : "Abonnés",
-    usingReach: false,
-    posts: postsN,
-  };
-}
 const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
 
@@ -179,35 +164,24 @@ export function Engagement() {
     };
   }, [creatorId]);
 
+  // Cumul 30 jours ÷ abonnés — les seuils des plateformes sont calibrés "mois entier".
   const interactions = p.metrics.reduce((a, m) => a + num(vals[m.key]), 0);
-  const bi = baseInfo(vals, followers);
-  const { baseN, usingReach, posts: postsN } = bi;
+  const baseN = num(followers);
   const hasInputs = baseN > 0 && interactions > 0;
   const er = hasInputs ? Math.round((interactions / baseN) * 100 * 100) / 100 : 0;
   const erLabel = er.toFixed(2).replace(".", ",") + " %";
   const v = verdict(er, p);
-  const numer = `(${p.metrics.map((m) => fmtInt(num(vals[m.key]))).join(" + ")})`;
-  const detail = usingReach
-    ? `${numer} ÷ ${fmtInt(num(vals["reach"]))} reach × 100`
-    : postsN > 1
-      ? `${numer} ÷ (${fmtInt(num(followers))} abonnés × ${postsN} pub.) × 100`
-      : `${numer} ÷ ${fmtInt(num(followers))} abonnés × 100`;
-  const formulaLabel = usingReach
-    ? p.formula.replace("abonnés", "reach")
-    : postsN > 1
-      ? p.formula.replace("abonnés", "(abonnés × nb pub.)")
-      : p.formula;
+  const detail = `(${p.metrics.map((m) => fmtInt(num(vals[m.key]))).join(" + ")}) sur 30 j ÷ ${fmtInt(baseN)} abonnés × 100`;
 
   const selectedCreator = creators.find((c) => c.id === creatorId) ?? null;
 
   /** Reconstruit l'objet `stats` de la fiche créateur à partir d'une entrée d'historique. */
   const statsFromEntry = (h: HistEntry) => {
     const pl = PLATFORMS.find((x) => x.key === h.platform) ?? PLATFORMS[0];
-    const b = baseInfo(h.vals ?? {}, h.followers ?? "");
     return {
       er: h.er,
-      base: b.baseN,
-      baseLabel: b.label,
+      base: num(h.followers ?? ""),
+      baseLabel: "Abonnés",
       platform: pl.key,
       platformLabel: pl.label,
       formula: pl.formula,
@@ -226,7 +200,7 @@ export function Engagement() {
       const stats = {
         er: erLabel,
         base: baseN,
-        baseLabel: bi.label,
+        baseLabel: "Abonnés",
         platform: p.key,
         platformLabel: p.label,
         formula: p.formula,
@@ -331,7 +305,7 @@ export function Engagement() {
             );
           })}
         </div>
-        <span className="rounded-full bg-signalsoft px-3 py-1.5 text-[10px] font-medium text-signaltext">{formulaLabel}</span>
+        <span className="rounded-full bg-signalsoft px-3 py-1.5 text-[10px] font-medium text-signaltext">{p.formula}</span>
       </div>
 
       {/* Créateur + champs */}
@@ -358,7 +332,7 @@ export function Engagement() {
           ))}
         </div>
 
-        {/* Base du calcul : abonnés + nb de publications (les stats couvrent une période) ; reach = optionnel exact */}
+        {/* Base du calcul : abonnés (les interactions saisies = cumul 30 jours) */}
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <NumField
             label="Abonnés"
@@ -367,35 +341,20 @@ export function Engagement() {
               setFollowers(x);
               setSavedOk(false);
             }}
-            className="min-w-[120px] flex-1"
+            className="min-w-[130px] flex-1"
           />
-          <NumField
-            label="Nb de publications"
-            value={vals["posts"] ?? ""}
-            onChange={(x) => set("posts", x)}
-            className="min-w-[120px] flex-1"
-          />
-          <NumField
-            label="Reach total (optionnel)"
-            value={vals["reach"] ?? ""}
-            onChange={(x) => set("reach", x)}
-            className="min-w-[120px] flex-1"
-          />
+          <p className="flex-[2] pb-2.5 text-[11px] leading-snug text-faint">
+            Entre les stats <span className="font-medium text-foreground">cumulées des 30 derniers jours</span> (Insights).
+            Taux mensuel = interactions 30 j ÷ abonnés × 100 — les barèmes sont calibrés pour un mois entier.
+          </p>
         </div>
-        <p className="mt-2 text-[11px] leading-snug text-faint">
-          {usingReach
-            ? "✓ Taux calculé sur le reach total — la méthode la plus précise."
-            : postsN > 1
-              ? `Stats sur ${postsN} publications : taux = interactions ÷ (abonnés × ${postsN}) × 100 = moyenne par post. Ajoute le reach total pour un taux encore plus exact.`
-              : "Tes stats couvrent une période (ex. 30 j) ? Indique le nombre de publications → le taux devient la moyenne par post (sinon il explose). Ou ajoute le reach total pour le taux exact."}
-        </p>
       </div>
 
       {/* Résultat */}
       <div className="rounded-2xl border border-border bg-panel p-6 shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Taux d'engagement · {p.label}</div>
+            <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Taux d'engagement · {p.label} · 30 jours</div>
             {hasInputs ? (
               <>
                 <div className="mt-1 text-5xl font-bold tracking-tight text-foreground">{erLabel}</div>
@@ -570,13 +529,9 @@ function DetailModal({
   onDelete: () => void;
 }) {
   const pl = PLATFORMS.find((x) => x.key === entry.platform) ?? PLATFORMS[0];
-  const postsNum = Math.max(1, Math.round(num(entry.vals?.["posts"] ?? "")) || 1);
-  const reachNum = num(entry.vals?.["reach"] ?? "");
   const cells = [
     ...pl.metrics.map((m) => ({ label: m.label, value: fmtInt(num(entry.vals?.[m.key] ?? "")) })),
     { label: "Abonnés", value: fmtInt(num(entry.followers ?? "")) },
-    ...(postsNum > 1 ? [{ label: "Publications", value: String(postsNum) }] : []),
-    ...(reachNum > 0 ? [{ label: "Reach total", value: fmtInt(reachNum) }] : []),
   ];
   const isMoyen = entry.verdict === "Moyen";
   return (

@@ -10,7 +10,7 @@
 // ============================================================================
 
 import webpush from "npm:web-push@3.6.7";
-import { getServiceClient } from "../_shared/google.ts";
+import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 
 const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
 const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
@@ -80,6 +80,7 @@ async function sendToAll(sb: ReturnType<typeof getServiceClient>, payload: strin
   const { data: subs } = await sb.from("push_subscriptions").select("id,endpoint,p256dh,auth");
   let sent = 0;
   let removed = 0;
+  let firstError: string | null = null;
   for (const s of (subs ?? []) as Sub[]) {
     try {
       await webpush.sendNotification(
@@ -89,18 +90,22 @@ async function sendToAll(sb: ReturnType<typeof getServiceClient>, payload: strin
       sent++;
     } catch (e) {
       const code = (e as { statusCode?: number })?.statusCode;
+      if (!firstError) firstError = `${code ?? ""} ${(e as Error)?.message ?? String(e)}`.trim().slice(0, 200);
       if (code === 404 || code === 410) {
         await sb.from("push_subscriptions").delete().eq("id", s.id);
         removed++;
       }
     }
   }
-  return { sent, removed };
+  return { sent, removed, firstError, total: (subs ?? []).length };
 }
 
 Deno.serve(async (req: Request) => {
+  // CORS — indispensable : le bouton "Envoyer un test" appelle depuis le navigateur.
+  const cors = corsHeaders(req.headers.get("Origin"));
   const jsonRes = (b: unknown, status = 200) =>
-    new Response(JSON.stringify(b), { status, headers: { "Content-Type": "application/json" } });
+    new Response(JSON.stringify(b), { status, headers: { ...cors, "Content-Type": "application/json" } });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   if (!(await authorize(req))) return jsonRes({ error: "unauthorized" }, 401);
   if (!VAPID_PRIVATE_KEY) return jsonRes({ error: "vapid_not_configured" }, 500);
@@ -122,8 +127,8 @@ Deno.serve(async (req: Request) => {
       url: "/",
       tag: "ttp-test",
     });
-    const { sent, removed } = await sendToAll(sb, payload);
-    return jsonRes({ ok: true, test: true, sent, removed });
+    const r = await sendToAll(sb, payload);
+    return jsonRes({ ok: true, test: true, ...r });
   }
 
   // 1) Factures en retard
@@ -173,6 +178,6 @@ Deno.serve(async (req: Request) => {
     url: "/",
     tag: `ttp-daily-${today}`,
   });
-  const { sent, removed } = await sendToAll(sb, payload);
-  return jsonRes({ ok: true, sent, removed, digest: lines.join(" · "), today });
+  const r = await sendToAll(sb, payload);
+  return jsonRes({ ok: true, ...r, digest: lines.join(" · "), today });
 });
