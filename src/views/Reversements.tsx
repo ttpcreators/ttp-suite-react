@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAppState, saveAppStateKey, parseAmount, formatEuro, type AppState } from "@/lib/appState";
+import { useCreators } from "@/lib/useCreators";
+import { commissionMap } from "@/lib/commission";
 import { titleCase, initials } from "@/lib/utils";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -40,6 +42,7 @@ export function Reversements() {
   const [error, setError] = useState(false);
   const live = useLiveKey();
   const { data: app } = useAppState<AppState>();
+  const creators = useCreators();
   const [localPayouts, setLocalPayouts] = useState<PayoutsMap | null>(null);
 
   const commissions = (app?.creatorCommission as Record<string, number>) ?? {};
@@ -67,6 +70,7 @@ export function Reversements() {
 
   const rows: Row[] = useMemo(() => {
     if (!invoices) return [];
+    const rosterCommission = commissionMap(creators);
     const enc = new Map<string, number>();
     for (const iv of invoices) {
       if (iv.status !== "payee") continue;
@@ -78,7 +82,7 @@ export function Reversements() {
     for (const c of Object.keys(payoutsMap)) if (!enc.has(c)) enc.set(c, 0);
     const out: Row[] = [];
     for (const [creator, encaisse] of enc) {
-      const rate = commissions[creator] != null ? commissions[creator] : DEFAULT_COMMISSION;
+      const rate = rosterCommission[creator] ?? (commissions[creator] != null ? commissions[creator] : DEFAULT_COMMISSION);
       const commission = Math.round(encaisse * (rate / 100));
       const du = encaisse - commission;
       const list = payoutsMap[creator] ?? [];
@@ -86,7 +90,7 @@ export function Reversements() {
       out.push({ creator, encaisse, rate, commission, du, reverse, reste: du - reverse, payouts: list });
     }
     return out.sort((a, b) => b.reste - a.reste);
-  }, [invoices, commissions, payoutsMap]);
+  }, [invoices, commissions, payoutsMap, creators]);
 
   const totalReste = rows.reduce((s, r) => s + Math.max(0, r.reste), 0);
   const totalDu = rows.reduce((s, r) => s + r.du, 0);

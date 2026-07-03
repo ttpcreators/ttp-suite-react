@@ -8,6 +8,7 @@ export type CreatorLite = {
   handle: string | null;
   photo_url: string | null;
   status: string | null;
+  commission: string | null;
 };
 
 let _cache: CreatorLite[] | null = null;
@@ -16,7 +17,7 @@ let _promise: Promise<CreatorLite[]> | null = null;
 async function load(): Promise<CreatorLite[]> {
   const { data, error } = await supabase
     .from("creators")
-    .select("id,name,handle,photo_url,status")
+    .select("id,name,handle,photo_url,status,commission")
     .order("sort_order");
   if (error) return [];
   return (data as CreatorLite[]) ?? [];

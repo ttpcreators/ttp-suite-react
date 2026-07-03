@@ -23,6 +23,7 @@ import { toast } from "@/components/ui/toast";
 import { AddButton, TextField, SelectField } from "@/components/ui/form";
 import { ActionMenu, type ActionItem } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
+import { commissionMap } from "@/lib/commission";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 
@@ -424,8 +425,13 @@ export function Facturation() {
 
   const invoices = rows; // narrowed: Row[]
 
+  // Taux de commission : la fiche roster (creators.commission) fait foi ; repli
+  // sur l'ancien blob puis le défaut. → changer le % sur le roster met à jour les factures.
+  const rosterCommission = commissionMap(creators);
   const commissionFor = (creator: string | null) =>
-    creator && commissions[creator] != null ? commissions[creator] : DEFAULT_COMMISSION;
+    creator
+      ? rosterCommission[creator] ?? (commissions[creator] != null ? commissions[creator] : DEFAULT_COMMISSION)
+      : DEFAULT_COMMISSION;
 
   const detailsFor = (r: Row): Details => {
     const existing = details[r.id];

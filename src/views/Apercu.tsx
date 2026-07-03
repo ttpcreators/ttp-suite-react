@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, initials } from "@/lib/utils";
 import { parseAmount, formatEuro, useAppState, type AppState } from "@/lib/appState";
+import { commissionMap } from "@/lib/commission";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { LocationTag } from "@/components/ui/location-tag";
 import { MiniChart } from "@/components/ui/mini-chart";
@@ -198,6 +199,7 @@ export function Apercu() {
 
   // ── Reversements (même calcul que la page Reversements) ──
   const DEFAULT_COMMISSION = 20;
+  const rosterCommission = commissionMap(d.creators);
   const commissionsMap = (app?.creatorCommission as Record<string, number>) ?? {};
   const payoutsMap = (app?.creatorPayouts as Record<string, { amount: number }[]>) ?? {};
   const encByCreator = new Map<string, number>();
@@ -207,7 +209,7 @@ export function Apercu() {
   }
   let duTotal = 0;
   for (const [c, enc] of encByCreator) {
-    const rate = commissionsMap[c] != null ? commissionsMap[c] : DEFAULT_COMMISSION;
+    const rate = rosterCommission[c] ?? (commissionsMap[c] != null ? commissionsMap[c] : DEFAULT_COMMISSION);
     duTotal += enc - Math.round((enc * rate) / 100);
   }
   let payeTotal = 0;

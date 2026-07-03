@@ -36,7 +36,7 @@ type Td = { id: string; text: string; done: boolean };
 type Br = { brand: string; deliverables: string | null; due: string | null };
 type Idea = { text: string };
 
-type Coord = Pick<Creator, "ville" | "phone" | "email" | "address" | "siren" | "birth" | "email_pro" | "instagram" | "tiktok">;
+type Coord = Pick<Creator, "ville" | "phone" | "email" | "address" | "siren" | "birth" | "email_pro" | "instagram" | "tiktok" | "commission">;
 
 const statusBadge = (s: string | null) =>
   s === "pause" ? "warning" : s === "inactif" ? "neutral" : "success";
@@ -106,6 +106,7 @@ export function CreatorDetail({
     email_pro: "",
     instagram: "",
     tiktok: "",
+    commission: "",
   });
   const [editing, setEditing] = useState(false);
 
@@ -131,6 +132,7 @@ export function CreatorDetail({
           email_pro: row.email_pro ?? "",
           instagram: row.instagram ?? "",
           tiktok: row.tiktok ?? "",
+          commission: row.commission ?? "",
         });
     });
     supabase.from("invoices").select("ref,party,amount,date").eq("creator", name).then(({ data, error }) => { if (error) console.error("Factures créateur:", error); if (alive) setInv((data as Inv[]) ?? []); });
@@ -166,6 +168,7 @@ export function CreatorDetail({
         email_pro: c.email_pro ?? "",
         instagram: c.instagram ?? "",
         tiktok: c.tiktok ?? "",
+        commission: c.commission ?? "",
       });
     setEditing(false);
   };
@@ -360,6 +363,7 @@ export function CreatorDetail({
             {field("Adresse", "address")}
             {field("SIREN", "siren")}
             {field("Naissance", "birth")}
+            {field("Commission (%)", "commission")}
           </div>
         ) : (
           <>
