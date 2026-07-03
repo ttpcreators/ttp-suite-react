@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType } from "react";
+import { lazy, Suspense, useEffect, useState, type ComponentType } from "react";
 import { ChevronRight, Moon, Sun, Loader2 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
@@ -11,32 +11,34 @@ import { Login } from "@/components/Login";
 import { NAV, findItem, type NavItem, type ViewId } from "@/lib/nav";
 import { supabase } from "@/lib/supabase";
 import { SearchContext } from "@/lib/search";
-import { RosterTabs } from "@/views/RosterTabs";
-import { Apercu } from "@/views/Apercu";
-import { Stats } from "@/views/Stats";
-import { Facturation } from "@/views/Facturation";
-import { Briefs } from "@/views/Briefs";
-import { Idees } from "@/views/Idees";
-import { Todo } from "@/views/Todo";
-import { Planning } from "@/views/Planning";
-import { Documents } from "@/views/Documents";
-import { Contacts } from "@/views/Contacts";
-import { Contrats } from "@/views/Contrats";
-import { Prospection } from "@/views/Prospection";
-import { Acces } from "@/views/Acces";
-import { Objectifs } from "@/views/Objectifs";
-import { Debrief } from "@/views/Debrief";
-import { Checklist } from "@/views/Checklist";
-import { Mediakit } from "@/views/Mediakit";
-import { Templates } from "@/views/Templates";
-import { CreatorDetail } from "@/views/CreatorDetail";
-import { Portal } from "@/views/Portal";
-import { CreatorSpace } from "@/views/CreatorSpace";
-import { Corbeille } from "@/views/Corbeille";
-import { Reversements } from "@/views/Reversements";
-import { Relances } from "@/views/Relances";
-import { Echeances } from "@/views/Echeances";
 import { AgencyAvatar } from "@/components/ui/agency-avatar";
+
+// Vues chargées à la demande (code-splitting → démarrage plus léger, mobile compris).
+const RosterTabs = lazy(() => import("@/views/RosterTabs").then((m) => ({ default: m.RosterTabs })));
+const Apercu = lazy(() => import("@/views/Apercu").then((m) => ({ default: m.Apercu })));
+const Stats = lazy(() => import("@/views/Stats").then((m) => ({ default: m.Stats })));
+const Facturation = lazy(() => import("@/views/Facturation").then((m) => ({ default: m.Facturation })));
+const Briefs = lazy(() => import("@/views/Briefs").then((m) => ({ default: m.Briefs })));
+const Idees = lazy(() => import("@/views/Idees").then((m) => ({ default: m.Idees })));
+const Todo = lazy(() => import("@/views/Todo").then((m) => ({ default: m.Todo })));
+const Planning = lazy(() => import("@/views/Planning").then((m) => ({ default: m.Planning })));
+const Documents = lazy(() => import("@/views/Documents").then((m) => ({ default: m.Documents })));
+const Contacts = lazy(() => import("@/views/Contacts").then((m) => ({ default: m.Contacts })));
+const Contrats = lazy(() => import("@/views/Contrats").then((m) => ({ default: m.Contrats })));
+const Prospection = lazy(() => import("@/views/Prospection").then((m) => ({ default: m.Prospection })));
+const Acces = lazy(() => import("@/views/Acces").then((m) => ({ default: m.Acces })));
+const Objectifs = lazy(() => import("@/views/Objectifs").then((m) => ({ default: m.Objectifs })));
+const Debrief = lazy(() => import("@/views/Debrief").then((m) => ({ default: m.Debrief })));
+const Checklist = lazy(() => import("@/views/Checklist").then((m) => ({ default: m.Checklist })));
+const Mediakit = lazy(() => import("@/views/Mediakit").then((m) => ({ default: m.Mediakit })));
+const Templates = lazy(() => import("@/views/Templates").then((m) => ({ default: m.Templates })));
+const CreatorDetail = lazy(() => import("@/views/CreatorDetail").then((m) => ({ default: m.CreatorDetail })));
+const Portal = lazy(() => import("@/views/Portal").then((m) => ({ default: m.Portal })));
+const CreatorSpace = lazy(() => import("@/views/CreatorSpace").then((m) => ({ default: m.CreatorSpace })));
+const Corbeille = lazy(() => import("@/views/Corbeille").then((m) => ({ default: m.Corbeille })));
+const Reversements = lazy(() => import("@/views/Reversements").then((m) => ({ default: m.Reversements })));
+const Relances = lazy(() => import("@/views/Relances").then((m) => ({ default: m.Relances })));
+const Echeances = lazy(() => import("@/views/Echeances").then((m) => ({ default: m.Echeances })));
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -231,12 +233,14 @@ export default function App() {
   // Espace CRÉATEUR : vue dédiée quand un créateur se connecte
   if (profile?.role === "creator" && profile.creator_name) {
     return (
-      <CreatorSpace
-        name={profile.creator_name}
-        dark={dark}
-        onToggleTheme={toggleTheme}
-        onLogout={logout}
-      />
+      <Suspense fallback={<div className="grid min-h-screen place-items-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+        <CreatorSpace
+          name={profile.creator_name}
+          dark={dark}
+          onToggleTheme={toggleTheme}
+          onLogout={logout}
+        />
+      </Suspense>
     );
   }
 
@@ -303,28 +307,30 @@ export default function App() {
 
             {/* Content */}
             <main className="px-4 pt-2 md:px-6">
-              {space === "portal" ? (
-                <Portal
-                  creator={portalCreator}
-                  onPick={setPortalCreator}
-                  onExit={() => setSpace("agency")}
-                />
-              ) : detailCreator ? (
-                <CreatorDetail
-                  name={detailCreator}
-                  onBack={() => setDetailCreator(null)}
-                  onOpenPortal={openPortal}
-                />
-              ) : (
-                <>
-                  {active !== "apercu" && (
-                    <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">
-                      {title}
-                    </h1>
-                  )}
-                  <ViewContent active={active} onOpenCreator={openDetail} />
-                </>
-              )}
+              <Suspense fallback={<div className="grid min-h-[50vh] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+                {space === "portal" ? (
+                  <Portal
+                    creator={portalCreator}
+                    onPick={setPortalCreator}
+                    onExit={() => setSpace("agency")}
+                  />
+                ) : detailCreator ? (
+                  <CreatorDetail
+                    name={detailCreator}
+                    onBack={() => setDetailCreator(null)}
+                    onOpenPortal={openPortal}
+                  />
+                ) : (
+                  <>
+                    {active !== "apercu" && (
+                      <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">
+                        {title}
+                      </h1>
+                    )}
+                    <ViewContent active={active} onOpenCreator={openDetail} />
+                  </>
+                )}
+              </Suspense>
             </main>
             </div>
           </div>
