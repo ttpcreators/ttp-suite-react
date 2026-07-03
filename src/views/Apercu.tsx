@@ -194,7 +194,7 @@ export function Apercu() {
   const topCreators = d.creators
     .slice()
     .sort((a, b) => parseAmount(b.ca) - parseAmount(a.ca))
-    .slice(0, 4);
+    .slice(0, 7);
 
   const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
   let objPct = "—";
@@ -298,9 +298,9 @@ export function Apercu() {
           )}
         </Card>
 
-        <Card index={6} className="md:col-span-8">
+        <Card index={6} className="flex flex-col md:col-span-8">
           <div className="mb-4 text-sm font-semibold">Activité de l'agence</div>
-          <div className="grid grid-cols-1 gap-3.5 md:grid-cols-3">
+          <div className="grid flex-1 grid-cols-1 gap-3.5 md:grid-cols-3">
             <div className="flex flex-col rounded-xl bg-panel p-4">
               <div className="text-[22px] font-bold tracking-tight">
                 {dealHero ? formatEuro(parseAmount(dealHero.amount)) : "—"}
@@ -339,9 +339,9 @@ export function Apercu() {
           </div>
         </Card>
 
-        <Card index={7} className="relative flex min-h-[220px] items-center justify-center overflow-hidden md:col-span-4">
+        <Card index={7} className="relative flex items-center justify-center overflow-hidden md:col-span-4">
           <Globe
-            className="w-full max-w-[260px]"
+            className="w-full max-w-[200px]"
             dark={isDark ? 1 : 0}
             baseColor={isDark ? [0.14, 0.14, 0.17] : [0.9, 0.91, 0.94]}
             glowColor={isDark ? [0.05, 0.05, 0.08] : [0.9, 0.92, 0.96]}
