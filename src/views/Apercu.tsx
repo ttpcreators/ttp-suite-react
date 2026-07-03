@@ -189,11 +189,10 @@ export function Apercu() {
 
   const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
   let objPct = "—";
-  const cur = obj && (obj["0"] as { ca?: string; target?: string }[] | undefined);
+  const cur = obj && (obj["0"] as { pct?: number }[] | undefined);
   if (Array.isArray(cur) && cur.length) {
-    const t = cur.reduce((a, o) => a + parseAmount(o.target), 0);
-    const c = cur.reduce((a, o) => a + parseAmount(o.ca), 0);
-    if (t > 0) objPct = Math.round((c / t) * 100) + "%";
+    // Moyenne des pourcentages — cohérent avec la page Objectifs (pas de mélange € / nombre).
+    objPct = Math.round(cur.reduce((a, o) => a + (Number(o.pct) || 0), 0) / cur.length) + "%";
   } else if (facture > 0) {
     objPct = Math.round((encaisse / facture) * 100) + "%";
   }

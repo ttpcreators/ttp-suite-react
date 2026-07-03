@@ -348,13 +348,13 @@ export function Stats() {
     caByCreator.set(key, (caByCreator.get(key) ?? 0) + parseAmount(iv.amount));
   }
   const topCreators = [...caByCreator.entries()]
-    .map(([name, ca]) => ({ name: titleCase(name).split(" ")[0] || name, ca }))
+    .map(([name, ca]) => ({ name: titleCase(name), ca }))
     .sort((a, b) => b.ca - a.ca)
     .slice(0, 8);
 
   // Followers par créateur
   const followersData = data.creators
-    .map((c) => ({ name: titleCase(c.name).split(" ")[0], followers: parseCompact(c.followers) }))
+    .map((c) => ({ name: titleCase(c.name), followers: parseCompact(c.followers) }))
     .filter((d) => d.followers > 0)
     .sort((a, b) => b.followers - a.followers)
     .slice(0, 8);
@@ -556,7 +556,7 @@ export function Stats() {
                 </defs>
                 <CartesianGrid horizontal={false} stroke="var(--color-border)" strokeDasharray="4 8" strokeOpacity={0.6} />
                 <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(v)} />
-                <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} width={70} />
+                <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => String(v).split(" ")[0]} width={70} />
                 <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ fill: "rgba(148,163,184,0.1)" }} />
                 <Bar dataKey="ca" fill="url(#topGrad)" radius={[0, 7, 7, 0]} maxBarSize={26}>
                   <LabelList dataKey="ca" position="right" formatter={(v) => fmtCompact(Number(v))} style={{ fontSize: 10, fontWeight: 600, fill: "#94a3b8" }} />
@@ -580,7 +580,7 @@ export function Stats() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="4 8" strokeOpacity={0.6} />
-                <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} interval={0} angle={-20} textAnchor="end" height={44} />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => String(v).split(" ")[0]} interval={0} angle={-20} textAnchor="end" height={44} />
                 <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(v)} width={38} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(148,163,184,0.1)" }} />
                 <Bar dataKey="followers" fill="url(#folGrad)" radius={[7, 7, 0, 0]} maxBarSize={56} />

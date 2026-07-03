@@ -47,6 +47,9 @@ alter table public.creators add column if not exists stats jsonb;
 alter table public.creators add column if not exists stats_history jsonb;
 alter table public.creators add column if not exists followers_history jsonb;
 alter table public.creators add column if not exists photo_url text;
+alter table public.creators add column if not exists email_pro text;
+alter table public.creators add column if not exists instagram text;
+alter table public.creators add column if not exists tiktok text;
 
 create table if not exists public.invoices (
   id uuid primary key default gen_random_uuid(),
@@ -62,6 +65,8 @@ create table if not exists public.contacts (
   email text, phone text, tone text default 'cyan',
   sort_order int default 0, created_at timestamptz default now()
 );
+alter table public.contacts add column if not exists first_name text;
+alter table public.contacts add column if not exists last_name text;
 
 create table if not exists public.prospects (
   id uuid primary key default gen_random_uuid(),

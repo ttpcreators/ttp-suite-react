@@ -303,7 +303,9 @@ export function Contacts() {
         toast("Erreur — réessaie");
         return;
       }
-      setRows(currentRows.map((r) => (r.id === editId ? { ...r, ...payload } : r)));
+      const next = currentRows.map((r) => (r.id === editId ? ({ ...r, ...payload } as Row) : r));
+      setRows(next);
+      setCache("contacts", next);
       toast("Contact modifié ✓");
     } else {
       const created = await dbInsert("contacts", { ...payload, tone: "indigo", sort_order: nextOrder(currentRows) });
@@ -311,7 +313,9 @@ export function Contacts() {
         toast("Erreur — réessaie");
         return;
       }
-      setRows([created as unknown as Row, ...currentRows]);
+      const next = [created as unknown as Row, ...currentRows];
+      setRows(next);
+      setCache("contacts", next);
       toast("Contact ajouté ✓");
     }
     setFormOpen(false);
