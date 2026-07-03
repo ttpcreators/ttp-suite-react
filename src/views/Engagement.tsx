@@ -90,6 +90,24 @@ function num(v: string | undefined): number {
 function fmtInt(n: number): string {
   return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
+
+/**
+ * Détermine le dénominateur du taux d'engagement à partir des saisies.
+ * - Reach total renseigné → taux exact : interactions ÷ reach.
+ * - Sinon → moyenne par publication : interactions ÷ (abonnés × nb publications).
+ *   (Les stats couvrent une période, pas une seule pub → il FAUT diviser par le nb de posts.)
+ */
+function baseInfo(vals: Record<string, string>, followersStr: string) {
+  const reachN = num(vals["reach"]);
+  const postsN = Math.max(1, Math.round(num(vals["posts"])) || 1);
+  if (reachN > 0) return { baseN: reachN, label: "Reach", usingReach: true, posts: postsN };
+  return {
+    baseN: num(followersStr) * postsN,
+    label: postsN > 1 ? `Abonnés × ${postsN} pub.` : "Abonnés",
+    usingReach: false,
+    posts: postsN,
+  };
+}
 const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
 
@@ -162,23 +180,34 @@ export function Engagement() {
   }, [creatorId]);
 
   const interactions = p.metrics.reduce((a, m) => a + num(vals[m.key]), 0);
-  const baseN = num(followers); // dénominateur = abonnés (pas de reach)
+  const bi = baseInfo(vals, followers);
+  const { baseN, usingReach, posts: postsN } = bi;
   const hasInputs = baseN > 0 && interactions > 0;
   const er = hasInputs ? Math.round((interactions / baseN) * 100 * 100) / 100 : 0;
   const erLabel = er.toFixed(2).replace(".", ",") + " %";
   const v = verdict(er, p);
-  const detail = `(${p.metrics.map((m) => fmtInt(num(vals[m.key]))).join(" + ")}) ÷ ${fmtInt(baseN)} abonnés × 100`;
+  const numer = `(${p.metrics.map((m) => fmtInt(num(vals[m.key]))).join(" + ")})`;
+  const detail = usingReach
+    ? `${numer} ÷ ${fmtInt(num(vals["reach"]))} reach × 100`
+    : postsN > 1
+      ? `${numer} ÷ (${fmtInt(num(followers))} abonnés × ${postsN} pub.) × 100`
+      : `${numer} ÷ ${fmtInt(num(followers))} abonnés × 100`;
+  const formulaLabel = usingReach
+    ? p.formula.replace("abonnés", "reach")
+    : postsN > 1
+      ? p.formula.replace("abonnés", "(abonnés × nb pub.)")
+      : p.formula;
 
   const selectedCreator = creators.find((c) => c.id === creatorId) ?? null;
 
   /** Reconstruit l'objet `stats` de la fiche créateur à partir d'une entrée d'historique. */
   const statsFromEntry = (h: HistEntry) => {
     const pl = PLATFORMS.find((x) => x.key === h.platform) ?? PLATFORMS[0];
-    const baseNum = num(h.followers ?? "");
+    const b = baseInfo(h.vals ?? {}, h.followers ?? "");
     return {
       er: h.er,
-      base: baseNum,
-      baseLabel: "Abonnés",
+      base: b.baseN,
+      baseLabel: b.label,
       platform: pl.key,
       platformLabel: pl.label,
       formula: pl.formula,
@@ -197,7 +226,7 @@ export function Engagement() {
       const stats = {
         er: erLabel,
         base: baseN,
-        baseLabel: "Abonnés",
+        baseLabel: bi.label,
         platform: p.key,
         platformLabel: p.label,
         formula: p.formula,
@@ -302,7 +331,7 @@ export function Engagement() {
             );
           })}
         </div>
-        <span className="rounded-full bg-signalsoft px-3 py-1.5 text-[10px] font-medium text-signaltext">{p.formula}</span>
+        <span className="rounded-full bg-signalsoft px-3 py-1.5 text-[10px] font-medium text-signaltext">{formulaLabel}</span>
       </div>
 
       {/* Créateur + champs */}
@@ -329,7 +358,7 @@ export function Engagement() {
           ))}
         </div>
 
-        {/* Abonnés = base du calcul (pas de reach) */}
+        {/* Base du calcul : abonnés + nb de publications (les stats couvrent une période) ; reach = optionnel exact */}
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <NumField
             label="Abonnés"
@@ -338,12 +367,28 @@ export function Engagement() {
               setFollowers(x);
               setSavedOk(false);
             }}
-            className="min-w-[130px] flex-1"
+            className="min-w-[120px] flex-1"
           />
-          <p className="flex-[2] pb-2.5 text-[11px] text-faint">
-            Base du calcul : le taux = interactions ÷ abonnés × 100 (méthode fiable sans le reach).
-          </p>
+          <NumField
+            label="Nb de publications"
+            value={vals["posts"] ?? ""}
+            onChange={(x) => set("posts", x)}
+            className="min-w-[120px] flex-1"
+          />
+          <NumField
+            label="Reach total (optionnel)"
+            value={vals["reach"] ?? ""}
+            onChange={(x) => set("reach", x)}
+            className="min-w-[120px] flex-1"
+          />
         </div>
+        <p className="mt-2 text-[11px] leading-snug text-faint">
+          {usingReach
+            ? "✓ Taux calculé sur le reach total — la méthode la plus précise."
+            : postsN > 1
+              ? `Stats sur ${postsN} publications : taux = interactions ÷ (abonnés × ${postsN}) × 100 = moyenne par post. Ajoute le reach total pour un taux encore plus exact.`
+              : "Tes stats couvrent une période (ex. 30 j) ? Indique le nombre de publications → le taux devient la moyenne par post (sinon il explose). Ou ajoute le reach total pour le taux exact."}
+        </p>
       </div>
 
       {/* Résultat */}
@@ -525,9 +570,13 @@ function DetailModal({
   onDelete: () => void;
 }) {
   const pl = PLATFORMS.find((x) => x.key === entry.platform) ?? PLATFORMS[0];
+  const postsNum = Math.max(1, Math.round(num(entry.vals?.["posts"] ?? "")) || 1);
+  const reachNum = num(entry.vals?.["reach"] ?? "");
   const cells = [
     ...pl.metrics.map((m) => ({ label: m.label, value: fmtInt(num(entry.vals?.[m.key] ?? "")) })),
     { label: "Abonnés", value: fmtInt(num(entry.followers ?? "")) },
+    ...(postsNum > 1 ? [{ label: "Publications", value: String(postsNum) }] : []),
+    ...(reachNum > 0 ? [{ label: "Reach total", value: fmtInt(reachNum) }] : []),
   ];
   const isMoyen = entry.verdict === "Moyen";
   return (
