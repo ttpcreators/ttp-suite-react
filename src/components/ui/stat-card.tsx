@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import { ArrowUp, ArrowDown, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Sparkline (aire) en SVG inline — léger, sans dépendance. */
@@ -59,31 +59,40 @@ export function StatCard({
 }) {
   const hasDelta = delta != null && Number.isFinite(delta);
   const up = (delta ?? 0) >= 0;
+  const footer = spark && spark.length >= 2 ? deltaLabel : deltaLabel ?? hint;
   return (
     <div className="flex flex-col rounded-xl border border-border bg-surface p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-wider text-faint">
-          {Icon && <Icon className="h-3.5 w-3.5" />} {label}
-        </div>
+      {/* Titre */}
+      <div className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+        {Icon && <Icon className="h-3.5 w-3.5 text-faint" />} {label}
+      </div>
+
+      {/* Valeur + variation */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        <span className="whitespace-nowrap text-2xl font-bold tracking-tight text-foreground">{value}</span>
         {hasDelta && (
           <span
             className={cn(
-              "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-              up ? "bg-signal/10 text-signaltext" : "bg-rose-500/10 text-rose-500",
+              "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold",
+              up ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/12 text-rose-500",
             )}
           >
-            {up ? "▲" : "▼"} {Math.abs(delta as number).toFixed(1).replace(".", ",")} %
+            {up ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+            {Math.abs(delta as number).toFixed(1).replace(".", ",")} %
           </span>
         )}
       </div>
-      <div className="mt-2 whitespace-nowrap text-xl font-bold tracking-tight text-foreground sm:text-2xl">{value}</div>
-      {spark && spark.length >= 2 ? (
+
+      {/* Sparkline optionnelle */}
+      {spark && spark.length >= 2 && (
         <div className="mt-3">
           <Sparkline values={spark} color={sparkColor} />
-          {deltaLabel && <div className="mt-1 text-[10px] font-medium text-faint">{deltaLabel}</div>}
         </div>
-      ) : (
-        hint && <div className="mt-auto pt-3 text-[10px] font-semibold text-muted-foreground">{hint}</div>
+      )}
+
+      {/* Pied : évolution ou contexte, séparé par un filet */}
+      {footer && (
+        <div className="mt-auto border-t border-border pt-2.5 text-[11px] text-muted-foreground">{footer}</div>
       )}
     </div>
   );
