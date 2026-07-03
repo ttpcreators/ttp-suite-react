@@ -52,6 +52,16 @@ function evDate(e: Ev): string {
   return "9999-12-31";
 }
 
+function ctEnd(start: string, months: number): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(start);
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1 + (months || 0), Number(m[3]));
+}
+function ctDaysLeft(d: Date): number {
+  const t = new Date();
+  return Math.round((d.getTime() - new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime()) / 86400000);
+}
+
 function DotMatrix({ ratio, tone }: { ratio: number; tone: "signal" | "muted" }) {
   const total = 120;
   const filled = Math.round(Math.min(1, Math.max(0, ratio)) * total);
@@ -64,22 +74,6 @@ function DotMatrix({ ratio, tone }: { ratio: number; tone: "signal" | "muted" })
             "h-[6px] w-[6px] rounded-full " +
             (i < filled ? (tone === "signal" ? "bg-signal" : "bg-foreground/70") : "bg-rowhover")
           }
-        />
-      ))}
-    </div>
-  );
-}
-
-function Bars({ heights, color, h }: { heights: number[]; color: string; h: number }) {
-  return (
-    <div className="flex items-end gap-[3px]" style={{ height: h }}>
-      {heights.map((v, i) => (
-        <motion.span
-          key={i}
-          className={"flex-1 rounded-[3px] " + color}
-          initial={{ height: 0 }}
-          animate={{ height: `${v}%` }}
-          transition={{ delay: 0.15 + i * 0.03, type: "spring", stiffness: 200, damping: 24 }}
         />
       ))}
     </div>
@@ -149,6 +143,7 @@ export function Apercu() {
   const { data: obj } = useAppState<Record<string, unknown> | null>(
     (s: AppState) => (s["objByMonth"] as Record<string, unknown>) ?? null,
   );
+  const { data: app } = useAppState<AppState>();
 
   useEffect(() => {
     let alive = true;
@@ -201,10 +196,34 @@ export function Apercu() {
   const attente = d.invoices.filter((i) => i.status === "attente").reduce((a, i) => a + parseAmount(i.amount), 0);
   const facture = d.invoices.reduce((a, i) => a + parseAmount(i.amount), 0);
 
-  const comms = d.creators.map((c) => parseAmount(c.commission)).filter((n) => n > 0);
-  const avgComm = comms.length ? comms.reduce((a, b) => a + b, 0) / comms.length / 100 : 0.2;
-  const reverse = Math.round(encaisse * (1 - avgComm));
-  const margePct = Math.round(avgComm * 100);
+  // ── Reversements (même calcul que la page Reversements) ──
+  const DEFAULT_COMMISSION = 20;
+  const commissionsMap = (app?.creatorCommission as Record<string, number>) ?? {};
+  const payoutsMap = (app?.creatorPayouts as Record<string, { amount: number }[]>) ?? {};
+  const encByCreator = new Map<string, number>();
+  for (const iv of d.invoices) {
+    if (iv.status !== "payee" || !iv.creator) continue;
+    encByCreator.set(iv.creator, (encByCreator.get(iv.creator) ?? 0) + parseAmount(iv.amount));
+  }
+  let duTotal = 0;
+  for (const [c, enc] of encByCreator) {
+    const rate = commissionsMap[c] != null ? commissionsMap[c] : DEFAULT_COMMISSION;
+    duTotal += enc - Math.round((enc * rate) / 100);
+  }
+  let payeTotal = 0;
+  for (const listP of Object.values(payoutsMap)) for (const p of listP) payeTotal += p.amount || 0;
+  const resteReverser = Math.max(0, duTotal - payeTotal);
+  const agencyPart = Math.max(0, encaisse - duTotal);
+  const margePct = encaisse > 0 ? Math.round((agencyPart / encaisse) * 100) : 20;
+
+  // Factures à relancer (retard) + contrats bientôt échus (≤ 60 j)
+  const retardInvoices = d.invoices.filter((i) => i.status === "retard");
+  const retardCount = retardInvoices.length;
+  const retardSum = retardInvoices.reduce((a, i) => a + parseAmount(i.amount), 0);
+  const ctSoon = ((app?.contractDeadlines as { start: string; months: number }[]) ?? []).filter((dl) => {
+    const e = ctEnd(dl.start, dl.months);
+    return e ? ctDaysLeft(e) <= 60 : false;
+  }).length;
 
   const dealHero = d.invoices.slice().sort((a, b) => parseAmount(b.amount) - parseAmount(a.amount))[0];
 
@@ -241,9 +260,6 @@ export function Apercu() {
   } else if (facture > 0) {
     objPct = Math.round((encaisse / facture) * 100) + "%";
   }
-
-  const H = (seed: number, n: number) =>
-    Array.from({ length: n }, (_, i) => 35 + ((Math.sin(seed + i * 1.3) + 1) / 2) * 60);
 
   const recent = d.invoices.slice(0, 5);
 
@@ -353,14 +369,14 @@ export function Apercu() {
         <Card index={2} className="flex flex-col md:col-span-3">
           <div className="flex items-center justify-between">
             <div className="grid h-[30px] w-[30px] place-items-center rounded-[9px] bg-rowhover text-sm font-bold text-muted-foreground">↩</div>
-            <span className="rounded-lg bg-rowhover px-2.5 py-1 text-[9px] font-semibold tracking-wide text-muted-foreground">REVERSÉ</span>
+            <span className="rounded-lg bg-rowhover px-2.5 py-1 text-[9px] font-semibold tracking-wide text-muted-foreground">CRÉATEURS</span>
           </div>
           <div className="my-5">
-            <DotMatrix ratio={facture ? reverse / facture : 0} tone="muted" />
+            <DotMatrix ratio={facture ? duTotal / facture : 0} tone="muted" />
           </div>
           <div className="mt-auto">
-            <div className="text-[11px] text-muted-foreground">Reversé aux créateurs</div>
-            <div className="mt-1 whitespace-nowrap text-[26px] font-bold tracking-tight">{formatEuro(reverse)}</div>
+            <div className="text-[11px] text-muted-foreground">Dû aux créateurs</div>
+            <div className="mt-1 whitespace-nowrap text-[26px] font-bold tracking-tight">{formatEuro(duTotal)}</div>
           </div>
         </Card>
 
@@ -387,24 +403,22 @@ export function Apercu() {
             <div className="text-right text-[8px] leading-tight text-muted-foreground">Marge<br />agence</div>
           </div>
           <div className="mt-auto pt-3.5">
-            <Bars heights={H(2, 11)} color="bg-primary/60" h={42} />
+            <div className="text-[10px] text-muted-foreground">Ta part sur l'encaissé</div>
+            <div className="mt-0.5 whitespace-nowrap text-sm font-bold tracking-tight">{formatEuro(agencyPart)}</div>
           </div>
         </Card>
 
         <Card index={5} className="flex flex-col md:col-span-2">
-          <div className="text-[11px] text-muted-foreground">Total facturé</div>
-          <div className="mt-1 whitespace-nowrap text-[20px] font-bold tracking-tight">{formatEuro(facture)}</div>
-          <svg viewBox="0 0 360 70" preserveAspectRatio="none" className="mt-auto h-12 w-full">
-            <path
-              d="M4,46 C30,30 46,52 70,40 C96,28 110,54 134,42 C160,30 174,18 200,30 C226,42 240,24 266,32 C292,40 306,18 332,22 C346,24 352,20 356,18"
-              fill="none"
-              stroke="var(--signal)"
-              strokeWidth="2.5"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
-          </svg>
+          <div className="flex items-center justify-between">
+            <div className="grid h-[30px] w-[30px] place-items-center rounded-[9px] bg-amber/15 text-sm font-bold text-amber">↺</div>
+            <span className="rounded-lg bg-rowhover px-2.5 py-1 text-[9px] font-semibold tracking-wide text-muted-foreground">À PAYER</span>
+          </div>
+          <div className="mt-auto pt-4">
+            <div className="text-[11px] text-muted-foreground">Reste à reverser</div>
+            <div className={"mt-1 whitespace-nowrap text-[20px] font-bold tracking-tight " + (resteReverser > 0.5 ? "text-amber" : "text-signaltext")}>
+              {resteReverser > 0.5 ? formatEuro(resteReverser) : "À jour ✓"}
+            </div>
+          </div>
         </Card>
 
         <Card index={6} className="md:col-span-8">
@@ -416,9 +430,7 @@ export function Apercu() {
                 <span className="ml-1 text-[11px] text-muted-foreground">DEAL</span>
               </div>
               <div className="mt-1 truncate text-[11px] text-muted-foreground">{dealHero?.party ?? "Aucun deal"}</div>
-              <div className="mt-auto pt-4">
-                <Bars heights={H(5, 9)} color="bg-signal" h={44} />
-              </div>
+              <div className="mt-auto pt-4 text-[10px] font-medium text-faint">Plus grosse facture</div>
             </div>
             <div className="rounded-xl bg-panel p-4">
               <div className="mb-3 text-xs font-semibold">Pipeline</div>
@@ -437,11 +449,15 @@ export function Apercu() {
               )}
             </div>
             <div className="flex flex-col items-center justify-center rounded-xl bg-panel p-4 text-center">
-              <div className="grid h-[42px] w-[42px] place-items-center rounded-xl bg-surface text-lg text-amber">✲</div>
-              <div className="mt-3 text-xs font-semibold">
-                {attente ? `${formatEuro(attente)} en attente` : "Tout est à jour"}
+              <div className={"grid h-[42px] w-[42px] place-items-center rounded-xl bg-surface text-lg " + (retardCount > 0 ? "text-rose-500" : "text-signaltext")}>
+                {retardCount > 0 ? "⏰" : "✓"}
               </div>
-              <div className="mt-1 text-[10px] leading-snug text-muted-foreground">Relance tes factures impayées.</div>
+              <div className="mt-3 text-xs font-semibold">
+                {retardCount > 0 ? `${retardCount} facture${retardCount > 1 ? "s" : ""} à relancer` : "Aucun impayé"}
+              </div>
+              <div className="mt-1 text-[10px] leading-snug text-muted-foreground">
+                {retardCount > 0 ? `${formatEuro(retardSum)} en retard` : "Tout est encaissé ou à jour."}
+              </div>
             </div>
           </div>
         </Card>
@@ -449,15 +465,29 @@ export function Apercu() {
         <Card index={7} className="flex flex-col bg-foreground text-background md:col-span-4">
           <div className="flex items-start justify-between">
             <div>
-              <div className="text-[11px] text-faint">CA total facturé</div>
+              <div className="text-[11px] text-background/60">CA total facturé</div>
               <div className="mt-1.5 text-[40px] font-bold leading-none tracking-tighter">{formatEuro(facture)}</div>
             </div>
-            <div className="flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1.5 text-[9px] font-semibold text-signal">
-              <span className="h-1.5 w-1.5 rounded-full bg-signal" /> EN HAUSSE
-            </div>
+            {caDelta != null && (
+              <div className={"flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1.5 text-[9px] font-semibold " + (caDelta >= 0 ? "text-signal" : "text-rose-400")}>
+                <span className={"h-1.5 w-1.5 rounded-full " + (caDelta >= 0 ? "bg-signal" : "bg-rose-400")} />
+                {caDelta >= 0 ? "EN HAUSSE" : "EN BAISSE"} · {Math.abs(caDelta).toFixed(0)}%
+              </div>
+            )}
           </div>
-          <div className="mt-auto pt-4">
-            <Bars heights={H(9, 14)} color="bg-signal" h={54} />
+          <div className="mt-auto grid grid-cols-3 gap-2 pt-5">
+            <div>
+              <div className="text-[8px] font-semibold uppercase tracking-wide text-background/50">Encaissé</div>
+              <div className="mt-0.5 text-[13px] font-bold">{formatEuro(encaisse)}</div>
+            </div>
+            <div>
+              <div className="text-[8px] font-semibold uppercase tracking-wide text-background/50">En attente</div>
+              <div className="mt-0.5 text-[13px] font-bold">{formatEuro(attente)}</div>
+            </div>
+            <div>
+              <div className="text-[8px] font-semibold uppercase tracking-wide text-background/50">Contrats &lt; 60j</div>
+              <div className="mt-0.5 text-[13px] font-bold">{ctSoon}</div>
+            </div>
           </div>
         </Card>
 

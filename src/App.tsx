@@ -117,7 +117,16 @@ function ViewContent({
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
-  const [active, setActive] = useState<ViewId>("apercu");
+  const [active, setActive] = useState<ViewId>(() => {
+    // Restaure la dernière page ouverte (évite de retomber sur l'Aperçu à chaque refresh).
+    try {
+      const saved = localStorage.getItem("ttp:view");
+      if (saved && saved in VIEWS) return saved as ViewId;
+    } catch {
+      /* localStorage indisponible */
+    }
+    return "apercu";
+  });
   const [dark, setDark] = useState(false);
   const [mobileTab, setMobileTab] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -131,6 +140,15 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
   }, [dark]);
+
+  // Mémorise la page courante pour la rouvrir au prochain refresh.
+  useEffect(() => {
+    try {
+      localStorage.setItem("ttp:view", active);
+    } catch {
+      /* localStorage indisponible */
+    }
+  }, [active]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
