@@ -8,7 +8,6 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { StatCard } from "@/components/ui/stat-card";
-import { ActivityStatsCard } from "@/components/ui/activity-stats-card";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import {
   BarChart,
@@ -400,20 +399,6 @@ export function Stats() {
         <StatCard icon={FileText} label="Briefs" value={`${data.briefs}`} hint={`${data.ideas} idées · ${data.todos} à faire`} />
         <StatCard icon={ContactIcon} label="Contacts" value={`${data.contacts}`} hint="réseau agence" />
       </div>
-
-      {/* Carte activité : facturé vs encaissé par mois */}
-      {hasRevenue && (
-        <ActivityStatsCard
-          title="Chiffre d'affaires"
-          icon={<Receipt className="h-4 w-4" />}
-          mainValue={formatEuro(totalCA)}
-          changeValue={caDelta ?? 0}
-          changeDescription="évolution mensuelle"
-          chartData={revenuePoints.slice(-8).map((p) => ({ label: p.label, currentValue: p.ca, previousValue: p.paid }))}
-          legend={{ primary: "Facturé", secondary: "Encaissé" }}
-          secondaryBarClassName="bg-signal/40"
-        />
-      )}
 
       {/* Comparaison de période */}
       <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
