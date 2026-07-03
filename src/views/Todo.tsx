@@ -25,7 +25,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { useEffect, useState, type ReactNode } from "react";
-import { X, Pencil, Trash2 } from "lucide-react";
+import { X, Pencil, Trash2, MessageSquarePlus, Check } from "lucide-react";
 
 type Priority = "haute" | "moyenne" | "basse";
 type Source = "agency" | "creator";
@@ -99,6 +99,13 @@ export function Todo() {
     else delete next[id];
     setNotes(next);
     await saveAppStateKey("itemNotes", next);
+  };
+  // Édition inline du commentaire d'avancement (sous la carte, dans la liste).
+  const [noteEditId, setNoteEditId] = useState<string | null>(null);
+  const [noteEditText, setNoteEditText] = useState("");
+  const startNote = (id: string) => {
+    setNoteEditId(id);
+    setNoteEditText(notes[id] ?? "");
   };
 
   const [creatorFilter, setCreatorFilter] = useState<CreatorFilter>(null);
@@ -416,8 +423,8 @@ export function Todo() {
               }
             };
             return (
+              <div key={row.id} className="rounded-2xl border border-border bg-card shadow-sm">
               <div
-                key={row.id}
                 role="button"
                 tabIndex={0}
                 onClick={() => setSelectedTodo(row)}
@@ -427,7 +434,7 @@ export function Todo() {
                     setSelectedTodo(row);
                   }
                 }}
-                className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:bg-rowhover"
+                className="flex cursor-pointer items-center gap-3 rounded-2xl p-4 transition-colors hover:bg-rowhover"
               >
                 {/* Case à cocher animée (barre progressive) */}
                 <Checkbox
@@ -498,6 +505,61 @@ export function Todo() {
                     ]}
                   />
                 </div>
+              </div>
+
+                {/* Commentaire d'avancement — directement sous la carte */}
+                {noteEditId === row.id ? (
+                  <div className="flex flex-col gap-2 border-t border-border px-4 py-3">
+                    <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Avancement / commentaire</span>
+                    <textarea
+                      value={noteEditText}
+                      onChange={(e) => setNoteEditText(e.target.value)}
+                      rows={2}
+                      autoFocus
+                      placeholder="Où en es-tu ? Note ton avancement, un blocage, un lien…"
+                      className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await saveNote(row.id, noteEditText);
+                          setNoteEditId(null);
+                          toast("Commentaire enregistré ✓");
+                        }}
+                        className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                      >
+                        <Check className="h-3.5 w-3.5" /> Enregistrer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNoteEditId(null)}
+                        className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                        title="Annuler"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : notes[row.id] ? (
+                  <button
+                    type="button"
+                    onClick={() => startNote(row.id)}
+                    className="flex w-full items-start gap-2 border-t border-border px-4 py-2.5 text-left transition-colors hover:bg-rowhover"
+                    title="Modifier le commentaire"
+                  >
+                    <MessageSquarePlus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" />
+                    <span className="whitespace-pre-wrap text-[12px] leading-relaxed text-muted-foreground">{notes[row.id]}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => startNote(row.id)}
+                    className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                  >
+                    <MessageSquarePlus className="h-3.5 w-3.5" /> Ajouter un commentaire d'avancement
+                  </button>
+                )}
               </div>
             );
           })}
