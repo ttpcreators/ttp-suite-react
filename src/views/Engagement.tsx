@@ -30,10 +30,10 @@ type Platform = {
   excellent: number; // seuil "Excellent" (%)
 };
 
-// Taux d'engagement MENSUEL (cumul 30 jours) : interactions 30 j ÷ abonnés × 100.
-// Les stats saisies sont TOUJOURS des cumuls sur 30 jours (Insights) → les seuils
-// sont calibrés pour un mois entier (≈ seuil par post × rythme de publication moyen),
-// PAS pour une publication seule.
+// Taux d'engagement 30 jours : interactions 30 j ÷ VUES 30 j × 100.
+// Les Insights (tableau de bord pro Instagram/TikTok) donnent les vues sur 30 j →
+// c'est le standard actuel, précis quelle que soit la taille du compte.
+// Les abonnés ne rentrent PAS dans le calcul (simple donnée de suivi).
 const PLATFORMS: Platform[] = [
   {
     key: "instagram",
@@ -44,9 +44,9 @@ const PLATFORMS: Platform[] = [
       { key: "saves", label: "Enregistrements" },
       { key: "shares", label: "Partages" },
     ],
-    formula: "(likes + commentaires + enreg. + partages) sur 30 j ÷ abonnés × 100",
-    bon: 45,
-    excellent: 90,
+    formula: "(likes + commentaires + enreg. + partages) sur 30 j ÷ vues × 100",
+    bon: 3,
+    excellent: 6,
   },
   {
     key: "tiktok",
@@ -56,9 +56,9 @@ const PLATFORMS: Platform[] = [
       { key: "comments", label: "Commentaires" },
       { key: "saves", label: "Enregistrements" },
     ],
-    formula: "(likes + commentaires + enreg.) sur 30 j ÷ abonnés × 100",
-    bon: 75,
-    excellent: 150,
+    formula: "(likes + commentaires + enreg.) sur 30 j ÷ vues × 100",
+    bon: 4.5,
+    excellent: 9,
   },
   {
     key: "youtube",
@@ -67,9 +67,9 @@ const PLATFORMS: Platform[] = [
       { key: "likes", label: "Likes" },
       { key: "comments", label: "Commentaires" },
     ],
-    formula: "(likes + commentaires) sur 30 j ÷ abonnés × 100",
-    bon: 8,
-    excellent: 20,
+    formula: "(likes + commentaires) sur 30 j ÷ vues × 100",
+    bon: 2,
+    excellent: 5,
   },
   {
     key: "x",
@@ -79,9 +79,9 @@ const PLATFORMS: Platform[] = [
       { key: "reposts", label: "Reposts" },
       { key: "replies", label: "Réponses" },
     ],
-    formula: "(likes + reposts + réponses) sur 30 j ÷ abonnés × 100",
-    bon: 15,
-    excellent: 45,
+    formula: "(likes + reposts + réponses) sur 30 j ÷ vues × 100",
+    bon: 0.5,
+    excellent: 1.5,
   },
 ];
 
@@ -164,14 +164,14 @@ export function Engagement() {
     };
   }, [creatorId]);
 
-  // Cumul 30 jours ÷ abonnés — les seuils des plateformes sont calibrés "mois entier".
+  // Interactions 30 j ÷ vues 30 j (les abonnés ne comptent pas dans le taux).
   const interactions = p.metrics.reduce((a, m) => a + num(vals[m.key]), 0);
-  const baseN = num(followers);
+  const baseN = num(vals["views"]);
   const hasInputs = baseN > 0 && interactions > 0;
   const er = hasInputs ? Math.round((interactions / baseN) * 100 * 100) / 100 : 0;
   const erLabel = er.toFixed(2).replace(".", ",") + " %";
   const v = verdict(er, p);
-  const detail = `(${p.metrics.map((m) => fmtInt(num(vals[m.key]))).join(" + ")}) sur 30 j ÷ ${fmtInt(baseN)} abonnés × 100`;
+  const detail = `(${p.metrics.map((m) => fmtInt(num(vals[m.key]))).join(" + ")}) sur 30 j ÷ ${fmtInt(baseN)} vues × 100`;
 
   const selectedCreator = creators.find((c) => c.id === creatorId) ?? null;
 
@@ -180,8 +180,8 @@ export function Engagement() {
     const pl = PLATFORMS.find((x) => x.key === h.platform) ?? PLATFORMS[0];
     return {
       er: h.er,
-      base: num(h.followers ?? ""),
-      baseLabel: "Abonnés",
+      base: num(h.vals?.["views"] ?? ""),
+      baseLabel: "Vues (30 j)",
       platform: pl.key,
       platformLabel: pl.label,
       formula: pl.formula,
@@ -200,7 +200,7 @@ export function Engagement() {
       const stats = {
         er: erLabel,
         base: baseN,
-        baseLabel: "Abonnés",
+        baseLabel: "Vues (30 j)",
         platform: p.key,
         platformLabel: p.label,
         formula: p.formula,
@@ -332,10 +332,16 @@ export function Engagement() {
           ))}
         </div>
 
-        {/* Base du calcul : abonnés (les interactions saisies = cumul 30 jours) */}
+        {/* Base du calcul : vues 30 j — abonnés = simple suivi (hors calcul) */}
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <NumField
-            label="Abonnés"
+            label="Vues (30 j)"
+            value={vals["views"] ?? ""}
+            onChange={(x) => set("views", x)}
+            className="min-w-[130px] flex-1"
+          />
+          <NumField
+            label="Abonnés (suivi)"
             value={followers}
             onChange={(x) => {
               setFollowers(x);
@@ -344,8 +350,8 @@ export function Engagement() {
             className="min-w-[130px] flex-1"
           />
           <p className="flex-[2] pb-2.5 text-[11px] leading-snug text-faint">
-            Entre les stats <span className="font-medium text-foreground">cumulées des 30 derniers jours</span> (Insights).
-            Taux mensuel = interactions 30 j ÷ abonnés × 100 — les barèmes sont calibrés pour un mois entier.
+            Stats <span className="font-medium text-foreground">cumulées des 30 derniers jours</span> (Insights).
+            Taux = interactions ÷ vues × 100. Les abonnés ne comptent pas dans le calcul — ils suivent l'évolution du créateur (mis à jour sur sa fiche).
           </p>
         </div>
       </div>
@@ -363,7 +369,7 @@ export function Engagement() {
             ) : (
               <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                 <Activity className="size-4 text-faint" />
-                Renseigne les interactions et les abonnés pour calculer le taux.
+                Renseigne les interactions et les vues (30 j) pour calculer le taux.
               </div>
             )}
           </div>
@@ -403,7 +409,7 @@ export function Engagement() {
             {editingId ? (
               <><span className="font-semibold text-primary">Modification en cours</span> — ajuste les valeurs puis « Mettre à jour ». </>
             ) : !hasInputs ? (
-              <>Renseigne les interactions <span className="font-medium text-foreground">et</span> les abonnés pour pouvoir enregistrer.</>
+              <>Renseigne les interactions <span className="font-medium text-foreground">et</span> les vues (30 j) pour pouvoir enregistrer.</>
             ) : creatorId ? (
               <>Met à jour la fiche de <span className="font-semibold text-foreground">{titleCase(selectedCreator?.name ?? "")}</span> (roster · media kit · portail) + l'historique.</>
             ) : (
@@ -531,7 +537,8 @@ function DetailModal({
   const pl = PLATFORMS.find((x) => x.key === entry.platform) ?? PLATFORMS[0];
   const cells = [
     ...pl.metrics.map((m) => ({ label: m.label, value: fmtInt(num(entry.vals?.[m.key] ?? "")) })),
-    { label: "Abonnés", value: fmtInt(num(entry.followers ?? "")) },
+    { label: "Vues (30 j)", value: fmtInt(num(entry.vals?.["views"] ?? "")) },
+    { label: "Abonnés (suivi)", value: fmtInt(num(entry.followers ?? "")) },
   ];
   const isMoyen = entry.verdict === "Moyen";
   return (
