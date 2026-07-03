@@ -63,20 +63,18 @@ function ctDaysLeft(d: Date): number {
   return Math.round((d.getTime() - new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime()) / 86400000);
 }
 
-function DotMatrix({ ratio, tone }: { ratio: number; tone: "signal" | "muted" }) {
-  const total = 120;
-  const filled = Math.round(Math.min(1, Math.max(0, ratio)) * total);
+function Gauge({ ratio, tone, caption }: { ratio: number; tone: "signal" | "muted"; caption?: string }) {
+  const pct = Math.round(Math.min(1, Math.max(0, ratio)) * 100);
+  const bar = tone === "signal" ? "bg-signal" : "bg-primary/60";
   return (
-    <div className="flex flex-wrap gap-[5px]">
-      {Array.from({ length: total }).map((_, i) => (
-        <span
-          key={i}
-          className={
-            "h-[6px] w-[6px] rounded-full " +
-            (i < filled ? (tone === "signal" ? "bg-signal" : "bg-foreground/70") : "bg-rowhover")
-          }
-        />
-      ))}
+    <div className="mt-3">
+      <div className="mb-1 flex items-center justify-between text-[10px] font-medium text-faint">
+        <span>{caption ?? ""}</span>
+        <span className="font-semibold text-muted-foreground">{pct}%</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-rowhover">
+        <div className={"h-full rounded-full " + bar} style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }
@@ -359,12 +357,10 @@ export function Apercu() {
             <div className="grid h-[30px] w-[30px] place-items-center rounded-[9px] bg-signalsoft text-sm font-bold text-signaltext">€</div>
             <span className="rounded-lg bg-rowhover px-2.5 py-1 text-[9px] font-semibold tracking-wide text-muted-foreground">ENCAISSÉ</span>
           </div>
-          <div className="my-5">
-            <DotMatrix ratio={facture ? encaisse / facture : 0} tone="signal" />
-          </div>
-          <div className="mt-auto">
+          <div className="mt-auto pt-6">
             <div className="text-[11px] text-muted-foreground">CA encaissé</div>
             <div className="mt-1 whitespace-nowrap text-[26px] font-bold tracking-tight">{formatEuro(encaisse)}</div>
+            <Gauge ratio={facture ? encaisse / facture : 0} tone="signal" caption="du CA facturé" />
           </div>
         </Card>
 
@@ -373,12 +369,10 @@ export function Apercu() {
             <div className="grid h-[30px] w-[30px] place-items-center rounded-[9px] bg-rowhover text-sm font-bold text-muted-foreground">↩</div>
             <span className="rounded-lg bg-rowhover px-2.5 py-1 text-[9px] font-semibold tracking-wide text-muted-foreground">CRÉATEURS</span>
           </div>
-          <div className="my-5">
-            <DotMatrix ratio={facture ? duTotal / facture : 0} tone="muted" />
-          </div>
-          <div className="mt-auto">
+          <div className="mt-auto pt-6">
             <div className="text-[11px] text-muted-foreground">Dû aux créateurs</div>
             <div className="mt-1 whitespace-nowrap text-[26px] font-bold tracking-tight">{formatEuro(duTotal)}</div>
+            <Gauge ratio={facture ? duTotal / facture : 0} tone="muted" caption="du CA facturé" />
           </div>
         </Card>
 
@@ -473,7 +467,7 @@ export function Apercu() {
             {caDelta != null && (
               <div className={"flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1.5 text-[9px] font-semibold " + (caDelta >= 0 ? "text-signal" : "text-rose-400")}>
                 <span className={"h-1.5 w-1.5 rounded-full " + (caDelta >= 0 ? "bg-signal" : "bg-rose-400")} />
-                {caDelta >= 0 ? "EN HAUSSE" : "EN BAISSE"} · {Math.abs(caDelta).toFixed(0)}%
+                {caDelta >= 0 ? "EN HAUSSE" : "EN BAISSE"} · {Math.abs(caDelta) > 999 ? ">999" : Math.abs(caDelta).toFixed(0)}%
               </div>
             )}
           </div>
