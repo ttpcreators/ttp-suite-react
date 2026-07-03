@@ -3,7 +3,6 @@ import { motion } from "motion/react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, initials } from "@/lib/utils";
 import { parseAmount, formatEuro, useAppState, type AppState } from "@/lib/appState";
-import { commissionMap } from "@/lib/commission";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { LocationTag } from "@/components/ui/location-tag";
 import { MiniChart } from "@/components/ui/mini-chart";
@@ -51,22 +50,6 @@ function evDate(e: Ev): string {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(e.day).padStart(2, "0")}`;
   }
   return "9999-12-31";
-}
-
-function Gauge({ ratio, tone, caption }: { ratio: number; tone: "signal" | "muted"; caption?: string }) {
-  const pct = Math.round(Math.min(1, Math.max(0, ratio)) * 100);
-  const bar = tone === "signal" ? "bg-signal" : "bg-primary/60";
-  return (
-    <div className="mt-3">
-      <div className="mb-1 flex items-center justify-between text-[10px] font-medium text-faint">
-        <span>{caption ?? ""}</span>
-        <span className="font-semibold text-muted-foreground">{pct}%</span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-rowhover">
-        <div className={"h-full rounded-full " + bar} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
 }
 
 /** Graphique CA mensuel : aire + dégradé (même DA que la page Stats). */
@@ -132,7 +115,6 @@ export function Apercu() {
   const { data: obj } = useAppState<Record<string, unknown> | null>(
     (s: AppState) => (s["objByMonth"] as Record<string, unknown>) ?? null,
   );
-  const { data: app } = useAppState<AppState>();
 
   useEffect(() => {
     let alive = true;
@@ -183,27 +165,6 @@ export function Apercu() {
   const paid = d.invoices.filter((i) => i.status === "payee");
   const encaisse = paid.reduce((a, i) => a + parseAmount(i.amount), 0);
   const facture = d.invoices.reduce((a, i) => a + parseAmount(i.amount), 0);
-
-  // ── Reversements (même calcul que la page Reversements) ──
-  const DEFAULT_COMMISSION = 20;
-  const rosterCommission = commissionMap(d.creators);
-  const commissionsMap = (app?.creatorCommission as Record<string, number>) ?? {};
-  const payoutsMap = (app?.creatorPayouts as Record<string, { amount: number }[]>) ?? {};
-  const encByCreator = new Map<string, number>();
-  for (const iv of d.invoices) {
-    if (iv.status !== "payee" || !iv.creator) continue;
-    encByCreator.set(iv.creator, (encByCreator.get(iv.creator) ?? 0) + parseAmount(iv.amount));
-  }
-  let duTotal = 0;
-  for (const [c, enc] of encByCreator) {
-    const rate = rosterCommission[c] ?? (commissionsMap[c] != null ? commissionsMap[c] : DEFAULT_COMMISSION);
-    duTotal += enc - Math.round((enc * rate) / 100);
-  }
-  let payeTotal = 0;
-  for (const listP of Object.values(payoutsMap)) for (const p of listP) payeTotal += p.amount || 0;
-  const resteReverser = Math.max(0, duTotal - payeTotal);
-  const agencyPart = Math.max(0, encaisse - duTotal);
-  const margePct = encaisse > 0 ? Math.round((agencyPart / encaisse) * 100) : 20;
 
   // Factures à relancer (retard)
   const retardInvoices = d.invoices.filter((i) => i.status === "retard");
@@ -335,57 +296,6 @@ export function Apercu() {
               ))}
             </div>
           )}
-        </Card>
-
-        <Card index={1} className="flex flex-col md:col-span-3">
-          <div className="flex items-center justify-between">
-            <div className="grid h-[30px] w-[30px] place-items-center rounded-[9px] bg-signalsoft text-sm font-bold text-signaltext">€</div>
-            <span className="rounded-lg bg-rowhover px-2.5 py-1 text-[9px] font-semibold tracking-wide text-muted-foreground">ENCAISSÉ</span>
-          </div>
-          <div className="mt-auto pt-6">
-            <div className="text-[11px] text-muted-foreground">CA encaissé</div>
-            <div className="mt-1 whitespace-nowrap text-[26px] font-bold tracking-tight">{formatEuro(encaisse)}</div>
-            <Gauge ratio={facture ? encaisse / facture : 0} tone="signal" caption="du CA facturé" />
-          </div>
-        </Card>
-
-        <Card index={2} className="flex flex-col md:col-span-3">
-          <div className="flex items-center justify-between">
-            <div className="grid h-[30px] w-[30px] place-items-center rounded-[9px] bg-rowhover text-sm font-bold text-muted-foreground">↩</div>
-            <span className="rounded-lg bg-rowhover px-2.5 py-1 text-[9px] font-semibold tracking-wide text-muted-foreground">CRÉATEURS</span>
-          </div>
-          <div className="mt-auto pt-6">
-            <div className="text-[11px] text-muted-foreground">Dû aux créateurs</div>
-            <div className="mt-1 whitespace-nowrap text-[26px] font-bold tracking-tight">{formatEuro(duTotal)}</div>
-            <Gauge ratio={facture ? duTotal / facture : 0} tone="muted" caption="du CA facturé" />
-          </div>
-        </Card>
-
-        <Card index={4} className="flex flex-col md:col-span-3">
-          <div className="flex items-baseline justify-between">
-            <div className="text-[22px] font-bold tracking-tight">
-              {margePct}
-              <span className="text-[13px]">%</span>
-            </div>
-            <div className="text-right text-[8px] leading-tight text-muted-foreground">Marge<br />agence</div>
-          </div>
-          <div className="mt-auto pt-3.5">
-            <div className="text-[10px] text-muted-foreground">Ta part sur l'encaissé</div>
-            <div className="mt-0.5 whitespace-nowrap text-sm font-bold tracking-tight">{formatEuro(agencyPart)}</div>
-          </div>
-        </Card>
-
-        <Card index={5} className="flex flex-col md:col-span-3">
-          <div className="flex items-center justify-between">
-            <div className="grid h-[30px] w-[30px] place-items-center rounded-[9px] bg-amber/15 text-sm font-bold text-amber">↺</div>
-            <span className="rounded-lg bg-rowhover px-2.5 py-1 text-[9px] font-semibold tracking-wide text-muted-foreground">À PAYER</span>
-          </div>
-          <div className="mt-auto pt-4">
-            <div className="text-[11px] text-muted-foreground">Reste à reverser</div>
-            <div className={"mt-1 whitespace-nowrap text-[20px] font-bold tracking-tight " + (resteReverser > 0.5 ? "text-amber" : "text-signaltext")}>
-              {resteReverser > 0.5 ? formatEuro(resteReverser) : "À jour ✓"}
-            </div>
-          </div>
         </Card>
 
         <Card index={6} className="md:col-span-8">
