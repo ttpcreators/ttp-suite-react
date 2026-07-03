@@ -1,10 +1,10 @@
 import { supabase } from "@/lib/supabase";
-import { Copy, X, Download, Upload, Trash2 } from "lucide-react";
+import { Copy, X, Download, Upload, Trash2, Pencil } from "lucide-react";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { cn, initials } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { dbInsert, nextOrder } from "@/lib/db";
+import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import {
@@ -168,6 +168,7 @@ export function Contacts() {
 
   const [selected, setSelected] = useState<Row | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const [brand, setBrand] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -250,6 +251,34 @@ export function Contacts() {
 
   const currentRows = rows;
 
+  const resetForm = () => {
+    setEditId(null);
+    setBrand("");
+    setFirstName("");
+    setLastName("");
+    setRole("");
+    setTag("Marque");
+    setEmail("");
+    setPhone("");
+  };
+  const openAdd = () => {
+    resetForm();
+    setFormOpen(true);
+  };
+  const startEdit = (r: Row) => {
+    setEditId(r.id);
+    setBrand(r.brand === "—" ? "" : r.brand);
+    const p = r.person && r.person !== "—" ? r.person : "";
+    const parts = p.split(" ");
+    setFirstName(r.first_name ?? parts[0] ?? "");
+    setLastName(r.last_name ?? parts.slice(1).join(" "));
+    setRole(r.role ?? "");
+    setTag(r.tag || "Marque");
+    setEmail(r.email ?? "");
+    setPhone(r.phone ?? "");
+    setFormOpen(true);
+  };
+
   const submit = async () => {
     if (!brand.trim()) {
       toast("Renseigne la marque / entreprise");
@@ -258,7 +287,7 @@ export function Contacts() {
     const first = firstName.trim();
     const last = lastName.trim();
     const person = [first, last].filter(Boolean).join(" ");
-    const row = {
+    const payload = {
       brand: brand.trim(),
       person: person || "—",
       first_name: first || null,
@@ -267,24 +296,26 @@ export function Contacts() {
       tag,
       email: email.trim(),
       phone: phone.trim(),
-      tone: "indigo",
-      sort_order: nextOrder(currentRows),
     };
-    const created = await dbInsert("contacts", row);
-    if (!created) {
-      toast("Erreur — réessaie");
-      return;
+    if (editId) {
+      const ok = await dbUpdate("contacts", editId, payload);
+      if (!ok) {
+        toast("Erreur — réessaie");
+        return;
+      }
+      setRows(currentRows.map((r) => (r.id === editId ? { ...r, ...payload } : r)));
+      toast("Contact modifié ✓");
+    } else {
+      const created = await dbInsert("contacts", { ...payload, tone: "indigo", sort_order: nextOrder(currentRows) });
+      if (!created) {
+        toast("Erreur — réessaie");
+        return;
+      }
+      setRows([created as unknown as Row, ...currentRows]);
+      toast("Contact ajouté ✓");
     }
-    setRows([created as unknown as Row, ...currentRows]);
-    toast("Contact ajouté ✓");
     setFormOpen(false);
-    setBrand("");
-    setFirstName("");
-    setLastName("");
-    setRole("");
-    setTag("Marque");
-    setEmail("");
-    setPhone("");
+    resetForm();
   };
 
   // Export : télécharge un vrai fichier .csv (respecte le filtre/recherche courants).
@@ -404,7 +435,7 @@ export function Contacts() {
             <Download className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Exporter</span>
           </button>
-          <AddButton label="Contact" onClick={() => setFormOpen(true)} />
+          <AddButton label="Contact" onClick={openAdd} />
         </div>
       </div>
 
@@ -431,9 +462,13 @@ export function Contacts() {
 
       <InlineForm
         open={formOpen}
-        title="Nouveau contact"
-        onClose={() => setFormOpen(false)}
+        title={editId ? "Modifier le contact" : "Nouveau contact"}
+        onClose={() => {
+          setFormOpen(false);
+          setEditId(null);
+        }}
         onSubmit={submit}
+        submitLabel={editId ? "Enregistrer" : "Ajouter"}
       >
         <TextField
           label="Marque / Entreprise"
@@ -502,6 +537,7 @@ export function Contacts() {
                   ...(row.email
                     ? [{ key: "copy", label: "Copier l'email", icon: Copy, onClick: () => { navigator.clipboard?.writeText(row.email); toast("Email copié ✓"); } }]
                     : []),
+                  { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(row) },
                   {
                     key: "delete",
                     label: "Supprimer",

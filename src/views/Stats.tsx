@@ -166,6 +166,17 @@ function RevenueChart({ points }: { points: RevenuePoint[] }) {
   );
 }
 
+/** N clés de mois "YYYY-MM" se terminant à `endKey` inclus (plus ancien d'abord). */
+function monthsEndingAt(endKey: string, n: number): string[] {
+  const [y, m] = endKey.split("-").map(Number);
+  const out: string[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(y, m - 1 - i, 1);
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+}
+
 /** Carte de comparaison : valeur courante + variation vs période de référence. */
 function CompareCard({ label, current, previous, delta, curLbl, prevLbl }: { label: string; current: string; previous: string; delta: number | null; curLbl: string; prevLbl: string }) {
   return (
@@ -196,7 +207,8 @@ function CompareCard({ label, current, previous, delta, curLbl, prevLbl }: { lab
 export function Stats() {
   const [data, setData] = useState<StatsData | null>(() => getCache<StatsData>("statsData"));
   const [error, setError] = useState(false);
-  const [compareMode, setCompareMode] = useState<"mom" | "yoyMonth" | "yoy">("mom");
+  const [cmpMonths, setCmpMonths] = useState<1 | 3 | 6 | 12>(3);
+  const [cmpAgainst, setCmpAgainst] = useState<"prev" | "year">("prev");
   const live = useLiveKey();
 
   useEffect(() => {
@@ -286,42 +298,41 @@ export function Stats() {
   }));
   const hasRevenue = revenuePoints.length >= 2 && revenuePoints.some((p) => p.ca > 0);
 
-  // ── Comparaison de période (mois vs mois dernier / même mois N-1 / année) ──
+  // ── Comparaison de période (fenêtre glissante vs période précédente ou N-1) ──
   const monthCount = new Map<string, number>();
-  const yearAgg = new Map<string, { tot: number; paid: number; count: number }>();
   for (const iv of data.invoices) {
     const k = invMonthKey(iv.date);
-    if (!k) continue;
-    monthCount.set(k, (monthCount.get(k) ?? 0) + 1);
-    const y = k.slice(0, 4);
-    const a = parseAmount(iv.amount);
-    const cy = yearAgg.get(y) ?? { tot: 0, paid: 0, count: 0 };
-    cy.tot += a;
-    if (iv.status === "payee") cy.paid += a;
-    cy.count += 1;
-    yearAgg.set(y, cy);
+    if (k) monthCount.set(k, (monthCount.get(k) ?? 0) + 1);
   }
   const now = new Date();
-  const pad2 = (n: number) => String(n).padStart(2, "0");
-  const curMonthKey = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
-  const pmDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prevMonthKey = `${pmDate.getFullYear()}-${pad2(pmDate.getMonth() + 1)}`;
-  const sameMonthLYKey = `${now.getFullYear() - 1}-${pad2(now.getMonth() + 1)}`;
-  const curYearKey = String(now.getFullYear());
-  const prevYearKey = String(now.getFullYear() - 1);
-  const cmpConf =
-    compareMode === "mom"
-      ? { curKey: curMonthKey, prevKey: prevMonthKey, curLbl: monthLabel(curMonthKey), prevLbl: monthLabel(prevMonthKey), src: "month" as const }
-      : compareMode === "yoyMonth"
-        ? { curKey: curMonthKey, prevKey: sameMonthLYKey, curLbl: `${monthLabel(curMonthKey)} ${curYearKey}`, prevLbl: `${monthLabel(sameMonthLYKey)} ${prevYearKey}`, src: "month" as const }
-        : { curKey: curYearKey, prevKey: prevYearKey, curLbl: curYearKey, prevLbl: prevYearKey, src: "year" as const };
-  const getAgg = (key: string) =>
-    cmpConf.src === "month"
-      ? { tot: monthAgg.get(key)?.tot ?? 0, paid: monthAgg.get(key)?.paid ?? 0, count: monthCount.get(key) ?? 0 }
-      : { tot: yearAgg.get(key)?.tot ?? 0, paid: yearAgg.get(key)?.paid ?? 0, count: yearAgg.get(key)?.count ?? 0 };
-  const cmpCur = getAgg(cmpConf.curKey);
-  const cmpPrev = getAgg(cmpConf.prevKey);
+  const keyOf = (dt: Date) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+  const curWindow = monthsEndingAt(keyOf(now), cmpMonths);
+  const compEndDate =
+    cmpAgainst === "prev"
+      ? new Date(now.getFullYear(), now.getMonth() - cmpMonths, 1)
+      : new Date(now.getFullYear() - 1, now.getMonth(), 1);
+  const compWindow = monthsEndingAt(keyOf(compEndDate), cmpMonths);
+  const sumWindow = (keys: string[]) =>
+    keys.reduce(
+      (acc, k) => ({
+        tot: acc.tot + (monthAgg.get(k)?.tot ?? 0),
+        paid: acc.paid + (monthAgg.get(k)?.paid ?? 0),
+        count: acc.count + (monthCount.get(k) ?? 0),
+      }),
+      { tot: 0, paid: 0, count: 0 },
+    );
+  const cmpCur = sumWindow(curWindow);
+  const cmpPrev = sumWindow(compWindow);
   const pctDelta = (a: number, b: number): number | null => (b > 0 ? ((a - b) / b) * 100 : null);
+  const cmpChart = curWindow.map((k, i) => ({
+    label: monthLabel(k),
+    actuel: monthAgg.get(k)?.tot ?? 0,
+    compare: monthAgg.get(compWindow[i])?.tot ?? 0,
+  }));
+  const myLabel = (k: string) => `${monthLabel(k)} ${k.slice(2, 4)}`;
+  const rangeLabel = (w: string[]) => (w.length === 1 ? myLabel(w[0]) : w.length ? `${myLabel(w[0])} → ${myLabel(w[w.length - 1])}` : "");
+  const curRange = rangeLabel(curWindow);
+  const compRange = rangeLabel(compWindow);
 
   const statusData = [
     { name: "Payé", value: byStatus.payee, color: COLORS.green },
@@ -391,35 +402,80 @@ export function Stats() {
 
       {/* Comparaison de période */}
       <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="text-sm font-semibold text-foreground">Comparaison</div>
-          <div className="flex flex-wrap gap-0.5 rounded-lg border border-border bg-card p-0.5">
-            {(
-              [
-                ["mom", "Mois vs mois dernier"],
-                ["yoyMonth", "vs même mois N-1"],
-                ["yoy", "Année vs an dernier"],
-              ] as const
-            ).map(([k, lbl]) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setCompareMode(k)}
-                className={cn(
-                  "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
-                  compareMode === k ? "bg-primary text-primary-foreground" : "text-faint hover:text-foreground",
-                )}
-              >
-                {lbl}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap gap-0.5 rounded-lg border border-border bg-card p-0.5">
+              {([1, 3, 6, 12] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setCmpMonths(n)}
+                  className={cn("rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors", cmpMonths === n ? "bg-primary text-primary-foreground" : "text-faint hover:text-foreground")}
+                >
+                  {n === 1 ? "1 mois" : `${n} mois`}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-0.5 rounded-lg border border-border bg-card p-0.5">
+              {(
+                [
+                  ["prev", "Période préc."],
+                  ["year", "Année N-1"],
+                ] as const
+              ).map(([k, lbl]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setCmpAgainst(k)}
+                  className={cn("rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors", cmpAgainst === k ? "bg-primary text-primary-foreground" : "text-faint hover:text-foreground")}
+                >
+                  {lbl}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <CompareCard label="CA facturé" current={formatEuro(cmpCur.tot)} previous={formatEuro(cmpPrev.tot)} delta={pctDelta(cmpCur.tot, cmpPrev.tot)} curLbl={cmpConf.curLbl} prevLbl={cmpConf.prevLbl} />
-          <CompareCard label="Encaissé" current={formatEuro(cmpCur.paid)} previous={formatEuro(cmpPrev.paid)} delta={pctDelta(cmpCur.paid, cmpPrev.paid)} curLbl={cmpConf.curLbl} prevLbl={cmpConf.prevLbl} />
-          <CompareCard label="Factures" current={String(cmpCur.count)} previous={String(cmpPrev.count)} delta={pctDelta(cmpCur.count, cmpPrev.count)} curLbl={cmpConf.curLbl} prevLbl={cmpConf.prevLbl} />
+
+        <div className="mt-2 text-[11px] text-faint">
+          <span className="font-medium text-muted-foreground">{curRange}</span> vs <span className="font-medium text-muted-foreground">{compRange}</span>
         </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <CompareCard label="CA facturé" current={formatEuro(cmpCur.tot)} previous={formatEuro(cmpPrev.tot)} delta={pctDelta(cmpCur.tot, cmpPrev.tot)} curLbl={curRange} prevLbl={compRange} />
+          <CompareCard label="Encaissé" current={formatEuro(cmpCur.paid)} previous={formatEuro(cmpPrev.paid)} delta={pctDelta(cmpCur.paid, cmpPrev.paid)} curLbl={curRange} prevLbl={compRange} />
+          <CompareCard label="Factures" current={String(cmpCur.count)} previous={String(cmpPrev.count)} delta={pctDelta(cmpCur.count, cmpPrev.count)} curLbl={curRange} prevLbl={compRange} />
+        </div>
+
+        {cmpMonths > 1 && (
+          <>
+            <div className="mb-2 mt-5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-4 rounded-full" style={{ background: COLORS.primary }} /> Période actuelle
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-4 rounded-full" style={{ background: COLORS.slate }} /> Comparaison
+              </span>
+              <span className="text-faint">· CA facturé</span>
+            </div>
+            <ChartContainer config={{}} className="h-[240px]">
+              <AreaChart data={cmpChart} margin={{ top: 12, right: 12, left: -6, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="cmpGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={COLORS.primary} stopOpacity={0.2} />
+                    <stop offset="100%" stopColor={COLORS.primary} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.6} vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickMargin={10} interval="preserveStartEnd" minTickGap={16} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(Number(v))} width={44} />
+                <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ stroke: COLORS.primary, strokeWidth: 1, strokeOpacity: 0.4 }} />
+                <Area type="monotone" dataKey="compare" name="Comparaison" stroke={COLORS.slate} strokeWidth={2} strokeDasharray="5 4" fill="transparent" dot={false} />
+                <Area type="monotone" dataKey="actuel" name="Période actuelle" stroke={COLORS.primary} strokeWidth={2.5} fill="url(#cmpGrad)" dot={false} activeDot={{ r: 4, fill: COLORS.primary, stroke: "var(--color-surface)", strokeWidth: 2 }} />
+              </AreaChart>
+            </ChartContainer>
+          </>
+        )}
       </div>
 
       {/* Graphique vedette : chiffre d'affaires */}
