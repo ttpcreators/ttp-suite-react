@@ -110,6 +110,21 @@ type HistEntry = {
   followers: string;
 };
 
+/**
+ * La fiche créateur (abonnés / engagement / stats) ne reflète que sa plateforme
+ * PRINCIPALE (champ `platform` du roster). Un calcul fait sur une autre
+ * plateforme est ajouté à l'historique (+ portail) mais n'écrase PAS la fiche —
+ * sinon un calcul TikTok remplaçait les abonnés Instagram.
+ */
+function isMainPlatform(creatorPlatform: string | null | undefined, key: PlatformKey): boolean {
+  const cp = (creatorPlatform ?? "").toLowerCase().trim();
+  if (!cp) return true; // pas de plateforme principale définie → on met à jour
+  if (key === "instagram") return cp.includes("insta");
+  if (key === "tiktok") return cp.includes("tiktok") || cp.includes("tik tok");
+  if (key === "youtube") return cp.includes("youtube") || cp.includes("yt");
+  return cp === "x" || cp.includes("twitter") || /(^|\s)x($|\s)/.test(cp);
+}
+
 function verdict(er: number, p: Platform): { label: string; hint: string; tone: "signal" | "amber" } {
   if (er >= p.excellent)
     return { label: "Excellent", hint: "Communauté très engagée — un argument fort en négociation.", tone: "signal" };
@@ -192,11 +207,15 @@ export function Engagement() {
     };
   };
 
+  // Le calcul en cours met-il à jour la fiche (plateforme principale) ou seulement l'historique ?
+  const updatesFiche = !creatorId || isMainPlatform(selectedCreator?.platform, p.key);
+
   const save = async () => {
     if (!hasInputs || saving) return;
     setSaving(true);
-    // 1) Si un créateur est sélectionné → met à jour sa fiche (er + stats + followers).
-    if (creatorId) {
+    // 1) Fiche créateur (er + stats + followers) — UNIQUEMENT si le calcul porte
+    //    sur sa plateforme principale (sinon un calcul TikTok écrase l'Instagram).
+    if (creatorId && updatesFiche) {
       const stats = {
         er: erLabel,
         base: baseN,
@@ -241,7 +260,15 @@ export function Engagement() {
     setSaving(false);
     setSavedOk(true);
     setEditingId(null);
-    toast(editingId ? "Mesure mise à jour ✓" : creatorId ? "Enregistré (fiche + historique) ✓" : "Ajouté à l'historique ✓");
+    toast(
+      editingId
+        ? "Mesure mise à jour ✓"
+        : creatorId
+          ? updatesFiche
+            ? "Enregistré (fiche + historique) ✓"
+            : `Historique + portail ✓ (fiche = ${selectedCreator?.platform ?? "plateforme principale"})`
+          : "Ajouté à l'historique ✓",
+    );
   };
 
   const delHist = async (id: string) => {
@@ -250,9 +277,12 @@ export function Engagement() {
     setHistory(next);
     if (editingId === id) setEditingId(null);
     await saveAppStateKey("engagementHistory", next);
-    // Propage sur la fiche du créateur : réapplique la mesure restante la plus récente, sinon efface.
+    // Propage sur la fiche du créateur : réapplique la mesure restante la plus
+    // récente DE SA PLATEFORME PRINCIPALE, sinon efface (les autres plateformes
+    // vivent dans l'historique/portail, pas sur la fiche).
     if (target?.creatorId) {
-      const latest = next.find((h) => h.creatorId === target.creatorId);
+      const plat = creators.find((c) => c.id === target.creatorId)?.platform;
+      const latest = next.find((h) => h.creatorId === target.creatorId && isMainPlatform(plat, h.platform));
       if (latest) {
         const patch: Record<string, unknown> = { er: latest.er, stats: statsFromEntry(latest) };
         if (num(latest.followers) > 0) patch.followers = fmtInt(num(latest.followers));
@@ -411,7 +441,11 @@ export function Engagement() {
             ) : !hasInputs ? (
               <>Renseigne les interactions <span className="font-medium text-foreground">et</span> les vues (30 j) pour pouvoir enregistrer.</>
             ) : creatorId ? (
-              <>Met à jour la fiche de <span className="font-semibold text-foreground">{titleCase(selectedCreator?.name ?? "")}</span> (roster · media kit · portail) + l'historique.</>
+              updatesFiche ? (
+                <>Met à jour la fiche de <span className="font-semibold text-foreground">{titleCase(selectedCreator?.name ?? "")}</span> (roster · media kit · portail) + l'historique.</>
+              ) : (
+                <>Plateforme secondaire : enregistré dans l'historique + portail de <span className="font-semibold text-foreground">{titleCase(selectedCreator?.name ?? "")}</span>. Sa fiche garde ses stats <span className="font-medium text-foreground">{selectedCreator?.platform}</span>.</>
+              )
             ) : (
               <>Astuce : sélectionne un <span className="font-medium text-foreground">créateur</span> ci-dessus pour l'enregistrer sur sa fiche. Sinon, ajouté à l'historique seul.</>
             )}
