@@ -54,9 +54,9 @@ const PLATFORMS: Platform[] = [
     metrics: [
       { key: "likes", label: "Likes" },
       { key: "comments", label: "Commentaires" },
-      { key: "saves", label: "Enregistrements" },
+      { key: "shares", label: "Partages" },
     ],
-    formula: "(likes + commentaires + enreg.) sur 30 j ÷ vues × 100",
+    formula: "(likes + commentaires + partages) sur 30 j ÷ vues × 100",
     bon: 4.5,
     excellent: 9,
   },
