@@ -29,6 +29,11 @@ verify_jwt = false
 [functions.google-sync]
 verify_jwt = false
 
+# daily-digest : résumé push matinal, appelé par pg_cron avec le CRON_SECRET
+# (pas un JWT) → verify_jwt=false obligatoire ; l'auth CRON_SECRET est dans le code.
+[functions.daily-digest]
+verify_jwt = false
+
 # --- Fonctions appelées par le front (JWT agence exigé) ---------------------
 # verify_jwt=true : la plateforme valide le JWT ; le code exige EN PLUS le rôle agence.
 [functions.google-connect-url]

@@ -1,14 +1,58 @@
 import * as React from "react";
-import { Bell, GripVertical, Trash2, Archive, ChevronRight } from "lucide-react";
+import { Bell, BellRing, GripVertical, Trash2, Archive, ChevronRight } from "lucide-react";
 import { motion } from "motion/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Card } from "@/components/ui/card";
+import { usePush } from "@/lib/push";
 
 export interface NotificationItem {
   id: string;
   title: string;
   description: string;
   time: string;
+}
+
+/** Bouton d'activation des notifications push (par téléphone) — au-dessus de la liste. */
+function PushRow() {
+  const { state, busy, enable, disable } = usePush();
+  if (state === "unsupported") return null;
+  return (
+    <div className="border-b border-border px-4 py-3">
+      {state === "enabled" ? (
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 text-[12px] font-medium text-signaltext">
+            <BellRing className="h-3.5 w-3.5" /> Notifications activées sur ce téléphone
+          </span>
+          <button
+            type="button"
+            onClick={disable}
+            disabled={busy}
+            className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-faint transition-colors hover:text-foreground disabled:opacity-50"
+          >
+            Désactiver
+          </button>
+        </div>
+      ) : state === "needs-install" ? (
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          📲 Pour recevoir les alertes sur iPhone :{" "}
+          <span className="font-medium text-foreground">Partager → Ajouter à l'écran d'accueil</span>, puis ouvre l'app depuis son icône.
+        </p>
+      ) : state === "denied" ? (
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          🔕 Notifications bloquées. Autorise-les dans les réglages du téléphone (Réglages → Notifications → TTP Suite).
+        </p>
+      ) : (
+        <button
+          type="button"
+          onClick={enable}
+          disabled={busy}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          <BellRing className="h-3.5 w-3.5" /> {busy ? "Activation…" : "Activer sur ce téléphone"}
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function Notifications({ items = [] }: { items?: NotificationItem[] }) {
@@ -54,6 +98,7 @@ export function Notifications({ items = [] }: { items?: NotificationItem[] }) {
               </button>
             )}
           </div>
+          <PushRow />
           {notifications.length === 0 ? (
             <div className="p-6 text-center text-sm text-muted-foreground">Aucune notification 🎉</div>
           ) : (
