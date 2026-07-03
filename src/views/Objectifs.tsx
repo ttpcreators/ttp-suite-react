@@ -171,6 +171,13 @@ export function Objectifs() {
           <ul className="divide-y divide-border">
             {list.map((o, index) => {
               const pct = Math.max(0, Math.min(100, Number(o.pct) || 0));
+              // Code couleur : ≥70% bleu · 50–70% orange · <50% rouge
+              const tone =
+                pct >= 70
+                  ? { ind: "bg-primary", track: "bg-primary/15", text: "text-primary" }
+                  : pct >= 50
+                    ? { ind: "bg-amber", track: "bg-amber/15", text: "text-amber" }
+                    : { ind: "bg-rose-500", track: "bg-rose-500/15", text: "text-rose-500" };
               return (
                 <li
                   key={`${o.name}-${index}`}
@@ -179,9 +186,9 @@ export function Objectifs() {
                   <span className="truncate text-[13px] font-semibold text-foreground md:w-44">
                     {o.name}
                   </span>
-                  <Progress value={pct} className="h-2 flex-1" />
+                  <Progress value={pct} className={"h-2 flex-1 " + tone.track} indicatorClassName={tone.ind} />
                   <div className="flex items-center justify-between gap-4 md:justify-end">
-                    <span className="w-12 shrink-0 text-right text-[13px] font-semibold text-foreground">
+                    <span className={"w-12 shrink-0 text-right text-[13px] font-semibold " + tone.text}>
                       {pct}%
                     </span>
                     <span className="shrink-0 whitespace-nowrap text-right text-[11px] text-faint">
