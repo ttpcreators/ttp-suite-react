@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
+import { frDate } from "@/lib/dates";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
@@ -542,7 +543,7 @@ export function CreatorSpace({
                       <div key={b.id} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
                         <span className="h-2 w-2 shrink-0 rounded-full bg-signal" />
                         <div className="min-w-0 flex-1 truncate text-xs font-medium">{b.brand}</div>
-                        <span className="text-[10px] text-faint">{b.due}</span>
+                        <span className="text-[10px] text-faint">{frDate(b.due)}</span>
                       </div>
                     ))
                   )}
@@ -575,7 +576,7 @@ export function CreatorSpace({
               <InlineForm open={tdOpen} title="Nouvelle tâche" onClose={() => setTdOpen(false)} onSubmit={addTodo}>
                 <TextField label="Tâche" value={tdText} onChange={setTdText} />
                 <TextField label="Description" value={tdDesc} onChange={setTdDesc} />
-                <TextField label="Échéance" value={tdDue} onChange={setTdDue} placeholder="JJ/MM" />
+                <TextField label="Échéance" type="date" value={tdDue} onChange={setTdDue} />
                 <SelectField label="Priorité" value={tdPrio} onChange={setTdPrio} options={PRIORITY_OPTIONS} />
               </InlineForm>
               <div className="flex flex-col gap-3">
@@ -701,7 +702,7 @@ export function CreatorSpace({
                   <div key={b.id} className={"flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3 " + (i > 0 ? "border-t border-border" : "")}>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold">{b.brand}</div>
-                      <div className="truncate text-xs text-faint">{b.deliverables} · échéance {b.due}</div>
+                      <div className="truncate text-xs text-faint">{b.deliverables} · échéance {frDate(b.due)}</div>
                     </div>
                     <div className="w-full sm:w-[150px] sm:shrink-0">
                       <StatusSelect value={b.status ?? "attente"} options={BRIEF_STATUS} onChange={(v) => setBriefStatus(b.id, v)} />

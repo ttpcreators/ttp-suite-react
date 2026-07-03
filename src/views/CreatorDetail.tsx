@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
+import { frDate } from "@/lib/dates";
 import { dbUpdate } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -637,7 +638,7 @@ export function CreatorDetail({
                 <span className="h-2 w-2 shrink-0 rounded-full bg-signal" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xs font-medium">{b.brand}</div>
-                  <div className="truncate text-[10px] text-faint">{b.deliverables} · {b.due}</div>
+                  <div className="truncate text-[10px] text-faint">{b.deliverables} · {frDate(b.due)}</div>
                 </div>
               </div>
             ))

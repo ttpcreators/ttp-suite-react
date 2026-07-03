@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, initials } from "@/lib/utils";
+import { frDate } from "@/lib/dates";
 import { parseAmount, formatEuro, useAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { LocationTag } from "@/components/ui/location-tag";
@@ -375,7 +376,7 @@ export function Apercu() {
                   </div>
                   <div className="truncate text-[10px] text-muted-foreground">{b.deliverables}</div>
                 </div>
-                <span className="text-[9px] font-semibold text-muted-foreground">{b.due}</span>
+                <span className="text-[9px] font-semibold text-muted-foreground">{frDate(b.due)}</span>
               </div>
             ))
           )}

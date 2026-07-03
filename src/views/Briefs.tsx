@@ -12,6 +12,7 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
+import { toISODate, frDate } from "@/lib/dates";
 import { getCache, setCache } from "@/lib/viewCache";
 
 type Row = {
@@ -134,7 +135,7 @@ export function Briefs() {
     setEditId(row.id);
     setEditBrand(row.brand);
     setEditDeliverables(row.deliverables === "—" ? "" : row.deliverables);
-    setEditDue(row.due === "—" ? "" : row.due);
+    setEditDue(toISODate(row.due));
     setEditObjectif(row.objectif === "—" ? "" : row.objectif);
   };
   const saveEdit = async (id: string) => {
@@ -186,7 +187,7 @@ export function Briefs() {
           <div className="flex flex-col gap-3">
             <TextField label="Marque" value={editBrand} onChange={setEditBrand} />
             <TextField label="Livrables" value={editDeliverables} onChange={setEditDeliverables} placeholder="ex 3 posts · 1 reel" />
-            <TextField label="Échéance" value={editDue} onChange={setEditDue} />
+            <TextField label="Échéance" type="date" value={editDue} onChange={setEditDue} />
             <TextField label="Objectif" value={editObjectif} onChange={setEditObjectif} />
             <button
               type="button"
@@ -250,7 +251,7 @@ export function Briefs() {
 
         <div className="mt-3 flex items-center gap-1.5 border-t border-border pt-2.5 text-[11px] text-muted-foreground">
           <CalendarClock className="h-3.5 w-3.5 shrink-0 text-faint" />
-          <span className="truncate">Échéance {row.due || "—"}</span>
+          <span className="truncate">Échéance {frDate(row.due)}</span>
         </div>
       </div>
     );
@@ -329,7 +330,7 @@ export function Briefs() {
         <TextField label="Marque" value={brand} onChange={setBrand} />
         <SelectField label="Créateur" value={creator} onChange={setCreator} options={creatorOptions} />
         <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />
-        <TextField label="Échéance" value={due} onChange={setDue} />
+        <TextField label="Échéance" type="date" value={due} onChange={setDue} />
         <TextField label="Budget" value={budget} onChange={setBudget} />
         <TextField label="Objectif" value={objectif} onChange={setObjectif} />
         <SelectField label="Statut" value={status} onChange={setStatus} options={STATUS_OPTS.map((s) => ({ value: s.value, label: s.label }))} />

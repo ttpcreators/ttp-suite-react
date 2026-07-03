@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, FileText, CalendarDays, Files, LayoutDashboard, ListChecks, Lightbulb } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
+import { frDate } from "@/lib/dates";
 import { useCreators } from "@/lib/useCreators";
 import { useAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -272,7 +273,7 @@ export function Portal({
                   <span className="h-2 w-2 shrink-0 rounded-full bg-signal" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs font-medium">{b.brand}</div>
-                    <div className="truncate text-[10px] text-faint">{b.deliverables} · {b.due}</div>
+                    <div className="truncate text-[10px] text-faint">{b.deliverables} · {frDate(b.due)}</div>
                   </div>
                 </div>
               ))
@@ -325,7 +326,7 @@ export function Portal({
               <div key={i} className={"flex items-center gap-3 px-4 py-3 " + (i > 0 ? "border-t border-border" : "")}>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{b.brand}</div>
-                  <div className="truncate text-xs text-faint">{b.deliverables} · échéance {b.due}</div>
+                  <div className="truncate text-xs text-faint">{b.deliverables} · échéance {frDate(b.due)}</div>
                 </div>
                 <AnimatedBadge status={b.status === "cours" ? "info" : b.status === "valider" ? "warning" : "neutral"} size="sm">
                   {b.status === "cours" ? "En cours" : b.status === "valider" ? "À valider" : "En attente"}

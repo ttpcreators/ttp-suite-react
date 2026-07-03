@@ -14,6 +14,7 @@ import {
 import { ActionMenu } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
+import { toISODate, frDate } from "@/lib/dates";
 import { getCache, setCache } from "@/lib/viewCache";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -99,7 +100,7 @@ export function Todo() {
   const openEdit = (row: Row) => {
     setEditText(row.text);
     setEditDescr(row.descr ?? "");
-    setEditDue(row.due && row.due !== "—" ? row.due : "");
+    setEditDue(toISODate(row.due));
     setEditPriority(row.priority);
     setEditCreator(row.creator ?? "");
     setEditing(true);
@@ -250,9 +251,9 @@ export function Todo() {
         <TextField label="Description" value={descr} onChange={setDescr} />
         <TextField
           label="Échéance"
+          type="date"
           value={due}
           onChange={setDue}
-          placeholder="JJ/MM ou —"
         />
         <SelectField
           label="Priorité"
@@ -543,9 +544,9 @@ export function Todo() {
                   />
                   <TextField
                     label="Échéance"
+                    type="date"
                     value={editDue}
                     onChange={setEditDue}
-                    placeholder="JJ/MM ou —"
                   />
                   <SelectField
                     label="Priorité"
@@ -610,7 +611,7 @@ export function Todo() {
 
                 <DetailBlock label="Échéance">
                   <p className="text-[13px] text-foreground">
-                    {selectedTodo.due || "—"}
+                    {frDate(selectedTodo.due)}
                   </p>
                 </DetailBlock>
 
