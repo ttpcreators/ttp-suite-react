@@ -666,7 +666,8 @@ export function Facturation() {
         ) : (
           filtered.map((r) => {
             const meta = STATUS_META[r.status];
-            const rate = details[r.id]?.commissionRate ?? commissionFor(r.creator);
+            // Taux vivant depuis le roster (source unique) → une modif de commission se répercute ici.
+            const rate = commissionFor(r.creator);
             const del = async () => {
               if (await dbTrash("invoices", r.id, r.party, formatEuro(parseAmount(r.amount)))) {
                 setRows(invoices.filter((x) => x.id !== r.id));
@@ -747,7 +748,7 @@ export function Facturation() {
                 <SelectField
                   label="Créateur"
                   value={draft.creator}
-                  onChange={(v) => setDraft({ ...draft, creator: v, commissionRate: v && commissions[v] != null ? commissions[v] : draft.commissionRate })}
+                  onChange={(v) => setDraft({ ...draft, creator: v, commissionRate: v ? commissionFor(v) : draft.commissionRate })}
                   options={creatorOptions}
                 />
               </div>

@@ -73,6 +73,10 @@ export function useNotifications(): NotificationItem[] {
         });
       });
       setItems(out);
+    }).catch((e) => {
+      if (!alive) return;
+      console.error("Notifications — échec réseau:", e);
+      setItems([]);
     });
     return () => {
       alive = false;

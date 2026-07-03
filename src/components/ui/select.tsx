@@ -313,9 +313,16 @@ const SelectContent = forwardRef<HTMLDivElement, SelectContentProps>(
     if (leftPos + boxWidth > vw - gap) leftPos = vw - gap - boxWidth;
     if (leftPos < gap) leftPos = gap;
 
+    // Clamp vertical : bascule vers le haut si trop peu de place en bas, et borne la hauteur.
+    const vh = typeof window !== "undefined" ? window.innerHeight : 768;
+    const spaceBelow = vh - triggerRect.bottom - gap;
+    const spaceAbove = triggerRect.top - gap;
+    const openUp = spaceBelow < 200 && spaceAbove > spaceBelow;
+    const maxH = Math.min(300, Math.max(140, openUp ? spaceAbove : spaceBelow));
+
     return createPortal(
       <SelectContentContext.Provider value={{ registerItem, activeIndex, checkedIndex }}>
-        <div style={{ position: "fixed", top: triggerRect.bottom + 6, left: leftPos, minWidth: Math.min(triggerRect.width, boxWidth), maxWidth: boxWidth, zIndex: 50 }}>
+        <div style={{ position: "fixed", ...(openUp ? { bottom: vh - triggerRect.top + 6 } : { top: triggerRect.bottom + 6 }), left: leftPos, minWidth: Math.min(triggerRect.width, boxWidth), maxWidth: boxWidth, zIndex: 50 }}>
           <motion.div
             ref={(node) => {
               (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
@@ -336,7 +343,7 @@ const SelectContent = forwardRef<HTMLDivElement, SelectContentProps>(
             initial={{ opacity: 0, y: -4, scaleY: 0.96 }}
             animate={{ opacity: 1, y: 0, scaleY: 1 }}
             transition={springs.fast}
-            style={{ transformOrigin: "top center" }}
+            style={{ transformOrigin: openUp ? "bottom center" : "top center", maxHeight: maxH }}
           >
             <AnimatePresence>
               {checkedRect && (

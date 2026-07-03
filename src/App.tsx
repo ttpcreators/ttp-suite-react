@@ -123,7 +123,8 @@ export default function App() {
     // Restaure la dernière page ouverte (évite de retomber sur l'Aperçu à chaque refresh).
     try {
       const saved = localStorage.getItem("ttp:view");
-      if (saved && saved in VIEWS) return saved as ViewId;
+      // `roster` est valide mais géré à part (pas dans VIEWS) → l'inclure explicitement.
+      if (saved && (saved in VIEWS || saved === "roster")) return saved as ViewId;
     } catch {
       /* localStorage indisponible */
     }

@@ -87,8 +87,13 @@ export function ActionMenu({ items, buttonClassName, align = "right" }: { items:
 
   const W = 210;
   const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 768;
   const base = rect ? (align === "left" ? rect.left : rect.right - W) : 0;
   const left = rect ? Math.min(Math.max(8, base), Math.max(8, vw - W - 8)) : 0;
+  const spaceBelow = rect ? vh - rect.bottom - 8 : 0;
+  const spaceAbove = rect ? rect.top - 8 : 0;
+  const menuUp = !!rect && spaceBelow < 200 && spaceAbove > spaceBelow;
+  const menuMaxH = Math.round(Math.max(140, Math.min(vh * 0.6, menuUp ? spaceAbove : spaceBelow)));
 
   return (
     <>
@@ -109,7 +114,7 @@ export function ActionMenu({ items, buttonClassName, align = "right" }: { items:
             <div className="fixed inset-0 z-[70]" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
             <div
               className="fixed z-[71] overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-xl"
-              style={{ top: rect.bottom + 6, left, width: W, maxHeight: "60vh" }}
+              style={{ ...(menuUp ? { bottom: vh - rect.top + 6 } : { top: rect.bottom + 6 }), left, width: W, maxHeight: menuMaxH }}
             >
               {items.map((it) => (
                 <button
