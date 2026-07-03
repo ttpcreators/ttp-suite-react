@@ -10,6 +10,7 @@ import { CheckCircle2, AlertTriangle, RefreshCw, Unlink, Loader2 } from "lucide-
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { connect, disconnect, getStatus, triggerSync, consumeOAuthReturn, type GoogleStatus } from "@/lib/googleCalendar";
+import { ConfirmDialog } from "@/components/ui/action-menu";
 
 /** Logo Google officiel multicolore (« G »). */
 function GoogleLogo({ className }: { className?: string }) {
@@ -41,6 +42,7 @@ export function GoogleConnect() {
   const [connecting, setConnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [confirmDisc, setConfirmDisc] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -142,7 +144,7 @@ export function GoogleConnect() {
               <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
               {syncing ? "Synchronisation…" : "Synchroniser maintenant"}
             </button>
-            <button type="button" onClick={onDisconnect} disabled={syncing || disconnecting} className={ghostBtn}>
+            <button type="button" onClick={() => setConfirmDisc(true)} disabled={syncing || disconnecting} className={ghostBtn}>
               <Unlink className="h-4 w-4" /> {disconnecting ? "Déconnexion…" : "Déconnecter"}
             </button>
           </div>
@@ -162,6 +164,21 @@ export function GoogleConnect() {
             </button>
           </div>
         </>
+      )}
+
+      {confirmDisc && (
+        <ConfirmDialog
+          title="Déconnecter Google Agenda ?"
+          message="La synchronisation avec Google Agenda sera coupée. Tu devras te reconnecter et réautoriser l'accès Google pour la relancer."
+          confirmLabel="Déconnecter"
+          cancelLabel="Annuler"
+          danger
+          onCancel={() => setConfirmDisc(false)}
+          onConfirm={() => {
+            setConfirmDisc(false);
+            onDisconnect();
+          }}
+        />
       )}
     </div>
   );
