@@ -10,10 +10,11 @@ import {
   TextField,
 } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { Trash2 } from "lucide-react";
+import { Trash2, MessageSquarePlus, Check, X } from "lucide-react";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useEffect, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
+import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
 
 type Row = {
@@ -42,7 +43,26 @@ export function Idees() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [text, setText] = useState("");
+  const [note, setNote] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>(ALL_STATUS);
+
+  // Commentaires (agence) stockés dans le blob __app_state__, indexés par id d'idée.
+  const { data: notesData } = useAppState<Record<string, string>>(
+    (s: AppState) => (s["itemNotes"] as Record<string, string>) ?? {},
+  );
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (notesData) setNotes(notesData);
+  }, [notesData]);
+  const [editNoteId, setEditNoteId] = useState<string | null>(null);
+  const [editNoteText, setEditNoteText] = useState("");
+  const saveNote = async (id: string, value: string) => {
+    const next = { ...notes };
+    if (value.trim()) next[id] = value.trim();
+    else delete next[id];
+    setNotes(next);
+    await saveAppStateKey("itemNotes", next);
+  };
 
   useEffect(() => {
     let active = true;
@@ -83,10 +103,13 @@ export function Idees() {
       toast("Erreur — réessaie");
       return;
     }
-    setRows([...(rows ?? []), created as unknown as Row]);
+    const createdRow = created as unknown as Row;
+    setRows([...(rows ?? []), createdRow]);
+    if (note.trim()) await saveNote(createdRow.id, note);
     toast("Idée ajoutée ✓");
     setFormOpen(false);
     setText("");
+    setNote("");
   };
 
   const updateStatus = async (id: string, status: string) => {
@@ -152,6 +175,7 @@ export function Idees() {
         onSubmit={submit}
       >
         <TextField label="Idée" value={text} onChange={setText} />
+        <TextField label="Commentaire (optionnel)" value={note} onChange={setNote} placeholder="Infos, rappel, lien…" />
       </InlineForm>
 
       {rows === null ? (
@@ -192,6 +216,15 @@ export function Idees() {
                   <ActionMenu
                     items={[
                       {
+                        key: "note",
+                        label: notes[row.id] ? "Modifier le commentaire" : "Ajouter un commentaire",
+                        icon: MessageSquarePlus,
+                        onClick: () => {
+                          setEditNoteId(row.id);
+                          setEditNoteText(notes[row.id] ?? "");
+                        },
+                      },
+                      {
                         key: "delete",
                         label: "Supprimer",
                         icon: Trash2,
@@ -203,6 +236,66 @@ export function Idees() {
                   />
                 </div>
               </div>
+
+              {/* Commentaire (agence) */}
+              {editNoteId === row.id ? (
+                <div className="mt-3 flex flex-col gap-2 rounded-xl border border-border bg-panel p-3">
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Commentaire</span>
+                  <textarea
+                    value={editNoteText}
+                    onChange={(e) => setEditNoteText(e.target.value)}
+                    rows={2}
+                    autoFocus
+                    placeholder="Infos, rappel, lien…"
+                    className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await saveNote(row.id, editNoteText);
+                        setEditNoteId(null);
+                        toast("Commentaire enregistré ✓");
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                    >
+                      <Check className="h-3.5 w-3.5" /> Enregistrer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditNoteId(null)}
+                      className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                      title="Annuler"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : notes[row.id] ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditNoteId(row.id);
+                    setEditNoteText(notes[row.id]);
+                  }}
+                  className="mt-2 flex w-full items-start gap-2 rounded-xl bg-panel px-3 py-2 text-left transition-colors hover:bg-rowhover"
+                  title="Modifier le commentaire"
+                >
+                  <MessageSquarePlus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" />
+                  <span className="whitespace-pre-wrap text-[13px] leading-relaxed text-muted-foreground">{notes[row.id]}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditNoteId(row.id);
+                    setEditNoteText("");
+                  }}
+                  className="mt-1.5 flex items-center gap-1.5 text-[11px] font-medium text-faint transition-colors hover:text-foreground"
+                >
+                  <MessageSquarePlus className="h-3.5 w-3.5" /> Ajouter un commentaire
+                </button>
+              )}
             </div>
           ))}
         </div>

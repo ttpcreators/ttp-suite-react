@@ -15,6 +15,7 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { toISODate, frDate } from "@/lib/dates";
+import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -79,9 +80,26 @@ export function Todo() {
   const [formOpen, setFormOpen] = useState(false);
   const [text, setText] = useState("");
   const [descr, setDescr] = useState("");
+  const [note, setNote] = useState("");
   const [due, setDue] = useState("");
   const [priority, setPriority] = useState<Priority>("moyenne");
   const [creator, setCreator] = useState("");
+
+  // Commentaires (agence) stockés dans le blob __app_state__, indexés par id de tâche.
+  const { data: notesData } = useAppState<Record<string, string>>(
+    (s: AppState) => (s["itemNotes"] as Record<string, string>) ?? {},
+  );
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (notesData) setNotes(notesData);
+  }, [notesData]);
+  const saveNote = async (id: string, value: string) => {
+    const next = { ...notes };
+    if (value.trim()) next[id] = value.trim();
+    else delete next[id];
+    setNotes(next);
+    await saveAppStateKey("itemNotes", next);
+  };
 
   const [creatorFilter, setCreatorFilter] = useState<CreatorFilter>(null);
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>(null);
@@ -92,6 +110,7 @@ export function Todo() {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [editDescr, setEditDescr] = useState("");
+  const [editNote, setEditNote] = useState("");
   const [editDue, setEditDue] = useState("");
   const [editPriority, setEditPriority] = useState<Priority>("moyenne");
   const [editCreator, setEditCreator] = useState("");
@@ -100,6 +119,7 @@ export function Todo() {
   const openEdit = (row: Row) => {
     setEditText(row.text);
     setEditDescr(row.descr ?? "");
+    setEditNote(notes[row.id] ?? "");
     setEditDue(toISODate(row.due));
     setEditPriority(row.priority);
     setEditCreator(row.creator ?? "");
@@ -130,6 +150,7 @@ export function Todo() {
       )
     );
     setSelectedTodo((prev) => (prev ? { ...prev, ...patch } : prev));
+    await saveNote(selectedTodo.id, editNote);
     setEditing(false);
     toast("Tâche modifiée ✓");
   };
@@ -177,11 +198,14 @@ export function Todo() {
       toast("Erreur — réessaie");
       return;
     }
-    setRows([created as unknown as Row, ...(rows ?? [])]);
+    const createdRow = created as unknown as Row;
+    setRows([createdRow, ...(rows ?? [])]);
+    if (note.trim()) await saveNote(createdRow.id, note);
     toast("Tâche ajoutée ✓");
     setFormOpen(false);
     setText("");
     setDescr("");
+    setNote("");
     setDue("");
     setPriority("moyenne");
     setCreator("");
@@ -249,6 +273,7 @@ export function Todo() {
       >
         <TextField label="Tâche" value={text} onChange={setText} />
         <TextField label="Description" value={descr} onChange={setDescr} />
+        <TextField label="Commentaire (optionnel)" value={note} onChange={setNote} placeholder="Infos en plus, rappel, lien…" />
         <TextField
           label="Échéance"
           type="date"
@@ -543,6 +568,13 @@ export function Todo() {
                     className="min-w-full"
                   />
                   <TextField
+                    label="Commentaire"
+                    value={editNote}
+                    onChange={setEditNote}
+                    className="min-w-full"
+                    placeholder="Infos en plus, rappel, lien…"
+                  />
+                  <TextField
                     label="Échéance"
                     type="date"
                     value={editDue}
@@ -596,6 +628,16 @@ export function Todo() {
                   </p>
                 ) : (
                   <p className="text-[13px] text-faint">Aucune description.</p>
+                )}
+              </DetailBlock>
+
+              <DetailBlock label="Commentaire">
+                {notes[selectedTodo.id] ? (
+                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">
+                    {notes[selectedTodo.id]}
+                  </p>
+                ) : (
+                  <p className="text-[13px] text-faint">Aucun commentaire. Clique sur ✏️ pour en ajouter un.</p>
                 )}
               </DetailBlock>
 
