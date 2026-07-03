@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   FileText,
   Eye,
@@ -394,19 +394,6 @@ export function Facturation() {
     setCommissions((appData.creatorCommission as Record<string, number>) ?? {});
   }, [appData]);
 
-  const totals = useMemo(() => {
-    const acc = { payee: 0, attente: 0, retard: 0, total: 0, attenteCount: 0 };
-    for (const r of rows ?? []) {
-      const amount = parseAmount(r.amount);
-      acc.total += amount;
-      if (r.status === "payee") acc.payee += amount;
-      else if (r.status === "attente") {
-        acc.attente += amount;
-        acc.attenteCount += 1;
-      } else if (r.status === "retard") acc.retard += amount;
-    }
-    return acc;
-  }, [rows]);
 
   if (error) {
     return (
@@ -453,13 +440,6 @@ export function Facturation() {
       notes: "",
     };
   };
-
-  const cards = [
-    { label: "Facturé · total", value: totals.total, hint: `${rows.length} facture${rows.length > 1 ? "s" : ""}`, hintClass: "text-muted-foreground" },
-    { label: "Encaissé", value: totals.payee, hint: "payé", hintClass: "text-signaltext" },
-    { label: "En attente", value: totals.attente, hint: `${totals.attenteCount} en cours`, hintClass: "text-indigo" },
-    { label: "En retard", value: totals.retard, hint: "à relancer", hintClass: "text-amber" },
-  ];
 
   const filtered = rows.filter(
     (r) => matchQuery(query, r.ref, r.party, r.creator, r.status) && (statusFilter === "Tous" || r.status === statusFilter),
@@ -641,17 +621,6 @@ export function Facturation() {
           </button>
           <AddButton label="Facture" onClick={openCreate} />
         </div>
-      </div>
-
-      {/* Cartes de totaux */}
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {cards.map((c) => (
-          <div key={c.label} className="rounded-xl border border-border bg-surface p-4 shadow-sm">
-            <div className="text-[9px] font-semibold uppercase tracking-wider text-faint">{c.label}</div>
-            <div className="mt-2 whitespace-nowrap text-xl font-bold tracking-tight text-foreground sm:text-2xl">{formatEuro(c.value)}</div>
-            <div className={cn("mt-1 text-[10px] font-semibold", c.hintClass)}>{c.hint}</div>
-          </div>
-        ))}
       </div>
 
       {/* Filtres */}

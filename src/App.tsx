@@ -264,7 +264,7 @@ export default function App() {
             {/* Zone défilante — l'en-tête défile avec le contenu (ne reste plus collé) */}
             <div className="flex-1 overflow-y-auto pb-28 md:pb-7">
             {/* Top bar */}
-            <header className="flex items-center gap-4 px-4 pt-3.5 md:px-6">
+            <header className="flex items-center gap-4 px-4 pt-5 md:px-6">
               {/* mobile logo */}
               <div className="flex items-center gap-2 md:hidden">
                 <div className="h-8 w-8 overflow-hidden rounded-lg bg-[#14181E]">
@@ -306,7 +306,7 @@ export default function App() {
             </header>
 
             {/* Content */}
-            <main className="px-4 pt-2 md:px-6">
+            <main className="px-4 pt-5 md:px-6">
               <Suspense fallback={<div className="grid min-h-[50vh] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
                 {space === "portal" ? (
                   <Portal
