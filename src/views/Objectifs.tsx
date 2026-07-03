@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Target } from "lucide-react";
+import { Target, Pencil } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import {
   useAppState,
@@ -45,6 +45,7 @@ export function Objectifs() {
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [ca, setCa] = useState("");
+  const [editIndex, setEditIndex] = useState<number | null>(null);
   const [pendingDel, setPendingDel] = useState<null | { message: string; run: () => void }>(null);
 
   const avgPct =
@@ -52,7 +53,22 @@ export function Objectifs() {
       ? Math.round(list.reduce((a, o) => a + (Number(o.pct) || 0), 0) / list.length)
       : 0;
 
-  async function add() {
+  function openAdd() {
+    setEditIndex(null);
+    setName("");
+    setTarget("");
+    setCa("");
+    setFormOpen(true);
+  }
+  function startEdit(index: number) {
+    const o = list[index];
+    setEditIndex(index);
+    setName(o.name);
+    setTarget(o.target);
+    setCa(o.ca === "—" ? "" : o.ca);
+    setFormOpen(true);
+  }
+  async function submit() {
     const nm = name.trim();
     const tg = target.trim();
     if (!nm) {
@@ -72,15 +88,17 @@ export function Objectifs() {
       pct: Number.isFinite(pct) ? pct : 0,
       tone: "indigo",
     };
-    const next: Objective[] = [item, ...list];
+    const isEdit = editIndex != null;
+    const next: Objective[] = isEdit ? list.map((o, i) => (i === editIndex ? item : o)) : [item, ...list];
     const nextObj: ObjByMonth = { ...obj, "0": next };
     setLocal(nextObj);
     setName("");
     setTarget("");
     setCa("");
+    setEditIndex(null);
     setFormOpen(false);
     const ok = await saveAppStateKey("objByMonth", nextObj);
-    toast(ok ? "Objectif ajouté ✓" : "Erreur — réessaie");
+    toast(ok ? (isEdit ? "Objectif mis à jour ✓" : "Objectif ajouté ✓") : "Erreur — réessaie");
   }
 
   async function remove(index: number) {
@@ -110,14 +128,18 @@ export function Objectifs() {
             </>
           )}
         </div>
-        <AddButton label="Objectif" onClick={() => setFormOpen(true)} />
+        <AddButton label="Objectif" onClick={openAdd} />
       </div>
 
       <InlineForm
         open={formOpen}
-        title="Nouvel objectif"
-        onClose={() => setFormOpen(false)}
-        onSubmit={add}
+        title={editIndex != null ? "Modifier l'objectif" : "Nouvel objectif"}
+        onClose={() => {
+          setFormOpen(false);
+          setEditIndex(null);
+        }}
+        onSubmit={submit}
+        submitLabel={editIndex != null ? "Enregistrer" : "Ajouter"}
       >
         <TextField
           label="Intitulé"
@@ -194,6 +216,14 @@ export function Objectifs() {
                     <span className="shrink-0 whitespace-nowrap text-right text-[11px] text-faint">
                       {o.ca} / {o.target}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(index)}
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                      title="Modifier l'avancement"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
                     <DeleteButton onClick={() => setPendingDel({ message: `Supprimer l'objectif « ${o.name} » ? Cette action est irréversible.`, run: () => remove(index) })} />
                   </div>
                 </li>
