@@ -39,6 +39,7 @@ const Corbeille = lazy(() => import("@/views/Corbeille").then((m) => ({ default:
 const Reversements = lazy(() => import("@/views/Reversements").then((m) => ({ default: m.Reversements })));
 const Relances = lazy(() => import("@/views/Relances").then((m) => ({ default: m.Relances })));
 const Echeances = lazy(() => import("@/views/Echeances").then((m) => ({ default: m.Echeances })));
+const Parametres = lazy(() => import("@/views/Parametres").then((m) => ({ default: m.Parametres })));
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -63,6 +64,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   checklist: Checklist,
   mediakit: Mediakit,
   templates: Templates,
+  parametres: Parametres,
   corbeille: Corbeille,
 };
 

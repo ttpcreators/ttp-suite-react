@@ -17,6 +17,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
 import { frDate, toISODate } from "@/lib/dates";
+import { notifyAgency } from "@/lib/push";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
@@ -198,6 +199,7 @@ export function CreatorSpace({
       return;
     }
     setTodos([created as unknown as Todo, ...todos]);
+    notifyAgency("tache", name, row.text); // push immédiat côté agence
     toast("Tâche ajoutée ✓");
     setTdOpen(false);
     setTdText("");
@@ -218,6 +220,7 @@ export function CreatorSpace({
       return;
     }
     setIdeas([created as unknown as Idea, ...ideas]);
+    notifyAgency("idee", name, row.text); // push immédiat côté agence
     toast("Idée ajoutée ✓");
     setIdOpen(false);
     setIdText("");
@@ -740,6 +743,7 @@ export function CreatorSpace({
                   return;
                 }
                 setEvents([{ id: String((created as { id: string }).id), date: dateVal, day, time: e.time || "—", title: e.title, type: e.type }, ...events]);
+                notifyAgency("evenement", name, e.title); // push immédiat côté agence
                 toast("Événement ajouté ✓");
               }}
               onUpdate={async (id, patch) => {

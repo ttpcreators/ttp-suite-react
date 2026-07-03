@@ -48,8 +48,10 @@ export function useNotifications(): NotificationItem[] {
         return;
       }
       const out: NotificationItem[] = [];
-      // Activité créateur en premier (ce qu'un créateur a ajouté depuis son espace, 7 derniers jours).
-      if (!tdC.error) {
+      // Activité créateur en premier (7 derniers jours) — désactivable dans Paramètres.
+      const prefs = ((app as Record<string, unknown>).notifPrefs as Record<string, boolean | undefined>) ?? {};
+      const bellCreator = prefs.bellCreatorActivity !== false;
+      if (bellCreator && !tdC.error) {
         ((tdC.data as { text: string; creator: string | null; created_at: string | null }[]) ?? []).forEach((t, k) =>
           out.push({
             id: `ctd-${k}`,
@@ -59,7 +61,7 @@ export function useNotifications(): NotificationItem[] {
           }),
         );
       }
-      if (!idC.error) {
+      if (bellCreator && !idC.error) {
         ((idC.data as { text: string; creator: string | null; created_at: string | null }[]) ?? []).forEach((i, k) =>
           out.push({
             id: `cid-${k}`,

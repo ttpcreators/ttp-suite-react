@@ -57,23 +57,39 @@ function dueOrPast(due: unknown, todayStr: string): boolean {
 type CtDeadline = { creator?: string; start?: string; months?: number; type?: string };
 type Sub = { id: string; endpoint: string; p256dh: string; auth: string };
 
-/** Autorise : soit le CRON_SECRET (pg_cron), soit un JWT agence (bouton "Tester" dans l'app). */
-async function authorize(req: Request): Promise<boolean> {
+type Caller = "cron" | "agency" | "creator" | null;
+
+/** Identifie l'appelant : CRON_SECRET (pg_cron), JWT agence (test) ou JWT créateur (activité). */
+async function identify(req: Request): Promise<Caller> {
   const authz = req.headers.get("Authorization") ?? "";
   const bearer = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
   const key = bearer || new URL(req.url).searchParams.get("key") || "";
-  if (CRON_SECRET && key === CRON_SECRET) return true; // appel pg_cron
+  if (CRON_SECRET && key === CRON_SECRET) return "cron";
   if (bearer) {
     const sb = getServiceClient();
     const { data, error } = await sb.auth.getUser(bearer);
     if (!error && data?.user) {
       const { data: prof } = await sb
         .from("profiles").select("role").eq("user_id", data.user.id).maybeSingle<{ role: string }>();
-      if (prof?.role !== "creator") return true; // membre agence
+      return prof?.role === "creator" ? "creator" : "agency";
     }
   }
-  return false;
+  return null;
 }
+
+/** Préférences de notifications (blob agence `notifPrefs`) — tout activé par défaut. */
+type NotifPrefs = Record<string, boolean | undefined>;
+async function loadPrefs(sb: ReturnType<typeof getServiceClient>): Promise<NotifPrefs> {
+  try {
+    const { data } = await sb.from("module_rows").select("a").eq("module", "__app_state__").maybeSingle();
+    const raw = (data as { a?: unknown } | null)?.a;
+    const obj = typeof raw === "string" ? JSON.parse(raw) : (raw ?? {});
+    return (obj?.notifPrefs as NotifPrefs) ?? {};
+  } catch {
+    return {};
+  }
+}
+const prefOn = (prefs: NotifPrefs, key: string) => prefs[key] !== false;
 
 /** Envoie un payload à tous les abonnements ; purge les morts (404/410). */
 async function sendToAll(sb: ReturnType<typeof getServiceClient>, payload: string) {
@@ -107,19 +123,42 @@ Deno.serve(async (req: Request) => {
     new Response(JSON.stringify(b), { status, headers: { ...cors, "Content-Type": "application/json" } });
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
-  if (!(await authorize(req))) return jsonRes({ error: "unauthorized" }, 401);
+  const caller = await identify(req);
+  if (!caller) return jsonRes({ error: "unauthorized" }, 401);
   if (!VAPID_PRIVATE_KEY) return jsonRes({ error: "vapid_not_configured" }, 500);
 
   const sb = getServiceClient();
   const today = parisToday();
 
-  // Mode test (bouton dans l'app) : envoie une notif de contrôle, sans calcul.
-  let body: { test?: boolean } = {};
+  let body: { test?: boolean; event?: string; kind?: string; creator?: string; text?: string } = {};
   try {
     body = await req.json();
   } catch {
     /* pas de corps → digest normal */
   }
+
+  // Activité créateur : push immédiat quand un créateur ajoute une tâche/idée/évènement.
+  // Seul mode ouvert aux JWT créateurs (le digest/test restent agence + cron).
+  if (body?.event === "creator_activity") {
+    const prefs = await loadPrefs(sb);
+    if (!prefOn(prefs, "pushCreatorActivity")) return jsonRes({ ok: true, skipped: "pref_off" });
+    const kindLabel = body.kind === "idee" ? "idée" : body.kind === "evenement" ? "évènement" : "tâche";
+    const who = String(body.creator ?? "Un créateur").slice(0, 60);
+    const what = String(body.text ?? "").slice(0, 140);
+    const payload = JSON.stringify({
+      title: `${who} a ajouté une ${kindLabel}`,
+      body: what,
+      url: "/",
+      tag: `ttp-creator-${Date.now()}`,
+    });
+    const r = await sendToAll(sb, payload);
+    return jsonRes({ ok: true, creatorActivity: true, ...r });
+  }
+
+  // Les modes ci-dessous (test + digest) sont réservés à l'agence / au cron.
+  if (caller === "creator") return jsonRes({ error: "unauthorized" }, 401);
+
+  // Mode test (bouton dans l'app) : envoie une notif de contrôle, sans calcul.
   if (body?.test === true) {
     const payload = JSON.stringify({
       title: "TTP Suite ✓",
@@ -163,12 +202,14 @@ Deno.serve(async (req: Request) => {
     .from("events").select("date").or("deleted.is.null,deleted.eq.false").eq("date", today);
   const eventsToday = (ev ?? []).length;
 
-  // Construit le résumé (rien à dire → on n'envoie pas, pour éviter le bruit)
+  // Construit le résumé (rien à dire → on n'envoie pas, pour éviter le bruit).
+  // Chaque catégorie respecte les préférences (page Paramètres).
+  const prefs = await loadPrefs(sb);
   const lines: string[] = [];
-  if (eventsToday) lines.push(`📅 ${eventsToday} évènement${eventsToday > 1 ? "s" : ""} aujourd'hui`);
-  if (tasksDue) lines.push(`✓ ${tasksDue} tâche${tasksDue > 1 ? "s" : ""}/brief${tasksDue > 1 ? "s" : ""} à échéance`);
-  if (contractsSoon) lines.push(`📄 ${contractsSoon} contrat${contractsSoon > 1 ? "s" : ""} à surveiller`);
-  if (overdue) lines.push(`💶 ${overdue} facture${overdue > 1 ? "s" : ""} en retard`);
+  if (eventsToday && prefOn(prefs, "digestEvents")) lines.push(`📅 ${eventsToday} évènement${eventsToday > 1 ? "s" : ""} aujourd'hui`);
+  if (tasksDue && prefOn(prefs, "digestTasks")) lines.push(`✓ ${tasksDue} tâche${tasksDue > 1 ? "s" : ""}/brief${tasksDue > 1 ? "s" : ""} à échéance`);
+  if (contractsSoon && prefOn(prefs, "digestContracts")) lines.push(`📄 ${contractsSoon} contrat${contractsSoon > 1 ? "s" : ""} à surveiller`);
+  if (overdue && prefOn(prefs, "digestInvoices")) lines.push(`💶 ${overdue} facture${overdue > 1 ? "s" : ""} en retard`);
 
   if (lines.length === 0) return jsonRes({ ok: true, sent: 0, reason: "rien à signaler", today });
 

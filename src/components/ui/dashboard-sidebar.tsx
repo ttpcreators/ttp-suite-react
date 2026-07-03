@@ -67,7 +67,7 @@ function Group({
         onClick={() => setOpen((o) => !o)}
         className="group/h flex select-none items-center justify-between rounded-[6px] px-2.5 py-1.5 text-left transition-colors hover:bg-rowhover/60"
       >
-        <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-faint">
+        <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-foreground">
           <group.icon className="h-3.5 w-3.5" strokeWidth={2} />
           {group.label}
         </span>

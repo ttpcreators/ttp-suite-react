@@ -24,6 +24,7 @@ import {
   Wallet,
   AlarmClock,
   CalendarClock,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
 
@@ -49,6 +50,7 @@ export type ViewId =
   | "templates"
   | "checklist"
   | "acces"
+  | "parametres"
   | "corbeille";
 
 export type NavItem = { id: ViewId; label: string; icon: LucideIcon };
@@ -114,6 +116,7 @@ export const NAV: NavFamily[] = [
       { id: "templates", label: "Templates", icon: LayoutTemplate },
       { id: "checklist", label: "Checklist", icon: CheckCircle2 },
       { id: "acces", label: "Accès", icon: KeyRound },
+      { id: "parametres", label: "Paramètres", icon: Settings },
     ],
   },
 ];
