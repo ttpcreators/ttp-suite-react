@@ -57,19 +57,74 @@ function dueOrPast(due: unknown, todayStr: string): boolean {
 type CtDeadline = { creator?: string; start?: string; months?: number; type?: string };
 type Sub = { id: string; endpoint: string; p256dh: string; auth: string };
 
+/** Autorise : soit le CRON_SECRET (pg_cron), soit un JWT agence (bouton "Tester" dans l'app). */
+async function authorize(req: Request): Promise<boolean> {
+  const authz = req.headers.get("Authorization") ?? "";
+  const bearer = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
+  const key = bearer || new URL(req.url).searchParams.get("key") || "";
+  if (CRON_SECRET && key === CRON_SECRET) return true; // appel pg_cron
+  if (bearer) {
+    const sb = getServiceClient();
+    const { data, error } = await sb.auth.getUser(bearer);
+    if (!error && data?.user) {
+      const { data: prof } = await sb
+        .from("profiles").select("role").eq("user_id", data.user.id).maybeSingle<{ role: string }>();
+      if (prof?.role !== "creator") return true; // membre agence
+    }
+  }
+  return false;
+}
+
+/** Envoie un payload à tous les abonnements ; purge les morts (404/410). */
+async function sendToAll(sb: ReturnType<typeof getServiceClient>, payload: string) {
+  const { data: subs } = await sb.from("push_subscriptions").select("id,endpoint,p256dh,auth");
+  let sent = 0;
+  let removed = 0;
+  for (const s of (subs ?? []) as Sub[]) {
+    try {
+      await webpush.sendNotification(
+        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+        payload,
+      );
+      sent++;
+    } catch (e) {
+      const code = (e as { statusCode?: number })?.statusCode;
+      if (code === 404 || code === 410) {
+        await sb.from("push_subscriptions").delete().eq("id", s.id);
+        removed++;
+      }
+    }
+  }
+  return { sent, removed };
+}
+
 Deno.serve(async (req: Request) => {
   const jsonRes = (b: unknown, status = 200) =>
     new Response(JSON.stringify(b), { status, headers: { "Content-Type": "application/json" } });
 
-  // Auth CRON_SECRET (Bearer ou ?key=)
-  const authz = req.headers.get("Authorization") ?? "";
-  const bearer = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
-  const key = bearer || new URL(req.url).searchParams.get("key") || "";
-  if (!CRON_SECRET || key !== CRON_SECRET) return jsonRes({ error: "unauthorized" }, 401);
+  if (!(await authorize(req))) return jsonRes({ error: "unauthorized" }, 401);
   if (!VAPID_PRIVATE_KEY) return jsonRes({ error: "vapid_not_configured" }, 500);
 
   const sb = getServiceClient();
   const today = parisToday();
+
+  // Mode test (bouton dans l'app) : envoie une notif de contrôle, sans calcul.
+  let body: { test?: boolean } = {};
+  try {
+    body = await req.json();
+  } catch {
+    /* pas de corps → digest normal */
+  }
+  if (body?.test === true) {
+    const payload = JSON.stringify({
+      title: "TTP Suite ✓",
+      body: "Test réussi — tes notifications fonctionnent ! 🎉",
+      url: "/",
+      tag: "ttp-test",
+    });
+    const { sent, removed } = await sendToAll(sb, payload);
+    return jsonRes({ ok: true, test: true, sent, removed });
+  }
 
   // 1) Factures en retard
   const { data: inv } = await sb.from("invoices").select("status").eq("status", "retard");
@@ -118,26 +173,6 @@ Deno.serve(async (req: Request) => {
     url: "/",
     tag: `ttp-daily-${today}`,
   });
-
-  // Envoi à tous les abonnements ; purge des abonnements morts (404/410).
-  const { data: subs } = await sb.from("push_subscriptions").select("id,endpoint,p256dh,auth");
-  let sent = 0;
-  let removed = 0;
-  for (const s of (subs ?? []) as Sub[]) {
-    try {
-      await webpush.sendNotification(
-        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-        payload,
-      );
-      sent++;
-    } catch (e) {
-      const code = (e as { statusCode?: number })?.statusCode;
-      if (code === 404 || code === 410) {
-        await sb.from("push_subscriptions").delete().eq("id", s.id);
-        removed++;
-      }
-    }
-  }
-
+  const { sent, removed } = await sendToAll(sb, payload);
   return jsonRes({ ok: true, sent, removed, digest: lines.join(" · "), today });
 });

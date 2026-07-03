@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Card } from "@/components/ui/card";
 import { usePush } from "@/lib/push";
+import { toast } from "@/components/ui/toast";
 
 export interface NotificationItem {
   id: string;
@@ -14,22 +15,45 @@ export interface NotificationItem {
 
 /** Bouton d'activation des notifications push (par téléphone) — au-dessus de la liste. */
 function PushRow() {
-  const { state, busy, enable, disable } = usePush();
+  const { state, busy, enable, disable, sendTest } = usePush();
+  const [testing, setTesting] = React.useState(false);
   if (state === "unsupported") return null;
+  const runTest = async () => {
+    if (testing) return;
+    setTesting(true);
+    try {
+      const r = await sendTest();
+      if (!r.ok) toast("Échec de l'envoi — réessaie");
+      else if (r.sent === 0) toast("Aucun appareil abonné pour l'instant");
+      else toast("Notification test envoyée 🎉");
+    } finally {
+      setTesting(false);
+    }
+  };
   return (
     <div className="border-b border-border px-4 py-3">
       {state === "enabled" ? (
-        <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-1.5 text-[12px] font-medium text-signaltext">
-            <BellRing className="h-3.5 w-3.5" /> Notifications activées sur ce téléphone
-          </span>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-[12px] font-medium text-signaltext">
+              <BellRing className="h-3.5 w-3.5" /> Activées sur ce téléphone
+            </span>
+            <button
+              type="button"
+              onClick={disable}
+              disabled={busy}
+              className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-faint transition-colors hover:text-foreground disabled:opacity-50"
+            >
+              Désactiver
+            </button>
+          </div>
           <button
             type="button"
-            onClick={disable}
-            disabled={busy}
-            className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-faint transition-colors hover:text-foreground disabled:opacity-50"
+            onClick={runTest}
+            disabled={testing}
+            className="w-full rounded-lg border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
           >
-            Désactiver
+            {testing ? "Envoi…" : "Envoyer un test 🔔"}
           </button>
         </div>
       ) : state === "needs-install" ? (
