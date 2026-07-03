@@ -53,16 +53,6 @@ function evDate(e: Ev): string {
   return "9999-12-31";
 }
 
-function ctEnd(start: string, months: number): Date | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(start);
-  if (!m) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1 + (months || 0), Number(m[3]));
-}
-function ctDaysLeft(d: Date): number {
-  const t = new Date();
-  return Math.round((d.getTime() - new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime()) / 86400000);
-}
-
 function Gauge({ ratio, tone, caption }: { ratio: number; tone: "signal" | "muted"; caption?: string }) {
   const pct = Math.round(Math.min(1, Math.max(0, ratio)) * 100);
   const bar = tone === "signal" ? "bg-signal" : "bg-primary/60";
@@ -192,7 +182,6 @@ export function Apercu() {
 
   const paid = d.invoices.filter((i) => i.status === "payee");
   const encaisse = paid.reduce((a, i) => a + parseAmount(i.amount), 0);
-  const attente = d.invoices.filter((i) => i.status === "attente").reduce((a, i) => a + parseAmount(i.amount), 0);
   const facture = d.invoices.reduce((a, i) => a + parseAmount(i.amount), 0);
 
   // ── Reversements (même calcul que la page Reversements) ──
@@ -216,14 +205,10 @@ export function Apercu() {
   const agencyPart = Math.max(0, encaisse - duTotal);
   const margePct = encaisse > 0 ? Math.round((agencyPart / encaisse) * 100) : 20;
 
-  // Factures à relancer (retard) + contrats bientôt échus (≤ 60 j)
+  // Factures à relancer (retard)
   const retardInvoices = d.invoices.filter((i) => i.status === "retard");
   const retardCount = retardInvoices.length;
   const retardSum = retardInvoices.reduce((a, i) => a + parseAmount(i.amount), 0);
-  const ctSoon = ((app?.contractDeadlines as { start: string; months: number }[]) ?? []).filter((dl) => {
-    const e = ctEnd(dl.start, dl.months);
-    return e ? ctDaysLeft(e) <= 60 : false;
-  }).length;
 
   const dealHero = d.invoices.slice().sort((a, b) => parseAmount(b.amount) - parseAmount(a.amount))[0];
 
@@ -376,21 +361,7 @@ export function Apercu() {
           </div>
         </Card>
 
-        <Card index={3} className="relative flex items-center justify-center overflow-hidden md:col-span-2">
-          <Globe
-            className="w-full max-w-[190px]"
-            dark={isDark ? 1 : 0}
-            baseColor={isDark ? [0.14, 0.14, 0.17] : [0.9, 0.91, 0.94]}
-            glowColor={isDark ? [0.05, 0.05, 0.08] : [0.9, 0.92, 0.96]}
-            markerColor={[0.17, 0.5, 1]}
-            markers={GLOBE_MARKERS}
-          />
-          <div className="pointer-events-none absolute bottom-3 left-4">
-            <div className="text-[8px] font-semibold uppercase tracking-wide text-faint">Objectif mensuel</div>
-            <div className="text-sm font-bold text-foreground">{objPct}</div>
-          </div>
-        </Card>
-        <Card index={4} className="flex flex-col md:col-span-2">
+        <Card index={4} className="flex flex-col md:col-span-3">
           <div className="flex items-baseline justify-between">
             <div className="text-[22px] font-bold tracking-tight">
               {margePct}
@@ -404,7 +375,7 @@ export function Apercu() {
           </div>
         </Card>
 
-        <Card index={5} className="flex flex-col md:col-span-2">
+        <Card index={5} className="flex flex-col md:col-span-3">
           <div className="flex items-center justify-between">
             <div className="grid h-[30px] w-[30px] place-items-center rounded-[9px] bg-amber/15 text-sm font-bold text-amber">↺</div>
             <span className="rounded-lg bg-rowhover px-2.5 py-1 text-[9px] font-semibold tracking-wide text-muted-foreground">À PAYER</span>
@@ -458,32 +429,18 @@ export function Apercu() {
           </div>
         </Card>
 
-        <Card index={7} className="flex flex-col bg-foreground text-background md:col-span-4">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-[11px] text-background/60">CA total facturé</div>
-              <div className="mt-1.5 text-[40px] font-bold leading-none tracking-tighter">{formatEuro(facture)}</div>
-            </div>
-            {caDelta != null && (
-              <div className={"flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1.5 text-[9px] font-semibold " + (caDelta >= 0 ? "text-signal" : "text-rose-400")}>
-                <span className={"h-1.5 w-1.5 rounded-full " + (caDelta >= 0 ? "bg-signal" : "bg-rose-400")} />
-                {caDelta >= 0 ? "EN HAUSSE" : "EN BAISSE"} · {Math.abs(caDelta) > 999 ? ">999" : Math.abs(caDelta).toFixed(0)}%
-              </div>
-            )}
-          </div>
-          <div className="mt-auto grid grid-cols-3 gap-2 pt-5">
-            <div>
-              <div className="text-[8px] font-semibold uppercase tracking-wide text-background/50">Encaissé</div>
-              <div className="mt-0.5 text-[13px] font-bold">{formatEuro(encaisse)}</div>
-            </div>
-            <div>
-              <div className="text-[8px] font-semibold uppercase tracking-wide text-background/50">En attente</div>
-              <div className="mt-0.5 text-[13px] font-bold">{formatEuro(attente)}</div>
-            </div>
-            <div>
-              <div className="text-[8px] font-semibold uppercase tracking-wide text-background/50">Contrats &lt; 60j</div>
-              <div className="mt-0.5 text-[13px] font-bold">{ctSoon}</div>
-            </div>
+        <Card index={7} className="relative flex min-h-[220px] items-center justify-center overflow-hidden md:col-span-4">
+          <Globe
+            className="w-full max-w-[260px]"
+            dark={isDark ? 1 : 0}
+            baseColor={isDark ? [0.14, 0.14, 0.17] : [0.9, 0.91, 0.94]}
+            glowColor={isDark ? [0.05, 0.05, 0.08] : [0.9, 0.92, 0.96]}
+            markerColor={[0.17, 0.5, 1]}
+            markers={GLOBE_MARKERS}
+          />
+          <div className="pointer-events-none absolute bottom-4 left-5">
+            <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Objectif mensuel</div>
+            <div className="text-lg font-bold text-foreground">{objPct}</div>
           </div>
         </Card>
 
