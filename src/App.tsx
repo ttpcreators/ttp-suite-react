@@ -257,8 +257,10 @@ export default function App() {
 
           {/* Main panel */}
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] bg-panel">
+            {/* Zone défilante — l'en-tête défile avec le contenu (ne reste plus collé) */}
+            <div className="flex-1 overflow-y-auto pb-28 md:pb-7">
             {/* Top bar */}
-            <header className="flex flex-shrink-0 items-center gap-4 px-4 py-3.5 md:px-6">
+            <header className="flex items-center gap-4 px-4 pt-3.5 md:px-6">
               {/* mobile logo */}
               <div className="flex items-center gap-2 md:hidden">
                 <div className="h-8 w-8 overflow-hidden rounded-lg bg-[#14181E]">
@@ -300,7 +302,7 @@ export default function App() {
             </header>
 
             {/* Content */}
-            <main className="flex-1 overflow-y-auto px-4 pb-28 pt-1.5 md:px-6 md:pb-7">
+            <main className="px-4 pt-2 md:px-6">
               {space === "portal" ? (
                 <Portal
                   creator={portalCreator}
@@ -324,6 +326,7 @@ export default function App() {
                 </>
               )}
             </main>
+            </div>
           </div>
         </div>
 
