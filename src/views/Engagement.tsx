@@ -24,13 +24,14 @@ type Field = { key: string; label: string };
 type Platform = {
   key: PlatformKey;
   label: string;
-  metrics: Field[]; // numérateur (interactions)
-  base: Field; // dénominateur
+  metrics: Field[]; // numérateur (interactions) — seulement ce qui est visible sans le reach
   formula: string;
   bon: number; // seuil "Bon" (%)
   excellent: number; // seuil "Excellent" (%)
 };
 
+// Taux d'engagement PAR ABONNÉS : interactions ÷ abonnés × 100.
+// Méthode fiable quand on n'a PAS accès au reach / aux vues (données publiques).
 const PLATFORMS: Platform[] = [
   {
     key: "instagram",
@@ -41,8 +42,7 @@ const PLATFORMS: Platform[] = [
       { key: "saves", label: "Enregistrements" },
       { key: "shares", label: "Partages" },
     ],
-    base: { key: "reach", label: "Reach (portée)" },
-    formula: "(likes + commentaires + enreg. + partages) ÷ reach × 100",
+    formula: "(likes + commentaires + enreg. + partages) ÷ abonnés × 100",
     bon: 3,
     excellent: 6,
   },
@@ -52,13 +52,11 @@ const PLATFORMS: Platform[] = [
     metrics: [
       { key: "likes", label: "Likes" },
       { key: "comments", label: "Commentaires" },
-      { key: "shares", label: "Partages" },
       { key: "saves", label: "Enregistrements" },
     ],
-    base: { key: "views", label: "Vues" },
-    formula: "(likes + commentaires + partages + enreg.) ÷ vues × 100",
-    bon: 4.5,
-    excellent: 9,
+    formula: "(likes + commentaires + enreg.) ÷ abonnés × 100",
+    bon: 5,
+    excellent: 10,
   },
   {
     key: "youtube",
@@ -67,8 +65,7 @@ const PLATFORMS: Platform[] = [
       { key: "likes", label: "Likes" },
       { key: "comments", label: "Commentaires" },
     ],
-    base: { key: "views", label: "Vues" },
-    formula: "(likes + commentaires) ÷ vues × 100",
+    formula: "(likes + commentaires) ÷ abonnés × 100",
     bon: 2,
     excellent: 5,
   },
@@ -80,10 +77,9 @@ const PLATFORMS: Platform[] = [
       { key: "reposts", label: "Reposts" },
       { key: "replies", label: "Réponses" },
     ],
-    base: { key: "impressions", label: "Impressions" },
-    formula: "(likes + reposts + réponses) ÷ impressions × 100",
-    bon: 0.5,
-    excellent: 1.5,
+    formula: "(likes + reposts + réponses) ÷ abonnés × 100",
+    bon: 1,
+    excellent: 3,
   },
 ];
 
@@ -116,7 +112,7 @@ function verdict(er: number, p: Platform): { label: string; hint: string; tone: 
     return { label: "Excellent", hint: "Communauté très engagée — un argument fort en négociation.", tone: "signal" };
   if (er >= p.bon)
     return { label: "Bon", hint: "Engagement solide, dans les standards de la plateforme.", tone: "signal" };
-  return { label: "Moyen", hint: "Sous la moyenne de la plateforme — à valoriser autrement (reach, niche).", tone: "amber" };
+  return { label: "Moyen", hint: "Sous la moyenne de la plateforme — à valoriser autrement (niche, régularité).", tone: "amber" };
 }
 
 export function Engagement() {
@@ -166,23 +162,23 @@ export function Engagement() {
   }, [creatorId]);
 
   const interactions = p.metrics.reduce((a, m) => a + num(vals[m.key]), 0);
-  const baseN = num(vals[p.base.key]);
+  const baseN = num(followers); // dénominateur = abonnés (pas de reach)
   const hasInputs = baseN > 0 && interactions > 0;
   const er = hasInputs ? Math.round((interactions / baseN) * 100 * 100) / 100 : 0;
   const erLabel = er.toFixed(2).replace(".", ",") + " %";
   const v = verdict(er, p);
-  const detail = `(${p.metrics.map((m) => fmtInt(num(vals[m.key]))).join(" + ")}) ÷ ${fmtInt(baseN)} × 100`;
+  const detail = `(${p.metrics.map((m) => fmtInt(num(vals[m.key]))).join(" + ")}) ÷ ${fmtInt(baseN)} abonnés × 100`;
 
   const selectedCreator = creators.find((c) => c.id === creatorId) ?? null;
 
   /** Reconstruit l'objet `stats` de la fiche créateur à partir d'une entrée d'historique. */
   const statsFromEntry = (h: HistEntry) => {
     const pl = PLATFORMS.find((x) => x.key === h.platform) ?? PLATFORMS[0];
-    const baseNum = num(h.vals?.[pl.base.key] ?? "");
+    const baseNum = num(h.followers ?? "");
     return {
       er: h.er,
       base: baseNum,
-      baseLabel: pl.base.label,
+      baseLabel: "Abonnés",
       platform: pl.key,
       platformLabel: pl.label,
       formula: pl.formula,
@@ -201,7 +197,7 @@ export function Engagement() {
       const stats = {
         er: erLabel,
         base: baseN,
-        baseLabel: p.base.label,
+        baseLabel: "Abonnés",
         platform: p.key,
         platformLabel: p.label,
         formula: p.formula,
@@ -326,17 +322,27 @@ export function Engagement() {
           />
         </div>
 
-        {/* Métriques (dynamiques selon la plateforme) + base */}
+        {/* Interactions (visibles sans le reach) */}
         <div className="mt-4 flex flex-wrap gap-3">
           {p.metrics.map((m) => (
             <NumField key={m.key} label={m.label} value={vals[m.key] ?? ""} onChange={(x) => set(m.key, x)} className="min-w-[130px] flex-1" />
           ))}
-          <NumField label={p.base.label} value={vals[p.base.key] ?? ""} onChange={(x) => set(p.base.key, x)} className="min-w-[130px] flex-1" />
         </div>
 
+        {/* Abonnés = base du calcul (pas de reach) */}
         <div className="mt-3 flex flex-wrap items-end gap-3">
-          <NumField label="Abonnés (suivi)" value={followers} onChange={setFollowers} className="min-w-[130px] flex-1" />
-          <p className="flex-[2] pb-2.5 text-[11px] text-faint">Donnée de suivi — n'entre pas dans le calcul du taux.</p>
+          <NumField
+            label="Abonnés"
+            value={followers}
+            onChange={(x) => {
+              setFollowers(x);
+              setSavedOk(false);
+            }}
+            className="min-w-[130px] flex-1"
+          />
+          <p className="flex-[2] pb-2.5 text-[11px] text-faint">
+            Base du calcul : le taux = interactions ÷ abonnés × 100 (méthode fiable sans le reach).
+          </p>
         </div>
       </div>
 
@@ -353,7 +359,7 @@ export function Engagement() {
             ) : (
               <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                 <Activity className="size-4 text-faint" />
-                Renseigne les interactions et {p.base.label.toLowerCase()} pour calculer le taux.
+                Renseigne les interactions et les abonnés pour calculer le taux.
               </div>
             )}
           </div>
@@ -393,7 +399,7 @@ export function Engagement() {
             {editingId ? (
               <><span className="font-semibold text-primary">Modification en cours</span> — ajuste les valeurs puis « Mettre à jour ». </>
             ) : !hasInputs ? (
-              <>Renseigne les interactions <span className="font-medium text-foreground">et</span> la {p.base.label.toLowerCase()} pour pouvoir enregistrer.</>
+              <>Renseigne les interactions <span className="font-medium text-foreground">et</span> les abonnés pour pouvoir enregistrer.</>
             ) : creatorId ? (
               <>Met à jour la fiche de <span className="font-semibold text-foreground">{titleCase(selectedCreator?.name ?? "")}</span> (roster · media kit · portail) + l'historique.</>
             ) : (
@@ -521,7 +527,7 @@ function DetailModal({
   const pl = PLATFORMS.find((x) => x.key === entry.platform) ?? PLATFORMS[0];
   const cells = [
     ...pl.metrics.map((m) => ({ label: m.label, value: fmtInt(num(entry.vals?.[m.key] ?? "")) })),
-    { label: pl.base.label, value: fmtInt(num(entry.vals?.[pl.base.key] ?? "")) },
+    { label: "Abonnés", value: fmtInt(num(entry.followers ?? "")) },
   ];
   const isMoyen = entry.verdict === "Moyen";
   return (
@@ -561,12 +567,6 @@ function DetailModal({
               <div className="text-sm font-semibold text-foreground">{c.value}</div>
             </div>
           ))}
-          {num(entry.followers) > 0 && (
-            <div className="rounded-lg border border-border bg-card px-3 py-2">
-              <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Abonnés (suivi)</div>
-              <div className="text-sm font-semibold text-foreground">{fmtInt(num(entry.followers))}</div>
-            </div>
-          )}
         </div>
 
         <div className="mt-5 flex items-center justify-between gap-2 border-t border-border pt-4">
