@@ -11,7 +11,12 @@ export type Ev = {
   title: string;
   type: string;
   who: string | null;
+  /** Catégorie de la puce. Par défaut "event" (vrai rendez-vous, modifiable).
+   *  "brief" / "todo" = échéances superposées en LECTURE SEULE (clic = navigation). */
+  kind?: "event" | "brief" | "todo";
 };
+
+type Kind = "event" | "brief" | "todo";
 
 type View = "month" | "week" | "list";
 
@@ -55,6 +60,34 @@ function typeText(t: string) {
 function typeLabel(t: string) {
   return TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t;
 }
+
+// ─── Overlays lecture seule (briefs / to-do datés) ───────────────────────────
+// Une puce peut être un vrai événement (couleur = son type) OU une échéance
+// dérivée d'un brief (ambre) / d'une to-do (indigo), affichée en lecture seule.
+function evKind(e: Ev): Kind {
+  return e.kind ?? "event";
+}
+function chipBg(e: Ev) {
+  if (e.kind === "brief") return "bg-amber";
+  if (e.kind === "todo") return "bg-indigo";
+  return typeBg(e.type);
+}
+function chipText(e: Ev) {
+  if (e.kind === "brief") return "text-amber";
+  if (e.kind === "todo") return "text-indigo";
+  return typeText(e.type);
+}
+function chipLabel(e: Ev) {
+  if (e.kind === "brief") return "Brief";
+  if (e.kind === "todo") return "To-do";
+  return typeLabel(e.type);
+}
+
+const KIND_META: { id: Kind; label: string; dot: string }[] = [
+  { id: "event", label: "Événements", dot: "bg-primary" },
+  { id: "brief", label: "Briefs", dot: "bg-amber" },
+  { id: "todo", label: "To-do", dot: "bg-indigo" },
+];
 
 // ─── Helpers de date (locaux, sans dépendance) ───────────────────────────────
 
@@ -130,12 +163,15 @@ export function EventCalendar({
   onCreate,
   onUpdate,
   onDelete,
+  onNavigate,
   creators = [],
 }: {
   events: Ev[];
   onCreate: (e: Omit<Ev, "id">) => void;
   onUpdate: (id: string, patch: Partial<Ev>) => void;
   onDelete: (id: string) => void;
+  /** Clic sur une échéance brief/to-do (lecture seule) → navigation vers sa page. */
+  onNavigate?: (kind: "brief" | "todo") => void;
   creators?: { name: string }[];
 }) {
   const [cursor, setCursor] = useState(() => {
@@ -146,20 +182,25 @@ export function EventCalendar({
   });
   const [view, setView] = useState<View>("month");
   const [draft, setDraft] = useState<Draft | null>(null);
+  // Filtres de catégorie (événements / briefs / to-do) — actifs par défaut.
+  const [kinds, setKinds] = useState<Record<Kind, boolean>>({ event: true, brief: true, todo: true });
 
   const tKey = todayKey();
+
+  // N'affiche que les catégories cochées.
+  const visibleEvents = useMemo(() => events.filter((e) => kinds[evKind(e)]), [events, kinds]);
 
   // Regroupe les events par jour (clé YYYY-MM-DD), triés par heure.
   const byDay = useMemo(() => {
     const m = new Map<string, Ev[]>();
-    for (const e of events) {
+    for (const e of visibleEvents) {
       const arr = m.get(e.date) ?? [];
       arr.push(e);
       m.set(e.date, arr);
     }
     for (const arr of m.values()) arr.sort((a, b) => a.time.localeCompare(b.time));
     return m;
-  }, [events]);
+  }, [visibleEvents]);
 
   const whoOptions = useMemo(() => {
     const names = new Set<string>();
@@ -195,6 +236,14 @@ export function EventCalendar({
   }
   function openEdit(e: Ev) {
     setDraft({ id: e.id, date: e.date, time: e.time, title: e.title, type: e.type, who: e.who ?? "" });
+  }
+  // Un vrai événement s'édite ; une échéance brief/to-do renvoie vers sa page.
+  function handleEventClick(e: Ev) {
+    if (e.kind === "brief" || e.kind === "todo") {
+      onNavigate?.(e.kind);
+      return;
+    }
+    openEdit(e);
   }
   function closeModal() {
     setDraft(null);
@@ -279,8 +328,29 @@ export function EventCalendar({
         </div>
       </div>
 
-      {/* Légende — code couleur des types d'événement */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-border bg-surface px-3 py-2 shadow-sm">
+      {/* Filtres de catégorie (cliquables) + légende des types d'événement */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-border bg-surface px-3 py-2 shadow-sm">
+        {KIND_META.map((k) => {
+          const on = kinds[k.id];
+          const count = events.filter((e) => evKind(e) === k.id).length;
+          return (
+            <button
+              key={k.id}
+              type="button"
+              onClick={() => setKinds((s) => ({ ...s, [k.id]: !s[k.id] }))}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold transition-colors hover:bg-rowhover",
+                on ? "text-foreground" : "text-faint",
+              )}
+              title={on ? `Masquer : ${k.label}` : `Afficher : ${k.label}`}
+            >
+              <span className={cn("size-2.5 shrink-0 rounded-full transition-opacity", k.dot, !on && "opacity-25")} />
+              {k.label}
+              <span className="tabular-nums opacity-50">{count}</span>
+            </button>
+          );
+        })}
+        <span className="mx-0.5 h-3.5 w-px shrink-0 bg-border" />
         {TYPE_OPTIONS.map((t) => (
           <span key={t.value} className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <span className={cn("size-2.5 shrink-0 rounded-full", typeBg(t.value))} />
@@ -290,12 +360,12 @@ export function EventCalendar({
       </div>
 
       {view === "month" && (
-        <MonthView cursor={cursor} byDay={byDay} tKey={tKey} onCellClick={openCreate} onEventClick={openEdit} />
+        <MonthView cursor={cursor} byDay={byDay} tKey={tKey} onCellClick={openCreate} onEventClick={handleEventClick} />
       )}
       {view === "week" && (
-        <WeekView cursor={cursor} byDay={byDay} tKey={tKey} onCellClick={openCreate} onEventClick={openEdit} />
+        <WeekView cursor={cursor} byDay={byDay} tKey={tKey} onCellClick={openCreate} onEventClick={handleEventClick} />
       )}
-      {view === "list" && <ListView events={events} onEventClick={openEdit} />}
+      {view === "list" && <ListView events={visibleEvents} onEventClick={handleEventClick} />}
 
       {draft && (
         <EventModal
@@ -396,7 +466,7 @@ function MonthView({
                     }}
                     className={cn(
                       "flex items-center gap-1 truncate rounded-md px-1.5 py-0.5 text-[10px] font-medium text-onsignal transition-opacity hover:opacity-90",
-                      typeBg(e.type),
+                      chipBg(e),
                     )}
                     title={`${e.time ? e.time + " · " : ""}${e.title}`}
                   >
@@ -472,13 +542,13 @@ function WeekView({
                   onClick={() => onEventClick(e)}
                   className="flex items-start gap-2 rounded-lg border border-border bg-panel px-2 py-1.5 text-left transition-colors hover:bg-rowhover"
                 >
-                  <span className={cn("mt-1 h-2 w-2 shrink-0 rounded-full", typeBg(e.type))} />
+                  <span className={cn("mt-1 h-2 w-2 shrink-0 rounded-full", chipBg(e))} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[12px] font-medium text-foreground">{e.title}</span>
                     <span className="block truncate text-[10px] text-muted-foreground">
                       {e.time && <span className="tabular-nums">{e.time}</span>}
                       {e.time && " · "}
-                      <span className={typeText(e.type)}>{typeLabel(e.type)}</span>
+                      <span className={chipText(e)}>{chipLabel(e)}</span>
                       {e.who && ` · ${e.who}`}
                     </span>
                   </span>
@@ -559,11 +629,11 @@ function ListView({ events, onEventClick }: { events: Ev[]; onEventClick: (e: Ev
                 <span className="w-12 shrink-0 text-[12px] font-medium tabular-nums text-muted-foreground">
                   {e.time || "—"}
                 </span>
-                <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", typeBg(e.type))} />
+                <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", chipBg(e))} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-foreground">{e.title}</span>
                   <span className="block truncate text-[11px] text-muted-foreground">
-                    <span className={typeText(e.type)}>{typeLabel(e.type)}</span>
+                    <span className={chipText(e)}>{chipLabel(e)}</span>
                     {e.who && ` · ${e.who}`}
                   </span>
                 </span>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { EventCalendar, type Ev } from "@/components/ui/event-calendar";
 import { GoogleConnect } from "@/components/ui/google-connect";
@@ -9,8 +9,22 @@ import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 
+/** Échéance libre ("03/07/2026" ou déjà ISO) → clé "YYYY-MM-DD", ou null si illisible. */
+function dueToKey(s: unknown): string | null {
+  const t = String(s ?? "").trim();
+  if (!t || t === "—") return null;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const fr = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/.exec(t);
+  if (!fr) return null;
+  const y = fr[3].length === 2 ? "20" + fr[3] : fr[3];
+  return `${y}-${fr[2].padStart(2, "0")}-${fr[1].padStart(2, "0")}`;
+}
+
 export function Planning() {
   const [rows, setRows] = useState<Ev[] | null>(() => getCache<Ev[]>("events"));
+  // Échéances briefs + to-do datées, superposées en lecture seule.
+  const [overlays, setOverlays] = useState<Ev[]>([]);
   const [error, setError] = useState(false);
   const creators = useCreators();
   const live = useLiveKey();
@@ -44,6 +58,52 @@ export function Planning() {
       alive = false;
     };
   }, [live]);
+
+  // Charge les briefs + to-do datés → puces lecture seule (couleur/kind distincts).
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      supabase.from("briefs").select("id,brand,creator,due"),
+      supabase.from("todos").select("id,text,creator,due,done"),
+    ]).then(([b, t]) => {
+      if (!alive) return;
+      const out: Ev[] = [];
+      for (const r of (b.data as Record<string, unknown>[] | null) ?? []) {
+        const date = dueToKey(r.due);
+        if (!date) continue;
+        out.push({
+          id: `brief:${r.id}`,
+          date,
+          time: "",
+          title: String(r.brand ?? "").trim() || "Brief",
+          type: "deadline",
+          who: (r.creator as string | null) ?? null,
+          kind: "brief",
+        });
+      }
+      for (const r of (t.data as Record<string, unknown>[] | null) ?? []) {
+        if (r.done === true) continue; // une to-do terminée n'a plus d'échéance à suivre
+        const date = dueToKey(r.due);
+        if (!date) continue;
+        out.push({
+          id: `todo:${r.id}`,
+          date,
+          time: "",
+          title: String(r.text ?? "").trim() || "To-do",
+          type: "deadline",
+          who: (r.creator as string | null) ?? null,
+          kind: "todo",
+        });
+      }
+      setOverlays(out);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [live]);
+
+  // Vrais événements + échéances superposées (briefs/to-do).
+  const allEvents = useMemo(() => [...(rows ?? []), ...overlays], [rows, overlays]);
 
   if (error)
     return (
@@ -105,10 +165,15 @@ export function Planning() {
     <div className="space-y-4">
       <GoogleConnect />
       <EventCalendar
-        events={rows}
+        events={allEvents}
         onCreate={onCreate}
         onUpdate={onUpdate}
         onDelete={onDelete}
+        onNavigate={(kind) =>
+          window.dispatchEvent(
+            new CustomEvent("ttp-navigate", { detail: kind === "brief" ? "briefs" : "todo" }),
+          )
+        }
         creators={creators}
       />
     </div>

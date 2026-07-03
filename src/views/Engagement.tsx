@@ -129,6 +129,7 @@ export function Engagement() {
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [viewEntry, setViewEntry] = useState<HistEntry | null>(null);
 
   const { data: histData } = useAppState<HistEntry[]>(
     (s) => ((s as Record<string, unknown>).engagementHistory as HistEntry[]) ?? [],
@@ -268,7 +269,7 @@ export function Engagement() {
     setPlatformKey(h.platform);
     setVals(h.vals ?? {});
     setFollowers(h.followers ?? "");
-    if (h.creatorId) setCreatorId(h.creatorId);
+    setCreatorId(h.creatorId ?? "");
     setEditingId(h.id);
     setSavedOk(false);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -386,41 +387,40 @@ export function Engagement() {
           ))}
         </div>
 
-        {/* Enregistrer (fiche si créateur sélectionné + toujours dans l'historique) */}
-        {hasInputs && (
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-            <div className="text-[11px] text-muted-foreground">
-              {editingId ? (
-                <><span className="font-semibold text-primary">Modification en cours</span> — ajuste les valeurs puis « Mettre à jour ». </>
-              ) : null}
-              {creatorId ? (
-                <>Enregistrer sur la fiche de <span className="font-semibold text-foreground">{titleCase(selectedCreator?.name ?? "")}</span> (roster · media kit · portail) + dans l'historique.</>
-              ) : (
-                "Enregistrer ce calcul dans l'historique (aucun créateur sélectionné)."
-              )}
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {editingId && (
-                <button
-                  type="button"
-                  onClick={cancelEdit}
-                  className="rounded-lg border border-border px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-                >
-                  Annuler
-                </button>
-              )}
+        {/* Enregistrer — bouton TOUJOURS visible (désactivé tant que le calcul n'est pas complet). */}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+          <div className="text-[11px] text-muted-foreground">
+            {editingId ? (
+              <><span className="font-semibold text-primary">Modification en cours</span> — ajuste les valeurs puis « Mettre à jour ». </>
+            ) : !hasInputs ? (
+              <>Renseigne les interactions <span className="font-medium text-foreground">et</span> la {p.base.label.toLowerCase()} pour pouvoir enregistrer.</>
+            ) : creatorId ? (
+              <>Met à jour la fiche de <span className="font-semibold text-foreground">{titleCase(selectedCreator?.name ?? "")}</span> (roster · media kit · portail) + l'historique.</>
+            ) : (
+              <>Astuce : sélectionne un <span className="font-medium text-foreground">créateur</span> ci-dessus pour l'enregistrer sur sa fiche. Sinon, ajouté à l'historique seul.</>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {editingId && (
               <button
                 type="button"
-                onClick={save}
-                disabled={saving}
-                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                onClick={cancelEdit}
+                className="rounded-lg border border-border px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
               >
-                {savedOk ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-                {savedOk ? "Enregistré" : saving ? "Enregistrement…" : editingId ? "Mettre à jour" : "Enregistrer"}
+                Annuler
               </button>
-            </div>
+            )}
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving || !hasInputs}
+              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {savedOk ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+              {savedOk ? "Enregistré" : saving ? "Enregistrement…" : editingId ? "Mettre à jour" : "Enregistrer"}
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Historique des calculs */}
@@ -432,20 +432,27 @@ export function Engagement() {
           </div>
           <div className="flex flex-col gap-2">
             {history.map((h) => (
-              <div key={h.id} className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-[13px] font-semibold text-foreground">{h.creator}</span>
-                    <span className="shrink-0 rounded-md bg-rowhover px-1.5 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">{h.platformLabel}</span>
-                  </div>
-                  <div className="mt-0.5 truncate text-[10px] text-faint">
-                    <span className="font-semibold text-muted-foreground">Calculé le {h.date}</span> · {h.detail}
-                  </div>
-                </div>
-                <span className="shrink-0 text-sm font-bold text-foreground">{h.er}</span>
-                <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold", h.verdict === "Moyen" ? "bg-amber/15 text-amber" : "bg-signalsoft text-signaltext")}>
-                  {h.verdict}
-                </span>
+              <div key={h.id} className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
+                <button
+                  type="button"
+                  onClick={() => setViewEntry(h)}
+                  title="Voir le détail du calcul"
+                  className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left transition-colors hover:opacity-80"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate text-[13px] font-semibold text-foreground">{h.creator}</span>
+                      <span className="shrink-0 rounded-md bg-rowhover px-1.5 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">{h.platformLabel}</span>
+                    </span>
+                    <span className="mt-0.5 block truncate text-[10px] text-faint">
+                      <span className="font-semibold text-muted-foreground">Calculé le {h.date}</span> · {h.detail}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-sm font-bold text-foreground">{h.er}</span>
+                  <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold", h.verdict === "Moyen" ? "bg-amber/15 text-amber" : "bg-signalsoft text-signaltext")}>
+                    {h.verdict}
+                  </span>
+                </button>
                 <button
                   type="button"
                   onClick={() => loadHist(h)}
@@ -467,6 +474,21 @@ export function Engagement() {
           </div>
         </div>
       )}
+      {viewEntry && (
+        <DetailModal
+          entry={viewEntry}
+          onClose={() => setViewEntry(null)}
+          onEdit={() => {
+            loadHist(viewEntry);
+            setViewEntry(null);
+          }}
+          onDelete={() => {
+            const id = viewEntry.id;
+            setViewEntry(null);
+            setPendingDel({ message: "Supprimer cette mesure de l'historique ? Cette action est irréversible.", run: () => delHist(id) });
+          }}
+        />
+      )}
       {pendingDel && (
         <ConfirmDialog
           title="Supprimer la mesure"
@@ -480,6 +502,90 @@ export function Engagement() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/** Détail complet d'une mesure enregistrée (lecture) + accès à la modification / suppression. */
+function DetailModal({
+  entry,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  entry: HistEntry;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const pl = PLATFORMS.find((x) => x.key === entry.platform) ?? PLATFORMS[0];
+  const cells = [
+    ...pl.metrics.map((m) => ({ label: m.label, value: fmtInt(num(entry.vals?.[m.key] ?? "")) })),
+    { label: pl.base.label, value: fmtInt(num(entry.vals?.[pl.base.key] ?? "")) },
+  ];
+  const isMoyen = entry.verdict === "Moyen";
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-sm font-semibold text-foreground">{entry.creator}</span>
+              <span className="shrink-0 rounded-md bg-rowhover px-1.5 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">{entry.platformLabel}</span>
+            </div>
+            <div className="mt-0.5 text-[10px] text-faint">Calculé le {entry.date}</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+            aria-label="Fermer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="text-4xl font-bold tracking-tight text-foreground">{entry.er}</div>
+          <span className={cn("mb-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-semibold", isMoyen ? "bg-amber/15 text-amber" : "bg-signalsoft text-signaltext")}>
+            {entry.verdict}
+          </span>
+        </div>
+        <div className="mt-1 text-[11px] text-muted-foreground">{entry.detail}</div>
+        <div className="mt-3 rounded-lg bg-panel px-3 py-2 text-[10px] text-muted-foreground">{pl.formula}</div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          {cells.map((c) => (
+            <div key={c.label} className="rounded-lg border border-border bg-card px-3 py-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{c.label}</div>
+              <div className="text-sm font-semibold text-foreground">{c.value}</div>
+            </div>
+          ))}
+          {num(entry.followers) > 0 && (
+            <div className="rounded-lg border border-border bg-card px-3 py-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Abonnés (suivi)</div>
+              <div className="text-sm font-semibold text-foreground">{fmtInt(num(entry.followers))}</div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5 flex items-center justify-between gap-2 border-t border-border pt-4">
+          <button
+            type="button"
+            onClick={onDelete}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#E5484D] transition-colors hover:bg-rowhover"
+          >
+            <X className="h-3.5 w-3.5" /> Supprimer
+          </button>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            <Pencil className="h-3.5 w-3.5" /> Modifier
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

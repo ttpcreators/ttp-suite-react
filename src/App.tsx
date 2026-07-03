@@ -153,6 +153,21 @@ export default function App() {
     }
   }, [active]);
 
+  // Navigation déclenchée par une vue (ex. clic sur une échéance brief/to-do dans le Planning).
+  useEffect(() => {
+    const onNav = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (id && (id in VIEWS || id === "roster")) {
+        setActive(id as ViewId);
+        setDetailCreator(null);
+        setSpace("agency");
+        setMobileTab(null);
+      }
+    };
+    window.addEventListener("ttp-navigate", onNav);
+    return () => window.removeEventListener("ttp-navigate", onNav);
+  }, []);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) =>

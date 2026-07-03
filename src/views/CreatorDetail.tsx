@@ -6,9 +6,9 @@ import { dbUpdate } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useLiveKey } from "@/lib/useLive";
-import { useAppState, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
 
-type CtDeadline = { creator: string; start: string; months: number; type?: string };
+type CtDeadline = { id?: string; creator: string; start: string; months: number; type?: string; note?: string };
 function ctEndDate(start: string, months: number): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(start);
   if (!m) return null;
@@ -21,6 +21,11 @@ function daysUntil(d: Date): number {
 function frDateShort(d: Date): string {
   return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+const uid = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
 import { AvatarUpload } from "@/components/ui/avatar-upload";
 
 type Creator = {
@@ -51,7 +56,26 @@ type Td = { id: string; text: string; done: boolean };
 type Br = { brand: string; deliverables: string | null; due: string | null };
 type Idea = { text: string };
 
-type Coord = Pick<Creator, "ville" | "phone" | "email" | "address" | "siren" | "birth" | "email_pro" | "instagram" | "tiktok" | "commission">;
+type Coord = Pick<Creator, "ville" | "phone" | "email" | "address" | "siren" | "birth" | "email_pro" | "instagram" | "tiktok" | "commission" | "handle" | "niche" | "platform">;
+
+/** Construit l'objet de formulaire éditable à partir d'une fiche (ou vide). */
+function coordOf(c: Creator | null): Coord {
+  return {
+    ville: c?.ville ?? "",
+    phone: c?.phone ?? "",
+    email: c?.email ?? "",
+    address: c?.address ?? "",
+    siren: c?.siren ?? "",
+    birth: c?.birth ?? "",
+    email_pro: c?.email_pro ?? "",
+    instagram: c?.instagram ?? "",
+    tiktok: c?.tiktok ?? "",
+    commission: c?.commission ?? "",
+    handle: c?.handle ?? "",
+    niche: c?.niche ?? "",
+    platform: c?.platform ?? "",
+  };
+}
 
 const statusBadge = (s: string | null) =>
   s === "pause" ? "warning" : s === "inactif" ? "neutral" : "success";
@@ -111,34 +135,39 @@ export function CreatorDetail({
   const [td, setTd] = useState<Td[]>([]);
   const [br, setBr] = useState<Br[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
-  const [form, setForm] = useState<Coord>({
-    ville: "",
-    phone: "",
-    email: "",
-    address: "",
-    siren: "",
-    birth: "",
-    email_pro: "",
-    instagram: "",
-    tiktok: "",
-    commission: "",
-  });
+  const [form, setForm] = useState<Coord>(() => coordOf(null));
   const [editing, setEditing] = useState(false);
+  const [exclusive, setExclusive] = useState(false);
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+  // Édition inline du contrat (écrit dans le blob `contractDeadlines`, partagé avec Échéances).
+  const [ctEditing, setCtEditing] = useState(false);
+  const [ctStart, setCtStart] = useState("");
+  const [ctMonths, setCtMonths] = useState("12");
+  const [ctType, setCtType] = useState("représentation");
 
   const live = useLiveKey();
   const { data: deadlines } = useAppState<CtDeadline[]>((s: AppState) => (s["contractDeadlines"] as CtDeadline[]) ?? []);
-  const editingRef = useRef(editing);
-  editingRef.current = editing;
+  const { data: exclusiveMap } = useAppState<Record<string, boolean>>(
+    (s: AppState) => (s["creatorExclusive"] as Record<string, boolean>) ?? {},
+  );
+  const exKey = name.toLowerCase();
+  // Reflète l'exclusivité stockée (sauf en cours d'édition, où l'utilisateur la modifie).
+  useEffect(() => {
+    if (!editingRef.current && exclusiveMap) setExclusive(exclusiveMap[exKey] === true);
+  }, [exclusiveMap, exKey]);
 
   // Date de fin du dernier contrat suivi (connecté à la page Échéances).
   let contractEnd: Date | null = null;
   let contractType = "";
+  let contractEntry: CtDeadline | null = null;
   for (const d of deadlines ?? []) {
     if ((d.creator ?? "").toLowerCase() !== name.toLowerCase()) continue;
     const e = ctEndDate(d.start, d.months);
     if (e && (!contractEnd || e > contractEnd)) {
       contractEnd = e;
       contractType = d.type ?? "";
+      contractEntry = d;
     }
   }
   const contractLeft = contractEnd ? daysUntil(contractEnd) : null;
@@ -150,19 +179,7 @@ export function CreatorDetail({
       if (error) console.error("Chargement de la fiche créateur échoué:", error);
       const row = (data?.[0] as Creator) ?? null;
       setC(row);
-      if (row && !editingRef.current)
-        setForm({
-          ville: row.ville ?? "",
-          phone: row.phone ?? "",
-          email: row.email ?? "",
-          address: row.address ?? "",
-          siren: row.siren ?? "",
-          birth: row.birth ?? "",
-          email_pro: row.email_pro ?? "",
-          instagram: row.instagram ?? "",
-          tiktok: row.tiktok ?? "",
-          commission: row.commission ?? "",
-        });
+      if (row && !editingRef.current) setForm(coordOf(row));
     });
     supabase.from("invoices").select("ref,party,amount,date").eq("creator", name).then(({ data, error }) => { if (error) console.error("Factures créateur:", error); if (alive) setInv((data as Inv[]) ?? []); });
     supabase.from("todos").select("id,text,done").eq("creator", name).then(({ data, error }) => { if (error) console.error("À faire créateur:", error); if (alive) setTd((data as Td[]) ?? []); });
@@ -180,26 +197,40 @@ export function CreatorDetail({
       toast("Erreur — réessaie");
       return;
     }
+    // Exclusivité : stockée dans le blob agence (pas une colonne créateur).
+    await saveAppStateKey("creatorExclusive", { ...(exclusiveMap ?? {}), [exKey]: exclusive });
     setC({ ...c, ...form });
     setEditing(false);
     toast("Infos enregistrées ✓");
   };
 
   const cancel = () => {
-    if (c)
-      setForm({
-        ville: c.ville ?? "",
-        phone: c.phone ?? "",
-        email: c.email ?? "",
-        address: c.address ?? "",
-        siren: c.siren ?? "",
-        birth: c.birth ?? "",
-        email_pro: c.email_pro ?? "",
-        instagram: c.instagram ?? "",
-        tiktok: c.tiktok ?? "",
-        commission: c.commission ?? "",
-      });
+    if (c) setForm(coordOf(c));
+    setExclusive(exclusiveMap?.[exKey] === true);
     setEditing(false);
+  };
+
+  // Ouvre l'éditeur de contrat en pré-remplissant depuis l'échéance existante.
+  const openCtEdit = () => {
+    setCtStart(contractEntry?.start || todayISO());
+    setCtMonths(String(contractEntry?.months ?? 12));
+    setCtType(contractEntry?.type || "représentation");
+    setCtEditing(true);
+  };
+  const saveContract = async () => {
+    const months = Math.max(1, parseInt(ctMonths, 10) || 0);
+    const start = ctStart || todayISO();
+    const list = (deadlines ?? []).slice();
+    const idx = contractEntry?.id ? list.findIndex((d) => d.id === contractEntry!.id) : -1;
+    if (idx >= 0) list[idx] = { ...list[idx], creator: list[idx].creator || name, type: ctType, start, months };
+    else list.push({ id: uid(), creator: name, type: ctType, start, months });
+    const ok = await saveAppStateKey("contractDeadlines", list);
+    if (!ok) {
+      toast("Erreur — réessaie");
+      return;
+    }
+    setCtEditing(false);
+    toast("Contrat mis à jour ✓");
   };
 
   const copyAll = () => {
@@ -306,6 +337,11 @@ export function CreatorDetail({
             <AnimatedBadge status={statusBadge(c?.status ?? null)} size="sm">
               {c?.status ? titleCase(c.status) : "Actif"}
             </AnimatedBadge>
+            {exclusive && (
+              <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">
+                Exclusif
+              </span>
+            )}
           </div>
           <div className="mt-1 text-sm text-faint">
             {[c?.handle, c?.niche, c?.platform].filter(Boolean).join(" · ") || "—"}
@@ -400,17 +436,36 @@ export function CreatorDetail({
         </div>
 
         {editing ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {field("Ville", "ville")}
-            {field("Téléphone", "phone")}
-            {field("Email perso", "email")}
-            {field("Email pro", "email_pro")}
-            {field("Instagram", "instagram")}
-            {field("TikTok", "tiktok")}
-            {field("Adresse", "address")}
-            {field("SIREN", "siren")}
-            {field("Naissance", "birth")}
-            {field("Commission (%)", "commission")}
+          <div className="space-y-4">
+            {/* Exclusivité (stockée côté agence) */}
+            <div className="flex items-center gap-2.5 rounded-lg border border-border bg-panel px-3 py-2.5">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={exclusive}
+                onClick={() => setExclusive((x) => !x)}
+                className={"relative h-5 w-9 shrink-0 rounded-full transition-colors " + (exclusive ? "bg-primary" : "bg-faint/40")}
+                title="Basculer l'exclusivité"
+              >
+                <span className={"absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all " + (exclusive ? "left-[18px]" : "left-0.5")} />
+              </button>
+              <span className="text-sm font-medium text-foreground">Créateur en exclusivité</span>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {field("Pseudo (@)", "handle")}
+              {field("Niche", "niche")}
+              {field("Plateforme", "platform")}
+              {field("Ville", "ville")}
+              {field("Téléphone", "phone")}
+              {field("Email perso", "email")}
+              {field("Email pro", "email_pro")}
+              {field("Instagram", "instagram")}
+              {field("TikTok", "tiktok")}
+              {field("Adresse", "address")}
+              {field("SIREN", "siren")}
+              {field("Naissance", "birth")}
+              {field("Commission (%)", "commission")}
+            </div>
           </div>
         ) : (
           <>
@@ -433,6 +488,112 @@ export function CreatorDetail({
               <Copy className="h-3.5 w-3.5" /> Copier toutes les infos
             </button>
           </>
+        )}
+      </div>
+
+      {/* Contrat — date de fin, connecté à la page Échéances */}
+      <div className="mb-4 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="text-sm font-semibold">Contrat</div>
+          {!ctEditing && (
+            <button
+              type="button"
+              onClick={openCtEdit}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            >
+              <Pencil className="h-3.5 w-3.5" /> {contractEnd ? "Modifier" : "Définir"}
+            </button>
+          )}
+        </div>
+
+        {ctEditing ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Date de début</div>
+                <input
+                  type="date"
+                  value={ctStart}
+                  onChange={(e) => setCtStart(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                />
+              </div>
+              <div>
+                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Durée (mois)</div>
+                <input
+                  type="number"
+                  value={ctMonths}
+                  onChange={(e) => setCtMonths(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                />
+              </div>
+              <div>
+                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Type</div>
+                <input
+                  value={ctType}
+                  onChange={(e) => setCtType(e.target.value)}
+                  placeholder="représentation"
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={saveContract}
+                className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                <Check className="h-3.5 w-3.5" /> Enregistrer
+              </button>
+              <button
+                type="button"
+                onClick={() => setCtEditing(false)}
+                className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                title="Annuler"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <span className="text-[11px] text-faint">Synchronisé avec la page Échéances.</span>
+            </div>
+          </div>
+        ) : contractEnd ? (
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+            <div>
+              <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Se termine le</div>
+              <div className="mt-0.5 text-2xl font-bold tracking-tight">{frDateShort(contractEnd)}</div>
+            </div>
+            <div>
+              <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Échéance</div>
+              <div
+                className={
+                  "mt-0.5 text-sm font-semibold " +
+                  (contractLeft != null && contractLeft <= 30
+                    ? "text-rose-500"
+                    : contractLeft != null && contractLeft <= 60
+                      ? "text-amber"
+                      : "text-foreground")
+                }
+              >
+                {contractLeft == null
+                  ? "—"
+                  : contractLeft < 0
+                    ? `Expiré depuis ${-contractLeft} j`
+                    : contractLeft === 0
+                      ? "Se termine aujourd'hui"
+                      : `Dans ${contractLeft} j`}
+              </div>
+            </div>
+            {contractType && (
+              <div>
+                <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Type</div>
+                <div className="mt-0.5 text-sm font-semibold capitalize">{contractType}</div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-xs text-muted-foreground">
+            Aucun contrat renseigné. Clique sur « Définir » pour ajouter la date de fin (visible aussi dans Échéances).
+          </div>
         )}
       </div>
 
