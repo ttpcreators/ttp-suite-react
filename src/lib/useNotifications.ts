@@ -14,20 +14,33 @@ function ctDaysLeft(d: Date): number {
   const t = new Date();
   return Math.round((d.getTime() - new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime()) / 86400000);
 }
+/** "il y a X j" / "hier" / "aujourd'hui" à partir d'un created_at. */
+function agoLabel(iso: string | null): string {
+  if (!iso) return "récemment";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "récemment";
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (days <= 0) return "aujourd'hui";
+  if (days === 1) return "hier";
+  return `il y a ${days} j`;
+}
 
-/** Notifications dérivées des vraies données : factures en retard, briefs à valider, prochains événements. */
+/** Notifications dérivées des vraies données : activité créateur, factures en retard, briefs à valider, événements. */
 export function useNotifications(): NotificationItem[] {
   const [items, setItems] = useState<NotificationItem[]>([]);
 
   useEffect(() => {
     let alive = true;
     const todayStr = new Date().toISOString().slice(0, 10);
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
     Promise.all([
       supabase.from("invoices").select("party,amount,status").eq("status", "retard"),
       supabase.from("briefs").select("brand,creator,status").eq("status", "valider"),
       supabase.from("events").select("date,time,title").or("deleted.is.null,deleted.eq.false").gte("date", todayStr).order("date").limit(3),
       getAppState().catch(() => ({}) as Record<string, unknown>),
-    ]).then(([inv, br, ev, app]) => {
+      supabase.from("todos").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
+      supabase.from("ideas").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
+    ]).then(([inv, br, ev, app, tdC, idC]) => {
       if (!alive) return;
       if (inv.error || br.error || ev.error) {
         console.error("Chargement des notifications échoué:", { inv: inv.error, br: br.error, ev: ev.error });
@@ -35,6 +48,27 @@ export function useNotifications(): NotificationItem[] {
         return;
       }
       const out: NotificationItem[] = [];
+      // Activité créateur en premier (ce qu'un créateur a ajouté depuis son espace, 7 derniers jours).
+      if (!tdC.error) {
+        ((tdC.data as { text: string; creator: string | null; created_at: string | null }[]) ?? []).forEach((t, k) =>
+          out.push({
+            id: `ctd-${k}`,
+            title: "Nouvelle tâche d'un créateur",
+            description: `${t.creator ? titleCase(t.creator) : "Créateur"} · ${t.text}`,
+            time: agoLabel(t.created_at),
+          }),
+        );
+      }
+      if (!idC.error) {
+        ((idC.data as { text: string; creator: string | null; created_at: string | null }[]) ?? []).forEach((i, k) =>
+          out.push({
+            id: `cid-${k}`,
+            title: "Nouvelle idée d'un créateur",
+            description: `${i.creator ? titleCase(i.creator) : "Créateur"} · ${i.text}`,
+            time: agoLabel(i.created_at),
+          }),
+        );
+      }
       ((inv.data as { party: string; amount: string }[]) ?? []).forEach((i, k) =>
         out.push({
           id: `inv-${k}`,
