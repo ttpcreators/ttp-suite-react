@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, Check, Save, RotateCcw, X } from "lucide-react";
+import { Activity, Check, Save, Pencil, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useCreators, invalidateCreators } from "@/lib/useCreators";
 import { dbUpdate } from "@/lib/db";
@@ -128,6 +128,7 @@ export function Engagement() {
   const [followers, setFollowers] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const { data: histData } = useAppState<HistEntry[]>(
     (s) => ((s as Record<string, unknown>).engagementHistory as HistEntry[]) ?? [],
@@ -173,10 +174,28 @@ export function Engagement() {
 
   const selectedCreator = creators.find((c) => c.id === creatorId) ?? null;
 
+  /** Reconstruit l'objet `stats` de la fiche créateur à partir d'une entrée d'historique. */
+  const statsFromEntry = (h: HistEntry) => {
+    const pl = PLATFORMS.find((x) => x.key === h.platform) ?? PLATFORMS[0];
+    const baseNum = num(h.vals?.[pl.base.key] ?? "");
+    return {
+      er: h.er,
+      base: baseNum,
+      baseLabel: pl.base.label,
+      platform: pl.key,
+      platformLabel: pl.label,
+      formula: pl.formula,
+      detail: h.detail,
+      metrics: pl.metrics.map((m) => ({ label: m.label, value: num(h.vals?.[m.key] ?? "") })),
+      verdict: h.verdict,
+      savedAt: h.date,
+    };
+  };
+
   const save = async () => {
     if (!hasInputs || saving) return;
     setSaving(true);
-    // 1) Si un créateur est sélectionné → met à jour sa fiche (er + stats).
+    // 1) Si un créateur est sélectionné → met à jour sa fiche (er + stats + followers).
     if (creatorId) {
       const stats = {
         er: erLabel,
@@ -200,9 +219,9 @@ export function Engagement() {
       }
       invalidateCreators();
     }
-    // 2) Historique (dans tous les cas).
+    // 2) Historique — met à jour l'entrée en cours d'édition, sinon crée une nouvelle.
     const entry: HistEntry = {
-      id: uid(),
+      id: editingId ?? uid(),
       date: new Date().toLocaleDateString("fr-FR"),
       creator: selectedCreator ? titleCase(selectedCreator.name) : "Calcul libre",
       creatorId: creatorId || undefined,
@@ -214,24 +233,50 @@ export function Engagement() {
       vals: { ...vals },
       followers,
     };
-    const nextHist = [entry, ...history].slice(0, 100);
+    const nextHist = editingId
+      ? history.map((h) => (h.id === editingId ? entry : h))
+      : [entry, ...history].slice(0, 100);
     setHistory(nextHist);
     await saveAppStateKey("engagementHistory", nextHist);
     setSaving(false);
     setSavedOk(true);
-    toast(creatorId ? "Enregistré (fiche + historique) ✓" : "Ajouté à l'historique ✓");
+    setEditingId(null);
+    toast(editingId ? "Mesure mise à jour ✓" : creatorId ? "Enregistré (fiche + historique) ✓" : "Ajouté à l'historique ✓");
   };
 
   const delHist = async (id: string) => {
+    const target = history.find((h) => h.id === id);
     const next = history.filter((h) => h.id !== id);
     setHistory(next);
+    if (editingId === id) setEditingId(null);
     await saveAppStateKey("engagementHistory", next);
+    // Propage sur la fiche du créateur : réapplique la mesure restante la plus récente, sinon efface.
+    if (target?.creatorId) {
+      const latest = next.find((h) => h.creatorId === target.creatorId);
+      if (latest) {
+        const patch: Record<string, unknown> = { er: latest.er, stats: statsFromEntry(latest) };
+        if (num(latest.followers) > 0) patch.followers = fmtInt(num(latest.followers));
+        await dbUpdate("creators", target.creatorId, patch);
+      } else {
+        await dbUpdate("creators", target.creatorId, { er: null, stats: null });
+      }
+      invalidateCreators();
+    }
+    toast("Mesure supprimée");
   };
   const loadHist = (h: HistEntry) => {
     setPlatformKey(h.platform);
     setVals(h.vals ?? {});
     setFollowers(h.followers ?? "");
     if (h.creatorId) setCreatorId(h.creatorId);
+    setEditingId(h.id);
+    setSavedOk(false);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setVals({});
+    setFollowers("");
     setSavedOk(false);
   };
 
@@ -345,21 +390,35 @@ export function Engagement() {
         {hasInputs && (
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
             <div className="text-[11px] text-muted-foreground">
+              {editingId ? (
+                <><span className="font-semibold text-primary">Modification en cours</span> — ajuste les valeurs puis « Mettre à jour ». </>
+              ) : null}
               {creatorId ? (
                 <>Enregistrer sur la fiche de <span className="font-semibold text-foreground">{titleCase(selectedCreator?.name ?? "")}</span> (roster · media kit · portail) + dans l'historique.</>
               ) : (
                 "Enregistrer ce calcul dans l'historique (aucun créateur sélectionné)."
               )}
             </div>
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving}
-              className="flex shrink-0 items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
-            >
-              {savedOk ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-              {savedOk ? "Enregistré" : saving ? "Enregistrement…" : "Enregistrer"}
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  className="rounded-lg border border-border px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                >
+                  Annuler
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={save}
+                disabled={saving}
+                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                {savedOk ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+                {savedOk ? "Enregistré" : saving ? "Enregistrement…" : editingId ? "Mettre à jour" : "Enregistrer"}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -379,7 +438,9 @@ export function Engagement() {
                     <span className="truncate text-[13px] font-semibold text-foreground">{h.creator}</span>
                     <span className="shrink-0 rounded-md bg-rowhover px-1.5 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">{h.platformLabel}</span>
                   </div>
-                  <div className="truncate text-[10px] text-faint">{h.date} · {h.detail}</div>
+                  <div className="mt-0.5 truncate text-[10px] text-faint">
+                    <span className="font-semibold text-muted-foreground">Calculé le {h.date}</span> · {h.detail}
+                  </div>
                 </div>
                 <span className="shrink-0 text-sm font-bold text-foreground">{h.er}</span>
                 <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold", h.verdict === "Moyen" ? "bg-amber/15 text-amber" : "bg-signalsoft text-signaltext")}>
@@ -388,10 +449,10 @@ export function Engagement() {
                 <button
                   type="button"
                   onClick={() => loadHist(h)}
-                  title="Recharger dans le calculateur"
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                  title="Modifier ce calcul"
+                  className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors hover:bg-rowhover", editingId === h.id ? "text-primary" : "text-faint hover:text-foreground")}
                 >
-                  <RotateCcw className="h-4 w-4" />
+                  <Pencil className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
