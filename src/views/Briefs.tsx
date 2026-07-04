@@ -143,10 +143,17 @@ export function Briefs() {
       toast("Renseigne la marque");
       return;
     }
+    // Préserve une échéance legacy illisible (texte libre) si le champ date est resté vide.
+    const oldDue = (rows ?? []).find((r) => r.id === id)?.due ?? "";
+    const dueVal = editDue.trim()
+      ? editDue.trim()
+      : oldDue && oldDue !== "—" && !toISODate(oldDue)
+        ? oldDue
+        : "—";
     const patch = {
       brand: editBrand.trim(),
       deliverables: editDeliverables.trim() || "—",
-      due: editDue.trim() || "—",
+      due: dueVal,
       objectif: editObjectif.trim() || "—",
     };
     if (!(await dbUpdate("briefs", id, patch))) {

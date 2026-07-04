@@ -225,7 +225,12 @@ export function EventCalendar({
     setCursor((c) => {
       const d = new Date(c);
       if (view === "week") d.setDate(d.getDate() + delta * 7);
-      else d.setMonth(d.getMonth() + delta);
+      else {
+        // Normalise au 1er du mois AVANT de décaler : avec un jour ≥ 29 (curseur
+        // hérité de la vue semaine), setMonth déborderait et sauterait un mois.
+        d.setDate(1);
+        d.setMonth(d.getMonth() + delta);
+      }
       return d;
     });
   }
@@ -313,6 +318,8 @@ export function EventCalendar({
               type="button"
               onClick={() => {
                 if (v === "week") setCursor((c) => startOfWeek(c));
+                // Mois : recale au 1er du mois du curseur (cohérent + pas d'overflow).
+                if (v === "month") setCursor((c) => new Date(c.getFullYear(), c.getMonth(), 1));
                 setView(v);
               }}
               className={cn(

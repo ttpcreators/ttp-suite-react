@@ -328,8 +328,25 @@ export function Portal({
                   <div className="truncate text-sm font-semibold">{b.brand}</div>
                   <div className="truncate text-xs text-faint">{b.deliverables} · échéance {frDate(b.due)}</div>
                 </div>
-                <AnimatedBadge status={b.status === "cours" ? "info" : b.status === "valider" ? "warning" : "neutral"} size="sm">
-                  {b.status === "cours" ? "En cours" : b.status === "valider" ? "À valider" : "En attente"}
+                <AnimatedBadge
+                  status={
+                    (b.status ?? "").includes("termin")
+                      ? "success"
+                      : b.status === "cours"
+                        ? "info"
+                        : b.status === "valider"
+                          ? "warning"
+                          : "neutral"
+                  }
+                  size="sm"
+                >
+                  {(b.status ?? "").includes("termin")
+                    ? "Terminé"
+                    : b.status === "cours"
+                      ? "En cours"
+                      : b.status === "valider"
+                        ? "À valider"
+                        : "En attente"}
                 </AnimatedBadge>
               </div>
             ))

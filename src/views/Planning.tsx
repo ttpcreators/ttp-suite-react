@@ -8,7 +8,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
-import { toISODate } from "@/lib/dates";
+import { toISODate, todayISO } from "@/lib/dates";
 
 export function Planning() {
   const [rows, setRows] = useState<Ev[] | null>(() => getCache<Ev[]>("events"));
@@ -34,7 +34,7 @@ export function Planning() {
         }
         const list = ((data as Record<string, unknown>[]) ?? []).map((r) => ({
           id: String(r.id),
-          date: ((r.date as string) && (r.date as string).trim()) ? (r.date as string) : new Date().toISOString().slice(0,10),
+          date: ((r.date as string) && (r.date as string).trim()) ? (r.date as string) : todayISO(),
           time: (r.time as string) ?? "—",
           title: (r.title as string) ?? "",
           type: (r.type as string) ?? "call",
@@ -113,7 +113,7 @@ export function Planning() {
       return;
     }
     // date par défaut = aujourd'hui (sinon l'événement n'apparaît nulle part)
-    const dateVal = e.date && e.date.trim() ? e.date : new Date().toISOString().slice(0, 10);
+    const dateVal = e.date && e.date.trim() ? e.date : todayISO();
     const row = {
       day: Number(dateVal.split("-")[2]) || 1,
       date: dateVal,

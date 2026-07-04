@@ -16,6 +16,12 @@ export function toISODate(s: unknown): string {
   return `${y}-${fr[2].padStart(2, "0")}-${fr[1].padStart(2, "0")}`;
 }
 
+/** Date LOCALE du jour en "YYYY-MM-DD" — pas d'UTC (évite le décalage de date en soirée). */
+export function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /** N'importe quel format → "jj/mm/aaaa" pour l'affichage. "—" si vide ; renvoie tel quel si déjà libre. */
 export function frDate(s: unknown): string {
   const t = String(s ?? "").trim();

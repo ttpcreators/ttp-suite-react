@@ -90,16 +90,17 @@ export function usePush() {
     refresh();
   }, [refresh]);
 
-  /** Doit être appelé depuis un clic utilisateur (exigence iOS). */
-  const enable = useCallback(async () => {
-    if (busy) return;
+  /** Doit être appelé depuis un clic utilisateur (exigence iOS).
+   *  Renvoie true si l'abonnement est bien enregistré côté serveur. */
+  const enable = useCallback(async (): Promise<boolean> => {
+    if (busy) return false;
     setBusy(true);
     try {
       const reg = await getReg();
       const perm = await Notification.requestPermission();
       if (perm !== "granted") {
         setState(perm === "denied" ? "denied" : "default");
-        return;
+        return false;
       }
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
@@ -107,7 +108,7 @@ export function usePush() {
       });
       const j = sub.toJSON();
       const { data: auth } = await supabase.auth.getUser();
-      await supabase.from("push_subscriptions").upsert(
+      const { error } = await supabase.from("push_subscriptions").upsert(
         {
           endpoint: j.endpoint,
           p256dh: j.keys?.p256dh,
@@ -117,7 +118,17 @@ export function usePush() {
         },
         { onConflict: "endpoint" },
       );
+      if (error) {
+        // Le serveur n'a jamais reçu l'abonnement → ne pas afficher « Activées ».
+        await sub.unsubscribe().catch(() => {});
+        setState("default");
+        return false;
+      }
       setState("enabled");
+      return true;
+    } catch {
+      setState("default");
+      return false;
     } finally {
       setBusy(false);
     }

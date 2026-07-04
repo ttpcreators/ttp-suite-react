@@ -152,7 +152,10 @@ export function Parametres() {
         ) : (
           <button
             type="button"
-            onClick={enable}
+            onClick={async () => {
+              const ok = await enable();
+              if (!ok && Notification.permission === "granted") toast("Activation échouée — réessaie");
+            }}
             disabled={busy}
             className="my-1 flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >

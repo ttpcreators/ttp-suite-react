@@ -126,7 +126,8 @@ export default function App() {
     try {
       const saved = localStorage.getItem("ttp:view");
       // `roster` est valide mais géré à part (pas dans VIEWS) → l'inclure explicitement.
-      if (saved && (saved in VIEWS || saved === "roster")) return saved as ViewId;
+      // hasOwn : `in` traverserait la chaîne de prototypes ("constructor"… passerait).
+      if (saved && (Object.hasOwn(VIEWS, saved) || saved === "roster")) return saved as ViewId;
     } catch {
       /* localStorage indisponible */
     }
@@ -159,7 +160,7 @@ export default function App() {
   useEffect(() => {
     const onNav = (e: Event) => {
       const id = (e as CustomEvent<string>).detail;
-      if (id && (id in VIEWS || id === "roster")) {
+      if (id && (Object.hasOwn(VIEWS, id) || id === "roster")) {
         setActive(id as ViewId);
         setDetailCreator(null);
         setSpace("agency");
@@ -236,7 +237,7 @@ export default function App() {
     content: <MobileMenu items={f.items} onSelect={select} />,
   }));
 
-  const notifs = useNotifications();
+  const { items: notifs, dismiss: dismissNotifs } = useNotifications();
   const title = findItem(active)?.label ?? (active === "corbeille" ? "Corbeille" : "Aperçu");
 
   if (session === undefined || (session && profile === undefined)) {
@@ -311,7 +312,7 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-                <Notifications items={notifs} />
+                <Notifications items={notifs} onDismiss={dismissNotifs} />
                 <button
                   type="button"
                   onClick={toggleTheme}

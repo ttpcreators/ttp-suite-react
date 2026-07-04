@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Activity, Check, Save, Pencil, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useCreators, invalidateCreators } from "@/lib/useCreators";
@@ -96,6 +96,12 @@ function fmtInt(n: number): string {
 const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
 
+/** Base (dénominateur) d'une entrée d'historique — avec repli pour les entrées
+ *  legacy enregistrées avant le passage aux vues (clés reach/abonnés). */
+function baseOf(h: { vals?: Record<string, string>; followers?: string }): number {
+  return num(h.vals?.["views"]) || num(h.vals?.["reach"]) || num(h.followers ?? "");
+}
+
 type HistEntry = {
   id: string;
   date: string;
@@ -161,8 +167,13 @@ export function Engagement() {
   };
 
   // Quand on choisit un créateur, on pré-remplit ses abonnés (suivi).
+  // JAMAIS pendant l'édition d'une mesure (les abonnés historiques seraient
+  // écrasés par la valeur actuelle de la fiche) ni par-dessus une saisie manuelle.
+  const editingIdRef = useRef(editingId);
+  editingIdRef.current = editingId;
   useEffect(() => {
     if (!creatorId) return;
+    if (editingIdRef.current) return;
     let alive = true;
     supabase
       .from("creators")
@@ -172,7 +183,8 @@ export function Engagement() {
       .then(({ data }) => {
         if (!alive) return;
         const f = data?.[0]?.followers as string | undefined;
-        if (f && /\d/.test(f) && !/[a-zA-Z]/.test(f)) setFollowers(String(f).replace(/[^\d]/g, ""));
+        if (f && /\d/.test(f) && !/[a-zA-Z]/.test(f))
+          setFollowers((prev) => prev || String(f).replace(/[^\d]/g, ""));
       });
     return () => {
       alive = false;
@@ -195,7 +207,7 @@ export function Engagement() {
     const pl = PLATFORMS.find((x) => x.key === h.platform) ?? PLATFORMS[0];
     return {
       er: h.er,
-      base: num(h.vals?.["views"] ?? ""),
+      base: baseOf(h),
       baseLabel: "Vues (30 j)",
       platform: pl.key,
       platformLabel: pl.label,
@@ -210,35 +222,36 @@ export function Engagement() {
   // Le calcul en cours met-il à jour la fiche (plateforme principale) ou seulement l'historique ?
   const updatesFiche = !creatorId || isMainPlatform(selectedCreator?.platform, p.key);
 
+  /** Une entrée est-elle sur la plateforme PRINCIPALE de son créateur ? */
+  const entryIsMain = (cid: string | undefined, pkey: PlatformKey) => {
+    if (!cid) return false;
+    return isMainPlatform(creators.find((c) => c.id === cid)?.platform, pkey);
+  };
+
+  /**
+   * Réconcilie la fiche d'un créateur avec l'historique : applique la mesure la
+   * plus récente de sa plateforme principale, sinon efface er/stats. Utilisé par
+   * l'édition ET la suppression pour garantir le même invariant.
+   */
+  const reconcileFiche = async (cid: string, hist: HistEntry[]) => {
+    const plat = creators.find((c) => c.id === cid)?.platform;
+    const latest = hist.find((h) => h.creatorId === cid && isMainPlatform(plat, h.platform));
+    if (latest) {
+      const patch: Record<string, unknown> = { er: latest.er, stats: statsFromEntry(latest) };
+      if (num(latest.followers) > 0) patch.followers = fmtInt(num(latest.followers));
+      await dbUpdate("creators", cid, patch);
+    } else {
+      await dbUpdate("creators", cid, { er: null, stats: null });
+    }
+    invalidateCreators();
+  };
+
   const save = async () => {
     if (!hasInputs || saving) return;
     setSaving(true);
-    // 1) Fiche créateur (er + stats + followers) — UNIQUEMENT si le calcul porte
-    //    sur sa plateforme principale (sinon un calcul TikTok écrase l'Instagram).
-    if (creatorId && updatesFiche) {
-      const stats = {
-        er: erLabel,
-        base: baseN,
-        baseLabel: "Vues (30 j)",
-        platform: p.key,
-        platformLabel: p.label,
-        formula: p.formula,
-        detail,
-        metrics: p.metrics.map((m) => ({ label: m.label, value: num(vals[m.key]) })),
-        verdict: v.label,
-        savedAt: new Date().toLocaleDateString("fr-FR"),
-      };
-      const patch: Record<string, unknown> = { er: erLabel, stats };
-      if (num(followers) > 0) patch.followers = fmtInt(num(followers));
-      const ok = await dbUpdate("creators", creatorId, patch);
-      if (!ok) {
-        setSaving(false);
-        toast("Erreur — réessaie");
-        return;
-      }
-      invalidateCreators();
-    }
-    // 2) Historique — met à jour l'entrée en cours d'édition, sinon crée une nouvelle.
+    // 1) Historique d'abord (source de vérité) — l'entrée éditée redevient la
+    //    plus récente (sa date repasse à aujourd'hui), donc remonte en tête.
+    const orig = editingId ? history.find((h) => h.id === editingId) : undefined;
     const entry: HistEntry = {
       id: editingId ?? uid(),
       date: new Date().toLocaleDateString("fr-FR"),
@@ -252,11 +265,21 @@ export function Engagement() {
       vals: { ...vals },
       followers,
     };
-    const nextHist = editingId
-      ? history.map((h) => (h.id === editingId ? entry : h))
-      : [entry, ...history].slice(0, 100);
+    const nextHist = [entry, ...history.filter((h) => h.id !== entry.id)].slice(0, 100);
+    const okBlob = await saveAppStateKey("engagementHistory", nextHist);
+    if (!okBlob) {
+      setSaving(false);
+      toast("Erreur d'enregistrement — réessaie");
+      return;
+    }
     setHistory(nextHist);
-    await saveAppStateKey("engagementHistory", nextHist);
+    // 2) Fiche(s) : réconciliées depuis l'historique — uniquement les créateurs
+    //    dont la fiche a pu être affectée (plateforme principale), y compris
+    //    l'ancien créateur si l'entrée éditée a changé de créateur/plateforme.
+    const affected = new Set<string>();
+    if (creatorId && updatesFiche) affected.add(creatorId);
+    if (orig && entryIsMain(orig.creatorId, orig.platform)) affected.add(orig.creatorId!);
+    for (const cid of affected) await reconcileFiche(cid, nextHist);
     setSaving(false);
     setSavedOk(true);
     setEditingId(null);
@@ -274,23 +297,18 @@ export function Engagement() {
   const delHist = async (id: string) => {
     const target = history.find((h) => h.id === id);
     const next = history.filter((h) => h.id !== id);
+    const okBlob = await saveAppStateKey("engagementHistory", next);
+    if (!okBlob) {
+      toast("Erreur — réessaie");
+      return;
+    }
     setHistory(next);
     if (editingId === id) setEditingId(null);
-    await saveAppStateKey("engagementHistory", next);
-    // Propage sur la fiche du créateur : réapplique la mesure restante la plus
-    // récente DE SA PLATEFORME PRINCIPALE, sinon efface (les autres plateformes
-    // vivent dans l'historique/portail, pas sur la fiche).
-    if (target?.creatorId) {
-      const plat = creators.find((c) => c.id === target.creatorId)?.platform;
-      const latest = next.find((h) => h.creatorId === target.creatorId && isMainPlatform(plat, h.platform));
-      if (latest) {
-        const patch: Record<string, unknown> = { er: latest.er, stats: statsFromEntry(latest) };
-        if (num(latest.followers) > 0) patch.followers = fmtInt(num(latest.followers));
-        await dbUpdate("creators", target.creatorId, patch);
-      } else {
-        await dbUpdate("creators", target.creatorId, { er: null, stats: null });
-      }
-      invalidateCreators();
+    // Réconcilie la fiche UNIQUEMENT si l'entrée supprimée avait pu y contribuer
+    // (plateforme principale) — sinon on effacerait un er saisi à la main alors
+    // que la mesure supprimée n'avait jamais touché la fiche.
+    if (target?.creatorId && entryIsMain(target.creatorId, target.platform)) {
+      await reconcileFiche(target.creatorId, next);
     }
     toast("Mesure supprimée");
   };
@@ -571,7 +589,7 @@ function DetailModal({
   const pl = PLATFORMS.find((x) => x.key === entry.platform) ?? PLATFORMS[0];
   const cells = [
     ...pl.metrics.map((m) => ({ label: m.label, value: fmtInt(num(entry.vals?.[m.key] ?? "")) })),
-    { label: "Vues (30 j)", value: fmtInt(num(entry.vals?.["views"] ?? "")) },
+    { label: "Vues (30 j)", value: fmtInt(baseOf(entry)) },
     { label: "Abonnés (suivi)", value: fmtInt(num(entry.followers ?? "")) },
   ];
   const isMoyen = entry.verdict === "Moyen";

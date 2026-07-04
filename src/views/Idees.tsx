@@ -14,7 +14,7 @@ import { Trash2, MessageSquarePlus, Check, X } from "lucide-react";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useEffect, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
-import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
 
 type Row = {
@@ -57,11 +57,16 @@ export function Idees() {
   const [editNoteId, setEditNoteId] = useState<string | null>(null);
   const [editNoteText, setEditNoteText] = useState("");
   const saveNote = async (id: string, value: string) => {
-    const next = { ...notes };
+    // Relit la map FRAÎCHE avant d'écrire (jamais depuis l'état local : on
+    // écraserait les commentaires posés depuis un autre poste / pas encore chargés).
+    invalidateAppState();
+    const fresh = ((await getAppState())["itemNotes"] as Record<string, string>) ?? {};
+    const next = { ...fresh };
     if (value.trim()) next[id] = value.trim();
     else delete next[id];
     setNotes(next);
-    await saveAppStateKey("itemNotes", next);
+    const ok = await saveAppStateKey("itemNotes", next);
+    if (!ok) toast("Commentaire non enregistré — réessaie");
   };
 
   useEffect(() => {
@@ -104,7 +109,9 @@ export function Idees() {
       return;
     }
     const createdRow = created as unknown as Row;
-    setRows([...(rows ?? []), createdRow]);
+    const nextRows = [...(rows ?? []), createdRow];
+    setRows(nextRows);
+    setCache("ideas", nextRows);
     if (note.trim()) await saveNote(createdRow.id, note);
     toast("Idée ajoutée ✓");
     setFormOpen(false);
@@ -113,9 +120,9 @@ export function Idees() {
   };
 
   const updateStatus = async (id: string, status: string) => {
-    setRows((prev) =>
-      (prev ?? []).map((r) => (r.id === id ? { ...r, status } : r)),
-    );
+    const next = (rows ?? []).map((r) => (r.id === id ? { ...r, status } : r));
+    setRows(next);
+    setCache("ideas", next);
     if (!(await dbUpdate("ideas", id, { status }))) {
       toast("Erreur — réessaie");
     }
@@ -124,7 +131,9 @@ export function Idees() {
   const removeRow = async (id: string) => {
     const r = (rows ?? []).find((x) => x.id === id);
     if (await dbTrash("ideas", id, r?.text ?? "Idée", r?.creator ?? undefined)) {
-      setRows((prev) => (prev ?? []).filter((x) => x.id !== id));
+      const next = (rows ?? []).filter((x) => x.id !== id);
+      setRows(next);
+      setCache("ideas", next);
       toast("Déplacée dans la corbeille");
     }
   };

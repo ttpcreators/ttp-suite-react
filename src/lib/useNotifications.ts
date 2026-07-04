@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
-import { getAppState } from "./appState";
+import { getAppState, invalidateAppState, saveAppStateKey } from "./appState";
+import { useLiveKey } from "./useLive";
+import { todayISO } from "./dates";
 import { titleCase } from "./utils";
 import type { NotificationItem } from "@/components/ui/notifications";
 
@@ -25,13 +27,21 @@ function agoLabel(iso: string | null): string {
   return `il y a ${days} j`;
 }
 
-/** Notifications dérivées des vraies données : activité créateur, factures en retard, briefs à valider, événements. */
-export function useNotifications(): NotificationItem[] {
+/** Notifications dérivées des vraies données : activité créateur, factures en retard, briefs à valider, événements.
+ *  Les IDs sont STABLES (contenu, pas index) pour que l'effacement persiste :
+ *  les ids effacés sont mémorisés dans le blob agence `notifDismissed`. */
+export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: string[]) => void } {
   const [items, setItems] = useState<NotificationItem[]>([]);
+  // Rejoue le fetch à chaque tick live : indispensable après une connexion par
+  // formulaire (le premier fetch part AVANT l'auth → RLS renvoie vide) et pour
+  // garder la cloche à jour sans recharger la page.
+  const live = useLiveKey();
 
   useEffect(() => {
     let alive = true;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    // Le blob a pu être mis en cache AVANT l'auth (vide) → on repart de zéro.
+    if (live > 0) invalidateAppState();
+    const todayStr = todayISO();
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
     Promise.all([
       supabase.from("invoices").select("party,amount,status").eq("status", "retard"),
@@ -52,9 +62,9 @@ export function useNotifications(): NotificationItem[] {
       const prefs = ((app as Record<string, unknown>).notifPrefs as Record<string, boolean | undefined>) ?? {};
       const bellCreator = prefs.bellCreatorActivity !== false;
       if (bellCreator && !tdC.error) {
-        ((tdC.data as { text: string; creator: string | null; created_at: string | null }[]) ?? []).forEach((t, k) =>
+        ((tdC.data as { text: string; creator: string | null; created_at: string | null }[]) ?? []).forEach((t) =>
           out.push({
-            id: `ctd-${k}`,
+            id: `ctd:${t.created_at}:${t.text.slice(0, 40)}`,
             title: "Nouvelle tâche d'un créateur",
             description: `${t.creator ? titleCase(t.creator) : "Créateur"} · ${t.text}`,
             time: agoLabel(t.created_at),
@@ -62,53 +72,55 @@ export function useNotifications(): NotificationItem[] {
         );
       }
       if (bellCreator && !idC.error) {
-        ((idC.data as { text: string; creator: string | null; created_at: string | null }[]) ?? []).forEach((i, k) =>
+        ((idC.data as { text: string; creator: string | null; created_at: string | null }[]) ?? []).forEach((i) =>
           out.push({
-            id: `cid-${k}`,
+            id: `cid:${i.created_at}:${i.text.slice(0, 40)}`,
             title: "Nouvelle idée d'un créateur",
             description: `${i.creator ? titleCase(i.creator) : "Créateur"} · ${i.text}`,
             time: agoLabel(i.created_at),
           }),
         );
       }
-      ((inv.data as { party: string; amount: string }[]) ?? []).forEach((i, k) =>
+      ((inv.data as { party: string; amount: string }[]) ?? []).forEach((i) =>
         out.push({
-          id: `inv-${k}`,
+          id: `inv:${i.party}:${i.amount}`,
           title: "Facture en retard",
           description: `${i.party} · ${i.amount}`,
           time: "à relancer",
         }),
       );
-      ((br.data as { brand: string; creator: string | null }[]) ?? []).forEach((b, k) =>
+      ((br.data as { brand: string; creator: string | null }[]) ?? []).forEach((b) =>
         out.push({
-          id: `br-${k}`,
+          id: `br:${b.brand}:${b.creator ?? ""}`,
           title: "Brief à valider",
           description: `${b.brand}${b.creator ? ` × ${titleCase(b.creator)}` : ""}`,
           time: "en attente",
         }),
       );
-      ((ev.data as { date: string; time: string; title: string }[]) ?? []).forEach((e, k) =>
+      ((ev.data as { date: string; time: string; title: string }[]) ?? []).forEach((e) =>
         out.push({
-          id: `ev-${k}`,
+          id: `ev:${e.date}:${e.title.slice(0, 40)}`,
           title: "Événement à venir",
           description: `${e.title}${e.time && e.time !== "—" ? ` · ${e.time}` : ""}`,
           time: e.date,
         }),
       );
       // Contrats bientôt échus (≤ 60 jours) ou déjà expirés.
-      (((app as Record<string, unknown>).contractDeadlines as Deadline[]) ?? []).forEach((d, k) => {
+      (((app as Record<string, unknown>).contractDeadlines as Deadline[]) ?? []).forEach((d) => {
         const end = ctEnd(d.start, d.months);
         if (!end) return;
         const left = ctDaysLeft(end);
         if (left > 60) return;
         out.push({
-          id: `ct-${k}`,
+          id: `ct:${d.creator}:${d.type}:${d.start}`,
           title: left < 0 ? "Contrat expiré" : "Contrat à renouveler",
           description: `${titleCase(d.creator)} · ${d.type}`,
           time: left < 0 ? `expiré depuis ${-left} j` : `expire dans ${left} j`,
         });
       });
-      setItems(out);
+      // Ne réaffiche jamais ce qui a été effacé (persisté dans le blob).
+      const dismissed = new Set(((app as Record<string, unknown>).notifDismissed as string[]) ?? []);
+      setItems(out.filter((n) => !dismissed.has(n.id)));
     }).catch((e) => {
       if (!alive) return;
       console.error("Notifications — échec réseau:", e);
@@ -117,7 +129,18 @@ export function useNotifications(): NotificationItem[] {
     return () => {
       alive = false;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live]);
 
-  return items;
+  /** Efface définitivement (persiste les ids dans le blob agence, tous appareils). */
+  const dismiss = async (ids: string[]) => {
+    if (!ids.length) return;
+    setItems((prev) => prev.filter((n) => !ids.includes(n.id)));
+    invalidateAppState();
+    const cur = (((await getAppState())["notifDismissed"] as string[]) ?? []);
+    const merged = [...new Set([...cur, ...ids])].slice(-300); // borne la liste
+    await saveAppStateKey("notifDismissed", merged);
+  };
+
+  return { items, dismiss };
 }

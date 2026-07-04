@@ -2,12 +2,12 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
-import { frDate, toISODate } from "@/lib/dates";
+import { frDate, toISODate, todayISO } from "@/lib/dates";
 import { dbUpdate } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useLiveKey } from "@/lib/useLive";
-import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 
 type CtDeadline = { id?: string; creator: string; start: string; months: number; type?: string; note?: string };
 function ctEndDate(start: string, months: number): Date | null {
@@ -21,9 +21,6 @@ function daysUntil(d: Date): number {
 }
 function frDateShort(d: Date): string {
   return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
 }
 const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
@@ -198,8 +195,12 @@ export function CreatorDetail({
       toast("Erreur — réessaie");
       return;
     }
-    // Exclusivité : stockée dans le blob agence (pas une colonne créateur).
-    await saveAppStateKey("creatorExclusive", { ...(exclusiveMap ?? {}), [exKey]: exclusive });
+    // Exclusivité : blob agence — relu FRAIS avant écriture (ne jamais réécrire
+    // la map depuis un état local potentiellement périmé → flags des autres perdus).
+    invalidateAppState();
+    const freshEx = ((await getAppState())["creatorExclusive"] as Record<string, boolean>) ?? {};
+    const okEx = await saveAppStateKey("creatorExclusive", { ...freshEx, [exKey]: exclusive });
+    if (!okEx) toast("Exclusivité non enregistrée — réessaie");
     setC({ ...c, ...form });
     setEditing(false);
     toast("Infos enregistrées ✓");
@@ -221,7 +222,10 @@ export function CreatorDetail({
   const saveContract = async () => {
     const months = Math.max(1, parseInt(ctMonths, 10) || 0);
     const start = ctStart || todayISO();
-    const list = (deadlines ?? []).slice();
+    // Relit le blob FRAIS : si `deadlines` n'était pas encore chargé, écrire
+    // depuis l'état local effacerait toutes les échéances des autres créateurs.
+    invalidateAppState();
+    const list = (((await getAppState())["contractDeadlines"] as CtDeadline[]) ?? []).slice();
     const idx = contractEntry?.id ? list.findIndex((d) => d.id === contractEntry!.id) : -1;
     if (idx >= 0) list[idx] = { ...list[idx], creator: list[idx].creator || name, type: ctType, start, months };
     else list.push({ id: uid(), creator: name, type: ctType, start, months });

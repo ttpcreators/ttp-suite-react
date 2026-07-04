@@ -69,7 +69,10 @@ function PushRow() {
       ) : (
         <button
           type="button"
-          onClick={enable}
+          onClick={async () => {
+            const ok = await enable();
+            if (!ok && Notification.permission === "granted") toast("Activation échouée — réessaie");
+          }}
           disabled={busy}
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
         >
@@ -80,7 +83,14 @@ function PushRow() {
   );
 }
 
-export function Notifications({ items = [] }: { items?: NotificationItem[] }) {
+export function Notifications({
+  items = [],
+  onDismiss,
+}: {
+  items?: NotificationItem[];
+  /** Effacement PERSISTANT (mémorisé côté serveur) — sinon la notif revient au refresh. */
+  onDismiss?: (ids: string[]) => void;
+}) {
   const [notifications, setNotifications] = React.useState<NotificationItem[]>(items);
   const [activeId, setActiveId] = React.useState<string | null>(null);
 
@@ -91,6 +101,7 @@ export function Notifications({ items = [] }: { items?: NotificationItem[] }) {
   const remove = (id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
     setActiveId(null);
+    onDismiss?.([id]);
   };
 
   return (
@@ -116,7 +127,10 @@ export function Notifications({ items = [] }: { items?: NotificationItem[] }) {
             {notifications.length > 0 && (
               <button
                 type="button"
-                onClick={() => setNotifications([])}
+                onClick={() => {
+                  onDismiss?.(notifications.map((n) => n.id));
+                  setNotifications([]);
+                }}
                 className="text-[10px] font-semibold uppercase tracking-wide text-faint transition-colors hover:text-foreground"
               >
                 Tout effacer

@@ -15,7 +15,7 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { toISODate, frDate } from "@/lib/dates";
-import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -94,11 +94,16 @@ export function Todo() {
     if (notesData) setNotes(notesData);
   }, [notesData]);
   const saveNote = async (id: string, value: string) => {
-    const next = { ...notes };
+    // Relit la map FRAÎCHE avant d'écrire (jamais depuis l'état local : on
+    // écraserait les commentaires posés depuis un autre poste / pas encore chargés).
+    invalidateAppState();
+    const fresh = ((await getAppState())["itemNotes"] as Record<string, string>) ?? {};
+    const next = { ...fresh };
     if (value.trim()) next[id] = value.trim();
     else delete next[id];
     setNotes(next);
-    await saveAppStateKey("itemNotes", next);
+    const ok = await saveAppStateKey("itemNotes", next);
+    if (!ok) toast("Commentaire non enregistré — réessaie");
   };
   // Édition inline du commentaire d'avancement (sous la carte, dans la liste).
   const [noteEditId, setNoteEditId] = useState<string | null>(null);
@@ -139,11 +144,19 @@ export function Todo() {
       toast("Renseigne la tâche");
       return;
     }
+    // Échéance : si l'ancienne valeur est un texte libre illisible (ex. « fin
+    // juin ») le champ date arrive vide — on la PRÉSERVE au lieu de l'écraser.
+    const oldDue = selectedTodo.due ?? "";
+    const dueVal = editDue.trim()
+      ? editDue.trim()
+      : oldDue && oldDue !== "—" && !toISODate(oldDue)
+        ? oldDue
+        : "—";
     const patch = {
       text: editText.trim(),
       descr: editDescr.trim() || null,
       tag: editCreator ? "CRÉATEUR" : "AGENCE",
-      due: editDue.trim() || "—",
+      due: dueVal,
       creator: editCreator || null,
       priority: editPriority,
     };

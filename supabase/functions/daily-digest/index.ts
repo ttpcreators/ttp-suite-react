@@ -57,22 +57,25 @@ function dueOrPast(due: unknown, todayStr: string): boolean {
 type CtDeadline = { creator?: string; start?: string; months?: number; type?: string };
 type Sub = { id: string; endpoint: string; p256dh: string; auth: string };
 
-type Caller = "cron" | "agency" | "creator" | null;
+type Caller = { role: "cron" | "agency" | "creator"; creatorName?: string | null } | null;
 
-/** Identifie l'appelant : CRON_SECRET (pg_cron), JWT agence (test) ou JWT créateur (activité). */
+/** Identifie l'appelant : CRON_SECRET (pg_cron), JWT agence (test) ou JWT créateur (activité).
+ *  Le secret n'est accepté QUE dans l'en-tête Authorization (pas en query string,
+ *  qui finirait dans les logs d'accès). */
 async function identify(req: Request): Promise<Caller> {
   const authz = req.headers.get("Authorization") ?? "";
   const bearer = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
-  const key = bearer || new URL(req.url).searchParams.get("key") || "";
-  if (CRON_SECRET && key === CRON_SECRET) return "cron";
-  if (bearer) {
-    const sb = getServiceClient();
-    const { data, error } = await sb.auth.getUser(bearer);
-    if (!error && data?.user) {
-      const { data: prof } = await sb
-        .from("profiles").select("role").eq("user_id", data.user.id).maybeSingle<{ role: string }>();
-      return prof?.role === "creator" ? "creator" : "agency";
-    }
+  if (!bearer) return null;
+  if (CRON_SECRET && bearer === CRON_SECRET) return { role: "cron" };
+  const sb = getServiceClient();
+  const { data, error } = await sb.auth.getUser(bearer);
+  if (!error && data?.user) {
+    const { data: prof } = await sb
+      .from("profiles").select("role,creator_name").eq("user_id", data.user.id)
+      .maybeSingle<{ role: string; creator_name: string | null }>();
+    return prof?.role === "creator"
+      ? { role: "creator", creatorName: prof.creator_name }
+      : { role: "agency" };
   }
   return null;
 }
@@ -91,13 +94,25 @@ async function loadPrefs(sb: ReturnType<typeof getServiceClient>): Promise<Notif
 }
 const prefOn = (prefs: NotifPrefs, key: string) => prefs[key] !== false;
 
-/** Envoie un payload à tous les abonnements ; purge les morts (404/410). */
+/** Envoie un payload aux abonnements AGENCE ; purge les morts (404/410).
+ *  Les appareils liés à un compte créateur sont EXCLUS : le digest contient des
+ *  infos internes (factures en retard, contrats…) réservées à l'agence. */
 async function sendToAll(sb: ReturnType<typeof getServiceClient>, payload: string) {
-  const { data: subs } = await sb.from("push_subscriptions").select("id,endpoint,p256dh,auth");
+  const { data: subsRaw } = await sb.from("push_subscriptions").select("id,endpoint,p256dh,auth,user_id");
+  const all = ((subsRaw ?? []) as (Sub & { user_id: string | null })[]);
+  const userIds = [...new Set(all.map((s) => s.user_id).filter(Boolean))] as string[];
+  const creatorIds = new Set<string>();
+  if (userIds.length) {
+    const { data: profs } = await sb.from("profiles").select("user_id,role").in("user_id", userIds);
+    for (const pr of (profs ?? []) as { user_id: string; role: string }[]) {
+      if (pr.role === "creator") creatorIds.add(pr.user_id);
+    }
+  }
+  const subs = all.filter((s) => !(s.user_id && creatorIds.has(s.user_id)));
   let sent = 0;
   let removed = 0;
   let firstError: string | null = null;
-  for (const s of (subs ?? []) as Sub[]) {
+  for (const s of subs) {
     try {
       await webpush.sendNotification(
         { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
@@ -113,7 +128,7 @@ async function sendToAll(sb: ReturnType<typeof getServiceClient>, payload: strin
       }
     }
   }
-  return { sent, removed, firstError, total: (subs ?? []).length };
+  return { sent, removed, firstError, total: subs.length };
 }
 
 Deno.serve(async (req: Request) => {
@@ -143,7 +158,9 @@ Deno.serve(async (req: Request) => {
     const prefs = await loadPrefs(sb);
     if (!prefOn(prefs, "pushCreatorActivity")) return jsonRes({ ok: true, skipped: "pref_off" });
     const kindLabel = body.kind === "idee" ? "idée" : body.kind === "evenement" ? "évènement" : "tâche";
-    const who = String(body.creator ?? "Un créateur").slice(0, 60);
+    // Anti-usurpation : pour un JWT créateur, le nom vient de SON profil (pas du corps de requête).
+    const rawWho = caller.role === "creator" ? (caller.creatorName || "Un créateur") : String(body.creator ?? "Un créateur");
+    const who = rawWho.slice(0, 60).replace(/\p{L}[\p{L}'’-]*/gu, (w) => w.charAt(0).toUpperCase() + w.slice(1));
     const what = String(body.text ?? "").slice(0, 140);
     const payload = JSON.stringify({
       title: `${who} a ajouté une ${kindLabel}`,
@@ -156,7 +173,7 @@ Deno.serve(async (req: Request) => {
   }
 
   // Les modes ci-dessous (test + digest) sont réservés à l'agence / au cron.
-  if (caller === "creator") return jsonRes({ error: "unauthorized" }, 401);
+  if (caller.role === "creator") return jsonRes({ error: "unauthorized" }, 401);
 
   // Mode test (bouton dans l'app) : envoie une notif de contrôle, sans calcul.
   if (body?.test === true) {
