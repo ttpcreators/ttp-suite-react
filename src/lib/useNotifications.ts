@@ -28,6 +28,10 @@ function agoLabel(iso: string | null): string {
   return `il y a ${days} j`;
 }
 
+// File d'attente d'effacements (module-level) : sérialise les écritures du blob
+// `notifDismissed` pour éviter la course read-merge-write entre deux dismiss.
+let dismissQueue: Promise<void> = Promise.resolve();
+
 /** Notifications dérivées des vraies données : activité créateur, factures en retard, briefs à valider, événements.
  *  Les IDs sont STABLES (contenu, pas index) pour que l'effacement persiste :
  *  les ids effacés sont mémorisés dans le blob agence `notifDismissed`. */
@@ -54,9 +58,9 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
     const todayStr = todayISO();
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
     Promise.all([
-      supabase.from("invoices").select("party,amount,status").eq("status", "retard"),
-      supabase.from("briefs").select("brand,creator,status").eq("status", "valider"),
-      supabase.from("events").select("date,time,title").or("deleted.is.null,deleted.eq.false").gte("date", todayStr).order("date").limit(3),
+      supabase.from("invoices").select("id,party,amount,status").eq("status", "retard"),
+      supabase.from("briefs").select("id,brand,creator,status").eq("status", "valider"),
+      supabase.from("events").select("id,date,time,title").or("deleted.is.null,deleted.eq.false").gte("date", todayStr).order("date").limit(3),
       getAppState().catch(() => ({}) as Record<string, unknown>),
       supabase.from("todos").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
       supabase.from("ideas").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
@@ -91,25 +95,25 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           }),
         );
       }
-      ((inv.data as { party: string; amount: string }[]) ?? []).forEach((i) =>
+      ((inv.data as { id: string; party: string; amount: string }[]) ?? []).forEach((i) =>
         out.push({
-          id: `inv:${i.party}:${i.amount}`,
+          id: `inv:${i.id}`,
           title: "Facture en retard",
           description: `${i.party} · ${i.amount}`,
           time: "à relancer",
         }),
       );
-      ((br.data as { brand: string; creator: string | null }[]) ?? []).forEach((b) =>
+      ((br.data as { id: string; brand: string; creator: string | null }[]) ?? []).forEach((b) =>
         out.push({
-          id: `br:${b.brand}:${b.creator ?? ""}`,
+          id: `br:${b.id}`,
           title: "Brief à valider",
           description: `${b.brand}${b.creator ? ` × ${titleCase(b.creator)}` : ""}`,
           time: "en attente",
         }),
       );
-      ((ev.data as { date: string; time: string; title: string }[]) ?? []).forEach((e) =>
+      ((ev.data as { id: string; date: string; time: string; title: string }[]) ?? []).forEach((e) =>
         out.push({
-          id: `ev:${e.date}:${e.title.slice(0, 40)}`,
+          id: `ev:${e.id}`,
           title: "Événement à venir",
           description: `${e.title}${e.time && e.time !== "—" ? ` · ${e.time}` : ""}`,
           time: e.date,
@@ -144,15 +148,19 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live]);
 
-  /** Efface définitivement (persiste les ids dans le blob agence, tous appareils). */
-  const dismiss = async (ids: string[]) => {
+  /** Efface définitivement (persiste les ids dans le blob agence, tous appareils).
+   *  Sérialisé : deux effacements rapprochés ne se court-circuitent pas (chacun
+   *  relit le blob frais APRÈS le précédent, sinon le 1er réapparaîtrait). */
+  const dismiss = (ids: string[]) => {
     if (!ids.length) return;
     setItems((prev) => prev.filter((n) => !ids.includes(n.id)));
-    invalidateAppState();
-    const cur = (((await getAppState())["notifDismissed"] as string[]) ?? []);
-    const merged = [...new Set([...cur, ...ids])].slice(-300); // borne la liste
-    const ok = await saveAppStateKey("notifDismissed", merged);
-    if (!ok) toast("Effacement non synchronisé — réessaie");
+    dismissQueue = dismissQueue.then(async () => {
+      invalidateAppState();
+      const cur = (((await getAppState())["notifDismissed"] as string[]) ?? []);
+      const merged = [...new Set([...cur, ...ids])].slice(-300); // borne la liste
+      const ok = await saveAppStateKey("notifDismissed", merged);
+      if (!ok) toast("Effacement non synchronisé — réessaie");
+    });
   };
 
   return { items, dismiss };

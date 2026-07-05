@@ -118,22 +118,27 @@ export function CreatorSpace({
   // Historique d'engagement du créateur — via la fonction serveur creator-history
   // (le blob agence est inaccessible aux créateurs ; le serveur filtre sur SON nom).
   const [suivi, setSuivi] = useState<SuiviEntry[] | null>(null);
+  const [suiviErr, setSuiviErr] = useState(false);
   useEffect(() => {
-    if (tab !== "evolution" || suivi !== null) return;
+    if (tab !== "evolution" || suivi !== null || suiviErr) return;
     let alive = true;
     supabase.functions
       .invoke("creator-history")
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (!alive) return;
+        if (error) {
+          setSuiviErr(true);
+          return;
+        }
         setSuivi(((data as { entries?: SuiviEntry[] } | null)?.entries ?? []) as SuiviEntry[]);
       })
       .catch(() => {
-        if (alive) setSuivi([]);
+        if (alive) setSuiviErr(true);
       });
     return () => {
       alive = false;
     };
-  }, [tab, suivi]);
+  }, [tab, suivi, suiviErr]);
   const [creator, setCreator] = useState<Creator | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
@@ -581,7 +586,22 @@ export function CreatorSpace({
 
           {/* Évolution (suivi engagement, mesures de l'agence — lecture seule) */}
           {tab === "evolution" &&
-            (suivi === null ? (
+            (suiviErr ? (
+              <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
+                <div className="text-sm font-medium text-foreground">Chargement impossible</div>
+                <p className="mt-1 text-xs text-muted-foreground">Ton évolution n'a pas pu être récupérée.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSuiviErr(false);
+                    setSuivi(null);
+                  }}
+                  className="mt-3 rounded-lg border border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                >
+                  Réessayer
+                </button>
+              </div>
+            ) : suivi === null ? (
               <AnimatedBadge status="loading" size="sm">
                 Chargement de ton évolution…
               </AnimatedBadge>

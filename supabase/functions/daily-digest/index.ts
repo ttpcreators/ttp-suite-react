@@ -84,8 +84,12 @@ async function identify(req: Request): Promise<Caller> {
 type NotifPrefs = Record<string, boolean | undefined>;
 async function loadPrefs(sb: ReturnType<typeof getServiceClient>): Promise<NotifPrefs> {
   try {
-    const { data } = await sb.from("module_rows").select("a").eq("module", "__app_state__").maybeSingle();
-    const raw = (data as { a?: unknown } | null)?.a;
+    // Même sélection que le client (appState.ts) : la ligne la plus récente —
+    // maybeSingle() planterait si 2 lignes __app_state__ coexistent.
+    const { data } = await sb
+      .from("module_rows").select("a").eq("module", "__app_state__")
+      .order("created_at", { ascending: false }).limit(1);
+    const raw = (data?.[0] as { a?: unknown } | undefined)?.a;
     const obj = typeof raw === "string" ? JSON.parse(raw) : (raw ?? {});
     return (obj?.notifPrefs as NotifPrefs) ?? {};
   } catch {
@@ -100,15 +104,17 @@ const prefOn = (prefs: NotifPrefs, key: string) => prefs[key] !== false;
 async function sendToAll(sb: ReturnType<typeof getServiceClient>, payload: string) {
   const { data: subsRaw } = await sb.from("push_subscriptions").select("id,endpoint,p256dh,auth,user_id");
   const all = ((subsRaw ?? []) as (Sub & { user_id: string | null })[]);
+  // ALLOWLIST agence : on n'envoie QU'AUX appareils dont le compte est rôle 'agency'.
+  // (Un abonnement sans user_id, ou d'un créateur/compte offboardé, est exclu.)
   const userIds = [...new Set(all.map((s) => s.user_id).filter(Boolean))] as string[];
-  const creatorIds = new Set<string>();
+  const agencyIds = new Set<string>();
   if (userIds.length) {
     const { data: profs } = await sb.from("profiles").select("user_id,role").in("user_id", userIds);
     for (const pr of (profs ?? []) as { user_id: string; role: string }[]) {
-      if (pr.role === "creator") creatorIds.add(pr.user_id);
+      if (pr.role !== "creator") agencyIds.add(pr.user_id);
     }
   }
-  const subs = all.filter((s) => !(s.user_id && creatorIds.has(s.user_id)));
+  const subs = all.filter((s) => s.user_id && agencyIds.has(s.user_id));
   let sent = 0;
   let removed = 0;
   let firstError: string | null = null;
@@ -195,8 +201,9 @@ Deno.serve(async (req: Request) => {
   let contractsSoon = 0;
   try {
     const { data: blob } = await sb
-      .from("module_rows").select("a").eq("module", "__app_state__").maybeSingle();
-    const raw = (blob as { a?: unknown } | null)?.a;
+      .from("module_rows").select("a").eq("module", "__app_state__")
+      .order("created_at", { ascending: false }).limit(1);
+    const raw = (blob?.[0] as { a?: unknown } | undefined)?.a;
     const obj = typeof raw === "string" ? JSON.parse(raw) : (raw ?? {});
     const deadlines: CtDeadline[] = Array.isArray(obj?.contractDeadlines) ? obj.contractDeadlines : [];
     for (const d of deadlines) {

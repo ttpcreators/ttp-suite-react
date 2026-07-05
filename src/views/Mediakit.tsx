@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Copy, Pencil, Eye, FileText, Plus, Trash2, X, ExternalLink, Archive } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { dbInsert, dbDelete } from "@/lib/db";
@@ -50,7 +50,7 @@ function archMonthLabel(key: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** Override éditable stocké dans le blob `mediaKitData` (indexé par position roster). */
+/** Override éditable stocké dans le blob `mediaKitData` (indexé par NOM du créateur, clé stable). */
 type MkOverride = {
   bio?: string;
   age?: string;
@@ -65,7 +65,7 @@ type MkOverride = {
   content?: ContentLink[];
   packages?: Package[];
 };
-type MediaKitData = Record<number, MkOverride>;
+type MediaKitData = Record<string, MkOverride>;
 
 const DEFAULT_AGE = "18–34 ans";
 const DEFAULT_AGE_PCT = "64%";
@@ -263,6 +263,27 @@ export function Mediakit() {
   const [localData, setLocalData] = useState<MediaKitData | null>(null);
   const data = localData ?? mkData ?? {};
 
+  // Migration one-shot : anciennes clés = POSITION roster (fragiles : décalées à
+  // chaque suppression/réordonnancement) → clé = NOM du créateur (stable).
+  const migratedRef = useRef(false);
+  useEffect(() => {
+    if (migratedRef.current || creators.length === 0 || !mkData) return;
+    const numericKeys = Object.keys(mkData).filter((k) => /^\d+$/.test(k));
+    if (numericKeys.length === 0) {
+      migratedRef.current = true;
+      return;
+    }
+    const remapped: MediaKitData = {};
+    for (const [k, v] of Object.entries(mkData)) if (!/^\d+$/.test(k)) remapped[k] = v;
+    for (const k of numericKeys) {
+      const nm = creators[Number(k)]?.name;
+      if (nm && !remapped[nm]) remapped[nm] = mkData[k];
+    }
+    migratedRef.current = true;
+    setLocalData(remapped);
+    saveAppStateKey("mediaKitData", remapped);
+  }, [creators, mkData]);
+
   const [selected, setSelected] = useState<string | null>(null);
   useEffect(() => {
     if (selected == null && creators.length > 0) setSelected(creators[0].name);
@@ -274,6 +295,7 @@ export function Mediakit() {
     if (!selected) return;
     let alive = true;
     setLoading(true);
+    setCreator(null); // évite d'afficher/archiver la fiche de l'ANCIEN créateur pendant la bascule
     supabase
       .from("creators")
       .select("*")
@@ -290,8 +312,7 @@ export function Mediakit() {
     };
   }, [selected]);
 
-  const selIndex = creators.findIndex((c) => c.name === selected);
-  const ov: MkOverride = (data && selIndex >= 0 && data[selIndex]) || {};
+  const ov: MkOverride = (selected && data[selected]) || {};
 
   const [editDraft, setEditDraft] = useState<MkOverride | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -454,15 +475,15 @@ export function Mediakit() {
   };
 
   const delArchive = async (row: ArchiveRow) => {
-    const { error: rmErr } = await supabase.storage.from("documents").remove([row.path]);
-    if (rmErr) {
-      toast("Suppression du fichier échouée — réessaie");
+    // Fiche d'ABORD (si elle survit avec un fichier mort, le créateur voit un lien
+    // cassé — pire qu'un fichier orphelin invisible). Le fichier ensuite (best effort).
+    if (!(await dbDelete("documents", row.id))) {
+      toast("Erreur — réessaie");
       return;
     }
-    if (await dbDelete("documents", row.id)) {
-      setArchives((prev) => (prev ?? []).filter((x) => x.id !== row.id));
-      toast("Archive supprimée");
-    }
+    await supabase.storage.from("documents").remove([row.path]).catch(() => {});
+    setArchives((prev) => (prev ?? []).filter((x) => x.id !== row.id));
+    toast("Archive supprimée");
   };
 
   const openEdit = () =>
@@ -482,13 +503,13 @@ export function Mediakit() {
     });
 
   const saveEdit = async () => {
-    if (!editDraft || selIndex < 0) return;
+    if (!editDraft || !selected) return;
     const cleaned: MkOverride = {
       ...editDraft,
       content: (editDraft.content ?? []).filter((c) => c.title.trim() || c.url.trim()),
       packages: (editDraft.packages ?? []).filter((p) => p.name.trim() || p.price.trim() || p.desc.trim()),
     };
-    const next = { ...data, [selIndex]: cleaned };
+    const next = { ...data, [selected]: cleaned };
     setLocalData(next);
     setEditDraft(null);
     const ok = await saveAppStateKey("mediaKitData", next);

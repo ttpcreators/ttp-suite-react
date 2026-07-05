@@ -82,7 +82,7 @@ export function SuiviPanel({ entries, lockedCreator }: { entries: SuiviEntry[]; 
   const creatorNames = useMemo(() => [...new Set(entries.map((h) => h.creator))], [entries]);
   const [selCreator, setSelCreator] = useState("");
   const creator = lockedCreator || selCreator || creatorNames[0] || "";
-  const sameCreator = (h: HistEntry) => h.creator.toLowerCase() === creator.toLowerCase();
+  const sameCreator = (h: HistEntry) => h.creator.trim().toLowerCase() === creator.trim().toLowerCase();
 
   // Plateformes disponibles pour ce créateur
   const platforms = useMemo(
@@ -93,27 +93,31 @@ export function SuiviPanel({ entries, lockedCreator }: { entries: SuiviEntry[]; 
   const [selPlatform, setSelPlatform] = useState("");
   const platform = platforms.includes(selPlatform) ? selPlatform : platforms[0] || "";
 
-  // Série chronologique du créateur × plateforme
+  // Série chronologique du créateur × plateforme.
+  // `entries` est dans l'ordre du blob (récent en tête). À date ÉGALE, on veut
+  // que la mesure la plus récente (index le plus faible) soit le DERNIER point →
+  // tri par date croissante puis par index décroissant.
   const points = useMemo(() => {
     return entries
       .filter((h) => sameCreator(h) && h.platform === platform)
-      .slice()
-      .sort((a, b) => frTime(a.date) - frTime(b.date))
-      .map((h) => ({
+      .map((h, i) => ({
         label: h.date.slice(0, 5),
         full: h.date,
+        t: frTime(h.date),
+        i,
         er: parseEr(h.er),
         followers: num(h.followers),
         interactions: interactionsOf(h),
         verdict: h.verdict,
-      }));
+      }))
+      .sort((a, b) => a.t - b.t || b.i - a.i);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, creator, platform]);
 
   const last = points[points.length - 1];
   const prev = points[points.length - 2];
   const dEr = last && prev ? Math.round((last.er - prev.er) * 100) / 100 : null;
-  const dFol = last && prev && prev.followers > 0 ? last.followers - prev.followers : null;
+  const dFol = last && prev && last.followers > 0 && prev.followers > 0 ? last.followers - prev.followers : null;
 
   if (entries.length === 0)
     return (

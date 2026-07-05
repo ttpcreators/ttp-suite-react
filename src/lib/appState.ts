@@ -59,12 +59,18 @@ export function invalidateAppState() {
  */
 export async function saveAppStateKey(key: string, value: unknown): Promise<boolean> {
   _writeGen++; // marque une écriture en cours (prioritaire sur les refetch)
-  const { data } = await supabase
+  const { data, error: selErr } = await supabase
     .from("module_rows")
     .select("id,a")
     .eq("module", "__app_state__")
     .order("created_at", { ascending: false })
     .limit(1);
+  // CRITIQUE : ne jamais confondre « lecture échouée » avec « ligne absente ».
+  // Sinon on insère une 2e ligne __app_state__ quasi vide qui masque tout le blob.
+  if (selErr) {
+    console.warn("[blob] read-before-save", key, selErr.message);
+    return false;
+  }
   const row = data && (data[0] as { id: string; a: string } | undefined);
   let obj: Record<string, unknown> = {};
   if (row) {

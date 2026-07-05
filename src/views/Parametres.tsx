@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { BellRing, Smartphone, Sunrise, Users } from "lucide-react";
-import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -81,7 +81,11 @@ export function Parametres() {
   }, [stored]);
 
   const setPref = async (key: keyof NotifPrefs, value: boolean) => {
-    const next = { ...prefs, [key]: value };
+    // Relecture FRAÎCHE avant fusion : ne pas réécrire la map depuis un état local
+    // périmé (sinon une préférence modifiée sur un autre appareil serait perdue).
+    invalidateAppState();
+    const fresh = ((await getAppState())["notifPrefs"] as NotifPrefs) ?? {};
+    const next = { ...fresh, [key]: value };
     setPrefs(next);
     const ok = await saveAppStateKey("notifPrefs", next);
     if (!ok) toast("Erreur d'enregistrement — réessaie");

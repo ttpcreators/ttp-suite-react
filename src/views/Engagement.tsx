@@ -3,10 +3,11 @@ import { Activity, Check, Save, Pencil, X, ArrowUpRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useCreators, invalidateCreators } from "@/lib/useCreators";
 import { dbUpdate } from "@/lib/db";
-import { useAppState, saveAppStateKey } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
 import { SelectField } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
+import { isMainPlatform, type PlatformKey } from "@/lib/platform";
 import { cn, titleCase } from "@/lib/utils";
 
 /**
@@ -19,7 +20,6 @@ import { cn, titleCase } from "@/lib/utils";
  * (roster, media kit, portail).
  */
 
-type PlatformKey = "instagram" | "tiktok" | "youtube" | "x";
 type Field = { key: string; label: string };
 type Platform = {
   key: PlatformKey;
@@ -116,21 +116,6 @@ type HistEntry = {
   followers: string;
 };
 
-/**
- * La fiche créateur (abonnés / engagement / stats) ne reflète que sa plateforme
- * PRINCIPALE (champ `platform` du roster). Un calcul fait sur une autre
- * plateforme est ajouté à l'historique (+ portail) mais n'écrase PAS la fiche —
- * sinon un calcul TikTok remplaçait les abonnés Instagram.
- */
-function isMainPlatform(creatorPlatform: string | null | undefined, key: PlatformKey): boolean {
-  const cp = (creatorPlatform ?? "").toLowerCase().trim();
-  if (!cp) return true; // pas de plateforme principale définie → on met à jour
-  if (key === "instagram") return cp.includes("insta");
-  if (key === "tiktok") return cp.includes("tiktok") || cp.includes("tik tok");
-  if (key === "youtube") return cp.includes("youtube") || cp.includes("yt");
-  return cp === "x" || cp.includes("twitter") || /(^|\s)x($|\s)/.test(cp);
-}
-
 function verdict(er: number, p: Platform): { label: string; hint: string; tone: "signal" | "amber" } {
   if (er >= p.excellent)
     return { label: "Excellent", hint: "Communauté très engagée — un argument fort en négociation.", tone: "signal" };
@@ -181,10 +166,11 @@ export function Engagement() {
       .eq("id", creatorId)
       .limit(1)
       .then(({ data }) => {
-        if (!alive) return;
+        if (!alive || editingIdRef.current) return;
+        // Au CHANGEMENT de créateur, on charge SES abonnés (écrase la valeur du
+        // créateur précédent — sinon la fiche du nouveau se retrouve corrompue).
         const f = data?.[0]?.followers as string | undefined;
-        if (f && /\d/.test(f) && !/[a-zA-Z]/.test(f))
-          setFollowers((prev) => prev || String(f).replace(/[^\d]/g, ""));
+        setFollowers(f && /\d/.test(f) && !/[a-zA-Z]/.test(f) ? String(f).replace(/[^\d]/g, "") : "");
       });
     return () => {
       alive = false;
@@ -249,9 +235,12 @@ export function Engagement() {
   const save = async () => {
     if (!hasInputs || saving) return;
     setSaving(true);
-    // 1) Historique d'abord (source de vérité) — l'entrée éditée redevient la
-    //    plus récente (sa date repasse à aujourd'hui), donc remonte en tête.
-    const orig = editingId ? history.find((h) => h.id === editingId) : undefined;
+    // 1) Historique d'abord (source de vérité). RELECTURE FRAÎCHE du blob avant
+    //    fusion : sinon, sur un état local périmé (chargement échoué, autre poste),
+    //    on écraserait/tronquerait tout l'historique. On fusionne sur `freshHist`.
+    invalidateAppState();
+    const freshHist = ((await getAppState())["engagementHistory"] as HistEntry[]) ?? [];
+    const orig = editingId ? freshHist.find((h) => h.id === editingId) : undefined;
     const entry: HistEntry = {
       id: editingId ?? uid(),
       date: new Date().toLocaleDateString("fr-FR"),
@@ -265,7 +254,7 @@ export function Engagement() {
       vals: { ...vals },
       followers,
     };
-    const nextHist = [entry, ...history.filter((h) => h.id !== entry.id)].slice(0, 100);
+    const nextHist = [entry, ...freshHist.filter((h) => h.id !== entry.id)].slice(0, 100);
     const okBlob = await saveAppStateKey("engagementHistory", nextHist);
     if (!okBlob) {
       setSaving(false);
@@ -295,8 +284,12 @@ export function Engagement() {
   };
 
   const delHist = async (id: string) => {
-    const target = history.find((h) => h.id === id);
-    const next = history.filter((h) => h.id !== id);
+    // Relecture fraîche : ne pas supprimer depuis une liste périmée (perte d'une
+    // mesure ajoutée depuis un autre poste entre-temps).
+    invalidateAppState();
+    const freshHist = ((await getAppState())["engagementHistory"] as HistEntry[]) ?? [];
+    const target = freshHist.find((h) => h.id === id);
+    const next = freshHist.filter((h) => h.id !== id);
     const okBlob = await saveAppStateKey("engagementHistory", next);
     if (!okBlob) {
       toast("Erreur — réessaie");

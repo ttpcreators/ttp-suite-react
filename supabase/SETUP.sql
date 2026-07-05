@@ -159,20 +159,21 @@ create or replace function public.my_creator() returns text
   select creator_name from public.profiles where user_id = auth.uid();
 $$;
 
--- À l'inscription d'un créateur (via la page Accès), le rôle + le nom du créateur
--- sont lus depuis les métadonnées envoyées par l'app.
+-- À l'inscription (via la page Accès), on ne fait JAMAIS confiance au rôle envoyé
+-- dans les métadonnées (contrôlable par le client → un compte pourrait se déclarer
+-- 'agency'). Rôle = TOUJOURS 'creator' ici ; la promotion agence se fait
+-- EXCLUSIVEMENT via la liste d'emails de la section 4 ci-dessous.
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer as $$
 begin
   insert into public.profiles (user_id, role, creator_name)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data->>'role','creator'),
+    'creator',
     nullif(new.raw_user_meta_data->>'creator_name','')
   )
   on conflict (user_id) do update
-    set role = excluded.role,
-        creator_name = coalesce(excluded.creator_name, public.profiles.creator_name);
+    set creator_name = coalesce(excluded.creator_name, public.profiles.creator_name);
   return new;
 end $$;
 
@@ -258,9 +259,23 @@ insert into storage.buckets (id, name, public)
   values ('documents','documents', false)
   on conflict (id) do nothing;
 
+-- Bucket privé `documents` : l'AGENCE gère tout ; un CRÉATEUR ne peut que LIRE
+-- (créer une URL signée) les fichiers rattachés à une de SES fiches documents.
+-- (Avant : tout compte authentifié avait accès total au bucket entier.)
 drop policy if exists documents_obj_auth on storage.objects;
-create policy documents_obj_auth on storage.objects for all to authenticated
-  using (bucket_id = 'documents') with check (bucket_id = 'documents');
+drop policy if exists documents_obj_agency on storage.objects;
+drop policy if exists documents_obj_creator_read on storage.objects;
+create policy documents_obj_agency on storage.objects for all to authenticated
+  using (bucket_id = 'documents' and public.is_agency())
+  with check (bucket_id = 'documents' and public.is_agency());
+create policy documents_obj_creator_read on storage.objects for select to authenticated
+  using (
+    bucket_id = 'documents'
+    and exists (
+      select 1 from public.documents d
+       where d.path = storage.objects.name and d.creator = public.my_creator()
+    )
+  );
 
 -- Bucket PUBLIC pour les photos de profil (avatars) : lecture publique (URL
 -- permanente), écriture réservée aux comptes connectés. Permet que la photo

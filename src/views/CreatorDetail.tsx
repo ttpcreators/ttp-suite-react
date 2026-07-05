@@ -3,6 +3,7 @@ import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X, ArrowUpRight } from "l
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
 import { frDate, toISODate, todayISO } from "@/lib/dates";
+import { isMainPlatform } from "@/lib/platform";
 import { dbUpdate } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -171,7 +172,14 @@ export function CreatorDetail({
   const [ctType, setCtType] = useState("représentation");
 
   const live = useLiveKey();
-  const { data: deadlines } = useAppState<CtDeadline[]>((s: AppState) => (s["contractDeadlines"] as CtDeadline[]) ?? []);
+  const { data: deadlinesRemote } = useAppState<CtDeadline[]>((s: AppState) => (s["contractDeadlines"] as CtDeadline[]) ?? []);
+  // Copie locale prioritaire après enregistrement du contrat (le blob ne se
+  // resynchronise qu'au prochain tick live, ~20 s) — effacée dès que le remote arrive.
+  const [deadlinesLocal, setDeadlinesLocal] = useState<CtDeadline[] | null>(null);
+  useEffect(() => {
+    setDeadlinesLocal(null);
+  }, [deadlinesRemote]);
+  const deadlines = deadlinesLocal ?? deadlinesRemote;
   const { data: exclusiveMap } = useAppState<Record<string, boolean>>(
     (s: AppState) => (s["creatorExclusive"] as Record<string, boolean>) ?? {},
   );
@@ -183,9 +191,11 @@ export function CreatorDetail({
   const perPlatform = (() => {
     const mine = (engHist ?? []).filter((h) => (h.creator ?? "").toLowerCase() === name.toLowerCase());
     const byPlat = new Map<string, EngEntry>();
+    // `mine` est dans l'ordre du blob (plus récent en tête) ; à date ÉGALE on
+    // garde donc la première rencontrée (`>` strict) = la plus récente.
     for (const h of mine) {
       const cur = byPlat.get(h.platform);
-      if (!cur || frTime(h.date) >= frTime(cur.date)) byPlat.set(h.platform, h);
+      if (!cur || frTime(h.date) > frTime(cur.date)) byPlat.set(h.platform, h);
     }
     return [...byPlat.values()];
   })();
@@ -230,7 +240,11 @@ export function CreatorDetail({
 
   const save = async () => {
     if (!c) return;
-    const ok = await dbUpdate("creators", c.id, { ...form });
+    const patch: Partial<Creator> = { ...form };
+    // Date de naissance legacy en texte libre illisible : le champ date arrive
+    // vide (toISODate a renvoyé "") → on la PRÉSERVE au lieu de l'effacer.
+    if (!form.birth && c.birth && !toISODate(c.birth)) delete patch.birth;
+    const ok = await dbUpdate("creators", c.id, patch);
     if (!ok) {
       toast("Erreur — réessaie");
       return;
@@ -241,7 +255,7 @@ export function CreatorDetail({
     const freshEx = ((await getAppState())["creatorExclusive"] as Record<string, boolean>) ?? {};
     const okEx = await saveAppStateKey("creatorExclusive", { ...freshEx, [exKey]: exclusive });
     if (!okEx) toast("Exclusivité non enregistrée — réessaie");
-    setC({ ...c, ...form });
+    setC({ ...c, ...patch });
     setEditing(false);
     toast("Infos enregistrées ✓");
   };
@@ -274,6 +288,7 @@ export function CreatorDetail({
       toast("Erreur — réessaie");
       return;
     }
+    setDeadlinesLocal(list); // reflète immédiatement (évite le doublon et l'affichage périmé)
     setCtEditing(false);
     toast("Contrat mis à jour ✓");
   };
@@ -392,11 +407,10 @@ export function CreatorDetail({
   // Engagement = dernière mesure de la plateforme principale (sinon la plus récente).
   const totalFollowers = perPlatform.reduce((a, p) => a + numOf(p.followers), 0);
   const latestMeasure = perPlatform.slice().sort((a, b) => frTime(b.date) - frTime(a.date))[0] ?? null;
-  const mainEntry = (() => {
-    if (perPlatform.length === 0) return null;
-    const cp = (c?.platform ?? "").toLowerCase();
-    return perPlatform.find((p) => cp.includes(p.platform.slice(0, 4))) ?? latestMeasure;
-  })();
+  const mainEntry =
+    perPlatform.length === 0
+      ? null
+      : (perPlatform.find((p) => isMainPlatform(c?.platform, p.platform)) ?? latestMeasure);
 
   return (
     <div>

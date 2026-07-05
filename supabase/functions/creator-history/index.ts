@@ -27,9 +27,13 @@ Deno.serve(async (req: Request) => {
   const sb = getServiceClient();
   const { data, error } = await sb.auth.getUser(bearer);
   if (error || !data?.user) return jsonRes({ error: "unauthorized" }, 401);
-  const { data: prof } = await sb
+  // FAIL-CLOSED : toute erreur de lecture du profil OU profil absent → on refuse.
+  // On ne renvoie l'historique COMPLET que si le rôle est explicitement "agency".
+  const { data: prof, error: profErr } = await sb
     .from("profiles").select("role,creator_name").eq("user_id", data.user.id)
     .maybeSingle<{ role: string; creator_name: string | null }>();
+  if (profErr || !prof) return jsonRes({ error: "forbidden" }, 403);
+  if (prof.role !== "agency" && prof.role !== "creator") return jsonRes({ entries: [] });
 
   // Blob agence (même sélection que le client : la ligne la plus récente).
   const { data: rows } = await sb
@@ -43,7 +47,7 @@ Deno.serve(async (req: Request) => {
     hist = [];
   }
 
-  if (prof?.role === "creator") {
+  if (prof.role === "creator") {
     const me = (prof.creator_name ?? "").trim().toLowerCase();
     if (!me) return jsonRes({ entries: [] });
     hist = hist.filter((h) => String(h?.creator ?? "").trim().toLowerCase() === me);
