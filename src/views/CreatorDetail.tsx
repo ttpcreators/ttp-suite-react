@@ -189,16 +189,6 @@ export function CreatorDetail({
     }
     return [...byPlat.values()];
   })();
-  // Pastille de plateforme sélectionnée → pilote les cartes Abonnés/Engagement.
-  // Défaut : la plateforme principale de la fiche si mesurée, sinon la première.
-  const [statPlat, setStatPlat] = useState("");
-  const defaultPlat = (() => {
-    const cp = (c?.platform ?? "").toLowerCase();
-    const hit = perPlatform.find((p) => cp.includes(p.platform.slice(0, 4)));
-    return hit?.platform ?? perPlatform[0]?.platform ?? "";
-  })();
-  const activePlat = statPlat || defaultPlat;
-  const selEntry = perPlatform.find((p) => p.platform === activePlat) ?? null;
   const exKey = name.toLowerCase();
   // Reflète l'exclusivité stockée (sauf en cours d'édition, où l'utilisateur la modifie).
   useEffect(() => {
@@ -371,6 +361,32 @@ export function CreatorDetail({
     if (xu) socialLinks.push({ label: "X", url: xu, icon: <XIcon className="h-4 w-4" /> });
   }
 
+  // Carte « Plateformes » : réunit lien du profil (logo cliquable) + abonnés/taux
+  // issus de la DERNIÈRE mesure d'engagement (datée automatiquement au jour du calcul).
+  const platCards = (() => {
+    const map = new Map<string, { key: string; label: string; url: string | null; entry: EngEntry | null }>();
+    for (const s of socialLinks) {
+      const k = s.label.toLowerCase();
+      map.set(k, { key: k, label: s.label, url: s.url, entry: null });
+    }
+    for (const e of perPlatform) {
+      const cur = map.get(e.platform);
+      if (cur) cur.entry = e;
+      else map.set(e.platform, { key: e.platform, label: e.platformLabel, url: null, entry: e });
+    }
+    return [...map.values()];
+  })();
+  const platIcon = (k: string) =>
+    k === "instagram" ? (
+      <InstagramIcon className="h-4 w-4" />
+    ) : k === "tiktok" ? (
+      <TikTokIcon className="h-4 w-4" />
+    ) : k === "youtube" ? (
+      <YoutubeIcon className="h-4 w-4" />
+    ) : (
+      <XIcon className="h-4 w-4" />
+    );
+
   return (
     <div>
       <button
@@ -403,22 +419,6 @@ export function CreatorDetail({
           <div className="mt-1 text-sm text-faint">
             {[c?.handle, c?.niche, c?.platform].filter(Boolean).join(" · ") || "—"}
           </div>
-          {socialLinks.length > 0 && (
-            <div className="mt-2.5 flex items-center gap-1.5">
-              {socialLinks.map((s) => (
-                <a
-                  key={s.label}
-                  href={s.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={`Ouvrir ${s.label}`}
-                  className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-surface text-muted-foreground transition-colors hover:border-primary hover:bg-rowhover hover:text-primary"
-                >
-                  {s.icon}
-                </a>
-              ))}
-            </div>
-          )}
         </div>
         <button
           onClick={() => onOpenPortal(name)}
@@ -428,47 +428,19 @@ export function CreatorDetail({
         </button>
       </div>
 
-      {/* Pastilles de plateforme : pilotent les cartes Abonnés / Engagement */}
-      {perPlatform.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-2">
-          {perPlatform.map((p) => (
-            <button
-              key={p.platform}
-              type="button"
-              onClick={() => setStatPlat(p.platform)}
-              className={
-                "rounded-xl px-3.5 py-2 text-[11px] font-semibold transition-colors " +
-                (p.platform === activePlat
-                  ? "bg-primary text-primary-foreground"
-                  : "border border-border bg-surface text-muted-foreground hover:bg-rowhover")
-              }
-            >
-              {p.platformLabel}
-            </button>
-          ))}
-        </div>
-      )}
-
       <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-        {stat(
-          "Abonnés",
-          selEntry && numOf(selEntry.followers) > 0 ? fmtCompact(numOf(selEntry.followers)) : (c?.followers ?? null),
-          selEntry ? `${selEntry.platformLabel} · au ${selEntry.date}` : undefined,
-        )}
-        {stat(
-          "Engagement",
-          selEntry ? selEntry.er : (c?.er ?? null),
-          selEntry ? `${selEntry.platformLabel} · au ${selEntry.date}` : undefined,
-        )}
+        {stat("Abonnés", c?.followers ?? null)}
+        {stat("Engagement", c?.er ?? null)}
         {stat("CA · mois", c?.ca ?? null)}
         {stat("Reach", c?.reach ?? null)}
       </div>
 
-      {/* Stats PAR PLATEFORME — dernière mesure enregistrée, datée automatiquement */}
-      {perPlatform.length > 0 && (
+      {/* Plateformes — logo cliquable (ouvre le profil) + abonnés/taux de la
+          dernière mesure d'engagement, datée automatiquement au jour du calcul */}
+      {platCards.length > 0 && (
         <div className="mb-4 rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="text-sm font-semibold">Stats par plateforme</div>
+            <div className="text-sm font-semibold">Plateformes</div>
             <button
               type="button"
               onClick={() => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "suivi" }))}
@@ -480,24 +452,34 @@ export function CreatorDetail({
             </button>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {perPlatform.map((p) => (
-              <div key={p.platform} className="rounded-xl border border-border bg-panel px-4 py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="rounded-md bg-rowhover px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    {p.platformLabel}
+            {platCards.map((p) => (
+              <div key={p.key} className="flex items-center gap-3 rounded-xl border border-border bg-panel px-4 py-3">
+                {p.url ? (
+                  <a
+                    href={p.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`Ouvrir le ${p.label} de ${titleCase(name)}`}
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-surface text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                  >
+                    {platIcon(p.key)}
+                  </a>
+                ) : (
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-surface text-faint">
+                    {platIcon(p.key)}
                   </span>
-                  <span className="text-[10px] text-faint">au {p.date}</span>
-                </div>
-                <div className="mt-2.5 flex items-end gap-5">
-                  <div>
-                    <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Taux</div>
-                    <div className="text-lg font-bold tracking-tight">{p.er}</div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">{p.label}</span>
+                    {p.entry && <span className="shrink-0 text-[9px] text-faint">au {p.entry.date}</span>}
                   </div>
-                  <div>
-                    <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Abonnés</div>
-                    <div className="text-lg font-bold tracking-tight">
-                      {numOf(p.followers) > 0 ? fmtCompact(numOf(p.followers)) : "—"}
-                    </div>
+                  <div className="mt-0.5 flex items-baseline gap-3">
+                    <span className="whitespace-nowrap text-lg font-bold tracking-tight">
+                      {p.entry && numOf(p.entry.followers) > 0 ? fmtCompact(numOf(p.entry.followers)) : "—"}
+                      <span className="ml-1 text-[10px] font-medium text-faint">abonnés</span>
+                    </span>
+                    {p.entry && <span className="text-[11px] font-semibold text-signaltext">{p.entry.er}</span>}
                   </div>
                 </div>
               </div>
