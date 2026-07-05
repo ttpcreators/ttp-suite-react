@@ -189,6 +189,16 @@ export function CreatorDetail({
     }
     return [...byPlat.values()];
   })();
+  // Pastille de plateforme sélectionnée → pilote les cartes Abonnés/Engagement.
+  // Défaut : la plateforme principale de la fiche si mesurée, sinon la première.
+  const [statPlat, setStatPlat] = useState("");
+  const defaultPlat = (() => {
+    const cp = (c?.platform ?? "").toLowerCase();
+    const hit = perPlatform.find((p) => cp.includes(p.platform.slice(0, 4)));
+    return hit?.platform ?? perPlatform[0]?.platform ?? "";
+  })();
+  const activePlat = statPlat || defaultPlat;
+  const selEntry = perPlatform.find((p) => p.platform === activePlat) ?? null;
   const exKey = name.toLowerCase();
   // Reflète l'exclusivité stockée (sauf en cours d'édition, où l'utilisateur la modifie).
   useEffect(() => {
@@ -337,10 +347,11 @@ export function CreatorDetail({
     );
   };
 
-  const stat = (label: string, val: string | null) => (
+  const stat = (label: string, val: string | null, sub?: string) => (
     <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
       <div className="text-[9px] font-semibold uppercase tracking-wider text-faint">{label}</div>
       <div className="mt-2 whitespace-nowrap text-2xl font-bold tracking-tight">{val || "—"}</div>
+      {sub && <div className="mt-1 truncate text-[10px] text-faint">{sub}</div>}
     </div>
   );
 
@@ -417,9 +428,38 @@ export function CreatorDetail({
         </button>
       </div>
 
+      {/* Pastilles de plateforme : pilotent les cartes Abonnés / Engagement */}
+      {perPlatform.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {perPlatform.map((p) => (
+            <button
+              key={p.platform}
+              type="button"
+              onClick={() => setStatPlat(p.platform)}
+              className={
+                "rounded-xl px-3.5 py-2 text-[11px] font-semibold transition-colors " +
+                (p.platform === activePlat
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border bg-surface text-muted-foreground hover:bg-rowhover")
+              }
+            >
+              {p.platformLabel}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-        {stat("Abonnés", c?.followers ?? null)}
-        {stat("Engagement", c?.er ?? null)}
+        {stat(
+          "Abonnés",
+          selEntry && numOf(selEntry.followers) > 0 ? fmtCompact(numOf(selEntry.followers)) : (c?.followers ?? null),
+          selEntry ? `${selEntry.platformLabel} · au ${selEntry.date}` : undefined,
+        )}
+        {stat(
+          "Engagement",
+          selEntry ? selEntry.er : (c?.er ?? null),
+          selEntry ? `${selEntry.platformLabel} · au ${selEntry.date}` : undefined,
+        )}
         {stat("CA · mois", c?.ca ?? null)}
         {stat("Reach", c?.reach ?? null)}
       </div>
