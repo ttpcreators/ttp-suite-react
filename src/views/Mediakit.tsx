@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Copy, Pencil, Eye, FileText, Plus, Trash2, X, ExternalLink } from "lucide-react";
+import { Copy, Pencil, Eye, FileText, Plus, Trash2, X, ExternalLink, Archive } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { dbInsert, dbDelete } from "@/lib/db";
+import { ConfirmDialog } from "@/components/ui/action-menu";
 import { useAppState, saveAppStateKey } from "@/lib/appState";
 import type { AppState } from "@/lib/appState";
 import { useCreators } from "@/lib/useCreators";
@@ -27,6 +29,26 @@ type Creator = {
 
 type ContentLink = { id: string; title: string; platform: string; url: string; views: string };
 type Package = { id: string; name: string; price: string; desc: string };
+
+/** Media kit archivé : fichier HTML dans le bucket privé `documents` +
+ *  fiche `documents` (type "mediakit") → visible par le créateur dans son espace. */
+type ArchiveRow = {
+  id: string;
+  creator: string | null;
+  name: string;
+  size: string | null;
+  path: string;
+  created_at: string | null;
+};
+function archMonthKey(iso: string | null): string {
+  const d = iso ? new Date(iso) : null;
+  return d && !Number.isNaN(d.getTime()) ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` : "?";
+}
+function archMonthLabel(key: string): string {
+  const [y, m] = key.split("-").map(Number);
+  const s = new Date(y, (m || 1) - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 /** Override éditable stocké dans le blob `mediaKitData` (indexé par position roster). */
 type MkOverride = {
@@ -274,6 +296,29 @@ export function Mediakit() {
   const [editDraft, setEditDraft] = useState<MkOverride | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
 
+  // ── Archives des media kits (fichiers datés, filtrables par mois) ──
+  const [archives, setArchives] = useState<ArchiveRow[] | null>(null);
+  const [archMonth, setArchMonth] = useState<string>("all");
+  const [archiving, setArchiving] = useState(false);
+  const [archDel, setArchDel] = useState<ArchiveRow | null>(null);
+  useEffect(() => {
+    let alive = true;
+    supabase
+      .from("documents")
+      .select("id,creator,name,size,path,created_at")
+      .eq("type", "mediakit")
+      .order("created_at", { ascending: false })
+      .then(({ data: rows, error }) => {
+        if (!alive) return;
+        setArchives(error ? [] : (((rows as ArchiveRow[]) ?? [])));
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const archMonths = [...new Set((archives ?? []).map((a) => archMonthKey(a.created_at)))].filter((k) => k !== "?");
+  const shownArchives = (archives ?? []).filter((a) => archMonth === "all" || archMonthKey(a.created_at) === archMonth);
+
   if (creators.length === 0 || (selected && loading && !creator)) {
     return (
       <div className="grid place-items-center rounded-2xl border border-border bg-surface p-16 text-sm text-muted-foreground shadow-sm">
@@ -362,6 +407,64 @@ export function Mediakit() {
     toast("Média kit téléchargé ✓ (ouvre-le puis Imprimer → PDF)");
   };
 
+  /** Archive la version ACTUELLE : fichier daté dans le bucket privé + fiche
+   *  documents (le créateur la voit dans son espace ; base du partage mail à venir). */
+  const archiveKit = async () => {
+    if (archiving) return;
+    setArchiving(true);
+    try {
+      const html = buildHTML();
+      const now = new Date();
+      const monthLabel = now.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+      const slug = creator.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const path = `mediakits/${slug}-${now.getTime()}.html`;
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const up = await supabase.storage.from("documents").upload(path, blob, { upsert: false, contentType: "text/html" });
+      if (up.error) {
+        toast("Échec de l'archivage — réessaie");
+        return;
+      }
+      const row = {
+        creator: creator.name,
+        name: `Media kit — ${titleCase(creator.name)} — ${monthLabel}`,
+        type: "mediakit",
+        size: `${Math.max(1, Math.round(blob.size / 1024))} Ko`,
+        path,
+        sort_order: 0,
+      };
+      const created = await dbInsert("documents", row);
+      if (!created) {
+        toast("Fichier stocké mais fiche non créée — réessaie");
+        return;
+      }
+      setArchives((prev) => [created as unknown as ArchiveRow, ...(prev ?? [])]);
+      toast("Media kit archivé ✓ — visible par le créateur dans ses documents");
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  const openArchive = async (row: ArchiveRow) => {
+    const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.path, 3600);
+    if (error || !data?.signedUrl) {
+      toast("Lien indisponible — réessaie");
+      return;
+    }
+    window.open(data.signedUrl, "_blank");
+  };
+
+  const delArchive = async (row: ArchiveRow) => {
+    const { error: rmErr } = await supabase.storage.from("documents").remove([row.path]);
+    if (rmErr) {
+      toast("Suppression du fichier échouée — réessaie");
+      return;
+    }
+    if (await dbDelete("documents", row.id)) {
+      setArchives((prev) => (prev ?? []).filter((x) => x.id !== row.id));
+      toast("Archive supprimée");
+    }
+  };
+
   const openEdit = () =>
     setEditDraft({
       bio,
@@ -402,6 +505,15 @@ export function Mediakit() {
           </button>
           <button type="button" onClick={() => setPreview(buildHTML())} className={cn(ghostBtn, "flex items-center gap-1.5")}>
             <Eye className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Aperçu</span>
+          </button>
+          <button
+            type="button"
+            onClick={archiveKit}
+            disabled={archiving}
+            title="Fige la version actuelle (datée) — visible par le créateur"
+            className={cn(ghostBtn, "flex items-center gap-1.5 disabled:opacity-50")}
+          >
+            <Archive className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{archiving ? "Archivage…" : "Archiver"}</span>
           </button>
           <button type="button" onClick={downloadPDF} className={cn(primaryBtn, "flex items-center gap-1.5")}>
             <FileText className="h-3.5 w-3.5" /> PDF
@@ -647,6 +759,86 @@ export function Mediakit() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* ── Media kits archivés (filtrables par mois, visibles côté créateur) ── */}
+      <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold">Media kits archivés</div>
+            <div className="mt-0.5 text-[11px] text-faint">
+              Chaque archive est datée automatiquement et visible par le créateur dans ses documents.
+            </div>
+          </div>
+          {archMonths.length > 0 && (
+            <Select value={archMonth} onValueChange={setArchMonth}>
+              <SelectTrigger className="h-9 w-auto min-w-[170px] rounded-full bg-surface" placeholder="Tous les mois" />
+              <SelectContent>
+                <SelectItem index={0} value="all">
+                  Tous les mois
+                </SelectItem>
+                {archMonths.map((k, i) => (
+                  <SelectItem key={k} index={i + 1} value={k}>
+                    {archMonthLabel(k)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+        {archives === null ? (
+          <div className="px-1 py-3 text-xs text-muted-foreground">Chargement…</div>
+        ) : shownArchives.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-xs text-muted-foreground">
+            Aucun media kit archivé{archMonth !== "all" ? " pour ce mois" : ""}. Clique sur « Archiver » pour figer la version actuelle.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {shownArchives.map((row) => (
+              <div key={row.id} className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5">
+                <FileText className="h-4 w-4 shrink-0 text-faint" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-medium text-foreground">{row.name}</div>
+                  <div className="text-[10px] text-faint">
+                    {row.creator ? titleCase(row.creator) : "—"} ·{" "}
+                    {row.created_at ? new Date(row.created_at).toLocaleDateString("fr-FR") : "—"}
+                    {row.size ? ` · ${row.size}` : ""}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openArchive(row)}
+                  title="Ouvrir (puis Imprimer → PDF si besoin)"
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setArchDel(row)}
+                  title="Supprimer l'archive"
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {archDel && (
+        <ConfirmDialog
+          title="Supprimer l'archive"
+          message={`Supprimer « ${archDel.name} » ? Le créateur ne la verra plus. Cette action est irréversible.`}
+          confirmLabel="Supprimer"
+          danger
+          onCancel={() => setArchDel(null)}
+          onConfirm={() => {
+            delArchive(archDel);
+            setArchDel(null);
+          }}
+        />
       )}
 
       {/* ── Aperçu ── */}

@@ -14,6 +14,7 @@ import {
   Check,
   Trash2,
   TrendingUp,
+  ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
@@ -59,7 +60,7 @@ type Todo = { id: string; text: string; descr: string | null; due: string | null
 type Idea = { id: string; text: string; status: string | null; sort_order?: number };
 type Brief = { id: string; brand: string; deliverables: string | null; due: string | null; status: string | null };
 type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string; type: string };
-type Doc = { id: string; name: string; type: string | null; size: string | null; created_at: string | null };
+type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null };
 type Invoice = { ref: string; party: string; amount: string | null; date: string | null; status: string | null };
 
 type Tab = "accueil" | "evolution" | "todo" | "ideas" | "briefs" | "planning" | "documents" | "facturation";
@@ -184,7 +185,7 @@ export function CreatorSpace({
       const rows = (data as (Ev & { who: string | null })[]) ?? [];
       setEvents(rows.filter((e) => (e.who ?? "").split(", ").includes(name)));
     });
-    supabase.from("documents").select("id,name,type,size,created_at").eq("creator", name).then(({ data }) => alive && setDocs((data as Doc[]) ?? []));
+    supabase.from("documents").select("id,name,type,size,path,created_at").eq("creator", name).then(({ data }) => alive && setDocs((data as Doc[]) ?? []));
     supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).then(({ data }) => alive && setInvoices((data as Invoice[]) ?? []));
     return () => {
       alive = false;
@@ -812,8 +813,25 @@ export function CreatorSpace({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold">{doc.name}</div>
-                      <div className="truncate text-xs text-faint">{[doc.type, doc.size].filter(Boolean).join(" · ")}</div>
+                      <div className="truncate text-xs text-faint">{[doc.type === "mediakit" ? "Media kit" : doc.type, doc.size].filter(Boolean).join(" · ")}</div>
                     </div>
+                    {doc.path && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const { data, error } = await supabase.storage.from("documents").createSignedUrl(doc.path!, 3600);
+                          if (error || !data?.signedUrl) {
+                            toast("Lien indisponible — réessaie");
+                            return;
+                          }
+                          window.open(data.signedUrl, "_blank");
+                        }}
+                        title="Ouvrir"
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 ))
               )}
