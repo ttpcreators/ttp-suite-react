@@ -18,7 +18,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { RecipientPicker, type PickContact } from "@/components/ui/recipient-picker";
 import { SignaturePicker } from "@/components/ui/signature-picker";
-import { signatureImgHtml, type MailSignature } from "@/lib/useMailSignatures";
+import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
 
 type Row = {
   id: string;
@@ -143,9 +143,9 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
 }
 /** Corps d'email HTML propre depuis un message texte (sauts de ligne préservés + signature). */
-function composeEmailHtml(message: string, signatureUrl?: string): string {
-  const footer = signatureUrl
-    ? signatureImgHtml(signatureUrl)
+function composeEmailHtml(message: string, sig?: MailSignature | null): string {
+  const footer = sig
+    ? renderSignatureHtml(sig)
     : `<div style="margin-top:28px;padding-top:16px;border-top:1px solid #ececec;color:#8a8a8a;font-size:12px;white-space:normal">TTP Creators · <a href="https://ttpcreators.pro" style="color:#8a8a8a">ttpcreators.pro</a></div>`;
   return (
     `<div style="font-family:system-ui,-apple-system,Arial,sans-serif;color:#111;max-width:560px;font-size:14px;line-height:1.6;white-space:pre-line">` +
@@ -339,7 +339,7 @@ export function Contacts() {
     }
     setSending(true);
     try {
-      const html = composeEmailHtml(mailBody.trim(), mailSig?.url);
+      const html = composeEmailHtml(mailBody.trim(), mailSig);
       const { data, error } = await supabase.functions.invoke("send-email", { body: { to: recipients, subject, html } });
       // supabase-js met le corps JSON des réponses non-2xx dans error.context, pas data.
       let res = data as { ok?: boolean; sent?: number; total?: number; detail?: string } | null;

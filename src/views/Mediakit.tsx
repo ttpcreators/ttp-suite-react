@@ -10,7 +10,7 @@ import { toast } from "@/components/ui/toast";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { RecipientPicker } from "@/components/ui/recipient-picker";
 import { SignaturePicker } from "@/components/ui/signature-picker";
-import { signatureImgHtml, type MailSignature } from "@/lib/useMailSignatures";
+import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
 
 /**
  * Media kit = bibliothèque de fichiers. L'agence dépose les media kits qu'elle a
@@ -56,7 +56,7 @@ const DEFAULT_TEMPLATES: MailTemplate[] = [
 /** Rend un template en remplaçant les variables (message : sauts de ligne → <br>). */
 function renderTemplate(tpl: MailTemplate, vars: { creator: string; lien: string; message: string }) {
   const sub = tpl.subject.replace(/\{\{creator\}\}/g, vars.creator);
-  const btn = `<p style="margin:16px 0 24px"><a href="${vars.lien}" style="display:inline-block;background:#0069FE;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600">Ouvrir le media kit</a></p>`;
+  const btn = `<p style="margin:14px 0"><a href="${vars.lien}" style="color:#0069FE;text-decoration:underline;font-weight:600">Ouvrir le media kit →</a></p>`;
   let text = tpl.body
     .replace(/\{\{creator\}\}/g, escapeHtml(vars.creator))
     .replace(/\{\{message\}\}/g, vars.message ? escapeHtml(vars.message) + "\n" : "");
@@ -236,7 +236,7 @@ export function Mediakit() {
       if (!link) return toast("Lien indisponible — réessaie");
       const who = titleCase(sendRow.creator ?? "");
       const { html } = renderTemplate(activeTpl, { creator: who, lien: link, message: sendMsg.trim() });
-      const finalHtml = sendSig?.url ? html + signatureImgHtml(sendSig.url) : html;
+      const finalHtml = sendSig ? html + renderSignatureHtml(sendSig) : html;
       const { data, error } = await supabase.functions.invoke("send-email", { body: { to: recipients, subject, html: finalHtml } });
       let res = data as { ok?: boolean; sent?: number; total?: number; detail?: string } | null;
       if (error && (error as { context?: { json?: () => Promise<unknown> } }).context?.json)
