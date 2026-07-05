@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X } from "lucide-react";
+import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X, ArrowUpRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
 import { frDate, toISODate, todayISO } from "@/lib/dates";
@@ -24,6 +24,32 @@ function frDateShort(d: Date): string {
 }
 const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
+
+/** Historique d'engagement (mesures du calculateur) — pour le bloc « par plateforme ». */
+type EngEntry = {
+  creator: string;
+  platform: string;
+  platformLabel: string;
+  er: string;
+  followers: string;
+  date: string; // date du calcul (jj/mm/aaaa), posée automatiquement à l'enregistrement
+  vals?: Record<string, string>;
+};
+function frTime(s: string): number {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/.exec((s ?? "").trim());
+  if (!m) return 0;
+  const y = m[3].length === 2 ? "20" + m[3] : m[3];
+  return new Date(Number(y), Number(m[2]) - 1, Number(m[1])).getTime();
+}
+function numOf(v: string | undefined): number {
+  const n = Number(String(v ?? "").replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+function fmtCompact(n: number): string {
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
+  return String(Math.round(n));
+}
 import { AvatarUpload } from "@/components/ui/avatar-upload";
 
 type Creator = {
@@ -149,6 +175,20 @@ export function CreatorDetail({
   const { data: exclusiveMap } = useAppState<Record<string, boolean>>(
     (s: AppState) => (s["creatorExclusive"] as Record<string, boolean>) ?? {},
   );
+  // Dernière mesure PAR PLATEFORME (la fiche principale n'affiche que la
+  // plateforme principale — ce bloc montre toutes celles mesurées, datées).
+  const { data: engHist } = useAppState<EngEntry[]>(
+    (s: AppState) => (s["engagementHistory"] as EngEntry[]) ?? [],
+  );
+  const perPlatform = (() => {
+    const mine = (engHist ?? []).filter((h) => (h.creator ?? "").toLowerCase() === name.toLowerCase());
+    const byPlat = new Map<string, EngEntry>();
+    for (const h of mine) {
+      const cur = byPlat.get(h.platform);
+      if (!cur || frTime(h.date) >= frTime(cur.date)) byPlat.set(h.platform, h);
+    }
+    return [...byPlat.values()];
+  })();
   const exKey = name.toLowerCase();
   // Reflète l'exclusivité stockée (sauf en cours d'édition, où l'utilisateur la modifie).
   useEffect(() => {
@@ -383,6 +423,48 @@ export function CreatorDetail({
         {stat("CA · mois", c?.ca ?? null)}
         {stat("Reach", c?.reach ?? null)}
       </div>
+
+      {/* Stats PAR PLATEFORME — dernière mesure enregistrée, datée automatiquement */}
+      {perPlatform.length > 0 && (
+        <div className="mb-4 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold">Stats par plateforme</div>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "suivi" }))}
+              className="group flex items-center gap-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-primary"
+              title="Courbes d'évolution"
+            >
+              Voir l'évolution
+              <ArrowUpRight className="h-3.5 w-3.5 text-faint transition-colors group-hover:text-primary" />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {perPlatform.map((p) => (
+              <div key={p.platform} className="rounded-xl border border-border bg-panel px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="rounded-md bg-rowhover px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {p.platformLabel}
+                  </span>
+                  <span className="text-[10px] text-faint">au {p.date}</span>
+                </div>
+                <div className="mt-2.5 flex items-end gap-5">
+                  <div>
+                    <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Taux</div>
+                    <div className="text-lg font-bold tracking-tight">{p.er}</div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Abonnés</div>
+                    <div className="text-lg font-bold tracking-tight">
+                      {numOf(p.followers) > 0 ? fmtCompact(numOf(p.followers)) : "—"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mb-4 rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-3">

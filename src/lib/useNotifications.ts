@@ -4,6 +4,7 @@ import { getAppState, invalidateAppState, saveAppStateKey } from "./appState";
 import { useLiveKey } from "./useLive";
 import { todayISO } from "./dates";
 import { titleCase } from "./utils";
+import { toast } from "@/components/ui/toast";
 import type { NotificationItem } from "@/components/ui/notifications";
 
 type Deadline = { creator: string; type: string; start: string; months: number };
@@ -39,8 +40,17 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
 
   useEffect(() => {
     let alive = true;
-    // Le blob a pu être mis en cache AVANT l'auth (vide) → on repart de zéro.
-    if (live > 0) invalidateAppState();
+    const run = async () => {
+    // Attend la restauration de la session : un fetch pré-auth renvoie des
+    // listes vides (RLS) et mettrait en cache un blob vide → les notifications
+    // effacées réapparaîtraient au refresh. On repart toujours d'un blob frais.
+    const { data: s } = await supabase.auth.getSession();
+    if (!alive) return;
+    if (!s.session) {
+      setItems([]);
+      return;
+    }
+    invalidateAppState();
     const todayStr = todayISO();
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
     Promise.all([
@@ -126,6 +136,8 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       console.error("Notifications — échec réseau:", e);
       setItems([]);
     });
+    };
+    run();
     return () => {
       alive = false;
     };
@@ -139,7 +151,8 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
     invalidateAppState();
     const cur = (((await getAppState())["notifDismissed"] as string[]) ?? []);
     const merged = [...new Set([...cur, ...ids])].slice(-300); // borne la liste
-    await saveAppStateKey("notifDismissed", merged);
+    const ok = await saveAppStateKey("notifDismissed", merged);
+    if (!ok) toast("Effacement non synchronisé — réessaie");
   };
 
   return { items, dismiss };

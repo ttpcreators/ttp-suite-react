@@ -23,7 +23,7 @@ import { cn, titleCase } from "@/lib/utils";
  * Lecture seule : les mesures s'ajoutent/s'éditent depuis le calculateur.
  */
 
-type HistEntry = {
+export type SuiviEntry = {
   id: string;
   date: string; // jj/mm/aaaa
   creator: string;
@@ -36,6 +36,7 @@ type HistEntry = {
   vals: Record<string, string>;
   followers: string;
 };
+type HistEntry = SuiviEntry;
 
 function num(v: string | undefined): number {
   const n = Number(String(v ?? "").replace(/\s/g, "").replace(",", "."));
@@ -71,20 +72,22 @@ const PLATFORM_LABELS: Record<string, string> = {
   x: "X",
 };
 
-export function EngagementSuivi() {
-  const { data: hist, loading } = useAppState<HistEntry[]>(
-    (s: AppState) => ((s["engagementHistory"] as HistEntry[]) ?? []),
-  );
-  const entries = useMemo(() => (hist ?? []).filter((h) => h.creator && h.creator !== "Calcul libre"), [hist]);
-
+/**
+ * Panneau réutilisable : côté AGENCE (sélecteur de créateur) et côté ESPACE
+ * CRÉATEUR (`lockedCreator` = verrouillé sur soi, entries déjà filtrées par la
+ * fonction serveur — un créateur ne voit jamais les mesures des autres).
+ */
+export function SuiviPanel({ entries, lockedCreator }: { entries: SuiviEntry[]; lockedCreator?: string }) {
   // Sélecteur créateur (ceux qui ont au moins une mesure)
   const creatorNames = useMemo(() => [...new Set(entries.map((h) => h.creator))], [entries]);
   const [selCreator, setSelCreator] = useState("");
-  const creator = selCreator || creatorNames[0] || "";
+  const creator = lockedCreator || selCreator || creatorNames[0] || "";
+  const sameCreator = (h: HistEntry) => h.creator.toLowerCase() === creator.toLowerCase();
 
   // Plateformes disponibles pour ce créateur
   const platforms = useMemo(
-    () => [...new Set(entries.filter((h) => h.creator === creator).map((h) => h.platform))],
+    () => [...new Set(entries.filter(sameCreator).map((h) => h.platform))],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [entries, creator],
   );
   const [selPlatform, setSelPlatform] = useState("");
@@ -93,7 +96,7 @@ export function EngagementSuivi() {
   // Série chronologique du créateur × plateforme
   const points = useMemo(() => {
     return entries
-      .filter((h) => h.creator === creator && h.platform === platform)
+      .filter((h) => sameCreator(h) && h.platform === platform)
       .slice()
       .sort((a, b) => frTime(a.date) - frTime(b.date))
       .map((h) => ({
@@ -104,6 +107,7 @@ export function EngagementSuivi() {
         interactions: interactionsOf(h),
         verdict: h.verdict,
       }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, creator, platform]);
 
   const last = points[points.length - 1];
@@ -111,21 +115,15 @@ export function EngagementSuivi() {
   const dEr = last && prev ? Math.round((last.er - prev.er) * 100) / 100 : null;
   const dFol = last && prev && prev.followers > 0 ? last.followers - prev.followers : null;
 
-  if (loading)
-    return (
-      <AnimatedBadge status="loading" size="sm">
-        Chargement du suivi…
-      </AnimatedBadge>
-    );
-
   if (entries.length === 0)
     return (
       <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
         <Activity className="mx-auto h-8 w-8 text-faint" />
         <div className="mt-3 text-sm font-medium text-foreground">Pas encore de mesures</div>
         <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-          Enregistre des calculs dans <span className="font-medium text-foreground">Roster → Engagement</span> :
-          chaque mesure alimente automatiquement l'évolution ici.
+          {lockedCreator
+            ? "Ton évolution apparaîtra ici dès que l'agence aura enregistré tes premières mesures d'engagement."
+            : "Enregistre des calculs dans Roster → Engagement : chaque mesure alimente automatiquement l'évolution ici."}
         </p>
       </div>
     );
@@ -140,19 +138,23 @@ export function EngagementSuivi() {
 
   return (
     <div className="space-y-4">
-      {/* Sélecteurs */}
+      {/* Sélecteurs (le créateur connecté est verrouillé sur lui-même) */}
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="w-full sm:max-w-xs">
-          <SelectField
-            label="Créateur"
-            value={creator}
-            onChange={(v) => {
-              setSelCreator(v);
-              setSelPlatform("");
-            }}
-            options={creatorNames.map((n) => ({ value: n, label: titleCase(n) }))}
-          />
-        </div>
+        {!lockedCreator ? (
+          <div className="w-full sm:max-w-xs">
+            <SelectField
+              label="Créateur"
+              value={creator}
+              onChange={(v) => {
+                setSelCreator(v);
+                setSelPlatform("");
+              }}
+              options={creatorNames.map((n) => ({ value: n, label: titleCase(n) }))}
+            />
+          </div>
+        ) : (
+          <div className="text-sm font-semibold text-foreground">Ton évolution 📈</div>
+        )}
         <div className="flex flex-wrap gap-2">
           {platforms.map((pk) => (
             <button
@@ -339,4 +341,19 @@ export function EngagementSuivi() {
       </div>
     </div>
   );
+}
+
+/** Page agence : tout l'historique (blob agence) + sélecteur de créateur. */
+export function EngagementSuivi() {
+  const { data: hist, loading } = useAppState<HistEntry[]>(
+    (s: AppState) => ((s["engagementHistory"] as HistEntry[]) ?? []),
+  );
+  const entries = useMemo(() => (hist ?? []).filter((h) => h.creator && h.creator !== "Calcul libre"), [hist]);
+  if (loading)
+    return (
+      <AnimatedBadge status="loading" size="sm">
+        Chargement du suivi…
+      </AnimatedBadge>
+    );
+  return <SuiviPanel entries={entries} />;
 }

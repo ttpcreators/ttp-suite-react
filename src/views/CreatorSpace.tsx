@@ -13,6 +13,7 @@ import {
   Pencil,
   Check,
   Trash2,
+  TrendingUp,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
@@ -28,6 +29,7 @@ import { EventCalendar, type Ev as CalEv } from "@/components/ui/event-calendar"
 import { parseAmount, formatEuro } from "@/lib/appState";
 import { useLiveKey } from "@/lib/useLive";
 import { AvatarUpload } from "@/components/ui/avatar-upload";
+import { SuiviPanel, type SuiviEntry } from "@/views/EngagementSuivi";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -60,9 +62,10 @@ type Ev = { id: string; date: string | null; day: number | null; time: string | 
 type Doc = { id: string; name: string; type: string | null; size: string | null; created_at: string | null };
 type Invoice = { ref: string; party: string; amount: string | null; date: string | null; status: string | null };
 
-type Tab = "accueil" | "todo" | "ideas" | "briefs" | "planning" | "documents" | "facturation";
+type Tab = "accueil" | "evolution" | "todo" | "ideas" | "briefs" | "planning" | "documents" | "facturation";
 const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "accueil", label: "Accueil", icon: LayoutDashboard },
+  { id: "evolution", label: "Évolution", icon: TrendingUp },
   { id: "todo", label: "À faire", icon: ListChecks },
   { id: "ideas", label: "Idées", icon: Lightbulb },
   { id: "briefs", label: "Briefs", icon: FileText },
@@ -111,6 +114,25 @@ export function CreatorSpace({
   onLogout: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("accueil");
+  // Historique d'engagement du créateur — via la fonction serveur creator-history
+  // (le blob agence est inaccessible aux créateurs ; le serveur filtre sur SON nom).
+  const [suivi, setSuivi] = useState<SuiviEntry[] | null>(null);
+  useEffect(() => {
+    if (tab !== "evolution" || suivi !== null) return;
+    let alive = true;
+    supabase.functions
+      .invoke("creator-history")
+      .then(({ data }) => {
+        if (!alive) return;
+        setSuivi(((data as { entries?: SuiviEntry[] } | null)?.entries ?? []) as SuiviEntry[]);
+      })
+      .catch(() => {
+        if (alive) setSuivi([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tab, suivi]);
   const [creator, setCreator] = useState<Creator | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
@@ -555,6 +577,16 @@ export function CreatorSpace({
               </div>
             </div>
           )}
+
+          {/* Évolution (suivi engagement, mesures de l'agence — lecture seule) */}
+          {tab === "evolution" &&
+            (suivi === null ? (
+              <AnimatedBadge status="loading" size="sm">
+                Chargement de ton évolution…
+              </AnimatedBadge>
+            ) : (
+              <SuiviPanel entries={suivi} lockedCreator={name} />
+            ))}
 
           {/* À faire */}
           {tab === "todo" && (

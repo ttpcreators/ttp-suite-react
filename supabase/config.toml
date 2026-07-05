@@ -44,3 +44,7 @@ verify_jwt = true
 
 [functions.google-disconnect]
 verify_jwt = true
+
+# creator-history : JWT requis (créateur → ses mesures ; agence → tout).
+[functions.creator-history]
+verify_jwt = true
