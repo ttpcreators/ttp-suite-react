@@ -25,6 +25,7 @@ import {
   AlarmClock,
   CalendarClock,
   Settings,
+  Activity,
   type LucideIcon,
 } from "lucide-react";
 
@@ -51,6 +52,7 @@ export type ViewId =
   | "checklist"
   | "acces"
   | "parametres"
+  | "suivi"
   | "corbeille";
 
 export type NavItem = { id: ViewId; label: string; icon: LucideIcon };
@@ -81,6 +83,7 @@ export const NAV: NavFamily[] = [
     icon: Users,
     items: [
       { id: "roster", label: "Roster", icon: Users },
+      { id: "suivi", label: "Suivi engagement", icon: Activity },
       { id: "mediakit", label: "Media kit", icon: ImageIcon },
     ],
   },

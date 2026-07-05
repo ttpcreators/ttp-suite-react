@@ -40,6 +40,7 @@ const Reversements = lazy(() => import("@/views/Reversements").then((m) => ({ de
 const Relances = lazy(() => import("@/views/Relances").then((m) => ({ default: m.Relances })));
 const Echeances = lazy(() => import("@/views/Echeances").then((m) => ({ default: m.Echeances })));
 const Parametres = lazy(() => import("@/views/Parametres").then((m) => ({ default: m.Parametres })));
+const EngagementSuivi = lazy(() => import("@/views/EngagementSuivi").then((m) => ({ default: m.EngagementSuivi })));
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -65,6 +66,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   mediakit: Mediakit,
   templates: Templates,
   parametres: Parametres,
+  suivi: EngagementSuivi,
   corbeille: Corbeille,
 };
 

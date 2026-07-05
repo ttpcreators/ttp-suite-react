@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, Check, Save, Pencil, X } from "lucide-react";
+import { Activity, Check, Save, Pencil, X, ArrowUpRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useCreators, invalidateCreators } from "@/lib/useCreators";
 import { dbUpdate } from "@/lib/db";
@@ -495,7 +495,16 @@ export function Engagement() {
       {history.length > 0 && (
         <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
-            <div className="text-sm font-semibold">Historique des calculs</div>
+            {/* → page Suivi engagement (courbes d'évolution taux / abonnés / interactions) */}
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "suivi" }))}
+              title="Voir l'évolution (graphiques)"
+              className="group flex items-center gap-1.5 text-sm font-semibold text-foreground transition-colors hover:text-primary"
+            >
+              Historique des calculs
+              <ArrowUpRight className="h-4 w-4 text-faint transition-colors group-hover:text-primary" />
+            </button>
             <span className="text-[11px] text-faint">{history.length} calcul{history.length > 1 ? "s" : ""}</span>
           </div>
           <div className="flex flex-col gap-2">
