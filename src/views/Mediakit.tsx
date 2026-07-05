@@ -8,6 +8,9 @@ import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type App
 import { titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { RecipientPicker } from "@/components/ui/recipient-picker";
+import { SignaturePicker } from "@/components/ui/signature-picker";
+import { signatureImgHtml, type MailSignature } from "@/lib/useMailSignatures";
 
 /**
  * Media kit = bibliothèque de fichiers. L'agence dépose les media kits qu'elle a
@@ -86,8 +89,10 @@ export function Mediakit() {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [sendRow, setSendRow] = useState<ArchiveRow | null>(null);
-  const [sendTo, setSendTo] = useState("");
+  const [sendRecipients, setSendRecipients] = useState<string[]>([]);
+  const [sendSubject, setSendSubject] = useState("");
   const [sendMsg, setSendMsg] = useState("");
+  const [sendSig, setSendSig] = useState<MailSignature | null>(null);
   const [sending, setSending] = useState(false);
 
   // Templates de mail (blob agence `mailTemplates`)
@@ -206,18 +211,33 @@ export function Mediakit() {
     toast("Media kit supprimé");
   };
 
+  // Objet par défaut d'un envoi = sujet du template avec {{creator}} résolu.
+  const subjectFor = (row: ArchiveRow, tpl: MailTemplate | undefined) =>
+    (tpl?.subject ?? "").replace(/\{\{creator\}\}/g, titleCase(row.creator ?? ""));
+
+  const openSend = (row: ArchiveRow) => {
+    setSendRow(row);
+    setSendRecipients([]);
+    setSendSubject(subjectFor(row, activeTpl));
+    setSendMsg("");
+    setSendSig(null);
+  };
+
   const sendEmail = async () => {
     if (!sendRow || sending) return;
-    const valid = [...new Set(sendTo.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))];
-    if (valid.length === 0) return toast("Ajoute au moins un destinataire valide");
+    const recipients = [...new Set(sendRecipients.map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))];
+    if (recipients.length === 0) return toast("Ajoute au moins un destinataire");
     if (!activeTpl) return toast("Choisis un template");
+    const subject = sendSubject.trim();
+    if (!subject) return toast("Ajoute un objet");
     setSending(true);
     try {
       const link = await resolveUrl(sendRow, 60 * 60 * 24 * 7); // lien valable 7 jours
       if (!link) return toast("Lien indisponible — réessaie");
       const who = titleCase(sendRow.creator ?? "");
-      const { subject, html } = renderTemplate(activeTpl, { creator: who, lien: link, message: sendMsg.trim() });
-      const { data, error } = await supabase.functions.invoke("send-email", { body: { to: valid, subject, html } });
+      const { html } = renderTemplate(activeTpl, { creator: who, lien: link, message: sendMsg.trim() });
+      const finalHtml = sendSig?.url ? html + signatureImgHtml(sendSig.url) : html;
+      const { data, error } = await supabase.functions.invoke("send-email", { body: { to: recipients, subject, html: finalHtml } });
       let res = data as { ok?: boolean; sent?: number; total?: number; detail?: string } | null;
       if (error && (error as { context?: { json?: () => Promise<unknown> } }).context?.json)
         res = (await (error as { context: { json: () => Promise<unknown> } }).context.json().catch(() => null)) as typeof res;
@@ -230,8 +250,10 @@ export function Mediakit() {
       }
       toast(`Envoyé ✓ (${res.sent}/${res.total} destinataire${(res.total ?? 0) > 1 ? "s" : ""})`);
       setSendRow(null);
-      setSendTo("");
+      setSendRecipients([]);
+      setSendSubject("");
       setSendMsg("");
+      setSendSig(null);
     } finally {
       setSending(false);
     }
@@ -354,11 +376,7 @@ export function Mediakit() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setSendRow(row);
-                    setSendTo("");
-                    setSendMsg("");
-                  }}
+                  onClick={() => openSend(row)}
                   title="Envoyer par mail"
                   className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-primary"
                 >
@@ -421,40 +439,10 @@ export function Mediakit() {
               </button>
             </div>
             <div className="flex flex-col gap-3">
-              {/* Destinataires (multiples) */}
+              {/* Destinataires : recherche dans les contacts + « tout le monde » + emails libres */}
               <div>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Destinataires</span>
-                  {contacts.length > 0 && (
-                    <Select
-                      value=""
-                      onValueChange={(email) => {
-                        if (!email) return;
-                        const cur = sendTo.trim();
-                        if (cur.toLowerCase().includes(email.toLowerCase())) return;
-                        setSendTo(cur ? `${cur}, ${email}` : email);
-                      }}
-                    >
-                      <SelectTrigger className="h-7 w-auto min-w-[150px] rounded-lg bg-surface text-[11px]" placeholder="+ depuis contacts" />
-                      <SelectContent>
-                        {contacts.map((c, i) => (
-                          <SelectItem key={c.email} index={i} value={c.email}>
-                            {c.label} · {c.email}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-                <textarea
-                  value={sendTo}
-                  onChange={(e) => setSendTo(e.target.value)}
-                  autoFocus
-                  rows={2}
-                  placeholder="contact@marque1.com, contact@marque2.com…"
-                  className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                />
-                <p className="mt-1 text-[10px] text-faint">Sépare par des virgules — chaque personne reçoit un mail séparé (elles ne se voient pas).</p>
+                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Destinataires</div>
+                <RecipientPicker value={sendRecipients} onChange={setSendRecipients} contacts={contacts} />
               </div>
 
               {/* Template */}
@@ -472,7 +460,14 @@ export function Mediakit() {
                     <Pencil className="h-3 w-3" /> Gérer les templates
                   </button>
                 </div>
-                <Select value={activeTpl?.id ?? ""} onValueChange={setTplId}>
+                <Select
+                  value={activeTpl?.id ?? ""}
+                  onValueChange={(id) => {
+                    setTplId(id);
+                    const t = templates.find((x) => x.id === id);
+                    if (t && sendRow) setSendSubject(subjectFor(sendRow, t));
+                  }}
+                >
                   <SelectTrigger className="h-10 w-full rounded-lg bg-surface" placeholder="Choisir un template" />
                   <SelectContent>
                     {templates.map((t, i) => (
@@ -482,6 +477,17 @@ export function Mediakit() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Objet (éditable, pré-rempli depuis le template) */}
+              <div>
+                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Objet</div>
+                <input
+                  value={sendSubject}
+                  onChange={(e) => setSendSubject(e.target.value)}
+                  placeholder="Objet de l'email"
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                />
               </div>
 
               {/* Message perso ({{message}}) */}
@@ -496,13 +502,11 @@ export function Mediakit() {
                 />
               </div>
 
-              {/* Aperçu objet */}
-              {activeTpl && (
-                <div className="rounded-lg bg-panel px-3 py-2 text-[11px] text-muted-foreground">
-                  <span className="font-semibold text-foreground">Objet :</span>{" "}
-                  {activeTpl.subject.replace(/\{\{creator\}\}/g, titleCase(sendRow.creator ?? ""))}
-                </div>
-              )}
+              {/* Signature image (optionnelle) */}
+              <div>
+                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Signature</div>
+                <SignaturePicker key={sendRow.id} value={sendSig} onChange={setSendSig} />
+              </div>
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setSendRow(null)} className="rounded-lg border border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:bg-rowhover">

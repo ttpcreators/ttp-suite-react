@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { Copy, X, Download, Upload, Trash2, Pencil } from "lucide-react";
+import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send } from "lucide-react";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { cn, initials } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
@@ -16,6 +16,9 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
+import { RecipientPicker, type PickContact } from "@/components/ui/recipient-picker";
+import { SignaturePicker } from "@/components/ui/signature-picker";
+import { signatureImgHtml, type MailSignature } from "@/lib/useMailSignatures";
 
 type Row = {
   id: string;
@@ -135,6 +138,23 @@ function csvToContacts(text: string): Partial<Record<CsvField, string>>[] {
   });
 }
 
+/** Échappe le HTML — empêche toute injection dans le corps du mail. */
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
+}
+/** Corps d'email HTML propre depuis un message texte (sauts de ligne préservés + signature). */
+function composeEmailHtml(message: string, signatureUrl?: string): string {
+  const footer = signatureUrl
+    ? signatureImgHtml(signatureUrl)
+    : `<div style="margin-top:28px;padding-top:16px;border-top:1px solid #ececec;color:#8a8a8a;font-size:12px;white-space:normal">TTP Creators · <a href="https://ttpcreators.pro" style="color:#8a8a8a">ttpcreators.pro</a></div>`;
+  return (
+    `<div style="font-family:system-ui,-apple-system,Arial,sans-serif;color:#111;max-width:560px;font-size:14px;line-height:1.6;white-space:pre-line">` +
+    escapeHtml(message) +
+    footer +
+    `</div>`
+  );
+}
+
 function CopyField({ label, value }: { label: string; value: string }) {
   const v = value && value.trim() ? value.trim() : "";
   return (
@@ -180,6 +200,15 @@ export function Contacts() {
   const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS);
   const [importing, setImporting] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
+
+  // Composeur d'email (envoi direct via la fonction serveur Resend `send-email`).
+  const [mailOpen, setMailOpen] = useState(false);
+  const [mailRecipients, setMailRecipients] = useState<string[]>([]);
+  const [mailSubject, setMailSubject] = useState("");
+  const [mailBody, setMailBody] = useState("");
+  const [mailSig, setMailSig] = useState<MailSignature | null>(null);
+  const [mailSeed, setMailSeed] = useState(0); // change → remonte le SignaturePicker (re-présélection du défaut)
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -278,6 +307,66 @@ export function Contacts() {
     setPhone(r.phone ?? "");
     setFormOpen(true);
   };
+
+  // Ouvre le composeur. Avec un contact → destinataire + « Bonjour Prénom » pré-remplis ;
+  // sans contact (bouton global) → composeur vierge pour choisir librement les destinataires.
+  const openMail = (r?: Row) => {
+    const fn = r?.first_name || (r?.person && r.person !== "—" ? r.person.split(" ")[0] : "");
+    setMailRecipients(r?.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email) ? [r.email.toLowerCase()] : []);
+    setMailSubject("");
+    setMailBody(`Bonjour${fn ? " " + fn : ""},\n\n`);
+    setMailSig(null);
+    setMailSeed((n) => n + 1);
+    setMailOpen(true);
+    setSelected(null);
+  };
+
+  const sendMail = async () => {
+    if (sending) return;
+    const recipients = [...new Set(mailRecipients.map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))];
+    if (recipients.length === 0) {
+      toast("Ajoute au moins un destinataire");
+      return;
+    }
+    const subject = mailSubject.trim();
+    if (!subject) {
+      toast("Ajoute un objet");
+      return;
+    }
+    if (!mailBody.trim()) {
+      toast("Écris un message");
+      return;
+    }
+    setSending(true);
+    try {
+      const html = composeEmailHtml(mailBody.trim(), mailSig?.url);
+      const { data, error } = await supabase.functions.invoke("send-email", { body: { to: recipients, subject, html } });
+      // supabase-js met le corps JSON des réponses non-2xx dans error.context, pas data.
+      let res = data as { ok?: boolean; sent?: number; total?: number; detail?: string } | null;
+      if (error && (error as { context?: { json?: () => Promise<unknown> } }).context?.json)
+        res = (await (error as { context: { json: () => Promise<unknown> } }).context.json().catch(() => null)) as typeof res;
+      if (!res?.ok) {
+        const d = (res?.detail ?? "").toLowerCase();
+        if (d.includes("domain") || d.includes("verif") || d.includes("testing"))
+          toast("Domaine non vérifié dans Resend — vérifie ttpcreators.pro.");
+        else toast(res?.detail ? `Échec : ${res.detail}` : "Envoi échoué — réessaie");
+        return;
+      }
+      toast(`Email envoyé ✓ (${res.sent}/${res.total} destinataire${(res.total ?? 0) > 1 ? "s" : ""})`);
+      setMailOpen(false);
+      setMailRecipients([]);
+      setMailSubject("");
+      setMailBody("");
+      setMailSig(null);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Contacts avec un email valide, pour le sélecteur de destinataires.
+  const pickContacts: PickContact[] = (rows ?? [])
+    .filter((r) => r.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email))
+    .map((r) => ({ email: r.email, label: [r.brand, r.person].filter((x) => x && x !== "—").join(" · ") || r.email, tag: r.tag }));
 
   const submit = async () => {
     if (!brand.trim()) {
@@ -439,6 +528,15 @@ export function Contacts() {
             <Download className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Exporter</span>
           </button>
+          <button
+            type="button"
+            onClick={() => openMail()}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            title="Écrire un email (choisir les destinataires)"
+          >
+            <Mail className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Email</span>
+          </button>
           <AddButton label="Contact" onClick={openAdd} />
         </div>
       </div>
@@ -539,7 +637,10 @@ export function Contacts() {
               <ActionMenu
                 items={[
                   ...(row.email
-                    ? [{ key: "copy", label: "Copier l'email", icon: Copy, onClick: () => { navigator.clipboard?.writeText(row.email); toast("Email copié ✓"); } }]
+                    ? [
+                        { key: "email", label: "Envoyer un email", icon: Mail, onClick: () => openMail(row) },
+                        { key: "copy", label: "Copier l'email", icon: Copy, onClick: () => { navigator.clipboard?.writeText(row.email); toast("Email copié ✓"); } },
+                      ]
                     : []),
                   { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(row) },
                   {
@@ -609,24 +710,115 @@ export function Contacts() {
               <CopyField label="Téléphone" value={selected.phone} />
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                const text = [
-                  selected.brand,
-                  `${selected.person} · ${selected.role}`,
-                  selected.email,
-                  selected.phone,
-                ]
-                  .filter((s) => s && s.trim() && s.trim() !== "·")
-                  .join("\n");
-                navigator.clipboard?.writeText(text);
-                toast("Fiche copiée ✓");
-              }}
-              className="mt-4 w-full rounded-lg bg-primary py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
-            >
-              Copier toute la fiche
-            </button>
+            <div className="mt-4 flex gap-2">
+              {selected.email && (
+                <button
+                  type="button"
+                  onClick={() => openMail(selected)}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                >
+                  <Mail className="h-3.5 w-3.5" /> Envoyer un email
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  const text = [
+                    selected.brand,
+                    `${selected.person} · ${selected.role}`,
+                    selected.email,
+                    selected.phone,
+                  ]
+                    .filter((s) => s && s.trim() && s.trim() !== "·")
+                    .join("\n");
+                  navigator.clipboard?.writeText(text);
+                  toast("Fiche copiée ✓");
+                }}
+                className={cn(
+                  "flex flex-1 items-center justify-center rounded-lg py-2.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                  selected.email
+                    ? "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground"
+                    : "bg-primary text-primary-foreground hover:opacity-90",
+                )}
+              >
+                Copier {selected.email ? "la fiche" : "toute la fiche"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Composeur d'email (envoi direct via Resend) */}
+      {mailOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClick={() => !sending && setMailOpen(false)}>
+          <div
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold">Envoyer un email</div>
+              <button
+                type="button"
+                onClick={() => setMailOpen(false)}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <div>
+                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Destinataires</div>
+                <RecipientPicker value={mailRecipients} onChange={setMailRecipients} contacts={pickContacts} />
+              </div>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Objet</span>
+                <input
+                  value={mailSubject}
+                  onChange={(e) => setMailSubject(e.target.value)}
+                  placeholder="Ex : Proposition de collaboration avec TTP Creators"
+                  className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Message</span>
+                <textarea
+                  value={mailBody}
+                  onChange={(e) => setMailBody(e.target.value)}
+                  rows={8}
+                  className="resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                />
+              </label>
+
+              <div>
+                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Signature</div>
+                <SignaturePicker key={mailSeed} value={mailSig} onChange={setMailSig} />
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-between gap-3">
+              <span className="text-[10px] text-faint">Expéditeur : ton domaine TTP Creators</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMailOpen(false)}
+                  disabled={sending}
+                  className="rounded-lg border border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:bg-rowhover disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={sendMail}
+                  disabled={sending}
+                  className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  <Send className="h-3.5 w-3.5" /> {sending ? "Envoi…" : "Envoyer"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
