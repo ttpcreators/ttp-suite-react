@@ -245,10 +245,15 @@ create policy messages_scoped on public.messages for all to authenticated
 create policy profiles_self   on public.profiles for select to authenticated using (user_id = auth.uid());
 create policy profiles_agency on public.profiles for all    to authenticated using (public.is_agency()) with check (public.is_agency());
 
--- DOCUMENTS (métadonnées) : agence = tout ; créateur = uniquement les siens
-create policy documents_scoped on public.documents for all to authenticated
-  using (public.is_agency() or creator = public.my_creator())
-  with check (public.is_agency() or creator = public.my_creator());
+-- DOCUMENTS (métadonnées) : l'agence gère TOUT ; le créateur peut seulement LIRE
+-- les siens. Le créateur ne doit PAS pouvoir INSÉRER une ligne : sinon il forge
+-- une ligne (creator=lui, path=celui d'un autre) et la policy Storage
+-- documents_obj_creator_read lui signerait alors le fichier d'un autre créateur.
+drop policy if exists documents_scoped on public.documents;
+create policy documents_agency on public.documents for all to authenticated
+  using (public.is_agency()) with check (public.is_agency());
+create policy documents_creator_read on public.documents for select to authenticated
+  using (public.is_agency() or creator = public.my_creator());
 
 -- ----------------------------------------------------------------------------
 -- 6) STORAGE : bucket privé `documents` (binaires des fichiers)

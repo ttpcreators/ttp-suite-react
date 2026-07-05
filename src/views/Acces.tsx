@@ -143,7 +143,10 @@ export function Acces() {
       const { data, error: fnErr } = await supabase.functions.invoke("create-access", {
         body: { email: mail, password: pwd, role, creator: role === "creator" ? creatorName : "" },
       });
-      const res = data as { ok?: boolean; error?: string } | null;
+      // supabase-js met le corps JSON des réponses non-2xx dans error.context, pas data.
+      let res = data as { ok?: boolean; error?: string } | null;
+      if (fnErr && (fnErr as { context?: { json?: () => Promise<unknown> } }).context?.json)
+        res = (await (fnErr as { context: { json: () => Promise<unknown> } }).context.json().catch(() => null)) as typeof res;
       if (fnErr || !res?.ok) {
         const map: Record<string, string> = {
           email_deja_utilise: "Cet email a déjà un compte",

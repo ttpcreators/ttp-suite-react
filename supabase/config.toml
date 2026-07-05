@@ -52,3 +52,7 @@ verify_jwt = true
 # create-access : JWT agence requis — crée un compte via l'API admin.
 [functions.create-access]
 verify_jwt = true
+
+# send-email : JWT agence requis — envoie via Resend (clé en secret serveur).
+[functions.send-email]
+verify_jwt = true
