@@ -387,6 +387,17 @@ export function CreatorDetail({
       <XIcon className="h-4 w-4" />
     );
 
+  // Cartes du haut CONNECTÉES aux dernières mesures :
+  // Abonnés = cumul des dernières mesures de chaque plateforme (comme le portail) ;
+  // Engagement = dernière mesure de la plateforme principale (sinon la plus récente).
+  const totalFollowers = perPlatform.reduce((a, p) => a + numOf(p.followers), 0);
+  const latestMeasure = perPlatform.slice().sort((a, b) => frTime(b.date) - frTime(a.date))[0] ?? null;
+  const mainEntry = (() => {
+    if (perPlatform.length === 0) return null;
+    const cp = (c?.platform ?? "").toLowerCase();
+    return perPlatform.find((p) => cp.includes(p.platform.slice(0, 4))) ?? latestMeasure;
+  })();
+
   return (
     <div>
       <button
@@ -429,8 +440,20 @@ export function CreatorDetail({
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-        {stat("Abonnés", c?.followers ?? null)}
-        {stat("Engagement", c?.er ?? null)}
+        {stat(
+          "Abonnés",
+          totalFollowers > 0 ? fmtCompact(totalFollowers) : (c?.followers ?? null),
+          totalFollowers > 0
+            ? perPlatform.length > 1
+              ? `cumul ${perPlatform.length} plateformes · au ${latestMeasure?.date}`
+              : `${perPlatform[0]?.platformLabel} · au ${latestMeasure?.date}`
+            : undefined,
+        )}
+        {stat(
+          "Engagement",
+          mainEntry ? mainEntry.er : (c?.er ?? null),
+          mainEntry ? `${mainEntry.platformLabel} · au ${mainEntry.date}` : undefined,
+        )}
         {stat("CA · mois", c?.ca ?? null)}
         {stat("Reach", c?.reach ?? null)}
       </div>
