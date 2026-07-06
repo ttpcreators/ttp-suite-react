@@ -8,7 +8,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { LocationTag } from "@/components/ui/location-tag";
 import { MiniChart } from "@/components/ui/mini-chart";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
-import { invMonthKey, monthLabel, momDelta, fmtCompact } from "@/lib/timeSeries";
+import { invMonthKey, monthsBetween, monthLabel, momDelta, fmtCompact } from "@/lib/timeSeries";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { useLiveKey } from "@/lib/useLive";
@@ -57,7 +57,7 @@ function evDate(e: Ev): string {
 function RevenueArea({ points }: { points: { label: string; ca: number }[] }) {
   return (
     <ChartContainer config={{}} className="mt-4 h-[160px]">
-      <AreaChart data={points} margin={{ top: 8, right: 6, left: -18, bottom: 0 }}>
+      <AreaChart data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="apercuCA" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#2b7fff" stopOpacity={0.24} />
@@ -66,7 +66,7 @@ function RevenueArea({ points }: { points: { label: string; ca: number }[] }) {
         </defs>
         <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.6} vertical={false} />
         <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickMargin={8} interval="preserveStartEnd" minTickGap={14} />
-        <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(Number(v))} width={42} />
+        <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(Number(v))} width={46} />
         <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ stroke: "#2b7fff", strokeWidth: 1, strokeOpacity: 0.4 }} />
         <Area type="monotone" dataKey="ca" name="Facturé" stroke="#2b7fff" strokeWidth={2.5} fill="url(#apercuCA)" dot={false} activeDot={{ r: 4, fill: "#2b7fff", stroke: "var(--color-surface)", strokeWidth: 2 }} />
       </AreaChart>
@@ -207,9 +207,11 @@ export function Apercu() {
     if (!k) continue;
     caMonthAgg.set(k, (caMonthAgg.get(k) ?? 0) + parseAmount(iv.amount));
   }
-  const monthlyCA = [...caMonthAgg.keys()]
-    .sort()
-    .slice(-8)
+  // Timeline CONTINUE : tous les mois du premier au dernier (0 si aucune facture) →
+  // espacement correct et pas de mois « sauté » qui déforme la courbe et le %.
+  const caKeys = [...caMonthAgg.keys()].sort();
+  const monthlyCA = (caKeys.length ? monthsBetween(caKeys[0], caKeys[caKeys.length - 1]) : [])
+    .slice(-12)
     .map((k) => ({ label: monthLabel(k), ca: caMonthAgg.get(k) ?? 0 }));
   const hasMonthlyCA = monthlyCA.length >= 2 && monthlyCA.some((p) => p.ca > 0);
   const caDelta = hasMonthlyCA ? momDelta(monthlyCA.map((p) => p.ca)) : null;
