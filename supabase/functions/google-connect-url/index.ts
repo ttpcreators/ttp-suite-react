@@ -19,7 +19,9 @@ const GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const SCOPES = [
   "openid",
   "email",
-  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar.events", // agenda (invitations datées)
+  "https://www.googleapis.com/auth/gmail.send", // envoyer depuis ta vraie boîte (séquences/relances)
+  "https://www.googleapis.com/auth/gmail.readonly", // lire les fils : historique + détection des réponses
 ].join(" ");
 
 function getAllowedOrigins(): string[] {
