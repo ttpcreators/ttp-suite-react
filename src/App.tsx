@@ -24,6 +24,7 @@ const Todo = lazy(() => import("@/views/Todo").then((m) => ({ default: m.Todo })
 const Planning = lazy(() => import("@/views/Planning").then((m) => ({ default: m.Planning })));
 const Documents = lazy(() => import("@/views/Documents").then((m) => ({ default: m.Documents })));
 const Contacts = lazy(() => import("@/views/Contacts").then((m) => ({ default: m.Contacts })));
+const Mails = lazy(() => import("@/views/Mails").then((m) => ({ default: m.Mails })));
 const Contrats = lazy(() => import("@/views/Contrats").then((m) => ({ default: m.Contrats })));
 const Prospection = lazy(() => import("@/views/Prospection").then((m) => ({ default: m.Prospection })));
 const Acces = lazy(() => import("@/views/Acces").then((m) => ({ default: m.Acces })));
@@ -57,6 +58,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   planning: Planning,
   documents: Documents,
   contacts: Contacts,
+  mails: Mails,
   contrats: Contrats,
   prospection: Prospection,
   acces: Acces,

@@ -26,6 +26,7 @@ import {
   CalendarClock,
   Settings,
   Activity,
+  Mail,
   type LucideIcon,
 } from "lucide-react";
 
@@ -45,6 +46,7 @@ export type ViewId =
   | "planning"
   | "documents"
   | "contacts"
+  | "mails"
   | "prospection"
   | "contrats"
   | "debrief"
@@ -105,6 +107,7 @@ export const NAV: NavFamily[] = [
     icon: Handshake,
     items: [
       { id: "contacts", label: "Contacts", icon: Contact },
+      { id: "mails", label: "Mails", icon: Mail },
       { id: "prospection", label: "Prospection", icon: Search },
       { id: "contrats", label: "Contrats", icon: ScrollText },
       { id: "echeances", label: "Échéances", icon: CalendarClock },
