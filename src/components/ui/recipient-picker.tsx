@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Users } from "lucide-react";
+import { X, Users, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type PickContact = { email: string; label: string; tag?: string };
@@ -52,6 +52,10 @@ export function RecipientPicker({
           .slice(0, 12)
       : [];
   const addable = [...new Set(pool.map((c) => c.email.toLowerCase()).filter((e) => EMAIL_RE.test(e)))].filter((e) => !has(e));
+  // Adresse libre tapée (hors contacts) : proposer explicitement de l'ajouter.
+  const typed = q.trim().toLowerCase();
+  const canAddTyped = EMAIL_RE.test(typed) && !has(typed);
+  const showList = focused && (matches.length > 0 || canAddTyped);
 
   const pill = "rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors";
   const pillOn = "bg-primary text-primary-foreground";
@@ -111,8 +115,21 @@ export function RecipientPicker({
           placeholder={tag ? `Rechercher dans « ${tag} » ou taper un email…` : "Rechercher un contact ou taper un email…"}
           className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
         />
-        {focused && matches.length > 0 && (
+        {showList && (
           <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-surface shadow-lg">
+            {canAddTyped && (
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  add(typed);
+                  setQ("");
+                }}
+                className="flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left text-[12px] font-semibold text-primary hover:bg-rowhover"
+              >
+                <Plus className="h-3.5 w-3.5 shrink-0" /> Ajouter «&nbsp;{typed}&nbsp;»
+              </button>
+            )}
             {matches.map((c) => (
               <button
                 key={c.email}
@@ -141,7 +158,7 @@ export function RecipientPicker({
           <Users className="h-3 w-3" /> {tag ? `Ajouter tous les « ${tag} »` : "Tout le monde"} ({addable.length})
         </button>
       )}
-      <p className="text-[10px] text-faint">Chaque personne reçoit un mail séparé — les destinataires ne se voient pas entre eux.</p>
+      <p className="text-[10px] text-faint">Tape une adresse puis <span className="font-medium text-foreground">Entrée</span> (ou clique « Ajouter »). Chaque personne reçoit un mail séparé.</p>
     </div>
   );
 }
