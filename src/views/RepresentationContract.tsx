@@ -3,7 +3,7 @@ import { Copy, Check, FileText, Eye, X, Save, ChevronDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
-import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { TextField, SelectField } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
@@ -24,6 +24,10 @@ type Configs = Record<string, SavedCase[]>;
 
 /** Sentinelle « créateur externe » (hors roster) : on ne préremplit rien. */
 const EXT = "__ext__";
+
+/** Contrat enregistré (historique agence). Le fichier vit aussi dans `documents`
+ *  (type='contract') → visible sur le portail du créateur concerné. */
+type ContractHist = { id: string; creator: string | null; title: string; variante: string; config: Cfg; createdAt: string; path: string };
 
 let _uid = 0;
 const uid = () => `rc${Date.now().toString(36)}${(_uid += 1)}`;
@@ -96,6 +100,13 @@ export function RepresentationContract() {
   const [preview, setPreview] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Général: true, Talent: true, Durée: true, Commission: true });
+
+  // Historique des contrats enregistrés (blob agence ; le fichier va aussi dans documents).
+  const { data: histData } = useAppState<ContractHist[]>((s: AppState) => (s["contractHistory"] as ContractHist[]) ?? []);
+  const [localHist, setLocalHist] = useState<ContractHist[] | null>(null);
+  const hist = localHist ?? histData ?? [];
+  const [saving, setSaving] = useState(false);
+  const [showHist, setShowHist] = useState(false);
 
   const ctName = creatorName || creators[0]?.name || "";
   const cases = configs[ctName] ?? [];
@@ -189,6 +200,92 @@ export function RepresentationContract() {
   const deleteCase = (id: string) => {
     persist({ ...configs, [ctName]: (configs[ctName] ?? []).filter((c) => c.id !== id) });
     toast("Cas supprimé");
+  };
+
+  // ── Historique des contrats : enregistrer / charger / partager / supprimer ──
+  const saveContract = async () => {
+    if (saving) return;
+    if (!config.talentNom?.trim()) {
+      toast("Renseigne le nom du Talent avant d'enregistrer");
+      return;
+    }
+    setSaving(true);
+    try {
+      const html = representationHTML(config);
+      const title = `Contrat de représentation — ${config.talentNom.trim()}`;
+      const slug = (config.talentNom.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "talent").replace(/^-|-$/g, "");
+      const path = `contracts/${slug}-${Date.now()}.html`;
+      const up = await supabase.storage.from("documents").upload(path, new Blob([html], { type: "text/html;charset=utf-8" }), {
+        contentType: "text/html;charset=utf-8",
+        upsert: false,
+      });
+      if (up.error) {
+        toast("Enregistrement échoué — réessaie");
+        return;
+      }
+      const creator = isExternal ? null : ctName || null;
+      const size = `${Math.max(1, Math.round(html.length / 1024))} Ko`;
+      const { data: doc, error: docErr } = await supabase
+        .from("documents")
+        .insert({ creator, name: title, type: "contract", size, path, sort_order: 0 })
+        .select("id")
+        .single();
+      if (docErr || !doc) {
+        await supabase.storage.from("documents").remove([path]).catch(() => {});
+        toast("Enregistrement échoué — réessaie");
+        return;
+      }
+      const entry: ContractHist = {
+        id: (doc as { id: string }).id,
+        creator,
+        title,
+        variante: config.variante,
+        config,
+        createdAt: new Date().toISOString(),
+        path,
+      };
+      invalidateAppState();
+      const fresh = ((await getAppState())["contractHistory"] as ContractHist[]) ?? [];
+      const ok = await saveAppStateKey("contractHistory", [entry, ...fresh]);
+      if (!ok) {
+        toast("Contrat stocké mais historique non enregistré — réessaie");
+        return;
+      }
+      setLocalHist([entry, ...hist]);
+      toast(creator ? "Contrat enregistré ✓ — visible dans le portail du créateur" : "Contrat enregistré ✓");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const loadContract = (e: ContractHist) => {
+    setConfig({ ...defaultConfig(e.variante || "exclusif"), ...e.config });
+    setCreatorName(e.creator ?? EXT);
+    setCaseName("Modifié");
+    setShowHist(false);
+    toast("Contrat chargé — modifie puis ré-enregistre");
+  };
+  const shareContract = async (e: ContractHist) => {
+    const { data, error } = await supabase.storage.from("documents").createSignedUrl(e.path, 60 * 60 * 24 * 7);
+    if (error || !data?.signedUrl) {
+      toast("Lien indisponible — réessaie");
+      return;
+    }
+    await navigator.clipboard?.writeText(data.signedUrl).catch(() => {});
+    toast("Lien du contrat copié ✓ (valable 7 jours)");
+  };
+  const deleteContract = async (e: ContractHist) => {
+    invalidateAppState();
+    const fresh = ((await getAppState())["contractHistory"] as ContractHist[]) ?? [];
+    const ok = await saveAppStateKey("contractHistory", fresh.filter((x) => x.id !== e.id));
+    if (!ok) {
+      toast("Erreur — réessaie");
+      return;
+    }
+    setLocalHist(hist.filter((x) => x.id !== e.id));
+    await supabase.from("documents").delete().eq("id", e.id);
+    await supabase.storage.from("documents").remove([e.path]).catch(() => {});
+    toast("Contrat supprimé");
   };
 
   const renderField = (key: string) => {
@@ -328,6 +425,23 @@ export function RepresentationContract() {
             <FileText className="h-3.5 w-3.5" /> PDF
           </button>
         </div>
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={saveContract}
+            disabled={saving}
+            className="flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/5 py-3 text-[10px] font-semibold uppercase tracking-wide text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+          >
+            <Save className="h-3.5 w-3.5" /> {saving ? "Enregistrement…" : "Enregistrer le contrat"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowHist(true)}
+            className="flex items-center justify-center gap-2 rounded-xl border border-border py-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+          >
+            <FileText className="h-3.5 w-3.5" /> Historique{hist.length ? ` (${hist.length})` : ""}
+          </button>
+        </div>
       </div>
 
       {preview && (
@@ -343,6 +457,51 @@ export function RepresentationContract() {
           </>
         }>
           <iframe title="Contrat de représentation" srcDoc={preview} className="h-[64vh] w-full rounded-lg border border-border bg-white" />
+        </Modal>
+      )}
+
+      {showHist && (
+        <Modal
+          title="Historique des contrats"
+          onClose={() => setShowHist(false)}
+          wide
+          footer={<button type="button" className={ghostBtn} onClick={() => setShowHist(false)}>Fermer</button>}
+        >
+          {hist.length === 0 ? (
+            <div className="py-8 text-center text-sm text-faint">
+              Aucun contrat enregistré. Clique « Enregistrer le contrat » — il sera stocké ici et poussé sur le portail du créateur concerné.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {hist.map((e) => (
+                <div key={e.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-semibold text-foreground">{e.title}</div>
+                    <div className="truncate text-[11px] text-faint">
+                      {e.creator ? titleCase(e.creator) : "Externe"} · {new Date(e.createdAt).toLocaleDateString("fr-FR")}
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => setPreview(representationHTML(e.config))} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                    <Eye className="h-3.5 w-3.5" /> Aperçu
+                  </button>
+                  <button type="button" onClick={() => loadContract(e)} className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                    Modifier
+                  </button>
+                  <button type="button" onClick={() => shareContract(e)} className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                    Partager
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPendingDel({ message: `Supprimer « ${e.title} » ?${e.creator ? " (retiré aussi du portail du créateur)" : ""}`, run: () => deleteContract(e) })}
+                    className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-rose-500"
+                    title="Supprimer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </Modal>
       )}
       {pendingDel && (
