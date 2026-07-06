@@ -115,11 +115,12 @@ export function InlineForm({
           <X className="h-4 w-4" />
         </button>
       </div>
-      <div className="flex flex-wrap items-end gap-3">
+      {/* Mobile : champs empilés en pleine largeur. ≥ sm : rangée multi-colonnes. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         {children}
         <button
           type="submit"
-          className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+          className="h-[42px] w-full shrink-0 rounded-lg bg-primary px-5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 sm:w-auto"
         >
           {submitLabel}
         </button>
