@@ -56,3 +56,7 @@ verify_jwt = true
 # send-email : JWT agence requis — envoie via Resend (clé en secret serveur).
 [functions.send-email]
 verify_jwt = true
+
+# gmail-send : JWT agence requis — envoie depuis la vraie boîte Gmail (OAuth).
+[functions.gmail-send]
+verify_jwt = true
