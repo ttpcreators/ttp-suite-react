@@ -104,7 +104,7 @@ export function Mediakit() {
   const [tplDraft, setTplDraft] = useState<MailTemplate | null>(null);
 
   // Contacts (pour ajouter des destinataires groupés)
-  const [contacts, setContacts] = useState<{ email: string; label: string }[]>([]);
+  const [contacts, setContacts] = useState<{ email: string; label: string; tag?: string }[]>([]);
   useEffect(() => {
     supabase
       .from("contacts")
@@ -113,10 +113,11 @@ export function Mediakit() {
         const rows = (data as Record<string, unknown>[]) ?? [];
         setContacts(
           rows
-            .map((r) => ({
-              email: String(r.email ?? "").trim(),
-              label: [r.first_name, r.last_name].filter(Boolean).join(" ") || String(r.company ?? r.name ?? r.email ?? ""),
-            }))
+            .map((r) => {
+              const person = [r.first_name, r.last_name].filter(Boolean).join(" ") || String(r.person ?? "");
+              const label = [String(r.brand ?? ""), person].filter((x) => x && x !== "—").join(" · ") || String(r.email ?? "");
+              return { email: String(r.email ?? "").trim(), label, tag: String(r.tag ?? "").trim() };
+            })
             .filter((c) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(c.email)),
         );
       });

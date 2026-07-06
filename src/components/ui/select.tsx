@@ -322,7 +322,7 @@ const SelectContent = forwardRef<HTMLDivElement, SelectContentProps>(
 
     return createPortal(
       <SelectContentContext.Provider value={{ registerItem, activeIndex, checkedIndex }}>
-        <div style={{ position: "fixed", ...(openUp ? { bottom: vh - triggerRect.top + 6 } : { top: triggerRect.bottom + 6 }), left: leftPos, minWidth: Math.min(triggerRect.width, boxWidth), maxWidth: boxWidth, zIndex: 50 }}>
+        <div style={{ position: "fixed", ...(openUp ? { bottom: vh - triggerRect.top + 6 } : { top: triggerRect.bottom + 6 }), left: leftPos, minWidth: Math.min(triggerRect.width, boxWidth), maxWidth: boxWidth, zIndex: 1000 }}>
           <motion.div
             ref={(node) => {
               (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = node;

@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { X, Users } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export type PickContact = { email: string; label: string; tag?: string };
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 /**
- * Éditeur de destinataires : recherche dans les contacts, ajout « tout le monde »,
- * saisie d'emails libres, chips retirables. `value` = liste d'emails (minuscules).
+ * Éditeur de destinataires : filtre par catégorie (tag), recherche, ajout
+ * « tout le monde » ou « tous les {tag} », saisie d'emails libres, chips
+ * retirables. `value` = liste d'emails (minuscules).
  */
 export function RecipientPicker({
   value,
@@ -18,6 +20,9 @@ export function RecipientPicker({
   contacts: PickContact[];
 }) {
   const [q, setQ] = useState("");
+  const [tag, setTag] = useState(""); // "" = toutes catégories
+  const [focused, setFocused] = useState(false);
+
   const has = (e: string) => value.some((v) => v.toLowerCase() === e.toLowerCase());
   const add = (e: string) => {
     const x = e.trim().toLowerCase();
@@ -36,18 +41,21 @@ export function RecipientPicker({
   };
   const remove = (e: string) => onChange(value.filter((v) => v.toLowerCase() !== e.toLowerCase()));
 
+  const tags = [...new Set(contacts.map((c) => (c.tag ?? "").trim()).filter(Boolean))];
+  const pool = tag ? contacts.filter((c) => (c.tag ?? "").trim() === tag) : contacts;
+
   const term = q.trim().toLowerCase();
-  const matches = term
-    ? contacts
-        .filter(
-          (c) =>
-            !has(c.email) &&
-            (c.label.toLowerCase().includes(term) || c.email.toLowerCase().includes(term) || (c.tag ?? "").toLowerCase().includes(term)),
-        )
-        .slice(0, 8)
-    : [];
-  const allEmails = [...new Set(contacts.map((c) => c.email.toLowerCase()).filter((e) => EMAIL_RE.test(e)))];
-  const notAdded = allEmails.filter((e) => !has(e));
+  const matches =
+    term || tag
+      ? pool
+          .filter((c) => !has(c.email) && (!term || c.label.toLowerCase().includes(term) || c.email.toLowerCase().includes(term)))
+          .slice(0, 12)
+      : [];
+  const addable = [...new Set(pool.map((c) => c.email.toLowerCase()).filter((e) => EMAIL_RE.test(e)))].filter((e) => !has(e));
+
+  const pill = "rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors";
+  const pillOn = "bg-primary text-primary-foreground";
+  const pillOff = "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground";
 
   return (
     <div className="flex flex-col gap-2">
@@ -67,10 +75,32 @@ export function RecipientPicker({
         </div>
       )}
 
+      {/* Filtre par catégorie */}
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          <button type="button" onClick={() => setTag("")} className={cn(pill, tag === "" ? pillOn : pillOff)}>
+            Tous
+          </button>
+          {tags.map((t) => (
+            <button key={t} type="button" onClick={() => setTag((cur) => (cur === t ? "" : t))} className={cn(pill, tag === t ? pillOn : pillOff)}>
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="relative">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            setFocused(false);
+            if (q.trim()) {
+              addMany(q);
+              setQ("");
+            }
+          }}
           onKeyDown={(e) => {
             if ((e.key === "Enter" || e.key === ",") && EMAIL_RE.test(q.trim())) {
               e.preventDefault();
@@ -78,24 +108,17 @@ export function RecipientPicker({
               setQ("");
             }
           }}
-          onBlur={() => {
-            if (q.trim()) {
-              addMany(q);
-              setQ("");
-            }
-          }}
-          placeholder="Rechercher un contact ou taper un email…"
+          placeholder={tag ? `Rechercher dans « ${tag} » ou taper un email…` : "Rechercher un contact ou taper un email…"}
           className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
         />
-        {matches.length > 0 && (
+        {focused && matches.length > 0 && (
           <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-surface shadow-lg">
             {matches.map((c) => (
               <button
                 key={c.email}
                 type="button"
                 onMouseDown={(e) => {
-                  // onMouseDown (avant le blur de l'input) pour ne pas perdre le clic
-                  e.preventDefault();
+                  e.preventDefault(); // avant le blur → ne perd pas le clic
                   add(c.email);
                   setQ("");
                 }}
@@ -109,13 +132,13 @@ export function RecipientPicker({
         )}
       </div>
 
-      {notAdded.length > 0 && (
+      {addable.length > 0 && (
         <button
           type="button"
-          onClick={() => onChange([...value, ...notAdded])}
+          onClick={() => onChange([...value, ...addable])}
           className="inline-flex items-center gap-1.5 self-start rounded-full border border-border bg-surface px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
         >
-          <Users className="h-3 w-3" /> Tout le monde ({notAdded.length})
+          <Users className="h-3 w-3" /> {tag ? `Ajouter tous les « ${tag} »` : "Tout le monde"} ({addable.length})
         </button>
       )}
       <p className="text-[10px] text-faint">Chaque personne reçoit un mail séparé — les destinataires ne se voient pas entre eux.</p>
