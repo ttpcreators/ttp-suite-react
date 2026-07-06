@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip } from "lucide-react";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { cn, initials } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
@@ -41,6 +41,26 @@ type MailMsg = { id: string; from: string; to?: string; subject: string; date: s
 function fmtMailDate(d: string): string {
   const t = new Date(d);
   return Number.isNaN(t.getTime()) ? "" : t.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
+}
+
+/** Pièce jointe d'un email (contenu en base64). */
+type Att = { filename: string; mimeType: string; contentBase64: string; size: number };
+const MAX_ATT = 8 * 1024 * 1024; // 8 Mo au total
+function fmtSize(b: number): string {
+  return b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} Mo` : `${Math.max(1, Math.round(b / 1024))} Ko`;
+}
+
+/** Logo Gmail officiel (multicolore). */
+function GmailLogo({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 256 193" className={className} aria-hidden="true">
+      <path fill="#4285F4" d="M58.182 192.05V93.14L27.507 65.077 0 49.504v125.091c0 9.658 7.825 17.455 17.455 17.455z" />
+      <path fill="#34A853" d="M197.818 192.05h40.727c9.659 0 17.455-7.826 17.455-17.455V49.505l-31.156 17.837-27.026 25.798z" />
+      <path fill="#EA4335" d="M58.182 93.14l-4.174-38.647 4.174-36.989L128 69.868l69.818-52.364 4.669 34.992-4.669 40.644L128 145.504z" />
+      <path fill="#FBBC04" d="M197.818 17.504V93.14L256 49.504V26.231c0-21.585-24.64-33.89-41.89-20.945z" />
+      <path fill="#C5221F" d="M0 49.504l26.759 20.07L58.182 93.14V17.504L41.89 5.286C24.61-7.66 0 4.646 0 26.231z" />
+    </svg>
+  );
 }
 
 const TAG_OPTIONS = [
@@ -220,6 +240,30 @@ export function Contacts() {
   const [sending, setSending] = useState(false);
   const [sendVia, setSendVia] = useState<"gmail" | "resend">("gmail"); // Gmail = ta vraie boîte ; Resend = domaine TTP
   const [confirmSend, setConfirmSend] = useState(false); // confirmation avant envoi (anti-mauvais clic)
+  const [attachments, setAttachments] = useState<Att[]>([]);
+  const attachRef = useRef<HTMLInputElement>(null);
+
+  // Lit des fichiers en base64 (data URL) et les ajoute (limite de taille totale).
+  const addFiles = async (files: FileList) => {
+    let total = attachments.reduce((a, x) => a + x.size, 0);
+    const next = [...attachments];
+    for (const f of Array.from(files)) {
+      if (total + f.size > MAX_ATT) {
+        toast("Pièces jointes trop lourdes (8 Mo max au total)");
+        break;
+      }
+      const b64 = await new Promise<string>((res) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result).split(",")[1] ?? "");
+        r.onerror = () => res("");
+        r.readAsDataURL(f);
+      });
+      if (!b64) continue;
+      next.push({ filename: f.name, mimeType: f.type || "application/octet-stream", contentBase64: b64, size: f.size });
+      total += f.size;
+    }
+    setAttachments(next);
+  };
 
   // Historique des mails Gmail avec le contact ouvert (fiche détail).
   const [history, setHistory] = useState<MailMsg[] | null>(null);
@@ -351,6 +395,7 @@ export function Contacts() {
     setMailSubject("");
     setMailBody(`Bonjour${fn ? " " + fn : ""},\n\n`);
     setMailSig(null);
+    setAttachments([]);
     setMailSeed((n) => n + 1);
     setMailOpen(true);
     setSelected(null);
@@ -398,7 +443,10 @@ export function Contacts() {
         let firstErr = "";
         for (const to of recipients) {
           const { data, error } = await supabase.functions.invoke("gmail-send", {
-            body: { to, subject, html, source: "manual", contactName: nameOf(to) },
+            body: {
+              to, subject, html, source: "manual", contactName: nameOf(to),
+              attachments: attachments.map((a) => ({ filename: a.filename, mimeType: a.mimeType, contentBase64: a.contentBase64 })),
+            },
           });
           const res = (await jsonOf(error, data)) as { ok?: boolean; error?: string } | null;
           if (res?.ok) sent++;
@@ -412,7 +460,9 @@ export function Contacts() {
         }
         toast(`Envoyé depuis Gmail ✓ (${sent}/${recipients.length} destinataire${recipients.length > 1 ? "s" : ""})`);
       } else {
-        const { data, error } = await supabase.functions.invoke("send-email", { body: { to: recipients, subject, html } });
+        const { data, error } = await supabase.functions.invoke("send-email", {
+          body: { to: recipients, subject, html, attachments: attachments.map((a) => ({ filename: a.filename, contentBase64: a.contentBase64 })) },
+        });
         const res = (await jsonOf(error, data)) as { ok?: boolean; sent?: number; total?: number; detail?: string } | null;
         if (!res?.ok) {
           const d = (res?.detail ?? "").toLowerCase();
@@ -428,6 +478,7 @@ export function Contacts() {
       setMailSubject("");
       setMailBody("");
       setMailSig(null);
+      setAttachments([]);
     } finally {
       setSending(false);
     }
@@ -900,6 +951,45 @@ export function Contacts() {
                 <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Signature</div>
                 <SignaturePicker key={mailSeed} value={mailSig} onChange={setMailSig} />
               </div>
+
+              {/* Pièces jointes */}
+              <div>
+                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Pièces jointes</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {attachments.map((a, i) => (
+                    <span key={`${a.filename}-${i}`} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-panel px-2.5 py-1 text-[11px] text-foreground">
+                      <Paperclip className="h-3 w-3 text-faint" />
+                      <span className="max-w-[160px] truncate">{a.filename}</span>
+                      <span className="text-faint">{fmtSize(a.size)}</span>
+                      <button
+                        type="button"
+                        onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                        className="text-faint transition-colors hover:text-[#E5484D]"
+                        aria-label={`Retirer ${a.filename}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => attachRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                  >
+                    <Paperclip className="h-3.5 w-3.5" /> Joindre un fichier
+                  </button>
+                  <input
+                    ref={attachRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.length) addFiles(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
@@ -909,20 +999,23 @@ export function Contacts() {
                     type="button"
                     onClick={() => setSendVia("gmail")}
                     className={cn(
-                      "px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                      "flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold transition-colors",
                       sendVia === "gmail" ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-rowhover",
                     )}
                   >
-                    Gmail
+                    <GmailLogo className="h-3.5 w-3.5" /> Gmail
                   </button>
                   <button
                     type="button"
                     onClick={() => setSendVia("resend")}
                     className={cn(
-                      "px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                      "flex items-center gap-1.5 border-l border-border px-3 py-1.5 text-[11px] font-semibold transition-colors",
                       sendVia === "resend" ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-rowhover",
                     )}
                   >
+                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
+                      <path d="M4 3h8.6c3 0 5 1.8 5 4.6 0 2-1 3.4-2.8 4.1L18.9 21h-4.3l-2.7-7.7H8.1V21H4V3zm4.1 3.3v4.1h4c1.3 0 2.2-.8 2.2-2s-.9-2.1-2.2-2.1H8.1z" />
+                    </svg>
                     Resend
                   </button>
                 </div>

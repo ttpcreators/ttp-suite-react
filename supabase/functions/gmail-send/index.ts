@@ -54,6 +54,7 @@ Deno.serve(async (req: Request) => {
   let body: {
     to?: string; subject?: string; html?: string;
     threadId?: string; inReplyTo?: string; source?: string; contactName?: string;
+    attachments?: { filename?: string; mimeType?: string; contentBase64?: string }[];
   } = {};
   try {
     body = await req.json();
@@ -79,19 +80,46 @@ Deno.serve(async (req: Request) => {
     return jsonRes({ error: "token_indisponible", detail: msg.slice(0, 160) }, 502);
   }
 
-  // Construit le message MIME (HTML) + entêtes de threading éventuelles.
-  const headers = [
-    `To: ${to}`,
-    `Subject: ${encSubject(subject)}`,
-    "MIME-Version: 1.0",
-    'Content-Type: text/html; charset="UTF-8"',
-    "Content-Transfer-Encoding: 8bit",
-  ];
+  // Construit le message MIME. Entêtes de base + threading éventuel.
+  const attachments = (Array.isArray(body.attachments) ? body.attachments : []).filter((a) => a?.contentBase64);
+  const base = [`To: ${to}`, `Subject: ${encSubject(subject)}`, "MIME-Version: 1.0"];
   if (body.inReplyTo) {
-    headers.push(`In-Reply-To: ${body.inReplyTo}`);
-    headers.push(`References: ${body.inReplyTo}`);
+    base.push(`In-Reply-To: ${body.inReplyTo}`);
+    base.push(`References: ${body.inReplyTo}`);
   }
-  const mime = headers.join("\r\n") + "\r\n\r\n" + html;
+
+  let mime: string;
+  if (attachments.length === 0) {
+    mime = [...base, 'Content-Type: text/html; charset="UTF-8"', "Content-Transfer-Encoding: 8bit", "", html].join("\r\n");
+  } else {
+    // multipart/mixed : corps HTML + chaque pièce jointe (base64).
+    const boundary = "ttp_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const lines = [
+      ...base,
+      `Content-Type: multipart/mixed; boundary="${boundary}"`,
+      "",
+      `--${boundary}`,
+      'Content-Type: text/html; charset="UTF-8"',
+      "Content-Transfer-Encoding: 8bit",
+      "",
+      html,
+    ];
+    for (const a of attachments) {
+      const fn = String(a.filename ?? "piece-jointe").replace(/["\r\n]/g, "");
+      const ct = String(a.mimeType || "application/octet-stream").replace(/[\r\n]/g, "");
+      const content = String(a.contentBase64 ?? "").replace(/\s+/g, "");
+      lines.push(
+        `--${boundary}`,
+        `Content-Type: ${ct}; name="${fn}"`,
+        "Content-Transfer-Encoding: base64",
+        `Content-Disposition: attachment; filename="${fn}"`,
+        "",
+        content,
+      );
+    }
+    lines.push(`--${boundary}--`, "");
+    mime = lines.join("\r\n");
+  }
   const raw = b64url(new TextEncoder().encode(mime));
 
   const payload: Record<string, unknown> = { raw };

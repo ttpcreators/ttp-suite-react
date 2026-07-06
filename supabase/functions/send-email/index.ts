@@ -37,7 +37,10 @@ Deno.serve(async (req: Request) => {
   if (!(await isAgency(req, sb))) return jsonRes({ error: "unauthorized" }, 401);
   if (!RESEND_API_KEY) return jsonRes({ error: "resend_non_configure" }, 500);
 
-  let body: { to?: string | string[]; subject?: string; html?: string; replyTo?: string } = {};
+  let body: {
+    to?: string | string[]; subject?: string; html?: string; replyTo?: string;
+    attachments?: { filename?: string; contentBase64?: string }[];
+  } = {};
   try {
     body = await req.json();
   } catch {
@@ -55,12 +58,17 @@ Deno.serve(async (req: Request) => {
   if (!subject) return jsonRes({ error: "objet_requis" }, 400);
   if (!html.trim()) return jsonRes({ error: "contenu_requis" }, 400);
   const replyTo = body.replyTo && emailRe.test(body.replyTo) ? body.replyTo : undefined;
+  // Pièces jointes Resend : { filename, content(base64) }.
+  const attachments = (Array.isArray(body.attachments) ? body.attachments : [])
+    .filter((a) => a?.contentBase64)
+    .map((a) => ({ filename: String(a.filename ?? "piece-jointe"), content: String(a.contentBase64) }));
 
   let sent = 0;
   const errors: string[] = [];
   for (const to of recipients) {
     const payload: Record<string, unknown> = { from: RESEND_FROM, to: [to], subject, html };
     if (replyTo) payload.reply_to = replyTo;
+    if (attachments.length) payload.attachments = attachments;
     try {
       const r = await fetch("https://api.resend.com/emails", {
         method: "POST",
