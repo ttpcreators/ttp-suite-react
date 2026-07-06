@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
-import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send } from "lucide-react";
-import { ActionMenu } from "@/components/ui/action-menu";
+import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { cn, initials } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -33,6 +33,15 @@ type Row = {
   phone: string;
   sort_order: number;
 };
+
+/** Un message Gmail de l'historique avec un contact. */
+type MailMsg = { id: string; from: string; to?: string; subject: string; date: string; snippet: string; direction: "in" | "out" };
+
+/** En-tête Date Gmail (RFC 2822) → "06 juil." (ou "" si illisible). */
+function fmtMailDate(d: string): string {
+  const t = new Date(d);
+  return Number.isNaN(t.getTime()) ? "" : t.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
+}
 
 const TAG_OPTIONS = [
   { value: "Marque", label: "Marque" },
@@ -210,6 +219,31 @@ export function Contacts() {
   const [mailSeed, setMailSeed] = useState(0); // change → remonte le SignaturePicker (re-présélection du défaut)
   const [sending, setSending] = useState(false);
   const [sendVia, setSendVia] = useState<"gmail" | "resend">("gmail"); // Gmail = ta vraie boîte ; Resend = domaine TTP
+  const [confirmSend, setConfirmSend] = useState(false); // confirmation avant envoi (anti-mauvais clic)
+
+  // Historique des mails Gmail avec le contact ouvert (fiche détail).
+  const [history, setHistory] = useState<MailMsg[] | null>(null);
+  const [historyBusy, setHistoryBusy] = useState(false);
+  useEffect(() => {
+    setHistory(null);
+    const email = selected?.email?.trim().toLowerCase();
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
+    let alive = true;
+    setHistoryBusy(true);
+    (async () => {
+      const { data, error } = await supabase.functions.invoke("gmail-history", { body: { contact: email } });
+      let res = data as { ok?: boolean; messages?: MailMsg[] } | null;
+      if (error && (error as { context?: { json?: () => Promise<unknown> } }).context?.json)
+        res = (await (error as { context: { json: () => Promise<unknown> } }).context.json().catch(() => null)) as typeof res;
+      if (!alive) return;
+      setHistory(res?.ok ? res.messages ?? [] : []);
+      setHistoryBusy(false);
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected]);
 
   useEffect(() => {
     let active = true;
@@ -320,6 +354,16 @@ export function Contacts() {
     setMailSeed((n) => n + 1);
     setMailOpen(true);
     setSelected(null);
+  };
+
+  // Valide les champs puis ouvre la confirmation (anti-envoi par mégarde).
+  const requestSend = () => {
+    if (sending) return;
+    const recipients = mailRecipients.map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
+    if (recipients.length === 0) return toast("Ajoute au moins un destinataire");
+    if (!mailSubject.trim()) return toast("Ajoute un objet");
+    if (!mailBody.trim()) return toast("Écris un message");
+    setConfirmSend(true);
   };
 
   const sendMail = async () => {
@@ -696,7 +740,7 @@ export function Contacts() {
           onClick={() => setSelected(null)}
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-xl"
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-start gap-3">
@@ -735,6 +779,40 @@ export function Contacts() {
               <CopyField label="Email" value={selected.email} />
               <CopyField label="Téléphone" value={selected.phone} />
             </div>
+
+            {selected.email && (
+              <div className="mt-4">
+                <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+                  <Mail className="h-3 w-3" /> Historique email
+                </div>
+                {historyBusy ? (
+                  <div className="text-[11px] text-faint">Chargement des mails…</div>
+                ) : !history ? null : history.length === 0 ? (
+                  <div className="text-[11px] text-faint">Aucun échange trouvé dans Gmail.</div>
+                ) : (
+                  <div className="max-h-52 space-y-1.5 overflow-y-auto pr-1">
+                    {history.map((m) => (
+                      <div key={m.id} className="rounded-lg border border-border bg-panel px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 text-[10px] font-semibold",
+                              m.direction === "in" ? "text-signaltext" : "text-primary",
+                            )}
+                          >
+                            {m.direction === "in" ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
+                            {m.direction === "in" ? "Reçu" : "Envoyé"}
+                          </span>
+                          <span className="shrink-0 text-[10px] text-faint">{fmtMailDate(m.date)}</span>
+                        </div>
+                        <div className="mt-0.5 truncate text-[12px] font-medium text-foreground">{m.subject || "(sans objet)"}</div>
+                        <div className="truncate text-[11px] text-faint">{m.snippet}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-4 flex gap-2">
               {selected.email && (
@@ -863,7 +941,7 @@ export function Contacts() {
                 </button>
                 <button
                   type="button"
-                  onClick={sendMail}
+                  onClick={requestSend}
                   disabled={sending}
                   className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
@@ -873,6 +951,20 @@ export function Contacts() {
             </div>
           </div>
         </div>
+      )}
+
+      {confirmSend && (
+        <ConfirmDialog
+          title="Confirmer l'envoi"
+          message={`Envoyer à ${[...new Set(mailRecipients.map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))].length} destinataire(s) via ${sendVia === "gmail" ? "ta boîte Gmail" : "Resend"} ? Objet : « ${mailSubject.trim()} ».`}
+          confirmLabel="Envoyer"
+          cancelLabel="Revenir"
+          onCancel={() => setConfirmSend(false)}
+          onConfirm={() => {
+            setConfirmSend(false);
+            sendMail();
+          }}
+        />
       )}
     </>
   );

@@ -32,7 +32,7 @@ export function ConfirmDialog({
   onCancel: () => void;
 }) {
   return createPortal(
-    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onCancel}>
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onCancel}>
       <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start gap-3">
           <div className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-full", danger ? "bg-rose-500/10 text-rose-500" : "bg-primary/10 text-primary")}>

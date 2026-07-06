@@ -60,3 +60,7 @@ verify_jwt = true
 # gmail-send : JWT agence requis — envoie depuis la vraie boîte Gmail (OAuth).
 [functions.gmail-send]
 verify_jwt = true
+
+# gmail-history : JWT agence requis — lit les fils Gmail avec un contact.
+[functions.gmail-history]
+verify_jwt = true
