@@ -22,6 +22,9 @@ type Cfg = Record<string, string>;
 type SavedCase = { id: string; name: string; config: Cfg };
 type Configs = Record<string, SavedCase[]>;
 
+/** Sentinelle « créateur externe » (hors roster) : on ne préremplit rien. */
+const EXT = "__ext__";
+
 let _uid = 0;
 const uid = () => `rc${Date.now().toString(36)}${(_uid += 1)}`;
 
@@ -96,10 +99,21 @@ export function RepresentationContract() {
 
   const ctName = creatorName || creators[0]?.name || "";
   const cases = configs[ctName] ?? [];
+  const isExternal = ctName === EXT;
+  const ctLabel = isExternal ? "Externe" : titleCase(ctName);
 
   // Au changement de créateur : préremplit les infos Talent + charge le 1er cas enregistré.
   useEffect(() => {
     if (!ctName) return;
+    if (ctName === EXT) {
+      // Externe : aucun préremplissage roster (tout se saisit dans « Talent »).
+      const saved = (configs[EXT] ?? [])[0];
+      if (saved) {
+        setConfig((prev) => ({ ...defaultConfig(prev.variante), ...saved.config }));
+        setCaseName(saved.name);
+      }
+      return;
+    }
     let alive = true;
     supabase.from("creators").select("name,birth,address,siren,email_pro").eq("name", ctName).limit(1).then(({ data }) => {
       if (!alive) return;
@@ -213,22 +227,24 @@ export function RepresentationContract() {
 
         {/* Créateur */}
         <div className="mb-2 mt-5 text-[9px] font-semibold uppercase tracking-wider text-faint">Créateur</div>
-        {creators.length === 0 ? (
-          <div className="text-xs text-faint">Aucun créateur dans le roster.</div>
-        ) : (
-          <Select value={ctName} onValueChange={setCreatorName}>
-            <SelectTrigger className="h-9 w-auto min-w-[190px] rounded-full bg-surface" placeholder="Choisir un créateur" />
-            <SelectContent>
-              {creators.map((c, i) => (
-                <SelectItem key={c.id} index={i} value={c.name}>{titleCase(c.name)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <Select value={ctName} onValueChange={setCreatorName}>
+          <SelectTrigger className="h-9 w-auto min-w-[190px] rounded-full bg-surface" placeholder="Choisir un créateur" />
+          <SelectContent>
+            {creators.map((c, i) => (
+              <SelectItem key={c.id} index={i} value={c.name}>{titleCase(c.name)}</SelectItem>
+            ))}
+            <SelectItem index={creators.length} value={EXT}>✎ Externe (hors roster)</SelectItem>
+          </SelectContent>
+        </Select>
+        {isExternal && (
+          <p className="mt-2 text-[11px] text-faint">
+            Créateur hors roster : renseigne son nom et ses infos dans la section <span className="font-medium text-foreground">Talent</span> ci-dessous.
+          </p>
         )}
 
         {/* Cas de configuration */}
         <div className="mt-5 rounded-xl border border-border bg-panel p-3.5">
-          <div className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-faint">Cas enregistrés · {ctName ? titleCase(ctName) : "—"}</div>
+          <div className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-faint">Cas enregistrés · {ctName ? ctLabel : "—"}</div>
           {cases.length > 0 ? (
             <div className="mb-2.5 flex flex-wrap gap-1.5">
               {cases.map((cs) => (
