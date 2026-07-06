@@ -99,10 +99,14 @@ create table if not exists public.ideas (
 create table if not exists public.events (
   id uuid primary key default gen_random_uuid(),
   day int, date text, time text, title text, type text default 'call', who text,
+  source text default 'agency',
   sort_order int default 0, created_at timestamptz default now()
 );
 -- date complète (YYYY-MM-DD) d'un événement : ajoutée si la table existait sans elle.
 alter table public.events add column if not exists date text;
+-- source ('agency'|'creator') : permet à la cloche de signaler un évènement ajouté
+-- par un créateur (comme todos/ideas). Ajoutée si la table existait sans elle.
+alter table public.events add column if not exists source text default 'agency';
 
 create table if not exists public.messages (
   id uuid primary key default gen_random_uuid(),
@@ -216,10 +220,13 @@ create policy creators_scoped on public.creators for all to authenticated
 
 -- DONNÉES AGENCE PURES : agence seulement
 create policy contacts_agency    on public.contacts    for all to authenticated using (public.is_agency()) with check (public.is_agency());
--- invoices : agence = tout ; créateur = uniquement ses factures (creator = son nom)
-create policy invoices_agency    on public.invoices    for all to authenticated
-  using (public.is_agency() or creator = public.my_creator())
-  with check (public.is_agency() or creator = public.my_creator());
+-- invoices : ÉCRITURE réservée à l'agence ; le créateur ne peut que LIRE les siennes.
+-- (Comme documents : un `for all` incluant le créateur le laissait modifier/insérer/
+--  supprimer ses propres factures — falsifier le CA, effacer une facture en retard.)
+create policy invoices_agency       on public.invoices for all    to authenticated
+  using (public.is_agency()) with check (public.is_agency());
+create policy invoices_creator_read on public.invoices for select to authenticated
+  using (public.is_agency() or creator = public.my_creator());
 create policy prospects_agency   on public.prospects   for all to authenticated using (public.is_agency()) with check (public.is_agency());
 create policy module_rows_agency on public.module_rows for all to authenticated using (public.is_agency()) with check (public.is_agency());
 
