@@ -421,33 +421,35 @@ export function CreatorDetail({
         <ArrowLeft className="h-3.5 w-3.5" /> Roster
       </button>
 
-      <div className="mb-5 flex flex-wrap items-center gap-4">
-        <AvatarUpload
-          creatorId={c?.id}
-          name={name}
-          photoUrl={c?.photo_url ?? null}
-          size={64}
-          onUploaded={(url) => setC((prev) => (prev ? { ...prev, photo_url: url } : prev))}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="text-2xl font-semibold tracking-tight">{titleCase(name)}</div>
-            <AnimatedBadge status={statusBadge(c?.status ?? null)} size="sm">
-              {c?.status ? titleCase(c.status) : "Actif"}
-            </AnimatedBadge>
-            {exclusive && (
-              <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">
-                Exclusif
-              </span>
-            )}
-          </div>
-          <div className="mt-1 text-sm text-faint">
-            {[c?.handle, c?.niche, c?.platform].filter(Boolean).join(" · ") || "—"}
+      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <AvatarUpload
+            creatorId={c?.id}
+            name={name}
+            photoUrl={c?.photo_url ?? null}
+            size={64}
+            onUploaded={(url) => setC((prev) => (prev ? { ...prev, photo_url: url } : prev))}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+              <div className="text-xl font-semibold tracking-tight sm:text-2xl">{titleCase(name)}</div>
+              <AnimatedBadge status={statusBadge(c?.status ?? null)} size="sm">
+                {c?.status ? titleCase(c.status) : "Actif"}
+              </AnimatedBadge>
+              {exclusive && (
+                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">
+                  Exclusif
+                </span>
+              )}
+            </div>
+            <div className="mt-1 text-sm text-faint">
+              {[c?.handle, c?.niche, c?.platform].filter(Boolean).join(" · ") || "—"}
+            </div>
           </div>
         </div>
         <button
           onClick={() => onOpenPortal(name)}
-          className="flex items-center gap-2 rounded-lg bg-foreground px-4 py-2.5 text-xs font-semibold text-background transition-opacity hover:opacity-90"
+          className="flex w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2.5 text-xs font-semibold text-background transition-opacity hover:opacity-90 sm:w-auto"
         >
           <ExternalLink className="h-4 w-4" /> Voir le portail
         </button>

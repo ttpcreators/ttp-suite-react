@@ -37,8 +37,9 @@ const STATUS_OPTS: StatusOption[] = [
 
 /** Colonne (canonique) d'un brief selon son statut stocké. */
 function colKey(status: string): string {
-  const s = String(status).toLowerCase();
-  if (s.includes("termine")) return "terminé";
+  // Insensible aux accents : "terminé" (é précomposé) ne contient PAS "termine".
+  const s = String(status).toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  if (s.includes("termin")) return "terminé";
   if (s.includes("cours")) return "cours";
   if (s.includes("valider")) return "valider";
   return "attente";

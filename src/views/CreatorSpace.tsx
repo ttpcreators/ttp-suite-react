@@ -839,6 +839,12 @@ export function CreatorSpace({
                       <button
                         type="button"
                         onClick={async () => {
+                          // Media kit « par lien » : le path est une URL externe (Drive/Canva…),
+                          // pas un objet du bucket → ouvrir directement (createSignedUrl échouerait).
+                          if (/^https?:\/\//i.test(doc.path!)) {
+                            window.open(doc.path!, "_blank");
+                            return;
+                          }
                           const { data, error } = await supabase.storage.from("documents").createSignedUrl(doc.path!, 3600);
                           if (error || !data?.signedUrl) {
                             toast("Lien indisponible — réessaie");

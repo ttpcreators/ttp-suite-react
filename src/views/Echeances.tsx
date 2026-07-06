@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Pencil, CalendarClock } from "lucide-react";
-import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/components/ui/form";
@@ -64,10 +64,16 @@ export function Echeances() {
       .sort((a, b) => (a.left ?? 1e9) - (b.left ?? 1e9));
   }, [list]);
 
-  const save = async (next: Deadline[]) => {
+  // Mutation sûre : relit le blob FRAIS avant de fusionner (la clé contractDeadlines
+  // est aussi écrite par la fiche créateur → ne jamais partir de l'état local périmé).
+  const mutate = async (fn: (fresh: Deadline[]) => Deadline[]): Promise<boolean> => {
+    invalidateAppState();
+    const fresh = ((await getAppState())["contractDeadlines"] as Deadline[]) ?? [];
+    const next = fn(fresh);
     setLocal(next);
     const ok = await saveAppStateKey("contractDeadlines", next);
     if (!ok) toast("Erreur — réessaie");
+    return ok;
   };
 
   const openAdd = () => {
@@ -94,15 +100,17 @@ export function Echeances() {
       months,
       note: draft.note.trim() || undefined,
     };
-    const next = editId ? list.map((x) => (x.id === editId ? entry : x)) : [entry, ...list];
+    const wasEdit = !!editId;
     setFormOpen(false);
     setEditId(null);
-    await save(next);
-    toast(editId ? "Contrat mis à jour ✓" : "Contrat ajouté ✓");
+    const ok = await mutate((fresh) =>
+      wasEdit ? fresh.map((x) => (x.id === entry.id ? entry : x)) : [entry, ...fresh],
+    );
+    if (ok) toast(wasEdit ? "Contrat mis à jour ✓" : "Contrat ajouté ✓");
   };
   const remove = async (id: string) => {
-    await save(list.filter((x) => x.id !== id));
-    toast("Contrat supprimé");
+    const ok = await mutate((fresh) => fresh.filter((x) => x.id !== id));
+    if (ok) toast("Contrat supprimé");
   };
 
   const badgeFor = (left: number | null) => {

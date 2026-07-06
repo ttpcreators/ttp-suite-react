@@ -37,9 +37,9 @@ async function authorize(req: Request): Promise<{ ok: boolean; via?: "cron" | "a
     if (error || !data?.user) return { ok: false };
     // is_agency() est SECURITY DEFINER mais lit auth.uid() ; en service-role
     // auth.uid() est null. On vérifie donc le rôle via la table profiles.
-    const { data: prof } = await sb
+    const { data: prof, error: profErr } = await sb
       .from("profiles").select("role").eq("user_id", data.user.id).maybeSingle<{ role: string }>();
-    if (prof?.role === "creator") return { ok: false };
+    if (profErr || !prof || prof.role !== "agency") return { ok: false }; // fail-closed
     return { ok: true, via: "agency" };
   } catch {
     return { ok: false };

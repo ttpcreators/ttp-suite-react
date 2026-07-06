@@ -14,7 +14,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { cn, titleCase } from "@/lib/utils";
-import { parseAmount, formatEuro, useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
+import { parseAmount, formatEuro, useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import type { AnimatedBadgeStatus } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
@@ -528,17 +528,28 @@ export function Facturation() {
       bankId: draft.bankId,
       notes: draft.notes,
     };
-    const nextDetails = { ...details, [id]: detailPart };
+    // Relire FRAIS avant de fusionner : deux postes peuvent créer des factures en
+    // parallèle → sinon l'instantané local périmé écrase les détails de l'autre.
+    invalidateAppState();
+    const freshState = await getAppState();
+    const freshDetails = (freshState["invoiceDetails"] as Record<string, Details>) ?? {};
+    const nextDetails = { ...freshDetails, [id]: detailPart };
     setDetails(nextDetails);
-    await saveAppStateKey("invoiceDetails", nextDetails);
+    const okDetails = await saveAppStateKey("invoiceDetails", nextDetails);
 
-    // Mémorise la commission par créateur
+    // Mémorise la commission par créateur (même relecture fraîche)
     if (draft.creator) {
-      const nextCom = { ...commissions, [draft.creator]: draft.commissionRate };
+      const freshCom = (freshState["creatorCommission"] as Record<string, number>) ?? {};
+      const nextCom = { ...freshCom, [draft.creator]: draft.commissionRate };
       setCommissions(nextCom);
       await saveAppStateKey("creatorCommission", nextCom);
     }
 
+    if (!okDetails) {
+      toast("Facture enregistrée, mais détails non synchronisés — réessaie");
+      setDraft(null);
+      return;
+    }
     toast(draft.id ? "Facture modifiée ✓" : "Facture créée ✓");
     setDraft(null);
   }
@@ -586,14 +597,15 @@ export function Facturation() {
   async function saveIssuer() {
     if (!issuerDraft) return;
     setIssuer(issuerDraft);
-    await saveAppStateKey("invoiceIssuer", issuerDraft);
+    const ok = await saveAppStateKey("invoiceIssuer", issuerDraft);
     setIssuerDraft(null);
-    toast("Émetteur enregistré ✓");
+    toast(ok ? "Émetteur enregistré ✓" : "Erreur — réessaie");
   }
 
   async function persistBanks(next: BankAccount[]) {
     setBanks(next);
-    await saveAppStateKey("invoiceBankAccounts", next);
+    const ok = await saveAppStateKey("invoiceBankAccounts", next);
+    if (!ok) toast("Erreur — réessaie");
   }
 
   const draftTotals = draft ? totalsOf(draft.items, draft.franchise, draft.vatRate, draft.commissionRate) : null;

@@ -21,9 +21,10 @@ async function requireAgency(req: Request): Promise<boolean> {
   const sb = getServiceClient();
   const { data, error } = await sb.auth.getUser(token);
   if (error || !data?.user) return false;
-  const { data: prof } = await sb
+  const { data: prof, error: profErr } = await sb
     .from("profiles").select("role").eq("user_id", data.user.id).maybeSingle<{ role: string }>();
-  return prof?.role !== "creator";
+  if (profErr || !prof) return false; // fail-closed : profil absent/illisible → refus
+  return prof.role === "agency";
 }
 
 Deno.serve(async (req: Request) => {

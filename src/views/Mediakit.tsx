@@ -123,15 +123,25 @@ export function Mediakit() {
       });
   }, []);
 
-  const saveTemplates = async (next: MailTemplate[]) => {
+  // Upsert/suppression d'un template sur l'état FRAIS (préserve les templates
+  // créés/modifiés depuis un autre poste — pas de merge jeté).
+  const upsertTemplate = async (tpl: MailTemplate): Promise<boolean> => {
     invalidateAppState();
     const fresh = ((await getAppState())["mailTemplates"] as MailTemplate[]) ?? [];
-    // Fusionne par id (préserve les templates créés depuis un autre poste).
-    const byId = new Map(fresh.map((t) => [t.id, t]));
-    for (const t of next) byId.set(t.id, t);
-    const merged = [...byId.values()].filter((t) => next.some((n) => n.id === t.id) || fresh.some((f) => f.id === t.id));
-    const ok = await saveAppStateKey("mailTemplates", next.length ? next : merged);
+    const base = fresh.length ? fresh : DEFAULT_TEMPLATES;
+    const next = base.some((t) => t.id === tpl.id) ? base.map((t) => (t.id === tpl.id ? tpl : t)) : [...base, tpl];
+    const ok = await saveAppStateKey("mailTemplates", next);
     if (!ok) toast("Template non enregistré — réessaie");
+    return ok;
+  };
+  const removeTemplate = async (id: string): Promise<boolean> => {
+    invalidateAppState();
+    const fresh = ((await getAppState())["mailTemplates"] as MailTemplate[]) ?? [];
+    const base = fresh.length ? fresh : DEFAULT_TEMPLATES;
+    const next = base.filter((t) => t.id !== id);
+    const ok = await saveAppStateKey("mailTemplates", next.length ? next : DEFAULT_TEMPLATES);
+    if (!ok) toast("Template non enregistré — réessaie");
+    return ok;
   };
 
   useEffect(() => {
@@ -560,9 +570,7 @@ export function Mediakit() {
                     type="button"
                     onClick={async () => {
                       if (!tplDraft.name.trim() || !tplDraft.subject.trim()) return toast("Nom et objet requis");
-                      const exists = templates.some((t) => t.id === tplDraft.id);
-                      const next = exists ? templates.map((t) => (t.id === tplDraft.id ? tplDraft : t)) : [...templates, tplDraft];
-                      await saveTemplates(next);
+                      if (!(await upsertTemplate(tplDraft))) return;
                       setTplId(tplDraft.id);
                       setTplDraft(null);
                       toast("Template enregistré ✓");
@@ -587,9 +595,7 @@ export function Mediakit() {
                     <button
                       type="button"
                       onClick={async () => {
-                        const next = templates.filter((x) => x.id !== t.id);
-                        await saveTemplates(next.length ? next : DEFAULT_TEMPLATES);
-                        toast("Template supprimé");
+                        if (await removeTemplate(t.id)) toast("Template supprimé");
                       }}
                       title="Supprimer"
                       className="grid h-8 w-8 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-[#E5484D]"
