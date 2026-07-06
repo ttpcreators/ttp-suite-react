@@ -64,7 +64,8 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       getAppState().catch(() => ({}) as Record<string, unknown>),
       supabase.from("todos").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
       supabase.from("ideas").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
-    ]).then(([inv, br, ev, app, tdC, idC]) => {
+      supabase.from("events").select("title,who,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
+    ]).then(([inv, br, ev, app, tdC, idC, evC]) => {
       if (!alive) return;
       if (inv.error || br.error || ev.error) {
         console.error("Chargement des notifications échoué:", { inv: inv.error, br: br.error, ev: ev.error });
@@ -92,6 +93,16 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
             title: "Nouvelle idée d'un créateur",
             description: `${i.creator ? titleCase(i.creator) : "Créateur"} · ${i.text}`,
             time: agoLabel(i.created_at),
+          }),
+        );
+      }
+      if (bellCreator && evC && !evC.error) {
+        ((evC.data as { title: string; who: string | null; created_at: string | null }[]) ?? []).forEach((e) =>
+          out.push({
+            id: `cev:${e.created_at}:${e.title.slice(0, 40)}`,
+            title: "Nouvel évènement d'un créateur",
+            description: `${e.who ? titleCase(e.who) : "Créateur"} · ${e.title}`,
+            time: agoLabel(e.created_at),
           }),
         );
       }

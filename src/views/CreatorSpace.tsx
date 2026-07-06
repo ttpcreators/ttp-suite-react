@@ -789,6 +789,7 @@ export function CreatorSpace({
                   title: e.title,
                   type: e.type,
                   who: name,
+                  source: "creator", // → notif cloche « Nouvel évènement d'un créateur »
                   sort_order: events.length + 1,
                 });
                 if (!created) {
