@@ -209,6 +209,7 @@ export function Contacts() {
   const [mailSig, setMailSig] = useState<MailSignature | null>(null);
   const [mailSeed, setMailSeed] = useState(0); // change → remonte le SignaturePicker (re-présélection du défaut)
   const [sending, setSending] = useState(false);
+  const [sendVia, setSendVia] = useState<"gmail" | "resend">("gmail"); // Gmail = ta vraie boîte ; Resend = domaine TTP
 
   useEffect(() => {
     let active = true;
@@ -340,19 +341,44 @@ export function Contacts() {
     setSending(true);
     try {
       const html = composeEmailHtml(mailBody.trim(), mailSig);
-      const { data, error } = await supabase.functions.invoke("send-email", { body: { to: recipients, subject, html } });
-      // supabase-js met le corps JSON des réponses non-2xx dans error.context, pas data.
-      let res = data as { ok?: boolean; sent?: number; total?: number; detail?: string } | null;
-      if (error && (error as { context?: { json?: () => Promise<unknown> } }).context?.json)
-        res = (await (error as { context: { json: () => Promise<unknown> } }).context.json().catch(() => null)) as typeof res;
-      if (!res?.ok) {
-        const d = (res?.detail ?? "").toLowerCase();
-        if (d.includes("domain") || d.includes("verif") || d.includes("testing"))
-          toast("Domaine non vérifié dans Resend — vérifie ttpcreators.pro.");
-        else toast(res?.detail ? `Échec : ${res.detail}` : "Envoi échoué — réessaie");
-        return;
+      const jsonOf = async (error: unknown, data: unknown) => {
+        if (error && (error as { context?: { json?: () => Promise<unknown> } }).context?.json)
+          return (await (error as { context: { json: () => Promise<unknown> } }).context.json().catch(() => null));
+        return data;
+      };
+
+      if (sendVia === "gmail") {
+        // L'API Gmail envoie 1:1 depuis ta boîte → un appel par destinataire.
+        const nameOf = (email: string) => pickContacts.find((c) => c.email.toLowerCase() === email)?.label;
+        let sent = 0;
+        let firstErr = "";
+        for (const to of recipients) {
+          const { data, error } = await supabase.functions.invoke("gmail-send", {
+            body: { to, subject, html, source: "manual", contactName: nameOf(to) },
+          });
+          const res = (await jsonOf(error, data)) as { ok?: boolean; error?: string } | null;
+          if (res?.ok) sent++;
+          else if (!firstErr) firstErr = res?.error ?? "";
+        }
+        if (sent === 0) {
+          if (firstErr === "google_non_connecte" || firstErr === "gmail_scope_manquant")
+            toast("Reconnecte Google (avec les droits Gmail) dans l'app.");
+          else toast("Envoi Gmail échoué — réessaie");
+          return;
+        }
+        toast(`Envoyé depuis Gmail ✓ (${sent}/${recipients.length} destinataire${recipients.length > 1 ? "s" : ""})`);
+      } else {
+        const { data, error } = await supabase.functions.invoke("send-email", { body: { to: recipients, subject, html } });
+        const res = (await jsonOf(error, data)) as { ok?: boolean; sent?: number; total?: number; detail?: string } | null;
+        if (!res?.ok) {
+          const d = (res?.detail ?? "").toLowerCase();
+          if (d.includes("domain") || d.includes("verif") || d.includes("testing"))
+            toast("Domaine non vérifié dans Resend — vérifie ttpcreators.pro.");
+          else toast(res?.detail ? `Échec : ${res.detail}` : "Envoi échoué — réessaie");
+          return;
+        }
+        toast(`Email envoyé ✓ (${res.sent}/${res.total} destinataire${(res.total ?? 0) > 1 ? "s" : ""})`);
       }
-      toast(`Email envoyé ✓ (${res.sent}/${res.total} destinataire${(res.total ?? 0) > 1 ? "s" : ""})`);
       setMailOpen(false);
       setMailRecipients([]);
       setMailSubject("");
@@ -798,8 +824,34 @@ export function Contacts() {
               </div>
             </div>
 
-            <div className="mt-5 flex items-center justify-between gap-3">
-              <span className="text-[10px] text-faint">Expéditeur : ton domaine TTP Creators</span>
+            <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
+              <div className="flex flex-col gap-1">
+                <div className="inline-flex overflow-hidden rounded-lg border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setSendVia("gmail")}
+                    className={cn(
+                      "px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                      sendVia === "gmail" ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-rowhover",
+                    )}
+                  >
+                    Gmail
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSendVia("resend")}
+                    className={cn(
+                      "px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                      sendVia === "resend" ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-rowhover",
+                    )}
+                  >
+                    Resend
+                  </button>
+                </div>
+                <span className="text-[10px] text-faint">
+                  {sendVia === "gmail" ? "Depuis ta boîte Gmail — réponses dans tes fils" : "Depuis ton domaine TTP (Resend)"}
+                </span>
+              </div>
               <div className="flex gap-2">
                 <button
                   type="button"
