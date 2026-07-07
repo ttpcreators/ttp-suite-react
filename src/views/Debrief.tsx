@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileBarChart, Pencil, Share2, Download, LayoutGrid, List, Table2, Trash2 } from "lucide-react";
+import { FileBarChart, Pencil, Share2, Download, LayoutGrid, List, Table2, Trash2, Send, Eye, X, FileText } from "lucide-react";
 import {
   useAppState,
   saveAppStateKey,
@@ -7,6 +7,7 @@ import {
   formatEuro,
   type AppState,
 } from "@/lib/appState";
+import { supabase } from "@/lib/supabase";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
@@ -89,6 +90,50 @@ function safeName(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "debrief";
 }
 
+function escHtml(s: string): string {
+  return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
+}
+
+/** Bilan de campagne en HTML « pro » (aperçu, email, impression PDF). */
+function debriefHTML(d: Debrief): string {
+  const burgundy = "#3d0000";
+  const kpis = d.kpis.filter((k) => k.v && k.v !== "—");
+  const cell = (k: Kpi) =>
+    `<td width="50%" style="padding:6px;vertical-align:top"><div style="border:1px solid #ececec;border-radius:12px;padding:12px 14px">` +
+    `<div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#8a8a8a">${escHtml(k.l)}</div>` +
+    `<div style="font-size:20px;font-weight:800;color:#111;margin-top:2px">${escHtml(k.v)}</div></div></td>`;
+  let kpiRows = "";
+  for (let i = 0; i < kpis.length; i += 2) {
+    kpiRows += `<tr>${cell(kpis[i])}${kpis[i + 1] ? cell(kpis[i + 1]) : '<td width="50%"></td>'}</tr>`;
+  }
+  const highlights = d.highlights
+    .filter(Boolean)
+    .map((h) => `<div style="margin:5px 0;font-size:14px;color:#222"><span style="color:#16a34a;font-weight:700">✓</span>&nbsp; ${escHtml(h)}</div>`)
+    .join("");
+  return (
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
+    `<body style="margin:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;color:#111">` +
+    `<div style="max-width:640px;margin:0 auto;padding:24px">` +
+    `<div style="background:#fff;border-radius:18px;overflow:hidden;border:1px solid #ececec">` +
+    `<div style="background:${burgundy};color:#fff;padding:22px 26px">` +
+    `<div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:.85">TTP Creators · Bilan de campagne</div>` +
+    `<div style="font-size:24px;font-weight:800;margin-top:6px">${escHtml(d.brand)}${d.creator ? ` × ${escHtml(titleCase(d.creator))}` : ""}</div>` +
+    (d.period && d.period !== "—" ? `<div style="opacity:.85;margin-top:2px">${escHtml(d.period)}</div>` : "") +
+    `</div><div style="padding:24px 26px">` +
+    `<table style="width:100%"><tr>` +
+    `<td style="font-size:15px;color:#333">Budget <b>${escHtml(d.budget)}</b> &nbsp;→&nbsp; CA généré <b style="color:#16a34a">${escHtml(d.revenue)}</b></td>` +
+    (d.roi && d.roi !== "—" ? `<td align="right"><span style="background:#dcfce7;color:#15803d;font-weight:800;border-radius:999px;padding:6px 14px;font-size:14px">ROI ${escHtml(d.roi)}</span></td>` : "") +
+    `</tr></table>` +
+    (d.deliverables && d.deliverables !== "—" ? `<div style="margin-top:10px;font-size:13px;color:#666">Livrables : ${escHtml(d.deliverables)}</div>` : "") +
+    (d.summary && d.summary !== "—" ? `<p style="margin:16px 0;font-size:14px;line-height:1.6;color:#222">${escHtml(d.summary)}</p>` : "") +
+    (kpis.length ? `<table style="width:100%;border-collapse:collapse;margin:8px 0">${kpiRows}</table>` : "") +
+    (highlights ? `<div style="margin-top:16px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8a8a8a;margin-bottom:6px">Points forts</div>${highlights}</div>` : "") +
+    `</div>` +
+    `<div style="border-top:1px solid #ececec;padding:16px 26px;font-size:12px;color:#8a8a8a">TTP Creators · Trust the Process · partnerships@ttpcreators.pro · ttpcreators.pro</div>` +
+    `</div></div></body></html>`
+  );
+}
+
 type DebriefView = "cards" | "list" | "table";
 
 export function Debrief() {
@@ -110,6 +155,19 @@ export function Debrief() {
   const [budget, setBudget] = useState("");
   const [revenue, setRevenue] = useState("");
   const [summary, setSummary] = useState("");
+  const [deliverables, setDeliverables] = useState("");
+  const [reach, setReach] = useState("");
+  const [engagement, setEngagement] = useState("");
+  const [clics, setClics] = useState("");
+  const [ventes, setVentes] = useState("");
+  const [highlightsText, setHighlightsText] = useState("");
+
+  // Partage à la marque (email)
+  const [shareD, setShareD] = useState<Debrief | null>(null);
+  const [shareTo, setShareTo] = useState("");
+  const [shareSubject, setShareSubject] = useState("");
+  const [shareVia, setShareVia] = useState<"gmail" | "resend">("gmail");
+  const [shareSending, setShareSending] = useState(false);
 
   const creatorOptions = [
     { value: "", label: "— Choisir —" },
@@ -123,8 +181,15 @@ export function Debrief() {
     setBudget("");
     setRevenue("");
     setSummary("");
+    setDeliverables("");
+    setReach("");
+    setEngagement("");
+    setClics("");
+    setVentes("");
+    setHighlightsText("");
     setEditIndex(null);
   }
+  const kpiVal = (d: Debrief, label: string) => d.kpis.find((k) => k.l.toLowerCase().startsWith(label.toLowerCase().slice(0, 5)))?.v ?? "";
 
   function openCreate() {
     resetForm();
@@ -140,6 +205,12 @@ export function Debrief() {
     setBudget(d.budget === "—" ? "" : d.budget);
     setRevenue(d.revenue === "—" ? "" : d.revenue);
     setSummary(d.summary === "—" ? "" : d.summary);
+    setDeliverables(d.deliverables === "—" ? "" : d.deliverables);
+    setReach(kpiVal(d, "Reach"));
+    setEngagement(kpiVal(d, "Engagement"));
+    setClics(kpiVal(d, "Clics"));
+    setVentes(kpiVal(d, "Ventes"));
+    setHighlightsText(d.highlights.join("\n"));
     setFormOpen(true);
   }
 
@@ -152,6 +223,14 @@ export function Debrief() {
     const budN = parseAmount(budget);
     const revN = parseAmount(revenue);
     const roi = budN > 0 ? (revN / budN).toFixed(1).replace(".", ",") + "×" : "—";
+    const kpis: Kpi[] = [
+      { l: "Reach", v: reach.trim() },
+      { l: "Engagement", v: engagement.trim() },
+      { l: "Clics", v: clics.trim() },
+      { l: "Ventes attribuées", v: ventes.trim() },
+    ].filter((k) => k.v);
+    const highlights = highlightsText.split("\n").map((h) => h.trim()).filter(Boolean);
+    const deliv = deliverables.trim() || "—";
     let next: Debrief[];
     if (editIndex !== null && list[editIndex]) {
       const prev = list[editIndex];
@@ -160,10 +239,13 @@ export function Debrief() {
         brand: b,
         creator: creator.trim(),
         period: period.trim() || "—",
+        deliverables: deliv,
         budget: budN ? formatEuro(budN) : "—",
         revenue: revN ? formatEuro(revN) : "—",
         roi,
         summary: summary.trim() || "—",
+        kpis,
+        highlights,
       };
       next = list.map((d, i) => (i === editIndex ? updated : d));
     } else {
@@ -171,14 +253,14 @@ export function Debrief() {
         brand: b,
         creator: creator.trim(),
         period: period.trim() || "—",
-        deliverables: "—",
+        deliverables: deliv,
         budget: budN ? formatEuro(budN) : "—",
         revenue: revN ? formatEuro(revN) : "—",
         roi,
         tone: "cyan",
         summary: summary.trim() || "—",
-        kpis: [],
-        highlights: [],
+        kpis,
+        highlights,
       };
       next = [item, ...list];
     }
@@ -229,12 +311,60 @@ export function Debrief() {
     toast("Debrief téléchargé ✓");
   }
 
+  function openShare(d: Debrief) {
+    setShareD(d);
+    setShareTo("");
+    setShareSubject(`Bilan de campagne — ${d.brand}`);
+    setShareVia("gmail");
+  }
+  function printDebrief(d: Debrief) {
+    const w = window.open("", "_blank");
+    if (w) {
+      w.document.write(debriefHTML(d));
+      w.document.close();
+      w.focus();
+      w.print();
+    } else toast("Autorise les pop-ups pour imprimer");
+  }
+  async function sendDebriefEmail() {
+    if (!shareD || shareSending) return;
+    const to = shareTo.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
+      toast("Email destinataire invalide");
+      return;
+    }
+    const subject = shareSubject.trim() || `Bilan de campagne — ${shareD.brand}`;
+    setShareSending(true);
+    try {
+      const html = debriefHTML(shareD);
+      const jsonOf = async (error: unknown, data: unknown) => {
+        if (error && (error as { context?: { json?: () => Promise<unknown> } }).context?.json)
+          return await (error as { context: { json: () => Promise<unknown> } }).context.json().catch(() => null);
+        return data;
+      };
+      const fn = shareVia === "gmail" ? "gmail-send" : "send-email";
+      const { data, error } = await supabase.functions.invoke(fn, { body: { to, subject, html, source: "debrief" } });
+      const res = (await jsonOf(error, data)) as { ok?: boolean; error?: string; detail?: string } | null;
+      if (!res?.ok) {
+        if (res?.error === "google_non_connecte" || res?.error === "gmail_scope_manquant") toast("Reconnecte Google (droits Gmail).");
+        else toast(res?.detail ? `Échec : ${res.detail}` : "Envoi échoué — réessaie");
+        return;
+      }
+      toast("Debrief envoyé à la marque ✓");
+      setShareD(null);
+    } finally {
+      setShareSending(false);
+    }
+  }
+
   const actions = (d: Debrief, index: number) => (
     <ActionMenu
       items={[
         { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(index) },
-        { key: "share", label: "Partager", icon: Share2, onClick: () => shareDebrief(d) },
-        { key: "download", label: "Télécharger", icon: Download, onClick: () => downloadDebrief(d) },
+        { key: "sharebrand", label: "Partager à la marque", icon: Send, onClick: () => openShare(d) },
+        { key: "preview", label: "Aperçu / PDF", icon: Eye, onClick: () => printDebrief(d) },
+        { key: "copy", label: "Copier le texte", icon: Share2, onClick: () => shareDebrief(d) },
+        { key: "download", label: "Télécharger (.txt)", icon: Download, onClick: () => downloadDebrief(d) },
         { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => remove(index), confirm: { title: "Supprimer le debrief", message: `Supprimer le debrief « ${d.brand} » ? Cette action est irréversible.` } },
       ]}
     />
@@ -340,6 +470,21 @@ export function Debrief() {
           placeholder="Bilan de la campagne…"
           className="min-w-full flex-[3]"
         />
+        <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="3 Reels · 5 Stories…" className="min-w-full flex-[2]" />
+        <TextField label="Reach" value={reach} onChange={setReach} placeholder="480 K" className="sm:min-w-[110px] flex-1" />
+        <TextField label="Engagement" value={engagement} onChange={setEngagement} placeholder="6,4 %" className="sm:min-w-[110px] flex-1" />
+        <TextField label="Clics" value={clics} onChange={setClics} placeholder="9 200" className="sm:min-w-[110px] flex-1" />
+        <TextField label="Ventes attribuées" value={ventes} onChange={setVentes} placeholder="310" className="sm:min-w-[130px] flex-1" />
+        <label className="flex min-w-full flex-col gap-1.5">
+          <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Points forts (un par ligne)</span>
+          <textarea
+            value={highlightsText}
+            onChange={(e) => setHighlightsText(e.target.value)}
+            rows={3}
+            placeholder={"Reel « routine matinale » : 210 K vues\nCode promo utilisé 310 fois en 10 jours"}
+            className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+          />
+        </label>
       </InlineForm>
 
       {/* Contenu */}
@@ -494,6 +639,53 @@ export function Debrief() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Partager le debrief à la marque */}
+      {shareD && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClick={() => !shareSending && setShareD(null)}>
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold">Partager le debrief à la marque</div>
+                <div className="truncate text-[11px] text-faint">{shareD.brand}{shareD.creator ? ` × ${titleCase(shareD.creator)}` : ""}</div>
+              </div>
+              <button type="button" onClick={() => setShareD(null)} className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Email de la marque</span>
+                  <input value={shareTo} onChange={(e) => setShareTo(e.target.value)} type="email" placeholder="contact@marque.com" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Objet</span>
+                  <input value={shareSubject} onChange={(e) => setShareSubject(e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" />
+                </label>
+              </div>
+              <div>
+                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Aperçu (ce que reçoit la marque)</div>
+                <iframe title="Aperçu debrief" srcDoc={debriefHTML(shareD)} className="h-[44vh] w-full rounded-lg border border-border bg-white" />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3.5">
+              <div className="inline-flex overflow-hidden rounded-lg border border-border">
+                <button type="button" onClick={() => setShareVia("gmail")} className={cn("px-3 py-1.5 text-[11px] font-semibold transition-colors", shareVia === "gmail" ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-rowhover")}>Gmail</button>
+                <button type="button" onClick={() => setShareVia("resend")} className={cn("border-l border-border px-3 py-1.5 text-[11px] font-semibold transition-colors", shareVia === "resend" ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-rowhover")}>Resend</button>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => printDebrief(shareD)} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover">
+                  <FileText className="h-3.5 w-3.5" /> PDF
+                </button>
+                <button type="button" onClick={sendDebriefEmail} disabled={shareSending} className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+                  <Send className="h-3.5 w-3.5" /> {shareSending ? "Envoi…" : "Envoyer"}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
