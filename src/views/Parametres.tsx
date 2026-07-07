@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BellRing, Smartphone, Sunrise, Users, Mail, CalendarDays } from "lucide-react";
+import { BellRing, Smartphone, Sunrise, Sun, Users, Mail, CalendarDays } from "lucide-react";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
@@ -19,6 +19,7 @@ export type NotifPrefs = {
   digestContracts?: boolean; // résumé matin : contrats ≤ 60 j
   digestInvoices?: boolean; // résumé matin : factures en retard
   digestWeekly?: boolean; // résumé du lundi : tâches & évènements de la semaine
+  digestAfternoon?: boolean; // point de mi-journée (14h) : ce qu'il reste à traiter
   emailReceivedBell?: boolean; // cloche : mail reçu sur la boîte agence
   emailReceivedPush?: boolean; // push : mail reçu sur la boîte agence
 };
@@ -200,6 +201,20 @@ export function Parametres() {
           hint="Les factures passées en statut « retard »."
           checked={on(prefs.digestInvoices)}
           onChange={(v) => setPref("digestInvoices", v)}
+        />
+      </Section>
+
+      {/* Point de mi-journée */}
+      <Section
+        icon={<Sun className="h-4 w-4" />}
+        title="Point de mi-journée"
+        hint="Chaque jour à 14h — un rappel de ce qu'il reste à traiter (coupe la journée en deux)."
+      >
+        <PrefRow
+          label="Rappel de 14h"
+          hint="Tâches & briefs encore à faire aujourd'hui, et évènements du jour."
+          checked={on(prefs.digestAfternoon)}
+          onChange={(v) => setPref("digestAfternoon", v)}
         />
       </Section>
 

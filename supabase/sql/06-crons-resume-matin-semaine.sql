@@ -58,5 +58,24 @@ select cron.schedule(
   $$
 );
 
+-- 3) MI-JOURNÉE — chaque jour à 14h. body {"kind":"afternoon"} → ce qu'il reste.
+select cron.unschedule('ttp-afternoon-digest')
+where exists (select 1 from cron.job where jobname = 'ttp-afternoon-digest');
+
+select cron.schedule(
+  'ttp-afternoon-digest',
+  '0 12,13 * * *',         -- 12h ET 13h UTC ; la fonction ne garde que 14h Paris
+  $$
+  select net.http_post(
+    url     := 'https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/daily-digest',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer <CRON_SECRET>',
+      'Content-Type',  'application/json'
+    ),
+    body    := '{"kind":"afternoon"}'::jsonb
+  );
+  $$
+);
+
 -- Vérifier :   select jobname, schedule, active from cron.job where jobname like 'ttp-%digest';
 -- Désactiver : select cron.unschedule('ttp-weekly-digest');

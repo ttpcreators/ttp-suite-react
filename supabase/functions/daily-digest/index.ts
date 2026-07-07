@@ -214,15 +214,44 @@ Deno.serve(async (req: Request) => {
     return jsonRes({ ok: true, test: true, ...r });
   }
 
-  // ─── Résumé poussé (cron) : QUOTIDIEN (défaut) ou HEBDO (body.kind="weekly") ───
-  // Le cron tape à 6h ET 7h UTC ; on ne garde QUE le passage où il est 8h à Paris
-  // (robuste au changement d'heure). `force:true` permet un test manuel hors 8h.
+  // ─── Résumé poussé (cron) : QUOTIDIEN 8h (défaut) · HEBDO lundi 8h (kind="weekly")
+  //     · MI-JOURNÉE 14h (kind="afternoon") ───
+  // Chaque cron tape à 2 heures UTC encadrant l'heure voulue ; on ne garde QUE le
+  // passage où il est l'heure cible à Paris (robuste au changement d'heure).
+  // `force:true` permet un test manuel hors créneau.
   const { hour, weekday } = parisParts();
   const weekly = body?.kind === "weekly";
+  const afternoon = body?.kind === "afternoon";
   const force = (body as { force?: boolean })?.force === true;
-  if (!force && hour !== 8) return jsonRes({ ok: true, skipped: "hors_8h", parisHour: hour });
+  const targetHour = afternoon ? 14 : 8;
+  if (!force && hour !== targetHour) return jsonRes({ ok: true, skipped: `hors_${targetHour}h`, parisHour: hour });
 
   const prefs = await loadPrefs(sb);
+
+  if (afternoon) {
+    // Point de MI-JOURNÉE : ce qu'il reste à traiter aujourd'hui (coupe la journée en 2).
+    if (!prefOn(prefs, "digestAfternoon")) return jsonRes({ ok: true, skipped: "pref_off_afternoon" });
+    const { data: tA } = await sb.from("todos").select("due,done");
+    const todosLeft = (tA ?? []).filter((t) => t.done !== true && dueOrPast(t.due, today)).length;
+    const { data: bA } = await sb.from("briefs").select("due");
+    const briefsLeft = (bA ?? []).filter((b) => dueOrPast(b.due, today)).length;
+    const tasksLeft = todosLeft + briefsLeft;
+    const { data: evA } = await sb.from("events").select("date")
+      .or("deleted.is.null,deleted.eq.false").eq("date", today);
+    const evToday = (evA ?? []).length;
+    const linesA: string[] = [];
+    if (tasksLeft) linesA.push(`✓ ${tasksLeft} tâche${tasksLeft > 1 ? "s" : ""}/brief${tasksLeft > 1 ? "s" : ""} encore à traiter`);
+    if (evToday) linesA.push(`📅 ${evToday} évènement${evToday > 1 ? "s" : ""} aujourd'hui`);
+    if (linesA.length === 0) return jsonRes({ ok: true, sent: 0, reason: "rien à signaler (mi-journée)", today });
+    const payloadA = JSON.stringify({
+      title: "TTP Suite — point de mi-journée",
+      body: linesA.join("\n"),
+      url: "/",
+      tag: `ttp-afternoon-${today}`,
+    });
+    const rA = await sendToAll(sb, payloadA);
+    return jsonRes({ ok: true, afternoon: true, ...rA, today });
+  }
 
   if (weekly) {
     // Résumé du LUNDI : tâches + évènements de la semaine (lundi → dimanche).
