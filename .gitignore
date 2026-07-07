@@ -3,3 +3,7 @@ dist/
 *.log
 
 scratch-*.png
+
+# Fichiers de travail temporaires
+scratch-*
+.scratch/

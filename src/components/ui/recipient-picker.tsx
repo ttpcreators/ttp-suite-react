@@ -125,7 +125,7 @@ export function RecipientPicker({
                   add(typed);
                   setQ("");
                 }}
-                className="flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left text-[12px] font-semibold text-primary hover:bg-rowhover"
+                className="flex min-h-[44px] w-full items-center gap-2 border-b border-border px-3 py-2 text-left text-[12px] font-semibold text-primary hover:bg-rowhover"
               >
                 <Plus className="h-3.5 w-3.5 shrink-0" /> Ajouter «&nbsp;{typed}&nbsp;»
               </button>
@@ -139,7 +139,7 @@ export function RecipientPicker({
                   add(c.email);
                   setQ("");
                 }}
-                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-rowhover"
+                className="flex min-h-[44px] w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-rowhover"
               >
                 <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">{c.label || c.email}</span>
                 <span className="shrink-0 truncate text-[11px] text-faint">{c.email}</span>

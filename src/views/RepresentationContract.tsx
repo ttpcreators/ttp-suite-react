@@ -176,30 +176,43 @@ export function RepresentationContract() {
     toast("Contrat téléchargé ✓ (ouvre-le puis Imprimer → PDF)");
   };
 
-  const persist = async (next: Configs) => {
+  // Relecture fraîche avant merge : ne pas écraser les cas d'autres créateurs.
+  const mutateConfigs = async (fn: (fresh: Configs) => Configs) => {
+    invalidateAppState();
+    const fresh = ((await getAppState())["representationConfigs"] as Configs) ?? {};
+    const next = fn(fresh);
     setLocalCfg(next);
-    await saveAppStateKey("representationConfigs", next);
+    const ok = await saveAppStateKey("representationConfigs", next);
+    if (!ok) toast("Erreur — réessaie");
+    return ok;
   };
-  const saveCase = () => {
+  const saveCase = async () => {
     if (!ctName) {
       toast("Choisis d'abord un créateur");
       return;
     }
     const name = caseName.trim() || "Cas";
     const cs: SavedCase = { id: uid(), name, config };
-    const list = configs[ctName] ?? [];
-    const idx = list.findIndex((c) => c.name.toLowerCase() === name.toLowerCase());
-    const nextList = idx >= 0 ? list.map((c, i) => (i === idx ? { ...cs, id: c.id } : c)) : [...list, cs];
-    persist({ ...configs, [ctName]: nextList });
-    toast(idx >= 0 ? `Cas « ${name} » mis à jour ✓` : `Cas « ${name} » enregistré ✓`);
+    let existed = false;
+    const ok = await mutateConfigs((fresh) => {
+      const list = fresh[ctName] ?? [];
+      const idx = list.findIndex((c) => c.name.toLowerCase() === name.toLowerCase());
+      existed = idx >= 0;
+      const nextList = idx >= 0 ? list.map((c, i) => (i === idx ? { ...cs, id: c.id } : c)) : [...list, cs];
+      return { ...fresh, [ctName]: nextList };
+    });
+    if (ok) toast(existed ? `Cas « ${name} » mis à jour ✓` : `Cas « ${name} » enregistré ✓`);
   };
   const loadCase = (cs: SavedCase) => {
     setConfig({ ...defaultConfig(cs.config.variante || "exclusif"), ...cs.config });
     setCaseName(cs.name);
   };
-  const deleteCase = (id: string) => {
-    persist({ ...configs, [ctName]: (configs[ctName] ?? []).filter((c) => c.id !== id) });
-    toast("Cas supprimé");
+  const deleteCase = async (id: string) => {
+    const ok = await mutateConfigs((fresh) => ({
+      ...fresh,
+      [ctName]: (fresh[ctName] ?? []).filter((c) => c.id !== id),
+    }));
+    if (ok) toast("Cas supprimé");
   };
 
   // ── Historique des contrats : enregistrer / charger / partager / supprimer ──
@@ -456,7 +469,7 @@ export function RepresentationContract() {
             </button>
           </>
         }>
-          <iframe title="Contrat de représentation" srcDoc={preview} className="h-[64vh] w-full rounded-lg border border-border bg-white" />
+          <iframe title="Contrat de représentation" srcDoc={preview} sandbox="" className="h-[64vh] w-full rounded-lg border border-border bg-white" />
         </Modal>
       )}
 

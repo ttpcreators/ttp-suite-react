@@ -804,28 +804,28 @@ export function Facturation() {
               </div>
               <div className="flex flex-col gap-2">
                 {draft.items.map((it) => (
-                  <div key={it.id} className="flex items-center gap-2">
+                  <div key={it.id} className="flex flex-wrap items-center gap-2">
                     <input
                       value={it.label}
                       onChange={(e) => setDraft({ ...draft, items: draft.items.map((x) => (x.id === it.id ? { ...x, label: e.target.value } : x)) })}
                       placeholder="Désignation (ex : Reel Instagram)"
-                      className="min-w-0 flex-[3] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                      className="min-w-0 basis-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:basis-0 sm:flex-[3]"
                     />
                     <input
                       value={String(it.qty)}
                       onChange={(e) => setDraft({ ...draft, items: draft.items.map((x) => (x.id === it.id ? { ...x, qty: num(e.target.value) } : x)) })}
                       inputMode="decimal"
                       placeholder="Qté"
-                      className="w-16 shrink-0 rounded-lg border border-border bg-surface px-2 py-2 text-center text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                      className="w-14 shrink-0 rounded-lg border border-border bg-surface px-2 py-2 text-center text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:w-16"
                     />
                     <input
                       value={String(it.unit)}
                       onChange={(e) => setDraft({ ...draft, items: draft.items.map((x) => (x.id === it.id ? { ...x, unit: num(e.target.value) } : x)) })}
                       inputMode="decimal"
                       placeholder="PU HT"
-                      className="w-24 shrink-0 rounded-lg border border-border bg-surface px-2 py-2 text-right text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                      className="w-20 shrink-0 rounded-lg border border-border bg-surface px-2 py-2 text-right text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:w-24"
                     />
-                    <span className="w-24 shrink-0 text-right text-sm font-semibold text-foreground">{euro2((it.qty || 0) * (it.unit || 0))}</span>
+                    <span className="flex-1 text-right text-sm font-semibold text-foreground sm:w-24 sm:flex-none">{euro2((it.qty || 0) * (it.unit || 0))}</span>
                     <button
                       type="button"
                       onClick={() => setDraft({ ...draft, items: draft.items.length > 1 ? draft.items.filter((x) => x.id !== it.id) : draft.items })}
@@ -984,7 +984,7 @@ export function Facturation() {
             </>
           }
         >
-          <iframe title={`Facture ${preview.ref}`} srcDoc={preview.html} className="h-[62vh] w-full rounded-lg border border-border bg-white" />
+          <iframe title={`Facture ${preview.ref}`} srcDoc={preview.html} sandbox="" className="h-[62vh] w-full rounded-lg border border-border bg-white" />
         </Modal>
       )}
     </>

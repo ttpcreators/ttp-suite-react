@@ -4,6 +4,8 @@ import { Progress } from "@/components/ui/progress";
 import {
   useAppState,
   saveAppStateKey,
+  getAppState,
+  invalidateAppState,
   parseAmount,
   type AppState,
 } from "@/lib/appState";
@@ -89,8 +91,12 @@ export function Objectifs() {
       tone: "indigo",
     };
     const isEdit = editIndex != null;
-    const next: Objective[] = isEdit ? list.map((o, i) => (i === editIndex ? item : o)) : [item, ...list];
-    const nextObj: ObjByMonth = { ...obj, "0": next };
+    // Relecture fraîche avant merge (évite d'écraser une écriture concurrente).
+    invalidateAppState();
+    const freshObj = ((await getAppState())["objByMonth"] as ObjByMonth) ?? {};
+    const freshList = freshObj["0"] ?? [];
+    const next: Objective[] = isEdit ? freshList.map((o, i) => (i === editIndex ? item : o)) : [item, ...freshList];
+    const nextObj: ObjByMonth = { ...freshObj, "0": next };
     setLocal(nextObj);
     setName("");
     setTarget("");
@@ -102,8 +108,11 @@ export function Objectifs() {
   }
 
   async function remove(index: number) {
-    const next = list.filter((_, i) => i !== index);
-    const nextObj: ObjByMonth = { ...obj, "0": next };
+    invalidateAppState();
+    const freshObj = ((await getAppState())["objByMonth"] as ObjByMonth) ?? {};
+    const freshList = freshObj["0"] ?? [];
+    const next = freshList.filter((_, i) => i !== index);
+    const nextObj: ObjByMonth = { ...freshObj, "0": next };
     setLocal(nextObj);
     const ok = await saveAppStateKey("objByMonth", nextObj);
     toast(ok ? "Supprimé" : "Erreur — réessaie");

@@ -11,7 +11,7 @@
 // ============================================================================
 
 import webpush from "npm:web-push@3.6.7";
-import { getServiceClient, getAccessToken, corsHeaders } from "../_shared/google.ts";
+import { getServiceClient, getAccessToken, corsHeaders, timingSafeEqualStr } from "../_shared/google.ts";
 
 const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
 const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
@@ -27,7 +27,7 @@ async function authorized(req: Request, sb: Sb): Promise<boolean> {
   const authz = req.headers.get("Authorization") ?? "";
   const bearer = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
   if (!bearer) return false;
-  if (CRON_SECRET && bearer === CRON_SECRET) return true;
+  if (CRON_SECRET && timingSafeEqualStr(bearer, CRON_SECRET)) return true;
   const { data, error } = await sb.auth.getUser(bearer);
   if (error || !data?.user) return false;
   const { data: prof, error: pe } = await sb.from("profiles").select("role").eq("user_id", data.user.id).maybeSingle<{ role: string }>();
@@ -117,19 +117,23 @@ Deno.serve(async (req: Request) => {
   const ids: string[] = ((list as { messages?: { id: string }[] }).messages ?? []).map((m) => m.id);
 
   let maxTs = lastTs;
-  const fresh: { id: string; threadId: string; from: string; subject: string; snippet: string }[] = [];
-  for (const id of ids) {
-    const mr = await fetch(`${GMAIL}/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`, { headers: { Authorization: `Bearer ${token}` } });
-    if (!mr.ok) continue;
-    const m = await mr.json().catch(() => null);
-    if (!m) continue;
-    const ts = Number(m.internalDate ?? 0);
-    if (ts <= lastTs) continue;
-    if (ts > maxTs) maxTs = ts;
-    const headers: Header[] = m.payload?.headers ?? [];
-    const h = (n: string) => headers.find((x) => x.name.toLowerCase() === n)?.value ?? "";
-    fresh.push({ id: m.id, threadId: m.threadId, from: h("from"), subject: h("subject"), snippet: String(m.snippet ?? "").slice(0, 180) });
-  }
+  type Fresh = { id: string; threadId: string; from: string; subject: string; snippet: string; ts: number };
+  // Métadonnées récupérées en parallèle (évite le N+1 séquentiel sur ~25 messages).
+  const metas = await Promise.all(
+    ids.map(async (id): Promise<Fresh | null> => {
+      const mr = await fetch(`${GMAIL}/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!mr.ok) return null;
+      const m = await mr.json().catch(() => null);
+      if (!m) return null;
+      const ts = Number(m.internalDate ?? 0);
+      if (ts <= lastTs) return null;
+      const headers: Header[] = m.payload?.headers ?? [];
+      const h = (n: string) => headers.find((x) => x.name.toLowerCase() === n)?.value ?? "";
+      return { id: m.id, threadId: m.threadId, from: h("from"), subject: h("subject"), snippet: String(m.snippet ?? "").slice(0, 180), ts };
+    }),
+  );
+  const fresh = metas.filter((x): x is Fresh => x !== null);
+  for (const f of fresh) if (f.ts > maxTs) maxTs = f.ts;
 
   // Enregistre les mails reçus (pour la cloche) — dédoublonné par gmail_message_id.
   for (const f of fresh) {

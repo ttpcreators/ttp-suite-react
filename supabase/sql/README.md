@@ -20,7 +20,8 @@ tu retrouves tout d'un coup d'œil, et c'est **versionné dans Git**.
 | [`04-todos-status.sql`](04-todos-status.sql) | 4 · Tâches status | Colonne `todos.status` (À faire/En cours/Fait) |
 | [`05-cron-alertes-email.sql`](05-cron-alertes-email.sql) | 5 · Cron alertes email | pg_cron `gmail-poll` toutes les 5 min |
 | [`crons-google-agenda.sql`](crons-google-agenda.sql) | Crons · Google Agenda | pg_cron watch-renew + sync |
-| [`push-subscriptions.sql`](push-subscriptions.sql) | Push · table push_subscriptions | Abonnements notifications push |
+| [`push-subscriptions.sql`](push-subscriptions.sql) | 🔒 Push · table push_subscriptions | Abonnements push — RLS cloisonnée (chacun ses lignes, agence tout) |
+| [`securite-avatars-storage.sql`](securite-avatars-storage.sql) | 🔒 Sécurité · storage avatars | Bucket avatars : upload ouvert, écrasement/suppression agence-only |
 | [`creators-reseaux-email-pro.sql`](creators-reseaux-email-pro.sql) | Créateurs · instagram/tiktok/email_pro | Colonnes réseaux + email pro |
 | [`contacts-prenom-nom.sql`](contacts-prenom-nom.sql) | Contacts · prénom / nom | Colonnes `first_name` / `last_name` |
 | [`admin-role-agence.sql`](admin-role-agence.sql) | Admin · Rôle agence (partnerships@) | Promeut un compte en agence (raccourci) |

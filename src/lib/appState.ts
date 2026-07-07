@@ -53,6 +53,26 @@ export function invalidateAppState() {
   _promise = null;
 }
 
+// Rafraîchissement partagé pour le tick "live". Sans ça, chaque vue montée
+// appelle invalidate()+getAppState() → invalidate remet _promise à null, donc
+// la déduplication saute et on déclenche N fetch réseau par tick. Ici, tous
+// les abonnés d'un même tick partagent UNE seule requête.
+let _refreshing: Promise<AppState> | null = null;
+export function refreshAppState(): Promise<AppState> {
+  if (_refreshing) return _refreshing;
+  _cache = null;
+  _refreshing = loadAppState()
+    .then((s) => {
+      _cache = s;
+      return s;
+    })
+    .finally(() => {
+      _refreshing = null;
+    });
+  _promise = _refreshing;
+  return _refreshing;
+}
+
 /**
  * Écrit une clé dans le blob __app_state__ (read-modify-write de tout le blob,
  * comme l'ancienne app). Réservé à l'AGENCE (RLS). Renvoie true si OK.
@@ -129,8 +149,8 @@ export function useAppState<T = AppState>(select?: (s: AppState) => T) {
   // chaque tick global : ce qu'un poste modifie apparaît sur les autres.
   useLive(() => {
     const gen = _writeGen;
-    invalidateAppState();
-    getAppState()
+    // Refresh partagé : une seule requête par tick pour toutes les vues montées.
+    refreshAppState()
       .then((s) => {
         // Ignore ce refetch si une écriture optimiste a démarré entre-temps
         // (sinon on annulerait visuellement la modif en cours).

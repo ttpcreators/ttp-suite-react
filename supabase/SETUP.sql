@@ -296,9 +296,22 @@ insert into storage.buckets (id, name, public)
   values ('avatars','avatars', true)
   on conflict (id) do nothing;
 
+-- Lecture : publique (bucket public), pas de policy nécessaire.
+-- Upload : tout compte connecté peut poser un avatar (chemins horodatés
+--   `slug/<timestamp>.ext` → jamais de collision, toujours un INSERT neuf).
+-- Écrasement / suppression : réservés à l'AGENCE — sinon n'importe quel
+--   créateur connecté pouvait supprimer ou remplacer l'avatar d'un autre.
 drop policy if exists avatars_obj_rw on storage.objects;
-create policy avatars_obj_rw on storage.objects for all to authenticated
-  using (bucket_id = 'avatars') with check (bucket_id = 'avatars');
+drop policy if exists avatars_obj_insert on storage.objects;
+drop policy if exists avatars_obj_update on storage.objects;
+drop policy if exists avatars_obj_delete on storage.objects;
+create policy avatars_obj_insert on storage.objects for insert to authenticated
+  with check (bucket_id = 'avatars');
+create policy avatars_obj_update on storage.objects for update to authenticated
+  using (bucket_id = 'avatars' and public.is_agency())
+  with check (bucket_id = 'avatars' and public.is_agency());
+create policy avatars_obj_delete on storage.objects for delete to authenticated
+  using (bucket_id = 'avatars' and public.is_agency());
 
 -- ============================================================================
 -- FIN. Vérif rapide (en étant DÉCONNECTÉ, ces requêtes doivent renvoyer 0 ligne) :

@@ -69,35 +69,29 @@ Deno.serve(async (req: Request) => {
   }
   const ids: string[] = ((list as { messages?: { id: string }[] }).messages ?? []).map((m) => m.id);
 
-  const messages: {
-    id: string; threadId: string; from: string; to: string; subject: string;
-    date: string; snippet: string; direction: "in" | "out"; ts: number;
-  }[] = [];
-  for (const id of ids) {
-    const mr = await fetch(
-      `${GMAIL}/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    if (!mr.ok) continue;
-    const m = await mr.json().catch(() => null);
-    if (!m) continue;
-    const headers: Header[] = m.payload?.headers ?? [];
-    const h = (name: string) => headers.find((x) => x.name.toLowerCase() === name)?.value ?? "";
-    const from = h("from");
-    const direction: "in" | "out" = from.toLowerCase().includes(contact) ? "in" : "out";
-    messages.push({
-      id: m.id,
-      threadId: m.threadId,
-      from,
-      to: h("to"),
-      subject: h("subject"),
-      date: h("date"),
-      snippet: String(m.snippet ?? "").slice(0, 200),
-      direction,
-      ts: Number(m.internalDate ?? 0),
-    });
-  }
-  messages.sort((a, b) => b.ts - a.ts);
+  type Msg = { id: string; threadId: string; from: string; to: string; subject: string; date: string; snippet: string; direction: "in" | "out"; ts: number };
+  // Parallèle (évite le N+1 séquentiel : ~15 messages en une salve au lieu d'un par un).
+  const fetched = await Promise.all(
+    ids.map(async (id): Promise<Msg | null> => {
+      const mr = await fetch(
+        `${GMAIL}/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!mr.ok) return null;
+      const m = await mr.json().catch(() => null);
+      if (!m) return null;
+      const headers: Header[] = m.payload?.headers ?? [];
+      const h = (name: string) => headers.find((x) => x.name.toLowerCase() === name)?.value ?? "";
+      const from = h("from");
+      return {
+        id: m.id, threadId: m.threadId, from, to: h("to"), subject: h("subject"), date: h("date"),
+        snippet: String(m.snippet ?? "").slice(0, 200),
+        direction: from.toLowerCase().includes(contact) ? "in" : "out",
+        ts: Number(m.internalDate ?? 0),
+      };
+    }),
+  );
+  const messages = fetched.filter((m): m is Msg => m !== null).sort((a, b) => b.ts - a.ts);
 
   return jsonRes({ ok: true, messages });
 });

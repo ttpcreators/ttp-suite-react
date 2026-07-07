@@ -10,7 +10,7 @@
 // ============================================================================
 
 import webpush from "npm:web-push@3.6.7";
-import { getServiceClient, corsHeaders } from "../_shared/google.ts";
+import { getServiceClient, corsHeaders, timingSafeEqualStr } from "../_shared/google.ts";
 
 const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
 const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
@@ -66,7 +66,7 @@ async function identify(req: Request): Promise<Caller> {
   const authz = req.headers.get("Authorization") ?? "";
   const bearer = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
   if (!bearer) return null;
-  if (CRON_SECRET && bearer === CRON_SECRET) return { role: "cron" };
+  if (CRON_SECRET && timingSafeEqualStr(bearer, CRON_SECRET)) return { role: "cron" };
   const sb = getServiceClient();
   const { data, error } = await sb.auth.getUser(bearer);
   if (!error && data?.user) {

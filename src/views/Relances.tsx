@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Copy, Mail, BellRing, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useAppState, saveAppStateKey, parseAmount, formatEuro, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";
 import { titleCase } from "@/lib/utils";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -123,8 +123,11 @@ export function Relances() {
   };
 
   const markReminded = async (id: string) => {
-    const cur = reminders[id];
-    const next: Reminders = { ...reminders, [id]: { last: todayISO(), count: (cur?.count ?? 0) + 1 } };
+    // Relecture fraîche : ne pas écraser les compteurs de relance d'autres factures.
+    invalidateAppState();
+    const fresh = ((await getAppState())["invoiceReminders"] as Reminders) ?? {};
+    const cur = fresh[id];
+    const next: Reminders = { ...fresh, [id]: { last: todayISO(), count: (cur?.count ?? 0) + 1 } };
     await saveReminders(next);
     toast("Relance enregistrée ✓");
   };

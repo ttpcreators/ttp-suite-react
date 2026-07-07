@@ -84,8 +84,10 @@ Deno.serve(async (req: Request) => {
   const attachments = (Array.isArray(body.attachments) ? body.attachments : []).filter((a) => a?.contentBase64);
   const base = [`To: ${to}`, `Subject: ${encSubject(subject)}`, "MIME-Version: 1.0"];
   if (body.inReplyTo) {
-    base.push(`In-Reply-To: ${body.inReplyTo}`);
-    base.push(`References: ${body.inReplyTo}`);
+    // Anti-injection d'entêtes MIME : jamais de CR/LF dans une valeur d'entête.
+    const irt = String(body.inReplyTo).replace(/[\r\n]/g, "").slice(0, 400);
+    base.push(`In-Reply-To: ${irt}`);
+    base.push(`References: ${irt}`);
   }
 
   let mime: string;

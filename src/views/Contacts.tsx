@@ -438,19 +438,26 @@ export function Contacts() {
 
       if (sendVia === "gmail") {
         // L'API Gmail envoie 1:1 depuis ta boîte → un appel par destinataire.
+        // Parallélisé par lots de 4 pour rester rapide sans saturer le quota Gmail.
         const nameOf = (email: string) => pickContacts.find((c) => c.email.toLowerCase() === email)?.label;
+        const attach = attachments.map((a) => ({ filename: a.filename, mimeType: a.mimeType, contentBase64: a.contentBase64 }));
         let sent = 0;
         let firstErr = "";
-        for (const to of recipients) {
-          const { data, error } = await supabase.functions.invoke("gmail-send", {
-            body: {
-              to, subject, html, source: "manual", contactName: nameOf(to),
-              attachments: attachments.map((a) => ({ filename: a.filename, mimeType: a.mimeType, contentBase64: a.contentBase64 })),
-            },
-          });
-          const res = (await jsonOf(error, data)) as { ok?: boolean; error?: string } | null;
-          if (res?.ok) sent++;
-          else if (!firstErr) firstErr = res?.error ?? "";
+        const BATCH = 4;
+        for (let i = 0; i < recipients.length; i += BATCH) {
+          const chunk = recipients.slice(i, i + BATCH);
+          const results = await Promise.all(
+            chunk.map(async (to) => {
+              const { data, error } = await supabase.functions.invoke("gmail-send", {
+                body: { to, subject, html, source: "manual", contactName: nameOf(to), attachments: attach },
+              });
+              return (await jsonOf(error, data)) as { ok?: boolean; error?: string } | null;
+            }),
+          );
+          for (const res of results) {
+            if (res?.ok) sent++;
+            else if (!firstErr) firstErr = res?.error ?? "";
+          }
         }
         if (sent === 0) {
           if (firstErr === "google_non_connecte" || firstErr === "gmail_scope_manquant")
@@ -485,9 +492,13 @@ export function Contacts() {
   };
 
   // Contacts avec un email valide, pour le sélecteur de destinataires.
-  const pickContacts: PickContact[] = (rows ?? [])
-    .filter((r) => r.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email))
-    .map((r) => ({ email: r.email, label: [r.brand, r.person].filter((x) => x && x !== "—").join(" · ") || r.email, tag: r.tag }));
+  const pickContacts: PickContact[] = useMemo(
+    () =>
+      (rows ?? [])
+        .filter((r) => r.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email))
+        .map((r) => ({ email: r.email, label: [r.brand, r.person].filter((x) => x && x !== "—").join(" · ") || r.email, tag: r.tag })),
+    [rows],
+  );
 
   const submit = async () => {
     if (!brand.trim()) {

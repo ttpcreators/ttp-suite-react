@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Copy, Check, Plus, Trash2, Save, FileText, Eye, X } from "lucide-react";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
-import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { TextField } from "@/components/ui/form";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
@@ -278,25 +278,37 @@ export function Contrats() {
   };
 
   // ── Cas de configuration (par créateur) ──
-  const persistConfigs = async (next: ContractConfigs) => {
+  // Relecture fraîche avant merge : ne pas écraser les cas d'autres créateurs.
+  const mutateConfigs = async (fn: (fresh: ContractConfigs) => ContractConfigs) => {
+    invalidateAppState();
+    const fresh = ((await getAppState())["contractConfigs"] as ContractConfigs) ?? {};
+    const next = fn(fresh);
     setLocalCfg(next);
-    await saveAppStateKey("contractConfigs", next);
+    const ok = await saveAppStateKey("contractConfigs", next);
+    if (!ok) toast("Erreur — réessaie");
+    return ok;
   };
 
-  const saveCase = () => {
+  const saveCase = async () => {
     const name = caseName.trim() || "Cas";
     const cs: ContractCase = { id: uid(), name, ctType, brand, value, commission, duration, deliverables, excl, extra };
-    const list = configs[ctName] ?? [];
-    const idx = list.findIndex((c) => c.name.toLowerCase() === name.toLowerCase());
-    const nextList = idx >= 0 ? list.map((c, i) => (i === idx ? { ...cs, id: c.id } : c)) : [...list, cs];
-    persistConfigs({ ...configs, [ctName]: nextList });
-    toast(idx >= 0 ? `Cas « ${name} » mis à jour ✓` : `Cas « ${name} » enregistré ✓`);
+    let existed = false;
+    const ok = await mutateConfigs((fresh) => {
+      const list = fresh[ctName] ?? [];
+      const idx = list.findIndex((c) => c.name.toLowerCase() === name.toLowerCase());
+      existed = idx >= 0;
+      const nextList = idx >= 0 ? list.map((c, i) => (i === idx ? { ...cs, id: c.id } : c)) : [...list, cs];
+      return { ...fresh, [ctName]: nextList };
+    });
+    if (ok) toast(existed ? `Cas « ${name} » mis à jour ✓` : `Cas « ${name} » enregistré ✓`);
   };
 
-  const deleteCase = (id: string) => {
-    const nextList = (configs[ctName] ?? []).filter((c) => c.id !== id);
-    persistConfigs({ ...configs, [ctName]: nextList });
-    toast("Cas supprimé");
+  const deleteCase = async (id: string) => {
+    const ok = await mutateConfigs((fresh) => ({
+      ...fresh,
+      [ctName]: (fresh[ctName] ?? []).filter((c) => c.id !== id),
+    }));
+    if (ok) toast("Cas supprimé");
   };
 
   const typeToggle = (
@@ -517,7 +529,7 @@ export function Contrats() {
             </>
           }
         >
-          <iframe title={`Contrat ${ref}`} srcDoc={preview} className="h-[64vh] w-full rounded-lg border border-border bg-white" />
+          <iframe title={`Contrat ${ref}`} srcDoc={preview} sandbox="" className="h-[64vh] w-full rounded-lg border border-border bg-white" />
         </Modal>
       )}
       {pendingDel && (

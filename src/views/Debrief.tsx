@@ -3,6 +3,8 @@ import { FileBarChart, Pencil, Share2, Download, LayoutGrid, List, Table2, Trash
 import {
   useAppState,
   saveAppStateKey,
+  getAppState,
+  invalidateAppState,
   parseAmount,
   formatEuro,
   type AppState,
@@ -92,6 +94,11 @@ function safeName(s: string): string {
 
 function escHtml(s: string): string {
   return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
+}
+
+/** Signature stable d'un debrief (pour fusionner sans index, le tableau étant partagé). */
+function debriefSig(d: Debrief): string {
+  return JSON.stringify([d.brand, d.creator, d.period, d.budget, d.revenue, d.summary, d.deliverables, d.kpis, d.highlights]);
 }
 
 /** Bilan de campagne en HTML « pro » (aperçu, email, impression PDF). */
@@ -231,49 +238,45 @@ export function Debrief() {
     ].filter((k) => k.v);
     const highlights = highlightsText.split("\n").map((h) => h.trim()).filter(Boolean);
     const deliv = deliverables.trim() || "—";
-    let next: Debrief[];
-    if (editIndex !== null && list[editIndex]) {
-      const prev = list[editIndex];
-      const updated: Debrief = {
-        ...prev,
-        brand: b,
-        creator: creator.trim(),
-        period: period.trim() || "—",
-        deliverables: deliv,
-        budget: budN ? formatEuro(budN) : "—",
-        revenue: revN ? formatEuro(revN) : "—",
-        roi,
-        summary: summary.trim() || "—",
-        kpis,
-        highlights,
-      };
-      next = list.map((d, i) => (i === editIndex ? updated : d));
-    } else {
-      const item: Debrief = {
-        brand: b,
-        creator: creator.trim(),
-        period: period.trim() || "—",
-        deliverables: deliv,
-        budget: budN ? formatEuro(budN) : "—",
-        revenue: revN ? formatEuro(revN) : "—",
-        roi,
-        tone: "cyan",
-        summary: summary.trim() || "—",
-        kpis,
-        highlights,
-      };
-      next = [item, ...list];
-    }
-    const wasEdit = editIndex !== null;
-    setLocal(next);
+    const wasEdit = editIndex !== null && !!list[editIndex];
+    const original = wasEdit ? list[editIndex] : null;
+    const built: Debrief = {
+      ...(original ?? { tone: "cyan" }),
+      brand: b,
+      creator: creator.trim(),
+      period: period.trim() || "—",
+      deliverables: deliv,
+      budget: budN ? formatEuro(budN) : "—",
+      revenue: revN ? formatEuro(revN) : "—",
+      roi,
+      tone: original?.tone ?? "cyan",
+      summary: summary.trim() || "—",
+      kpis,
+      highlights,
+    };
     resetForm();
     setFormOpen(false);
+    // Relecture FRAÎCHE + fusion par signature (le tableau est partagé entre postes).
+    invalidateAppState();
+    const fresh = ((await getAppState())["debriefData"] as Debrief[]) ?? [];
+    let next: Debrief[];
+    if (original) {
+      const os = debriefSig(original);
+      const idx = fresh.findIndex((d) => debriefSig(d) === os);
+      next = idx >= 0 ? fresh.map((d, i) => (i === idx ? built : d)) : [built, ...fresh];
+    } else {
+      next = [built, ...fresh];
+    }
+    setLocal(next);
     const ok = await saveAppStateKey("debriefData", next);
     toast(ok ? (wasEdit ? "Debrief modifié ✓" : "Debrief créé ✓") : "Erreur — réessaie");
   }
 
-  async function remove(index: number) {
-    const next = list.filter((_, i) => i !== index);
+  async function remove(d: Debrief) {
+    invalidateAppState();
+    const fresh = ((await getAppState())["debriefData"] as Debrief[]) ?? [];
+    const s = debriefSig(d);
+    const next = fresh.filter((x) => debriefSig(x) !== s);
     setLocal(next);
     const ok = await saveAppStateKey("debriefData", next);
     toast(ok ? "Supprimé" : "Erreur — réessaie");
@@ -365,7 +368,7 @@ export function Debrief() {
         { key: "preview", label: "Aperçu / PDF", icon: Eye, onClick: () => printDebrief(d) },
         { key: "copy", label: "Copier le texte", icon: Share2, onClick: () => shareDebrief(d) },
         { key: "download", label: "Télécharger (.txt)", icon: Download, onClick: () => downloadDebrief(d) },
-        { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => remove(index), confirm: { title: "Supprimer le debrief", message: `Supprimer le debrief « ${d.brand} » ? Cette action est irréversible.` } },
+        { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => remove(d), confirm: { title: "Supprimer le debrief", message: `Supprimer le debrief « ${d.brand} » ? Cette action est irréversible.` } },
       ]}
     />
   );
@@ -668,7 +671,7 @@ export function Debrief() {
               </div>
               <div>
                 <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Aperçu (ce que reçoit la marque)</div>
-                <iframe title="Aperçu debrief" srcDoc={debriefHTML(shareD)} className="h-[44vh] w-full rounded-lg border border-border bg-white" />
+                <iframe title="Aperçu debrief" srcDoc={debriefHTML(shareD)} sandbox="" className="h-[44vh] w-full rounded-lg border border-border bg-white" />
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3.5">

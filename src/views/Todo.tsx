@@ -443,14 +443,16 @@ export function Todo() {
         <div className="flex flex-col gap-3">
           {filtered.map((row) => {
             const toggleDone = async (next: boolean) => {
-              if (await dbUpdate("todos", row.id, { done: next })) {
+              // Garde la case et le statut synchronisés (coché = « Fait »).
+              const status = next ? "Fait" : "À faire";
+              if (await dbUpdate("todos", row.id, { done: next, status })) {
                 setRows((prev) =>
                   (prev ?? []).map((r) =>
-                    r.id === row.id ? { ...r, done: next } : r
+                    r.id === row.id ? { ...r, done: next, status } : r
                   )
                 );
                 setSelectedTodo((prev) =>
-                  prev?.id === row.id ? { ...prev, done: next } : prev
+                  prev?.id === row.id ? { ...prev, done: next, status } : prev
                 );
                 toast(next ? "Fait ✓" : "À refaire");
               } else {

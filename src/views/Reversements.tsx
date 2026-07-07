@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useAppState, saveAppStateKey, parseAmount, formatEuro, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";
 import { useCreators } from "@/lib/useCreators";
 import { commissionMap } from "@/lib/commission";
 import { titleCase, initials } from "@/lib/utils";
@@ -96,10 +96,16 @@ export function Reversements() {
   const totalDu = rows.reduce((s, r) => s + r.du, 0);
   const totalReverse = rows.reduce((s, r) => s + r.reverse, 0);
 
-  const savePayouts = async (next: PayoutsMap) => {
+  // Relit FRAIS le blob et ne fusionne QUE le créateur modifié (paiements = argent :
+  // deux postes ne doivent jamais s'écraser). Renvoie le booléen d'écriture.
+  const mutatePayouts = async (creator: string, fn: (arr: Payout[]) => Payout[]): Promise<boolean> => {
+    invalidateAppState();
+    const fresh = ((await getAppState())["creatorPayouts"] as PayoutsMap) ?? {};
+    const next: PayoutsMap = { ...fresh, [creator]: fn(fresh[creator] ?? []) };
     setLocalPayouts(next);
     const ok = await saveAppStateKey("creatorPayouts", next);
     if (!ok) toast("Erreur — réessaie");
+    return ok;
   };
 
   const [openFor, setOpenFor] = useState<string | null>(null);
@@ -121,15 +127,13 @@ export function Reversements() {
       return;
     }
     const entry: Payout = { id: uid(), date: date || todayISO(), amount: n, note: note.trim() || undefined };
-    const next: PayoutsMap = { ...payoutsMap, [creator]: [entry, ...(payoutsMap[creator] ?? [])] };
     setOpenFor(null);
-    await savePayouts(next);
-    toast("Paiement enregistré ✓");
+    const ok = await mutatePayouts(creator, (arr) => [entry, ...arr]);
+    if (ok) toast("Paiement enregistré ✓");
   };
   const removePayout = async (creator: string, id: string) => {
-    const next: PayoutsMap = { ...payoutsMap, [creator]: (payoutsMap[creator] ?? []).filter((p) => p.id !== id) };
-    await savePayouts(next);
-    toast("Paiement supprimé");
+    const ok = await mutatePayouts(creator, (arr) => arr.filter((p) => p.id !== id));
+    if (ok) toast("Paiement supprimé");
   };
 
   if (error)
