@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/toast";
 import { Notifications } from "@/components/ui/notifications";
 import { useNotifications } from "@/lib/useNotifications";
 import { Sidebar } from "@/components/Sidebar";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Login } from "@/components/Login";
 import { NAV, findItem, type NavItem, type ViewId } from "@/lib/nav";
 import { supabase } from "@/lib/supabase";
@@ -328,32 +329,35 @@ export default function App() {
               </div>
             </header>
 
-            {/* Content */}
+            {/* Content — barrière d'erreur par vue : une page qui plante n'emporte
+                pas la navigation, et un changement de page relance le rendu. */}
             <main className="px-4 pt-5 md:px-6">
-              <Suspense fallback={<div className="grid min-h-[50vh] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
-                {space === "portal" ? (
-                  <Portal
-                    creator={portalCreator}
-                    onPick={setPortalCreator}
-                    onExit={() => setSpace("agency")}
-                  />
-                ) : detailCreator ? (
-                  <CreatorDetail
-                    name={detailCreator}
-                    onBack={() => setDetailCreator(null)}
-                    onOpenPortal={openPortal}
-                  />
-                ) : (
-                  <>
-                    {active !== "apercu" && (
-                      <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">
-                        {title}
-                      </h1>
-                    )}
-                    <ViewContent active={active} onOpenCreator={openDetail} />
-                  </>
-                )}
-              </Suspense>
+              <ErrorBoundary variant="inline" label="Cette page" resetKey={`${space}:${detailCreator ?? ""}:${active}`}>
+                <Suspense fallback={<div className="grid min-h-[50vh] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+                  {space === "portal" ? (
+                    <Portal
+                      creator={portalCreator}
+                      onPick={setPortalCreator}
+                      onExit={() => setSpace("agency")}
+                    />
+                  ) : detailCreator ? (
+                    <CreatorDetail
+                      name={detailCreator}
+                      onBack={() => setDetailCreator(null)}
+                      onOpenPortal={openPortal}
+                    />
+                  ) : (
+                    <>
+                      {active !== "apercu" && (
+                        <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">
+                          {title}
+                        </h1>
+                      )}
+                      <ViewContent active={active} onOpenCreator={openDetail} />
+                    </>
+                  )}
+                </Suspense>
+              </ErrorBoundary>
             </main>
             </div>
           </div>
