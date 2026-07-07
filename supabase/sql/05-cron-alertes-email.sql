@@ -10,7 +10,7 @@ select cron.schedule(
   select net.http_post(
     url := 'https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/gmail-poll',
     headers := jsonb_build_object(
-      'Authorization','Bearer nq66DO+Bw8X7g6e2xu5jpAMrQuV45ixarQll2O7z9bBEMqBb0oTpCKB3v7KOo33r.',
+      'Authorization','Bearer nq66DO+Bw8X7g6e2xu5jpAMrQuV45ixarQll2O7z9bBEMqBb0oTpCKB3v7KOo33r',
       'Content-Type','application/json'),
     body := '{}'::jsonb
   );
