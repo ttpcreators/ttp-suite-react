@@ -11,7 +11,7 @@ import { toast } from "@/components/ui/toast";
  * gmail-thread). Réservé à l'agence (les fonctions vérifient le rôle).
  */
 type Contact = { email: string; label: string; tag?: string };
-type MailMsg = { id: string; threadId: string; from: string; to?: string; subject: string; date: string; snippet: string; direction: "in" | "out" };
+type MailMsg = { id: string; threadId: string; from: string; to?: string; subject: string; date: string; snippet: string; direction: "in" | "out"; source?: string };
 type ThreadMsg = { id: string; from: string; to?: string; subject: string; date: string; html: string; text: string; direction: "in" | "out"; ts: number };
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -103,11 +103,35 @@ export function Mails() {
     let alive = true;
     setHistoryBusy(true);
     (async () => {
-      const res = await invokeJson<{ ok?: boolean; messages?: MailMsg[]; error?: string }>("gmail-history", { contact: email });
+      // Gmail (fils réels) + email_activity (envois Resend / media kit non présents dans Gmail).
+      const [res, act] = await Promise.all([
+        invokeJson<{ ok?: boolean; messages?: MailMsg[]; error?: string }>("gmail-history", { contact: email }),
+        supabase
+          .from("email_activity")
+          .select("subject,snippet,direction,source,created_at,thread_id,gmail_message_id")
+          .eq("contact_email", email)
+          .order("created_at", { ascending: false })
+          .limit(20),
+      ]);
       if (!alive) return;
       if (res?.error === "google_non_connecte" || res?.error === "gmail_scope_manquant")
         setHistoryErr("Reconnecte Google (droits Gmail) dans l'app pour lire tes mails.");
-      setHistory(res?.ok ? res.messages ?? [] : []);
+      const gmail = res?.ok ? res.messages ?? [] : [];
+      const gmailIds = new Set(gmail.map((m) => m.id));
+      const extra: MailMsg[] = ((act.data as { subject: string | null; snippet: string | null; direction: string | null; source: string | null; created_at: string | null; thread_id: string | null; gmail_message_id: string | null }[]) ?? [])
+        .filter((a) => a.source && a.source !== "manual" && (!a.gmail_message_id || !gmailIds.has(a.gmail_message_id)))
+        .map((a) => ({
+          id: `act-${a.created_at}-${a.subject ?? ""}`.slice(0, 60),
+          threadId: a.thread_id ?? "",
+          from: "",
+          subject: a.subject ?? "",
+          date: a.created_at ?? "",
+          snippet: a.snippet ?? "",
+          direction: a.direction === "in" ? "in" : "out",
+          source: a.source ?? undefined,
+        }));
+      const merged = [...gmail, ...extra].sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime());
+      setHistory(merged);
       setHistoryBusy(false);
     })();
     return () => {
@@ -240,8 +264,11 @@ export function Mails() {
                     <button
                       key={m.id}
                       type="button"
-                      onClick={() => openThread(m)}
-                      className="flex w-full items-start gap-3 rounded-xl border border-border bg-panel px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-rowhover"
+                      onClick={() => m.threadId && openThread(m)}
+                      className={cn(
+                        "flex w-full items-start gap-3 rounded-xl border border-border bg-panel px-3 py-2.5 text-left transition-colors",
+                        m.threadId ? "hover:border-primary/40 hover:bg-rowhover" : "cursor-default",
+                      )}
                     >
                       <span
                         className={cn(
@@ -253,7 +280,12 @@ export function Mails() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-[12px] font-semibold text-foreground">{m.subject || "(sans objet)"}</span>
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="truncate text-[12px] font-semibold text-foreground">{m.subject || "(sans objet)"}</span>
+                            {m.source === "mediakit" && (
+                              <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase text-primary">Media kit</span>
+                            )}
+                          </span>
                           <span className="shrink-0 text-[10px] text-faint">{fmtDate(m.date)}</span>
                         </div>
                         <div className="truncate text-[11px] text-faint">{m.snippet}</div>

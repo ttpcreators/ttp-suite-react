@@ -38,7 +38,7 @@ Deno.serve(async (req: Request) => {
   if (!RESEND_API_KEY) return jsonRes({ error: "resend_non_configure" }, 500);
 
   let body: {
-    to?: string | string[]; subject?: string; html?: string; replyTo?: string;
+    to?: string | string[]; subject?: string; html?: string; replyTo?: string; source?: string;
     attachments?: { filename?: string; contentBase64?: string }[];
   } = {};
   try {
@@ -75,8 +75,17 @@ Deno.serve(async (req: Request) => {
         headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (r.ok) sent++;
-      else {
+      if (r.ok) {
+        sent++;
+        // Journal unifié (best-effort) : l'envoi Resend apparaît dans l'historique.
+        await sb.from("email_activity").insert({
+          contact_email: to,
+          direction: "out",
+          subject,
+          snippet: html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180),
+          source: typeof body.source === "string" ? body.source : "manual",
+        }).catch(() => {});
+      } else {
         const data = await r.json().catch(() => ({}));
         errors.push(`${to}: ${String((data as { message?: string })?.message ?? r.status).slice(0, 160)}`);
       }

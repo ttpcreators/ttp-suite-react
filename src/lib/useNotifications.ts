@@ -57,6 +57,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
     invalidateAppState();
     const todayStr = todayISO();
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+    const emailSince = new Date(Date.now() - 3 * 86400000).toISOString(); // emails reçus : 72 h
     Promise.all([
       supabase.from("invoices").select("id,party,amount,status").eq("status", "retard"),
       supabase.from("briefs").select("id,brand,creator,status").eq("status", "valider"),
@@ -65,7 +66,8 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       supabase.from("todos").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
       supabase.from("ideas").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
       supabase.from("events").select("title,who,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
-    ]).then(([inv, br, ev, app, tdC, idC, evC]) => {
+      supabase.from("email_activity").select("subject,contact_name,contact_email,created_at,gmail_message_id").eq("direction", "in").gte("created_at", emailSince).order("created_at", { ascending: false }).limit(8),
+    ]).then(([inv, br, ev, app, tdC, idC, evC, mailIn]) => {
       if (!alive) return;
       if (inv.error || br.error || ev.error) {
         console.error("Chargement des notifications échoué:", { inv: inv.error, br: br.error, ev: ev.error });
@@ -102,6 +104,18 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
             id: `cev:${e.created_at}:${e.title.slice(0, 40)}`,
             title: "Nouvel évènement d'un créateur",
             description: `${e.who ? titleCase(e.who) : "Créateur"} · ${e.title}`,
+            time: agoLabel(e.created_at),
+          }),
+        );
+      }
+      // Emails reçus sur la boîte agence (remplis par gmail-poll) — désactivable.
+      const bellEmail = prefs.emailReceivedBell !== false;
+      if (bellEmail && mailIn && !mailIn.error) {
+        ((mailIn.data as { subject: string | null; contact_name: string | null; contact_email: string | null; created_at: string | null; gmail_message_id: string | null }[]) ?? []).forEach((e) =>
+          out.push({
+            id: `mail:${e.gmail_message_id ?? e.created_at}`,
+            title: "Nouvel email reçu",
+            description: `${e.contact_name || e.contact_email || "Contact"} · ${e.subject || "(sans objet)"}`,
             time: agoLabel(e.created_at),
           }),
         );

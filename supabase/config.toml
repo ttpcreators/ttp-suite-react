@@ -68,3 +68,8 @@ verify_jwt = true
 # gmail-thread : JWT agence requis — lit un fil Gmail complet (corps des messages).
 [functions.gmail-thread]
 verify_jwt = true
+
+# gmail-poll : appelé par pg_cron (CRON_SECRET) ou agence (JWT) → verify_jwt=false,
+# auth applicative dans le code (CRON_SECRET OU rôle agence).
+[functions.gmail-poll]
+verify_jwt = false

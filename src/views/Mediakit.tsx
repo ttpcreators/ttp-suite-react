@@ -248,7 +248,7 @@ export function Mediakit() {
       const who = titleCase(sendRow.creator ?? "");
       const { html } = renderTemplate(activeTpl, { creator: who, lien: link, message: sendMsg.trim() });
       const finalHtml = sendSig ? html + renderSignatureHtml(sendSig) : html;
-      const { data, error } = await supabase.functions.invoke("send-email", { body: { to: recipients, subject, html: finalHtml } });
+      const { data, error } = await supabase.functions.invoke("send-email", { body: { to: recipients, subject, html: finalHtml, source: "mediakit" } });
       let res = data as { ok?: boolean; sent?: number; total?: number; detail?: string } | null;
       if (error && (error as { context?: { json?: () => Promise<unknown> } }).context?.json)
         res = (await (error as { context: { json: () => Promise<unknown> } }).context.json().catch(() => null)) as typeof res;
