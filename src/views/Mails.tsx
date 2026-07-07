@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Mail, ArrowDownLeft, ArrowUpRight, X, Search, Loader2 } from "lucide-react";
+import { Mail, ArrowDownLeft, ArrowUpRight, X, Search, Loader2, Send } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
+import { toast } from "@/components/ui/toast";
 
 /**
  * Page « Mails » : historique des échanges Gmail par contact + lecture d'un fil
@@ -67,9 +68,11 @@ export function Mails() {
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyErr, setHistoryErr] = useState("");
 
-  const [thread, setThread] = useState<{ contact: string; subject: string } | null>(null);
+  const [thread, setThread] = useState<{ contact: string; subject: string; threadId: string } | null>(null);
   const [threadMsgs, setThreadMsgs] = useState<ThreadMsg[] | null>(null);
   const [threadBusy, setThreadBusy] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [replySending, setReplySending] = useState(false);
 
   // Contacts avec un email valide.
   useEffect(() => {
@@ -113,8 +116,9 @@ export function Mails() {
   }, [selected]);
 
   const openThread = async (m: MailMsg) => {
-    setThread({ contact: selected?.email.toLowerCase() ?? "", subject: m.subject });
+    setThread({ contact: selected?.email.toLowerCase() ?? "", subject: m.subject, threadId: m.threadId });
     setThreadMsgs(null);
+    setReplyText("");
     setThreadBusy(true);
     const res = await invokeJson<{ ok?: boolean; messages?: ThreadMsg[] }>("gmail-thread", {
       threadId: m.threadId,
@@ -122,6 +126,34 @@ export function Mails() {
     });
     setThreadMsgs(res?.ok ? res.messages ?? [] : []);
     setThreadBusy(false);
+  };
+
+  // Répondre : envoie via Gmail dans le MÊME fil (threadId) → apparaît chez le contact.
+  const sendReply = async () => {
+    if (!thread || replySending) return;
+    const body = replyText.trim();
+    if (!body) return;
+    setReplySending(true);
+    const subject = thread.subject.replace(/^\s*re\s*:\s*/i, "");
+    const html = `<div style="font-family:system-ui,Arial,sans-serif;font-size:14px;line-height:1.6;white-space:pre-line">${body
+      .replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c)}</div>`;
+    const res = await invokeJson<{ ok?: boolean; error?: string }>("gmail-send", {
+      to: thread.contact,
+      subject: `Re: ${subject}`,
+      html,
+      threadId: thread.threadId,
+      source: "manual",
+    });
+    setReplySending(false);
+    if (!res?.ok) {
+      toast(res?.error === "google_non_connecte" ? "Reconnecte Google (droits Gmail)." : "Envoi échoué — réessaie");
+      return;
+    }
+    toast("Réponse envoyée ✓");
+    setReplyText("");
+    // Recharge le fil pour afficher la réponse.
+    const fresh = await invokeJson<{ ok?: boolean; messages?: ThreadMsg[] }>("gmail-thread", { threadId: thread.threadId, contact: thread.contact });
+    if (fresh?.ok) setThreadMsgs(fresh.messages ?? []);
   };
 
   const filtered = useMemo(() => {
@@ -279,6 +311,28 @@ export function Mails() {
                   </div>
                 ))
               )}
+            </div>
+
+            {/* Répondre */}
+            <div className="border-t border-border px-5 py-3">
+              <div className="flex items-end gap-2">
+                <textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  rows={2}
+                  placeholder={`Répondre à ${titleCase(displayName(thread.contact))}…`}
+                  className="flex-1 resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                />
+                <button
+                  type="button"
+                  onClick={sendReply}
+                  disabled={replySending || !replyText.trim()}
+                  className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  <Send className="h-3.5 w-3.5" /> {replySending ? "Envoi…" : "Répondre"}
+                </button>
+              </div>
+              <p className="mt-1 text-[10px] text-faint">La réponse part depuis ta boîte Gmail, dans ce fil.</p>
             </div>
           </div>
         </div>
