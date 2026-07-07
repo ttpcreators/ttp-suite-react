@@ -1,0 +1,23 @@
+-- 🔒 Sécurité · handle_new_user + storage documents (durci)
+-- Rôle forcé à 'creator' à l'inscription (anti-escalade) + cloisonnement du
+-- bucket Storage `documents` : agence = tout, créateur = uniquement ses fichiers.
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer as $$
+begin
+  insert into public.profiles (user_id, role, creator_name)
+  values (new.id, 'creator', nullif(new.raw_user_meta_data->>'creator_name',''))
+  on conflict (user_id) do update
+    set creator_name = coalesce(excluded.creator_name, public.profiles.creator_name);
+  return new;
+end $$;
+
+drop policy if exists documents_obj_auth on storage.objects;
+drop policy if exists documents_obj_agency on storage.objects;
+drop policy if exists documents_obj_creator_read on storage.objects;
+create policy documents_obj_agency on storage.objects for all to authenticated
+  using (bucket_id = 'documents' and public.is_agency())
+  with check (bucket_id = 'documents' and public.is_agency());
+create policy documents_obj_creator_read on storage.objects for select to authenticated
+  using (bucket_id = 'documents' and exists (
+    select 1 from public.documents d
+     where d.path = storage.objects.name and d.creator = public.my_creator()));
