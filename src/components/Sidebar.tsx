@@ -1,4 +1,3 @@
-import type { MouseEvent as ReactMouseEvent } from "react";
 import { LogOut, Trash2 } from "lucide-react";
 import { NAV, type ViewId } from "@/lib/nav";
 import { cn } from "@/lib/utils";
@@ -19,14 +18,12 @@ export function Sidebar({
   onLogout,
   space,
   onSpaceChange,
-  onItemContext,
 }: {
   active: ViewId;
   onSelect: (id: ViewId) => void;
   onLogout: () => void;
   space: "agency" | "portal";
   onSpaceChange: (s: "agency" | "portal") => void;
-  onItemContext?: (id: ViewId, e: ReactMouseEvent) => void;
 }) {
   const header = (
     <>
@@ -101,7 +98,6 @@ export function Sidebar({
       groups={GROUPS}
       activeId={active}
       onSelect={(id) => onSelect(id as ViewId)}
-      onItemContext={onItemContext ? (id, e) => onItemContext(id as ViewId, e) : undefined}
       header={header}
       footer={footer}
     />
