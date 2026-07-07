@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState, type ComponentType } from "react";
-import { ChevronRight, Moon, Sun, Loader2 } from "lucide-react";
+import { lazy, Suspense, useEffect, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
+import { ChevronRight, Moon, Sun, Loader2, X, Columns2, SquareArrowRight } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
 import { GlobalSearch } from "@/components/GlobalSearch";
@@ -123,6 +123,32 @@ function ViewContent({
   );
 }
 
+const PANE_FALLBACK = (
+  <div className="grid min-h-[50vh] place-items-center">
+    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+  </div>
+);
+
+// En-tête d'un volet en mode split (titre + bouton fermer pour le volet de droite).
+function PaneHeader({ title, onClose }: { title: string; onClose?: () => void }) {
+  return (
+    <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2.5 md:px-6">
+      <h2 className="truncate text-[15px] font-semibold tracking-tight">{title}</h2>
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="ml-auto grid h-7 w-7 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+          title="Fermer le volet"
+          aria-label="Fermer le volet"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [active, setActive] = useState<ViewId>(() => {
@@ -139,6 +165,17 @@ export default function App() {
   });
   const [dark, setDark] = useState(false);
   const [mobileTab, setMobileTab] = useState<string | null>(null);
+  // Volet secondaire (multi-pages côte à côte, desktop) + son menu contextuel.
+  const [splitView, setSplitView] = useState<ViewId | null>(() => {
+    try {
+      const saved = localStorage.getItem("ttp:split");
+      if (saved && Object.hasOwn(VIEWS, saved)) return saved as ViewId;
+    } catch {
+      /* localStorage indisponible */
+    }
+    return null;
+  });
+  const [ctxMenu, setCtxMenu] = useState<{ id: ViewId; x: number; y: number } | null>(null);
   const [query, setQuery] = useState("");
   const [detailCreator, setDetailCreator] = useState<string | null>(null);
   const [space, setSpace] = useState<"agency" | "portal">("agency");
@@ -159,6 +196,24 @@ export default function App() {
       /* localStorage indisponible */
     }
   }, [active]);
+
+  // Mémorise le volet secondaire (ou l'efface quand il est fermé).
+  useEffect(() => {
+    try {
+      if (splitView) localStorage.setItem("ttp:split", splitView);
+      else localStorage.removeItem("ttp:split");
+    } catch {
+      /* localStorage indisponible */
+    }
+  }, [splitView]);
+
+  // Ferme le menu contextuel sur Échap.
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setCtxMenu(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ctxMenu]);
 
   // Navigation déclenchée par une vue (ex. clic sur une échéance brief/to-do dans le Planning).
   useEffect(() => {
@@ -212,6 +267,13 @@ export default function App() {
     setQuery("");
     setDetailCreator(null);
     setSpace("agency");
+  };
+  // Clic droit sur un élément du menu (desktop) → menu contextuel « Ouvrir à côté ».
+  const onItemContext = (id: ViewId, e: ReactMouseEvent) => {
+    e.preventDefault();
+    const x = Math.min(e.clientX, window.innerWidth - 210);
+    const y = Math.min(e.clientY, window.innerHeight - 120);
+    setCtxMenu({ id, x, y });
   };
   const toggleTheme = () => setDark((d) => !d);
   const logout = () => supabase.auth.signOut();
@@ -267,6 +329,51 @@ export default function App() {
     );
   }
 
+  // Barre du haut (recherche + profil + notifs + thème) — partagée normal/split.
+  const topBar = (
+    <header className="flex items-center gap-4 px-4 pt-5 md:px-6">
+      {/* mobile logo */}
+      <div className="flex items-center gap-2 md:hidden">
+        <div className="h-8 w-8 overflow-hidden rounded-lg bg-[#14181E]">
+          <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
+        </div>
+      </div>
+      {/* recherche globale (filtre + navigation) */}
+      <GlobalSearch query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} />
+      {/* right cluster */}
+      <div className="ml-auto flex items-center gap-2.5">
+        <div className="hidden items-center gap-2.5 rounded-lg bg-surface py-1.5 pl-2 pr-3.5 shadow-sm sm:flex">
+          <AgencyAvatar />
+          <div className="leading-tight">
+            <div className="whitespace-nowrap text-xs font-medium text-foreground">Marc &amp; Gianni</div>
+            <div className="whitespace-nowrap text-[10px] text-faint">Direction · TTP</div>
+          </div>
+        </div>
+        <Notifications items={notifs} onDismiss={dismissNotifs} />
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="grid h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"
+          aria-label="Basculer le thème"
+        >
+          {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
+      </div>
+    </header>
+  );
+
+  // Contenu principal (portail / fiche créateur / vue nav).
+  const mainInner =
+    space === "portal" ? (
+      <Portal creator={portalCreator} onPick={setPortalCreator} onExit={() => setSpace("agency")} />
+    ) : detailCreator ? (
+      <CreatorDetail name={detailCreator} onBack={() => setDetailCreator(null)} onOpenPortal={openPortal} />
+    ) : (
+      <ViewContent active={active} onOpenCreator={openDetail} />
+    );
+  const primaryTitle = detailCreator ?? (space === "portal" ? "Portail créateur" : title);
+  const showPrimaryH1 = space !== "portal" && !detailCreator && active !== "apercu";
+
   return (
     <SearchContext.Provider value={{ query, setQuery }}>
       <div className="h-screen bg-background p-2 md:p-[14px]">
@@ -279,83 +386,51 @@ export default function App() {
               onLogout={logout}
               space={space}
               onSpaceChange={changeSpace}
+              onItemContext={onItemContext}
             />
           </div>
 
           {/* Main panel */}
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] bg-panel">
-            {/* Zone défilante — l'en-tête défile avec le contenu (ne reste plus collé) */}
-            <div className="flex-1 overflow-y-auto pb-28 md:pb-7">
-            {/* Top bar */}
-            <header className="flex items-center gap-4 px-4 pt-5 md:px-6">
-              {/* mobile logo */}
-              <div className="flex items-center gap-2 md:hidden">
-                <div className="h-8 w-8 overflow-hidden rounded-lg bg-[#14181E]">
-                  <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
+            {splitView ? (
+              /* Mode multi-pages : deux volets côte à côte, défilement indépendant. */
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="shrink-0">{topBar}</div>
+                <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+                  {/* Volet principal (suit le menu de gauche) */}
+                  <section className="flex min-w-0 flex-1 flex-col overflow-hidden md:border-r md:border-border">
+                    <PaneHeader title={primaryTitle} />
+                    <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4 md:px-6 md:pb-6">
+                      <Suspense fallback={PANE_FALLBACK}>{mainInner}</Suspense>
+                    </div>
+                  </section>
+                  {/* Volet secondaire */}
+                  <section className="flex min-w-0 flex-1 flex-col overflow-hidden border-t border-border md:border-t-0">
+                    <PaneHeader title={findItem(splitView)?.label ?? ""} onClose={() => setSplitView(null)} />
+                    <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4 md:px-6 md:pb-6">
+                      <Suspense fallback={PANE_FALLBACK}>
+                        <ViewContent active={splitView} onOpenCreator={openDetail} />
+                      </Suspense>
+                    </div>
+                  </section>
                 </div>
               </div>
-
-              {/* recherche globale (filtre + navigation) */}
-              <GlobalSearch
-                query={query}
-                setQuery={setQuery}
-                onOpenCreator={openDetail}
-                onGoto={gotoSearch}
-              />
-
-              {/* right cluster */}
-              <div className="ml-auto flex items-center gap-2.5">
-                <div className="hidden items-center gap-2.5 rounded-lg bg-surface py-1.5 pl-2 pr-3.5 shadow-sm sm:flex">
-                  <AgencyAvatar />
-                  <div className="leading-tight">
-                    <div className="whitespace-nowrap text-xs font-medium text-foreground">
-                      Marc &amp; Gianni
-                    </div>
-                    <div className="whitespace-nowrap text-[10px] text-faint">
-                      Direction · TTP
-                    </div>
-                  </div>
-                </div>
-                <Notifications items={notifs} onDismiss={dismissNotifs} />
-                <button
-                  type="button"
-                  onClick={toggleTheme}
-                  className="grid h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"
-                  aria-label="Basculer le thème"
-                >
-                  {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                </button>
-              </div>
-            </header>
-
-            {/* Content */}
-            <main className="px-4 pt-5 md:px-6">
-              <Suspense fallback={<div className="grid min-h-[50vh] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
-                {space === "portal" ? (
-                  <Portal
-                    creator={portalCreator}
-                    onPick={setPortalCreator}
-                    onExit={() => setSpace("agency")}
-                  />
-                ) : detailCreator ? (
-                  <CreatorDetail
-                    name={detailCreator}
-                    onBack={() => setDetailCreator(null)}
-                    onOpenPortal={openPortal}
-                  />
-                ) : (
-                  <>
-                    {active !== "apercu" && (
+            ) : (
+              /* Mode normal (une seule page) — l'en-tête défile avec le contenu. */
+              <div className="flex-1 overflow-y-auto pb-28 md:pb-7">
+                {topBar}
+                <main className="px-4 pt-5 md:px-6">
+                  <Suspense fallback={PANE_FALLBACK}>
+                    {showPrimaryH1 && (
                       <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">
                         {title}
                       </h1>
                     )}
-                    <ViewContent active={active} onOpenCreator={openDetail} />
-                  </>
-                )}
-              </Suspense>
-            </main>
-            </div>
+                    {mainInner}
+                  </Suspense>
+                </main>
+              </div>
+            )}
           </div>
         </div>
 
@@ -369,6 +444,60 @@ export default function App() {
             />
           </div>
         </div>
+
+        {/* Menu contextuel (clic droit sur un élément du menu, desktop) */}
+        {ctxMenu && (
+          <div
+            className="fixed inset-0 z-[1200]"
+            onClick={() => setCtxMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setCtxMenu(null);
+            }}
+          >
+            <div
+              className="absolute min-w-[200px] overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-xl"
+              style={{ top: ctxMenu.y, left: ctxMenu.x }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="truncate px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-faint">
+                {findItem(ctxMenu.id)?.label}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  select(ctxMenu.id);
+                  setCtxMenu(null);
+                }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-rowhover"
+              >
+                <SquareArrowRight className="h-4 w-4 text-faint" /> Ouvrir
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSplitView(ctxMenu.id);
+                  setCtxMenu(null);
+                }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-rowhover"
+              >
+                <Columns2 className="h-4 w-4 text-faint" /> Ouvrir à côté
+              </button>
+              {splitView && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSplitView(null);
+                    setCtxMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 border-t border-border px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-rowhover"
+                >
+                  <X className="h-4 w-4 text-faint" /> Fermer le volet de droite
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       <Toaster />
     </SearchContext.Provider>
