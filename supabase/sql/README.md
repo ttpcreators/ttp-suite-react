@@ -19,6 +19,7 @@ tu retrouves tout d'un coup d'œil, et c'est **versionné dans Git**.
 | [`03-outil-email-tables.sql`](03-outil-email-tables.sql) | 3 · Outil email (tables) | `email_sequences`, `sequence_enrollments`, `email_activity` |
 | [`04-todos-status.sql`](04-todos-status.sql) | 4 · Tâches status | Colonne `todos.status` (À faire/En cours/Fait) |
 | [`05-cron-alertes-email.sql`](05-cron-alertes-email.sql) | 5 · Cron alertes email | pg_cron `gmail-poll` toutes les 5 min |
+| [`06-crons-resume-matin-semaine.sql`](06-crons-resume-matin-semaine.sql) | 6 · Crons résumé matin + semaine | Digest quotidien 8h + hebdo lundi 8h (`daily-digest`) |
 | [`crons-google-agenda.sql`](crons-google-agenda.sql) | Crons · Google Agenda | pg_cron watch-renew + sync |
 | [`push-subscriptions.sql`](push-subscriptions.sql) | 🔒 Push · table push_subscriptions | Abonnements push — RLS cloisonnée (chacun ses lignes, agence tout) |
 | [`securite-avatars-storage.sql`](securite-avatars-storage.sql) | 🔒 Sécurité · storage avatars | Bucket avatars : upload ouvert, écrasement/suppression agence-only |

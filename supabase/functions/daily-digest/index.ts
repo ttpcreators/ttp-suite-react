@@ -53,6 +53,27 @@ function dueOrPast(due: unknown, todayStr: string): boolean {
   const iso = toISO(due);
   return iso !== "" && iso <= todayStr;
 }
+/** Échéance comprise dans [from, to] (bornes incluses). */
+function dueInRange(due: unknown, from: string, to: string): boolean {
+  const iso = toISO(due);
+  return iso !== "" && iso >= from && iso <= to;
+}
+/** Heure + jour de semaine à Paris (robuste au changement d'heure été/hiver). */
+function parisParts(): { hour: number; weekday: string } {
+  const p = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Paris", hour: "2-digit", hour12: false, weekday: "short",
+  }).formatToParts(new Date());
+  return {
+    hour: Number(p.find((x) => x.type === "hour")?.value ?? "0"),
+    weekday: p.find((x) => x.type === "weekday")?.value ?? "", // "Mon".."Sun"
+  };
+}
+/** "YYYY-MM-DD" + N jours → "YYYY-MM-DD" (calcul en UTC, sans dérive de fuseau). */
+function addDaysISO(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return new Intl.DateTimeFormat("fr-CA", { timeZone: "UTC" }).format(dt);
+}
 
 type CtDeadline = { creator?: string; start?: string; months?: number; type?: string };
 type Sub = { id: string; endpoint: string; p256dh: string; auth: string };
@@ -193,6 +214,45 @@ Deno.serve(async (req: Request) => {
     return jsonRes({ ok: true, test: true, ...r });
   }
 
+  // ─── Résumé poussé (cron) : QUOTIDIEN (défaut) ou HEBDO (body.kind="weekly") ───
+  // Le cron tape à 6h ET 7h UTC ; on ne garde QUE le passage où il est 8h à Paris
+  // (robuste au changement d'heure). `force:true` permet un test manuel hors 8h.
+  const { hour, weekday } = parisParts();
+  const weekly = body?.kind === "weekly";
+  const force = (body as { force?: boolean })?.force === true;
+  if (!force && hour !== 8) return jsonRes({ ok: true, skipped: "hors_8h", parisHour: hour });
+
+  const prefs = await loadPrefs(sb);
+
+  if (weekly) {
+    // Résumé du LUNDI : tâches + évènements de la semaine (lundi → dimanche).
+    if (!force && weekday !== "Mon") return jsonRes({ ok: true, skipped: "pas_lundi", weekday });
+    if (!prefOn(prefs, "digestWeekly")) return jsonRes({ ok: true, skipped: "pref_off_weekly" });
+    const monday = today; // le cron hebdo ne se déclenche que le lundi
+    const sunday = addDaysISO(today, 6);
+    const { data: evW } = await sb.from("events").select("date")
+      .or("deleted.is.null,deleted.eq.false").gte("date", monday).lte("date", sunday);
+    const eventsWeek = (evW ?? []).length;
+    const { data: tW } = await sb.from("todos").select("due,done");
+    const todosWeek = (tW ?? []).filter((t) => t.done !== true && dueInRange(t.due, monday, sunday)).length;
+    const { data: bW } = await sb.from("briefs").select("due");
+    const briefsWeek = (bW ?? []).filter((b) => dueInRange(b.due, monday, sunday)).length;
+    const tasksWeek = todosWeek + briefsWeek;
+    const linesW: string[] = [];
+    if (eventsWeek) linesW.push(`📅 ${eventsWeek} évènement${eventsWeek > 1 ? "s" : ""} cette semaine`);
+    if (tasksWeek) linesW.push(`✓ ${tasksWeek} tâche${tasksWeek > 1 ? "s" : ""}/brief${tasksWeek > 1 ? "s" : ""} à rendre`);
+    if (linesW.length === 0) linesW.push("Semaine dégagée — rien de prévu pour l'instant 👌");
+    const payloadW = JSON.stringify({
+      title: "TTP Suite — ta semaine",
+      body: linesW.join("\n"),
+      url: "/",
+      tag: `ttp-weekly-${monday}`,
+    });
+    const rW = await sendToAll(sb, payloadW);
+    return jsonRes({ ok: true, weekly: true, ...rW, week: `${monday}→${sunday}` });
+  }
+
+  // ─── QUOTIDIEN ───
   // 1) Factures en retard
   const { data: inv } = await sb.from("invoices").select("status").eq("status", "retard");
   const overdue = (inv ?? []).length;
@@ -227,8 +287,7 @@ Deno.serve(async (req: Request) => {
   const eventsToday = (ev ?? []).length;
 
   // Construit le résumé (rien à dire → on n'envoie pas, pour éviter le bruit).
-  // Chaque catégorie respecte les préférences (page Paramètres).
-  const prefs = await loadPrefs(sb);
+  // Chaque catégorie respecte les préférences (page Paramètres) — `prefs` chargé plus haut.
   const lines: string[] = [];
   if (eventsToday && prefOn(prefs, "digestEvents")) lines.push(`📅 ${eventsToday} évènement${eventsToday > 1 ? "s" : ""} aujourd'hui`);
   if (tasksDue && prefOn(prefs, "digestTasks")) lines.push(`✓ ${tasksDue} tâche${tasksDue > 1 ? "s" : ""}/brief${tasksDue > 1 ? "s" : ""} à échéance`);

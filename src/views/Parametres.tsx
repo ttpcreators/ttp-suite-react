@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BellRing, Smartphone, Sunrise, Users, Mail } from "lucide-react";
+import { BellRing, Smartphone, Sunrise, Users, Mail, CalendarDays } from "lucide-react";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
@@ -18,6 +18,7 @@ export type NotifPrefs = {
   digestTasks?: boolean; // résumé matin : tâches & briefs à échéance
   digestContracts?: boolean; // résumé matin : contrats ≤ 60 j
   digestInvoices?: boolean; // résumé matin : factures en retard
+  digestWeekly?: boolean; // résumé du lundi : tâches & évènements de la semaine
   emailReceivedBell?: boolean; // cloche : mail reçu sur la boîte agence
   emailReceivedPush?: boolean; // push : mail reçu sur la boîte agence
 };
@@ -174,7 +175,7 @@ export function Parametres() {
       <Section
         icon={<Sunrise className="h-4 w-4" />}
         title="Résumé du matin"
-        hint="Une notification groupée vers 8h30 — envoyée seulement s'il y a quelque chose à signaler."
+        hint="Chaque matin à 8h, une notification groupée — envoyée seulement s'il y a quelque chose à signaler."
       >
         <PrefRow
           label="Évènements du jour"
@@ -199,6 +200,20 @@ export function Parametres() {
           hint="Les factures passées en statut « retard »."
           checked={on(prefs.digestInvoices)}
           onChange={(v) => setPref("digestInvoices", v)}
+        />
+      </Section>
+
+      {/* Résumé de la semaine */}
+      <Section
+        icon={<CalendarDays className="h-4 w-4" />}
+        title="Résumé de la semaine"
+        hint="Chaque lundi à 8h — un aperçu des tâches et évènements de la semaine à venir."
+      >
+        <PrefRow
+          label="Résumé du lundi"
+          hint="Tâches, briefs et évènements prévus du lundi au dimanche."
+          checked={on(prefs.digestWeekly)}
+          onChange={(v) => setPref("digestWeekly", v)}
         />
       </Section>
 
