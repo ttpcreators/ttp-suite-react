@@ -1,0 +1,29 @@
+# Mises à jour de dépendances automatiques (Dependabot).
+# Les alertes de vulnérabilité + correctifs de sécurité sont activés côté repo ;
+# ce fichier ajoute les montées de version de routine, groupées pour limiter le
+# bruit de PR (un seul PR par lot mineur/patch et par semaine).
+version: 2
+updates:
+  # Dépendances npm de l'app (React/Vite/Supabase…).
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      minor-et-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "deps"
+
+  # Actions du workflow GitHub Pages (déploiement).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "ci"
