@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BellRing, Smartphone, Sunrise, Sun, Users, Mail, CalendarDays } from "lucide-react";
+import { BellRing, Smartphone, Sunrise, Sun, Users, Mail, CalendarDays, Bug } from "lucide-react";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
@@ -22,6 +22,7 @@ export type NotifPrefs = {
   digestAfternoon?: boolean; // point de mi-journée (14h) : ce qu'il reste à traiter
   emailReceivedBell?: boolean; // cloche : mail reçu sur la boîte agence
   emailReceivedPush?: boolean; // push : mail reçu sur la boîte agence
+  pushErrors?: boolean; // push : un bug (crash de rendu) est survenu dans l'app
 };
 
 const on = (v: boolean | undefined) => v !== false; // défaut = activé
@@ -229,6 +230,20 @@ export function Parametres() {
           hint="Tâches, briefs et évènements prévus du lundi au dimanche."
           checked={on(prefs.digestWeekly)}
           onChange={(v) => setPref("digestWeekly", v)}
+        />
+      </Section>
+
+      {/* Alertes techniques */}
+      <Section
+        icon={<Bug className="h-4 w-4" />}
+        title="Alertes techniques"
+        hint="Pour être prévenu si un bug survient dans l'app — chez toi, Gianni ou un créateur."
+      >
+        <PrefRow
+          label="Notif quand un bug survient"
+          hint="Un push « ⚠️ bug » à la première occurrence (anti-spam), et l'erreur est journalisée pour diagnostic."
+          checked={on(prefs.pushErrors)}
+          onChange={(v) => setPref("pushErrors", v)}
         />
       </Section>
 

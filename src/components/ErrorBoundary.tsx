@@ -1,4 +1,33 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { supabase } from "@/lib/supabase";
+
+// Anti-répétition (session) : on n'envoie pas 10× la même erreur au serveur.
+const _reported = new Set<string>();
+
+/** Remonte le crash au serveur (journal + notif agence). Best-effort : ne lève JAMAIS. */
+function reportError(error: Error, componentStack: string, page: string) {
+  try {
+    const message = String(error?.message ?? error ?? "Erreur inconnue").slice(0, 500);
+    const sig = `${page}|${message}`;
+    if (_reported.has(sig)) return;
+    _reported.add(sig);
+    if (_reported.size > 50) _reported.clear(); // borne mémoire
+    void supabase.functions
+      .invoke("report-error", {
+        body: {
+          message,
+          page: page.slice(0, 80),
+          stack: String(error?.stack ?? "").slice(0, 4000),
+          componentStack: String(componentStack ?? "").slice(0, 4000),
+          url: typeof location !== "undefined" ? location.href : "",
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        },
+      })
+      .catch(() => {}); // la remontée ne doit jamais casser le boundary
+  } catch {
+    /* rien : reporter une erreur ne doit jamais en provoquer une */
+  }
+}
 
 // Clés d'UI (non critiques) qu'on peut effacer sans danger pour se ré-parer.
 // IMPORTANT : ne JAMAIS toucher la session Supabase (clé `sb-*-auth-token`),
@@ -41,6 +70,8 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo) {
     // Trace pour le débogage (visible dans la console navigateur).
     console.error("[ErrorBoundary]", error, info.componentStack);
+    // + remontée serveur : journal + notif push à l'agence.
+    reportError(error, info.componentStack ?? "", String(this.props.resetKey ?? this.props.label ?? ""));
   }
 
   componentDidUpdate(prev: Props) {

@@ -34,6 +34,11 @@ verify_jwt = false
 [functions.daily-digest]
 verify_jwt = false
 
+# report-error : reçoit les crashs de l'ErrorBoundary (même déconnecté, ex. écran
+# login) → verify_jwt=false. Ne fait que journaliser + notifier l'agence (anti-spam).
+[functions.report-error]
+verify_jwt = false
+
 # --- Fonctions appelées par le front (JWT agence exigé) ---------------------
 # verify_jwt=true : la plateforme valide le JWT ; le code exige EN PLUS le rôle agence.
 [functions.google-connect-url]
