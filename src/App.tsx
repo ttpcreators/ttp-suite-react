@@ -1,6 +1,7 @@
-import { lazy, Suspense, useEffect, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronRight, Moon, Sun, Loader2, X, Columns2, SquareArrowRight } from "lucide-react";
+import { lazy, Suspense, useEffect, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
+import { ChevronRight, Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
+import { cn } from "@/lib/utils";
 import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { Toaster } from "@/components/ui/toast";
@@ -149,6 +150,68 @@ function PaneHeader({ title, onClose }: { title: string; onClose?: () => void })
   );
 }
 
+// Barre d'onglets façon navigateur (desktop). Chaque page ouverte = un onglet.
+function TabBar({
+  tabs,
+  active,
+  onSelect,
+  onClose,
+  onNew,
+}: {
+  tabs: ViewId[];
+  active: ViewId;
+  onSelect: (id: ViewId) => void;
+  onClose: (id: ViewId) => void;
+  onNew: () => void;
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border px-3 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {tabs.map((id) => {
+        const item = findItem(id);
+        const isActive = id === active;
+        return (
+          <div
+            key={id}
+            role="button"
+            tabIndex={0}
+            onClick={() => onSelect(id)}
+            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onSelect(id)}
+            className={cn(
+              "group flex shrink-0 cursor-pointer items-center gap-2 rounded-t-lg border border-b-0 px-3 py-2 text-[12px] transition-colors",
+              isActive
+                ? "border-border bg-panel font-medium text-foreground"
+                : "border-transparent text-muted-foreground hover:bg-rowhover",
+            )}
+          >
+            {item && <item.icon className="h-3.5 w-3.5 shrink-0" />}
+            <span className="max-w-[130px] truncate">{item?.label ?? id}</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose(id);
+              }}
+              className="grid h-4 w-4 shrink-0 place-items-center rounded text-faint transition-colors hover:bg-border hover:text-foreground"
+              aria-label={`Fermer ${item?.label ?? id}`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        onClick={onNew}
+        className="ml-1 grid h-7 w-7 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+        title="Nouvel onglet"
+        aria-label="Nouvel onglet"
+      >
+        <Plus className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [active, setActive] = useState<ViewId>(() => {
@@ -163,6 +226,23 @@ export default function App() {
     }
     return "apercu";
   });
+  // Onglets ouverts (façon navigateur). L'onglet actif = `active`.
+  const [tabs, setTabs] = useState<ViewId[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("ttp:tabs") || "null");
+      if (Array.isArray(saved)) {
+        const valid = saved.filter((id): id is ViewId => typeof id === "string" && (Object.hasOwn(VIEWS, id) || id === "roster"));
+        if (valid.length) return Array.from(new Set(valid));
+      }
+    } catch {
+      /* localStorage indisponible */
+    }
+    return [active];
+  });
+  // Ref vers l'onglet actif : permet à navigateCurrentTab (stable) de lire la
+  // valeur à jour sans dépendre d'une closure (utilisé aussi hors React, ex. events).
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const [dark, setDark] = useState(false);
   const [mobileTab, setMobileTab] = useState<string | null>(null);
   // Volet secondaire (multi-pages côte à côte, desktop) + son menu contextuel.
@@ -183,6 +263,20 @@ export default function App() {
   const [profile, setProfile] = useState<
     { role: string; creator_name: string | null } | null | undefined
   >(undefined);
+
+  // Navigue l'onglet COURANT vers `id` (comme un clic de lien dans Chrome) :
+  // remplace la page de l'onglet actif, ou bascule dessus s'il est déjà ouvert.
+  const navigateCurrentTab = useCallback((id: ViewId) => {
+    setTabs((prev) => {
+      if (prev.includes(id)) return prev;
+      const i = prev.indexOf(activeRef.current);
+      if (i === -1) return [...prev, id];
+      const copy = [...prev];
+      copy[i] = id;
+      return copy;
+    });
+    setActive(id);
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -207,6 +301,20 @@ export default function App() {
     }
   }, [splitView]);
 
+  // Mémorise la liste d'onglets ouverts.
+  useEffect(() => {
+    try {
+      localStorage.setItem("ttp:tabs", JSON.stringify(tabs));
+    } catch {
+      /* localStorage indisponible */
+    }
+  }, [tabs]);
+
+  // Invariant : l'onglet actif fait toujours partie de la liste.
+  useEffect(() => {
+    setTabs((prev) => (prev.includes(active) ? prev : [...prev, active]));
+  }, [active]);
+
   // Ferme le menu contextuel sur Échap.
   useEffect(() => {
     if (!ctxMenu) return;
@@ -220,7 +328,7 @@ export default function App() {
     const onNav = (e: Event) => {
       const id = (e as CustomEvent<string>).detail;
       if (id && (Object.hasOwn(VIEWS, id) || id === "roster")) {
-        setActive(id as ViewId);
+        navigateCurrentTab(id as ViewId);
         setDetailCreator(null);
         setSpace("agency");
         setMobileTab(null);
@@ -228,7 +336,7 @@ export default function App() {
     };
     window.addEventListener("ttp-navigate", onNav);
     return () => window.removeEventListener("ttp-navigate", onNav);
-  }, []);
+  }, [navigateCurrentTab]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -262,17 +370,46 @@ export default function App() {
   }, [session]);
 
   const select = (id: ViewId) => {
+    navigateCurrentTab(id);
+    setMobileTab(null);
+    setQuery("");
+    setDetailCreator(null);
+    setSpace("agency");
+  };
+  // Ouvre `id` dans un NOUVEL onglet (ou bascule dessus s'il est déjà ouvert).
+  const openInNewTab = (id: ViewId) => {
+    setTabs((prev) => (prev.includes(id) ? prev : [...prev, id]));
     setActive(id);
     setMobileTab(null);
     setQuery("");
     setDetailCreator(null);
     setSpace("agency");
   };
-  // Clic droit sur un élément du menu (desktop) → menu contextuel « Ouvrir à côté ».
+  // Ferme un onglet ; si c'était l'actif, bascule sur un voisin.
+  const closeTab = (id: ViewId) => {
+    const idx = tabs.indexOf(id);
+    const next = tabs.filter((t) => t !== id);
+    if (next.length === 0) {
+      setTabs(["apercu"]);
+      setActive("apercu");
+    } else {
+      setTabs(next);
+      if (id === active) setActive(next[Math.min(idx, next.length - 1)]);
+    }
+    if (splitView === id) setSplitView(null);
+  };
+  const newTab = () => openInNewTab("apercu");
+  // Clic sur un onglet : bascule dessus (et referme un éventuel drill-down).
+  const switchTab = (id: ViewId) => {
+    setActive(id);
+    setDetailCreator(null);
+    setSpace("agency");
+  };
+  // Clic droit sur un élément du menu (desktop) → menu contextuel.
   const onItemContext = (id: ViewId, e: ReactMouseEvent) => {
     e.preventDefault();
-    const x = Math.min(e.clientX, window.innerWidth - 210);
-    const y = Math.min(e.clientY, window.innerHeight - 120);
+    const x = Math.min(e.clientX, window.innerWidth - 230);
+    const y = Math.min(e.clientY, window.innerHeight - 150);
     setCtxMenu({ id, x, y });
   };
   const toggleTheme = () => setDark((d) => !d);
@@ -281,7 +418,7 @@ export default function App() {
   // Navigation depuis la recherche globale : garde la requête pour que la vue
   // cible filtre dessus (contrairement à `select` qui remet à zéro).
   const gotoSearch = (id: ViewId) => {
-    setActive(id);
+    navigateCurrentTab(id);
     setDetailCreator(null);
     setSpace("agency");
     setMobileTab(null);
@@ -373,6 +510,8 @@ export default function App() {
     );
   const primaryTitle = detailCreator ?? (space === "portal" ? "Portail créateur" : title);
   const showPrimaryH1 = space !== "portal" && !detailCreator && active !== "apercu";
+  // Multi-pages actif dès qu'il y a ≥ 2 onglets ou un volet latéral.
+  const multi = tabs.length > 1 || splitView != null;
 
   return (
     <SearchContext.Provider value={{ query, setQuery }}>
@@ -392,31 +531,8 @@ export default function App() {
 
           {/* Main panel */}
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] bg-panel">
-            {splitView ? (
-              /* Mode multi-pages : deux volets côte à côte, défilement indépendant. */
-              <div className="flex min-h-0 flex-1 flex-col">
-                <div className="shrink-0">{topBar}</div>
-                <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-                  {/* Volet principal (suit le menu de gauche) */}
-                  <section className="flex min-w-0 flex-1 flex-col overflow-hidden md:border-r md:border-border">
-                    <PaneHeader title={primaryTitle} />
-                    <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4 md:px-6 md:pb-6">
-                      <Suspense fallback={PANE_FALLBACK}>{mainInner}</Suspense>
-                    </div>
-                  </section>
-                  {/* Volet secondaire */}
-                  <section className="flex min-w-0 flex-1 flex-col overflow-hidden border-t border-border md:border-t-0">
-                    <PaneHeader title={findItem(splitView)?.label ?? ""} onClose={() => setSplitView(null)} />
-                    <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4 md:px-6 md:pb-6">
-                      <Suspense fallback={PANE_FALLBACK}>
-                        <ViewContent active={splitView} onOpenCreator={openDetail} />
-                      </Suspense>
-                    </div>
-                  </section>
-                </div>
-              </div>
-            ) : (
-              /* Mode normal (une seule page) — l'en-tête défile avec le contenu. */
+            {!multi ? (
+              /* Une seule page : mise en page d'origine (l'en-tête défile avec le contenu). */
               <div className="flex-1 overflow-y-auto pb-28 md:pb-7">
                 {topBar}
                 <main className="px-4 pt-5 md:px-6">
@@ -429,6 +545,47 @@ export default function App() {
                     {mainInner}
                   </Suspense>
                 </main>
+              </div>
+            ) : (
+              /* Multi-pages : barre du haut + onglets fixes, contenu défilant. */
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="shrink-0">{topBar}</div>
+                <TabBar tabs={tabs} active={active} onSelect={switchTab} onClose={closeTab} onNew={newTab} />
+                {splitView ? (
+                  /* Deux volets côte à côte, défilement indépendant. */
+                  <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+                    {/* Volet principal (onglet actif) */}
+                    <section className="flex min-w-0 flex-1 flex-col overflow-hidden md:border-r md:border-border">
+                      <PaneHeader title={primaryTitle} />
+                      <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4 md:px-6 md:pb-6">
+                        <Suspense fallback={PANE_FALLBACK}>{mainInner}</Suspense>
+                      </div>
+                    </section>
+                    {/* Volet secondaire (à côté) */}
+                    <section className="flex min-w-0 flex-1 flex-col overflow-hidden border-t border-border md:border-t-0">
+                      <PaneHeader title={findItem(splitView)?.label ?? ""} onClose={() => setSplitView(null)} />
+                      <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4 md:px-6 md:pb-6">
+                        <Suspense fallback={PANE_FALLBACK}>
+                          <ViewContent active={splitView} onOpenCreator={openDetail} />
+                        </Suspense>
+                      </div>
+                    </section>
+                  </div>
+                ) : (
+                  /* Un seul onglet visible mais ≥ 2 ouverts → contenu simple défilant. */
+                  <div className="flex-1 overflow-y-auto pb-24 md:pb-7">
+                    <main className="px-4 pt-5 md:px-6">
+                      <Suspense fallback={PANE_FALLBACK}>
+                        {showPrimaryH1 && (
+                          <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">
+                            {title}
+                          </h1>
+                        )}
+                        {mainInner}
+                      </Suspense>
+                    </main>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -472,6 +629,16 @@ export default function App() {
                 className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-rowhover"
               >
                 <SquareArrowRight className="h-4 w-4 text-faint" /> Ouvrir
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  openInNewTab(ctxMenu.id);
+                  setCtxMenu(null);
+                }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-rowhover"
+              >
+                <Plus className="h-4 w-4 text-faint" /> Ouvrir dans un nouvel onglet
               </button>
               <button
                 type="button"
