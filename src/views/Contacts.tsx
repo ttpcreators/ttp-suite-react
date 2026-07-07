@@ -492,13 +492,12 @@ export function Contacts() {
   };
 
   // Contacts avec un email valide, pour le sélecteur de destinataires.
-  const pickContacts: PickContact[] = useMemo(
-    () =>
-      (rows ?? [])
-        .filter((r) => r.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email))
-        .map((r) => ({ email: r.email, label: [r.brand, r.person].filter((x) => x && x !== "—").join(" · ") || r.email, tag: r.tag })),
-    [rows],
-  );
+  // NB : calcul simple (PAS de useMemo) — on est APRÈS les early returns
+  // `if (error)` / `if (rows === null)`, donc un hook ici changerait le nombre
+  // de hooks entre deux rendus → React #310. Ne jamais mettre de hook ici.
+  const pickContacts: PickContact[] = (rows ?? [])
+    .filter((r) => r.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email))
+    .map((r) => ({ email: r.email, label: [r.brand, r.person].filter((x) => x && x !== "—").join(" · ") || r.email, tag: r.tag }));
 
   const submit = async () => {
     if (!brand.trim()) {
