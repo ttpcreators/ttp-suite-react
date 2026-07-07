@@ -18,6 +18,7 @@ import { toISODate, frDate } from "@/lib/dates";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
 import { Checkbox } from "@/components/ui/checkbox";
+import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import {
   Select,
   SelectTrigger,
@@ -40,9 +41,18 @@ type Row = {
   priority: Priority;
   source: Source;
   done: boolean;
+  status?: string | null;
   sort_order: number;
   created_at: string | null;
 };
+
+const TODO_STATUS_OPTS: StatusOption[] = [
+  { value: "À faire", label: "À faire", dot: "bg-primary" },
+  { value: "En cours", label: "En cours", dot: "bg-cyan" },
+  { value: "Fait", label: "Fait", dot: "bg-signal" },
+];
+/** Statut affiché : colonne status si présente, sinon dérivé de `done`. */
+const todoStatus = (r: Row): string => r.status ?? (r.done ? "Fait" : "À faire");
 
 const priorityBadge: Record<
   Priority,
@@ -180,7 +190,7 @@ export function Todo() {
     (async () => {
       const { data, error } = await supabase
         .from("todos")
-        .select("id, text, descr, tag, due, creator, priority, source, done, sort_order, created_at")
+        .select("*")
         .order("sort_order");
       if (!active) return;
       if (error) {
@@ -435,6 +445,14 @@ export function Todo() {
                 toast("Erreur — réessaie");
               }
             };
+            const updateStatus = async (status: string) => {
+              if (await dbUpdate("todos", row.id, { status, done: status === "Fait" })) {
+                setRows((prev) => (prev ?? []).map((r) => (r.id === row.id ? { ...r, status, done: status === "Fait" } : r)));
+                setSelectedTodo((prev) => (prev?.id === row.id ? { ...prev, status, done: status === "Fait" } : prev));
+              } else {
+                toast("Statut non enregistré — la colonne « status » manque (lance le SQL)");
+              }
+            };
             return (
               <div key={row.id} className="rounded-2xl border border-border bg-card shadow-sm">
               <div
@@ -485,8 +503,11 @@ export function Todo() {
                   )}
                 </div>
 
-                {/* Méta : origine + créateur + priorité */}
+                {/* Méta : statut + origine + créateur + priorité */}
                 <div className="flex shrink-0 items-center gap-2">
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <StatusSelect value={todoStatus(row)} options={TODO_STATUS_OPTS} onChange={updateStatus} />
+                  </div>
                   {row.source === "creator" && (
                     <span className="hidden rounded-md bg-signalsoft px-2 py-[3px] text-[8px] font-semibold uppercase tracking-wider text-signaltext sm:inline">
                       Du créateur

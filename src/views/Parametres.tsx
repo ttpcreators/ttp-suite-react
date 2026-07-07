@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BellRing, Smartphone, Sunrise, Users } from "lucide-react";
+import { BellRing, Smartphone, Sunrise, Users, Mail } from "lucide-react";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
@@ -18,6 +18,8 @@ export type NotifPrefs = {
   digestTasks?: boolean; // résumé matin : tâches & briefs à échéance
   digestContracts?: boolean; // résumé matin : contrats ≤ 60 j
   digestInvoices?: boolean; // résumé matin : factures en retard
+  emailReceivedBell?: boolean; // cloche : mail reçu sur la boîte agence
+  emailReceivedPush?: boolean; // push : mail reçu sur la boîte agence
 };
 
 const on = (v: boolean | undefined) => v !== false; // défaut = activé
@@ -217,6 +219,26 @@ export function Parametres() {
           hint="L'activité des 7 derniers jours en haut des notifications de l'app."
           checked={on(prefs.bellCreatorActivity)}
           onChange={(v) => setPref("bellCreatorActivity", v)}
+        />
+      </Section>
+
+      {/* Emails reçus */}
+      <Section
+        icon={<Mail className="h-4 w-4" />}
+        title="Emails"
+        hint="Quand un email arrive sur la boîte de l'agence (Gmail connecté)."
+      >
+        <PrefRow
+          label="Notification sur le téléphone"
+          hint="Un push dès qu'un nouvel email arrive."
+          checked={on(prefs.emailReceivedPush)}
+          onChange={(v) => setPref("emailReceivedPush", v)}
+        />
+        <PrefRow
+          label="Afficher dans la cloche"
+          hint="Les nouveaux emails en haut des notifications de l'app."
+          checked={on(prefs.emailReceivedBell)}
+          onChange={(v) => setPref("emailReceivedBell", v)}
         />
       </Section>
     </div>
