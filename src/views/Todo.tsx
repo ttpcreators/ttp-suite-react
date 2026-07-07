@@ -63,6 +63,19 @@ const priorityBadge: Record<
   basse: { status: "neutral", label: "Basse" },
 };
 
+/** Point de priorité scintillant (remplace le badge texte dans la liste). */
+function PriorityDot({ priority }: { priority: Priority }) {
+  const color = priority === "haute" ? "bg-rose-500" : priority === "moyenne" ? "bg-amber-500" : "bg-slate-400";
+  const label = priority === "haute" ? "Priorité haute" : priority === "moyenne" ? "Priorité moyenne" : "Priorité basse";
+  const animate = priority !== "basse";
+  return (
+    <span className="relative flex h-2.5 w-2.5 shrink-0" title={label} aria-label={label}>
+      {animate && <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-60", color)} />}
+      <span className={cn("relative inline-flex h-2.5 w-2.5 rounded-full", color)} />
+    </span>
+  );
+}
+
 // Formate created_at en fr-FR ; rien si absent.
 const formatCreatedAt = (created_at: string | null): string | null =>
   created_at ? new Date(created_at).toLocaleDateString("fr-FR") : null;
@@ -429,7 +442,6 @@ export function Todo() {
       ) : (
         <div className="flex flex-col gap-3">
           {filtered.map((row) => {
-            const badge = priorityBadge[row.priority];
             const toggleDone = async (next: boolean) => {
               if (await dbUpdate("todos", row.id, { done: next })) {
                 setRows((prev) =>
@@ -516,9 +528,7 @@ export function Todo() {
                   <span className="hidden rounded-md bg-rowhover px-2 py-[3px] text-[8px] font-semibold uppercase tracking-wider text-muted-foreground sm:inline">
                     {row.creator ? titleCase(row.creator) : "Agence"}
                   </span>
-                  <AnimatedBadge status={badge.status} size="sm">
-                    {badge.label}
-                  </AnimatedBadge>
+                  <PriorityDot priority={row.priority} />
                   <ActionMenu
                     items={[
                       {
