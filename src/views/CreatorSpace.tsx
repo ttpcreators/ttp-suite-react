@@ -15,6 +15,7 @@ import {
   Trash2,
   TrendingUp,
   ExternalLink,
+  BarChart3,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
@@ -63,10 +64,11 @@ type Ev = { id: string; date: string | null; day: number | null; time: string | 
 type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null };
 type Invoice = { ref: string; party: string; amount: string | null; date: string | null; status: string | null };
 
-type Tab = "accueil" | "evolution" | "todo" | "ideas" | "briefs" | "planning" | "documents" | "facturation";
+type Tab = "accueil" | "evolution" | "debrief" | "todo" | "ideas" | "briefs" | "planning" | "documents" | "facturation";
 const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "accueil", label: "Accueil", icon: LayoutDashboard },
   { id: "evolution", label: "Évolution", icon: TrendingUp },
+  { id: "debrief", label: "Debrief", icon: BarChart3 },
   { id: "todo", label: "À faire", icon: ListChecks },
   { id: "ideas", label: "Idées", icon: Lightbulb },
   { id: "briefs", label: "Briefs", icon: FileText },
@@ -74,6 +76,13 @@ const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "documents", label: "Documents", icon: Files },
   { id: "facturation", label: "Facturation", icon: Receipt },
 ];
+
+/** Debrief (lecture seule côté créateur). */
+type DebriefLite = {
+  brand: string; creator: string; period: string; deliverables?: string;
+  budget: string; revenue: string; roi: string; summary: string;
+  kpis: { l: string; v: string }[]; highlights: string[];
+};
 
 const BRIEF_STATUS: StatusOption[] = [
   { value: "attente", label: "En attente", dot: "bg-amber" },
@@ -139,6 +148,30 @@ export function CreatorSpace({
       alive = false;
     };
   }, [tab, suivi, suiviErr]);
+
+  // Debriefs du créateur — via la fonction serveur debrief-history (blob agence filtré).
+  const [debriefs, setDebriefs] = useState<DebriefLite[] | null>(null);
+  const [debriefErr, setDebriefErr] = useState(false);
+  useEffect(() => {
+    if (tab !== "debrief" || debriefs !== null || debriefErr) return;
+    let alive = true;
+    supabase.functions
+      .invoke("debrief-history")
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (error) {
+          setDebriefErr(true);
+          return;
+        }
+        setDebriefs(((data as { debriefs?: DebriefLite[] } | null)?.debriefs ?? []) as DebriefLite[]);
+      })
+      .catch(() => {
+        if (alive) setDebriefErr(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tab, debriefs, debriefErr]);
   const [creator, setCreator] = useState<Creator | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
@@ -607,6 +640,75 @@ export function CreatorSpace({
               </AnimatedBadge>
             ) : (
               <SuiviPanel entries={suivi} lockedCreator={name} />
+            ))}
+
+          {/* Debrief (bilans de campagne de l'agence — lecture seule) */}
+          {tab === "debrief" &&
+            (debriefErr ? (
+              <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
+                <div className="text-sm font-medium text-foreground">Chargement impossible</div>
+                <p className="mt-1 text-xs text-muted-foreground">Tes debriefs n'ont pas pu être récupérés.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDebriefErr(false);
+                    setDebriefs(null);
+                  }}
+                  className="mt-3 rounded-lg border border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                >
+                  Réessayer
+                </button>
+              </div>
+            ) : debriefs === null ? (
+              <AnimatedBadge status="loading" size="sm">
+                Chargement de tes debriefs…
+              </AnimatedBadge>
+            ) : debriefs.length === 0 ? (
+              <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center shadow-sm">
+                <BarChart3 className="mx-auto h-8 w-8 text-faint" />
+                <div className="mt-2 text-sm font-medium text-foreground">Aucun debrief pour l'instant</div>
+                <p className="mt-1 text-xs text-muted-foreground">Les bilans de tes campagnes apparaîtront ici.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {debriefs.map((d, i) => (
+                  <article key={i} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-foreground">{d.brand}</div>
+                        {d.period && d.period !== "—" && <div className="mt-0.5 text-[11px] text-faint">{d.period}</div>}
+                      </div>
+                      {d.roi && d.roi !== "—" && (
+                        <span className="shrink-0 rounded-full bg-signalsoft px-2.5 py-1 text-[11px] font-semibold text-signaltext">ROI {d.roi}</span>
+                      )}
+                    </div>
+                    <div className="mt-2 text-[13px] text-muted-foreground">
+                      {d.budget} <span className="text-faint">→</span> <span className="font-semibold text-signaltext">{d.revenue}</span>
+                    </div>
+                    {d.summary && d.summary !== "—" && <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">{d.summary}</p>}
+                    {d.highlights?.length > 0 && (
+                      <ul className="mt-3 space-y-1.5">
+                        {d.highlights.map((h, j) => (
+                          <li key={j} className="flex items-start gap-2 text-[13px] text-foreground">
+                            <span className="mt-0.5 shrink-0 font-bold text-signaltext">✓</span>
+                            <span className="flex-1">{h}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {d.kpis?.length > 0 && (
+                      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {d.kpis.map((k, j) => (
+                          <div key={j} className="rounded-xl bg-panel px-3 py-2.5">
+                            <div className="text-[8px] font-semibold uppercase tracking-wide text-faint">{k.l}</div>
+                            <div className="mt-1 text-lg font-bold leading-none tracking-tight text-foreground">{k.v}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
             ))}
 
           {/* À faire */}
