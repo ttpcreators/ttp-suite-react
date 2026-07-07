@@ -74,11 +74,31 @@ export function refreshAppState(): Promise<AppState> {
 }
 
 /**
- * Écrit une clé dans le blob __app_state__ (read-modify-write de tout le blob,
- * comme l'ancienne app). Réservé à l'AGENCE (RLS). Renvoie true si OK.
+ * Écrit une clé dans le blob __app_state__. Réservé à l'AGENCE (RLS).
+ *
+ * Chemin ATOMIQUE (par défaut) : la fonction Postgres `app_state_set` fait un
+ * jsonb_set d'UNE seule clé, sous verrou de ligne → deux sauvegardes simultanées
+ * de clés différentes (Marc + Gianni) ne s'écrasent plus JAMAIS.
+ *
+ * Filet : si la fonction SQL n'est pas encore posée (migration 07), on retombe
+ * automatiquement sur l'ancien read-modify-write → aucune régression.
+ * Renvoie true si OK.
  */
 export async function saveAppStateKey(key: string, value: unknown): Promise<boolean> {
   _writeGen++; // marque une écriture en cours (prioritaire sur les refetch)
+  const { error } = await supabase.rpc("app_state_set", { p_key: key, p_value: value });
+  if (!error) {
+    // Cache local à jour sans refetch (le prochain tick live resynchronise).
+    _cache = { ...(_cache ?? {}), [key]: value } as AppState;
+    return true;
+  }
+  console.warn("[blob] app_state_set → fallback legacy", key, error.message);
+  return await legacySaveAppStateKey(key, value);
+}
+
+/** Ancienne écriture read-modify-write de tout le blob. Fallback si la fonction
+ *  SQL atomique n'existe pas encore. */
+async function legacySaveAppStateKey(key: string, value: unknown): Promise<boolean> {
   const { data, error: selErr } = await supabase
     .from("module_rows")
     .select("id,a")
