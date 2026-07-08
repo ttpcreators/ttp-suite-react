@@ -3,6 +3,7 @@ import { Copy, Check, FileText, Eye, X, Save, ChevronDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
+import { printHtml } from "@/lib/printPdf";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { TextField, SelectField } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
@@ -164,16 +165,9 @@ export function RepresentationContract() {
     }
   };
   const downloadPDF = () => {
-    const blob = new Blob([representationHTML(config)], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `contrat-representation-${(config.talentNom || "talent").toLowerCase().replace(/\s+/g, "-")}.html`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toast("Contrat téléchargé ✓ (ouvre-le puis Imprimer → PDF)");
+    // Ouvre la boîte d'impression → « Enregistrer au format PDF » (vrai PDF, texte net).
+    printHtml(representationHTML(config));
+    toast("Dans la fenêtre : choisis « Enregistrer au format PDF »");
   };
 
   // Relecture fraîche avant merge : ne pas écraser les cas d'autres créateurs.
@@ -461,11 +455,8 @@ export function RepresentationContract() {
         <Modal title="Aperçu du contrat" onClose={() => setPreview(null)} wide footer={
           <>
             <button type="button" className={ghostBtn} onClick={() => setPreview(null)}>Fermer</button>
-            <button type="button" className={cn(ghostBtn, "flex items-center gap-1.5")} onClick={() => {
-              const w = window.open("", "_blank");
-              if (w) { w.document.write(preview); w.document.close(); w.focus(); w.print(); } else toast("Autorise les pop-ups");
-            }}>
-              <FileText className="h-3.5 w-3.5" /> Imprimer / PDF
+            <button type="button" className={cn(ghostBtn, "flex items-center gap-1.5")} onClick={() => printHtml(preview)}>
+              <FileText className="h-3.5 w-3.5" /> Enregistrer en PDF
             </button>
           </>
         }>

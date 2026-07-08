@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Copy, Check, Plus, Trash2, Save, FileText, Eye, X } from "lucide-react";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
+import { printHtml } from "@/lib/printPdf";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { TextField } from "@/components/ui/form";
@@ -265,16 +266,9 @@ export function Contrats() {
   };
 
   const downloadPDF = () => {
-    const blob = new Blob([buildHTML()], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `contrat-${ctName.toLowerCase().replace(/\s+/g, "-")}-${ref}.html`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toast("Contrat téléchargé ✓ (ouvre-le puis Imprimer → PDF)");
+    // Ouvre la boîte d'impression → « Enregistrer au format PDF » (vrai PDF, texte net).
+    printHtml(buildHTML());
+    toast("Dans la fenêtre : choisis « Enregistrer au format PDF »");
   };
 
   // ── Cas de configuration (par créateur) ──
@@ -519,12 +513,9 @@ export function Contrats() {
               <button
                 type="button"
                 className={cn(ghostBtn, "flex items-center gap-1.5")}
-                onClick={() => {
-                  const w = window.open("", "_blank");
-                  if (w) { w.document.write(preview); w.document.close(); w.focus(); w.print(); } else toast("Autorise les pop-ups pour imprimer");
-                }}
+                onClick={() => printHtml(preview)}
               >
-                <FileText className="h-3.5 w-3.5" /> Imprimer / PDF
+                <FileText className="h-3.5 w-3.5" /> Enregistrer en PDF
               </button>
             </>
           }
