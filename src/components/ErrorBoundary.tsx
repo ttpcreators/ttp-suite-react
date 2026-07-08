@@ -29,6 +29,28 @@ function reportError(error: Error, componentStack: string, page: string) {
   }
 }
 
+// Erreur de chargement d'un chunk (module dynamique) : arrive quand l'app est
+// restée ouverte pendant un déploiement et demande un ancien fichier au hash
+// remplacé. Ce n'est PAS un bug de code → on recharge, on ne remonte pas.
+export function isChunkError(err: unknown): boolean {
+  const m = String((err as { message?: string })?.message ?? err ?? "");
+  return /dynamically imported module|Importing a module script failed|module script failed|Failed to fetch|ChunkLoadError|error loading dynamically/i.test(m);
+}
+
+/** Recharge la page au plus une fois par ~20 s (évite toute boucle si vraiment cassé). */
+export function reloadOnce(): boolean {
+  try {
+    const KEY = "ttp:chunk-reload";
+    const last = Number(sessionStorage.getItem(KEY) || "0");
+    if (Date.now() - last < 20000) return false; // déjà rechargé récemment → stop
+    sessionStorage.setItem(KEY, String(Date.now()));
+  } catch {
+    /* pas de sessionStorage → on tente quand même un reload */
+  }
+  location.reload();
+  return true;
+}
+
 // Clés d'UI (non critiques) qu'on peut effacer sans danger pour se ré-parer.
 // IMPORTANT : ne JAMAIS toucher la session Supabase (clé `sb-*-auth-token`),
 // sinon l'utilisateur serait déconnecté. On ne vise que nos clés `ttp:*` d'UI.
@@ -70,6 +92,9 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo) {
     // Trace pour le débogage (visible dans la console navigateur).
     console.error("[ErrorBoundary]", error, info.componentStack);
+    // Chunk introuvable après un déploiement → recharge auto (1×), pas un bug de
+    // code : on NE le remonte PAS au journal (sinon spam après chaque déploiement).
+    if (isChunkError(error) && reloadOnce()) return;
     // + remontée serveur : journal + notif push à l'agence.
     reportError(error, info.componentStack ?? "", String(this.props.resetKey ?? this.props.label ?? ""));
   }
@@ -84,6 +109,16 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
+
+    // Chunk manquant (déploiement) : on est en train de recharger → écran neutre,
+    // pas de message d'erreur alarmant.
+    if (isChunkError(error)) {
+      return (
+        <div className="grid min-h-[40vh] place-items-center">
+          <div className="text-sm text-muted-foreground">Mise à jour de l'app…</div>
+        </div>
+      );
+    }
 
     const { variant = "full", label } = this.props;
     const msg = error?.message ? String(error.message).slice(0, 300) : "Erreur inconnue";
