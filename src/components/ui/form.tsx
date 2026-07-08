@@ -55,6 +55,34 @@ export function TextField({
   );
 }
 
+export function TextAreaField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  rows = 3,
+  className,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  rows?: number;
+  className?: string;
+}) {
+  return (
+    <Field label={label} className={className}>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        className={inputCls + " resize-y leading-relaxed"}
+      />
+    </Field>
+  );
+}
+
 export function SelectField({
   label,
   value,

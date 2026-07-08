@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, X, Trash2 } from "lucide-react";
-import { TextField, SelectField } from "@/components/ui/form";
+import { TextField, TextAreaField, SelectField } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +11,7 @@ export type Ev = {
   title: string;
   type: string;
   who: string | null;
+  description?: string | null;
   /** Catégorie de la puce. Par défaut "event" (vrai rendez-vous, modifiable).
    *  "brief" / "todo" = échéances superposées en LECTURE SEULE (clic = navigation). */
   kind?: "event" | "brief" | "todo";
@@ -152,10 +153,11 @@ type Draft = {
   title: string;
   type: string;
   who: string;
+  description: string;
 };
 
 function emptyDraft(date: string): Draft {
-  return { id: null, date, time: "", title: "", type: "call", who: "" };
+  return { id: null, date, time: "", title: "", type: "call", who: "", description: "" };
 }
 
 export function EventCalendar({
@@ -240,7 +242,7 @@ export function EventCalendar({
     setDraft(emptyDraft(date));
   }
   function openEdit(e: Ev) {
-    setDraft({ id: e.id, date: e.date, time: e.time, title: e.title, type: e.type, who: e.who ?? "" });
+    setDraft({ id: e.id, date: e.date, time: e.time, title: e.title, type: e.type, who: e.who ?? "", description: e.description ?? "" });
   }
   // Un vrai événement s'édite ; une échéance brief/to-do renvoie vers sa page.
   function handleEventClick(e: Ev) {
@@ -261,6 +263,7 @@ export function EventCalendar({
       title: draft.title.trim(),
       type: draft.type,
       who: draft.who ? draft.who : null,
+      description: draft.description.trim() ? draft.description.trim() : null,
     };
     if (draft.id) onUpdate(draft.id, payload);
     else onCreate(payload);
@@ -737,6 +740,12 @@ function EventModal({
               options={whoOptions}
             />
           </div>
+          <TextAreaField
+            label="Description / commentaire"
+            value={draft.description}
+            onChange={(v) => setDraft({ ...draft, description: v })}
+            placeholder="Notes, ordre du jour, lien visio… (synchronisé avec Google Agenda)"
+          />
         </div>
 
         <div className="mt-5 flex items-center justify-between gap-2">

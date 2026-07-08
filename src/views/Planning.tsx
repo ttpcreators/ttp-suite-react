@@ -22,7 +22,7 @@ export function Planning() {
     let alive = true;
     supabase
       .from("events")
-      .select("id,day,date,time,title,type,who")
+      .select("id,day,date,time,title,type,who,description")
       .or("deleted.is.null,deleted.eq.false")
       .order("sort_order")
       .then(({ data, error }) => {
@@ -39,6 +39,7 @@ export function Planning() {
           title: (r.title as string) ?? "",
           type: (r.type as string) ?? "call",
           who: (r.who as string | null) ?? null,
+          description: (r.description as string | null) ?? null,
         })) as Ev[];
         setCache("events", list);
         setRows(list);
@@ -121,6 +122,7 @@ export function Planning() {
       title: e.title,
       type: e.type,
       who: e.who || null,
+      description: e.description ?? null,
       sort_order: rows.length + 1,
     };
     const created = await dbInsert("events", row);

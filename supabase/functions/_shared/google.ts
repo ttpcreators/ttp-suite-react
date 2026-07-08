@@ -177,6 +177,7 @@ export interface EventRow {
   title: string;
   type: string;
   who: string | null;
+  description: string | null;
   sort_order: number;
   google_event_id: string | null;
   google_etag: string | null;
@@ -192,6 +193,7 @@ export interface GoogleEvent {
   etag?: string;
   status?: string;
   summary?: string;
+  description?: string;
   updated?: string;
   start?: { date?: string; dateTime?: string; timeZone?: string };
   end?: { date?: string; dateTime?: string; timeZone?: string };
@@ -516,6 +518,8 @@ export function eventToGoogle(row: EventRow): Record<string, unknown> {
 
   const base: Record<string, unknown> = {
     summary: row.title && row.title.trim() ? row.title : "(sans titre)",
+    // Toujours envoyer description (même "") pour qu'un effacement se propage à Google.
+    description: row.description ?? "",
     extendedProperties: { private: priv },
   };
 
@@ -541,7 +545,7 @@ export function eventToGoogle(row: EventRow): Record<string, unknown> {
  */
 export function googleToEvent(g: GoogleEvent): {
   title: string; date: string; time: string | null; day: number;
-  type: string; who: string | null; sort_order: number;
+  type: string; who: string | null; description: string | null; sort_order: number;
 } {
   const priv = g.extendedProperties?.private ?? {};
   let date: string;
@@ -569,6 +573,7 @@ export function googleToEvent(g: GoogleEvent): {
     day,
     type: priv.ttp_type && priv.ttp_type.length > 0 ? priv.ttp_type : "call",
     who: priv.ttp_who && priv.ttp_who.length > 0 ? priv.ttp_who : null,
+    description: g.description && g.description.trim() ? g.description : null,
     sort_order: Number.isFinite(parsedSort) ? parsedSort : 0,
   };
 }
