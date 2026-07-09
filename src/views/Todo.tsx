@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
+import { notifyCreator } from "@/lib/push";
 import { useLiveKey } from "@/lib/useLive";
 import { toISODate, frDate } from "@/lib/dates";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
@@ -244,6 +245,8 @@ export function Todo() {
     const createdRow = created as unknown as Row;
     setRows([createdRow, ...(rows ?? [])]);
     if (note.trim()) await saveNote(createdRow.id, note);
+    // Push au créateur concerné (s'il a activé les notifs sur son téléphone).
+    if (creator) notifyCreator("task", creator, text.trim());
     toast("Tâche ajoutée ✓");
     setFormOpen(false);
     setText("");

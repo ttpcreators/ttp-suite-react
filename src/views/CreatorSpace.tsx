@@ -21,6 +21,7 @@ import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
 import { frDate, toISODate } from "@/lib/dates";
 import { notifyAgency } from "@/lib/push";
+import { PushCard } from "@/components/ui/push-card";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
@@ -513,6 +514,8 @@ export function CreatorSpace({
           {/* Accueil */}
           {tab === "accueil" && (
             <div className="flex flex-col gap-4">
+              {/* Activer les notifications push (tâches / documents ajoutés par l'agence) */}
+              <PushCard />
               {/* Mes infos (éditable) */}
               <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
                 <div className="mb-3 flex items-center justify-between gap-3">

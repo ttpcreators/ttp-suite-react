@@ -26,6 +26,24 @@ export function notifyAgency(kind: "tache" | "idee" | "evenement", creator: stri
   }
 }
 
+/** Notifie UN créateur (push immédiat sur ses appareils) quand l'agence lui
+ *  ajoute quelque chose (tâche, document…). Best-effort : jamais bloquant. */
+export function notifyCreator(
+  kind: "task" | "document" | "brief" | "debrief" | "event" | "mediakit",
+  creator: string,
+  text: string,
+) {
+  const who = creator.trim();
+  if (!who) return;
+  try {
+    supabase.functions
+      .invoke("daily-digest", { body: { event: "agency_activity", kind, creator: who, text: text.slice(0, 140) } })
+      .catch(() => {});
+  } catch {
+    /* jamais bloquant */
+  }
+}
+
 export function pushSupported(): boolean {
   return (
     typeof navigator !== "undefined" &&

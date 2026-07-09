@@ -8,6 +8,7 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { useCreators } from "@/lib/useCreators";
+import { notifyCreator } from "@/lib/push";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useEffect, useRef, useState } from "react";
 import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, Trash2, type LucideIcon } from "lucide-react";
@@ -127,6 +128,8 @@ export function Documents() {
       return;
     }
     setRows([created as unknown as Row, ...(rows ?? [])]);
+    // Push au créateur concerné (s'il a activé les notifs sur son téléphone).
+    if (docCreator) notifyCreator("document", docCreator, file.name);
     toast("Document ajouté ✓");
     setFormOpen(false);
     setDocType("autre");

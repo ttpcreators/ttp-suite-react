@@ -158,6 +158,33 @@ async function sendToAll(sb: ReturnType<typeof getServiceClient>, payload: strin
   return { sent, removed, firstError, total: subs.length };
 }
 
+/** Push vers les appareils d'UN créateur (résolu par profiles.creator_name).
+ *  Réservé à l'agence : la résolution se fait côté serveur, pas de fuite croisée. */
+async function pushToCreator(sb: ReturnType<typeof getServiceClient>, creatorName: string, payload: string) {
+  const { data: profs } = await sb
+    .from("profiles").select("user_id").eq("role", "creator").eq("creator_name", creatorName);
+  const ids = [...new Set((profs ?? []).map((p) => (p as { user_id: string | null }).user_id).filter(Boolean))] as string[];
+  if (!ids.length) return { sent: 0, removed: 0, total: 0, reason: "creator_sans_compte" };
+  const { data: subsRaw } = await sb
+    .from("push_subscriptions").select("id,endpoint,p256dh,auth").in("user_id", ids);
+  const subs = (subsRaw ?? []) as { id: string; endpoint: string; p256dh: string; auth: string }[];
+  let sent = 0;
+  let removed = 0;
+  for (const s of subs) {
+    try {
+      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
+      sent++;
+    } catch (e) {
+      const code = (e as { statusCode?: number })?.statusCode;
+      if (code === 404 || code === 410) {
+        await sb.from("push_subscriptions").delete().eq("id", s.id);
+        removed++;
+      }
+    }
+  }
+  return { sent, removed, total: subs.length };
+}
+
 Deno.serve(async (req: Request) => {
   // CORS — indispensable : le bouton "Envoyer un test" appelle depuis le navigateur.
   const cors = corsHeaders(req.headers.get("Origin"));
@@ -199,8 +226,30 @@ Deno.serve(async (req: Request) => {
     return jsonRes({ ok: true, creatorActivity: true, ...r });
   }
 
-  // Les modes ci-dessous (test + digest) sont réservés à l'agence / au cron.
+  // Les modes ci-dessous (agence→créateur, test, digest) sont réservés à l'agence / au cron.
   if (caller.role === "creator") return jsonRes({ error: "unauthorized" }, 401);
+
+  // Activité agence → créateur : push au créateur concerné (nouvelle tâche, document…).
+  if (body?.event === "agency_activity") {
+    const creator = String(body.creator ?? "").trim();
+    if (!creator) return jsonRes({ error: "creator_manquant" }, 400);
+    const what = String(body.text ?? "").slice(0, 140);
+    const title =
+      body.kind === "document" ? "📄 Nouveau document de ton agence"
+      : body.kind === "brief" ? "📋 Nouveau brief de ton agence"
+      : body.kind === "debrief" ? "📊 Nouveau débrief de ton agence"
+      : body.kind === "event" ? "📅 Nouvel évènement de ton agence"
+      : body.kind === "mediakit" ? "🖼️ Nouveau media kit de ton agence"
+      : "✓ Nouvelle tâche de ton agence";
+    const payload = JSON.stringify({
+      title,
+      body: what || "Ouvre ton espace pour voir le détail.",
+      url: "/",
+      tag: `ttp-agency-${Date.now()}`,
+    });
+    const r = await pushToCreator(sb, creator, payload);
+    return jsonRes({ ok: true, agencyActivity: true, ...r });
+  }
 
   // Mode test (bouton dans l'app) : envoie une notif de contrôle, sans calcul.
   if (body?.test === true) {
