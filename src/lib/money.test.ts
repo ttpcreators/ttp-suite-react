@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseAmount, formatEuro } from "./appState";
+import { parseAmount, formatEuro } from "./money";
 
 describe("parseAmount", () => {
   it("lit les montants FR (espace = milliers, virgule = décimale)", () => {

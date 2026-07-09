@@ -182,19 +182,6 @@ export function useAppState<T = AppState>(select?: (s: AppState) => T) {
   return { data, loading, error };
 }
 
-/** Helper : parse un montant texte ("3 000 €", "1 200,50 €") en nombre.
- *  Gère le séparateur décimal FR (virgule) sans l'écraser — sinon "3 000,00 €"
- *  était lu 300000 (×100). Compatible avec les montants entiers ("2000 €" → 2000). */
-export function parseAmount(x: unknown): number {
-  const cleaned = String(x ?? "")
-    .replace(/\s/g, "")
-    .replace(",", ".")
-    .replace(/[^0-9.\-]/g, "");
-  const n = parseFloat(cleaned);
-  return Number.isFinite(n) ? n : 0;
-}
-
-/** Helper : formate un nombre en "3 000 €". */
-export function formatEuro(n: number): string {
-  return n.toLocaleString("fr-FR").replace(/ /g, " ") + " €";
-}
+// parseAmount / formatEuro vivent dans ./money (purs, sans supabase -> testables
+// sans charger le client). Reexportes ici pour ne pas casser les imports existants.
+export { parseAmount, formatEuro } from "./money";
