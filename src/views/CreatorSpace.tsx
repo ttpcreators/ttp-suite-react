@@ -16,6 +16,11 @@ import {
   TrendingUp,
   ExternalLink,
   BarChart3,
+  Users,
+  Heart,
+  Eye,
+  Wallet,
+  type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
@@ -408,10 +413,15 @@ export function CreatorSpace({
     setTdEditId(null);
   };
 
-  const stat = (label: string, val: string | null) => (
-    <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-      <div className="text-[9px] font-semibold uppercase tracking-wider text-faint">{label}</div>
-      <div className="mt-1.5 truncate text-xl font-bold tracking-tight">{val || "—"}</div>
+  const stat = (label: string, val: string | null, Icon: LucideIcon, tint: string) => (
+    <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow-md">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[9px] font-semibold uppercase tracking-wider text-faint">{label}</div>
+        <span className={"grid h-7 w-7 shrink-0 place-items-center rounded-full " + tint}>
+          <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
+        </span>
+      </div>
+      <div className="mt-2 truncate text-[26px] font-bold leading-none tracking-tight">{val || "—"}</div>
     </div>
   );
 
@@ -511,20 +521,23 @@ export function CreatorSpace({
             </div>
           </div>
 
-          {/* Greeting */}
-          <div className="mb-5 flex items-center gap-4">
+          {/* Hero d'accueil */}
+          <div className="mb-5 flex items-center gap-4 rounded-2xl border border-border bg-gradient-to-br from-primary/10 via-surface to-surface p-4 shadow-sm">
             <AvatarUpload
               creatorId={creator?.id}
               name={name}
               photoUrl={creator?.photo_url ?? null}
-              size={56}
+              size={60}
               onUploaded={(url) => setCreator((c) => (c ? { ...c, photo_url: url } : c))}
             />
-            <div>
-              <div className="text-sm text-faint">Bonjour</div>
-              <div className="text-[26px] font-semibold tracking-tight md:text-[30px]">
+            <div className="min-w-0">
+              <div className="text-xs font-medium text-faint">Bonjour</div>
+              <div className="truncate text-[24px] font-bold tracking-tight md:text-[28px]">
                 {firstName} 👋
               </div>
+              {creator?.instagram && (
+                <div className="mt-0.5 truncate text-xs text-muted-foreground">{creator.instagram}</div>
+              )}
             </div>
           </div>
 
@@ -604,36 +617,58 @@ export function CreatorSpace({
 
               {/* Stats */}
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                {stat("Abonnés", creator?.followers ?? null)}
-                {stat("Engagement", creator?.er ?? null)}
-                {stat("Reach", creator?.reach ?? null)}
-                {stat("CA · mois", creator?.ca ?? null)}
+                {stat("Abonnés", creator?.followers ?? null, Users, "bg-primary/10 text-primary")}
+                {stat("Engagement", creator?.er ?? null, Heart, "bg-rose-500/10 text-rose-500")}
+                {stat("Reach", creator?.reach ?? null, Eye, "bg-violet-500/10 text-violet-500")}
+                {stat("CA · mois", creator?.ca ?? null, Wallet, "bg-emerald-500/10 text-emerald-600")}
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                  <div className="mb-3 text-sm font-semibold">Mes tâches</div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-primary/10 text-primary">
+                      <ListChecks className="h-4 w-4" />
+                    </span>
+                    <div className="text-sm font-semibold">Mes tâches</div>
+                    {openTodos.length > 0 && (
+                      <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                        {openTodos.length}
+                      </span>
+                    )}
+                  </div>
                   {openTodos.length === 0 ? (
-                    <div className="text-xs text-muted-foreground">Rien à faire 🎉</div>
+                    <div className="py-2 text-xs text-muted-foreground">Rien à faire 🎉</div>
                   ) : (
-                    openTodos.slice(0, 5).map((t) => (
-                      <div key={t.id} className="flex items-center gap-2.5 py-1.5">
-                        <span className="h-4 w-4 shrink-0 rounded-[5px] border border-faint" />
-                        <span className="truncate text-xs">{t.text}</span>
-                      </div>
-                    ))
+                    <div className="flex flex-col gap-0.5">
+                      {openTodos.slice(0, 5).map((t) => (
+                        <div key={t.id} className="flex items-center gap-2.5 rounded-lg py-1.5">
+                          <span className="h-4 w-4 shrink-0 rounded-[5px] border-2 border-faint/60" />
+                          <span className="truncate text-[13px]">{t.text}</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
                 <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                  <div className="mb-3 text-sm font-semibold">Mes briefs</div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-violet-500/10 text-violet-500">
+                      <FileText className="h-4 w-4" />
+                    </span>
+                    <div className="text-sm font-semibold">Mes briefs</div>
+                    {briefs.length > 0 && (
+                      <span className="ml-auto rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-bold text-violet-500">
+                        {briefs.length}
+                      </span>
+                    )}
+                  </div>
                   {briefs.length === 0 ? (
-                    <div className="text-xs text-muted-foreground">Aucun brief.</div>
+                    <div className="py-2 text-xs text-muted-foreground">Aucun brief.</div>
                   ) : (
                     briefs.slice(0, 5).map((b) => (
                       <div key={b.id} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
                         <span className="h-2 w-2 shrink-0 rounded-full bg-signal" />
-                        <div className="min-w-0 flex-1 truncate text-xs font-medium">{b.brand}</div>
-                        <span className="text-[10px] text-faint">{frDate(b.due)}</span>
+                        <div className="min-w-0 flex-1 truncate text-[13px] font-medium">{b.brand}</div>
+                        <span className="shrink-0 text-[10px] text-faint">{frDate(b.due)}</span>
                       </div>
                     ))
                   )}
