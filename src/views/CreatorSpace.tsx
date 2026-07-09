@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { motion } from "motion/react";
 import {
   LayoutDashboard,
   ListChecks,
@@ -16,11 +17,6 @@ import {
   TrendingUp,
   ExternalLink,
   BarChart3,
-  Users,
-  Heart,
-  Eye,
-  Wallet,
-  type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
@@ -92,6 +88,20 @@ const MOBILE_FAMILIES: { id: string; label: string; icon: typeof LayoutDashboard
   { id: "travail", label: "Mon travail", icon: ListChecks, items: ["todo", "ideas", "briefs", "planning"] },
   { id: "fichiers", label: "Fichiers", icon: Files, items: ["documents", "facturation"] },
 ];
+
+/** Carte animée (identique à l'Aperçu agence : entrée douce + délai décalé). */
+function Card({ children, className = "", index = 0 }: { children: ReactNode; className?: string; index?: number }) {
+  return (
+    <motion.div
+      initial={{ y: 14 }}
+      animate={{ y: 0 }}
+      transition={{ delay: index * 0.04, duration: 0.4, ease: "easeOut" }}
+      className={"rounded-2xl border border-border bg-surface p-5 shadow-sm " + className}
+    >
+      {children}
+    </motion.div>
+  );
+}
 
 /** Sous-menu déployé d'une famille (liste ses pages). */
 function CreatorMobileMenu({ ids, onSelect }: { ids: Tab[]; onSelect: (id: Tab) => void }) {
@@ -413,17 +423,6 @@ export function CreatorSpace({
     setTdEditId(null);
   };
 
-  const stat = (label: string, val: string | null, Icon: LucideIcon, tint: string) => (
-    <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow-md">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-[9px] font-semibold uppercase tracking-wider text-faint">{label}</div>
-        <span className={"grid h-7 w-7 shrink-0 place-items-center rounded-full " + tint}>
-          <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
-        </span>
-      </div>
-      <div className="mt-2 truncate text-[26px] font-bold leading-none tracking-tight">{val || "—"}</div>
-    </div>
-  );
 
   const infoRow = (label: string, val: string | null) => (
     <div className="flex items-start justify-between gap-3 border-b border-border py-2 last:border-0">
@@ -521,24 +520,19 @@ export function CreatorSpace({
             </div>
           </div>
 
-          {/* Hero d'accueil */}
-          <div className="mb-5 flex items-center gap-4 rounded-2xl border border-border bg-gradient-to-br from-primary/10 via-surface to-surface p-4 shadow-sm">
+          {/* Header (façon Aperçu agence : petit bonjour + gros titre, avatar à droite) */}
+          <div className="mb-5 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="mb-1.5 text-sm text-foreground">Bonjour {firstName} ✌️</div>
+              <div className="text-[26px] font-semibold tracking-tight md:text-[30px]">Mon espace</div>
+            </div>
             <AvatarUpload
               creatorId={creator?.id}
               name={name}
               photoUrl={creator?.photo_url ?? null}
-              size={60}
+              size={52}
               onUploaded={(url) => setCreator((c) => (c ? { ...c, photo_url: url } : c))}
             />
-            <div className="min-w-0">
-              <div className="text-xs font-medium text-faint">Bonjour</div>
-              <div className="truncate text-[24px] font-bold tracking-tight md:text-[28px]">
-                {firstName} 👋
-              </div>
-              {creator?.instagram && (
-                <div className="mt-0.5 truncate text-xs text-muted-foreground">{creator.instagram}</div>
-              )}
-            </div>
           </div>
 
           {/* (Nav mobile déplacée en barre flottante fixe en bas — voir plus bas.) */}
@@ -549,130 +543,125 @@ export function CreatorSpace({
           {/* Accueil */}
           {tab === "accueil" && (
             <div className="flex flex-col gap-4">
-              {/* Activer les notifications push (tâches / documents ajoutés par l'agence) */}
               <PushCard />
-              {/* Mes infos (éditable) */}
-              <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold">Mes infos</div>
-                  {editing ? (
-                    <button
-                      type="button"
-                      onClick={saveInfos}
-                      className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
-                    >
-                      <Check className="h-3.5 w-3.5" /> Enregistrer
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={startEdit}
-                      disabled={!creator}
-                      className="flex h-8 items-center gap-1.5 rounded-lg bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover disabled:opacity-50"
-                    >
-                      <Pencil className="h-3.5 w-3.5" /> Modifier
-                    </button>
-                  )}
+
+              {/* Mes statistiques — KPI en mini-cartes (façon "Activité de l'agence") */}
+              <Card index={0}>
+                <div className="mb-4 text-sm font-semibold">Mes statistiques</div>
+                <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
+                  {[
+                    { label: "Abonnés", val: creator?.followers },
+                    { label: "Engagement", val: creator?.er },
+                    { label: "Reach", val: creator?.reach },
+                    { label: "CA · mois", val: creator?.ca },
+                  ].map((s) => (
+                    <div key={s.label} className="rounded-xl bg-panel p-4">
+                      <div className="truncate text-[22px] font-bold tracking-tight">{s.val || "—"}</div>
+                      <div className="mt-1 text-[10px] font-medium text-faint">{s.label}</div>
+                    </div>
+                  ))}
                 </div>
+              </Card>
 
-                {editing ? (
-                  <div className="flex flex-col gap-4">
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      {editInput("Ville", "ville")}
-                      {editInput("Téléphone", "phone")}
-                      {editInput("Email perso", "email")}
-                      {editInput("Email pro", "email_pro")}
-                      {editInput("Instagram", "instagram")}
-                      {editInput("TikTok", "tiktok")}
-                      {editInput("Adresse", "address")}
-                      {editInput("SIREN", "siren")}
-                      {editInput("Naissance", "birth", undefined, "date")}
-                    </div>
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">Statistiques</div>
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                      {editInput("Abonnés", "followers")}
-                      {editInput("Engagement", "er")}
-                      {editInput("Reach", "reach")}
-                      {editInput("CA · mois", "ca")}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-x-8 gap-y-0 md:grid-cols-2">
-                    <div>
-                      {infoRow("Ville", creator?.ville ?? null)}
-                      {infoRow("Téléphone", creator?.phone ?? null)}
-                      {infoRow("Email perso", creator?.email ?? null)}
-                      {infoRow("Email pro", creator?.email_pro ?? null)}
-                    </div>
-                    <div>
-                      {infoRow("Adresse", creator?.address ?? null)}
-                      {infoRow("SIREN", creator?.siren ?? null)}
-                      {infoRow("Naissance", frDate(creator?.birth))}
-                      {infoRow("Instagram", creator?.instagram ?? null)}
-                      {infoRow("TikTok", creator?.tiktok ?? null)}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Stats */}
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                {stat("Abonnés", creator?.followers ?? null, Users, "bg-primary/10 text-primary")}
-                {stat("Engagement", creator?.er ?? null, Heart, "bg-rose-500/10 text-rose-500")}
-                {stat("Reach", creator?.reach ?? null, Eye, "bg-violet-500/10 text-violet-500")}
-                {stat("CA · mois", creator?.ca ?? null, Wallet, "bg-emerald-500/10 text-emerald-600")}
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                  <div className="mb-3 flex items-center gap-2">
-                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-primary/10 text-primary">
-                      <ListChecks className="h-4 w-4" />
-                    </span>
+              {/* Tâches + Briefs (listes façon agence) */}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
+                <Card index={1} className="md:col-span-6">
+                  <div className="mb-3.5 flex items-center justify-between">
                     <div className="text-sm font-semibold">Mes tâches</div>
                     {openTodos.length > 0 && (
-                      <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-                        {openTodos.length}
-                      </span>
+                      <span className="text-[9px] font-semibold text-muted-foreground">{openTodos.length} EN COURS</span>
                     )}
                   </div>
                   {openTodos.length === 0 ? (
                     <div className="py-2 text-xs text-muted-foreground">Rien à faire 🎉</div>
                   ) : (
-                    <div className="flex flex-col gap-0.5">
-                      {openTodos.slice(0, 5).map((t) => (
-                        <div key={t.id} className="flex items-center gap-2.5 rounded-lg py-1.5">
-                          <span className="h-4 w-4 shrink-0 rounded-[5px] border-2 border-faint/60" />
-                          <span className="truncate text-[13px]">{t.text}</span>
-                        </div>
-                      ))}
-                    </div>
+                    openTodos.slice(0, 5).map((t) => (
+                      <div key={t.id} className="flex items-center gap-2.5 py-[7px]">
+                        <span className="h-4 w-4 shrink-0 rounded-[5px] border border-faint" />
+                        <span className="flex-1 truncate text-xs">{t.text}</span>
+                      </div>
+                    ))
                   )}
-                </div>
-                <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                  <div className="mb-3 flex items-center gap-2">
-                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-violet-500/10 text-violet-500">
-                      <FileText className="h-4 w-4" />
-                    </span>
-                    <div className="text-sm font-semibold">Mes briefs</div>
-                    {briefs.length > 0 && (
-                      <span className="ml-auto rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-bold text-violet-500">
-                        {briefs.length}
-                      </span>
-                    )}
-                  </div>
+                </Card>
+
+                <Card index={2} className="md:col-span-6">
+                  <div className="mb-3.5 text-sm font-semibold">Mes briefs</div>
                   {briefs.length === 0 ? (
                     <div className="py-2 text-xs text-muted-foreground">Aucun brief.</div>
                   ) : (
                     briefs.slice(0, 5).map((b) => (
                       <div key={b.id} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
                         <span className="h-2 w-2 shrink-0 rounded-full bg-signal" />
-                        <div className="min-w-0 flex-1 truncate text-[13px] font-medium">{b.brand}</div>
-                        <span className="shrink-0 text-[10px] text-faint">{frDate(b.due)}</span>
+                        <div className="min-w-0 flex-1 truncate text-xs font-medium">{b.brand}</div>
+                        <span className="shrink-0 text-[9px] font-semibold text-muted-foreground">{frDate(b.due)}</span>
                       </div>
                     ))
                   )}
-                </div>
+                </Card>
+
+                {/* Mes infos (éditable) — pleine largeur */}
+                <Card index={3} className="md:col-span-12">
+                  <div className="mb-3.5 flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold">Mes infos</div>
+                    {editing ? (
+                      <button
+                        type="button"
+                        onClick={saveInfos}
+                        className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+                      >
+                        <Check className="h-3.5 w-3.5" /> Enregistrer
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={startEdit}
+                        disabled={!creator}
+                        className="flex h-8 items-center gap-1.5 rounded-lg bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover disabled:opacity-50"
+                      >
+                        <Pencil className="h-3.5 w-3.5" /> Modifier
+                      </button>
+                    )}
+                  </div>
+
+                  {editing ? (
+                    <div className="flex flex-col gap-4">
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {editInput("Ville", "ville")}
+                        {editInput("Téléphone", "phone")}
+                        {editInput("Email perso", "email")}
+                        {editInput("Email pro", "email_pro")}
+                        {editInput("Instagram", "instagram")}
+                        {editInput("TikTok", "tiktok")}
+                        {editInput("Adresse", "address")}
+                        {editInput("SIREN", "siren")}
+                        {editInput("Naissance", "birth", undefined, "date")}
+                      </div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">Statistiques</div>
+                      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                        {editInput("Abonnés", "followers")}
+                        {editInput("Engagement", "er")}
+                        {editInput("Reach", "reach")}
+                        {editInput("CA · mois", "ca")}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-x-8 gap-y-0 md:grid-cols-2">
+                      <div>
+                        {infoRow("Ville", creator?.ville ?? null)}
+                        {infoRow("Téléphone", creator?.phone ?? null)}
+                        {infoRow("Email perso", creator?.email ?? null)}
+                        {infoRow("Email pro", creator?.email_pro ?? null)}
+                      </div>
+                      <div>
+                        {infoRow("Adresse", creator?.address ?? null)}
+                        {infoRow("SIREN", creator?.siren ?? null)}
+                        {infoRow("Naissance", frDate(creator?.birth))}
+                        {infoRow("Instagram", creator?.instagram ?? null)}
+                        {infoRow("TikTok", creator?.tiktok ?? null)}
+                      </div>
+                    </div>
+                  )}
+                </Card>
               </div>
             </div>
           )}
