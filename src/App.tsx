@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronRight, Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus } from "lucide-react";
+import { ChevronRight, Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { restoreTabs, navigateTab, addTab, closeTab as closeTabState } from "@/lib/tabs";
 import type { Session } from "@supabase/supabase-js";
@@ -487,6 +487,15 @@ export default function App() {
           aria-label="Basculer le thème"
         >
           {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
+        {/* Déconnexion — mobile uniquement (sur desktop, elle est dans la sidebar) */}
+        <button
+          type="button"
+          onClick={logout}
+          className="grid h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover md:hidden"
+          aria-label="Se déconnecter"
+        >
+          <LogOut className="h-4 w-4" />
         </button>
       </div>
     </header>
