@@ -455,8 +455,8 @@ export function CreatorSpace({
           </div>
         </aside>
 
-        {/* Panneau principal */}
-        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto rounded-[22px] bg-panel px-4 pb-8 pt-4 md:px-6 md:pt-6">
+        {/* Panneau principal — pb-28 sur mobile pour dégager la barre flottante du bas */}
+        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto rounded-[22px] bg-panel px-4 pb-28 pt-4 md:px-6 md:pb-8 md:pt-6">
           {/* Barre du haut (mobile) */}
           <div className="mb-5 flex items-center justify-between gap-3 md:hidden">
             <div className="flex items-center gap-2.5">
@@ -495,25 +495,7 @@ export function CreatorSpace({
             </div>
           </div>
 
-          {/* Tabs (mobile uniquement) — barre défilante horizontalement.
-              shrink-0 sur la BARRE : le <main> est un flex-col, sans ça la barre
-              est comprimée verticalement en un filet quand le contenu est haut.
-              shrink-0 sur chaque onglet : sinon ils se compriment horizontalement. */}
-          <div className="-mx-4 mb-5 flex shrink-0 gap-1.5 overflow-x-auto px-4 pb-1 md:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                className={
-                  "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors " +
-                  (tab === t.id ? "bg-primary text-primary-foreground shadow-sm" : "bg-surface text-muted-foreground hover:text-foreground")
-                }
-              >
-                <t.icon className="h-4 w-4 shrink-0" /> <span>{t.label}</span>
-              </button>
-            ))}
-          </div>
+          {/* (Nav mobile déplacée en barre flottante fixe en bas — voir plus bas.) */}
 
           {/* Contenu des onglets — barrière d'erreur : un onglet qui plante
               n'emporte pas la navigation (la sidebar reste cliquable). */}
@@ -1021,6 +1003,31 @@ export function CreatorSpace({
           )}
           </ErrorBoundary>
         </main>
+      </div>
+
+      {/* Nav mobile flottante (fixe en bas — façon espace agence). En position
+          fixed → jamais comprimée par le flex. L'onglet actif montre son libellé. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-3 md:hidden">
+        <div className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-border bg-surface p-1.5 shadow-lg [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {TABS.map((t) => {
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                aria-label={t.label}
+                className={
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold transition-colors " +
+                  (active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-rowhover")
+                }
+              >
+                <t.icon className="h-4 w-4 shrink-0" />
+                {active && <span className="whitespace-nowrap">{t.label}</span>}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
