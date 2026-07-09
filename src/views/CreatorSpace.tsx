@@ -495,19 +495,21 @@ export function CreatorSpace({
             </div>
           </div>
 
-          {/* Tabs (mobile uniquement) */}
-          <div className="mb-5 flex gap-1 overflow-x-auto rounded-xl bg-surface p-1 md:hidden">
+          {/* Tabs (mobile uniquement) — barre défilante horizontalement.
+              shrink-0 sur chaque onglet : sinon 9 onglets se compriment dans un
+              flex et la barre devient un filet inutilisable au lieu de défiler. */}
+          <div className="-mx-4 mb-5 flex gap-1.5 overflow-x-auto px-4 pb-1 md:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {TABS.map((t) => (
               <button
                 key={t.id}
                 type="button"
                 onClick={() => setTab(t.id)}
                 className={
-                  "flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 py-2.5 text-xs font-semibold transition-colors " +
-                  (tab === t.id ? "bg-panel text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")
+                  "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors " +
+                  (tab === t.id ? "bg-primary text-primary-foreground shadow-sm" : "bg-surface text-muted-foreground hover:text-foreground")
                 }
               >
-                <t.icon className="h-4 w-4" /> <span>{t.label}</span>
+                <t.icon className="h-4 w-4 shrink-0" /> <span>{t.label}</span>
               </button>
             ))}
           </div>

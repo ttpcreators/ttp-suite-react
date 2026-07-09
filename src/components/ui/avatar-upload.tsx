@@ -64,12 +64,16 @@ export function AvatarUpload({
     setBusy(true);
     const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
     const path = `${slug(name) || "creator"}/${Date.now()}.${ext}`;
+    // Chemin horodaté = toujours unique → INSERT pur (upsert:false). Les créateurs
+    // ont le droit d'INSÉRER dans `avatars`, mais pas d'UPDATE (réservé à l'agence) ;
+    // upsert:true pouvait donc échouer côté créateur depuis le durcissement du bucket.
     const { error: upErr } = await supabase.storage
       .from("avatars")
-      .upload(path, file, { upsert: true, cacheControl: "3600", contentType: file.type });
+      .upload(path, file, { upsert: false, cacheControl: "3600", contentType: file.type });
     if (upErr) {
       setBusy(false);
-      toast("Échec de l'upload — réessaie");
+      console.warn("[avatar] upload", upErr);
+      toast(`Échec de l'upload : ${(upErr.message || "réessaie").slice(0, 80)}`);
       return;
     }
     const { data } = supabase.storage.from("avatars").getPublicUrl(path);
@@ -77,7 +81,7 @@ export function AvatarUpload({
     const ok = await dbUpdate("creators", creatorId, { photo_url: url });
     setBusy(false);
     if (!ok) {
-      toast("Photo envoyée mais non enregistrée");
+      toast("Photo envoyée mais non enregistrée (droits ?)");
       return;
     }
     setBroken(false);
