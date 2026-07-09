@@ -29,6 +29,7 @@ import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/f
 import { ActionMenu } from "@/components/ui/action-menu";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
+import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
 import { EventCalendar, type Ev as CalEv } from "@/components/ui/event-calendar";
 import { parseAmount, formatEuro } from "@/lib/appState";
 import { useLiveKey } from "@/lib/useLive";
@@ -79,6 +80,37 @@ const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "facturation", label: "Facturation", icon: Receipt },
 ];
 
+// Regroupement des onglets en familles pour la nav mobile animée (ExpandableTabs,
+// même composant que l'espace agence) : on tape une famille → ses pages se déploient.
+const MOBILE_FAMILIES: { id: string; label: string; icon: typeof LayoutDashboard; items: Tab[] }[] = [
+  { id: "espace", label: "Mon espace", icon: LayoutDashboard, items: ["accueil", "evolution", "debrief"] },
+  { id: "travail", label: "Mon travail", icon: ListChecks, items: ["todo", "ideas", "briefs", "planning"] },
+  { id: "fichiers", label: "Fichiers", icon: Files, items: ["documents", "facturation"] },
+];
+
+/** Sous-menu déployé d'une famille (liste ses pages). */
+function CreatorMobileMenu({ ids, onSelect }: { ids: Tab[]; onSelect: (id: Tab) => void }) {
+  return (
+    <div className="flex w-[14rem] flex-col gap-0.5">
+      {ids.map((id) => {
+        const t = TABS.find((x) => x.id === id);
+        if (!t) return null;
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onSelect(id)}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            <t.icon className="h-4 w-4 text-muted-foreground" />
+            <span className="flex-1">{t.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** Debrief (lecture seule côté créateur). */
 type DebriefLite = {
   brand: string; creator: string; period: string; deliverables?: string;
@@ -126,6 +158,7 @@ export function CreatorSpace({
   onLogout: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("accueil");
+  const [mobileTab, setMobileTab] = useState<string | null>(null); // famille déployée (nav mobile)
   // Historique d'engagement du créateur — via la fonction serveur creator-history
   // (le blob agence est inaccessible aux créateurs ; le serveur filtre sur SON nom).
   const [suivi, setSuivi] = useState<SuiviEntry[] | null>(null);
@@ -1005,28 +1038,28 @@ export function CreatorSpace({
         </main>
       </div>
 
-      {/* Nav mobile flottante (fixe en bas — façon espace agence). En position
-          fixed → jamais comprimée par le flex. L'onglet actif montre son libellé. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-3 md:hidden">
-        <div className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-border bg-surface p-1.5 shadow-lg [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {TABS.map((t) => {
-            const active = tab === t.id;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                aria-label={t.label}
-                className={
-                  "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold transition-colors " +
-                  (active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-rowhover")
-                }
-              >
-                <t.icon className="h-4 w-4 shrink-0" />
-                {active && <span className="whitespace-nowrap">{t.label}</span>}
-              </button>
-            );
-          })}
+      {/* Nav mobile animée — MÊME composant que l'espace agence (ExpandableTabs).
+          On tape une famille → ses pages se déploient en animé. Fixe en bas. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center md:hidden">
+        <div className="pointer-events-auto">
+          <ExpandableTabs
+            items={MOBILE_FAMILIES.map((f) => ({
+              id: f.id,
+              label: f.label,
+              icon: <f.icon className="h-4 w-4" />,
+              content: (
+                <CreatorMobileMenu
+                  ids={f.items}
+                  onSelect={(id) => {
+                    setTab(id);
+                    setMobileTab(null);
+                  }}
+                />
+              ),
+            }))}
+            value={mobileTab}
+            onValueChange={setMobileTab}
+          />
         </div>
       </div>
     </div>
