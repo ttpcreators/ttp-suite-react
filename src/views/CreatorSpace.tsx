@@ -496,9 +496,10 @@ export function CreatorSpace({
           </div>
 
           {/* Tabs (mobile uniquement) — barre défilante horizontalement.
-              shrink-0 sur chaque onglet : sinon 9 onglets se compriment dans un
-              flex et la barre devient un filet inutilisable au lieu de défiler. */}
-          <div className="-mx-4 mb-5 flex gap-1.5 overflow-x-auto px-4 pb-1 md:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              shrink-0 sur la BARRE : le <main> est un flex-col, sans ça la barre
+              est comprimée verticalement en un filet quand le contenu est haut.
+              shrink-0 sur chaque onglet : sinon ils se compriment horizontalement. */}
+          <div className="-mx-4 mb-5 flex shrink-0 gap-1.5 overflow-x-auto px-4 pb-1 md:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {TABS.map((t) => (
               <button
                 key={t.id}
