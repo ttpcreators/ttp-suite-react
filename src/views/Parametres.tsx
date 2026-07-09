@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BellRing, Smartphone, Sunrise, Sun, Users, Mail, CalendarDays, Bug } from "lucide-react";
+import { BellRing, Smartphone, Sunrise, Sun, Users, Mail, CalendarDays, Bug, LogOut } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
@@ -285,6 +286,21 @@ export function Parametres() {
           checked={on(prefs.emailReceivedBell)}
           onChange={(v) => setPref("emailReceivedBell", v)}
         />
+      </Section>
+
+      {/* Compte */}
+      <Section
+        icon={<LogOut className="h-4 w-4" />}
+        title="Compte"
+        hint="Se déconnecter de cet appareil."
+      >
+        <button
+          type="button"
+          onClick={() => supabase.auth.signOut()}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#E5484D] transition-colors hover:bg-rowhover"
+        >
+          <LogOut className="h-3.5 w-3.5" /> Se déconnecter
+        </button>
       </Section>
     </div>
   );
