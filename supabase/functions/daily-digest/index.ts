@@ -226,6 +226,42 @@ Deno.serve(async (req: Request) => {
     return jsonRes({ ok: true, creatorActivity: true, ...r });
   }
 
+  // Notif de TEST vers les PROPRES appareils de l'appelant (agence OU créateur).
+  // Autorisé aux JWT créateurs → le bouton "Envoyer un test" marche des deux côtés.
+  if (body?.event === "self_test") {
+    const authz = req.headers.get("Authorization") ?? "";
+    const bearer = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
+    const { data: u } = await sb.auth.getUser(bearer);
+    const uid = u?.user?.id;
+    if (!uid) return jsonRes({ error: "unauthorized" }, 401);
+    const { data: subsRaw } = await sb
+      .from("push_subscriptions").select("id,endpoint,p256dh,auth").eq("user_id", uid);
+    const subs = (subsRaw ?? []) as { id: string; endpoint: string; p256dh: string; auth: string }[];
+    const payload = JSON.stringify({
+      title: "TTP Suite ✓",
+      body: "Test réussi — tes notifications fonctionnent ! 🎉",
+      url: "/",
+      tag: "ttp-test",
+    });
+    let sent = 0;
+    let removed = 0;
+    let firstError: string | null = null;
+    for (const s of subs) {
+      try {
+        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
+        sent++;
+      } catch (e) {
+        const code = (e as { statusCode?: number })?.statusCode;
+        if (!firstError) firstError = `${code ?? ""} ${(e as Error)?.message ?? ""}`.trim().slice(0, 200);
+        if (code === 404 || code === 410) {
+          await sb.from("push_subscriptions").delete().eq("id", s.id);
+          removed++;
+        }
+      }
+    }
+    return jsonRes({ ok: true, test: true, sent, total: subs.length, removed, firstError });
+  }
+
   // Les modes ci-dessous (agence→créateur, test, digest) sont réservés à l'agence / au cron.
   if (caller.role === "creator") return jsonRes({ error: "unauthorized" }, 401);
 

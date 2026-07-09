@@ -168,9 +168,9 @@ export function usePush() {
     }
   }, [busy]);
 
-  /** Déclenche une notification de test (via l'Edge Function daily-digest, mode test). */
+  /** Déclenche une notification de test vers SES propres appareils (agence ou créateur). */
   const sendTest = useCallback(async (): Promise<{ ok: boolean; sent: number; total: number; detail: string | null }> => {
-    const { data, error } = await supabase.functions.invoke("daily-digest", { body: { test: true } });
+    const { data, error } = await supabase.functions.invoke("daily-digest", { body: { event: "self_test" } });
     if (error) return { ok: false, sent: 0, total: 0, detail: error.message ?? null };
     const d = (data as { sent?: number; total?: number; firstError?: string | null } | null) ?? {};
     return { ok: true, sent: d.sent ?? 0, total: d.total ?? 0, detail: d.firstError ?? null };
