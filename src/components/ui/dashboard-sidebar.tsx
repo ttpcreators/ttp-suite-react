@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
 import { ChevronRight, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -9,15 +9,18 @@ function Row({
   item,
   active,
   onClick,
+  onContext,
 }: {
   item: SbItem;
   active: boolean;
   onClick: () => void;
+  onContext?: (e: ReactMouseEvent) => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      onContextMenu={onContext}
       className={cn(
         "group flex w-full select-none items-center justify-between rounded-[7px] py-[7px] pl-3 pr-2.5 text-left transition-colors",
         active
@@ -48,10 +51,12 @@ function Group({
   group,
   activeId,
   onSelect,
+  onItemContext,
 }: {
   group: SbGroup;
   activeId: string;
   onSelect: (id: string) => void;
+  onItemContext?: (id: string, e: ReactMouseEvent) => void;
 }) {
   // Au chargement : groupes repliés (effet aéré) ; seul le groupe de la page
   // active reste ouvert. Se rouvre si un de ses items devient actif (recherche…).
@@ -87,7 +92,13 @@ function Group({
       >
         <div className="flex min-h-0 flex-col gap-0.5 overflow-hidden pt-0.5">
           {group.items.map((item) => (
-            <Row key={item.id} item={item} active={item.id === activeId} onClick={() => onSelect(item.id)} />
+            <Row
+              key={item.id}
+              item={item}
+              active={item.id === activeId}
+              onClick={() => onSelect(item.id)}
+              onContext={onItemContext ? (e) => onItemContext(item.id, e) : undefined}
+            />
           ))}
         </div>
       </div>
@@ -104,12 +115,14 @@ export function SidebarNav({
   groups,
   activeId,
   onSelect,
+  onItemContext,
   header,
   footer,
 }: {
   groups: SbGroup[];
   activeId: string;
   onSelect: (id: string) => void;
+  onItemContext?: (id: string, e: ReactMouseEvent) => void;
   header?: ReactNode;
   footer?: ReactNode;
 }) {
@@ -118,7 +131,7 @@ export function SidebarNav({
       {header}
       <nav className="mt-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {groups.map((g) => (
-          <Group key={g.id} group={g} activeId={activeId} onSelect={onSelect} />
+          <Group key={g.id} group={g} activeId={activeId} onSelect={onSelect} onItemContext={onItemContext} />
         ))}
       </nav>
       {footer && <div className="mt-auto border-t border-border pt-3">{footer}</div>}
