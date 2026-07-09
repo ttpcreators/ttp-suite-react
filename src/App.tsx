@@ -471,7 +471,7 @@ export default function App() {
       {/* recherche globale (filtre + navigation) */}
       <GlobalSearch query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} />
       {/* right cluster */}
-      <div className="ml-auto flex items-center gap-2.5">
+      <div className="ml-auto flex shrink-0 items-center gap-2.5">
         <div className="hidden items-center gap-2.5 rounded-lg bg-surface py-1.5 pl-2 pr-3.5 shadow-sm sm:flex">
           <AgencyAvatar />
           <div className="leading-tight">
@@ -488,12 +488,13 @@ export default function App() {
         >
           {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
-        {/* Déconnexion — mobile uniquement (sur desktop, elle est dans la sidebar) */}
+        {/* Déconnexion — toujours visible dans la barre du haut (mobile + desktop) */}
         <button
           type="button"
           onClick={logout}
-          className="grid h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover md:hidden"
+          className="grid h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"
           aria-label="Se déconnecter"
+          title="Se déconnecter"
         >
           <LogOut className="h-4 w-4" />
         </button>
