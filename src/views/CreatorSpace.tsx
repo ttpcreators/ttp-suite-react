@@ -22,6 +22,7 @@ import { titleCase } from "@/lib/utils";
 import { frDate, toISODate } from "@/lib/dates";
 import { notifyAgency } from "@/lib/push";
 import { PushCard } from "@/components/ui/push-card";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
@@ -511,6 +512,9 @@ export function CreatorSpace({
             ))}
           </div>
 
+          {/* Contenu des onglets — barrière d'erreur : un onglet qui plante
+              n'emporte pas la navigation (la sidebar reste cliquable). */}
+          <ErrorBoundary variant="inline" label="Cette page" resetKey={tab}>
           {/* Accueil */}
           {tab === "accueil" && (
             <div className="flex flex-col gap-4">
@@ -1012,6 +1016,7 @@ export function CreatorSpace({
               </div>
             </div>
           )}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

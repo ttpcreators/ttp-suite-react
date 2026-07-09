@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type FormEvent, type RefObject } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabase, setRemember } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -118,6 +118,7 @@ export function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [remember, setRememberChecked] = useState(true);
   const [mouseX, setMouseX] = useState(0);
   const [mouseY, setMouseY] = useState(0);
   const [isPurpleBlinking, setIsPurpleBlinking] = useState(false);
@@ -213,6 +214,7 @@ export function Login() {
     if (isLoading) return;
     setError("");
     setIsLoading(true);
+    setRemember(remember); // route le stockage de session AVANT la connexion
     const { error } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
       password,
@@ -392,7 +394,11 @@ export function Login() {
 
             <div className="flex flex-wrap items-center justify-between gap-y-2">
               <div className="flex items-center gap-2">
-                <Checkbox id="remember" defaultChecked />
+                <Checkbox
+                  id="remember"
+                  checked={remember}
+                  onCheckedChange={(v) => setRememberChecked(v === true)}
+                />
                 <Label htmlFor="remember" className="cursor-pointer font-normal">
                   Se souvenir
                 </Label>
