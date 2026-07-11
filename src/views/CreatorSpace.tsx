@@ -27,7 +27,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
-import { ActionMenu } from "@/components/ui/action-menu";
+import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
@@ -174,6 +174,7 @@ export function CreatorSpace({
 }) {
   const [tab, setTab] = useState<Tab>("accueil");
   const [mobileTab, setMobileTab] = useState<string | null>(null); // famille déployée (nav mobile)
+  const [confirmDoneTodo, setConfirmDoneTodo] = useState<Todo | null>(null); // anti-missclick « fait »
   // Historique d'engagement du créateur — via la fonction serveur creator-history
   // (le blob agence est inaccessible aux créateurs ; le serveur filtre sur SON nom).
   const [suivi, setSuivi] = useState<SuiviEntry[] | null>(null);
@@ -392,8 +393,7 @@ export function CreatorSpace({
   const encaisse = invoices.filter((i) => i.status === "payee").reduce((a, i) => a + parseAmount(i.amount), 0);
   const totalFacture = invoices.reduce((a, i) => a + parseAmount(i.amount), 0);
 
-  const toggleTodo = async (t: Todo) => {
-    const next = !t.done;
+  const markTodo = async (t: Todo, next: boolean) => {
     if (await dbUpdate("todos", t.id, { done: next })) {
       setTodos((prev) => prev.map((x) => (x.id === t.id ? { ...x, done: next } : x)));
       toast(next ? "Fait ✓" : "À refaire");
@@ -798,7 +798,7 @@ export function CreatorSpace({
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
-                          onClick={() => toggleTodo(t)}
+                          onClick={() => (t.done ? markTodo(t, false) : setConfirmDoneTodo(t))}
                           className={
                             "grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors " +
                             (t.done ? "border-primary bg-primary text-primary-foreground" : "border-faint hover:border-primary")
@@ -1086,6 +1086,21 @@ export function CreatorSpace({
           />
         </div>
       </div>
+
+      {/* Confirmation anti-missclick avant de marquer une tâche « faite » */}
+      {confirmDoneTodo && (
+        <ConfirmDialog
+          title="Marquer comme fait ?"
+          message={`« ${confirmDoneTodo.text} » sera marquée comme terminée.`}
+          confirmLabel="Oui, c'est fait ✓"
+          onCancel={() => setConfirmDoneTodo(null)}
+          onConfirm={() => {
+            const t = confirmDoneTodo;
+            setConfirmDoneTodo(null);
+            markTodo(t, true);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -11,7 +11,7 @@ import {
   TextField,
   SelectField,
 } from "@/components/ui/form";
-import { ActionMenu } from "@/components/ui/action-menu";
+import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
 import { useLiveKey } from "@/lib/useLive";
@@ -141,6 +141,19 @@ export function Todo() {
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>(null);
   const [todoFilter, setTodoFilter] = useState<TodoFilter>("encours");
   const [selectedTodo, setSelectedTodo] = useState<Row | null>(null);
+  const [confirmDone, setConfirmDone] = useState<Row | null>(null); // anti-missclick « fait »
+
+  // Marque une tâche faite / à refaire (remonté au niveau composant pour la confirmation).
+  const markDone = async (row: Row, next: boolean) => {
+    const status = next ? "Fait" : "À faire";
+    if (await dbUpdate("todos", row.id, { done: next, status })) {
+      setRows((prev) => (prev ?? []).map((r) => (r.id === row.id ? { ...r, done: next, status } : r)));
+      setSelectedTodo((prev) => (prev?.id === row.id ? { ...prev, done: next, status } : prev));
+      toast(next ? "Fait ✓" : "À refaire");
+    } else {
+      toast("Erreur — réessaie");
+    }
+  };
 
   // Édition de la tâche sélectionnée (dans le panneau de détail).
   const [editing, setEditing] = useState(false);
@@ -445,23 +458,6 @@ export function Todo() {
       ) : (
         <div className="flex flex-col gap-3">
           {filtered.map((row) => {
-            const toggleDone = async (next: boolean) => {
-              // Garde la case et le statut synchronisés (coché = « Fait »).
-              const status = next ? "Fait" : "À faire";
-              if (await dbUpdate("todos", row.id, { done: next, status })) {
-                setRows((prev) =>
-                  (prev ?? []).map((r) =>
-                    r.id === row.id ? { ...r, done: next, status } : r
-                  )
-                );
-                setSelectedTodo((prev) =>
-                  prev?.id === row.id ? { ...prev, done: next, status } : prev
-                );
-                toast(next ? "Fait ✓" : "À refaire");
-              } else {
-                toast("Erreur — réessaie");
-              }
-            };
             const updateStatus = async (status: string) => {
               if (await dbUpdate("todos", row.id, { status, done: status === "Fait" })) {
                 setRows((prev) => (prev ?? []).map((r) => (r.id === row.id ? { ...r, status, done: status === "Fait" } : r)));
@@ -489,7 +485,7 @@ export function Todo() {
                   id={`todo-${row.id}`}
                   checked={row.done}
                   onClick={(e) => e.stopPropagation()}
-                  onCheckedChange={(v) => toggleDone(v === true)}
+                  onCheckedChange={(v) => (v === true ? setConfirmDone(row) : markDone(row, false))}
                   title={row.done ? "Marquer à refaire" : "Marquer comme fait"}
                   className="peer shrink-0"
                 />
@@ -802,6 +798,21 @@ export function Todo() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Confirmation anti-missclick avant de marquer une tâche « faite » */}
+      {confirmDone && (
+        <ConfirmDialog
+          title="Marquer comme fait ?"
+          message={`« ${confirmDone.text} » sera marquée comme terminée.`}
+          confirmLabel="Oui, c'est fait ✓"
+          onCancel={() => setConfirmDone(null)}
+          onConfirm={() => {
+            const r = confirmDone;
+            setConfirmDone(null);
+            markDone(r, true);
+          }}
+        />
       )}
     </div>
   );

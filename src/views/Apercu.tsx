@@ -10,7 +10,7 @@ import { MiniChart } from "@/components/ui/mini-chart";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { invMonthKey, monthsBetween, monthLabel, momDelta, fmtCompact } from "@/lib/timeSeries";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { TrendingUp, TrendingDown, Users, ListChecks, CalendarDays } from "lucide-react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { Globe, type GlobeMarker } from "@/components/ui/cobe-globe";
@@ -228,6 +228,24 @@ export function Apercu() {
           </div>
         </div>
         <LocationTag city="Lyon" country="France" timezone="CET" />
+      </div>
+
+      {/* Raccourcis rapides */}
+      <div className="mb-4 grid grid-cols-3 gap-3">
+        {[
+          { id: "roster", label: "Roster", Icon: Users },
+          { id: "todo", label: "À faire", Icon: ListChecks },
+          { id: "planning", label: "Planning", Icon: CalendarDays },
+        ].map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: s.id }))}
+            className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface px-3 py-3.5 text-xs font-semibold text-foreground shadow-sm transition-colors hover:bg-rowhover"
+          >
+            <s.Icon className="h-4 w-4 text-primary" /> <span>{s.label}</span>
+          </button>
+        ))}
       </div>
 
       {hasMonthlyCA ? (
