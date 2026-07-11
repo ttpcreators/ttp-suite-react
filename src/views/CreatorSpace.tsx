@@ -17,6 +17,7 @@ import {
   TrendingUp,
   ExternalLink,
   BarChart3,
+  Contact,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
@@ -67,8 +68,9 @@ type Brief = { id: string; brand: string; deliverables: string | null; due: stri
 type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string; type: string };
 type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null };
 type Invoice = { ref: string; party: string; amount: string | null; date: string | null; status: string | null };
+type Contact = { id: string; brand: string; person: string | null; role: string | null; email: string | null; phone: string | null; sort_order?: number };
 
-type Tab = "accueil" | "evolution" | "debrief" | "todo" | "ideas" | "briefs" | "planning" | "documents" | "facturation";
+type Tab = "accueil" | "evolution" | "debrief" | "todo" | "ideas" | "briefs" | "planning" | "contacts" | "documents" | "facturation";
 const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "accueil", label: "Accueil", icon: LayoutDashboard },
   { id: "evolution", label: "Évolution", icon: TrendingUp },
@@ -77,6 +79,7 @@ const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "ideas", label: "Idées", icon: Lightbulb },
   { id: "briefs", label: "Briefs", icon: FileText },
   { id: "planning", label: "Planning", icon: CalendarDays },
+  { id: "contacts", label: "Contacts", icon: Contact },
   { id: "documents", label: "Documents", icon: Files },
   { id: "facturation", label: "Facturation", icon: Receipt },
 ];
@@ -85,7 +88,7 @@ const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
 // même composant que l'espace agence) : on tape une famille → ses pages se déploient.
 const MOBILE_FAMILIES: { id: string; label: string; icon: typeof LayoutDashboard; items: Tab[] }[] = [
   { id: "espace", label: "Mon espace", icon: LayoutDashboard, items: ["accueil", "evolution", "debrief"] },
-  { id: "travail", label: "Mon travail", icon: ListChecks, items: ["todo", "ideas", "briefs", "planning"] },
+  { id: "travail", label: "Mon travail", icon: ListChecks, items: ["todo", "ideas", "briefs", "planning", "contacts"] },
   { id: "fichiers", label: "Fichiers", icon: Files, items: ["documents", "facturation"] },
 ];
 
@@ -230,6 +233,7 @@ export function CreatorSpace({
   const [events, setEvents] = useState<Ev[]>([]);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
 
   // todo filter
   const [todoFilter, setTodoFilter] = useState<TodoFilter>("encours");
@@ -246,6 +250,13 @@ export function CreatorSpace({
   const [tdPrio, setTdPrio] = useState("moyenne");
   const [idOpen, setIdOpen] = useState(false);
   const [idText, setIdText] = useState("");
+  // add-contact form
+  const [ctOpen, setCtOpen] = useState(false);
+  const [ctBrand, setCtBrand] = useState("");
+  const [ctPerson, setCtPerson] = useState("");
+  const [ctRole, setCtRole] = useState("");
+  const [ctEmail, setCtEmail] = useState("");
+  const [ctPhone, setCtPhone] = useState("");
 
   // todo inline edit
   const [tdEditId, setTdEditId] = useState<string | null>(null);
@@ -276,6 +287,8 @@ export function CreatorSpace({
     });
     supabase.from("documents").select("id,name,type,size,path,created_at").eq("creator", name).then(({ data }) => alive && setDocs((data as Doc[]) ?? []));
     supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).then(({ data }) => alive && setInvoices((data as Invoice[]) ?? []));
+    // Contacts propres au créateur (RLS : il ne voit QUE ses lignes, jamais celles de l'agence).
+    supabase.from("contacts").select("id,brand,person,role,email,phone,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setContacts((data as Contact[]) ?? []));
     return () => {
       alive = false;
     };
@@ -336,6 +349,38 @@ export function CreatorSpace({
     toast("Idée ajoutée ✓");
     setIdOpen(false);
     setIdText("");
+  };
+
+  const addContact = async () => {
+    if (!ctBrand.trim() && !ctPerson.trim()) {
+      toast("Renseigne au moins la marque ou le nom");
+      return;
+    }
+    const row = {
+      brand: ctBrand.trim() || ctPerson.trim(),
+      person: ctPerson.trim() || "—",
+      role: ctRole.trim() || null,
+      email: ctEmail.trim() || null,
+      phone: ctPhone.trim() || null,
+      tag: "Perso",
+      tone: "cyan",
+      creator: name, // RLS : le créateur ne peut insérer QUE pour lui-même
+      sort_order: nextOrder(contacts),
+    };
+    const created = await dbInsert("contacts", row);
+    if (!created) {
+      toast("Erreur — réessaie");
+      return;
+    }
+    setContacts([created as unknown as Contact, ...contacts]);
+    notifyAgency("contact", name, row.brand); // push immédiat côté agence
+    toast("Contact ajouté ✓");
+    setCtOpen(false);
+    setCtBrand("");
+    setCtPerson("");
+    setCtRole("");
+    setCtEmail("");
+    setCtPhone("");
   };
 
   const startEdit = () => {
@@ -890,6 +935,70 @@ export function CreatorSpace({
                               }
                             },
                             confirm: { title: "Supprimer l'idée", message: `Supprimer « ${x.text} » ? Cette action est irréversible.` },
+                          },
+                        ]}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Contacts du créateur — visibles par l'agence (table partagée, RLS cloisonnée) */}
+          {tab === "contacts" && (
+            <>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="text-sm text-muted-foreground">
+                  {contacts.length} contact{contacts.length > 1 ? "s" : ""} · visibles par ton agence
+                </div>
+                <AddButton label="Contact" onClick={() => setCtOpen(true)} />
+              </div>
+              <InlineForm open={ctOpen} title="Nouveau contact" onClose={() => setCtOpen(false)} onSubmit={addContact}>
+                <TextField label="Marque / société" value={ctBrand} onChange={setCtBrand} placeholder="ex Sephora" />
+                <TextField label="Nom du contact" value={ctPerson} onChange={setCtPerson} placeholder="ex Julie Martin" />
+                <TextField label="Rôle" value={ctRole} onChange={setCtRole} placeholder="ex Responsable partenariats" />
+                <TextField label="Email" value={ctEmail} onChange={setCtEmail} placeholder="ex julie@marque.com" />
+                <TextField label="Téléphone" value={ctPhone} onChange={setCtPhone} placeholder="ex 06 12 34 56 78" />
+              </InlineForm>
+              <div className="flex flex-col gap-3">
+                {contacts.length === 0 ? (
+                  <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">
+                    Aucun contact. Ajoute une marque ou une personne que tu connais — ton agence les verra 👋
+                  </div>
+                ) : (
+                  contacts.map((c) => (
+                    <div key={c.id} className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-panel text-muted-foreground">
+                        <Contact className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold text-foreground">{c.brand}</div>
+                        <div className="truncate text-xs text-faint">
+                          {[c.person && c.person !== "—" ? c.person : "", c.role].filter(Boolean).join(" · ") || "—"}
+                        </div>
+                        {(c.email || c.phone) && (
+                          <div className="truncate text-[11px] text-muted-foreground">
+                            {[c.email, c.phone].filter(Boolean).join(" · ")}
+                          </div>
+                        )}
+                      </div>
+                      <ActionMenu
+                        items={[
+                          {
+                            key: "delete",
+                            label: "Supprimer",
+                            icon: Trash2,
+                            danger: true,
+                            onClick: async () => {
+                              if (await dbDelete("contacts", c.id)) {
+                                setContacts((prev) => prev.filter((y) => y.id !== c.id));
+                                toast("Supprimé");
+                              } else {
+                                toast("Erreur — réessaie");
+                              }
+                            },
+                            confirm: { title: "Supprimer le contact", message: `Supprimer « ${c.brand} » ? Cette action est irréversible.` },
                           },
                         ]}
                       />

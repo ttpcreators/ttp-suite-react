@@ -25,6 +25,7 @@ tu retrouves tout d'un coup d'œil, et c'est **versionné dans Git**.
 | [`09-events-description.sql`](09-events-description.sql) | 9 · Events · description | Colonne `events.description` (Planning + sync Google Agenda bidirectionnelle) |
 | [`10-public-roster.sql`](10-public-roster.sql) | 10 · Vue publique roster | Vue `public_roster` (site vitrine, lecture anonyme, colonnes publiques) |
 | [`11-rappel-datas-createurs.sql`](11-rappel-datas-createurs.sql) | 11 · Rappel datas créateurs | Colonne `creators.stats_month` + cron quotidien 9h (rappel « données à jour ce mois ») |
+| [`12-contacts-createur.sql`](12-contacts-createur.sql) | 12 · Contacts créateur | Colonne `contacts.creator` + RLS `contacts_scoped` (créateur ajoute ses contacts, agence les voit) |
 | [`crons-google-agenda.sql`](crons-google-agenda.sql) | Crons · Google Agenda | pg_cron watch-renew + sync |
 | [`push-subscriptions.sql`](push-subscriptions.sql) | 🔒 Push · table push_subscriptions | Abonnements push — RLS cloisonnée (chacun ses lignes, agence tout) |
 | [`securite-avatars-storage.sql`](securite-avatars-storage.sql) | 🔒 Sécurité · storage avatars | Bucket avatars : upload ouvert, écrasement/suppression agence-only |

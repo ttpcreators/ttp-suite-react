@@ -19,6 +19,10 @@ export type NotifPrefs = {
   digestTasks?: boolean; // résumé matin : tâches & briefs à échéance
   digestContracts?: boolean; // résumé matin : contrats ≤ 60 j
   digestInvoices?: boolean; // résumé matin : factures en retard
+  digestRdvTomorrow?: boolean; // résumé matin : RDV prévus demain (rappel la veille)
+  digestPayouts?: boolean; // résumé matin : reversements à faire aux créateurs
+  digestBirthdays?: boolean; // résumé matin : anniversaires créateurs du jour
+  digestMonthly?: boolean; // résumé matin du 1er : récap CA du mois précédent
   digestWeekly?: boolean; // résumé du lundi : tâches & évènements de la semaine
   digestAfternoon?: boolean; // point de mi-journée (14h) : ce qu'il reste à traiter
   digestStats?: boolean; // rappel quotidien : données créateurs à mettre à jour ce mois
@@ -204,6 +208,30 @@ export function Parametres() {
           hint="Les factures passées en statut « retard »."
           checked={on(prefs.digestInvoices)}
           onChange={(v) => setPref("digestInvoices", v)}
+        />
+        <PrefRow
+          label="RDV de demain"
+          hint="Un rappel la veille des rendez-vous prévus le lendemain."
+          checked={on(prefs.digestRdvTomorrow)}
+          onChange={(v) => setPref("digestRdvTomorrow", v)}
+        />
+        <PrefRow
+          label="Reversements à faire"
+          hint="Créateurs à qui il reste de l'argent à reverser (encaissé − commission − déjà versé)."
+          checked={on(prefs.digestPayouts)}
+          onChange={(v) => setPref("digestPayouts", v)}
+        />
+        <PrefRow
+          label="Anniversaires créateurs"
+          hint="Un petit rappel le jour de l'anniversaire d'un créateur du roster."
+          checked={on(prefs.digestBirthdays)}
+          onChange={(v) => setPref("digestBirthdays", v)}
+        />
+        <PrefRow
+          label="Récap mensuel (1er du mois)"
+          hint="Le 1er de chaque mois : CA facturé et encaissé du mois précédent."
+          checked={on(prefs.digestMonthly)}
+          onChange={(v) => setPref("digestMonthly", v)}
         />
       </Section>
 

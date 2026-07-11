@@ -85,6 +85,27 @@ function parisMonthLabel(): string {
 function capName(s: string): string {
   return s.slice(0, 60).replace(/\p{L}[\p{L}'’-]*/gu, (w) => w.charAt(0).toUpperCase() + w.slice(1));
 }
+/** Montant texte ("3 000 €", "1 200,50 €") → nombre (miroir de src/lib/money.ts). */
+function parseAmount(x: unknown): number {
+  const cleaned = String(x ?? "").replace(/\s/g, "").replace(",", ".").replace(/[^0-9.\-]/g, "");
+  const n = parseFloat(cleaned);
+  return Number.isFinite(n) ? n : 0;
+}
+/** "25%", "25,5 %" → 25 ; null si illisible (miroir de src/lib/commission.ts). */
+function parseCommissionPct(s: unknown): number | null {
+  if (s == null || s === "") return null;
+  const m = /(\d+(?:[.,]\d+)?)/.exec(String(s));
+  return m ? parseFloat(m[1].replace(",", ".")) : null;
+}
+/** Montant en euros formaté "3 000 €". */
+function euro(n: number): string {
+  return Math.round(n).toLocaleString("fr-FR") + " €";
+}
+/** "YYYY-MM" d'un ISO → clé mois ; "" si illisible. */
+function monthKeyOf(iso: string): string {
+  const m = /^(\d{4})-(\d{2})/.exec(iso);
+  return m ? `${m[1]}-${m[2]}` : "";
+}
 
 type CtDeadline = { creator?: string; start?: string; months?: number; type?: string };
 type Sub = { id: string; endpoint: string; p256dh: string; auth: string };
@@ -222,13 +243,14 @@ Deno.serve(async (req: Request) => {
   if (body?.event === "creator_activity") {
     const prefs = await loadPrefs(sb);
     if (!prefOn(prefs, "pushCreatorActivity")) return jsonRes({ ok: true, skipped: "pref_off" });
-    const kindLabel = body.kind === "idee" ? "idée" : body.kind === "evenement" ? "évènement" : "tâche";
+    const kindLabel = body.kind === "idee" ? "idée" : body.kind === "evenement" ? "évènement" : body.kind === "contact" ? "contact" : "tâche";
+    const article = body.kind === "evenement" || body.kind === "contact" ? "un" : "une";
     // Anti-usurpation : pour un JWT créateur, le nom vient de SON profil (pas du corps de requête).
     const rawWho = caller.role === "creator" ? (caller.creatorName || "Un créateur") : String(body.creator ?? "Un créateur");
     const who = rawWho.slice(0, 60).replace(/\p{L}[\p{L}'’-]*/gu, (w) => w.charAt(0).toUpperCase() + w.slice(1));
     const what = String(body.text ?? "").slice(0, 140);
     const payload = JSON.stringify({
-      title: `${who} a ajouté une ${kindLabel}`,
+      title: `${who} a ajouté ${article} ${kindLabel}`,
       body: what,
       url: "/",
       tag: `ttp-creator-${Date.now()}`,
@@ -409,8 +431,10 @@ Deno.serve(async (req: Request) => {
   const { data: inv } = await sb.from("invoices").select("status").eq("status", "retard");
   const overdue = (inv ?? []).length;
 
-  // 2) Contrats (depuis le blob agence __app_state__)
+  // 2) Blob agence __app_state__ : contrats à surveiller, commissions (override), reversements payés.
   let contractsSoon = 0;
+  let commBlob: Record<string, number> = {};
+  let payoutsBlob: Record<string, { amount?: number }[]> = {};
   try {
     const { data: blob } = await sb
       .from("module_rows").select("a").eq("module", "__app_state__")
@@ -422,8 +446,10 @@ Deno.serve(async (req: Request) => {
       const end = contractEnd(d.start ?? "", d.months ?? 0);
       if (end && daysUntil(end, today) <= 60) contractsSoon++;
     }
+    if (obj?.creatorCommission && typeof obj.creatorCommission === "object") commBlob = obj.creatorCommission as Record<string, number>;
+    if (obj?.creatorPayouts && typeof obj.creatorPayouts === "object") payoutsBlob = obj.creatorPayouts as Record<string, { amount?: number }[]>;
   } catch {
-    /* blob illisible → 0 contrat */
+    /* blob illisible → valeurs par défaut */
   }
 
   // 3) To-do + 4) Briefs à échéance aujourd'hui ou en retard
@@ -433,18 +459,70 @@ Deno.serve(async (req: Request) => {
   const briefsDue = (briefs ?? []).filter((b) => dueOrPast(b.due, today)).length;
   const tasksDue = todosDue + briefsDue;
 
-  // 5) Évènements du jour
+  // 5) Évènements du jour + 6) RDV de DEMAIN (rappel la veille)
+  const tomorrow = addDaysISO(today, 1);
   const { data: ev } = await sb
-    .from("events").select("date").or("deleted.is.null,deleted.eq.false").eq("date", today);
-  const eventsToday = (ev ?? []).length;
+    .from("events").select("date").or("deleted.is.null,deleted.eq.false").in("date", [today, tomorrow]);
+  const eventsToday = (ev ?? []).filter((e) => e.date === today).length;
+  const rdvTomorrow = (ev ?? []).filter((e) => e.date === tomorrow).length;
+
+  // 7) Créateurs : anniversaires du jour + taux de commission (pour les reversements)
+  const { data: crRows } = await sb.from("creators").select("name,birth,commission,status");
+  const creators = (crRows ?? []) as { name: string; birth: string | null; commission: string | null; status: string | null }[];
+  const md = today.slice(5); // "MM-DD"
+  const birthdays = creators
+    .filter((c) => String(c.status ?? "actif").toLowerCase() !== "inactif")
+    .filter((c) => { const iso = toISO(c.birth); return iso !== "" && iso.slice(5) === md; })
+    .map((c) => capName(c.name));
+
+  // 8) Reversements à faire : (encaissé − commission) − déjà reversé, par créateur.
+  const { data: invAll } = await sb.from("invoices").select("amount,status,creator,date");
+  const invRows = (invAll ?? []) as { amount: string | null; status: string | null; creator: string | null; date: string | null }[];
+  const encByCreator = new Map<string, number>();
+  for (const iv of invRows) {
+    if (iv.status !== "payee") continue;
+    const c = (iv.creator ?? "").trim();
+    if (!c) continue;
+    encByCreator.set(c, (encByCreator.get(c) ?? 0) + parseAmount(iv.amount));
+  }
+  const rosterRate: Record<string, number | null> = {};
+  for (const c of creators) rosterRate[c.name] = parseCommissionPct(c.commission);
+  let reverseCount = 0;
+  let reverseSum = 0;
+  for (const [c, enc] of encByCreator) {
+    const rate = rosterRate[c] != null ? (rosterRate[c] as number) : (typeof commBlob[c] === "number" ? commBlob[c] : 20);
+    const du = enc - Math.round((enc * rate) / 100);
+    const paid = (payoutsBlob[c] ?? []).reduce((a, p) => a + (Number(p?.amount) || 0), 0);
+    const reste = du - paid;
+    if (reste > 0) { reverseCount++; reverseSum += reste; }
+  }
+
+  // 9) Récap mensuel — uniquement le 1er du mois : CA facturé/encaissé du mois précédent.
+  let monthlyLine = "";
+  if (today.slice(8) === "01") {
+    const prevKey = monthKeyOf(addDaysISO(today, -1)); // hier = dernier jour du mois précédent
+    let factured = 0;
+    let cashed = 0;
+    for (const iv of invRows) {
+      if (monthKeyOf(toISO(iv.date)) !== prevKey) continue;
+      const amt = parseAmount(iv.amount);
+      factured += amt;
+      if (iv.status === "payee") cashed += amt;
+    }
+    if (factured > 0 || cashed > 0) monthlyLine = `📊 Mois dernier : ${euro(factured)} facturés · ${euro(cashed)} encaissés`;
+  }
 
   // Construit le résumé (rien à dire → on n'envoie pas, pour éviter le bruit).
   // Chaque catégorie respecte les préférences (page Paramètres) — `prefs` chargé plus haut.
   const lines: string[] = [];
   if (eventsToday && prefOn(prefs, "digestEvents")) lines.push(`📅 ${eventsToday} évènement${eventsToday > 1 ? "s" : ""} aujourd'hui`);
+  if (rdvTomorrow && prefOn(prefs, "digestRdvTomorrow")) lines.push(`🔔 ${rdvTomorrow} RDV demain`);
   if (tasksDue && prefOn(prefs, "digestTasks")) lines.push(`✓ ${tasksDue} tâche${tasksDue > 1 ? "s" : ""}/brief${tasksDue > 1 ? "s" : ""} à échéance`);
   if (contractsSoon && prefOn(prefs, "digestContracts")) lines.push(`📄 ${contractsSoon} contrat${contractsSoon > 1 ? "s" : ""} à surveiller`);
   if (overdue && prefOn(prefs, "digestInvoices")) lines.push(`💶 ${overdue} facture${overdue > 1 ? "s" : ""} en retard`);
+  if (reverseCount && prefOn(prefs, "digestPayouts")) lines.push(`💸 ${reverseCount} créateur${reverseCount > 1 ? "s" : ""} à reverser · ${euro(reverseSum)}`);
+  if (birthdays.length && prefOn(prefs, "digestBirthdays")) lines.push(`🎂 Anniversaire : ${birthdays.join(", ")}`);
+  if (monthlyLine && prefOn(prefs, "digestMonthly")) lines.push(monthlyLine);
 
   if (lines.length === 0) return jsonRes({ ok: true, sent: 0, reason: "rien à signaler", today });
 

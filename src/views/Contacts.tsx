@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip } from "lucide-react";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
-import { cn, initials } from "@/lib/utils";
+import { cn, initials, titleCase } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
@@ -32,6 +32,7 @@ type Row = {
   email: string;
   phone: string;
   sort_order: number;
+  creator?: string | null; // renseigné = contact ajouté par ce créateur
 };
 
 /** Un message Gmail de l'historique avec un contact. */
@@ -758,6 +759,16 @@ export function Contacts() {
               <div className="hidden max-w-[200px] truncate text-[11px] font-medium text-muted-foreground sm:block">
                 {row.email}
               </div>
+
+              {/* Attribution : contact ajouté par un créateur */}
+              {row.creator && (
+                <span
+                  className="hidden shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide text-signaltext sm:inline"
+                  title={`Ajouté par ${titleCase(row.creator)}`}
+                >
+                  ↳ {titleCase(row.creator)}
+                </span>
+              )}
 
               {/* Pastille tag */}
               <span className="shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground">

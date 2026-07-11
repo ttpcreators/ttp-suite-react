@@ -27,7 +27,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { useEffect, useState, type ReactNode } from "react";
-import { X, Pencil, Trash2, MessageSquarePlus, Check } from "lucide-react";
+import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3 } from "lucide-react";
 
 type Priority = "haute" | "moyenne" | "basse";
 type Source = "agency" | "creator";
@@ -142,6 +142,22 @@ export function Todo() {
   const [todoFilter, setTodoFilter] = useState<TodoFilter>("encours");
   const [selectedTodo, setSelectedTodo] = useState<Row | null>(null);
   const [confirmDone, setConfirmDone] = useState<Row | null>(null); // anti-missclick « fait »
+
+  // Mode de vue : liste classique ↔ colonnes par statut (kanban). Mémorisé.
+  const [viewMode, setViewMode] = useState<"liste" | "colonnes">(
+    () => (localStorage.getItem("ttp:todo-view") === "colonnes" ? "colonnes" : "liste"),
+  );
+  useEffect(() => { localStorage.setItem("ttp:todo-view", viewMode); }, [viewMode]);
+
+  // Change le statut d'une tâche (utilisé par le kanban ; done dérivé de « Fait »).
+  const setStatus = async (row: Row, status: string) => {
+    if (await dbUpdate("todos", row.id, { status, done: status === "Fait" })) {
+      setRows((prev) => (prev ?? []).map((r) => (r.id === row.id ? { ...r, status, done: status === "Fait" } : r)));
+      setSelectedTodo((prev) => (prev?.id === row.id ? { ...prev, status, done: status === "Fait" } : prev));
+    } else {
+      toast("Statut non enregistré — la colonne « status » manque (lance le SQL)");
+    }
+  };
 
   // Marque une tâche faite / à refaire (remonté au niveau composant pour la confirmation).
   const markDone = async (row: Row, next: boolean) => {
@@ -275,10 +291,8 @@ export function Todo() {
     setSelectedTodo((prev) => (prev?.id === id ? null : prev));
   };
 
-  // Combine filtre statut + recherche + filtre créateur + filtre priorité.
-  const filtered = (rows ?? []).filter((row) => {
-    if (todoFilter === "encours" && row.done) return false;
-    if (todoFilter === "terminees" && !row.done) return false;
+  // Base : recherche + filtre créateur + filtre priorité (sans le filtre de statut).
+  const filteredBase = (rows ?? []).filter((row) => {
     if (!matchQuery(query, row.text, row.descr, row.creator, row.tag)) return false;
     if (creatorFilter === "__agency__") {
       if (row.creator) return false;
@@ -286,6 +300,12 @@ export function Todo() {
       if (row.creator !== creatorFilter) return false;
     }
     if (priorityFilter != null && row.priority !== priorityFilter) return false;
+    return true;
+  });
+  // Vue liste : on applique en plus le filtre En cours / Terminées / Toutes.
+  const filtered = filteredBase.filter((row) => {
+    if (todoFilter === "encours" && row.done) return false;
+    if (todoFilter === "terminees" && !row.done) return false;
     return true;
   });
 
@@ -363,26 +383,44 @@ export function Todo() {
       {/* Barre de filtres */}
       {rows !== null && rows.length > 0 && (
         <div className="mb-4 flex flex-col gap-2.5">
-          <div className="flex flex-wrap gap-2">
-            {TODO_FILTERS.map((f) => {
-              const active = todoFilter === f.id;
-              return (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setTodoFilter(f.id)}
-                  className={cn(
-                    "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-                    active
-                      ? "bg-primary text-primary-foreground"
-                      : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground"
-                  )}
-                >
-                  {f.label}
-                </button>
-              );
-            })}
+          {/* Bascule de vue : liste ↔ colonnes par statut */}
+          <div className="flex items-center gap-1 self-start rounded-full border border-border bg-surface p-1">
+            {([["liste", "Liste", List], ["colonnes", "Colonnes", Columns3]] as const).map(([mode, label, Icon]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setViewMode(mode)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                  viewMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" /> {label}
+              </button>
+            ))}
           </div>
+          {viewMode === "liste" && (
+            <div className="flex flex-wrap gap-2">
+              {TODO_FILTERS.map((f) => {
+                const active = todoFilter === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setTodoFilter(f.id)}
+                    className={cn(
+                      "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground"
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             <Select value={creatorSelectValue} onValueChange={onCreatorSelect}>
               <SelectTrigger
@@ -442,6 +480,52 @@ export function Todo() {
       ) : rows.length === 0 ? (
         <div className="rounded-xl border border-border bg-card shadow-sm px-4 py-3">
           <p className="text-sm text-muted-foreground">Aucune tâche en cours.</p>
+        </div>
+      ) : viewMode === "colonnes" ? (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {TODO_STATUS_OPTS.map((col) => {
+            const colRows = filteredBase.filter((r) => todoStatus(r) === col.value);
+            return (
+              <div key={col.value} className="flex flex-col gap-2.5 rounded-2xl border border-border bg-panel/40 p-2.5">
+                <div className="flex items-center justify-between px-1.5 pt-1">
+                  <div className="flex items-center gap-2">
+                    <span className={cn("h-2 w-2 rounded-full", col.dot)} />
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{col.label}</span>
+                  </div>
+                  <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-semibold text-faint">{colRows.length}</span>
+                </div>
+                {colRows.length === 0 ? (
+                  <div className="px-2 py-8 text-center text-[11px] text-faint">Aucune tâche</div>
+                ) : (
+                  colRows.map((row) => (
+                    <div
+                      key={row.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedTodo(row)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedTodo(row); } }}
+                      className="flex cursor-pointer flex-col gap-2 rounded-xl border border-border bg-card p-3 shadow-sm transition-colors hover:bg-rowhover"
+                    >
+                      <div className="flex items-start gap-2">
+                        <PriorityDot priority={row.priority} />
+                        <span className={cn("min-w-0 flex-1 text-[12.5px] font-medium leading-snug text-foreground", row.done && "text-muted-foreground line-through")}>
+                          {row.text}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate rounded-md bg-rowhover px-2 py-[3px] text-[8px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          {row.creator ? titleCase(row.creator) : "Agence"}
+                        </span>
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <StatusSelect value={todoStatus(row)} options={TODO_STATUS_OPTS} onChange={(s) => setStatus(row, s)} />
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            );
+          })}
         </div>
       ) : query.trim() && filtered.length === 0 ? (
         <div className="rounded-xl border border-border bg-card shadow-sm">
