@@ -74,6 +74,17 @@ function addDaysISO(iso: string, days: number): string {
   const dt = new Date(Date.UTC(y, m - 1, d + days));
   return new Intl.DateTimeFormat("fr-CA", { timeZone: "UTC" }).format(dt);
 }
+/** Mois courant "YYYY-MM" à Paris + libellé "juillet 2026". */
+function parisMonth(): string {
+  return new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit" }).format(new Date());
+}
+function parisMonthLabel(): string {
+  return new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", month: "long", year: "numeric" }).format(new Date());
+}
+/** Capitalise chaque mot d'un nom (créateur) pour l'affichage. */
+function capName(s: string): string {
+  return s.slice(0, 60).replace(/\p{L}[\p{L}'’-]*/gu, (w) => w.charAt(0).toUpperCase() + w.slice(1));
+}
 
 type CtDeadline = { creator?: string; start?: string; months?: number; type?: string };
 type Sub = { id: string; endpoint: string; p256dh: string; auth: string };
@@ -307,7 +318,34 @@ Deno.serve(async (req: Request) => {
   const { hour, weekday } = parisParts();
   const weekly = body?.kind === "weekly";
   const afternoon = body?.kind === "afternoon";
+  const statsReminder = body?.kind === "stats";
   const force = (body as { force?: boolean })?.force === true;
+
+  // ─── RAPPEL MENSUEL « données créateurs à jour » ───
+  // Chaque jour à 9h Paris : liste les créateurs actifs dont `stats_month` ≠ mois
+  // courant. Au 1er du mois, tout le monde bascule « à mettre à jour » → rappel
+  // quotidien jusqu'à ce que l'agence ait tout coché. Plus rien de stale → silence.
+  if (statsReminder) {
+    if (!force && hour !== 9) return jsonRes({ ok: true, skipped: "hors_9h", parisHour: hour });
+    const prefsS = await loadPrefs(sb);
+    if (!prefOn(prefsS, "digestStats")) return jsonRes({ ok: true, skipped: "pref_off_stats" });
+    const month = parisMonth();
+    const { data: cr } = await sb.from("creators").select("name,stats_month,status");
+    const active = (cr ?? []).filter((c) => String((c as { status?: string }).status ?? "actif").toLowerCase() !== "inactif");
+    const stale = active.filter((c) => String((c as { stats_month?: string | null }).stats_month ?? "") !== month);
+    if (stale.length === 0) return jsonRes({ ok: true, sent: 0, reason: "tous à jour", month });
+    const names = stale.slice(0, 8).map((c) => capName(String((c as { name?: string }).name ?? "")));
+    const extra = stale.length > 8 ? ` +${stale.length - 8}` : "";
+    const payloadS = JSON.stringify({
+      title: "📊 Mets à jour les données créateurs",
+      body: `${stale.length} créateur${stale.length > 1 ? "s" : ""} pas encore à jour pour ${parisMonthLabel()} :\n${names.join(", ")}${extra}`,
+      url: "/",
+      tag: `ttp-stats-${today}`, // tag daté → relance chaque jour tant que c'est stale
+    });
+    const rS = await sendToAll(sb, payloadS);
+    return jsonRes({ ok: true, statsReminder: true, ...rS, month, stale: stale.length });
+  }
+
   const targetHour = afternoon ? 14 : 8;
   if (!force && hour !== targetHour) return jsonRes({ ok: true, skipped: `hors_${targetHour}h`, parisHour: hour });
 

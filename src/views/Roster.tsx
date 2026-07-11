@@ -4,12 +4,12 @@ import { cn, titleCase } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { dbInsert, nextOrder } from "@/lib/db";
+import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { Trash2 } from "lucide-react";
+import { Trash2, Check, RefreshCw } from "lucide-react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 
@@ -25,6 +25,7 @@ type CreatorRow = {
   status: string | null;
   photo_url: string | null;
   sort_order: number | null;
+  stats_month: string | null;
 };
 
 type Creator = {
@@ -39,6 +40,7 @@ type Creator = {
   status: string;
   photo: string;
   sort_order: number | null;
+  statsMonth: string;
 };
 
 function mapCreator(r: CreatorRow): Creator {
@@ -54,8 +56,13 @@ function mapCreator(r: CreatorRow): Creator {
     status: (r.status ?? "actif").toLowerCase(),
     photo: r.photo_url ?? "",
     sort_order: r.sort_order,
+    statsMonth: r.stats_month ?? "",
   };
 }
+
+/** Mois courant "YYYY-MM" (fuseau local agence) + libellé "juillet 2026". */
+const NOW_MONTH = new Intl.DateTimeFormat("fr-CA", { year: "numeric", month: "2-digit" }).format(new Date());
+const MONTH_LABEL = new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" }).format(new Date());
 
 const STATUS_LABEL: Record<string, string> = {
   live: "LIVE",
@@ -131,9 +138,27 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
     setNiche("");
   };
 
+  // Marque (ou annule) « données à jour ce mois » pour un créateur.
+  const markUpToDate = async (c: Creator, done: boolean) => {
+    const next = done ? NOW_MONTH : "";
+    setRows(rows.map((r) => (r.id === c.id ? { ...r, statsMonth: next } : r)));
+    const ok = await dbUpdate("creators", c.id, { stats_month: next || null });
+    if (!ok) {
+      setRows(rows); // rollback optimiste
+      toast("Erreur — réessaie");
+      return;
+    }
+    toast(done ? `${titleCase(c.name)} · données à jour ✓` : "Marqué à mettre à jour");
+  };
+
   const filtered = rows.filter((c) =>
     matchQuery(query, c.name, c.handle, c.niche, c.platform),
   );
+
+  // Créateurs actifs pas encore à jour pour le mois courant (pour la bannière).
+  const staleCount = rows.filter(
+    (c) => c.status !== "inactif" && c.statsMonth !== NOW_MONTH,
+  ).length;
 
   const cols =
     "grid-cols-[2.4fr_1fr_0.9fr_0.8fr_1.1fr_0.9fr_auto] gap-3";
@@ -147,6 +172,15 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
         </div>
         <AddButton label="Créateur" onClick={() => setFormOpen(true)} />
       </div>
+
+      {staleCount > 0 && (
+        <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[13px] text-amber-700 dark:text-amber-300">
+          <RefreshCw className="h-4 w-4 shrink-0" />
+          <span>
+            <span className="font-semibold">{staleCount} créateur{staleCount > 1 ? "s" : ""}</span> à mettre à jour pour <span className="font-semibold capitalize">{MONTH_LABEL}</span> — coche « à jour » sur chaque ligne une fois les données saisies.
+          </span>
+        </div>
+      )}
 
       <InlineForm
         open={formOpen}
@@ -246,7 +280,27 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                       {c.niche}
                     </span>
                   )}
-                  <div className="flex items-center justify-end md:col-start-6">
+                  <div className="flex items-center justify-end gap-1.5 md:col-start-6">
+                    {c.status !== "inactif" &&
+                      (c.statsMonth === NOW_MONTH ? (
+                        <button
+                          type="button"
+                          title={`Données à jour · ${MONTH_LABEL} (clique pour annuler)`}
+                          onClick={(e) => { e.stopPropagation(); markUpToDate(c, false); }}
+                          className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-emerald-600 transition-colors hover:bg-emerald-500/25 dark:text-emerald-400"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          title={`Marquer les données à jour · ${MONTH_LABEL}`}
+                          onClick={(e) => { e.stopPropagation(); markUpToDate(c, true); }}
+                          className="flex shrink-0 items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-700 transition-colors hover:bg-amber-500/20 dark:text-amber-300"
+                        >
+                          <RefreshCw className="h-3 w-3" /> à jour ?
+                        </button>
+                      ))}
                     <AnimatedBadge status={badgeStatus} size="sm">
                       {titleCase(label.toLowerCase())}
                     </AnimatedBadge>

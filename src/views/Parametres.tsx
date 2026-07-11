@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BellRing, Smartphone, Sunrise, Sun, Users, Mail, CalendarDays, Bug, LogOut } from "lucide-react";
+import { BellRing, Smartphone, Sunrise, Sun, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { usePush } from "@/lib/push";
@@ -21,6 +21,7 @@ export type NotifPrefs = {
   digestInvoices?: boolean; // résumé matin : factures en retard
   digestWeekly?: boolean; // résumé du lundi : tâches & évènements de la semaine
   digestAfternoon?: boolean; // point de mi-journée (14h) : ce qu'il reste à traiter
+  digestStats?: boolean; // rappel quotidien : données créateurs à mettre à jour ce mois
   emailReceivedBell?: boolean; // cloche : mail reçu sur la boîte agence
   emailReceivedPush?: boolean; // push : mail reçu sur la boîte agence
   pushErrors?: boolean; // push : un bug (crash de rendu) est survenu dans l'app
@@ -231,6 +232,20 @@ export function Parametres() {
           hint="Tâches, briefs et évènements prévus du lundi au dimanche."
           checked={on(prefs.digestWeekly)}
           onChange={(v) => setPref("digestWeekly", v)}
+        />
+      </Section>
+
+      {/* Données créateurs à jour */}
+      <Section
+        icon={<RefreshCw className="h-4 w-4" />}
+        title="Données créateurs à jour"
+        hint="Chaque jour à 9h — tant que des créateurs ne sont pas cochés « à jour » pour le mois en cours (roster)."
+      >
+        <PrefRow
+          label="Rappel mensuel des données"
+          hint="Liste les créateurs dont les stats (abonnés, ER, CA…) ne sont pas encore à jour ce mois-ci. S'arrête quand tout est coché."
+          checked={on(prefs.digestStats)}
+          onChange={(v) => setPref("digestStats", v)}
         />
       </Section>
 

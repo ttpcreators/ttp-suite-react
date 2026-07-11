@@ -32,10 +32,140 @@ const CLAUSES: Term[] = [
   { l: "Art. 8 — Droit applicable & litiges", v: "Contrat régi par le droit français. À défaut d'accord amiable (médiation préalable), compétence exclusive des tribunaux de Lyon." },
 ];
 
-const PAY_TERMS: Term[] = [
-  { l: "Modalités", v: "Virement · 30 j fin de mois" },
-  { l: "TVA", v: "Non assujetti (art. 293 B CGI)" },
+// ══════════════════════════════════════════════════════════════════
+// Cas de figure — sélecteurs qui adaptent AUTOMATIQUEMENT le contrat
+// (termes + clauses) pour que le template colle à la réalité du deal.
+// ══════════════════════════════════════════════════════════════════
+type Opt = { v: string; label: string };
+
+const COLLAB_OPTS: Opt[] = [
+  { v: "sponso", label: "Post sponsorisé" },
+  { v: "ugc", label: "UGC (sans diffusion)" },
+  { v: "gifting", label: "Placement / gifting" },
+  { v: "ambassador", label: "Ambassadeur (long terme)" },
+  { v: "event", label: "Prestation événementielle" },
 ];
+const RIGHTS_OPTS: Opt[] = [
+  { v: "organic", label: "Organique — compte créateur seul" },
+  { v: "repost", label: "Repost organique par la marque" },
+  { v: "paid", label: "Paid media / whitelisting (ads)" },
+  { v: "buyout", label: "Cession totale (buyout)" },
+];
+const DUR_OPTS: Opt[] = [
+  { v: "3 mois", label: "3 mois" },
+  { v: "6 mois", label: "6 mois" },
+  { v: "12 mois", label: "12 mois" },
+  { v: "illimitée", label: "Illimitée" },
+];
+const TERRITORY_OPTS: Opt[] = [
+  { v: "France", label: "France" },
+  { v: "France + DOM-TOM", label: "France + DOM-TOM" },
+  { v: "Europe", label: "Europe" },
+  { v: "Monde", label: "Monde entier" },
+];
+const PAYMENT_OPTS: Opt[] = [
+  { v: "30j", label: "Virement · 30 j fin de mois" },
+  { v: "livraison", label: "À la livraison" },
+  { v: "acompte", label: "50 % acompte · 50 % livraison" },
+  { v: "45j", label: "Virement · 45 j" },
+];
+const TVA_OPTS: Opt[] = [
+  { v: "non", label: "Non assujetti (art. 293 B CGI)" },
+  { v: "20", label: "TVA 20 %" },
+];
+const EXCL_OPTS: Opt[] = [
+  { v: "non", label: "Aucune" },
+  { v: "cat30", label: "Catégorie · 30 jours" },
+  { v: "cat90", label: "Catégorie · 90 jours" },
+  { v: "total", label: "Secteur complet · durée du contrat" },
+];
+
+const labelOf = (opts: Opt[], v: string) => opts.find((o) => o.v === v)?.label ?? v;
+
+type Scenario = {
+  collab: string;
+  rights: string;
+  rightsDuration: string;
+  territory: string;
+  payment: string;
+  tva: string;
+  exclScope: string;
+  defraiement: boolean;
+};
+
+const SCENARIO_DEFAULT: Scenario = {
+  collab: "sponso",
+  rights: "organic",
+  rightsDuration: "6 mois",
+  territory: "France",
+  payment: "30j",
+  tva: "non",
+  exclScope: "cat30",
+  defraiement: false,
+};
+
+function objetOf(collab: string, brand: string): string {
+  const b = brand || "—";
+  switch (collab) {
+    case "ugc": return `Production de contenus UGC pour ${b}`;
+    case "gifting": return `Placement de produit — ${b}`;
+    case "ambassador": return `Programme ambassadeur — ${b}`;
+    case "event": return `Prestation événementielle — ${b}`;
+    default: return `Campagne ${b}`;
+  }
+}
+
+function rightsValue(s: Scenario): string {
+  switch (s.rights) {
+    case "repost": return `Repost organique — ${s.rightsDuration}`;
+    case "paid": return `Paid media / whitelisting — ${s.rightsDuration}`;
+    case "buyout": return `Cession totale (buyout) — ${s.rightsDuration}`;
+    default: return "Organique — compte du créateur uniquement";
+  }
+}
+
+function payClause(payment: string): string {
+  switch (payment) {
+    case "livraison": return "Les sommes sont versées par virement à la livraison et à la validation des contenus. Tout retard entraîne des pénalités au taux BCE + 10 pts et une indemnité forfaitaire de 40 € (art. L441-10 C. com.).";
+    case "acompte": return "50 % du montant sont versés à la signature (acompte), le solde à la livraison et à la validation des contenus. Tout retard entraîne les pénalités légales (art. L441-10 C. com.).";
+    case "45j": return "Les sommes sont versées par virement à 45 jours. Tout retard entraîne des pénalités au taux BCE + 10 pts et une indemnité forfaitaire de 40 € (art. L441-10 C. com.).";
+    default: return "Les sommes sont versées par virement à 30 jours fin de mois. Tout retard entraîne des pénalités au taux BCE + 10 pts et une indemnité forfaitaire de 40 € (art. L441-10 C. com.).";
+  }
+}
+
+function rightsClause(s: Scenario): string {
+  const terr = s.territory;
+  const dur = s.rightsDuration;
+  switch (s.rights) {
+    case "repost": return `Le créateur conserve la propriété de ses contenus et autorise l'Annonceur à les reposter sur ses propres canaux organiques (sans achat média), pour une durée de ${dur}, sur le territoire : ${terr}. Toute diffusion payante fait l'objet d'un avenant.`;
+    case "paid": return `Le créateur cède à l'Annonceur les droits d'exploitation des contenus en publicité payante (whitelisting / paid media), pour une durée de ${dur}, sur le territoire : ${terr}. Cession limitée aux supports et à la durée stipulés.`;
+    case "buyout": return `Cession totale (buyout) : le créateur cède l'ensemble des droits d'exploitation des contenus, tous supports, sur le territoire : ${terr}, pour une durée de ${dur}. Rémunération incluse dans le montant.`;
+    default: return "Le créateur conserve la pleine propriété de ses contenus, publiés sur son seul compte. Aucune réutilisation par l'Annonceur hors de son compte n'est autorisée sans avenant.";
+  }
+}
+
+/** Clauses adaptées au cas de figure : Art. 2/3 réécrits + clauses optionnelles (exclusivité, défraiement). */
+function buildClauses(s: Scenario): Term[] {
+  const base: Term[] = [
+    CLAUSES[0], // Art. 1 — Objet
+    { l: "Art. 2 — Rémunération & paiement", v: payClause(s.payment) },
+    { l: "Art. 3 — Propriété intellectuelle & droits d'usage", v: rightsClause(s) },
+    ...CLAUSES.slice(3), // Art. 4 → 8
+  ];
+  let n = 9;
+  const opt: Term[] = [];
+  if (s.exclScope !== "non") {
+    const detail =
+      s.exclScope === "total"
+        ? "opérant dans le même secteur d'activité, pour toute la durée du contrat"
+        : `de la même catégorie de produits, pendant ${s.exclScope === "cat90" ? "90" : "30"} jours à compter de la publication`;
+    opt.push({ l: `Art. ${n++} — Exclusivité`, v: `Pendant la période d'exclusivité, le créateur s'interdit toute collaboration rémunérée avec une marque concurrente ${detail}.` });
+  }
+  if (s.defraiement) {
+    opt.push({ l: `Art. ${n++} — Frais & défraiement`, v: "L'Annonceur prend en charge les produits nécessaires à la prestation ainsi que les frais de déplacement et d'hébergement engagés à sa demande, sur présentation de justificatifs." });
+  }
+  return [...base, ...opt];
+}
 
 type Clause = { id: string; l: string; v: string };
 
@@ -51,6 +181,15 @@ type ContractCase = {
   deliverables: string;
   excl: boolean;
   extra: Clause[];
+  // Cas de figure (optionnels → compat descendante avec les cas déjà enregistrés).
+  collab?: string;
+  rights?: string;
+  rightsDuration?: string;
+  territory?: string;
+  payment?: string;
+  tva?: string;
+  exclScope?: string;
+  defraiement?: boolean;
 };
 type ContractConfigs = Record<string, ContractCase[]>;
 
@@ -140,6 +279,22 @@ td{padding:9px 0;border-bottom:1px solid #ececef;font-weight:600}
 </body></html>`;
 }
 
+function SelectField({ label, value, onChange, opts }: { label: string; value: string; onChange: (v: string) => void; opts: Opt[] }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</span>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="h-9 w-full rounded-lg bg-surface" placeholder={label} />
+        <SelectContent>
+          {opts.map((o, i) => (
+            <SelectItem key={o.v} index={i} value={o.v}>{o.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export function Contrats() {
   const creators = useCreators();
   const { data: cfgData } = useAppState<ContractConfigs>((s: AppState) => (s["contractConfigs"] as ContractConfigs) ?? {});
@@ -153,8 +308,17 @@ export function Contrats() {
   const [commission, setCommission] = useState("20");
   const [duration, setDuration] = useState("12 mois");
   const [deliverables, setDeliverables] = useState("3 posts · 1 reel");
-  const [excl, setExcl] = useState(true);
   const [extra, setExtra] = useState<Clause[]>([]);
+  // Cas de figure
+  const [collab, setCollab] = useState(SCENARIO_DEFAULT.collab);
+  const [rights, setRights] = useState(SCENARIO_DEFAULT.rights);
+  const [rightsDuration, setRightsDuration] = useState(SCENARIO_DEFAULT.rightsDuration);
+  const [territory, setTerritory] = useState(SCENARIO_DEFAULT.territory);
+  const [payment, setPayment] = useState(SCENARIO_DEFAULT.payment);
+  const [tva, setTva] = useState(SCENARIO_DEFAULT.tva);
+  const [exclScope, setExclScope] = useState(SCENARIO_DEFAULT.exclScope);
+  const [defraiement, setDefraiement] = useState(SCENARIO_DEFAULT.defraiement);
+  const scenario: Scenario = { collab, rights, rightsDuration, territory, payment, tva, exclScope, defraiement };
   const [copied, setCopied] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [caseName, setCaseName] = useState("Standard");
@@ -171,9 +335,17 @@ export function Contrats() {
     setCommission(cs.commission);
     setDuration(cs.duration);
     setDeliverables(cs.deliverables);
-    setExcl(cs.excl);
     setExtra(cs.extra ?? []);
     setCaseName(cs.name);
+    // Cas de figure — replis pour les cas enregistrés avant cette fonctionnalité.
+    setCollab(cs.collab ?? SCENARIO_DEFAULT.collab);
+    setRights(cs.rights ?? SCENARIO_DEFAULT.rights);
+    setRightsDuration(cs.rightsDuration ?? SCENARIO_DEFAULT.rightsDuration);
+    setTerritory(cs.territory ?? SCENARIO_DEFAULT.territory);
+    setPayment(cs.payment ?? SCENARIO_DEFAULT.payment);
+    setTva(cs.tva ?? SCENARIO_DEFAULT.tva);
+    setExclScope(cs.exclScope ?? (cs.excl ? "cat30" : "non"));
+    setDefraiement(cs.defraiement ?? SCENARIO_DEFAULT.defraiement);
   };
 
   // Au changement de créateur, charge automatiquement son 1er cas s'il en a un.
@@ -184,22 +356,32 @@ export function Contrats() {
   }, [ctName]);
 
   const meta = TYPE_META[ctType];
-  const exclLabel = excl ? "Oui · 30 jours" : "Non";
+  const exclLabel = labelOf(EXCL_OPTS, exclScope);
+  const payLabel = labelOf(PAYMENT_OPTS, payment);
+  const tvaLabel = labelOf(TVA_OPTS, tva);
   const commClean = String(commission).replace(/[^0-9.]/g, "") || "20";
   const ref = refFor(ctName);
 
   const { parties, terms } = useMemo<{ parties: string; terms: Term[] }>(() => {
+    const payTerms: Term[] = [
+      { l: "Modalités", v: payLabel },
+      { l: "TVA", v: tvaLabel },
+    ];
     if (ctType === "marque") {
       return {
         parties: `ENTRE ${brand || "[Annonceur]"} (l'Annonceur) ET ${ctName}, représenté(e) par TTP Creators (l'Agent).`,
         terms: [
-          { l: "Objet", v: `Campagne ${brand || "—"}` },
+          { l: "Objet", v: objetOf(collab, brand) },
+          { l: "Nature", v: labelOf(COLLAB_OPTS, collab) },
           { l: "Livrables", v: deliverables || "—" },
           { l: "Montant", v: value || "—" },
+          { l: "Cession de droits", v: rightsValue(scenario) },
+          { l: "Territoire", v: territory },
           { l: "Exclusivité", v: exclLabel },
           { l: "Durée", v: duration || "—" },
           { l: "Commission TTP", v: `${commClean}% du montant` },
-          ...PAY_TERMS,
+          ...(defraiement ? [{ l: "Frais & produits", v: "Pris en charge par l'Annonceur" }] : []),
+          ...payTerms,
         ],
       };
     }
@@ -212,7 +394,7 @@ export function Contrats() {
           { l: "Exclusivité", v: exclLabel },
           { l: "Durée", v: duration || "—" },
           { l: "Périmètre", v: "Négo · contrats · facturation" },
-          ...PAY_TERMS,
+          ...payTerms,
         ],
       };
     }
@@ -222,15 +404,19 @@ export function Contrats() {
         { l: "Objet", v: `Contenus UGC pour ${brand || "—"}` },
         { l: "Livrables", v: deliverables || "—" },
         { l: "Montant", v: value || "—" },
-        { l: "Cession de droits", v: "12 mois · paid media" },
+        { l: "Cession de droits", v: rightsValue(scenario) },
+        { l: "Territoire", v: territory },
         { l: "Exclusivité", v: exclLabel },
         { l: "Durée", v: duration || "—" },
-        ...PAY_TERMS,
+        ...(defraiement ? [{ l: "Frais & produits", v: "Pris en charge par l'Annonceur" }] : []),
+        ...payTerms,
       ],
     };
-  }, [ctType, brand, ctName, deliverables, value, exclLabel, duration, commClean]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctType, brand, ctName, deliverables, value, exclLabel, duration, commClean, collab, rights, rightsDuration, territory, payLabel, tvaLabel, defraiement]);
 
-  const allClauses: Term[] = [...CLAUSES, ...extra.map((e) => ({ l: e.l, v: e.v }))];
+  const allClauses: Term[] = [...buildClauses(scenario), ...extra.map((e) => ({ l: e.l, v: e.v }))];
+  const nextClauseNo = buildClauses(scenario).length + 1 + extra.length;
   const isBrand = ctType !== "repr";
 
   const contractText = useMemo(() => {
@@ -285,7 +471,7 @@ export function Contrats() {
 
   const saveCase = async () => {
     const name = caseName.trim() || "Cas";
-    const cs: ContractCase = { id: uid(), name, ctType, brand, value, commission, duration, deliverables, excl, extra };
+    const cs: ContractCase = { id: uid(), name, ctType, brand, value, commission, duration, deliverables, excl: exclScope !== "non", extra, collab, rights, rightsDuration, territory, payment, tva, exclScope, defraiement };
     let existed = false;
     const ok = await mutateConfigs((fresh) => {
       const list = fresh[ctName] ?? [];
@@ -395,29 +581,38 @@ export function Contrats() {
             </div>
           </>
         )}
-        <div className="mt-3">
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
           <TextField label="Commission (%)" value={commission} onChange={setCommission} type="number" placeholder="ex 20" />
-        </div>
-        <div className="mt-3 grid grid-cols-1 items-end gap-3 md:grid-cols-2">
           <TextField label="Durée" value={duration} onChange={setDuration} placeholder="ex 12 mois" />
-          <div className="flex min-w-[150px] flex-1 flex-col gap-1.5">
-            <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Exclusivité</span>
-            <button
-              type="button"
-              onClick={() => setExcl((v) => !v)}
-              className={cn("flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-[11px] font-semibold transition-colors", excl ? "bg-signalsoft text-signaltext" : "border border-border text-muted-foreground hover:bg-rowhover")}
-            >
-              <span className={cn("grid h-4 w-4 place-items-center rounded", excl ? "bg-primary text-primary-foreground" : "border border-border")}>{excl && <Check className="h-3 w-3" />}</span>
-              {exclLabel}
-            </button>
+        </div>
+
+        {/* ── Cas de figure : sélecteurs qui adaptent le contrat ── */}
+        <div className="mt-5 rounded-xl border border-border bg-panel p-3.5">
+          <div className="mb-2.5 text-[9px] font-semibold uppercase tracking-wider text-faint">Cas de figure — le contrat s'adapte tout seul</div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {ctType === "marque" && <SelectField label="Type de collab" value={collab} onChange={setCollab} opts={COLLAB_OPTS} />}
+            <SelectField label="Cession de droits" value={rights} onChange={setRights} opts={RIGHTS_OPTS} />
+            {rights !== "organic" && <SelectField label="Durée de cession" value={rightsDuration} onChange={setRightsDuration} opts={DUR_OPTS} />}
+            <SelectField label="Territoire" value={territory} onChange={setTerritory} opts={TERRITORY_OPTS} />
+            <SelectField label="Exclusivité" value={exclScope} onChange={setExclScope} opts={EXCL_OPTS} />
+            <SelectField label="Paiement" value={payment} onChange={setPayment} opts={PAYMENT_OPTS} />
+            <SelectField label="TVA" value={tva} onChange={setTva} opts={TVA_OPTS} />
           </div>
+          <button
+            type="button"
+            onClick={() => setDefraiement((v) => !v)}
+            className={cn("mt-3 flex w-full items-center gap-2 rounded-lg px-3.5 py-2.5 text-[11px] font-semibold transition-colors", defraiement ? "bg-signalsoft text-signaltext" : "border border-border text-muted-foreground hover:bg-rowhover")}
+          >
+            <span className={cn("grid h-4 w-4 shrink-0 place-items-center rounded", defraiement ? "bg-primary text-primary-foreground" : "border border-border")}>{defraiement && <Check className="h-3 w-3" />}</span>
+            Frais &amp; produits pris en charge (défraiement)
+          </button>
         </div>
 
         {/* Clauses additionnelles */}
         <div className="mt-5">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[9px] font-semibold uppercase tracking-wider text-faint">Clauses additionnelles</span>
-            <button type="button" onClick={() => setExtra([...extra, { id: uid(), l: `Art. ${9 + extra.length} — Clause`, v: "" }])} className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover">
+            <button type="button" onClick={() => setExtra([...extra, { id: uid(), l: `Art. ${nextClauseNo} — Clause`, v: "" }])} className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover">
               <Plus className="h-3.5 w-3.5" /> Ajouter
             </button>
           </div>

@@ -132,14 +132,27 @@ export function RepresentationContract() {
       const row = (data?.[0] as { name: string; birth: string | null; address: string | null; siren: string | null; email_pro: string | null }) ?? null;
       const saved = (configs[ctName] ?? [])[0];
       setConfig((prev) => {
-        const base = saved ? { ...defaultConfig(prev.variante), ...saved.config } : { ...prev };
+        if (saved) {
+          // Cas enregistré pour ce créateur : ses valeurs priment, roster en repli.
+          const base = { ...defaultConfig(prev.variante), ...saved.config };
+          return {
+            ...base,
+            talentNom: base.talentNom || (row ? titleCase(row.name) : ""),
+            talentDateNaissance: base.talentDateNaissance || toISO(row?.birth),
+            talentAdresse: base.talentAdresse || (row?.address ?? ""),
+            talentSiret: base.talentSiret || (row?.siren ?? ""),
+            talentEmailPro: base.talentEmailPro || (row?.email_pro ?? ""),
+          };
+        }
+        // Pas de cas enregistré → on préremplit DEPUIS LE ROSTER et on ÉCRASE les
+        // infos de l'ancien créateur (sinon elles restaient, ex. Candice au lieu de Lucie).
         return {
-          ...base,
-          talentNom: base.talentNom || (row ? titleCase(row.name) : ""),
-          talentDateNaissance: base.talentDateNaissance || toISO(row?.birth),
-          talentAdresse: base.talentAdresse || (row?.address ?? ""),
-          talentSiret: base.talentSiret || (row?.siren ?? ""),
-          talentEmailPro: base.talentEmailPro || (row?.email_pro ?? ""),
+          ...prev,
+          talentNom: row ? titleCase(row.name) : "",
+          talentDateNaissance: toISO(row?.birth),
+          talentAdresse: row?.address ?? "",
+          talentSiret: row?.siren ?? "",
+          talentEmailPro: row?.email_pro ?? "",
         };
       });
       if (saved) setCaseName(saved.name);
