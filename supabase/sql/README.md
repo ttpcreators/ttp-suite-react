@@ -23,6 +23,7 @@ tu retrouves tout d'un coup d'œil, et c'est **versionné dans Git**.
 | [`07-blob-atomique-et-backup.sql`](07-blob-atomique-et-backup.sql) | 7 · Blob atomique + backup | `app_state_set` (écriture atomique) + backup quotidien du blob (30 j) |
 | [`08-error-log.sql`](08-error-log.sql) | 8 · Journal des bugs | Table `error_log` (crashs remontés par report-error, lecture agence) |
 | [`09-events-description.sql`](09-events-description.sql) | 9 · Events · description | Colonne `events.description` (Planning + sync Google Agenda bidirectionnelle) |
+| [`10-public-roster.sql`](10-public-roster.sql) | 10 · Vue publique roster | Vue `public_roster` (site vitrine, lecture anonyme, colonnes publiques) |
 | [`crons-google-agenda.sql`](crons-google-agenda.sql) | Crons · Google Agenda | pg_cron watch-renew + sync |
 | [`push-subscriptions.sql`](push-subscriptions.sql) | 🔒 Push · table push_subscriptions | Abonnements push — RLS cloisonnée (chacun ses lignes, agence tout) |
 | [`securite-avatars-storage.sql`](securite-avatars-storage.sql) | 🔒 Sécurité · storage avatars | Bucket avatars : upload ouvert, écrasement/suppression agence-only |
