@@ -61,22 +61,27 @@ export function Globe({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // Rendu léger sur mobile : le globe s'affiche en ≤200px, inutile de payer
+    // le coût GPU/CPU d'un échantillonnage et d'un DPR pensés pour desktop.
+    const isMobile = window.matchMedia("(max-width: 768px)").matches;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let globe: ReturnType<typeof createGlobe> | null = null;
     let raf = 0;
     let phi = 0;
+    let running = !document.hidden;
 
     const init = () => {
       const width = canvas.offsetWidth;
       if (width === 0 || globe) return;
       globe = createGlobe(canvas, {
-        devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2),
         width: width * 2,
         height: width * 2,
         phi: 0,
         theta: 0.25,
         dark,
         diffuse: 1.4,
-        mapSamples: 16000,
+        mapSamples: isMobile ? 6000 : 16000,
         mapBrightness: dark ? 6 : 9,
         baseColor,
         markerColor,
@@ -85,8 +90,10 @@ export function Globe({
         markers: markers.map((m) => ({ location: m.location, size: m.size ?? markerSize })),
       });
       const animate = () => {
-        if (dragging.current === null) phi += 0.004;
-        globe!.update({ phi: phi + phiOffset.current, theta: 0.25 });
+        if (running) {
+          if (dragging.current === null && !reducedMotion) phi += 0.004;
+          globe!.update({ phi: phi + phiOffset.current, theta: 0.25 });
+        }
         raf = requestAnimationFrame(animate);
       };
       animate();
@@ -94,6 +101,13 @@ export function Globe({
         if (canvas) canvas.style.opacity = "1";
       });
     };
+
+    // En arrière-plan (onglet caché / app minimisée), on arrête de recalculer
+    // le globe : évite de cramer batterie/CPU pour un rendu invisible.
+    const onVisibility = () => {
+      running = !document.hidden;
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     if (canvas.offsetWidth > 0) {
       init();
@@ -107,11 +121,13 @@ export function Globe({
       ro.observe(canvas);
       return () => {
         ro.disconnect();
+        document.removeEventListener("visibilitychange", onVisibility);
         if (raf) cancelAnimationFrame(raf);
         globe?.destroy();
       };
     }
     return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
       if (raf) cancelAnimationFrame(raf);
       globe?.destroy();
     };
