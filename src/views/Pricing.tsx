@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { useCreators } from "@/lib/useCreators";
 import { formatEuro } from "@/lib/appState";
 import { cn, titleCase } from "@/lib/utils";
+import { PlatformIcon } from "@/components/ui/platform-icon";
 
 /**
  * Calculateur de tarif influence — basé sur la méthode standard du marché 2026
@@ -208,10 +209,11 @@ export function Pricing() {
                   setFmtKey(p.formats[0].key);
                 }}
                 className={cn(
-                  "rounded-xl px-3.5 py-2 text-[11px] font-semibold transition-colors",
+                  "flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[11px] font-semibold transition-colors",
                   p.key === platKey ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:bg-rowhover",
                 )}
               >
+                <PlatformIcon platform={p.key} className="h-3.5 w-3.5" />
                 {p.label}
               </button>
             ))}

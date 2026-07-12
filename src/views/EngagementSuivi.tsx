@@ -15,6 +15,7 @@ import { useAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { SelectField } from "@/components/ui/form";
 import { cn, titleCase } from "@/lib/utils";
+import { PlatformIcon } from "@/components/ui/platform-icon";
 
 /**
  * Suivi engagement — page dédiée à l'ÉVOLUTION des mesures enregistrées dans
@@ -166,12 +167,13 @@ export function SuiviPanel({ entries, lockedCreator }: { entries: SuiviEntry[]; 
               type="button"
               onClick={() => setSelPlatform(pk)}
               className={cn(
-                "rounded-xl px-3.5 py-2 text-[11px] font-semibold transition-colors",
+                "flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[11px] font-semibold transition-colors",
                 pk === platform
                   ? "bg-primary text-primary-foreground"
                   : "border border-border text-muted-foreground hover:bg-rowhover",
               )}
             >
+              <PlatformIcon platform={pk} className="h-3.5 w-3.5" />
               {PLATFORM_LABELS[pk] ?? pk}
             </button>
           ))}
