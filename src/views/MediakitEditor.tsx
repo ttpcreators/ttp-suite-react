@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon } from "lucide-react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon, Camera, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { dbUpdate } from "@/lib/db";
 import { useCreators } from "@/lib/useCreators";
@@ -45,7 +45,7 @@ type MediaKit = {
   };
   platforms?: PlatformBlock[];
   brands?: BrandRow[];
-  photos?: { hero?: string | null; contact?: string | null; instagram?: string | null; tiktok?: string | null };
+  photos?: Record<string, string | null>; // hero, contact, + une capture par plateforme (clé = instagram/tiktok/…)
 };
 
 // Champs SUPPLÉMENTAIRES par plateforme (en plus de followers / ER / tranche d'âge).
@@ -137,6 +137,8 @@ export function MediakitEditor() {
   const patch = (p: Partial<MediaKit>) => setMk((m) => ({ ...m, ...p }));
   const patchAudience = (p: Partial<NonNullable<MediaKit["audience"]>>) =>
     setMk((m) => ({ ...m, audience: { ...m.audience, ...p } }));
+  const setPhoto = (key: string, url: string | null) =>
+    setMk((m) => ({ ...m, photos: { ...(m.photos ?? {}), [key]: url } }));
 
   const save = async () => {
     if (!selId || saving) return;
@@ -320,6 +322,33 @@ export function MediakitEditor() {
             </div>
           </section>
 
+          {/* ---------------- PHOTOS ---------------- */}
+          <section className={`${CARD} xl:col-span-2`}>
+            <h3 className="mb-3 text-sm font-semibold text-foreground">Photos</h3>
+            <div className="flex flex-wrap gap-6">
+              <ImageField
+                label="Portrait principal (page d'accueil)"
+                slug={mk.slug ?? ""}
+                field="hero"
+                url={mk.photos?.hero}
+                onChange={(u) => setPhoto("hero", u)}
+                boxClass="h-44 w-36"
+              />
+              <ImageField
+                label="Portrait secondaire (page contact)"
+                slug={mk.slug ?? ""}
+                field="contact"
+                url={mk.photos?.contact}
+                onChange={(u) => setPhoto("contact", u)}
+                boxClass="h-44 w-36"
+              />
+            </div>
+            <p className="mt-2 text-[11px] text-faint">
+              Images max 5 Mo. Les captures des profils s'ajoutent dans chaque bloc « Plateforme » ci-dessous. Après un
+              upload, clique « Enregistrer » en haut.
+            </p>
+          </section>
+
           {/* ---------------- PLATEFORMES ---------------- */}
           <section className={`${CARD} xl:col-span-2`}>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -337,6 +366,9 @@ export function MediakitEditor() {
                 <PlatformEditor
                   key={i}
                   block={p}
+                  slug={mk.slug ?? ""}
+                  photo={mk.photos?.[p.key]}
+                  onPhotoChange={(u) => setPhoto(p.key, u)}
                   onChange={(next) => setPlatforms((mk.platforms ?? []).map((x, j) => (j === i ? next : x)))}
                   onRemove={() => setPlatforms((mk.platforms ?? []).filter((_, j) => j !== i))}
                 />
@@ -359,6 +391,14 @@ export function MediakitEditor() {
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {(mk.brands ?? []).map((b, i) => (
                 <div key={i} className="flex items-center gap-2">
+                  <ImageField
+                    label=""
+                    slug={mk.slug ?? ""}
+                    field={`logo-${i}`}
+                    url={b.logo}
+                    onChange={(u) => setBrands((mk.brands ?? []).map((x, j) => (j === i ? { ...x, logo: u } : x)))}
+                    boxClass="h-10 w-10 shrink-0"
+                  />
                   <input
                     value={b.name}
                     onChange={(e) => setBrands((mk.brands ?? []).map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
@@ -524,10 +564,16 @@ function CountryList({ rows, onChange }: { rows: CountryRow[]; onChange: (r: Cou
 
 function PlatformEditor({
   block,
+  slug,
+  photo,
+  onPhotoChange,
   onChange,
   onRemove,
 }: {
   block: PlatformBlock;
+  slug: string;
+  photo?: string | null;
+  onPhotoChange: (url: string | null) => void;
   onChange: (b: PlatformBlock) => void;
   onRemove: () => void;
 }) {
@@ -583,7 +629,78 @@ function PlatformEditor({
           </div>
         ))}
       </div>
+      <div className="mt-3">
+        <ImageField label="Capture du profil" slug={slug} field={block.key} url={photo} onChange={onPhotoChange} boxClass="h-40 w-24" />
+      </div>
       <p className="mt-2 text-[10px] text-faint">Bloc « {platLabel(block.key)} » — page « Plateforme » du media kit.</p>
+    </div>
+  );
+}
+
+/** Champ image : upload dans le bucket public `avatars` (chemin mediakit/<slug>/…),
+ *  renvoie l'URL publique via onChange. Le blob mediakit est persisté au clic « Enregistrer ». */
+function ImageField({
+  label,
+  slug,
+  field,
+  url,
+  onChange,
+  boxClass = "h-20 w-16",
+}: {
+  label: string;
+  slug: string;
+  field: string;
+  url?: string | null;
+  onChange: (url: string | null) => void;
+  boxClass?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return toast("Choisis une image");
+    if (file.size > 5 * 1024 * 1024) return toast("Image trop lourde (max 5 Mo)");
+    setBusy(true);
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const s = (slug || "creator").replace(/[^a-z0-9-]/g, "") || "creator";
+    const path = `mediakit/${s}/${field}-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: false, cacheControl: "3600", contentType: file.type });
+    setBusy(false);
+    if (error) return toast("Échec de l'upload — réessaie");
+    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+    onChange(data.publicUrl);
+    toast("Image ajoutée ✓ — pense à Enregistrer");
+  };
+  return (
+    <div>
+      {label ? <label className={LBL}>{label}</label> : null}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => !busy && inputRef.current?.click()}
+          className={`relative grid shrink-0 place-items-center overflow-hidden rounded-lg border border-dashed border-border bg-surface text-faint transition-colors hover:border-primary hover:text-primary ${boxClass}`}
+        >
+          {url ? (
+            <img src={url} alt="" className="h-full w-full object-cover" />
+          ) : busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Camera className="h-4 w-4" />
+          )}
+        </button>
+        {url ? (
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
+      <input ref={inputRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
     </div>
   );
 }
