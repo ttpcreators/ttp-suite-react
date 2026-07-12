@@ -51,6 +51,7 @@ alter table public.creators add column if not exists email_pro text;
 alter table public.creators add column if not exists instagram text;
 alter table public.creators add column if not exists tiktok text;
 alter table public.creators add column if not exists stats_month text;   -- sql/11 : mois de dernière MAJ des datas
+alter table public.creators add column if not exists mediakit jsonb;     -- sql/14 : contenu du media kit (bio, audience, stats par plateforme, marques, photos)
 
 create table if not exists public.invoices (
   id uuid primary key default gen_random_uuid(),
@@ -640,6 +641,17 @@ with (security_invoker = false) as
   from public.creators
   where coalesce(status, 'actif') <> 'inactif';
 grant select on public.public_roster to anon, authenticated;
+
+-- ─── 7.7 Vue publique du media kit par créatrice (sql/14) ────────────────────
+-- Expose les champs publics + le blob `mediakit` (contenu media kit non sensible)
+-- lu en anonyme par le site (ttpcreators.pro/mediakit/<slug>). Ne JAMAIS mettre de
+-- donnée sensible dans le blob mediakit (il devient public via cette vue).
+create or replace view public.public_mediakit
+with (security_invoker = false) as
+  select name, handle, niche, platform, photo_url, sort_order, mediakit
+  from public.creators
+  where coalesce(status, 'actif') <> 'inactif';
+grant select on public.public_mediakit to anon, authenticated;
 
 -- ============================================================================
 -- FIN. Vérif rapide (en étant DÉCONNECTÉ, ces requêtes doivent renvoyer 0 ligne) :
