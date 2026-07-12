@@ -1,6 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import NumberFlow from "@number-flow/react";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
+import { fmtCompact } from "@/lib/timeSeries";
 import {
   LayoutDashboard,
   ListChecks,
@@ -155,6 +158,35 @@ function StatTile({ label, value, kind }: { label: string; value: number | null;
   );
 }
 
+/** "jj/mm/aaaa" → timestamp (tri chronologique des mesures). */
+function frTime(s: string): number {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/.exec((s ?? "").trim());
+  if (!m) return 0;
+  const y = m[3].length === 2 ? "20" + m[3] : m[3];
+  return new Date(Number(y), Number(m[2]) - 1, Number(m[1])).getTime();
+}
+
+/** Graphique d'évolution des abonnés (même DA que l'Aperçu agence : aire + dégradé). */
+function FollowerArea({ points }: { points: { label: string; abonnes: number }[] }) {
+  return (
+    <ChartContainer config={{}} className="mt-4 h-[170px]">
+      <AreaChart data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id="csFollowers" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#2b7fff" stopOpacity={0.24} />
+            <stop offset="100%" stopColor="#2b7fff" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.6} vertical={false} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickMargin={8} interval="preserveStartEnd" minTickGap={14} />
+        <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(Number(v))} width={40} />
+        <Tooltip content={<ChartTooltip unit="" />} cursor={{ stroke: "#2b7fff", strokeWidth: 1, strokeOpacity: 0.4 }} />
+        <Area type="monotone" dataKey="abonnes" name="Abonnés" stroke="#2b7fff" strokeWidth={2.5} fill="url(#csFollowers)" dot={false} activeDot={{ r: 4, fill: "#2b7fff", stroke: "var(--color-surface)", strokeWidth: 2 }} />
+      </AreaChart>
+    </ChartContainer>
+  );
+}
+
 /** Sous-menu déployé d'une famille (liste ses pages). */
 function CreatorMobileMenu({ ids, onSelect }: { ids: Tab[]; onSelect: (id: Tab) => void }) {
   return (
@@ -237,7 +269,8 @@ export function CreatorSpace({
   const [suivi, setSuivi] = useState<SuiviEntry[] | null>(null);
   const [suiviErr, setSuiviErr] = useState(false);
   useEffect(() => {
-    if (tab !== "evolution" || suivi !== null || suiviErr) return;
+    // Chargé pour l'Évolution ET l'accueil (graphique d'abonnés).
+    if ((tab !== "evolution" && tab !== "accueil") || suivi !== null || suiviErr) return;
     let alive = true;
     supabase.functions
       .invoke("creator-history")
@@ -553,6 +586,19 @@ export function CreatorSpace({
     .filter((e) => (e.date ?? "") >= CS_TODAY)
     .sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""))
     .slice(0, 3);
+  // Évolution des abonnés (depuis les mesures agence) — 1 point par date (valeur max = plateforme principale).
+  const followerPoints = (() => {
+    const byDate = new Map<number, number>();
+    for (const e of suivi ?? []) {
+      const t = frTime(e.date);
+      if (!t) continue;
+      byDate.set(t, Math.max(byDate.get(t) ?? 0, toNum(e.followers) ?? 0));
+    }
+    return [...byDate.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([t, f]) => ({ label: new Intl.DateTimeFormat("fr-FR", { month: "short" }).format(new Date(t)).replace(".", ""), abonnes: f }))
+      .filter((p) => p.abonnes > 0);
+  })();
   const filteredTodos =
     todoFilter === "encours" ? todos.filter((t) => !t.done) : todoFilter === "terminees" ? todos.filter((t) => t.done) : todos;
 
@@ -848,6 +894,22 @@ export function CreatorSpace({
                   <div className="mt-1 text-[11px] text-faint">document{docs.length > 1 ? "s" : ""} · voir →</div>
                 </Card>
               </div>
+
+              {/* Évolution des abonnés — même graphique que l'Aperçu agence */}
+              {followerPoints.length >= 2 && (
+                <Card index={1}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">Évolution des abonnés</div>
+                      <div className="mt-0.5 text-[11px] text-faint">D'après les mesures de ton agence</div>
+                    </div>
+                    <div className="text-2xl font-bold tracking-tight text-foreground">
+                      {fmtCompact(followerPoints[followerPoints.length - 1].abonnes)}
+                    </div>
+                  </div>
+                  <FollowerArea points={followerPoints} />
+                </Card>
+              )}
 
               {/* Mes infos — carte premium : toggle Statistiques / Coordonnées + chiffres animés */}
               <Card index={0}>
