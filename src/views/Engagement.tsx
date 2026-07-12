@@ -84,6 +84,18 @@ const PLATFORMS: Platform[] = [
     bon: 0.5,
     excellent: 1.5,
   },
+  {
+    key: "snapchat",
+    label: "Snapchat",
+    metrics: [
+      { key: "shares", label: "Partages" },
+      { key: "replies", label: "Réponses" },
+      { key: "screenshots", label: "Captures d'écran" },
+    ],
+    formula: "(partages + réponses + captures) sur 30 j ÷ vues de story × 100",
+    bon: 1.5,
+    excellent: 4,
+  },
 ];
 
 function num(v: string | undefined): number {

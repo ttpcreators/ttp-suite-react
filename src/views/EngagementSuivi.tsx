@@ -71,6 +71,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   tiktok: "TikTok",
   youtube: "YouTube",
   x: "X",
+  snapchat: "Snapchat",
 };
 
 /**
