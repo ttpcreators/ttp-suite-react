@@ -6,12 +6,13 @@ import { notifyCreator } from "@/lib/push";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
-import { titleCase } from "@/lib/utils";
+import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { RecipientPicker } from "@/components/ui/recipient-picker";
 import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
+import { MediakitEditor } from "@/views/MediakitEditor";
 
 /**
  * Media kit = bibliothèque de fichiers. L'agence dépose les media kits qu'elle a
@@ -77,7 +78,7 @@ function monthLabel(key: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function Mediakit() {
+function MediakitFiles() {
   const creators = useCreators();
   const [selected, setSelected] = useState<string>("");
   const [archives, setArchives] = useState<ArchiveRow[] | null>(null);
@@ -632,6 +633,36 @@ export function Mediakit() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Page « Media kit » = 2 onglets :
+ *  - EN LIGNE : éditeur des données du media kit web (→ ttpcreators.pro/mediakit).
+ *  - FICHIERS : bibliothèque des media kits déposés (PDF/liens) + envoi par mail.
+ */
+export function Mediakit() {
+  const [tab, setTab] = useState<"online" | "files">("online");
+  const tabBtn = (id: "online" | "files", label: string) => (
+    <button
+      type="button"
+      onClick={() => setTab(id)}
+      className={cn(
+        "rounded-lg px-4 py-2 transition-colors",
+        tab === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="space-y-4">
+      <div className="inline-flex rounded-xl border border-border bg-surface p-1 text-[11px] font-semibold uppercase tracking-wide">
+        {tabBtn("online", "En ligne")}
+        {tabBtn("files", "Fichiers")}
+      </div>
+      {tab === "online" ? <MediakitEditor /> : <MediakitFiles />}
     </div>
   );
 }
