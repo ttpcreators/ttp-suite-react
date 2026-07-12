@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
+import { parseAmount, formatEuro } from "@/lib/money";
 import { useSearch, matchQuery } from "@/lib/search";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -94,6 +95,21 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
           setRows(list);
         }
       });
+  }, [live]);
+
+  // CA par créateur = somme de SES factures payées (auto, plus de saisie manuelle).
+  const [caByCreator, setCaByCreator] = useState<Record<string, number>>(() => getCache<Record<string, number>>("rosterCA") ?? {});
+  useEffect(() => {
+    supabase.from("invoices").select("amount,status,creator").eq("status", "payee").then(({ data }) => {
+      const m: Record<string, number> = {};
+      for (const iv of (data as { amount: string | null; creator: string | null }[]) ?? []) {
+        const c = (iv.creator ?? "").trim();
+        if (!c) continue;
+        m[c] = (m[c] ?? 0) + parseAmount(iv.amount);
+      }
+      setCache("rosterCA", m);
+      setCaByCreator(m);
+    });
   }, [live]);
 
   if (error) {
@@ -217,7 +233,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
             <span>Niche</span>
             <span className="text-right">Abonnés</span>
             <span className="text-right">ER</span>
-            <span className="text-right">CA · Mois</span>
+            <span className="text-right">CA · encaissé</span>
             <span className="text-right">Statut</span>
             <span />
           </div>
@@ -270,7 +286,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                   {c.er}
                 </span>
                 <span className="hidden text-right text-xs font-semibold text-foreground md:inline">
-                  {c.ca}
+                  {caByCreator[c.name] ? formatEuro(caByCreator[c.name]) : "—"}
                 </span>
 
                 {/* Bloc droit mobile : niche + statut */}

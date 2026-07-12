@@ -183,9 +183,16 @@ export function Apercu() {
   const briefsToValidate = d.briefs.filter((b) => b.status === "valider" || b.status === "attente").slice(0, 3);
   const briefsShown = briefsToValidate.length ? briefsToValidate : d.briefs.slice(0, 3);
 
+  // CA par créateur = somme de SES factures payées (auto, plus de saisie manuelle).
+  const caByCreator = new Map<string, number>();
+  for (const i of paid) {
+    const c = (i.creator ?? "").trim();
+    if (!c) continue;
+    caByCreator.set(c, (caByCreator.get(c) ?? 0) + parseAmount(i.amount));
+  }
   const topCreators = d.creators
-    .slice()
-    .sort((a, b) => parseAmount(b.ca) - parseAmount(a.ca))
+    .map((c) => ({ name: c.name, caNum: caByCreator.get(c.name) ?? 0 }))
+    .sort((a, b) => b.caNum - a.caNum)
     .slice(0, 7);
 
   const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
@@ -414,7 +421,7 @@ export function Apercu() {
                   {initials(c.name)}
                 </span>
                 <span className="flex-1 truncate text-xs font-medium">{titleCase(c.name)}</span>
-                <span className="text-xs font-semibold">{c.ca ? formatEuro(parseAmount(c.ca)) : "—"}</span>
+                <span className="text-xs font-semibold">{c.caNum ? formatEuro(c.caNum) : "—"}</span>
               </div>
             ))
           )}

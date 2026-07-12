@@ -10,6 +10,7 @@ import {
   InlineForm,
   TextField,
   SelectField,
+  AutoGrowTextField,
 } from "@/components/ui/form";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
@@ -351,7 +352,7 @@ export function Todo() {
         onSubmit={submit}
       >
         <TextField label="Tâche" value={text} onChange={setText} />
-        <TextField label="Description" value={descr} onChange={setDescr} />
+        <AutoGrowTextField label="Description" value={descr} onChange={setDescr} placeholder="Détaille la tâche — le champ s'agrandit tout seul…" className="min-w-full" />
         <TextField label="Commentaire (optionnel)" value={note} onChange={setNote} placeholder="Infos en plus, rappel, lien…" />
         <TextField
           label="Échéance"
@@ -752,7 +753,7 @@ export function Todo() {
                     onChange={setEditText}
                     className="min-w-full"
                   />
-                  <TextField
+                  <AutoGrowTextField
                     label="Description"
                     value={editDescr}
                     onChange={setEditDescr}

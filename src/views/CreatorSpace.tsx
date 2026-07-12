@@ -18,6 +18,7 @@ import {
   ExternalLink,
   BarChart3,
   Contact,
+  X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
@@ -27,7 +28,7 @@ import { PushCard } from "@/components/ui/push-card";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
-import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
+import { AddButton, InlineForm, TextField, SelectField, AutoGrowTextField } from "@/components/ui/form";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -250,6 +251,9 @@ export function CreatorSpace({
   const [tdPrio, setTdPrio] = useState("moyenne");
   const [idOpen, setIdOpen] = useState(false);
   const [idText, setIdText] = useState("");
+  // édition inline d'une idée
+  const [ideaEditId, setIdeaEditId] = useState<string | null>(null);
+  const [ideaEditText, setIdeaEditText] = useState("");
   // add-contact form
   const [ctOpen, setCtOpen] = useState(false);
   const [ctBrand, setCtBrand] = useState("");
@@ -349,6 +353,18 @@ export function CreatorSpace({
     toast("Idée ajoutée ✓");
     setIdOpen(false);
     setIdText("");
+  };
+
+  const saveIdeaEdit = async (id: string) => {
+    const t = ideaEditText.trim();
+    if (!t) {
+      toast("L'idée ne peut pas être vide");
+      return;
+    }
+    setIdeas((prev) => prev.map((x) => (x.id === id ? { ...x, text: t } : x)));
+    setIdeaEditId(null);
+    if (!(await dbUpdate("ideas", id, { text: t }))) toast("Erreur — réessaie");
+    else toast("Idée modifiée ✓");
   };
 
   const addContact = async () => {
@@ -828,7 +844,7 @@ export function CreatorSpace({
               </div>
               <InlineForm open={tdOpen} title="Nouvelle tâche" onClose={() => setTdOpen(false)} onSubmit={addTodo}>
                 <TextField label="Tâche" value={tdText} onChange={setTdText} />
-                <TextField label="Description" value={tdDesc} onChange={setTdDesc} />
+                <AutoGrowTextField label="Description" value={tdDesc} onChange={setTdDesc} placeholder="Détaille — le champ s'agrandit tout seul…" className="min-w-full" />
                 <TextField label="Échéance" type="date" value={tdDue} onChange={setTdDue} />
                 <SelectField label="Priorité" value={tdPrio} onChange={setTdPrio} options={PRIORITY_OPTIONS} />
               </InlineForm>
@@ -910,36 +926,76 @@ export function CreatorSpace({
                 <AddButton label="Idée" onClick={() => setIdOpen(true)} />
               </div>
               <InlineForm open={idOpen} title="Nouvelle idée" onClose={() => setIdOpen(false)} onSubmit={addIdea}>
-                <TextField label="Idée de contenu" value={idText} onChange={setIdText} />
+                <AutoGrowTextField label="Idée de contenu" value={idText} onChange={setIdText} placeholder="Décris ton idée — le champ s'agrandit tout seul…" className="min-w-full" />
               </InlineForm>
               <div className="flex flex-col gap-3">
                 {ideas.length === 0 ? (
                   <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">Aucune idée. Ajoute la première 💡</div>
                 ) : (
-                  ideas.map((x) => (
-                    <div key={x.id} className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                      <span className="h-2 w-2 shrink-0 rounded-full bg-indigo" />
-                      <div className="min-w-0 flex-1 truncate text-sm">{x.text}</div>
-                      <AnimatedBadge status="neutral" size="sm">{x.status ?? "À faire"}</AnimatedBadge>
-                      <ActionMenu
-                        items={[
-                          {
-                            key: "delete",
-                            label: "Supprimer",
-                            icon: Trash2,
-                            danger: true,
-                            onClick: async () => {
-                              if (await dbDelete("ideas", x.id)) {
-                                setIdeas((prev) => prev.filter((y) => y.id !== x.id));
-                                toast("Supprimé");
-                              }
+                  ideas.map((x) =>
+                    ideaEditId === x.id ? (
+                      <div key={x.id} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                        <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Modifier l'idée</span>
+                        <textarea
+                          value={ideaEditText}
+                          onChange={(e) => setIdeaEditText(e.target.value)}
+                          rows={3}
+                          autoFocus
+                          placeholder="Ton idée de contenu…"
+                          className="w-full resize-y rounded-lg border border-border bg-panel px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => saveIdeaEdit(x.id)}
+                            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                          >
+                            <Check className="h-3.5 w-3.5" /> Enregistrer
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIdeaEditId(null)}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                            title="Annuler"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={x.id} className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-indigo" />
+                        <div className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed">{x.text}</div>
+                        <AnimatedBadge status="neutral" size="sm">{x.status ?? "À faire"}</AnimatedBadge>
+                        <ActionMenu
+                          items={[
+                            {
+                              key: "edit",
+                              label: "Modifier l'idée",
+                              icon: Pencil,
+                              onClick: () => {
+                                setIdeaEditId(x.id);
+                                setIdeaEditText(x.text);
+                              },
                             },
-                            confirm: { title: "Supprimer l'idée", message: `Supprimer « ${x.text} » ? Cette action est irréversible.` },
-                          },
-                        ]}
-                      />
-                    </div>
-                  ))
+                            {
+                              key: "delete",
+                              label: "Supprimer",
+                              icon: Trash2,
+                              danger: true,
+                              onClick: async () => {
+                                if (await dbDelete("ideas", x.id)) {
+                                  setIdeas((prev) => prev.filter((y) => y.id !== x.id));
+                                  toast("Supprimé");
+                                }
+                              },
+                              confirm: { title: "Supprimer l'idée", message: `Supprimer « ${x.text} » ? Cette action est irréversible.` },
+                            },
+                          ]}
+                        />
+                      </div>
+                    ),
+                  )
                 )}
               </div>
             </>

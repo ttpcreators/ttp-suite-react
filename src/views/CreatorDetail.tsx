@@ -9,6 +9,7 @@ import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useLiveKey } from "@/lib/useLive";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { parseAmount, formatEuro } from "@/lib/money";
 
 type CtDeadline = { id?: string; creator: string; start: string; months: number; type?: string; note?: string };
 function ctEndDate(start: string, months: number): Date | null {
@@ -76,7 +77,7 @@ type Creator = {
   tiktok: string | null;
   email_pro: string | null;
 };
-type Inv = { ref: string; party: string; amount: string; date: string };
+type Inv = { ref: string; party: string; amount: string; date: string; status?: string | null };
 type Td = { id: string; text: string; done: boolean };
 type Br = { brand: string; deliverables: string | null; due: string | null };
 type Idea = { text: string };
@@ -229,7 +230,7 @@ export function CreatorDetail({
       setC(row);
       if (row && !editingRef.current) setForm(coordOf(row));
     });
-    supabase.from("invoices").select("ref,party,amount,date").eq("creator", name).then(({ data, error }) => { if (error) console.error("Factures créateur:", error); if (alive) setInv((data as Inv[]) ?? []); });
+    supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).then(({ data, error }) => { if (error) console.error("Factures créateur:", error); if (alive) setInv((data as Inv[]) ?? []); });
     supabase.from("todos").select("id,text,done").eq("creator", name).then(({ data, error }) => { if (error) console.error("À faire créateur:", error); if (alive) setTd((data as Td[]) ?? []); });
     supabase.from("briefs").select("brand,deliverables,due").eq("who", name).then(({ data, error }) => { if (error) console.error("Briefs créateur:", error); if (alive) setBr((data as Br[]) ?? []); });
     supabase.from("ideas").select("text").eq("creator", name).then(({ data, error }) => { if (error) console.error("Idées créateur:", error); if (alive) setIdeas((data as Idea[]) ?? []); });
@@ -406,6 +407,8 @@ export function CreatorDetail({
   // Abonnés = cumul des dernières mesures de chaque plateforme (comme le portail) ;
   // Engagement = dernière mesure de la plateforme principale (sinon la plus récente).
   const totalFollowers = perPlatform.reduce((a, p) => a + numOf(p.followers), 0);
+  // CA encaissé = somme des factures payées de ce créateur (auto, plus de saisie manuelle).
+  const caEncaisse = inv.filter((i) => i.status === "payee").reduce((a, i) => a + parseAmount(i.amount), 0);
   const latestMeasure = perPlatform.slice().sort((a, b) => frTime(b.date) - frTime(a.date))[0] ?? null;
   const mainEntry =
     perPlatform.length === 0
@@ -470,7 +473,7 @@ export function CreatorDetail({
           mainEntry ? mainEntry.er : (c?.er ?? null),
           mainEntry ? `${mainEntry.platformLabel} · au ${mainEntry.date}` : undefined,
         )}
-        {stat("CA · mois", c?.ca ?? null)}
+        {stat("CA · encaissé", caEncaisse > 0 ? formatEuro(caEncaisse) : null)}
         {stat("Reach", c?.reach ?? null)}
       </div>
 

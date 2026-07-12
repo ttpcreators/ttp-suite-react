@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useLayoutEffect, useRef } from "react";
 import { Plus, X } from "lucide-react";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "./select";
 
@@ -78,6 +78,46 @@ export function TextAreaField({
         placeholder={placeholder}
         rows={rows}
         className={inputCls + " resize-y leading-relaxed"}
+      />
+    </Field>
+  );
+}
+
+/** Champ texte qui grandit tout seul au fil des lignes tapées (lisibilité) —
+ *  sans barre de défilement ni poignée de redimensionnement. */
+export function AutoGrowTextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  minRows = 2,
+  className,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  minRows?: number;
+  className?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  // Recale la hauteur sur le contenu à chaque changement de valeur (y compris
+  // quand le formulaire est réinitialisé après envoi → revient à minRows).
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <Field label={label} className={className}>
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={minRows}
+        className={inputCls + " resize-none overflow-hidden leading-relaxed"}
       />
     </Field>
   );

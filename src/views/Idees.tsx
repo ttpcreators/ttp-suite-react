@@ -8,9 +8,10 @@ import {
   AddButton,
   InlineForm,
   TextField,
+  AutoGrowTextField,
 } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { Trash2, MessageSquarePlus, Check, X } from "lucide-react";
+import { Trash2, MessageSquarePlus, Check, X, Pencil } from "lucide-react";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useEffect, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
@@ -45,6 +46,9 @@ export function Idees() {
   const [text, setText] = useState("");
   const [note, setNote] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>(ALL_STATUS);
+  // Édition inline du texte d'une idée.
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
 
   // Commentaires (agence) stockés dans le blob __app_state__, indexés par id d'idée.
   const { data: notesData } = useAppState<Record<string, string>>(
@@ -119,6 +123,24 @@ export function Idees() {
     setNote("");
   };
 
+  const startEdit = (row: Row) => {
+    setEditId(row.id);
+    setEditText(row.text);
+  };
+  const saveEdit = async (id: string) => {
+    const t = editText.trim();
+    if (!t) {
+      toast("L'idée ne peut pas être vide");
+      return;
+    }
+    const next = (rows ?? []).map((r) => (r.id === id ? { ...r, text: t } : r));
+    setRows(next);
+    setCache("ideas", next);
+    setEditId(null);
+    if (!(await dbUpdate("ideas", id, { text: t }))) toast("Erreur — réessaie");
+    else toast("Idée modifiée ✓");
+  };
+
   const updateStatus = async (id: string, status: string) => {
     const next = (rows ?? []).map((r) => (r.id === id ? { ...r, status } : r));
     setRows(next);
@@ -183,7 +205,7 @@ export function Idees() {
         onClose={() => setFormOpen(false)}
         onSubmit={submit}
       >
-        <TextField label="Idée" value={text} onChange={setText} />
+        <AutoGrowTextField label="Idée" value={text} onChange={setText} placeholder="Décris ton idée — le champ s'agrandit tout seul…" className="min-w-full" />
         <TextField label="Commentaire (optionnel)" value={note} onChange={setNote} placeholder="Infos, rappel, lien…" />
       </InlineForm>
 
@@ -206,45 +228,82 @@ export function Idees() {
               key={row.id}
               className="rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:bg-rowhover"
             >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-foreground">{row.text}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    {row.creator ? titleCase(row.creator) : "Toutes"} ·{" "}
-                    {row.source === "creator" ? "Proposée par le créateur" : "Ajoutée par l'agence"}
+              {editId === row.id ? (
+                <div className="flex flex-col gap-2">
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Modifier l'idée</span>
+                  <textarea
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    rows={3}
+                    autoFocus
+                    placeholder="Ton idée de contenu…"
+                    className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(row.id)}
+                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                    >
+                      <Check className="h-3.5 w-3.5" /> Enregistrer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditId(null)}
+                      className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                      title="Annuler"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 sm:shrink-0">
-                  <div className="flex-1 sm:w-[160px] sm:flex-none">
-                    <StatusSelect
-                      value={row.status ?? "À faire"}
-                      options={STATUS_OPTS}
-                      onChange={(v) => updateStatus(row.id, v)}
+              ) : (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="whitespace-pre-wrap text-sm font-medium leading-relaxed text-foreground">{row.text}</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      {row.creator ? titleCase(row.creator) : "Toutes"} ·{" "}
+                      {row.source === "creator" ? "Proposée par le créateur" : "Ajoutée par l'agence"}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 sm:shrink-0">
+                    <div className="flex-1 sm:w-[160px] sm:flex-none">
+                      <StatusSelect
+                        value={row.status ?? "À faire"}
+                        options={STATUS_OPTS}
+                        onChange={(v) => updateStatus(row.id, v)}
+                      />
+                    </div>
+                    <ActionMenu
+                      items={[
+                        {
+                          key: "edit",
+                          label: "Modifier l'idée",
+                          icon: Pencil,
+                          onClick: () => startEdit(row),
+                        },
+                        {
+                          key: "note",
+                          label: notes[row.id] ? "Modifier le commentaire" : "Ajouter un commentaire",
+                          icon: MessageSquarePlus,
+                          onClick: () => {
+                            setEditNoteId(row.id);
+                            setEditNoteText(notes[row.id] ?? "");
+                          },
+                        },
+                        {
+                          key: "delete",
+                          label: "Supprimer",
+                          icon: Trash2,
+                          danger: true,
+                          onClick: () => removeRow(row.id),
+                          confirm: { title: "Supprimer l'idée", message: `Supprimer « ${row.text} » ? Cette action est irréversible.` },
+                        },
+                      ]}
                     />
                   </div>
-                  <ActionMenu
-                    items={[
-                      {
-                        key: "note",
-                        label: notes[row.id] ? "Modifier le commentaire" : "Ajouter un commentaire",
-                        icon: MessageSquarePlus,
-                        onClick: () => {
-                          setEditNoteId(row.id);
-                          setEditNoteText(notes[row.id] ?? "");
-                        },
-                      },
-                      {
-                        key: "delete",
-                        label: "Supprimer",
-                        icon: Trash2,
-                        danger: true,
-                        onClick: () => removeRow(row.id),
-                        confirm: { title: "Supprimer l'idée", message: `Supprimer « ${row.text} » ? Cette action est irréversible.` },
-                      },
-                    ]}
-                  />
                 </div>
-              </div>
+              )}
 
               {/* Commentaire (agence) */}
               {editNoteId === row.id ? (
