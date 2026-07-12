@@ -34,7 +34,10 @@ function reportError(error: Error, componentStack: string, page: string) {
 // remplacé. Ce n'est PAS un bug de code → on recharge, on ne remonte pas.
 export function isChunkError(err: unknown): boolean {
   const m = String((err as { message?: string })?.message ?? err ?? "");
-  return /dynamically imported module|Importing a module script failed|module script failed|Failed to fetch|ChunkLoadError|error loading dynamically/i.test(m);
+  // `_result.default` / `._result` = internes de React.lazy quand un chunk périmé
+  // n'a pas pu se charger (iOS Safari remonte ce TypeError au lieu du "Failed to
+  // fetch"). On le traite comme une erreur de chunk → rechargement, pas un bug.
+  return /dynamically imported module|Importing a module script failed|module script failed|Failed to fetch|ChunkLoadError|error loading dynamically|_result\.default|\._result\b/i.test(m);
 }
 
 /** Recharge la page au plus une fois par ~20 s (évite toute boucle si vraiment cassé). */

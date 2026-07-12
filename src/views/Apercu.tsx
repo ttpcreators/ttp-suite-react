@@ -301,15 +301,15 @@ export function Apercu() {
           ) : (
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               {rdv.map((e, i) => (
-                <div key={i} className="min-w-0 rounded-xl bg-panel p-3.5">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-indigo" />
-                    <span className="text-[10px] font-semibold text-muted-foreground">
+                <div key={i} className="flex min-w-0 flex-col gap-2 rounded-xl bg-panel p-3.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-indigo" />
+                    <span className="truncate text-[10px] font-semibold tabular-nums text-muted-foreground">
                       {evDate(e).slice(8, 10)}/{evDate(e).slice(5, 7)}
                       {e.time && e.time !== "—" ? ` · ${e.time}` : ""}
                     </span>
                   </div>
-                  <div className="mt-2 truncate text-xs font-semibold">{e.title}</div>
+                  <div className="line-clamp-2 break-words text-xs font-semibold leading-snug">{e.title}</div>
                 </div>
               ))}
             </div>
