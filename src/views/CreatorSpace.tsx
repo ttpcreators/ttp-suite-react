@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
+import NumberFlow from "@number-flow/react";
 import {
   LayoutDashboard,
   ListChecks,
@@ -19,9 +20,10 @@ import {
   BarChart3,
   Contact,
   X,
+  Copy,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { titleCase } from "@/lib/utils";
+import { titleCase, cn } from "@/lib/utils";
 import { frDate, toISODate } from "@/lib/dates";
 import { notifyAgency } from "@/lib/push";
 import { PushCard } from "@/components/ui/push-card";
@@ -104,6 +106,44 @@ function Card({ children, className = "", index = 0 }: { children: ReactNode; cl
     >
       {children}
     </motion.div>
+  );
+}
+
+const TAB_SPRING = { type: "spring" as const, stiffness: 300, damping: 30, mass: 0.8 };
+
+/** Parse un champ texte ("10 600", "0,89 %", "10,6K", "1,2M") en nombre, ou null. */
+function toNum(s?: string | null): number | null {
+  if (s == null) return null;
+  const t = String(s).trim();
+  if (!t || t === "—") return null;
+  const km = /^([\d\s.,]+)\s*([kKmM])\b/.exec(t);
+  const core = (km ? km[1] : t).replace(/\s/g, "").replace(",", ".").replace(/[^\d.]/g, "");
+  let n = parseFloat(core);
+  if (!Number.isFinite(n)) return null;
+  if (km) n *= km[2].toLowerCase() === "m" ? 1e6 : 1e3;
+  return n;
+}
+
+/** Tuile de statistique avec chiffre animé (NumberFlow) — « — » si donnée absente. */
+function StatTile({ label, value, kind }: { label: string; value: number | null; kind: "int" | "pct" | "eur" }) {
+  return (
+    <div className="rounded-xl bg-panel p-4">
+      <div className="flex items-baseline text-[22px] font-bold tracking-tight text-foreground">
+        {value == null ? (
+          <span>—</span>
+        ) : (
+          <>
+            <NumberFlow
+              value={value}
+              locales="fr-FR"
+              format={kind === "eur" ? { style: "currency", currency: "EUR", maximumFractionDigits: 0 } : { maximumFractionDigits: kind === "pct" ? 2 : 0 }}
+            />
+            {kind === "pct" && <span className="ml-0.5 text-base">%</span>}
+          </>
+        )}
+      </div>
+      <div className="mt-1 text-[10px] font-medium text-faint">{label}</div>
+    </div>
   );
 }
 
@@ -242,6 +282,7 @@ export function CreatorSpace({
   // "Mes infos" edit state
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<Creator>>({});
+  const [infoTab, setInfoTab] = useState<"stats" | "coord">("stats"); // carte Mes infos : onglet actif
 
   // add-forms
   const [tdOpen, setTdOpen] = useState(false);
@@ -448,6 +489,8 @@ export function CreatorSpace({
   const setField = (k: keyof Creator, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const openTodos = todos.filter((t) => !t.done);
+  // CA encaissé = somme des factures payées du créateur (auto, cohérent avec l'agence).
+  const caEncaisse = invoices.filter((i) => i.status === "payee").reduce((a, i) => a + parseAmount(i.amount), 0);
   const filteredTodos =
     todoFilter === "encours" ? todos.filter((t) => !t.done) : todoFilter === "terminees" ? todos.filter((t) => t.done) : todos;
 
@@ -485,10 +528,25 @@ export function CreatorSpace({
   };
 
 
-  const infoRow = (label: string, val: string | null) => (
-    <div className="flex items-start justify-between gap-3 border-b border-border py-2 last:border-0">
+  const coordRow = (label: string, val: string | null, copyable = false) => (
+    <div className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-0">
       <span className="text-[11px] font-medium uppercase tracking-wide text-faint">{label}</span>
-      <span className="max-w-[60%] truncate text-right text-xs text-foreground">{val || "—"}</span>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate text-xs text-foreground">{val || "—"}</span>
+        {copyable && val && (
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard?.writeText(val);
+              toast(`${label} copié ✓`);
+            }}
+            className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+            title={`Copier ${label.toLowerCase()}`}
+          >
+            <Copy className="h-3 w-3" />
+          </button>
+        )}
+      </div>
     </div>
   );
 
@@ -606,22 +664,115 @@ export function CreatorSpace({
             <div className="flex flex-col gap-4">
               <PushCard />
 
-              {/* Mes statistiques — KPI en mini-cartes (façon "Activité de l'agence") */}
+              {/* Mes infos — carte premium : toggle Statistiques / Coordonnées + chiffres animés */}
               <Card index={0}>
-                <div className="mb-4 text-sm font-semibold">Mes statistiques</div>
-                <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
-                  {[
-                    { label: "Abonnés", val: creator?.followers },
-                    { label: "Engagement", val: creator?.er },
-                    { label: "Reach", val: creator?.reach },
-                    { label: "CA · mois", val: creator?.ca },
-                  ].map((s) => (
-                    <div key={s.label} className="rounded-xl bg-panel p-4">
-                      <div className="truncate text-[22px] font-bold tracking-tight">{s.val || "—"}</div>
-                      <div className="mt-1 text-[10px] font-medium text-faint">{s.label}</div>
-                    </div>
-                  ))}
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div className="text-sm font-semibold">Mes infos</div>
+                  {editing ? (
+                    <button
+                      type="button"
+                      onClick={saveInfos}
+                      className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+                    >
+                      <Check className="h-3.5 w-3.5" /> Enregistrer
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={startEdit}
+                      disabled={!creator}
+                      className="flex h-8 items-center gap-1.5 rounded-lg bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover disabled:opacity-50"
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Modifier
+                    </button>
+                  )}
                 </div>
+
+                {editing ? (
+                  <div className="flex flex-col gap-4">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      {editInput("Ville", "ville")}
+                      {editInput("Téléphone", "phone")}
+                      {editInput("Email perso", "email")}
+                      {editInput("Email pro", "email_pro")}
+                      {editInput("Instagram", "instagram")}
+                      {editInput("TikTok", "tiktok")}
+                      {editInput("Adresse", "address")}
+                      {editInput("SIREN", "siren")}
+                      {editInput("Naissance", "birth", undefined, "date")}
+                    </div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">Statistiques</div>
+                    <div className="grid grid-cols-3 gap-3">
+                      {editInput("Abonnés", "followers")}
+                      {editInput("Engagement", "er")}
+                      {editInput("Reach", "reach")}
+                    </div>
+                    <p className="text-[11px] text-faint">Le CA est calculé automatiquement depuis tes factures payées.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Toggle segmenté (fond glissant) */}
+                    <div className="mb-4 flex h-10 rounded-xl bg-panel p-1 ring-1 ring-border">
+                      {([["stats", "Statistiques"], ["coord", "Coordonnées"]] as const).map(([id, lbl]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setInfoTab(id)}
+                          className={cn(
+                            "relative flex-1 rounded-lg text-[12px] font-medium transition-colors",
+                            infoTab === id ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {infoTab === id && (
+                            <motion.div layoutId="mesinfos-tab" className="absolute inset-0 rounded-lg bg-surface shadow-sm ring-1 ring-border" transition={TAB_SPRING} />
+                          )}
+                          <span className="relative z-10">{lbl}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <AnimatePresence mode="wait" initial={false}>
+                      {infoTab === "stats" ? (
+                        <motion.div
+                          key="stats"
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          transition={{ duration: 0.2 }}
+                          className="grid grid-cols-2 gap-3.5 md:grid-cols-4"
+                        >
+                          <StatTile label="Abonnés" value={toNum(creator?.followers)} kind="int" />
+                          <StatTile label="Engagement" value={toNum(creator?.er)} kind="pct" />
+                          <StatTile label="Reach" value={toNum(creator?.reach)} kind="int" />
+                          <StatTile label="CA encaissé" value={caEncaisse || null} kind="eur" />
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key="coord"
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          transition={{ duration: 0.2 }}
+                          className="grid grid-cols-1 gap-x-8 gap-y-0 md:grid-cols-2"
+                        >
+                          <div>
+                            {coordRow("Ville", creator?.ville ?? null)}
+                            {coordRow("Téléphone", creator?.phone ?? null, true)}
+                            {coordRow("Email perso", creator?.email ?? null, true)}
+                            {coordRow("Email pro", creator?.email_pro ?? null, true)}
+                          </div>
+                          <div>
+                            {coordRow("Adresse", creator?.address ?? null)}
+                            {coordRow("SIREN", creator?.siren ?? null)}
+                            {coordRow("Naissance", frDate(creator?.birth))}
+                            {coordRow("Instagram", creator?.instagram ?? null, true)}
+                            {coordRow("TikTok", creator?.tiktok ?? null, true)}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </>
+                )}
               </Card>
 
               {/* Tâches + Briefs (listes façon agence) */}
@@ -657,70 +808,6 @@ export function CreatorSpace({
                         <span className="shrink-0 text-[9px] font-semibold text-muted-foreground">{frDate(b.due)}</span>
                       </div>
                     ))
-                  )}
-                </Card>
-
-                {/* Mes infos (éditable) — pleine largeur */}
-                <Card index={3} className="md:col-span-12">
-                  <div className="mb-3.5 flex items-center justify-between gap-3">
-                    <div className="text-sm font-semibold">Mes infos</div>
-                    {editing ? (
-                      <button
-                        type="button"
-                        onClick={saveInfos}
-                        className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
-                      >
-                        <Check className="h-3.5 w-3.5" /> Enregistrer
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={startEdit}
-                        disabled={!creator}
-                        className="flex h-8 items-center gap-1.5 rounded-lg bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover disabled:opacity-50"
-                      >
-                        <Pencil className="h-3.5 w-3.5" /> Modifier
-                      </button>
-                    )}
-                  </div>
-
-                  {editing ? (
-                    <div className="flex flex-col gap-4">
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        {editInput("Ville", "ville")}
-                        {editInput("Téléphone", "phone")}
-                        {editInput("Email perso", "email")}
-                        {editInput("Email pro", "email_pro")}
-                        {editInput("Instagram", "instagram")}
-                        {editInput("TikTok", "tiktok")}
-                        {editInput("Adresse", "address")}
-                        {editInput("SIREN", "siren")}
-                        {editInput("Naissance", "birth", undefined, "date")}
-                      </div>
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">Statistiques</div>
-                      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                        {editInput("Abonnés", "followers")}
-                        {editInput("Engagement", "er")}
-                        {editInput("Reach", "reach")}
-                        {editInput("CA · mois", "ca")}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-x-8 gap-y-0 md:grid-cols-2">
-                      <div>
-                        {infoRow("Ville", creator?.ville ?? null)}
-                        {infoRow("Téléphone", creator?.phone ?? null)}
-                        {infoRow("Email perso", creator?.email ?? null)}
-                        {infoRow("Email pro", creator?.email_pro ?? null)}
-                      </div>
-                      <div>
-                        {infoRow("Adresse", creator?.address ?? null)}
-                        {infoRow("SIREN", creator?.siren ?? null)}
-                        {infoRow("Naissance", frDate(creator?.birth))}
-                        {infoRow("Instagram", creator?.instagram ?? null)}
-                        {infoRow("TikTok", creator?.tiktok ?? null)}
-                      </div>
-                    </div>
                   )}
                 </Card>
               </div>
