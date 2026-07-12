@@ -73,6 +73,7 @@ const TAG_OPTIONS = [
 ];
 
 const ALL_TAGS = "__all__";
+const CREATOR_FILTER = "__creator__"; // filtre : contacts ajoutés par un créateur
 
 // ─── CSV : export + import réels ─────────────────────────────────────────────
 
@@ -610,9 +611,14 @@ export function Contacts() {
   };
 
   // Le filtre par tag se combine avec la recherche existante.
+  const hasCreatorContacts = currentRows.some((r) => (r.creator ?? "").trim());
   const filtered = currentRows.filter((row) => {
-    const tagOk = tagFilter === ALL_TAGS || (row.tag ?? "").trim() === tagFilter;
-    if (!tagOk) return false;
+    if (tagFilter === CREATOR_FILTER) {
+      if (!(row.creator ?? "").trim()) return false;
+    } else {
+      const tagOk = tagFilter === ALL_TAGS || (row.tag ?? "").trim() === tagFilter;
+      if (!tagOk) return false;
+    }
     return matchQuery(query, row.brand, row.person, row.role, row.email, row.tag);
   });
 
@@ -692,6 +698,16 @@ export function Contacts() {
             {t}
           </button>
         ))}
+        {hasCreatorContacts && (
+          <button
+            type="button"
+            onClick={() => setTagFilter(CREATOR_FILTER)}
+            className={cn(pillBase, "flex items-center gap-1", tagFilter === CREATOR_FILTER ? pillActive : pillInactive)}
+            title="Contacts ajoutés par un créateur"
+          >
+            ↳ Créateurs
+          </button>
+        )}
       </div>
 
       <InlineForm

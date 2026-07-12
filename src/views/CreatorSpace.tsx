@@ -317,6 +317,13 @@ export function CreatorSpace({
   const [ctRole, setCtRole] = useState("");
   const [ctEmail, setCtEmail] = useState("");
   const [ctPhone, setCtPhone] = useState("");
+  // edit-contact (inline)
+  const [ctEditId, setCtEditId] = useState<string | null>(null);
+  const [ceBrand, setCeBrand] = useState("");
+  const [cePerson, setCePerson] = useState("");
+  const [ceRole, setCeRole] = useState("");
+  const [ceEmail, setCeEmail] = useState("");
+  const [cePhone, setCePhone] = useState("");
 
   // todo inline edit
   const [tdEditId, setTdEditId] = useState<string | null>(null);
@@ -453,6 +460,34 @@ export function CreatorSpace({
     setCtRole("");
     setCtEmail("");
     setCtPhone("");
+  };
+
+  const startEditContact = (c: Contact) => {
+    setCtEditId(c.id);
+    setCeBrand(c.brand ?? "");
+    setCePerson(c.person && c.person !== "—" ? c.person : "");
+    setCeRole(c.role ?? "");
+    setCeEmail(c.email ?? "");
+    setCePhone(c.phone ?? "");
+  };
+  const saveContactEdit = async () => {
+    if (!ctEditId) return;
+    if (!ceBrand.trim() && !cePerson.trim()) {
+      toast("Renseigne au moins la marque ou le nom");
+      return;
+    }
+    const patch = {
+      brand: ceBrand.trim() || cePerson.trim(),
+      person: cePerson.trim() || "—",
+      role: ceRole.trim() || null,
+      email: ceEmail.trim() || null,
+      phone: cePhone.trim() || null,
+    };
+    const id = ctEditId;
+    setContacts((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    setCtEditId(null);
+    if (!(await dbUpdate("contacts", id, patch))) toast("Erreur — réessaie");
+    else toast("Contact modifié ✓");
   };
 
   const startEdit = () => {
@@ -1231,43 +1266,59 @@ export function CreatorSpace({
                     Aucun contact. Ajoute une marque ou une personne que tu connais — ton agence les verra 👋
                   </div>
                 ) : (
-                  contacts.map((c) => (
-                    <div key={c.id} className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-panel text-muted-foreground">
-                        <Contact className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold text-foreground">{c.brand}</div>
-                        <div className="truncate text-xs text-faint">
-                          {[c.person && c.person !== "—" ? c.person : "", c.role].filter(Boolean).join(" · ") || "—"}
+                  contacts.map((c) =>
+                    ctEditId === c.id ? (
+                      <InlineForm key={c.id} open title="Modifier le contact" submitLabel="Enregistrer" onClose={() => setCtEditId(null)} onSubmit={saveContactEdit}>
+                        <TextField label="Marque / société" value={ceBrand} onChange={setCeBrand} placeholder="ex Sephora" />
+                        <TextField label="Nom du contact" value={cePerson} onChange={setCePerson} placeholder="ex Julie Martin" />
+                        <TextField label="Rôle" value={ceRole} onChange={setCeRole} placeholder="ex Responsable partenariats" />
+                        <TextField label="Email" value={ceEmail} onChange={setCeEmail} placeholder="ex julie@marque.com" />
+                        <TextField label="Téléphone" value={cePhone} onChange={setCePhone} placeholder="ex 06 12 34 56 78" />
+                      </InlineForm>
+                    ) : (
+                      <div key={c.id} className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-panel text-muted-foreground">
+                          <Contact className="h-4 w-4" />
                         </div>
-                        {(c.email || c.phone) && (
-                          <div className="truncate text-[11px] text-muted-foreground">
-                            {[c.email, c.phone].filter(Boolean).join(" · ")}
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold text-foreground">{c.brand}</div>
+                          <div className="truncate text-xs text-faint">
+                            {[c.person && c.person !== "—" ? c.person : "", c.role].filter(Boolean).join(" · ") || "—"}
                           </div>
-                        )}
-                      </div>
-                      <ActionMenu
-                        items={[
-                          {
-                            key: "delete",
-                            label: "Supprimer",
-                            icon: Trash2,
-                            danger: true,
-                            onClick: async () => {
-                              if (await dbDelete("contacts", c.id)) {
-                                setContacts((prev) => prev.filter((y) => y.id !== c.id));
-                                toast("Supprimé");
-                              } else {
-                                toast("Erreur — réessaie");
-                              }
+                          {(c.email || c.phone) && (
+                            <div className="truncate text-[11px] text-muted-foreground">
+                              {[c.email, c.phone].filter(Boolean).join(" · ")}
+                            </div>
+                          )}
+                        </div>
+                        <ActionMenu
+                          items={[
+                            {
+                              key: "edit",
+                              label: "Modifier",
+                              icon: Pencil,
+                              onClick: () => startEditContact(c),
                             },
-                            confirm: { title: "Supprimer le contact", message: `Supprimer « ${c.brand} » ? Cette action est irréversible.` },
-                          },
-                        ]}
-                      />
-                    </div>
-                  ))
+                            {
+                              key: "delete",
+                              label: "Supprimer",
+                              icon: Trash2,
+                              danger: true,
+                              onClick: async () => {
+                                if (await dbDelete("contacts", c.id)) {
+                                  setContacts((prev) => prev.filter((y) => y.id !== c.id));
+                                  toast("Supprimé");
+                                } else {
+                                  toast("Erreur — réessaie");
+                                }
+                              },
+                              confirm: { title: "Supprimer le contact", message: `Supprimer « ${c.brand} » ? Cette action est irréversible.` },
+                            },
+                          ]}
+                        />
+                      </div>
+                    ),
+                  )
                 )}
               </div>
             </>
