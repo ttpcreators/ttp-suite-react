@@ -221,6 +221,13 @@ const BRIEF_STATUS: StatusOption[] = [
   { value: "cours", label: "En cours", dot: "bg-cyan" },
   { value: "terminé", label: "Terminé", dot: "bg-signal" },
 ];
+// Statuts d'idée — identiques à l'espace agence (page Idées).
+const IDEA_STATUS: StatusOption[] = [
+  { value: "À explorer", label: "À explorer", dot: "bg-indigo" },
+  { value: "À faire", label: "À faire", dot: "bg-primary" },
+  { value: "En cours", label: "En cours", dot: "bg-cyan" },
+  { value: "Publiée", label: "Publiée", dot: "bg-signal" },
+];
 
 const PRIORITY_OPTIONS = [
   { value: "haute", label: "Haute" },
@@ -452,6 +459,11 @@ export function CreatorSpace({
     toast("Idée ajoutée ✓");
     setIdOpen(false);
     setIdText("");
+  };
+
+  const setIdeaStatus = async (x: Idea, status: string) => {
+    setIdeas((prev) => prev.map((y) => (y.id === x.id ? { ...y, status } : y)));
+    if (!(await dbUpdate("ideas", x.id, { status }))) toast("Erreur — réessaie");
   };
 
   const saveIdeaEdit = async (id: string) => {
@@ -1270,9 +1282,11 @@ export function CreatorSpace({
                       </div>
                     ) : (
                       <div key={x.id} className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-indigo" />
+                        <span className="mt-1.5 h-2 w-2 shrink-0 self-start rounded-full bg-indigo" />
                         <div className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed">{x.text}</div>
-                        <AnimatedBadge status="neutral" size="sm">{x.status ?? "À faire"}</AnimatedBadge>
+                        <div className="w-[132px] shrink-0">
+                          <StatusSelect value={x.status ?? "À faire"} options={IDEA_STATUS} onChange={(s) => setIdeaStatus(x, s)} />
+                        </div>
                         <ActionMenu
                           items={[
                             {
