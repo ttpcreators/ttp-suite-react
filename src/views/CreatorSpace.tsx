@@ -363,6 +363,7 @@ export function CreatorSpace({
   const [ctRole, setCtRole] = useState("");
   const [ctEmail, setCtEmail] = useState("");
   const [ctPhone, setCtPhone] = useState("");
+  const [contactView, setContactView] = useState<Contact | null>(null); // fiche contact (voir/copier)
   // edit-contact (inline)
   const [ctEditId, setCtEditId] = useState<string | null>(null);
   const [ceBrand, setCeBrand] = useState("");
@@ -663,6 +664,28 @@ export function CreatorSpace({
     setTdEditId(null);
   };
 
+
+  // Ligne d'info copiable dans la fiche contact.
+  const contactField = (label: string, val: string | null) =>
+    val ? (
+      <div className="flex items-center justify-between gap-3 rounded-lg bg-panel px-3 py-2.5">
+        <div className="min-w-0">
+          <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</div>
+          <div className="truncate text-sm text-foreground">{val}</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            navigator.clipboard?.writeText(val);
+            toast(`${label} copié ✓`);
+          }}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+          title={`Copier ${label.toLowerCase()}`}
+        >
+          <Copy className="h-4 w-4" />
+        </button>
+      </div>
+    ) : null;
 
   const coordRow = (label: string, val: string | null, copyable = false, platform?: string) => (
     <div className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-0">
@@ -1476,7 +1499,11 @@ export function CreatorSpace({
                         <TextField label="Téléphone" value={cePhone} onChange={setCePhone} placeholder="ex 06 12 34 56 78" />
                       </InlineForm>
                     ) : (
-                      <div key={c.id} className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                      <div
+                        key={c.id}
+                        onClick={() => setContactView(c)}
+                        className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-colors hover:bg-rowhover"
+                      >
                         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-panel text-muted-foreground">
                           <Contact className="h-4 w-4" />
                         </div>
@@ -1491,6 +1518,7 @@ export function CreatorSpace({
                             </div>
                           )}
                         </div>
+                        <div onClick={(e) => e.stopPropagation()}>
                         <ActionMenu
                           items={[
                             {
@@ -1516,11 +1544,43 @@ export function CreatorSpace({
                             },
                           ]}
                         />
+                        </div>
                       </div>
                     ),
                   )
                 )}
               </div>
+
+              {/* Fiche contact (voir + copier) */}
+              {contactView && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setContactView(null)}>
+                  <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-panel text-muted-foreground"><Contact className="h-4 w-4" /></div>
+                        <div className="min-w-0">
+                          <div className="truncate text-base font-semibold text-foreground">{contactView.brand}</div>
+                          {contactView.person && contactView.person !== "—" && (
+                            <div className="truncate text-xs text-faint">{[contactView.person, contactView.role].filter(Boolean).join(" · ")}</div>
+                          )}
+                        </div>
+                      </div>
+                      <button type="button" onClick={() => setContactView(null)} className="shrink-0 text-faint transition-colors hover:text-foreground" title="Fermer">
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {contactField("Email", contactView.email)}
+                      {contactField("Téléphone", contactView.phone)}
+                      {contactField("Personne", contactView.person && contactView.person !== "—" ? contactView.person : null)}
+                      {contactField("Rôle", contactView.role)}
+                      {!contactView.email && !contactView.phone && !contactView.role && (!contactView.person || contactView.person === "—") && (
+                        <div className="rounded-lg bg-panel px-3 py-4 text-center text-xs text-muted-foreground">Aucune info supplémentaire.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
 

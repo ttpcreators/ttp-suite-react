@@ -158,7 +158,7 @@ export function SuiviPanel({ entries, lockedCreator }: { entries: SuiviEntry[]; 
             />
           </div>
         ) : (
-          <div className="text-sm font-semibold text-foreground">Ton évolution 📈</div>
+          <div className="text-sm font-semibold text-foreground">Ton évolution</div>
         )}
         <div className="flex flex-wrap gap-2">
           {platforms.map((pk) => (

@@ -38,8 +38,8 @@ export function PushCard() {
         {state === "enabled" ? (
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-1.5 text-[12px] font-medium text-signaltext">
-                <BellRing className="h-3.5 w-3.5" /> Activées sur ce téléphone
+              <span className="text-[12px] font-medium text-signaltext">
+                Activées sur ce téléphone
               </span>
               <button
                 type="button"
@@ -56,7 +56,7 @@ export function PushCard() {
               disabled={testing}
               className="w-full rounded-lg border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
             >
-              {testing ? "Envoi…" : "Envoyer un test 🔔"}
+              {testing ? "Envoi…" : "Envoyer un test"}
             </button>
           </div>
         ) : state === "needs-install" ? (
