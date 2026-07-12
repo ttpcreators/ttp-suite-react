@@ -23,6 +23,8 @@ import {
   Copy,
   List,
   Columns3,
+  Users,
+  Wallet,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
@@ -98,13 +100,14 @@ const MOBILE_FAMILIES: { id: string; label: string; icon: typeof LayoutDashboard
 ];
 
 /** Carte animée (identique à l'Aperçu agence : entrée douce + délai décalé). */
-function Card({ children, className = "", index = 0 }: { children: ReactNode; className?: string; index?: number }) {
+function Card({ children, className = "", index = 0, onClick }: { children: ReactNode; className?: string; index?: number; onClick?: () => void }) {
   return (
     <motion.div
       initial={{ y: 14 }}
       animate={{ y: 0 }}
       transition={{ delay: index * 0.04, duration: 0.4, ease: "easeOut" }}
-      className={"rounded-2xl border border-border bg-surface p-5 shadow-sm " + className}
+      onClick={onClick}
+      className={"rounded-2xl border border-border bg-surface p-5 shadow-sm " + (onClick ? "cursor-pointer transition-colors hover:bg-rowhover " : "") + className}
     >
       {children}
     </motion.div>
@@ -112,6 +115,7 @@ function Card({ children, className = "", index = 0 }: { children: ReactNode; cl
 }
 
 const TAB_SPRING = { type: "spring" as const, stiffness: 300, damping: 30, mass: 0.8 };
+const CS_TODAY = new Intl.DateTimeFormat("fr-CA").format(new Date());
 
 /** Parse un champ texte ("10 600", "0,89 %", "10,6K", "1,2M") en nombre, ou null. */
 function toNum(s?: string | null): number | null {
@@ -502,6 +506,13 @@ export function CreatorSpace({
   const openTodos = todos.filter((t) => !t.done);
   // CA encaissé = somme des factures payées du créateur (auto, cohérent avec l'agence).
   const caEncaisse = invoices.filter((i) => i.status === "payee").reduce((a, i) => a + parseAmount(i.amount), 0);
+  // KPIs pour la vue d'ensemble (accueil bento).
+  const followersNum = toNum(creator?.followers);
+  const erNum = toNum(creator?.er);
+  const nextRdv = events
+    .filter((e) => (e.date ?? "") >= CS_TODAY)
+    .sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""))
+    .slice(0, 3);
   const filteredTodos =
     todoFilter === "encours" ? todos.filter((t) => !t.done) : todoFilter === "terminees" ? todos.filter((t) => t.done) : todos;
 
@@ -689,6 +700,65 @@ export function CreatorSpace({
             <div className="flex flex-col gap-4">
               <PushCard />
 
+              {/* Vue d'ensemble — bento : stats animées + travail cliquable + RDV */}
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+                <Card index={0} className="col-span-2 md:col-span-2">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-faint"><Users className="h-4 w-4" /> Abonnés</div>
+                  <div className="mt-2 text-3xl font-bold tracking-tight text-foreground">
+                    {followersNum == null ? "—" : <NumberFlow value={followersNum} locales="fr-FR" />}
+                  </div>
+                  {creator?.reach && creator.reach !== "—" && <div className="mt-1 text-[11px] text-faint">Reach {creator.reach}</div>}
+                </Card>
+                <Card index={1} className="col-span-1 md:col-span-2">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-faint"><TrendingUp className="h-4 w-4" /> Engagement</div>
+                  <div className="mt-2 flex items-baseline text-3xl font-bold tracking-tight text-foreground">
+                    {erNum == null ? "—" : (<><NumberFlow value={erNum} locales="fr-FR" format={{ maximumFractionDigits: 2 }} /><span className="ml-0.5 text-lg">%</span></>)}
+                  </div>
+                </Card>
+                <Card index={2} className="col-span-1 md:col-span-2">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-faint"><Wallet className="h-4 w-4" /> CA encaissé</div>
+                  <div className="mt-2 text-3xl font-bold tracking-tight text-foreground">
+                    {caEncaisse ? <NumberFlow value={caEncaisse} locales="fr-FR" format={{ style: "currency", currency: "EUR", maximumFractionDigits: 0 }} /> : "—"}
+                  </div>
+                </Card>
+                <Card index={3} onClick={() => setTab("todo")} className="col-span-2 md:col-span-2">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-faint"><ListChecks className="h-4 w-4" /> À faire</div>
+                  <div className="mt-2 text-3xl font-bold tracking-tight text-foreground"><NumberFlow value={openTodos.length} /></div>
+                  <div className="mt-1 text-[11px] text-faint">{openTodos.length ? "en cours · voir →" : "rien à faire 🎉"}</div>
+                </Card>
+                <Card index={4} onClick={() => setTab("briefs")} className="col-span-1 md:col-span-2">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-faint"><FileText className="h-4 w-4" /> Briefs</div>
+                  <div className="mt-2 text-3xl font-bold tracking-tight text-foreground"><NumberFlow value={briefs.length} /></div>
+                  <div className="mt-1 text-[11px] text-faint">voir →</div>
+                </Card>
+                <Card index={5} onClick={() => setTab("ideas")} className="col-span-1 md:col-span-2">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-faint"><Lightbulb className="h-4 w-4" /> Idées</div>
+                  <div className="mt-2 text-3xl font-bold tracking-tight text-foreground"><NumberFlow value={ideas.length} /></div>
+                  <div className="mt-1 text-[11px] text-faint">voir →</div>
+                </Card>
+                <Card index={6} className="col-span-2 md:col-span-4">
+                  <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-faint"><CalendarDays className="h-4 w-4" /> Prochains RDV</div>
+                  {nextRdv.length === 0 ? (
+                    <div className="py-2 text-xs text-muted-foreground">Rien de prévu.</div>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      {nextRdv.map((e) => (
+                        <div key={e.id} className="flex items-center gap-3 border-b border-border py-1.5 last:border-0">
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-panel"><CalendarDays className="h-4 w-4 text-muted-foreground" /></span>
+                          <div className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{e.title}</div>
+                          <span className="shrink-0 text-[11px] font-semibold text-muted-foreground">{frDate(e.date)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+                <Card index={7} onClick={() => setTab("documents")} className="col-span-2 md:col-span-2">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-faint"><Files className="h-4 w-4" /> Mes fichiers</div>
+                  <div className="mt-2 text-3xl font-bold tracking-tight text-foreground"><NumberFlow value={docs.length} /></div>
+                  <div className="mt-1 text-[11px] text-faint">document{docs.length > 1 ? "s" : ""} · voir →</div>
+                </Card>
+              </div>
+
               {/* Mes infos — carte premium : toggle Statistiques / Coordonnées + chiffres animés */}
               <Card index={0}>
                 <div className="mb-4 flex items-center justify-between gap-3">
@@ -800,42 +870,6 @@ export function CreatorSpace({
                 )}
               </Card>
 
-              {/* Tâches + Briefs (listes façon agence) */}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
-                <Card index={1} className="md:col-span-6">
-                  <div className="mb-3.5 flex items-center justify-between">
-                    <div className="text-sm font-semibold">Mes tâches</div>
-                    {openTodos.length > 0 && (
-                      <span className="text-[9px] font-semibold text-muted-foreground">{openTodos.length} EN COURS</span>
-                    )}
-                  </div>
-                  {openTodos.length === 0 ? (
-                    <div className="py-2 text-xs text-muted-foreground">Rien à faire 🎉</div>
-                  ) : (
-                    openTodos.slice(0, 5).map((t) => (
-                      <div key={t.id} className="flex items-center gap-2.5 py-[7px]">
-                        <span className="h-4 w-4 shrink-0 rounded-[5px] border border-faint" />
-                        <span className="flex-1 truncate text-xs">{t.text}</span>
-                      </div>
-                    ))
-                  )}
-                </Card>
-
-                <Card index={2} className="md:col-span-6">
-                  <div className="mb-3.5 text-sm font-semibold">Mes briefs</div>
-                  {briefs.length === 0 ? (
-                    <div className="py-2 text-xs text-muted-foreground">Aucun brief.</div>
-                  ) : (
-                    briefs.slice(0, 5).map((b) => (
-                      <div key={b.id} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-signal" />
-                        <div className="min-w-0 flex-1 truncate text-xs font-medium">{b.brand}</div>
-                        <span className="shrink-0 text-[9px] font-semibold text-muted-foreground">{frDate(b.due)}</span>
-                      </div>
-                    ))
-                  )}
-                </Card>
-              </div>
             </div>
           )}
 
