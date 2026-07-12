@@ -269,6 +269,7 @@ export function CreatorSpace({
   const [tab, setTab] = useState<Tab>("accueil");
   const [mobileTab, setMobileTab] = useState<string | null>(null); // famille déployée (nav mobile)
   const [confirmDoneTodo, setConfirmDoneTodo] = useState<Todo | null>(null); // anti-missclick « fait »
+  const [taskView, setTaskView] = useState<Todo | null>(null); // fiche tâche (texte complet)
   const live = useLiveKey();
   // Historique d'engagement du créateur — via la fonction serveur creator-history
   // (le blob agence est inaccessible aux créateurs ; le serveur filtre sur SON nom).
@@ -1284,7 +1285,9 @@ export function CreatorSpace({
                         ) : (
                           colRows.map((t) => (
                             <div key={t.id} className="rounded-xl border border-border bg-surface p-3 shadow-sm">
-                              <div className={"line-clamp-2 break-words text-[12.5px] font-medium leading-snug " + (t.done ? "text-muted-foreground line-through" : "text-foreground")}>{t.text}</div>
+                              <button type="button" onClick={() => setTaskView(t)} className="block w-full text-left">
+                                <span className={"block line-clamp-2 break-words text-[12.5px] font-medium leading-snug " + (t.done ? "text-muted-foreground line-through" : "text-foreground")}>{t.text}</span>
+                              </button>
                               <div className="mt-2 flex items-center justify-between gap-2">
                                 <AnimatedBadge status={prioBadge(t.priority)} size="sm">{titleCase(t.priority ?? "moyenne")}</AnimatedBadge>
                                 <div className="w-[118px] shrink-0">
@@ -1320,10 +1323,10 @@ export function CreatorSpace({
                         >
                           {t.done && <Check className="h-3.5 w-3.5" />}
                         </button>
-                        <div className="min-w-0 flex-1">
+                        <button type="button" onClick={() => setTaskView(t)} className="min-w-0 flex-1 text-left">
                           <div className={"line-clamp-2 break-words text-sm font-medium leading-snug " + (t.done ? "text-muted-foreground line-through" : "text-foreground")}>{t.text}</div>
                           {t.descr && <div className="mt-0.5 line-clamp-2 break-words text-xs leading-relaxed text-faint">{t.descr}</div>}
-                        </div>
+                        </button>
                       </div>
                       {/* Ligne 2 : priorité à gauche · actions à droite */}
                       <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2.5">
@@ -1784,6 +1787,47 @@ export function CreatorSpace({
             markTodo(t, true);
           }}
         />
+      )}
+
+      {/* Fiche tâche — texte complet en grande carte */}
+      {taskView && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setTaskView(null)}>
+          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AnimatedBadge status={prioBadge(taskView.priority)} size="sm">{titleCase(taskView.priority ?? "moyenne")}</AnimatedBadge>
+                <AnimatedBadge status="neutral" size="sm">{cStatus(taskView)}</AnimatedBadge>
+              </div>
+              <button type="button" onClick={() => setTaskView(null)} className="shrink-0 text-faint transition-colors hover:text-foreground" title="Fermer">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className={"whitespace-pre-wrap break-words text-base font-semibold leading-relaxed " + (taskView.done ? "text-muted-foreground line-through" : "text-foreground")}>
+              {taskView.text}
+            </div>
+            {taskView.descr && (
+              <div className="mt-3 whitespace-pre-wrap break-words border-t border-border pt-3 text-sm leading-relaxed text-muted-foreground">
+                {taskView.descr}
+              </div>
+            )}
+            {taskView.due && taskView.due !== "—" && (
+              <div className="mt-4 text-xs text-faint">Échéance · {frDate(taskView.due)}</div>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const t = taskView;
+                  setTaskView(null);
+                  startEditTodo(t);
+                }}
+                className="flex items-center gap-1.5 rounded-lg bg-panel px-3 py-2 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
+              >
+                <Pencil className="h-3.5 w-3.5" /> Modifier
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
