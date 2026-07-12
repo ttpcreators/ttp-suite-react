@@ -8,6 +8,7 @@ import { toast } from "@/components/ui/toast";
 import { SelectField } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { isMainPlatform, type PlatformKey } from "@/lib/platform";
+import { PlatformIcon } from "@/components/ui/platform-icon";
 import { cn, titleCase } from "@/lib/utils";
 
 /**
@@ -337,10 +338,11 @@ export function Engagement() {
                   setSavedOk(false);
                 }}
                 className={cn(
-                  "rounded-xl px-3.5 py-2 text-[11px] font-semibold transition-colors",
+                  "flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[11px] font-semibold transition-colors",
                   active ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:bg-rowhover",
                 )}
               >
+                <PlatformIcon platform={pl.key} className="h-3.5 w-3.5" />
                 {pl.label}
               </button>
             );
