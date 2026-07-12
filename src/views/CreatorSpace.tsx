@@ -943,12 +943,13 @@ export function CreatorSpace({
                 ) : (
                   filteredTodos.map((t) => (
                     <div key={t.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                      <div className="flex items-center gap-3">
+                      {/* Ligne 1 : case + titre (jusqu'à 2 lignes) + description */}
+                      <div className="flex items-start gap-3">
                         <button
                           type="button"
                           onClick={() => (t.done ? markTodo(t, false) : setConfirmDoneTodo(t))}
                           className={
-                            "grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors " +
+                            "mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors " +
                             (t.done ? "border-primary bg-primary text-primary-foreground" : "border-faint hover:border-primary")
                           }
                           aria-label={t.done ? "Marquer à refaire" : "Marquer fait"}
@@ -956,37 +957,42 @@ export function CreatorSpace({
                           {t.done && <Check className="h-3.5 w-3.5" />}
                         </button>
                         <div className="min-w-0 flex-1">
-                          <div className={"truncate text-sm font-medium " + (t.done ? "text-muted-foreground line-through" : "")}>{t.text}</div>
-                          {t.descr && <div className="truncate text-xs text-faint">{t.descr}</div>}
+                          <div className={"line-clamp-2 break-words text-sm font-medium leading-snug " + (t.done ? "text-muted-foreground line-through" : "text-foreground")}>{t.text}</div>
+                          {t.descr && <div className="mt-0.5 line-clamp-2 break-words text-xs leading-relaxed text-faint">{t.descr}</div>}
                         </div>
+                      </div>
+                      {/* Ligne 2 : priorité à gauche · actions à droite */}
+                      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2.5">
                         <AnimatedBadge status={prioBadge(t.priority)} size="sm">
                           {titleCase(t.priority ?? "moyenne")}
                         </AnimatedBadge>
-                        <button
-                          type="button"
-                          onClick={() => (tdEditId === t.id ? setTdEditId(null) : startEditTodo(t))}
-                          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-panel text-muted-foreground shadow-sm transition-colors hover:bg-rowhover hover:text-foreground"
-                          aria-label="Modifier la tâche"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <ActionMenu
-                          items={[
-                            {
-                              key: "delete",
-                              label: "Supprimer",
-                              icon: Trash2,
-                              danger: true,
-                              onClick: async () => {
-                                if (await dbDelete("todos", t.id)) {
-                                  setTodos((prev) => prev.filter((x) => x.id !== t.id));
-                                  toast("Supprimé");
-                                }
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => (tdEditId === t.id ? setTdEditId(null) : startEditTodo(t))}
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-panel text-muted-foreground shadow-sm transition-colors hover:bg-rowhover hover:text-foreground"
+                            aria-label="Modifier la tâche"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <ActionMenu
+                            items={[
+                              {
+                                key: "delete",
+                                label: "Supprimer",
+                                icon: Trash2,
+                                danger: true,
+                                onClick: async () => {
+                                  if (await dbDelete("todos", t.id)) {
+                                    setTodos((prev) => prev.filter((x) => x.id !== t.id));
+                                    toast("Supprimé");
+                                  }
+                                },
+                                confirm: { title: "Supprimer la tâche", message: `Supprimer « ${t.text} » ? Cette action est irréversible.` },
                               },
-                              confirm: { title: "Supprimer la tâche", message: `Supprimer « ${t.text} » ? Cette action est irréversible.` },
-                            },
-                          ]}
-                        />
+                            ]}
+                          />
+                        </div>
                       </div>
                       <InlineForm
                         open={tdEditId === t.id}
@@ -995,7 +1001,7 @@ export function CreatorSpace({
                         onSubmit={saveEditTodo}
                       >
                         <TextField label="Tâche" value={teText} onChange={setTeText} />
-                        <TextField label="Description" value={teDesc} onChange={setTeDesc} />
+                        <AutoGrowTextField label="Description" value={teDesc} onChange={setTeDesc} className="min-w-full" />
                         <SelectField label="Priorité" value={tePrio} onChange={setTePrio} options={PRIORITY_OPTIONS} />
                       </InlineForm>
                     </div>
