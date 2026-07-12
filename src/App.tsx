@@ -519,7 +519,7 @@ export default function App() {
 
   return (
     <SearchContext.Provider value={{ query, setQuery }}>
-      <div className="h-screen bg-background p-2 md:p-[14px]">
+      <div className="h-[100dvh] bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]">
         <div className="flex h-full overflow-hidden rounded-[22px]">
           {/* Desktop sidebar */}
           <div className="hidden h-full md:block">

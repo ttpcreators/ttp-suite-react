@@ -686,7 +686,7 @@ export function CreatorSpace({
   );
 
   return (
-    <div className="h-screen bg-background p-2 md:p-[14px]">
+    <div className="h-[100dvh] bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]">
       <div className="flex h-full overflow-hidden rounded-[22px]">
         {/* Sidebar desktop repliable */}
         {sbCollapsed ? (
@@ -836,6 +836,21 @@ export function CreatorSpace({
             <div className="flex flex-col gap-4">
               <PushCard />
 
+              {/* Raccourcis rapides */}
+              <div className="grid grid-cols-3 gap-3">
+                {([["todo", "À faire", ListChecks], ["ideas", "Idées", Lightbulb], ["planning", "Planning", CalendarDays]] as const).map(([id, label, Icon]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setTab(id)}
+                    className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-colors hover:bg-rowhover"
+                  >
+                    <span className="grid h-9 w-9 place-items-center rounded-xl bg-panel text-primary"><Icon className="h-4 w-4" /></span>
+                    <span className="text-xs font-medium text-foreground">{label}</span>
+                  </button>
+                ))}
+              </div>
+
               {/* Vue d'ensemble — bento : stats animées + travail cliquable + RDV */}
               <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
                 <Card index={0} className="col-span-2 md:col-span-2">
@@ -896,20 +911,28 @@ export function CreatorSpace({
               </div>
 
               {/* Évolution des abonnés — même graphique que l'Aperçu agence */}
-              {followerPoints.length >= 2 && (
-                <Card index={1}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-foreground">Évolution des abonnés</div>
-                      <div className="mt-0.5 text-[11px] text-faint">D'après les mesures de ton agence</div>
-                    </div>
+              <Card index={1}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Évolution des abonnés</div>
+                    <div className="mt-0.5 text-[11px] text-faint">D'après les mesures de ton agence</div>
+                  </div>
+                  {followerPoints.length > 0 && (
                     <div className="text-2xl font-bold tracking-tight text-foreground">
                       {fmtCompact(followerPoints[followerPoints.length - 1].abonnes)}
                     </div>
-                  </div>
+                  )}
+                </div>
+                {followerPoints.length >= 2 ? (
                   <FollowerArea points={followerPoints} />
-                </Card>
-              )}
+                ) : (
+                  <div className="mt-4 grid h-[120px] place-items-center rounded-xl bg-panel/40 px-4 text-center text-xs leading-relaxed text-muted-foreground">
+                    {suivi === null
+                      ? "Chargement…"
+                      : "Pas encore assez de mesures pour tracer la courbe. Ton agence doit enregistrer au moins 2 relevés d'abonnés à des dates différentes."}
+                  </div>
+                )}
+              </Card>
 
               {/* Mes infos — carte premium : toggle Statistiques / Coordonnées + chiffres animés */}
               <Card index={0}>
