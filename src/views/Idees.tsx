@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { cn, titleCase } from "@/lib/utils";
+import { titleCase } from "@/lib/utils";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
@@ -11,6 +11,7 @@ import {
   AutoGrowTextField,
 } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
+import { FilterBar } from "@/components/ui/filter-bar";
 import { Trash2, MessageSquarePlus, Check, X, Pencil } from "lucide-react";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useEffect, useState } from "react";
@@ -178,26 +179,13 @@ export function Idees() {
         <AddButton label="Idée" onClick={() => setFormOpen(true)} />
       </div>
 
-      {/* Barre de filtres par statut */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setStatusFilter(ALL_STATUS)}
-          className={cn(chipBase, statusFilter === ALL_STATUS ? chipActive : chipInactive)}
-        >
-          Tous
-        </button>
-        {STATUS_FILTERS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setStatusFilter(s)}
-            className={cn(chipBase, statusFilter === s ? chipActive : chipInactive)}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
+      {/* Barre de filtres par statut (pastilles desktop · sélecteur mobile) */}
+      <FilterBar
+        className="mb-4"
+        value={statusFilter}
+        onChange={setStatusFilter}
+        options={[{ value: ALL_STATUS, label: "Tous" }, ...STATUS_FILTERS.map((s) => ({ value: s, label: s }))]}
+      />
 
       <InlineForm
         open={formOpen}
@@ -372,7 +360,3 @@ export function Idees() {
   );
 }
 
-const chipBase =
-  "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors";
-const chipActive = "bg-primary text-primary-foreground";
-const chipInactive = "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground";

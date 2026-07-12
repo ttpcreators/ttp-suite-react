@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { RecipientPicker, type PickContact } from "@/components/ui/recipient-picker";
+import { FilterBar } from "@/components/ui/filter-bar";
 import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
 
@@ -622,10 +623,6 @@ export function Contacts() {
     return matchQuery(query, row.brand, row.person, row.role, row.email, row.tag);
   });
 
-  const pillBase =
-    "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors";
-  const pillActive = "bg-primary text-primary-foreground";
-  const pillInactive = "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground";
 
   return (
     <>
@@ -679,36 +676,17 @@ export function Contacts() {
         </div>
       </div>
 
-      {/* Barre de filtres par tag */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setTagFilter(ALL_TAGS)}
-          className={cn(pillBase, tagFilter === ALL_TAGS ? pillActive : pillInactive)}
-        >
-          Tous
-        </button>
-        {tagList.map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTagFilter(t)}
-            className={cn(pillBase, tagFilter === t ? pillActive : pillInactive)}
-          >
-            {t}
-          </button>
-        ))}
-        {hasCreatorContacts && (
-          <button
-            type="button"
-            onClick={() => setTagFilter(CREATOR_FILTER)}
-            className={cn(pillBase, "flex items-center gap-1", tagFilter === CREATOR_FILTER ? pillActive : pillInactive)}
-            title="Contacts ajoutés par un créateur"
-          >
-            ↳ Créateurs
-          </button>
-        )}
-      </div>
+      {/* Barre de filtres par tag (pastilles desktop · sélecteur mobile) */}
+      <FilterBar
+        className="mb-4"
+        value={tagFilter}
+        onChange={setTagFilter}
+        options={[
+          { value: ALL_TAGS, label: "Tous" },
+          ...tagList.map((t) => ({ value: t, label: t })),
+          ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "↳ Créateurs" }] : []),
+        ]}
+      />
 
       <InlineForm
         open={formOpen}

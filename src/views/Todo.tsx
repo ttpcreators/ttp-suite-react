@@ -13,6 +13,7 @@ import {
   AutoGrowTextField,
 } from "@/components/ui/form";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
+import { FilterBar } from "@/components/ui/filter-bar";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
 import { useLiveKey } from "@/lib/useLive";
@@ -401,26 +402,11 @@ export function Todo() {
             ))}
           </div>
           {viewMode === "liste" && (
-            <div className="flex flex-wrap gap-2">
-              {TODO_FILTERS.map((f) => {
-                const active = todoFilter === f.id;
-                return (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setTodoFilter(f.id)}
-                    className={cn(
-                      "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-                      active
-                        ? "bg-primary text-primary-foreground"
-                        : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground"
-                    )}
-                  >
-                    {f.label}
-                  </button>
-                );
-              })}
-            </div>
+            <FilterBar
+              value={todoFilter}
+              onChange={(v) => setTodoFilter(v as TodoFilter)}
+              options={TODO_FILTERS.map((f) => ({ value: f.id, label: f.label }))}
+            />
           )}
           <div className="flex flex-wrap gap-2">
             <Select value={creatorSelectValue} onValueChange={onCreatorSelect}>
@@ -443,26 +429,11 @@ export function Todo() {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {priorityPills.map((pill) => {
-              const active = priorityFilter === pill.value;
-              return (
-                <button
-                  key={pill.value ?? "__all__"}
-                  type="button"
-                  onClick={() => setPriorityFilter(pill.value)}
-                  className={cn(
-                    "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-                    active
-                      ? "bg-primary text-primary-foreground"
-                      : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground"
-                  )}
-                >
-                  {pill.label}
-                </button>
-              );
-            })}
-          </div>
+          <FilterBar
+            value={priorityFilter ?? "__all__"}
+            onChange={(v) => setPriorityFilter(v === "__all__" ? null : (v as Priority))}
+            options={priorityPills.map((p) => ({ value: p.value ?? "__all__", label: p.label }))}
+          />
         </div>
       )}
 

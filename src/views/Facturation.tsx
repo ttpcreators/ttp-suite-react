@@ -22,6 +22,7 @@ import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import { AddButton, TextField, SelectField } from "@/components/ui/form";
 import { ActionMenu, type ActionItem } from "@/components/ui/action-menu";
+import { FilterBar } from "@/components/ui/filter-bar";
 import { useCreators } from "@/lib/useCreators";
 import { commissionMap } from "@/lib/commission";
 import { useLiveKey } from "@/lib/useLive";
@@ -635,25 +636,13 @@ export function Facturation() {
         </div>
       </div>
 
-      {/* Filtres */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        {statusChips.map((chip) => {
-          const active = statusFilter === chip.value;
-          return (
-            <button
-              key={chip.value}
-              type="button"
-              onClick={() => setStatusFilter(chip.value)}
-              className={cn(
-                "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-                active ? "bg-primary text-primary-foreground" : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
-              )}
-            >
-              {chip.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* Filtres (pastilles desktop · sélecteur mobile) */}
+      <FilterBar
+        className="mb-4"
+        value={statusFilter}
+        onChange={(v) => setStatusFilter(v as InvoiceStatus | "Tous")}
+        options={statusChips}
+      />
 
       {/* Liste */}
       <div className="overflow-hidden rounded-xl border border-border bg-surface p-2 shadow-sm">
