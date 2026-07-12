@@ -69,7 +69,11 @@ const STATUS_LABEL: Record<string, string> = {
   live: "LIVE",
   actif: "ACTIF",
   pause: "PAUSE",
+  inactif: "INACTIF",
 };
+/** Point de couleur du statut (remplace le badge « Actif » : vert = actif). */
+const statusDot = (status: string): string =>
+  status === "inactif" ? "bg-slate-400" : status === "pause" ? "bg-amber-500" : status === "live" ? "bg-rose-500" : "bg-emerald-500";
 
 export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
   const [rows, setRows] = useState<Creator[] | null>(() => getCache<Creator[]>("roster"));
@@ -240,12 +244,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
 
           {filtered.map((c) => {
             const label = STATUS_LABEL[c.status] ?? "ACTIF";
-            const badgeStatus =
-              c.status === "live"
-                ? "danger"
-                : c.status === "pause"
-                  ? "warning"
-                  : "success";
+            const dot = statusDot(c.status);
             return (
               <div
                 key={c.id}
@@ -269,11 +268,12 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                     </div>
                     <div className="truncate text-xs text-faint">
                       {c.handle}
+                      {c.niche && <span className="md:hidden"> · {c.niche}</span>}
                     </div>
                   </div>
                 </div>
 
-                {/* Niche : pastille sur mobile, texte sur desktop */}
+                {/* Niche : texte sur desktop (sur mobile, affichée sous le nom) */}
                 <span className="hidden truncate text-xs text-muted-foreground md:inline">
                   {c.niche}
                 </span>
@@ -289,14 +289,9 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                   {caByCreator[c.name] ? formatEuro(caByCreator[c.name]) : "—"}
                 </span>
 
-                {/* Bloc droit mobile : niche + statut */}
+                {/* Bloc droit mobile : à jour + statut (point de couleur) */}
                 <div className="flex shrink-0 items-center gap-2 md:contents">
-                  {c.niche && (
-                    <span className="rounded-md bg-surface px-2.5 py-1 text-[10px] font-semibold tracking-wide text-muted-foreground md:hidden">
-                      {c.niche}
-                    </span>
-                  )}
-                  <div className="flex items-center justify-end gap-1.5 md:col-start-6">
+                  <div className="flex items-center justify-end gap-2 md:col-start-6">
                     {c.status !== "inactif" &&
                       (c.statsMonth === NOW_MONTH ? (
                         <button
@@ -317,9 +312,10 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                           <RefreshCw className="h-3 w-3" /> à jour ?
                         </button>
                       ))}
-                    <AnimatedBadge status={badgeStatus} size="sm">
-                      {titleCase(label.toLowerCase())}
-                    </AnimatedBadge>
+                    <span className="flex items-center gap-1.5" title={titleCase(label.toLowerCase())}>
+                      <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", dot)} />
+                      <span className="hidden text-xs font-medium text-muted-foreground md:inline">{titleCase(label.toLowerCase())}</span>
+                    </span>
                   </div>
                 </div>
 
