@@ -50,6 +50,7 @@ alter table public.creators add column if not exists photo_url text;
 alter table public.creators add column if not exists email_pro text;
 alter table public.creators add column if not exists instagram text;
 alter table public.creators add column if not exists tiktok text;
+alter table public.creators add column if not exists stats_month text;   -- sql/11 : mois de dernière MAJ des datas
 
 create table if not exists public.invoices (
   id uuid primary key default gen_random_uuid(),
@@ -67,6 +68,7 @@ create table if not exists public.contacts (
 );
 alter table public.contacts add column if not exists first_name text;
 alter table public.contacts add column if not exists last_name text;
+alter table public.contacts add column if not exists creator text;       -- sql/12 : contact ajouté par un créateur (NULL = agence)
 
 create table if not exists public.prospects (
   id uuid primary key default gen_random_uuid(),
@@ -81,6 +83,8 @@ create table if not exists public.todos (
   creator text, priority text default 'moyenne', source text default 'agency',
   done boolean default false, sort_order int default 0, created_at timestamptz default now()
 );
+alter table public.todos add column if not exists status text default 'À faire';  -- sql/04
+update public.todos set status = case when done then 'Fait' else 'À faire' end where status is null;
 
 create table if not exists public.briefs (
   id uuid primary key default gen_random_uuid(),
@@ -107,6 +111,15 @@ alter table public.events add column if not exists date text;
 -- source ('agency'|'creator') : permet à la cloche de signaler un évènement ajouté
 -- par un créateur (comme todos/ideas). Ajoutée si la table existait sans elle.
 alter table public.events add column if not exists source text default 'agency';
+alter table public.events add column if not exists description text;                       -- sql/09 (Planning + sync Google)
+-- Colonnes de synchronisation Google Agenda (migrations/20260702_google_calendar.sql) :
+alter table public.events add column if not exists google_event_id text;
+alter table public.events add column if not exists google_etag     text;
+alter table public.events add column if not exists updated_at      timestamptz not null default now();
+alter table public.events add column if not exists last_synced_at  timestamptz;
+alter table public.events add column if not exists sync_source     text default 'agence';
+alter table public.events add column if not exists deleted         boolean not null default false;
+alter table public.events add column if not exists deleted_at      timestamptz;
 
 create table if not exists public.messages (
   id uuid primary key default gen_random_uuid(),
@@ -219,7 +232,11 @@ create policy creators_scoped on public.creators for all to authenticated
   with check (public.is_agency() or name = public.my_creator());
 
 -- DONNÉES AGENCE PURES : agence seulement
-create policy contacts_agency    on public.contacts    for all to authenticated using (public.is_agency()) with check (public.is_agency());
+-- contacts : partagés — l'agence voit/gère tout ; le créateur voit ceux de l'agence
+-- (creator NULL) + ajoute/gère les siens (creator = son nom). (sql/12)
+create policy contacts_scoped on public.contacts for all to authenticated
+  using (public.is_agency() or creator is null or creator = public.my_creator())
+  with check (public.is_agency() or creator = public.my_creator());
 -- invoices : ÉCRITURE réservée à l'agence ; le créateur ne peut que LIRE les siennes.
 -- (Comme documents : un `for all` incluant le créateur le laissait modifier/insérer/
 --  supprimer ses propres factures — falsifier le CA, effacer une facture en retard.)
@@ -239,9 +256,12 @@ create policy ideas_scoped  on public.ideas  for all to authenticated
   using (public.is_agency() or creator = public.my_creator()) with check (public.is_agency() or creator = public.my_creator());
 -- events : un événement peut concerner plusieurs créateurs (who = "Nom A, Nom B").
 -- Le créateur le voit si son nom figure dans la liste.
+-- LECTURE : le créateur voit tout évènement où son nom figure (liste "Nom A, Nom B").
+-- ÉCRITURE : il ne peut créer/modifier QUE des évènements qui le concernent lui seul
+-- (who = son nom) — il ne peut pas taguer d'autres créateurs à sa place. (sql/13)
 create policy events_scoped on public.events for all to authenticated
   using (public.is_agency() or public.my_creator() = any(string_to_array(coalesce(who,''), ', ')))
-  with check (public.is_agency() or public.my_creator() = any(string_to_array(coalesce(who,''), ', ')));
+  with check (public.is_agency() or who = public.my_creator());
 
 -- MESSAGES : agence = tout ; créateur = les siens + annonces globales (creator NULL)
 create policy messages_scoped on public.messages for all to authenticated
@@ -312,6 +332,314 @@ create policy avatars_obj_update on storage.objects for update to authenticated
   with check (bucket_id = 'avatars' and public.is_agency());
 create policy avatars_obj_delete on storage.objects for delete to authenticated
   using (bucket_id = 'avatars' and public.is_agency());
+
+-- ============================================================================
+-- 7) MODULES ADDITIONNELS (migrations repliées — idempotent, rejouable)
+--    Tout ce qui a été ajouté après la 1re version du schéma. Les crons pg_cron
+--    NE sont PAS inclus ici (opérationnels, nécessitent CRON_SECRET) — voir
+--    sql/05, sql/06, sql/07, sql/11 et migrations/ pour les planifications.
+-- ============================================================================
+
+-- ─── 7.1 Outil email : séquences / inscriptions / journal (sql/03) ───────────
+create table if not exists public.email_sequences (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  steps jsonb not null default '[]',        -- [{delay_days, subject, body}]
+  active boolean default true,
+  created_at timestamptz default now()
+);
+create table if not exists public.sequence_enrollments (
+  id uuid primary key default gen_random_uuid(),
+  sequence_id uuid references public.email_sequences(id) on delete cascade,
+  contact_email text not null,
+  contact_name text,
+  step_index int default 0,
+  status text default 'active',             -- active | replied | done | stopped
+  thread_id text,
+  last_sent_at timestamptz,
+  next_due_at timestamptz,
+  created_at timestamptz default now()
+);
+create table if not exists public.email_activity (
+  id uuid primary key default gen_random_uuid(),
+  contact_email text,
+  contact_name text,
+  direction text default 'out',             -- out | in
+  subject text,
+  snippet text,
+  source text default 'manual',             -- sequence | mediakit | inbox | manual
+  thread_id text,
+  gmail_message_id text,
+  sequence_id uuid,
+  created_at timestamptz default now()
+);
+create index if not exists seq_enroll_due_idx         on public.sequence_enrollments (status, next_due_at);
+create index if not exists email_activity_contact_idx on public.email_activity (contact_email, created_at);
+alter table public.email_sequences      enable row level security;
+alter table public.sequence_enrollments enable row level security;
+alter table public.email_activity       enable row level security;
+drop policy if exists email_sequences_agency      on public.email_sequences;
+drop policy if exists sequence_enrollments_agency on public.sequence_enrollments;
+drop policy if exists email_activity_agency       on public.email_activity;
+create policy email_sequences_agency      on public.email_sequences      for all to authenticated using (public.is_agency()) with check (public.is_agency());
+create policy sequence_enrollments_agency on public.sequence_enrollments for all to authenticated using (public.is_agency()) with check (public.is_agency());
+create policy email_activity_agency       on public.email_activity       for all to authenticated using (public.is_agency()) with check (public.is_agency());
+
+-- ─── 7.2 Journal des crashs de rendu (sql/08) ────────────────────────────────
+-- Écriture : uniquement via l'Edge Function report-error (service role, bypass RLS).
+-- Lecture  : réservée à l'agence.
+create table if not exists public.error_log (
+  id              uuid primary key default gen_random_uuid(),
+  message         text,
+  page            text,
+  stack           text,
+  component_stack text,
+  url             text,
+  user_agent      text,
+  role            text,
+  created_at      timestamptz default now()
+);
+alter table public.error_log enable row level security;
+drop policy if exists error_log_agency_read on public.error_log;
+create policy error_log_agency_read on public.error_log
+  for select to authenticated using (public.is_agency());
+
+-- ─── 7.3 Abonnements Web Push (push-subscriptions.sql) ───────────────────────
+create table if not exists public.push_subscriptions (
+  id         uuid primary key default gen_random_uuid(),
+  endpoint   text not null unique,
+  p256dh     text not null,
+  auth       text not null,
+  user_id    uuid references auth.users(id) on delete set null,
+  ua         text,
+  created_at timestamptz default now()
+);
+alter table public.push_subscriptions enable row level security;
+drop policy if exists push_sub_ins on public.push_subscriptions;
+drop policy if exists push_sub_upd on public.push_subscriptions;
+drop policy if exists push_sub_del on public.push_subscriptions;
+drop policy if exists push_sub_sel on public.push_subscriptions;
+-- Chaque appareil ne gère QUE son propre abonnement ; l'agence peut lire/supprimer.
+-- Les Edge Functions (service_role) bypassent la RLS → le push serveur marche.
+create policy push_sub_sel on public.push_subscriptions for select to authenticated
+  using (public.is_agency() or user_id = auth.uid());
+create policy push_sub_ins on public.push_subscriptions for insert to authenticated
+  with check (user_id = auth.uid());
+create policy push_sub_upd on public.push_subscriptions for update to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy push_sub_del on public.push_subscriptions for delete to authenticated
+  using (public.is_agency() or user_id = auth.uid());
+
+-- ─── 7.4 Blob agence : écriture atomique + backup quotidien (sql/07) ──────────
+-- app_state_set : écrit UNE clé du blob __app_state__ en une instruction (jsonb_set
+-- sous verrou de ligne) → deux sauvegardes concurrentes ne s'écrasent plus.
+create or replace function public.app_state_set(p_key text, p_value jsonb)
+returns void
+language plpgsql
+security invoker              -- respecte la RLS module_rows (agence seule écrit)
+set search_path = public
+as $$
+declare v_id uuid;
+begin
+  select id into v_id
+    from public.module_rows
+   where module = '__app_state__'
+   order by created_at desc
+   limit 1;
+  if v_id is null then
+    insert into public.module_rows (module, a)
+      values ('__app_state__', jsonb_build_object(p_key, p_value)::text);
+  else
+    update public.module_rows
+       set a = jsonb_set(coalesce(a, '{}')::jsonb, array[p_key], p_value, true)::text
+     where id = v_id;
+  end if;
+end;
+$$;
+grant execute on function public.app_state_set(text, jsonb) to authenticated;
+
+-- Instantanés quotidiens du blob (30 j d'historique). Le cron ttp-app-state-backup
+-- (sql/07) appelle backup_app_state() ; la planification n'est pas incluse ici.
+create table if not exists public.app_state_backups (
+  id         uuid primary key default gen_random_uuid(),
+  snapshot   text not null,
+  created_at timestamptz default now()
+);
+alter table public.app_state_backups enable row level security;
+drop policy if exists app_state_backups_agency on public.app_state_backups;
+create policy app_state_backups_agency on public.app_state_backups
+  for select to authenticated using (public.is_agency());
+-- (aucune policy d'écriture : seule backup_app_state, SECURITY DEFINER, écrit)
+create or replace function public.backup_app_state()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.app_state_backups (snapshot)
+    select a from public.module_rows
+     where module = '__app_state__' and a is not null
+     order by created_at desc limit 1;
+  delete from public.app_state_backups where created_at < now() - interval '30 days';
+end;
+$$;
+revoke execute on function public.backup_app_state() from public, anon, authenticated;
+
+-- ─── 7.5 Synchronisation Google Agenda (migrations/20260702_google_calendar.sql)
+-- Colonnes de sync sur events : déjà ajoutées plus haut (section events). Ici :
+-- fonctions trigger, tables singleton, contrainte/index, triggers. Les crons
+-- (google-watch-renew, events-purge-tombstones, google-sync-hourly) sont EXCLUS.
+
+-- 7.5.a Fonctions trigger updated_at (+ garde de source d'écriture).
+create or replace function public.touch_updated_at()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_pg_role  text := current_user;
+  v_jwt_role text := current_setting('request.jwt.claim.role', true);
+begin
+  -- Écriture applicative (UI agence) → origine 'agence', horodatée now().
+  -- Écriture serveur (service_role, sync Google) → préserve updated_at si 'google'.
+  if v_pg_role <> 'service_role' and coalesce(v_jwt_role, '') <> 'service_role' then
+    new.sync_source := 'agence';
+    new.updated_at := now();
+  else
+    if new.sync_source is distinct from 'google' then
+      new.updated_at := now();
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.touch_updated_at_simple()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+-- 7.5.b Table google_tokens (singleton id=1) — SECRETS, RLS deny-all.
+create table if not exists public.google_tokens (
+  id             int         primary key default 1,
+  google_sub     text,
+  google_email   text,
+  access_token   text,                                     -- SECRET
+  refresh_token  text,                                     -- SECRET
+  token_type     text        default 'Bearer',
+  scope          text,
+  expires_at     timestamptz,
+  connected      boolean     not null default false,
+  last_error     text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'google_tokens_singleton') then
+    alter table public.google_tokens add constraint google_tokens_singleton check (id = 1);
+  end if;
+end $$;
+alter table public.google_tokens enable row level security;
+revoke all on table public.google_tokens from anon, authenticated;
+drop trigger if exists google_tokens_touch on public.google_tokens;
+create trigger google_tokens_touch
+  before update on public.google_tokens
+  for each row execute function public.touch_updated_at_simple();
+
+-- 7.5.c Table sync_state (singleton id=1) — curseur + watch + lease, RLS deny-all.
+create table if not exists public.sync_state (
+  id                  int         primary key default 1,
+  sync_token          text,
+  channel_id          text,
+  channel_resource_id text,
+  channel_token       text,                                -- SECRET
+  channel_expiration  timestamptz,
+  last_sync_at        timestamptz,
+  syncing             boolean     not null default false,
+  syncing_at          timestamptz,
+  updated_at          timestamptz not null default now()
+);
+alter table public.sync_state add column if not exists syncing_at timestamptz;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'sync_state_singleton') then
+    alter table public.sync_state add constraint sync_state_singleton check (id = 1);
+  end if;
+end $$;
+alter table public.sync_state enable row level security;
+revoke all on table public.sync_state from anon, authenticated;
+drop trigger if exists sync_state_touch on public.sync_state;
+create trigger sync_state_touch
+  before update on public.sync_state
+  for each row execute function public.touch_updated_at_simple();
+
+insert into public.google_tokens (id) values (1) on conflict (id) do nothing;
+insert into public.sync_state    (id) values (1) on conflict (id) do nothing;
+
+-- 7.5.d Backfill : les events préexistants sont "déjà à jour" (pas de push initial).
+update public.events
+   set updated_at     = coalesce(created_at, now()),
+       last_synced_at = now(),
+       sync_source    = 'agence'
+ where google_event_id is null
+   and last_synced_at is null;
+
+-- 7.5.e Contrainte UNIQUE + index de sync sur events.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'events_google_event_id_key') then
+    alter table public.events add constraint events_google_event_id_key unique (google_event_id);
+  end if;
+end $$;
+create index if not exists events_updated_at_idx on public.events (updated_at);
+create index if not exists events_pending_push_idx
+  on public.events (updated_at)
+  where sync_source = 'agence' and deleted = false;
+create index if not exists events_deleted_idx on public.events (deleted);
+
+-- 7.5.f Triggers events : updated_at + garde DELETE (tombstone si déjà synchronisé).
+drop trigger if exists events_touch_updated_at on public.events;
+create trigger events_touch_updated_at
+  before insert or update on public.events
+  for each row execute function public.touch_updated_at();
+
+create or replace function public.events_guard_delete()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.google_event_id is not null and old.deleted = false then
+    update public.events
+       set deleted     = true,
+           deleted_at  = now(),
+           sync_source = 'agence',
+           updated_at  = now()
+     where id = old.id;
+    return null;  -- annule le DELETE physique → tombstone propagée à Google
+  end if;
+  return old;     -- laisse supprimer les lignes jamais synchronisées
+end;
+$$;
+drop trigger if exists events_guard_delete on public.events;
+create trigger events_guard_delete
+  before delete on public.events
+  for each row execute function public.events_guard_delete();
+
+-- ─── 7.6 Vue publique du roster pour le site vitrine (sql/10) ─────────────────
+-- La table creators est privée (RLS to authenticated) ; cette vue (security
+-- definer) n'expose QUE des colonnes publiques, lisible en anonyme par le site.
+create or replace view public.public_roster
+with (security_invoker = false) as
+  select name, handle, niche, platform, photo_url, sort_order
+  from public.creators
+  where coalesce(status, 'actif') <> 'inactif';
+grant select on public.public_roster to anon, authenticated;
 
 -- ============================================================================
 -- FIN. Vérif rapide (en étant DÉCONNECTÉ, ces requêtes doivent renvoyer 0 ligne) :
