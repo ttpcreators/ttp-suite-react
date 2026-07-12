@@ -19,7 +19,6 @@ import { AgencyAvatar } from "@/components/ui/agency-avatar";
 // Vues chargées à la demande (code-splitting → démarrage plus léger, mobile compris).
 const RosterTabs = lazy(() => import("@/views/RosterTabs").then((m) => ({ default: m.RosterTabs })));
 const Apercu = lazy(() => import("@/views/Apercu").then((m) => ({ default: m.Apercu })));
-const VueEnsemble = lazy(() => import("@/views/VueEnsemble").then((m) => ({ default: m.VueEnsemble })));
 const Stats = lazy(() => import("@/views/Stats").then((m) => ({ default: m.Stats })));
 const Facturation = lazy(() => import("@/views/Facturation").then((m) => ({ default: m.Facturation })));
 const Briefs = lazy(() => import("@/views/Briefs").then((m) => ({ default: m.Briefs })));
@@ -50,7 +49,6 @@ const EngagementSuivi = lazy(() => import("@/views/EngagementSuivi").then((m) =>
 const BASE = import.meta.env.BASE_URL;
 
 const VIEWS: Partial<Record<ViewId, ComponentType>> = {
-  "vue-ensemble": VueEnsemble,
   apercu: Apercu,
   stats: Stats,
   facturation: Facturation,
