@@ -25,6 +25,8 @@ import {
   Columns3,
   Users,
   Wallet,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
@@ -298,6 +300,9 @@ export function CreatorSpace({
     () => (localStorage.getItem("ttp:cs-todo-view") === "colonnes" ? "colonnes" : "liste"),
   );
   useEffect(() => { localStorage.setItem("ttp:cs-todo-view", todoView); }, [todoView]);
+  // Sidebar desktop repliable en rail (mémorisé).
+  const [sbCollapsed, setSbCollapsed] = useState(() => localStorage.getItem("ttp:cs-sidebar-collapsed") === "1");
+  useEffect(() => { localStorage.setItem("ttp:cs-sidebar-collapsed", sbCollapsed ? "1" : "0"); }, [sbCollapsed]);
 
   // add-forms
   const [tdOpen, setTdOpen] = useState(false);
@@ -637,55 +642,105 @@ export function CreatorSpace({
   return (
     <div className="h-screen bg-background p-2 md:p-[14px]">
       <div className="flex h-full overflow-hidden rounded-[22px]">
-        {/* Sidebar desktop (façon espace agence) */}
-        <aside className="hidden w-[240px] shrink-0 flex-col p-3 md:flex">
-          <div className="flex items-center gap-3 px-1.5 py-2.5">
-            <div className="h-8 w-8 overflow-hidden rounded-lg bg-[#14181E]">
+        {/* Sidebar desktop repliable */}
+        {sbCollapsed ? (
+          <aside className="hidden w-[68px] shrink-0 flex-col items-center p-2 md:flex">
+            <div className="mt-1 h-9 w-9 shrink-0 overflow-hidden rounded-[8px] bg-[#14181E]">
               <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
             </div>
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-semibold leading-tight">Espace créateur</div>
-              <div className="text-[11px] text-faint">TTP Creators</div>
-            </div>
-          </div>
-          <nav className="mt-3 flex flex-1 flex-col gap-0.5 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                className={
-                  "group flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-[9px] text-left text-[13px] transition-colors " +
-                  (tab === t.id ? "bg-rowhover font-medium text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")
-                }
-              >
-                <t.icon
-                  className={"h-4 w-4 shrink-0 " + (tab === t.id ? "text-primary" : "text-faint group-hover:text-foreground/70")}
-                  strokeWidth={1.75}
-                />
-                {t.label}
+            <button
+              type="button"
+              onClick={() => setSbCollapsed(false)}
+              className="mt-2 grid h-8 w-8 place-items-center rounded-full border border-border bg-surface text-faint shadow-sm transition-colors hover:text-foreground"
+              title="Déplier le menu"
+              aria-label="Déplier le menu"
+            >
+              <PanelLeftOpen className="h-4 w-4" />
+            </button>
+            <nav className="mt-3 flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  title={t.label}
+                  className={
+                    "grid h-10 w-10 shrink-0 place-items-center rounded-[10px] transition-colors " +
+                    (tab === t.id ? "bg-primary/10 text-primary" : "text-faint hover:bg-rowhover hover:text-foreground")
+                  }
+                >
+                  <t.icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                </button>
+              ))}
+            </nav>
+            <div className="mt-auto flex w-full flex-col items-center gap-1 border-t border-border pt-2">
+              <button type="button" onClick={onToggleTheme} title={dark ? "Mode clair" : "Mode sombre"} className="grid h-10 w-10 place-items-center rounded-[10px] text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                {dark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
               </button>
-            ))}
-          </nav>
-          <div className="mt-auto flex flex-col gap-0.5 border-t border-border pt-3">
-            <button
-              type="button"
-              onClick={onToggleTheme}
-              className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-            >
-              {dark ? <Sun className="h-4 w-4 text-faint" /> : <Moon className="h-4 w-4 text-faint" />}
-              <span className="text-[13px]">{dark ? "Mode clair" : "Mode sombre"}</span>
-            </button>
-            <button
-              type="button"
-              onClick={onLogout}
-              className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-            >
-              <LogOut className="h-4 w-4 text-faint" />
-              <span className="text-[13px]">Se déconnecter</span>
-            </button>
-          </div>
-        </aside>
+              <button type="button" onClick={onLogout} title="Se déconnecter" className="grid h-10 w-10 place-items-center rounded-[10px] text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                <LogOut className="h-[18px] w-[18px]" strokeWidth={1.75} />
+              </button>
+            </div>
+          </aside>
+        ) : (
+          <aside className="hidden w-[240px] shrink-0 flex-col p-3 md:flex">
+            <div className="flex items-center gap-3 px-1.5 py-2.5">
+              <div className="h-8 w-8 shrink-0 overflow-hidden rounded-lg bg-[#14181E]">
+                <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-semibold leading-tight">Espace créateur</div>
+                <div className="text-[11px] text-faint">TTP Creators</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSbCollapsed(true)}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                title="Replier le menu"
+                aria-label="Replier le menu"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            </div>
+            <nav className="mt-3 flex flex-1 flex-col gap-0.5 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className={
+                    "group flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-[9px] text-left text-[13px] transition-colors " +
+                    (tab === t.id ? "bg-rowhover font-medium text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")
+                  }
+                >
+                  <t.icon
+                    className={"h-4 w-4 shrink-0 " + (tab === t.id ? "text-primary" : "text-faint group-hover:text-foreground/70")}
+                    strokeWidth={1.75}
+                  />
+                  {t.label}
+                </button>
+              ))}
+            </nav>
+            <div className="mt-auto flex flex-col gap-0.5 border-t border-border pt-3">
+              <button
+                type="button"
+                onClick={onToggleTheme}
+                className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              >
+                {dark ? <Sun className="h-4 w-4 text-faint" /> : <Moon className="h-4 w-4 text-faint" />}
+                <span className="text-[13px]">{dark ? "Mode clair" : "Mode sombre"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={onLogout}
+                className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              >
+                <LogOut className="h-4 w-4 text-faint" />
+                <span className="text-[13px]">Se déconnecter</span>
+              </button>
+            </div>
+          </aside>
+        )}
 
         {/* Panneau principal — pb-28 sur mobile pour dégager la barre flottante du bas */}
         <main className="flex min-w-0 flex-1 flex-col overflow-y-auto rounded-[22px] bg-panel px-4 pb-28 pt-4 md:px-6 md:pb-8 md:pt-6">
