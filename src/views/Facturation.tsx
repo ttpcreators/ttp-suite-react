@@ -163,9 +163,11 @@ function todayISO(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 function frDate(iso: string): string {
-  if (!iso || iso === "—") return iso || "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("fr-FR");
+  const t = String(iso ?? "").trim();
+  if (!t || t === "—") return "—";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`; // ISO "AAAA-MM-JJ" → "JJ/MM/AAAA"
+  return t; // déjà lisible : on ne réinterprète pas (pas de new Date qui inverse jour/mois)
 }
 
 const esc = (s: unknown) =>
