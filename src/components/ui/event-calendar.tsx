@@ -712,7 +712,7 @@ function EventModal({
             onChange={(v) => setDraft({ ...draft, title: v })}
             placeholder="Intitulé de l'événement"
           />
-          <div className="flex flex-wrap gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <TextField
               label="Date"
               type="date"
@@ -726,7 +726,7 @@ function EventModal({
               onChange={(v) => setDraft({ ...draft, time: v })}
             />
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <SelectField
               label="Type"
               value={draft.type}
