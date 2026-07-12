@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Upload, FileText, ExternalLink, Trash2, Image as ImageIcon, Link2, Mail, X, Send, Pencil, Plus, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { dbInsert, dbDelete } from "@/lib/db";
+import { notifyCreator } from "@/lib/push";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
@@ -199,6 +200,7 @@ export function Mediakit() {
     const created = await dbInsert("documents", row);
     if (!created) return toast("Erreur — réessaie");
     setArchives((prev) => [created as unknown as ArchiveRow, ...(prev ?? [])]);
+    if (selected) notifyCreator("mediakit", selected, row.name); // push au créateur
     toast("Media kit ajouté ✓ — visible par le créateur");
   };
 

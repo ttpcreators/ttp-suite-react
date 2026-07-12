@@ -126,9 +126,10 @@ async function identify(req: Request): Promise<Caller> {
     const { data: prof } = await sb
       .from("profiles").select("role,creator_name").eq("user_id", data.user.id)
       .maybeSingle<{ role: string; creator_name: string | null }>();
-    return prof?.role === "creator"
-      ? { role: "creator", creatorName: prof.creator_name }
-      : { role: "agency" };
+    // Fail-closed : on n'accorde le rôle agence QUE si le profil le dit explicitement.
+    // Profil absent ou rôle inconnu → créateur (moindre privilège), jamais agence.
+    if (prof?.role === "agency") return { role: "agency" };
+    return { role: "creator", creatorName: prof?.creator_name ?? null };
   }
   return null;
 }

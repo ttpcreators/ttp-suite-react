@@ -117,7 +117,7 @@ export function Portal({
     if (!name) return;
     let alive = true;
     supabase.from("creators").select("*").eq("name", name).limit(1).then(({ data, error }) => { if (error) console.error("Portail — chargement créateur:", error); if (alive) setC((data?.[0] as Creator) ?? null); });
-    supabase.from("briefs").select("brand,deliverables,due,status").eq("who", name).then(({ data }) => alive && setBriefs((data as Br[]) ?? []));
+    supabase.from("briefs").select("brand,deliverables,due,status").eq("creator", name).then(({ data }) => alive && setBriefs((data as Br[]) ?? []));
     supabase.from("events").select("date,day,time,title,type,who").or("deleted.is.null,deleted.eq.false").then(({ data }) => alive && setEvents(((data as (Ev & { who: string | null })[]) ?? []).filter((e) => (e.who ?? "").split(", ").includes(name))));
     supabase.from("documents").select("name,type,size,created_at").eq("creator", name).then(({ data }) => alive && setDocs((data as Doc[]) ?? []));
     supabase.from("ideas").select("text,status").eq("creator", name).then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
