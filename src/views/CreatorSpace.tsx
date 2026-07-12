@@ -269,13 +269,15 @@ export function CreatorSpace({
   const [tab, setTab] = useState<Tab>("accueil");
   const [mobileTab, setMobileTab] = useState<string | null>(null); // famille déployée (nav mobile)
   const [confirmDoneTodo, setConfirmDoneTodo] = useState<Todo | null>(null); // anti-missclick « fait »
+  const live = useLiveKey();
   // Historique d'engagement du créateur — via la fonction serveur creator-history
   // (le blob agence est inaccessible aux créateurs ; le serveur filtre sur SON nom).
   const [suivi, setSuivi] = useState<SuiviEntry[] | null>(null);
   const [suiviErr, setSuiviErr] = useState(false);
   useEffect(() => {
-    // Chargé pour l'Évolution ET l'accueil (graphique d'abonnés).
-    if ((tab !== "evolution" && tab !== "accueil") || suivi !== null || suiviErr) return;
+    // Chargé pour l'Évolution ET l'accueil ; rafraîchi à chaque `live` (nouvelle
+    // mesure d'engagement de l'agence) sans vider l'affichage (pas de flash).
+    if (tab !== "evolution" && tab !== "accueil") return;
     let alive = true;
     supabase.functions
       .invoke("creator-history")
@@ -285,6 +287,7 @@ export function CreatorSpace({
           setSuiviErr(true);
           return;
         }
+        setSuiviErr(false);
         setSuivi(((data as { entries?: SuiviEntry[] } | null)?.entries ?? []) as SuiviEntry[]);
       })
       .catch(() => {
@@ -293,7 +296,7 @@ export function CreatorSpace({
     return () => {
       alive = false;
     };
-  }, [tab, suivi, suiviErr]);
+  }, [tab, live]);
 
   // Debriefs du créateur — via la fonction serveur debrief-history (blob agence filtré).
   const [debriefs, setDebriefs] = useState<DebriefLite[] | null>(null);
@@ -373,8 +376,6 @@ export function CreatorSpace({
   const [teText, setTeText] = useState("");
   const [teDesc, setTeDesc] = useState("");
   const [tePrio, setTePrio] = useState("moyenne");
-
-  const live = useLiveKey();
 
   useEffect(() => {
     let alive = true;
@@ -586,8 +587,19 @@ export function CreatorSpace({
 
   const setField = (k: keyof Creator, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  const openTodos = todos.filter((t) => !t.done);
   // CA encaissé = somme des factures payées du créateur (auto, cohérent avec l'agence).
   const caEncaisse = invoices.filter((i) => i.status === "payee").reduce((a, i) => a + parseAmount(i.amount), 0);
+  // Dernière mesure d'engagement PAR plateforme → abonnés cumulés + ER par réseau.
+  const platformLatest = (() => {
+    const m = new Map<string, SuiviEntry>();
+    for (const e of suivi ?? []) {
+      const prev = m.get(e.platform);
+      if (!prev || frTime(prev.date) < frTime(e.date)) m.set(e.platform, e);
+    }
+    return [...m.values()].sort((a, b) => (toNum(b.followers) ?? 0) - (toNum(a.followers) ?? 0));
+  })();
+  const totalFollowers = platformLatest.reduce((a, e) => a + (toNum(e.followers) ?? 0), 0);
   // Évolution des abonnés (depuis les mesures agence) — 1 point par date (valeur max = plateforme principale).
   const followerPoints = (() => {
     const byDate = new Map<number, number>();
@@ -928,12 +940,48 @@ export function CreatorSpace({
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -8 }}
                           transition={{ duration: 0.2 }}
-                          className="grid grid-cols-2 gap-3.5 md:grid-cols-4"
+                          className="flex flex-col gap-3.5"
                         >
-                          <StatTile label="Abonnés" value={toNum(creator?.followers)} kind="int" />
-                          <StatTile label="Engagement" value={toNum(creator?.er)} kind="pct" />
-                          <StatTile label="Reach" value={toNum(creator?.reach)} kind="int" />
-                          <StatTile label="CA encaissé" value={caEncaisse || null} kind="eur" />
+                          <div className="grid grid-cols-2 gap-3.5">
+                            {/* Abonnés cumulés = somme de la dernière mesure de chaque plateforme */}
+                            <div className="rounded-xl bg-panel p-4">
+                              <div className="text-[22px] font-bold tracking-tight text-foreground">
+                                {totalFollowers > 0 ? (
+                                  <NumberFlow value={totalFollowers} locales="fr-FR" />
+                                ) : toNum(creator?.followers) != null ? (
+                                  <NumberFlow value={toNum(creator?.followers) as number} locales="fr-FR" />
+                                ) : (
+                                  "—"
+                                )}
+                              </div>
+                              <div className="mt-1 text-[10px] font-medium text-faint">
+                                Abonnés cumulés{platformLatest.length > 1 ? ` · ${platformLatest.length} réseaux` : ""}
+                              </div>
+                            </div>
+                            <StatTile label="CA encaissé" value={caEncaisse || null} kind="eur" />
+                          </div>
+                          {/* Engagement par plateforme (on sait de quel réseau il s'agit) */}
+                          <div className="rounded-xl bg-panel p-4">
+                            <div className="mb-2.5 text-[10px] font-semibold uppercase tracking-wide text-faint">Engagement par plateforme</div>
+                            {platformLatest.length === 0 ? (
+                              <div className="text-xs text-muted-foreground">
+                                {toNum(creator?.er) != null ? `ER global · ${creator?.er}` : "Pas encore de mesure d'engagement de ton agence."}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-2.5">
+                                {platformLatest.map((e) => (
+                                  <div key={e.platform} className="flex items-center justify-between gap-2">
+                                    <span className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground">
+                                      <PlatformIcon platform={e.platform} className="h-4 w-4 shrink-0" />
+                                      <span className="truncate">{e.platformLabel}</span>
+                                      {toNum(e.followers) ? <span className="shrink-0 text-faint">· {fmtCompact(toNum(e.followers) as number)}</span> : null}
+                                    </span>
+                                    <span className="shrink-0 text-sm font-bold text-foreground">{e.er}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </motion.div>
                       ) : (
                         <motion.div
@@ -964,6 +1012,75 @@ export function CreatorSpace({
                 )}
               </Card>
 
+              {/* Cartes en bas — mêmes listes que le dashboard agence, côté créateur */}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Card>
+                  <div className="mb-3.5 flex items-center justify-between">
+                    <div className="text-sm font-semibold">Mes tâches</div>
+                    {openTodos.length > 0 && (
+                      <button type="button" onClick={() => setTab("todo")} className="text-[10px] font-semibold uppercase tracking-wide text-primary transition-opacity hover:opacity-80">Voir tout</button>
+                    )}
+                  </div>
+                  {openTodos.length === 0 ? (
+                    <div className="py-2 text-xs text-muted-foreground">Rien à faire 🎉</div>
+                  ) : (
+                    openTodos.slice(0, 5).map((t) => (
+                      <div key={t.id} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
+                        <span className="h-4 w-4 shrink-0 rounded-[5px] border border-faint" />
+                        <span className="min-w-0 flex-1 truncate text-xs">{t.text}</span>
+                      </div>
+                    ))
+                  )}
+                </Card>
+
+                <Card>
+                  <div className="mb-3.5 flex items-center justify-between">
+                    <div className="text-sm font-semibold">Mes briefs</div>
+                    {briefs.length > 0 && (
+                      <button type="button" onClick={() => setTab("briefs")} className="text-[10px] font-semibold uppercase tracking-wide text-primary transition-opacity hover:opacity-80">Voir tout</button>
+                    )}
+                  </div>
+                  {briefs.length === 0 ? (
+                    <div className="py-2 text-xs text-muted-foreground">Aucun brief.</div>
+                  ) : (
+                    briefs.slice(0, 5).map((b) => (
+                      <div key={b.id} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-signal" />
+                        <div className="min-w-0 flex-1 truncate text-xs font-medium">{b.brand}</div>
+                        <span className="shrink-0 text-[9px] font-semibold text-muted-foreground">{frDate(b.due)}</span>
+                      </div>
+                    ))
+                  )}
+                </Card>
+
+                <Card className="md:col-span-2">
+                  <div className="mb-3.5 flex items-center justify-between">
+                    <div className="text-sm font-semibold">Mes factures récentes</div>
+                    {invoices.length > 0 && (
+                      <button type="button" onClick={() => setTab("facturation")} className="text-[10px] font-semibold uppercase tracking-wide text-primary transition-opacity hover:opacity-80">Voir tout</button>
+                    )}
+                  </div>
+                  {invoices.length === 0 ? (
+                    <div className="py-2 text-xs text-muted-foreground">Aucune facture.</div>
+                  ) : (
+                    invoices.slice(0, 5).map((iv) => {
+                      const st = invStatus(iv.status);
+                      return (
+                        <div key={iv.ref} className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-0">
+                          <div className="min-w-0">
+                            <div className="truncate text-xs font-medium text-foreground">{iv.party}</div>
+                            <div className="text-[10px] text-faint">#{iv.ref}</div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2.5">
+                            <span className="text-xs font-semibold text-foreground">{iv.amount || "—"}</span>
+                            <AnimatedBadge status={st.status} size="sm">{st.label}</AnimatedBadge>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </Card>
+              </div>
             </div>
           )}
 
