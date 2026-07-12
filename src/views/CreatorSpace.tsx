@@ -1819,6 +1819,7 @@ export function CreatorSpace({
                 onClick={() => {
                   const t = taskView;
                   setTaskView(null);
+                  setTodoView("liste"); // le formulaire d'édition n'existe qu'en vue liste
                   startEditTodo(t);
                 }}
                 className="flex items-center gap-1.5 rounded-lg bg-panel px-3 py-2 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
