@@ -27,10 +27,12 @@ import {
   Settings,
   Activity,
   Mail,
+  LayoutGrid,
   type LucideIcon,
 } from "lucide-react";
 
 export type ViewId =
+  | "vue-ensemble"
   | "apercu"
   | "stats"
   | "objectifs"
@@ -71,6 +73,7 @@ export const NAV: NavFamily[] = [
     label: "Pilotage",
     icon: Gauge,
     items: [
+      { id: "vue-ensemble", label: "Vue d'ensemble", icon: LayoutGrid },
       { id: "apercu", label: "Aperçu", icon: LayoutDashboard },
       { id: "stats", label: "Stats", icon: TrendingUp },
       { id: "objectifs", label: "Objectifs", icon: Target },
