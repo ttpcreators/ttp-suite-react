@@ -1047,7 +1047,23 @@ export function CreatorSpace({
                 Chargement de ton évolution…
               </AnimatedBadge>
             ) : (
-              <SuiviPanel entries={suivi} lockedCreator={name} />
+              <div className="flex flex-col gap-4">
+                {followerPoints.length >= 2 && (
+                  <Card index={0}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-foreground">Évolution des abonnés</div>
+                        <div className="mt-0.5 text-[11px] text-faint">D'après les mesures de ton agence</div>
+                      </div>
+                      <div className="text-2xl font-bold tracking-tight text-foreground">
+                        {fmtCompact(followerPoints[followerPoints.length - 1].abonnes)}
+                      </div>
+                    </div>
+                    <FollowerArea points={followerPoints} />
+                  </Card>
+                )}
+                <SuiviPanel entries={suivi} lockedCreator={name} />
+              </div>
             ))}
 
           {/* Debrief (bilans de campagne de l'agence — lecture seule) */}
