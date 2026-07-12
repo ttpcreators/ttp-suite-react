@@ -12,6 +12,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
+import { notifyCreator } from "@/lib/push";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
@@ -269,6 +270,7 @@ export function Debrief() {
     }
     setLocal(next);
     const ok = await saveAppStateKey("debriefData", next);
+    if (ok && !wasEdit && built.creator) notifyCreator("debrief", built.creator, built.brand); // push au créateur à la création
     toast(ok ? (wasEdit ? "Debrief modifié ✓" : "Debrief créé ✓") : "Erreur — réessaie");
   }
 

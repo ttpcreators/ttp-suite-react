@@ -9,6 +9,7 @@ import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { toISODate, todayISO } from "@/lib/dates";
+import { notifyCreator } from "@/lib/push";
 
 export function Planning() {
   const [rows, setRows] = useState<Ev[] | null>(() => getCache<Ev[]>("events"));
@@ -131,6 +132,8 @@ export function Planning() {
       return;
     }
     setRows([{ ...e, date: dateVal, id: String((created as { id: string }).id) }, ...rows]);
+    // Push à chaque créateur concerné (who peut être une liste "Nom A, Nom B").
+    (e.who ?? "").split(",").map((c) => c.trim()).filter(Boolean).forEach((c) => notifyCreator("event", c, e.title));
     toast("Événement ajouté ✓");
   };
 

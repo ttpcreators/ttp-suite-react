@@ -21,6 +21,8 @@ import {
   Contact,
   X,
   Copy,
+  List,
+  Columns3,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
@@ -65,7 +67,7 @@ type Creator = {
   tiktok: string | null;
   email_pro: string | null;
 };
-type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; sort_order?: number };
+type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; status?: string | null; sort_order?: number };
 type Idea = { id: string; text: string; status: string | null; sort_order?: number };
 type Brief = { id: string; brand: string; deliverables: string | null; due: string | null; status: string | null };
 type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string; type: string };
@@ -197,6 +199,11 @@ const TODO_FILTERS: { id: TodoFilter; label: string }[] = [
   { id: "terminees", label: "Terminées" },
   { id: "toutes", label: "Toutes" },
 ];
+const TODO_STATUS_OPTS: StatusOption[] = [
+  { value: "À faire", label: "À faire", dot: "bg-primary" },
+  { value: "En cours", label: "En cours", dot: "bg-cyan" },
+  { value: "Fait", label: "Fait", dot: "bg-signal" },
+];
 
 const invStatus = (s: string | null): { status: "success" | "warning" | "danger" | "neutral"; label: string } => {
   if (s === "payee") return { status: "success", label: "Payée" };
@@ -283,6 +290,10 @@ export function CreatorSpace({
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<Creator>>({});
   const [infoTab, setInfoTab] = useState<"stats" | "coord">("stats"); // carte Mes infos : onglet actif
+  const [todoView, setTodoView] = useState<"liste" | "colonnes">(
+    () => (localStorage.getItem("ttp:cs-todo-view") === "colonnes" ? "colonnes" : "liste"),
+  );
+  useEffect(() => { localStorage.setItem("ttp:cs-todo-view", todoView); }, [todoView]);
 
   // add-forms
   const [tdOpen, setTdOpen] = useState(false);
@@ -322,7 +333,7 @@ export function CreatorSpace({
         if (error) console.error("Espace créateur — chargement de la fiche échoué:", error);
         if (alive) setCreator((data?.[0] as Creator) ?? null);
       });
-    supabase.from("todos").select("id,text,descr,due,priority,done,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setTodos((data as Todo[]) ?? []));
+    supabase.from("todos").select("id,text,descr,due,priority,done,status,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setTodos((data as Todo[]) ?? []));
     supabase.from("ideas").select("id,text,status,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
     supabase.from("briefs").select("id,brand,deliverables,due,status").eq("who", name).then(({ data }) => alive && setBriefs((data as Brief[]) ?? []));
     supabase.from("events").select("id,date,day,time,title,type,who").or("deleted.is.null,deleted.eq.false").then(({ data }) => {
@@ -498,11 +509,25 @@ export function CreatorSpace({
   const totalFacture = invoices.reduce((a, i) => a + parseAmount(i.amount), 0);
 
   const markTodo = async (t: Todo, next: boolean) => {
-    if (await dbUpdate("todos", t.id, { done: next })) {
-      setTodos((prev) => prev.map((x) => (x.id === t.id ? { ...x, done: next } : x)));
+    // On écrit done ET status ensemble (comme l'agence) → l'affichage statut/kanban
+    // reste cohérent des deux côtés (audit : ne pas laisser status désynchronisé).
+    const status = next ? "Fait" : "À faire";
+    if (await dbUpdate("todos", t.id, { done: next, status })) {
+      setTodos((prev) => prev.map((x) => (x.id === t.id ? { ...x, done: next, status } : x)));
       toast(next ? "Fait ✓" : "À refaire");
+    } else {
+      toast("Erreur — réessaie");
     }
   };
+
+  // Change le statut d'une tâche depuis la vue colonnes (done dérivé de « Fait »).
+  const setTodoStatus = async (t: Todo, status: string) => {
+    const done = status === "Fait";
+    setTodos((prev) => prev.map((x) => (x.id === t.id ? { ...x, status, done } : x)));
+    if (!(await dbUpdate("todos", t.id, { status, done }))) toast("Erreur — réessaie");
+  };
+
+  const cStatus = (t: Todo): string => t.status ?? (t.done ? "Fait" : "À faire");
 
   const startEditTodo = (t: Todo) => {
     setTdEditId(t.id);
@@ -912,20 +937,42 @@ export function CreatorSpace({
           {tab === "todo" && (
             <>
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex gap-1 rounded-xl bg-surface p-1">
-                  {TODO_FILTERS.map((f) => (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => setTodoFilter(f.id)}
-                      className={
-                        "rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors " +
-                        (todoFilter === f.id ? "bg-panel text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")
-                      }
-                    >
-                      {f.label}
-                    </button>
-                  ))}
+                <div className="flex flex-wrap items-center gap-2">
+                  {todoView === "liste" && (
+                    <div className="flex gap-1 rounded-xl bg-surface p-1">
+                      {TODO_FILTERS.map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => setTodoFilter(f.id)}
+                          className={
+                            "rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors " +
+                            (todoFilter === f.id ? "bg-panel text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")
+                          }
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {/* Bascule Liste / Colonnes (mémorisée) */}
+                  <div className="flex items-center gap-1 rounded-xl bg-surface p-1">
+                    {([["liste", List], ["colonnes", Columns3]] as const).map(([m, Icon]) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setTodoView(m)}
+                        className={
+                          "grid h-8 w-8 place-items-center rounded-lg transition-colors " +
+                          (todoView === m ? "bg-panel text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")
+                        }
+                        aria-label={m === "liste" ? "Vue liste" : "Vue colonnes"}
+                        title={m === "liste" ? "Liste" : "Colonnes par statut"}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <AddButton label="Tâche" onClick={() => setTdOpen(true)} />
               </div>
@@ -935,6 +982,39 @@ export function CreatorSpace({
                 <TextField label="Échéance" type="date" value={tdDue} onChange={setTdDue} />
                 <SelectField label="Priorité" value={tdPrio} onChange={setTdPrio} options={PRIORITY_OPTIONS} />
               </InlineForm>
+              {todoView === "colonnes" ? (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  {TODO_STATUS_OPTS.map((col) => {
+                    const colRows = todos.filter((t) => cStatus(t) === col.value);
+                    return (
+                      <div key={col.value} className="flex flex-col gap-2.5 rounded-2xl border border-border bg-panel/40 p-2.5">
+                        <div className="flex items-center justify-between px-1.5 pt-1">
+                          <div className="flex items-center gap-2">
+                            <span className={"h-2 w-2 rounded-full " + col.dot} />
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{col.label}</span>
+                          </div>
+                          <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-semibold text-faint">{colRows.length}</span>
+                        </div>
+                        {colRows.length === 0 ? (
+                          <div className="px-2 py-6 text-center text-[11px] text-faint">—</div>
+                        ) : (
+                          colRows.map((t) => (
+                            <div key={t.id} className="rounded-xl border border-border bg-surface p-3 shadow-sm">
+                              <div className={"line-clamp-2 break-words text-[12.5px] font-medium leading-snug " + (t.done ? "text-muted-foreground line-through" : "text-foreground")}>{t.text}</div>
+                              <div className="mt-2 flex items-center justify-between gap-2">
+                                <AnimatedBadge status={prioBadge(t.priority)} size="sm">{titleCase(t.priority ?? "moyenne")}</AnimatedBadge>
+                                <div className="w-[118px] shrink-0">
+                                  <StatusSelect value={cStatus(t)} options={TODO_STATUS_OPTS} onChange={(s) => setTodoStatus(t, s)} />
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
               <div className="flex flex-col gap-3">
                 {filteredTodos.length === 0 ? (
                   <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">
@@ -1008,6 +1088,7 @@ export function CreatorSpace({
                   ))
                 )}
               </div>
+              )}
             </>
           )}
 

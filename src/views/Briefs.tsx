@@ -14,6 +14,7 @@ import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { toISODate, frDate } from "@/lib/dates";
 import { getCache, setCache } from "@/lib/viewCache";
+import { notifyCreator } from "@/lib/push";
 
 type Row = {
   id: string;
@@ -121,6 +122,7 @@ export function Briefs() {
       return;
     }
     setRows([created as unknown as Row, ...(rows ?? [])]);
+    if (creator) notifyCreator("brief", creator, brand.trim()); // push au créateur (s'il a activé les notifs)
     toast("Brief ajouté ✓");
     setFormOpen(false);
     setBrand("");
