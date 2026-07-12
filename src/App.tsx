@@ -488,11 +488,11 @@ export default function App() {
         >
           {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
-        {/* Déconnexion — toujours visible dans la barre du haut (mobile + desktop) */}
+        {/* Déconnexion — desktop uniquement (sur mobile, se déconnecter via Paramètres) */}
         <button
           type="button"
           onClick={logout}
-          className="grid h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"
+          className="hidden h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover md:grid"
           aria-label="Se déconnecter"
           title="Se déconnecter"
         >
