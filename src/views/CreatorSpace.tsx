@@ -1281,38 +1281,44 @@ export function CreatorSpace({
                         </div>
                       </div>
                     ) : (
-                      <div key={x.id} className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                        <span className="mt-1.5 h-2 w-2 shrink-0 self-start rounded-full bg-indigo" />
-                        <div className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed">{x.text}</div>
-                        <div className="w-[132px] shrink-0">
-                          <StatusSelect value={x.status ?? "À faire"} options={IDEA_STATUS} onChange={(s) => setIdeaStatus(x, s)} />
+                      <div key={x.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                        {/* Ligne 1 : puce + texte de l'idée (pleine largeur) */}
+                        <div className="flex items-start gap-3">
+                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-indigo" />
+                          <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{x.text}</div>
                         </div>
-                        <ActionMenu
-                          items={[
-                            {
-                              key: "edit",
-                              label: "Modifier l'idée",
-                              icon: Pencil,
-                              onClick: () => {
-                                setIdeaEditId(x.id);
-                                setIdeaEditText(x.text);
+                        {/* Ligne 2 : statut + actions */}
+                        <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2.5">
+                          <div className="w-[150px]">
+                            <StatusSelect value={x.status ?? "À faire"} options={IDEA_STATUS} onChange={(s) => setIdeaStatus(x, s)} />
+                          </div>
+                          <ActionMenu
+                            items={[
+                              {
+                                key: "edit",
+                                label: "Modifier l'idée",
+                                icon: Pencil,
+                                onClick: () => {
+                                  setIdeaEditId(x.id);
+                                  setIdeaEditText(x.text);
+                                },
                               },
-                            },
-                            {
-                              key: "delete",
-                              label: "Supprimer",
-                              icon: Trash2,
-                              danger: true,
-                              onClick: async () => {
-                                if (await dbDelete("ideas", x.id)) {
-                                  setIdeas((prev) => prev.filter((y) => y.id !== x.id));
-                                  toast("Supprimé");
-                                }
+                              {
+                                key: "delete",
+                                label: "Supprimer",
+                                icon: Trash2,
+                                danger: true,
+                                onClick: async () => {
+                                  if (await dbDelete("ideas", x.id)) {
+                                    setIdeas((prev) => prev.filter((y) => y.id !== x.id));
+                                    toast("Supprimé");
+                                  }
+                                },
+                                confirm: { title: "Supprimer l'idée", message: `Supprimer « ${x.text} » ? Cette action est irréversible.` },
                               },
-                              confirm: { title: "Supprimer l'idée", message: `Supprimer « ${x.text} » ? Cette action est irréversible.` },
-                            },
-                          ]}
-                        />
+                            ]}
+                          />
+                        </div>
                       </div>
                     ),
                   )
