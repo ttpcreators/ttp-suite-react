@@ -161,7 +161,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
     const ok = await dbUpdate("creators", c.id, { stats_month: next || null });
     if (!ok) {
       setRows(rows); // rollback optimiste
-      toast("Erreur — réessaie");
+      toast("Enregistrement impossible — la colonne « stats_month » manque (lance le SQL 11)");
       return;
     }
     toast(done ? `${titleCase(c.name)} · données à jour ✓` : "Marqué à mettre à jour");
