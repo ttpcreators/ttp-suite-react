@@ -60,11 +60,21 @@ Deno.serve(async (req: Request) => {
     return jsonRes({ error: "creation_echouee", detail: msg.slice(0, 200) }, 400);
   }
 
-  // Profil : le trigger a posé role='creator'. Aligne le rôle/nom demandé.
-  await sb.from("profiles").upsert(
+  // Profil : le trigger pose role='creator' + creator_name=NULL (aucune confiance
+  // aux métadonnées client — cf. handle_new_user). C'est ICI, côté serveur admin et
+  // APRÈS vérification que l'appelant est bien l'agence, qu'on fixe le rôle et le
+  // rattachement créatrice. C'est désormais le SEUL endroit qui lie un compte à une
+  // créatrice → on vérifie que l'upsert a réussi (sinon le compte ne verrait rien).
+  const { error: profErr2 } = await sb.from("profiles").upsert(
     { user_id: created.user.id, role, creator_name: creator || null },
     { onConflict: "user_id" },
   );
+  if (profErr2) {
+    return jsonRes(
+      { error: "profil_non_enregistre", detail: String(profErr2.message).slice(0, 200) },
+      500,
+    );
+  }
 
   return jsonRes({ ok: true, userId: created.user.id, email, role, creator: creator || null });
 });

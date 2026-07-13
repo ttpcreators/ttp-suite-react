@@ -177,21 +177,22 @@ create or replace function public.my_creator() returns text
   select creator_name from public.profiles where user_id = auth.uid();
 $$;
 
--- À l'inscription (via la page Accès), on ne fait JAMAIS confiance au rôle envoyé
--- dans les métadonnées (contrôlable par le client → un compte pourrait se déclarer
--- 'agency'). Rôle = TOUJOURS 'creator' ici ; la promotion agence se fait
--- EXCLUSIVEMENT via la liste d'emails de la section 4 ci-dessous.
+-- À l'inscription, on ne fait JAMAIS confiance aux métadonnées envoyées par le
+-- client. NI le rôle (sinon un compte se déclarerait 'agency'), NI le creator_name
+-- (sinon n'importe qui s'inscrirait en « CANDICE MAISSA » et récupérerait, via la
+-- policy RLS `name = my_creator()`, l'accès à sa fiche + ses données privées — les
+-- noms étant publics dans public_roster). Donc ici : rôle TOUJOURS 'creator',
+-- creator_name TOUJOURS NULL. Le rattachement à une créatrice est fait UNIQUEMENT
+-- côté serveur par la fonction admin create-access (réservée à l'agence), qui upsert
+-- profiles juste après. Un signup public reste creator_name = NULL → my_creator()
+-- = NULL → ne matche aucune fiche. La promotion agence se fait via la section 4.
+-- (cf. supabase/sql/securite-signup-creator-name.sql)
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer as $$
 begin
   insert into public.profiles (user_id, role, creator_name)
-  values (
-    new.id,
-    'creator',
-    nullif(new.raw_user_meta_data->>'creator_name','')
-  )
-  on conflict (user_id) do update
-    set creator_name = coalesce(excluded.creator_name, public.profiles.creator_name);
+  values (new.id, 'creator', null)
+  on conflict (user_id) do nothing;
   return new;
 end $$;
 
