@@ -232,6 +232,30 @@ create policy creators_scoped on public.creators for all to authenticated
   using (public.is_agency() or name = public.my_creator())
   with check (public.is_agency() or name = public.my_creator());
 
+-- GARDE-FOU colonnes sensibles : la policy `for all` ci-dessus laisse un créateur
+-- écrire SA fiche — donc, via un appel API direct (hors UI), modifier des colonnes
+-- qui ne le regardent pas : ca (CA, calculé depuis les factures), commission, status
+-- (actif/inactif), exclu (exclusivité), sort_order (ordre roster de l'agence).
+-- Même logique que pour invoices : on ferme le trou côté base, pas seulement côté UI.
+-- Un trigger BEFORE UPDATE force ces colonnes à conserver leur ANCIENNE valeur quand
+-- l'auteur n'est pas l'agence. L'agence n'est jamais affectée ; les vraies éditions du
+-- créateur (coordonnées, réseaux, followers/ER/reach, bio, media kit…) passent normalement.
+create or replace function public.creators_guard() returns trigger
+  language plpgsql security definer as $$
+begin
+  if not public.is_agency() then
+    new.ca         := old.ca;
+    new.commission := old.commission;
+    new.status     := old.status;
+    new.exclu      := old.exclu;
+    new.sort_order := old.sort_order;
+  end if;
+  return new;
+end $$;
+drop trigger if exists creators_guard_upd on public.creators;
+create trigger creators_guard_upd before update on public.creators
+  for each row execute function public.creators_guard();
+
 -- DONNÉES AGENCE PURES : agence seulement
 -- contacts : partagés — l'agence voit/gère tout ; le créateur voit ceux de l'agence
 -- (creator NULL) + ajoute/gère les siens (creator = son nom). (sql/12)

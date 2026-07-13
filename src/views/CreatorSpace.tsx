@@ -579,8 +579,9 @@ export function CreatorSpace({
       birth: (form.birth ?? "").trim(),
       followers: (form.followers ?? "").trim(),
       er: (form.er ?? "").trim(),
-      ca: (form.ca ?? "").trim(),
       reach: (form.reach ?? "").trim(),
+      // ca/commission/status/exclu NON envoyés : colonnes agence (CA calculé depuis
+      // les factures). Verrouillées aussi côté base par le trigger creators_guard.
     };
     if (!(await dbUpdate("creators", creator.id, patch))) {
       toast("Erreur — réessaie");
