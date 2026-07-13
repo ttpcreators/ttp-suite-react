@@ -1,13 +1,15 @@
 -- 🔒 Sécurité · handle_new_user + storage documents (durci)
 -- Rôle forcé à 'creator' à l'inscription (anti-escalade) + cloisonnement du
 -- bucket Storage `documents` : agence = tout, créateur = uniquement ses fichiers.
+-- ⚠️ creator_name TOUJOURS NULL (zéro confiance aux métadonnées client — sinon
+-- usurpation d'une créatrice via signup public). Le rattachement se fait UNIQUEMENT
+-- côté serveur par create-access (admin). Cf. sql/securite-signup-creator-name.sql.
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer as $$
 begin
   insert into public.profiles (user_id, role, creator_name)
-  values (new.id, 'creator', nullif(new.raw_user_meta_data->>'creator_name',''))
-  on conflict (user_id) do update
-    set creator_name = coalesce(excluded.creator_name, public.profiles.creator_name);
+  values (new.id, 'creator', null)
+  on conflict (user_id) do nothing;
   return new;
 end $$;
 

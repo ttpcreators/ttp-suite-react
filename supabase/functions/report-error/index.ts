@@ -84,10 +84,20 @@ Deno.serve(async (req: Request) => {
 
   const sb = getServiceClient();
 
-  // 1) Journalise toujours (service role → bypass RLS).
-  await sb.from("error_log").insert({
-    message, page, stack, component_stack: componentStack, url, user_agent: userAgent, role,
-  }).then(() => {}, () => {});
+  // Garde-fou anti-flood : endpoint NON authentifié (verify_jwt=false) → un script
+  // pourrait gonfler error_log sans limite. Au-delà de 60 insertions/minute (très
+  // au-dessus du trafic d'erreurs réel), on cesse d'insérer. (audit 2026-07-13)
+  const oneMinAgo = new Date(Date.now() - 60_000).toISOString();
+  const { count: recentCount } = await sb.from("error_log")
+    .select("id", { count: "exact", head: true }).gte("created_at", oneMinAgo);
+  const flooding = (recentCount ?? 0) > 60;
+
+  // 1) Journalise (service role → bypass RLS), sauf en cas de flood manifeste.
+  if (!flooding) {
+    await sb.from("error_log").insert({
+      message, page, stack, component_stack: componentStack, url, user_agent: userAgent, role,
+    }).then(() => {}, () => {});
+  }
 
   // 2) Push agence — seulement la 1re occurrence de ce message sur 30 min (anti-spam).
   const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
@@ -97,12 +107,16 @@ Deno.serve(async (req: Request) => {
   const occurrences = count ?? 1;
 
   let pushed = 0;
-  if (occurrences <= 1 && VAPID_PRIVATE_KEY && (await pushErrorsEnabled(sb))) {
+  if (!flooding && occurrences <= 1 && VAPID_PRIVATE_KEY && (await pushErrorsEnabled(sb))) {
+    // SÉCURITÉ (audit 2026-07-13) : endpoint non authentifié → NE PAS mettre de texte
+    // contrôlé par l'appelant (message/page) dans la notif, sinon vecteur de phishing
+    // vers les téléphones agence. Corps générique ; le détail reste dans error_log.
+    // Tag FIXE → les pushs se remplacent au lieu de s'empiler (anti-spam).
     const payload = JSON.stringify({
       title: "⚠️ Bug dans l'app",
-      body: `${page ? page + " — " : ""}${message}`.slice(0, 180),
+      body: "Un incident a été signalé. Ouvre le journal des erreurs pour le détail.",
       url: "/",
-      tag: `ttp-error-${message}`.slice(0, 120),
+      tag: "ttp-error",
     });
     pushed = await pushAgency(sb, payload);
   }

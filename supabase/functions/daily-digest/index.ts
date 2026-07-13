@@ -250,11 +250,14 @@ Deno.serve(async (req: Request) => {
     const rawWho = caller.role === "creator" ? (caller.creatorName || "Un créateur") : String(body.creator ?? "Un créateur");
     const who = rawWho.slice(0, 60).replace(/\p{L}[\p{L}'’-]*/gu, (w) => w.charAt(0).toUpperCase() + w.slice(1));
     const what = String(body.text ?? "").slice(0, 140);
+    // Tag STABLE par créateur (pas Date.now()) : deux notifs d'activité du même
+    // créateur se REMPLACENT au lieu de s'empiler → borne le spam de notifications
+    // qu'un compte créateur pourrait générer en boucle. (audit 2026-07-13)
     const payload = JSON.stringify({
       title: `${who} a ajouté ${article} ${kindLabel}`,
       body: what,
       url: "/",
-      tag: `ttp-creator-${Date.now()}`,
+      tag: `ttp-creator-${who}`.slice(0, 120),
     });
     const r = await sendToAll(sb, payload);
     return jsonRes({ ok: true, creatorActivity: true, ...r });

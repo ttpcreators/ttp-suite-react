@@ -204,9 +204,14 @@ create trigger on_auth_user_created
 -- ----------------------------------------------------------------------------
 -- 4) RÔLE AGENCE (fait AVANT le verrouillage → pas de lock-out)
 -- ----------------------------------------------------------------------------
+-- SÉCURITÉ (audit 2026-07-13) : uniquement des emails d'un domaine POSSÉDÉ + email
+-- confirmé. Le placeholder 'agence@ttp.com' (domaine non contrôlé) a été retiré : il
+-- était squattable via signup public → relancer SETUP.sql aurait promu ce compte en
+-- agence. Bootstrap ponctuel d'un compte réel = sql/admin-role-agence.sql (par user_id).
 insert into public.profiles (user_id, role)
   select id, 'agency' from auth.users
-   where email in ('partnerships@ttpcreators.pro','marcbouraoui@gmail.com','agence@ttp.com')
+   where email in ('partnerships@ttpcreators.pro','marcbouraoui@gmail.com')
+     and email_confirmed_at is not null
   on conflict (user_id) do update set role = 'agency';
 
 -- ----------------------------------------------------------------------------
@@ -228,10 +233,19 @@ begin
   end loop;
 end $$;
 
--- CREATORS : agence = tout ; créateur = sa propre fiche
-create policy creators_scoped on public.creators for all to authenticated
+-- CREATORS : agence = tout ; créateur = sa propre fiche EN LECTURE + UPDATE seulement.
+-- INSERT et DELETE réservés à l'agence : sinon (creators_guard n'étant que BEFORE
+-- UPDATE) un créateur pouvait FORGER à l'INSERT une fiche à son nom avec ca/commission/
+-- status/exclu/sort_order arbitraires, ou supprimer sa fiche. (audit 2026-07-13)
+create policy creators_read           on public.creators for select to authenticated
+  using (public.is_agency() or name = public.my_creator());
+create policy creators_creator_update on public.creators for update to authenticated
   using (public.is_agency() or name = public.my_creator())
   with check (public.is_agency() or name = public.my_creator());
+create policy creators_agency_insert  on public.creators for insert to authenticated
+  with check (public.is_agency());
+create policy creators_agency_delete  on public.creators for delete to authenticated
+  using (public.is_agency());
 
 -- GARDE-FOU colonnes sensibles : la policy `for all` ci-dessus laisse un créateur
 -- écrire SA fiche — donc, via un appel API direct (hors UI), modifier des colonnes
@@ -260,8 +274,14 @@ create trigger creators_guard_upd before update on public.creators
 -- DONNÉES AGENCE PURES : agence seulement
 -- contacts : partagés — l'agence voit/gère tout ; le créateur voit ceux de l'agence
 -- (creator NULL) + ajoute/gère les siens (creator = son nom). (sql/12)
-create policy contacts_scoped on public.contacts for all to authenticated
-  using (public.is_agency() or creator is null or creator = public.my_creator())
+-- LECTURE large (agence + contacts partagés `creator is null` + les siens) MAIS
+-- ÉCRITURE (INSERT/UPDATE/DELETE) réservée à `is_agency() or creator = my_creator()` :
+-- sans ce découpage, la branche `creator is null` dans un `for all` laissait tout
+-- compte connecté SUPPRIMER/réattribuer le carnet partagé de l'agence. (audit 2026-07-13)
+create policy contacts_read  on public.contacts for select to authenticated
+  using (public.is_agency() or creator is null or creator = public.my_creator());
+create policy contacts_write on public.contacts for all to authenticated
+  using (public.is_agency() or creator = public.my_creator())
   with check (public.is_agency() or creator = public.my_creator());
 -- invoices : ÉCRITURE réservée à l'agence ; le créateur ne peut que LIRE les siennes.
 -- (Comme documents : un `for all` incluant le créateur le laissait modifier/insérer/
@@ -285,13 +305,23 @@ create policy ideas_scoped  on public.ideas  for all to authenticated
 -- LECTURE : le créateur voit tout évènement où son nom figure (liste "Nom A, Nom B").
 -- ÉCRITURE : il ne peut créer/modifier QUE des évènements qui le concernent lui seul
 -- (who = son nom) — il ne peut pas taguer d'autres créateurs à sa place. (sql/13)
-create policy events_scoped on public.events for all to authenticated
-  using (public.is_agency() or public.my_creator() = any(string_to_array(coalesce(who,''), ', ')))
+-- LECTURE par appartenance à la liste (who = "A, B") ; mais ÉCRITURE/SUPPRESSION
+-- réservée aux évènements qui le concernent LUI SEUL (who = son nom, strict) — sinon
+-- un créateur listé pouvait supprimer un évènement multi-créateurs et propager la
+-- suppression à l'agenda Google via events_guard_delete. (audit 2026-07-13)
+create policy events_read  on public.events for select to authenticated
+  using (public.is_agency() or public.my_creator() = any(string_to_array(coalesce(who,''), ', ')));
+create policy events_write on public.events for all to authenticated
+  using (public.is_agency() or who = public.my_creator())
   with check (public.is_agency() or who = public.my_creator());
 
--- MESSAGES : agence = tout ; créateur = les siens + annonces globales (creator NULL)
-create policy messages_scoped on public.messages for all to authenticated
-  using (public.is_agency() or creator = public.my_creator() or creator is null)
+-- MESSAGES : agence = tout ; créateur = les siens + annonces globales (creator NULL).
+-- Même découpage que contacts : la branche `creator is null` reste en LECTURE mais
+-- jamais en écriture (sinon tout compte supprime/détourne les annonces). (audit 2026-07-13)
+create policy messages_read  on public.messages for select to authenticated
+  using (public.is_agency() or creator = public.my_creator() or creator is null);
+create policy messages_write on public.messages for all to authenticated
+  using (public.is_agency() or creator = public.my_creator())
   with check (public.is_agency() or creator = public.my_creator());
 
 -- PROFILES : chacun lit le sien ; l'agence gère tout
