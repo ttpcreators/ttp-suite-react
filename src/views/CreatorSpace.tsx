@@ -409,9 +409,26 @@ export function CreatorSpace({
   }, [name, live]);
 
   const firstName = titleCase(name).split(" ")[0];
-  // Media kit public de la créatrice (rempli par l'agence, visible ici une fois enregistré).
-  const mkSlug = (creator?.mediakit?.slug ?? "").trim() || null;
+  // Media kit public de la créatrice. Le site génère une page pour CHAQUE créatrice :
+  // slug = champ « Lien » s'il est rempli, sinon le prénom — même règle exacte que le
+  // build du site (minuscule, sans accent, non-alphanum → tiret). On n'affiche le lien
+  // que si la page répond réellement (HEAD 200) : une créatrice tout juste créée, pas
+  // encore générée par le build horaire, voit « Bientôt disponible » et non un lien mort.
+  const slugify = (s: string) =>
+    (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const mkSlug = slugify((creator?.mediakit?.slug ?? "").trim() || firstName) || null;
   const mkUrl = mkSlug ? `https://ttpcreators.pro/mediakit/${mkSlug}/` : null;
+  const [mkLive, setMkLive] = useState<boolean | null>(null); // null = vérification en cours
+  useEffect(() => {
+    if (!mkUrl) { setMkLive(false); return; }
+    let alive = true;
+    setMkLive(null);
+    fetch(mkUrl, { method: "HEAD" })
+      .then((r) => { if (alive) setMkLive(r.ok); })
+      .catch(() => { if (alive) setMkLive(false); });
+    return () => { alive = false; };
+  }, [mkUrl]);
 
   // Le créateur peut faire évoluer le statut de ses briefs (synchro agence via la table).
   const setBriefStatus = async (id: string, status: string) => {
@@ -1116,10 +1133,14 @@ export function CreatorSpace({
                     <div className="min-w-0">
                       <div className="text-sm font-semibold">Mon media kit</div>
                       <div className="mt-0.5 text-[11px] text-faint">
-                        {mkUrl ? "Ta page publique — à partager aux marques" : "En préparation avec ton agence"}
+                        {mkLive === true
+                          ? "Ta page publique — à partager aux marques"
+                          : mkLive === null
+                            ? "Vérification de ta page…"
+                            : "En préparation avec ton agence"}
                       </div>
                     </div>
-                    {mkUrl ? (
+                    {mkLive === true && mkUrl ? (
                       <div className="flex shrink-0 items-center gap-2">
                         <button
                           type="button"
@@ -1142,7 +1163,9 @@ export function CreatorSpace({
                         </a>
                       </div>
                     ) : (
-                      <span className="shrink-0 text-[11px] text-muted-foreground">Bientôt disponible</span>
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {mkLive === null ? "…" : "Bientôt disponible"}
+                      </span>
                     )}
                   </div>
                 </Card>
