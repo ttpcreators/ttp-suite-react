@@ -247,7 +247,9 @@ export default function App() {
   const [splitView, setSplitView] = useState<ViewId | null>(() => {
     try {
       const saved = localStorage.getItem("ttp:split");
-      if (saved && Object.hasOwn(VIEWS, saved)) return saved as ViewId;
+      // isNavView (et pas seulement VIEWS) → 'roster' est une cible de split valide,
+      // donc restaurable après un refresh comme les autres vues.
+      if (saved && isNavView(saved)) return saved as ViewId;
     } catch {
       /* localStorage indisponible */
     }
@@ -352,17 +354,33 @@ export default function App() {
       return;
     }
     let alive = true;
-    supabase
-      .from("profiles")
-      .select("role,creator_name")
-      .eq("user_id", session.user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!alive) return;
-        if (error) console.error("Chargement du profil échoué:", error);
-        const row = data as { role: string; creator_name: string | null } | null;
-        setProfile(row ?? { role: "agency", creator_name: null });
-      });
+    let attempt = 0;
+    const load = () => {
+      supabase
+        .from("profiles")
+        .select("role,creator_name")
+        .eq("user_id", session.user.id)
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (!alive) return;
+          if (error) {
+            console.error("Chargement du profil échoué:", error);
+            // Réessais bornés. Sur échec réseau/RLS, NE PAS basculer en « agence » :
+            // un créateur atterrirait dans le mauvais espace. On réessaie puis, si
+            // l'échec persiste, on garde l'écran de chargement (rafraîchir suffit).
+            // Un défaut réseau ne doit JAMAIS changer le rôle de l'utilisateur.
+            if (attempt < 3) {
+              attempt += 1;
+              setTimeout(load, 800 * attempt);
+            }
+            return;
+          }
+          // Pas d'erreur : une ligne absente = compte sans profil = espace agence.
+          const row = data as { role: string; creator_name: string | null } | null;
+          setProfile(row ?? { role: "agency", creator_name: null });
+        });
+    };
+    load();
     return () => {
       alive = false;
     };

@@ -105,33 +105,51 @@ export function MediakitEditor() {
   const [mk, setMk] = useState<MediaKit>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  // ID de la créatrice dont le blob a été LU AVEC SUCCÈS. Le save n'est autorisé
+  // que si loadedId === selId : sinon un échec de lecture (réseau/RLS/quota)
+  // afficherait un kit vide qui, une fois « enregistré », écraserait le vrai
+  // media kit en base. Garde-fou anti perte de données silencieuse.
+  const [loadedId, setLoadedId] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Charge le blob mediakit de la créatrice choisie.
   useEffect(() => {
     if (!selId) {
       setMk({});
+      setLoadedId(null);
+      setLoadError(false);
       return;
     }
     let alive = true;
     setLoading(true);
+    setLoadError(false);
+    setLoadedId(null);
     supabase
       .from("creators")
       .select("mediakit")
       .eq("id", selId)
       .limit(1)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (!alive) return;
+        if (error) {
+          // Lecture échouée : NE PAS vider mk, NE PAS marquer chargé → save bloqué.
+          setLoadError(true);
+          setLoading(false);
+          return;
+        }
         const blob = (data?.[0]?.mediakit as MediaKit | null) ?? {};
         // slug par défaut = prénom de la créatrice
         if (!blob.slug && selected) blob.slug = slugify((selected.name || "").split(/\s+/)[0]);
         setMk(blob);
+        setLoadedId(selId);
         setLoading(false);
       });
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selId]);
+  }, [selId, reloadKey]);
 
   // ---- helpers d'édition immuables ----
   const patch = (p: Partial<MediaKit>) => setMk((m) => ({ ...m, ...p }));
@@ -142,9 +160,29 @@ export function MediakitEditor() {
 
   const save = async () => {
     if (!selId || saving) return;
+    // Garde-fou : ne jamais écrire tant que le blob courant n'a pas été LU avec
+    // succès, sinon on remplacerait le vrai media kit par un objet vide.
+    if (loadedId !== selId) return toast("Media kit pas encore chargé — patiente ou recharge");
     setSaving(true);
     try {
-      const clean: MediaKit = { ...mk, slug: (mk.slug || "").trim() || slugify((selected?.name || "").split(/\s+/)[0]) };
+      const desired = (mk.slug || "").trim() || slugify((selected?.name || "").split(/\s+/)[0]) || "createur";
+      // Slug UNIQUE entre créatrices : le générateur du site déduplique les
+      // collisions (-2/-3). On garantit l'unicité ici pour que le lien « Voir le
+      // media kit » et l'URL publique pointent bien sur la page de CETTE créatrice.
+      let slug = desired;
+      try {
+        const { data: others } = await supabase.from("creators").select("id, mediakit").neq("id", selId);
+        const used = new Set(
+          (others ?? [])
+            .map((o) => (o.mediakit as MediaKit | null)?.slug)
+            .filter((s): s is string => !!s),
+        );
+        let n = 2;
+        while (used.has(slug)) slug = `${desired}-${n++}`;
+      } catch {
+        /* si la vérif d'unicité échoue, on garde le slug désiré (le site dédupliquera au pire) */
+      }
+      const clean: MediaKit = { ...mk, slug };
       const ok = await dbUpdate("creators", selId, { mediakit: clean });
       if (!ok) return toast("Enregistrement échoué — réessaie");
       setMk(clean);
@@ -158,7 +196,12 @@ export function MediakitEditor() {
   const importFromCalculator = async () => {
     if (!selected) return;
     invalidateAppState();
-    const st = (await getAppState()) as AppState;
+    let st: AppState;
+    try {
+      st = (await getAppState()) as AppState;
+    } catch {
+      return toast("Import impossible — réessaie");
+    }
     const hist = ((st["engagementHistory"] as HistLike[]) ?? []).filter(
       (h) => (h.creator || "").toLowerCase() === (selected.name || "").toLowerCase(),
     );
@@ -225,7 +268,7 @@ export function MediakitEditor() {
             <button
               type="button"
               onClick={save}
-              disabled={saving || loading}
+              disabled={saving || loading || loadError || loadedId !== selId}
               className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               <Save className="h-3.5 w-3.5" /> {saving ? "Enregistrement…" : "Enregistrer"}
@@ -244,6 +287,21 @@ export function MediakitEditor() {
         </div>
       ) : loading ? (
         <div className={`${CARD} text-sm text-muted-foreground`}>Chargement…</div>
+      ) : loadError ? (
+        <div className={`${CARD} text-sm`}>
+          <div className="font-medium text-foreground">Impossible de charger ce media kit.</div>
+          <p className="mt-1 text-muted-foreground">
+            Vérifie ta connexion. L'enregistrement est <strong>bloqué</strong> pour ne pas risquer d'écraser les
+            données déjà en ligne.
+          </p>
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="mt-3 rounded-xl bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            Réessayer
+          </button>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {/* ---------------- PROFIL ---------------- */}
