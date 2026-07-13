@@ -145,7 +145,7 @@ function PaneHeader({ title, onClose }: { title: string; onClose?: () => void })
         <button
           type="button"
           onClick={onClose}
-          className="ml-auto grid h-7 w-7 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+          className="ml-auto grid h-9 w-9 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-foreground"
           title="Fermer le volet"
           aria-label="Fermer le volet"
         >
@@ -265,6 +265,10 @@ export default function App() {
   const [profile, setProfile] = useState<
     { role: string; creator_name: string | null } | null | undefined
   >(undefined);
+  // Chargement du profil : échec persistant après réessais → écran de secours (pas de
+  // spinner infini). `profileReload` permet de relancer la tentative depuis l'UI.
+  const [profileError, setProfileError] = useState(false);
+  const [profileReload, setProfileReload] = useState(0);
 
   // Navigue l'onglet COURANT vers `id` (comme un lien dans Chrome) : remplace la
   // page de l'onglet actif, ou bascule dessus s'il est déjà ouvert.
@@ -355,6 +359,7 @@ export default function App() {
     }
     let alive = true;
     let attempt = 0;
+    setProfileError(false);
     const load = () => {
       supabase
         .from("profiles")
@@ -367,11 +372,13 @@ export default function App() {
             console.error("Chargement du profil échoué:", error);
             // Réessais bornés. Sur échec réseau/RLS, NE PAS basculer en « agence » :
             // un créateur atterrirait dans le mauvais espace. On réessaie puis, si
-            // l'échec persiste, on garde l'écran de chargement (rafraîchir suffit).
-            // Un défaut réseau ne doit JAMAIS changer le rôle de l'utilisateur.
+            // l'échec persiste, on montre un écran de secours (Réessayer / Se déconnecter)
+            // au lieu d'un spinner infini. Un défaut réseau ne change JAMAIS le rôle.
             if (attempt < 3) {
               attempt += 1;
               setTimeout(load, 800 * attempt);
+            } else {
+              setProfileError(true);
             }
             return;
           }
@@ -384,7 +391,7 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [session]);
+  }, [session, profileReload]);
 
   const select = (id: ViewId) => {
     navigateCurrentTab(id);
@@ -454,7 +461,7 @@ export default function App() {
   const { items: notifs, dismiss: dismissNotifs } = useNotifications();
   const title = findItem(active)?.label ?? (active === "corbeille" ? "Corbeille" : "Aperçu");
 
-  if (session === undefined || (session && profile === undefined)) {
+  if (session === undefined) {
     return (
       <div className="grid min-h-screen place-items-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -462,6 +469,41 @@ export default function App() {
     );
   }
   if (!session) return <Login />;
+  if (profile === undefined) {
+    // Session OK mais profil pas encore chargé. Si les réessais ont tous échoué, on
+    // propose une sortie (Réessayer / Se déconnecter) plutôt qu'un spinner sans fin.
+    if (profileError) {
+      return (
+        <div className="grid min-h-screen place-items-center bg-background px-6">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
+            <p className="text-sm font-semibold text-foreground">Impossible de charger ton espace</p>
+            <p className="mt-1 text-xs text-muted-foreground">Vérifie ta connexion internet, puis réessaie.</p>
+            <div className="mt-4 flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setProfileReload((n) => n + 1)}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                Réessayer
+              </button>
+              <button
+                type="button"
+                onClick={logout}
+                className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-rowhover"
+              >
+                Se déconnecter
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="grid min-h-screen place-items-center bg-background">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   // Espace CRÉATEUR : vue dédiée quand un créateur se connecte
   if (profile?.role === "creator" && profile.creator_name) {

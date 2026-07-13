@@ -421,14 +421,14 @@ function MonthView({
 
   return (
     <div className="overflow-x-auto overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-      <div className="grid min-w-[480px] grid-cols-7 border-b border-border bg-panel sm:min-w-0">
+      <div className="grid min-w-[320px] grid-cols-7 border-b border-border bg-panel sm:min-w-0">
         {DAYS_FR.map((d) => (
           <div key={d} className="px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-faint">
             {d}
           </div>
         ))}
       </div>
-      <div className="grid min-w-[480px] grid-cols-7 sm:min-w-0">
+      <div className="grid min-w-[320px] grid-cols-7 sm:min-w-0">
         {cells.map((d, i) => {
           const key = toKey(d);
           const inMonth = d.getMonth() === curMonth;

@@ -26,12 +26,15 @@ export async function dbUpdate(
   // sync_source='agence' pour être re-poussée vers Google (le trigger DB le
   // force aussi ; on le pose ici pour cohérence du cache optimiste).
   const finalPatch = table === "events" ? { ...patch, sync_source: "agence" } : patch;
-  const { error } = await supabase.from(table).update(finalPatch).eq("id", id);
+  const { data, error } = await supabase.from(table).update(finalPatch).eq("id", id).select("id");
   if (error) {
     console.warn(`[db] update ${table}:`, error.message);
     return false;
   }
-  return true;
+  // 0 ligne affectée (sans erreur) = écriture bloquée par la RLS ou ligne inexistante.
+  // On renvoie false pour ne PAS afficher un faux « enregistré ✓ » suivi d'un retour en
+  // arrière (ex : un créateur qui tente d'éditer un évènement multi-créateurs de l'agence).
+  return (data?.length ?? 0) > 0;
 }
 
 export async function dbDelete(table: string, id: string): Promise<boolean> {
@@ -39,23 +42,24 @@ export async function dbDelete(table: string, id: string): Promise<boolean> {
   // suppression ne serait jamais propagée à Google). On pose un tombstone
   // (deleted=true) que le push transforme en suppression Google, puis pg_cron purge.
   if (table === "events") {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("events")
       .update({ deleted: true, deleted_at: new Date().toISOString(), sync_source: "agence" })
-      .eq("id", id);
+      .eq("id", id)
+      .select("id");
     if (error) {
       console.warn(`[db] soft-delete events:`, error.message);
       return false;
     }
-    return true;
+    return (data?.length ?? 0) > 0;
   }
 
-  const { error } = await supabase.from(table).delete().eq("id", id);
+  const { data, error } = await supabase.from(table).delete().eq("id", id).select("id");
   if (error) {
     console.warn(`[db] delete ${table}:`, error.message);
     return false;
   }
-  return true;
+  return (data?.length ?? 0) > 0;
 }
 
 /** Prochain sort_order pour un tableau existant. */

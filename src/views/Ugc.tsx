@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pencil, Copy, Trash2 } from "lucide-react";
-import { useAppState, saveAppStateKey } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState } from "@/lib/appState";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
@@ -52,7 +52,6 @@ const blank = (): Ugc => ({ id: uid(), name: "", handle: "", platform: "Instagra
 export function Ugc() {
   const { data } = useAppState<Ugc[]>((s) => ((s as Record<string, unknown>).ugcRoster as Ugc[]) ?? []);
   const [list, setList] = useState<Ugc[]>([]);
-  const [dirty, setDirty] = useState(false);
   const { query } = useSearch();
   const [platFilter, setPlatFilter] = useState<string>(ALL);
 
@@ -60,15 +59,23 @@ export function Ugc() {
   const [editId, setEditId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Ugc>(blank());
 
+  // On resynchronise en continu depuis la donnée live (les 2 comptes agence voient
+  // les MÀJ de l'autre), sauf pendant qu'un formulaire est ouvert (ne pas bouger sous
+  // les doigts). Plus de gel « dirty » permanent qui masquait les écritures concurrentes.
   useEffect(() => {
-    if (data && !dirty) setList(data);
-  }, [data, dirty]);
+    if (data && !formOpen) setList(data);
+  }, [data, formOpen]);
 
-  const persist = async (next: Ugc[]) => {
-    setDirty(true);
+  // Écrit en RELISANT l'état frais juste avant (jamais depuis un `list` local périmé) :
+  // évite l'écrasement d'une écriture concurrente ET le clobber au tout premier chargement.
+  const persist = async (mutate: (fresh: Ugc[]) => Ugc[]): Promise<boolean> => {
+    invalidateAppState();
+    const fresh = (((await getAppState()) as Record<string, unknown>).ugcRoster as Ugc[]) ?? [];
+    const next = mutate(fresh);
     setList(next);
     const ok = await saveAppStateKey("ugcRoster", next);
     if (!ok) toast("Erreur — réessaie");
+    return ok;
   };
 
   const openAdd = () => {
@@ -89,17 +96,16 @@ export function Ugc() {
       return;
     }
     const clean = { ...draft, name: draft.name.trim() };
-    const next = editId ? list.map((u) => (u.id === editId ? clean : u)) : [clean, ...list];
-    await persist(next);
-    toast(editId ? "UGC modifié ✓" : "UGC ajouté ✓");
+    const ok = await persist((fresh) => (editId ? fresh.map((u) => (u.id === editId ? clean : u)) : [clean, ...fresh]));
+    if (ok) toast(editId ? "UGC modifié ✓" : "UGC ajouté ✓");
     setFormOpen(false);
     setEditId(null);
     setDraft(blank());
   };
 
   const del = async (id: string) => {
-    await persist(list.filter((u) => u.id !== id));
-    toast("Supprimé");
+    const ok = await persist((fresh) => fresh.filter((u) => u.id !== id));
+    if (ok) toast("Supprimé");
   };
 
   const platList = Array.from(new Set(list.map((u) => u.platform).filter(Boolean)));

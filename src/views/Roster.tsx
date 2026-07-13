@@ -298,9 +298,9 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                           type="button"
                           title={`Données à jour · ${MONTH_LABEL} (clique pour annuler)`}
                           onClick={(e) => { e.stopPropagation(); markUpToDate(c, false); }}
-                          className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-emerald-600 transition-colors hover:bg-emerald-500/25 dark:text-emerald-400"
+                          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-emerald-600 transition-colors hover:bg-emerald-500/25 dark:text-emerald-400"
                         >
-                          <Check className="h-3.5 w-3.5" />
+                          <Check className="h-4 w-4" />
                         </button>
                       ) : (
                         <button

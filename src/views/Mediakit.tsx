@@ -416,7 +416,7 @@ function MediakitFiles() {
           <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <div className="text-sm font-semibold">Ajouter un media kit par lien</div>
-              <button type="button" onClick={() => setLinkOpen(false)} className="grid h-7 w-7 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground">
+              <button type="button" onClick={() => setLinkOpen(false)} className="grid h-9 w-9 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -448,7 +448,7 @@ function MediakitFiles() {
           <div onClick={(e) => e.stopPropagation()} className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <div className="text-sm font-semibold">Envoyer le media kit de {titleCase(sendRow.creator ?? "")}</div>
-              <button type="button" onClick={() => setSendRow(null)} className="grid h-7 w-7 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground">
+              <button type="button" onClick={() => setSendRow(null)} className="grid h-9 w-9 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -545,7 +545,7 @@ function MediakitFiles() {
           <div onClick={(e) => e.stopPropagation()} className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <div className="text-sm font-semibold">Templates de mail</div>
-              <button type="button" onClick={() => setTplMgr(false)} className="grid h-7 w-7 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground">
+              <button type="button" onClick={() => setTplMgr(false)} className="grid h-9 w-9 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground">
                 <X className="h-4 w-4" />
               </button>
             </div>

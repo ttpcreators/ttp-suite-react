@@ -173,7 +173,7 @@ export function SignaturePicker({
           >
             <div className="mb-4 flex items-center justify-between">
               <div className="text-sm font-semibold">{editId ? "Modifier la signature" : "Nouvelle signature HTML"}</div>
-              <button type="button" onClick={() => setFormOpen(false)} className="grid h-7 w-7 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground">
+              <button type="button" onClick={() => setFormOpen(false)} className="grid h-9 w-9 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground">
                 <X className="h-4 w-4" />
               </button>
             </div>

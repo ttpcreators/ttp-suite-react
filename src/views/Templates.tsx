@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Copy, Search } from "lucide-react";
 import { useSearch, matchQuery } from "@/lib/search";
-import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -103,7 +103,13 @@ export function Templates() {
   const [activeCategory, setActiveCategory] = useState<string>("Tous");
   const [localQuery, setLocalQuery] = useState("");
 
-  // custom du blob (chargé une fois) + éventuels ajouts locaux de la session.
+  // On repasse en mode « live » (local=null) dès que la donnée du blob change : ainsi les
+  // ajouts faits par l'autre compte agence apparaissent, au lieu de rester gelés sur `local`.
+  useEffect(() => {
+    setLocal(null);
+  }, [custom]);
+
+  // custom du blob (live) + éventuel ajout local optimiste en attendant le prochain tick.
   const customList = local ?? custom ?? [];
   const all = [...DEFAULT_TEMPLATES, ...customList];
 
@@ -146,14 +152,18 @@ export function Templates() {
     const b = body.trim();
     if (!t || !b) return;
     const item: Template = { category: category.trim() || "Divers", title: t, body: b };
-    const next = [item, ...customList];
+    // Relecture fraîche du blob avant merge : ne jamais repartir d'un `customList` périmé
+    // (écrasement d'un ajout concurrent) ni d'un état non encore chargé (clobber à froid).
+    invalidateAppState();
+    const fresh = ((await getAppState())["customTemplates"] as Template[]) ?? [];
+    const next = [item, ...fresh];
     setLocal(next);
     setShowForm(false);
     setTitle("");
     setBody("");
     setCategory(CATEGORY_ORDER[0]);
-    await saveAppStateKey("customTemplates", next);
-    toast("Template ajouté ✓");
+    const ok = await saveAppStateKey("customTemplates", next);
+    toast(ok ? "Template ajouté ✓" : "Erreur — réessaie");
   }
 
   return (

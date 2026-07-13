@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, ChevronLeft, Pencil } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { AddButton, InlineForm, TextField, DeleteButton } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
@@ -102,19 +102,32 @@ export function Checklist() {
     if (!ok) toast("Erreur — réessaie");
   };
 
+  // Écriture STRUCTURELLE (ajout/suppression/renommage d'une checklist) : on relit l'état
+  // frais du blob juste avant de fusionner, pour ne pas écraser une checklist créée en
+  // parallèle par l'autre compte agence. (Le toggle d'une étape reste optimiste : sans
+  // enjeu, il se resynchronise au tick suivant.)
+  const persistFresh = async (mutate: (fresh: Checklist[]) => Checklist[]): Promise<boolean> => {
+    invalidateAppState();
+    const fresh = ((await getAppState())["checklists"] as Checklist[]) ?? DEFAULT_CHECKLISTS;
+    const next = mutate(fresh);
+    setLists(next);
+    const ok = await saveAppStateKey("checklists", next);
+    if (!ok) toast("Erreur — réessaie");
+    return ok;
+  };
+
   const addChecklist = async () => {
     const trimmed = name.trim();
     if (!trimmed) return;
     const ck: Checklist = { id: "ck" + Date.now(), name: trimmed, done: {} };
-    await persist([...lists, ck]);
+    await persistFresh((fresh) => [...fresh, ck]);
     setName("");
     setFormOpen(false);
     toast("Checklist créée");
   };
 
   const removeChecklist = async (id: string) => {
-    const next = lists.filter((c) => c.id !== id);
-    await persist(next);
+    await persistFresh((fresh) => fresh.filter((c) => c.id !== id));
     if (selectedId === id) setSelectedId(null);
     toast("Checklist supprimée");
   };
@@ -132,8 +145,7 @@ export function Checklist() {
   const saveEdit = async (id: string) => {
     const trimmed = editName.trim();
     if (!trimmed) return;
-    const next = lists.map((c) => (c.id === id ? { ...c, name: trimmed } : c));
-    await persist(next);
+    await persistFresh((fresh) => fresh.map((c) => (c.id === id ? { ...c, name: trimmed } : c)));
     cancelEdit();
     toast("Titre modifié");
   };
