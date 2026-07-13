@@ -23,9 +23,9 @@ tu retrouves tout d'un coup d'œil, et c'est **versionné dans Git**.
 | Correctif | Fichier / Action | Statut prod | Vérifié |
 |---|---|---|---|
 | Verrou colonnes agence de `creators` (trigger `creators_guard`) | [`securite-creators-colonnes-agence.sql`](securite-creators-colonnes-agence.sql) | ✅ Appliqué (2026-07-13) | ✅ testé live 11/11 (PATCH + upsert bloqués) |
-| Anti-usurpation d'identité au signup (`handle_new_user` → creator_name NULL) | [`securite-signup-creator-name.sql`](securite-signup-creator-name.sql) | ⏳ **À lancer** | — |
-| Audit RLS : `contacts` / `messages` / `creators` (INSERT/DELETE agence) / `events` + section 4 | [`securite-audit-2026-07-13.sql`](securite-audit-2026-07-13.sql) | ⏳ **À lancer** | — |
-| Désactiver l'**inscription publique** (obligatoire, complète le fix signup) | Dashboard → Authentication → *Allow new users to sign up* = **OFF** | ⏳ **À faire** | — |
+| Anti-usurpation d'identité au signup (`handle_new_user` → creator_name NULL) | [`securite-signup-creator-name.sql`](securite-signup-creator-name.sql) | ✅ Appliqué (2026-07-13) | ✅ `my_creator()`=NULL sur signup injecté |
+| Audit RLS : `contacts` / `messages` / `creators` (INSERT/DELETE agence) / `events` + section 4 | [`securite-audit-2026-07-13.sql`](securite-audit-2026-07-13.sql) | ✅ Appliqué (2026-07-13) | ✅ INSERT creators = 403 ; contacts→null = 403 |
+| Désactiver l'**inscription publique** (défense en profondeur : bloque les comptes auto-inscrits qui lisent contacts partagés/annonces + le spam) | Dashboard → Authentication → *Allow new users to sign up* = **OFF** | ⏳ **À faire** (recommandé) | — |
 | Déployer les edge functions corrigées | `supabase functions deploy report-error daily-digest create-access --project-ref zizvggziggswhrbuyhuo` | ⏳ **À déployer** | — |
 | Limite taille/type du bucket `avatars` (anti-abus hébergement, LOW) | Dashboard → Storage → avatars (max size + `image/*`) | ⏳ optionnel | — |
 
