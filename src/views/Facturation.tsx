@@ -94,6 +94,14 @@ const STATUS_META: Record<InvoiceStatus, { badge: AnimatedBadgeStatus; label: st
   brouillon: { badge: "neutral", label: "Brouillon" },
 };
 
+/** Accès SÛR au badge/libellé d'un statut. `invoices.status` n'a pas de contrainte
+ *  CHECK en base → une valeur inconnue (legacy, import, saisie libre) est possible.
+ *  Indexer STATUS_META en direct planterait alors le rendu de toute la page (le badge
+ *  serait `undefined`). Repli neutre, comme les helpers défensifs d'Aperçu/CreatorSpace. */
+function metaOf(status: string): { badge: AnimatedBadgeStatus; label: string } {
+  return STATUS_META[status as InvoiceStatus] ?? { badge: "neutral", label: status || "—" };
+}
+
 const STATUS_OPTIONS: { value: InvoiceStatus; label: string }[] = [
   { value: "brouillon", label: "Brouillon" },
   { value: "attente", label: "En attente" },
@@ -477,7 +485,8 @@ export function Facturation() {
 
   function openEdit(r: Row) {
     const d = detailsFor(r);
-    const brand = r.party.includes("×") ? r.party.split("×")[0].trim() : r.party;
+    const party = r.party ?? "";
+    const brand = party.includes("×") ? party.split("×")[0].trim() : party;
     setDraft({ ...d, id: r.id, ref: r.ref, brand, creator: r.creator ?? "", status: r.status });
   }
 
@@ -561,8 +570,9 @@ export function Facturation() {
     const d = detailsFor(r);
     const t = totalsOf(d.items, d.franchise, d.vatRate, d.commissionRate);
     const bank = banks.find((b) => b.id === d.bankId) ?? null;
-    const brand = r.party.includes("×") ? r.party.split("×")[0].trim() : r.party;
-    return invoiceHTML({ issuer, bank, details: d, ref: r.ref, brand, creator: r.creator, totals: t, statusLabel: STATUS_META[r.status].label });
+    const party = r.party ?? "";
+    const brand = party.includes("×") ? party.split("×")[0].trim() : party;
+    return invoiceHTML({ issuer, bank, details: d, ref: r.ref, brand, creator: r.creator, totals: t, statusLabel: metaOf(r.status).label });
   }
 
   function downloadInvoice(r: Row) {
@@ -668,7 +678,7 @@ export function Facturation() {
           </div>
         ) : (
           filtered.map((r) => {
-            const meta = STATUS_META[r.status];
+            const meta = metaOf(r.status);
             // Taux vivant depuis le roster (source unique) → une modif de commission se répercute ici.
             const rate = commissionFor(r.creator);
             const del = async () => {

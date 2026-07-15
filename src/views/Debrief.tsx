@@ -144,9 +144,24 @@ function debriefHTML(d: Debrief): string {
 
 type DebriefView = "cards" | "list" | "table";
 
+/** Garantit que kpis/highlights sont des tableaux (blob partiel/legacy toléré). */
+function normDebrief(d: Debrief): Debrief {
+  return {
+    ...d,
+    kpis: Array.isArray(d.kpis) ? d.kpis : [],
+    highlights: Array.isArray(d.highlights) ? d.highlights : [],
+  };
+}
+
 export function Debrief() {
   const { data, loading, error } = useAppState<Debrief[]>(
-    (s: AppState) => (s["debriefData"] as Debrief[]) ?? null
+    // Normalise kpis/highlights en tableaux : un blob partiel/legacy sans l'un des
+    // deux ferait planter le rendu (.length/.map). Garde-fou de forme à la source.
+    // On garde la sémantique « null = pas encore chargé » (cf. `data === null` plus bas).
+    (s: AppState) => {
+      const raw = s["debriefData"] as Debrief[] | undefined;
+      return (raw ? raw.map(normDebrief) : null) as Debrief[];
+    }
   );
   const creators = useCreators();
 

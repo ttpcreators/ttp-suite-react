@@ -708,6 +708,30 @@ with (security_invoker = false) as
   where coalesce(status, 'actif') <> 'inactif';
 grant select on public.public_mediakit to anon, authenticated;
 
+-- ─── 7.8 Media kit AGENCE : contenu éditable du deck global (sql/media-kit-agence) ─
+-- Table SINGLETON (id=1) avec un blob `data` jsonb : intro / piliers / KPIs / contact
+-- du deck ttpcreators.pro/mediakit/agence/. Édité dans l'app (vue « Media kit agence »),
+-- exposé au site par la vue anon public_agency_mediakit. Écriture réservée à l'agence.
+create table if not exists public.agency_mediakit (
+  id         int primary key default 1,
+  data       jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
+  constraint agency_mediakit_singleton check (id = 1)
+);
+insert into public.agency_mediakit (id, data) values (1, '{}'::jsonb)
+  on conflict (id) do nothing;
+alter table public.agency_mediakit enable row level security;
+drop policy if exists agency_mediakit_read  on public.agency_mediakit;
+drop policy if exists agency_mediakit_write on public.agency_mediakit;
+create policy agency_mediakit_read  on public.agency_mediakit for select to authenticated
+  using (true);
+create policy agency_mediakit_write on public.agency_mediakit for all to authenticated
+  using (public.is_agency()) with check (public.is_agency());
+create or replace view public.public_agency_mediakit
+with (security_invoker = false) as
+  select data from public.agency_mediakit where id = 1;
+grant select on public.public_agency_mediakit to anon, authenticated;
+
 -- ============================================================================
 -- FIN. Vérif rapide (en étant DÉCONNECTÉ, ces requêtes doivent renvoyer 0 ligne) :
 --   select * from public.creators;

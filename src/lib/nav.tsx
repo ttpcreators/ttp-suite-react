@@ -27,6 +27,7 @@ import {
   Settings,
   Activity,
   Mail,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -40,6 +41,7 @@ export type ViewId =
   | "echeances"
   | "roster"
   | "mediakit"
+  | "mediakitAgence"
   | "briefs"
   | "ideas"
   | "todo"
@@ -87,6 +89,7 @@ export const NAV: NavFamily[] = [
       { id: "roster", label: "Roster", icon: Users },
       { id: "suivi", label: "Suivi engagement", icon: Activity },
       { id: "mediakit", label: "Media kit", icon: ImageIcon },
+      { id: "mediakitAgence", label: "Media kit agence", icon: Building2 },
     ],
   },
   {

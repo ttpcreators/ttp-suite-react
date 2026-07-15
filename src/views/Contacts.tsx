@@ -70,6 +70,7 @@ const TAG_OPTIONS = [
   { value: "Agence", label: "Agence" },
   { value: "Média", label: "Média" },
   { value: "PME", label: "PME" },
+  { value: "Freelance", label: "Freelance" },
   { value: "Autre", label: "Autre" },
 ];
 
@@ -337,7 +338,10 @@ export function Contacts() {
       }
     }
     for (const extra of present) ordered.push(extra);
-    return ordered;
+    // On ne montre PAS de puce « Perso » dans le filtre : c'est le tag par défaut des
+    // contacts ajoutés par les créateurs (cf. CreatorSpace) ; ils restent visibles via
+    // « Tous » et le filtre « ↳ Créateurs ». (demande utilisateur)
+    return ordered.filter((t) => t.toLowerCase() !== "perso");
   }, [rows]);
 
   if (error) {

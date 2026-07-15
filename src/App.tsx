@@ -35,6 +35,7 @@ const Objectifs = lazy(() => import("@/views/Objectifs").then((m) => ({ default:
 const Debrief = lazy(() => import("@/views/Debrief").then((m) => ({ default: m.Debrief })));
 const Checklist = lazy(() => import("@/views/Checklist").then((m) => ({ default: m.Checklist })));
 const Mediakit = lazy(() => import("@/views/Mediakit").then((m) => ({ default: m.Mediakit })));
+const MediakitAgence = lazy(() => import("@/views/MediakitAgence").then((m) => ({ default: m.MediakitAgence })));
 const Templates = lazy(() => import("@/views/Templates").then((m) => ({ default: m.Templates })));
 const CreatorDetail = lazy(() => import("@/views/CreatorDetail").then((m) => ({ default: m.CreatorDetail })));
 const Portal = lazy(() => import("@/views/Portal").then((m) => ({ default: m.Portal })));
@@ -69,6 +70,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   debrief: Debrief,
   checklist: Checklist,
   mediakit: Mediakit,
+  mediakitAgence: MediakitAgence,
   templates: Templates,
   parametres: Parametres,
   suivi: EngagementSuivi,

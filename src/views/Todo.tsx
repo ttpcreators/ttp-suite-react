@@ -66,6 +66,13 @@ const priorityBadge: Record<
   basse: { status: "neutral", label: "Basse" },
 };
 
+/** Accès SÛR au badge de priorité. `todos.priority` n'a pas de contrainte CHECK en
+ *  base → une valeur inconnue (legacy/import) est possible ; l'indexer en direct
+ *  planterait la modale de détail. Repli neutre. */
+function prioOf(p: string): { status: "danger" | "warning" | "neutral"; label: string } {
+  return priorityBadge[p as Priority] ?? { status: "neutral", label: p || "—" };
+}
+
 /** Point de priorité scintillant (remplace le badge texte dans la liste). */
 function PriorityDot({ priority }: { priority: Priority }) {
   const color = priority === "haute" ? "bg-rose-500" : priority === "moyenne" ? "bg-amber-500" : "bg-slate-400";
@@ -807,10 +814,10 @@ export function Todo() {
               <div className="grid grid-cols-2 gap-4">
                 <DetailBlock label="Priorité">
                   <AnimatedBadge
-                    status={priorityBadge[selectedTodo.priority].status}
+                    status={prioOf(selectedTodo.priority).status}
                     size="sm"
                   >
-                    {priorityBadge[selectedTodo.priority].label}
+                    {prioOf(selectedTodo.priority).label}
                   </AnimatedBadge>
                 </DetailBlock>
 

@@ -46,15 +46,37 @@ async function readBin(): Promise<TrashEntry[]> {
  * sa table. Renvoie true si la suppression en base a réussi.
  */
 export async function dbTrash(table: string, id: string, label: string, sub?: string): Promise<boolean> {
-  const { data } = await supabase.from(table).select("*").eq("id", id).limit(1);
-  const row = (data?.[0] as Record<string, unknown>) ?? { id };
+  // 1) Lire la ligne COMPLÈTE. Si la lecture échoue (réseau/RLS) ou renvoie 0 ligne,
+  //    on n'a rien de restaurable → on N'AVANCE PAS. Avant, on capturait une coquille
+  //    { id } puis on supprimait quand même → perte de données définitive.
+  const { data, error: readErr } = await supabase.from(table).select("*").eq("id", id).limit(1);
+  if (readErr) {
+    console.warn(`[trash] read ${table}:`, readErr.message);
+    return false;
+  }
+  const row = data?.[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    console.warn(`[trash] read ${table}: ligne introuvable (${id})`);
+    return false;
+  }
+  // 2) Persister dans la corbeille AVANT de supprimer. Si l'écriture du blob échoue,
+  //    on NE supprime PAS (sinon la ligne disparaît sans copie récupérable — perte
+  //    silencieuse avec un faux « déplacé dans la corbeille ✓»).
   const entry: TrashEntry = { id: uid(), table, label, sub, data: row, deletedAt: new Date().toISOString() };
   const bin = await readBin();
-  await saveAppStateKey("trashBin", [entry, ...bin]);
+  const saved = await saveAppStateKey("trashBin", [entry, ...bin]);
+  if (!saved) {
+    console.warn(`[trash] écriture corbeille échouée (${table}) → suppression annulée`);
+    return false;
+  }
 
+  // 3) Supprimer de la table source.
   const { error } = await supabase.from(table).delete().eq("id", id);
   if (error) {
     console.warn(`[trash] delete ${table}:`, error.message);
+    // La ligne existe toujours : on retire l'entrée corbeille qu'on venait d'ajouter
+    // (best-effort) pour éviter un doublon fantôme dans la corbeille.
+    await saveAppStateKey("trashBin", bin);
     return false;
   }
   return true;
