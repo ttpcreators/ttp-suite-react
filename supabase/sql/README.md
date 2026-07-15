@@ -28,7 +28,7 @@ tu retrouves tout d'un coup d'œil, et c'est **versionné dans Git**.
 | Désactiver l'**inscription publique** (défense en profondeur : bloque les comptes auto-inscrits qui lisent contacts partagés/annonces + le spam) | Dashboard → Authentication → *Allow new users to sign up* = **OFF** | ✅ Fait (2026-07-13) | ✅ signup = HTTP 422 « Signups not allowed » ; login existant = 200 |
 | Déployer les edge functions corrigées | `supabase functions deploy report-error daily-digest create-access --project-ref zizvggziggswhrbuyhuo` | ✅ Déployé (2026-07-13) | ✅ report-error 400 « empty » ; create-access 401 sans auth |
 | Limite taille/type du bucket `avatars` (anti-abus hébergement, LOW) | Dashboard → Storage → avatars (max size + `image/*`) | ⏳ optionnel | — |
-| **Media kit agence** : table singleton `agency_mediakit` + vue anon `public_agency_mediakit` (contenu éditable du deck agence) | [`media-kit-agence.sql`](media-kit-agence.sql) | ⏳ **À lancer** (2026-07-15) | — |
+| **Media kit agence** : table singleton `agency_mediakit` + vue anon `public_agency_mediakit` (contenu éditable du deck agence) | [`media-kit-agence.sql`](media-kit-agence.sql) | ✅ Appliqué (2026-07-15) | ✅ vue anon = HTTP 200 (1 ligne `data`) ; éditeur charge + enregistre |
 
 > Les deux migrations « À lancer » ci-dessus peuvent être exécutées **en un seul bloc**
 > (elles sont idempotentes). Après application, relancer les **tests synthétiques** (comptes

@@ -117,6 +117,9 @@ export function Todo() {
   const [due, setDue] = useState("");
   const [priority, setPriority] = useState<Priority>("moyenne");
   const [creator, setCreator] = useState("");
+  // Bouton dédié « Tâche agence » : ouvre le formulaire verrouillé sur l'agence
+  // (creator vide) et masque le champ « Pour qui » → tâche interne, sans créatrice.
+  const [forceAgency, setForceAgency] = useState(false);
 
   // Commentaires (agence) stockés dans le blob __app_state__, indexés par id de tâche.
   const { data: notesData } = useAppState<Record<string, string>>(
@@ -287,6 +290,7 @@ export function Todo() {
     if (creator) notifyCreator("task", creator, text.trim());
     toast("Tâche ajoutée ✓");
     setFormOpen(false);
+    setForceAgency(false);
     setText("");
     setDescr("");
     setNote("");
@@ -350,13 +354,32 @@ export function Todo() {
                 return `${openCount} tâche${openCount > 1 ? "s" : ""} en cours`;
               })()}
         </div>
-        <AddButton label="Tâche" onClick={() => setFormOpen(true)} />
+        <div className="flex items-center gap-2">
+          <AddButton
+            label="Tâche agence"
+            onClick={() => {
+              setCreator("");
+              setForceAgency(true);
+              setFormOpen(true);
+            }}
+          />
+          <AddButton
+            label="Tâche"
+            onClick={() => {
+              setForceAgency(false);
+              setFormOpen(true);
+            }}
+          />
+        </div>
       </div>
 
       <InlineForm
         open={formOpen}
-        title="Nouvelle tâche"
-        onClose={() => setFormOpen(false)}
+        title={forceAgency ? "Nouvelle tâche agence" : "Nouvelle tâche"}
+        onClose={() => {
+          setFormOpen(false);
+          setForceAgency(false);
+        }}
         onSubmit={submit}
       >
         <TextField label="Tâche" value={text} onChange={setText} />
@@ -378,15 +401,19 @@ export function Todo() {
             { value: "basse", label: "Basse" },
           ]}
         />
-        <SelectField
-          label="Pour qui"
-          value={creator}
-          onChange={setCreator}
-          options={[
-            { value: "", label: "Agence (tous)" },
-            ...creators.map((c) => ({ value: c.name, label: titleCase(c.name) })),
-          ]}
-        />
+        {forceAgency ? (
+          <p className="text-[11px] text-faint">Tâche interne à l'agence (pas de créatrice).</p>
+        ) : (
+          <SelectField
+            label="Pour qui"
+            value={creator}
+            onChange={setCreator}
+            options={[
+              { value: "", label: "Agence (tous)" },
+              ...creators.map((c) => ({ value: c.name, label: titleCase(c.name) })),
+            ]}
+          />
+        )}
       </InlineForm>
 
       {/* Barre de filtres */}
