@@ -65,7 +65,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       getAppState().catch(() => ({}) as Record<string, unknown>),
       supabase.from("todos").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
       supabase.from("ideas").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
-      supabase.from("events").select("title,who,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
+      supabase.from("events").select("title,who,created_at").eq("source", "creator").or("deleted.is.null,deleted.eq.false").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
       supabase.from("email_activity").select("subject,contact_name,contact_email,created_at,gmail_message_id").eq("direction", "in").gte("created_at", emailSince).order("created_at", { ascending: false }).limit(8),
     ]).then(([inv, br, ev, app, tdC, idC, evC, mailIn]) => {
       if (!alive) return;

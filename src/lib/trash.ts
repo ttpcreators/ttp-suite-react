@@ -41,6 +41,24 @@ async function readBin(): Promise<TrashEntry[]> {
   return (state.trashBin as TrashEntry[]) ?? [];
 }
 
+// Sérialise les modifications du blob `trashBin` (read-modify-write). Sans ça, deux
+// opérations concurrentes (deux suppressions rapides, ou une suppression pendant la
+// purge auto au montage de la Corbeille) lisent la même liste et s'écrasent : une
+// entrée corbeille est perdue ALORS QUE la ligne source est déjà supprimée → perte
+// irrécupérable. `fn` reçoit la liste FRAÎCHE et renvoie la nouvelle (ou null = ne
+// rien écrire). Renvoie le succès de l'écriture. (Sérialisation intra-onglet ; les
+// écritures cross-onglets restent last-writer-wins, borne acceptable ici.)
+let _binChain: Promise<unknown> = Promise.resolve();
+function mutateBin(fn: (bin: TrashEntry[]) => TrashEntry[] | null): Promise<boolean> {
+  const run = _binChain.then(async () => {
+    const next = fn(await readBin());
+    if (next === null) return true; // rien à écrire
+    return saveAppStateKey("trashBin", next);
+  });
+  _binChain = run.catch(() => {});
+  return run;
+}
+
 /**
  * Suppression douce : sauvegarde la ligne dans la corbeille puis la supprime de
  * sa table. Renvoie true si la suppression en base a réussi.
@@ -63,8 +81,7 @@ export async function dbTrash(table: string, id: string, label: string, sub?: st
   //    on NE supprime PAS (sinon la ligne disparaît sans copie récupérable — perte
   //    silencieuse avec un faux « déplacé dans la corbeille ✓»).
   const entry: TrashEntry = { id: uid(), table, label, sub, data: row, deletedAt: new Date().toISOString() };
-  const bin = await readBin();
-  const saved = await saveAppStateKey("trashBin", [entry, ...bin]);
+  const saved = await mutateBin((bin) => [entry, ...bin]);
   if (!saved) {
     console.warn(`[trash] écriture corbeille échouée (${table}) → suppression annulée`);
     return false;
@@ -76,7 +93,7 @@ export async function dbTrash(table: string, id: string, label: string, sub?: st
     console.warn(`[trash] delete ${table}:`, error.message);
     // La ligne existe toujours : on retire l'entrée corbeille qu'on venait d'ajouter
     // (best-effort) pour éviter un doublon fantôme dans la corbeille.
-    await saveAppStateKey("trashBin", bin);
+    await mutateBin((bin) => bin.filter((e) => e.id !== entry.id));
     return false;
   }
   return true;
@@ -85,26 +102,28 @@ export async function dbTrash(table: string, id: string, label: string, sub?: st
 /** Restaure une entrée : ré-insère la ligne dans sa table + retire de la corbeille. */
 export async function restoreEntry(entry: TrashEntry): Promise<boolean> {
   const data: Record<string, unknown> = { ...entry.data };
-  for (const k of ["id", "created_at", "updated_at"]) delete data[k];
+  // On CONSERVE l'id d'origine (la ligne a été supprimée → aucun conflit) : sinon la
+  // ligne restaurée reçoit un nouvel uuid et les données indexées par id (commentaires
+  // `itemNotes` des idées/tâches) deviennent orphelines. On ne réinitialise que les
+  // horodatages laissés à la base.
+  for (const k of ["created_at", "updated_at"]) delete data[k];
   const { error } = await supabase.from(entry.table).insert(data);
   if (error) {
     console.warn(`[trash] restore ${entry.table}:`, error.message);
     return false;
   }
-  const bin = (await readBin()).filter((e) => e.id !== entry.id);
-  await saveAppStateKey("trashBin", bin);
+  await mutateBin((bin) => bin.filter((e) => e.id !== entry.id));
   return true;
 }
 
 /** Supprime définitivement une entrée de la corbeille. */
 export async function purgeEntry(id: string): Promise<void> {
-  const bin = (await readBin()).filter((e) => e.id !== id);
-  await saveAppStateKey("trashBin", bin);
+  await mutateBin((bin) => bin.filter((e) => e.id !== id));
 }
 
 /** Vide toute la corbeille. */
 export async function emptyTrash(): Promise<void> {
-  await saveAppStateKey("trashBin", []);
+  await mutateBin(() => []);
 }
 
 /** Jours restants avant purge automatique (0 = à purger). */
@@ -114,11 +133,17 @@ export function daysLeft(entry: TrashEntry): number {
   return Math.max(0, Math.ceil(TRASH_TTL_DAYS - elapsed));
 }
 
-/** Purge les entrées de plus de 30 jours. Renvoie la liste nettoyée (ou null si rien changé). */
-export async function purgeExpired(bin: TrashEntry[]): Promise<TrashEntry[] | null> {
+/** Purge les entrées de plus de 30 jours. Renvoie la liste nettoyée (ou null si rien changé).
+ *  Écriture sérialisée sur une lecture fraîche (le param n'est plus utilisé pour l'écriture,
+ *  gardé pour compat. d'appel). */
+export async function purgeExpired(_bin: TrashEntry[]): Promise<TrashEntry[] | null> {
   const now = Date.now();
-  const kept = bin.filter((e) => (now - new Date(e.deletedAt).getTime()) / 86400000 < TRASH_TTL_DAYS);
-  if (kept.length === bin.length) return null;
-  await saveAppStateKey("trashBin", kept);
-  return kept;
+  let result: TrashEntry[] | null = null;
+  await mutateBin((fresh) => {
+    const kept = fresh.filter((e) => (now - new Date(e.deletedAt).getTime()) / 86400000 < TRASH_TTL_DAYS);
+    if (kept.length === fresh.length) return null; // rien à purger → pas d'écriture
+    result = kept;
+    return kept;
+  });
+  return result;
 }
