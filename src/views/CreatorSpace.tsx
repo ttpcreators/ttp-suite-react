@@ -641,7 +641,12 @@ export function CreatorSpace({
     todoFilter === "encours" ? todos.filter((t) => !t.done) : todoFilter === "terminees" ? todos.filter((t) => t.done) : todos;
 
   const encaisse = invoices.filter((i) => i.status === "payee").reduce((a, i) => a + parseAmount(i.amount), 0);
-  const totalFacture = invoices.reduce((a, i) => a + parseAmount(i.amount), 0);
+  // « Total facturé » = factures réellement émises. Un brouillon de l'agence n'est pas
+  // encore facturé → ne doit pas être annoncé comme tel à la créatrice (même règle que
+  // le KPI « CA facturé » côté agence).
+  const totalFacture = invoices
+    .filter((i) => i.status !== "brouillon")
+    .reduce((a, i) => a + parseAmount(i.amount), 0);
 
   const markTodo = async (t: Todo, next: boolean) => {
     // On écrit done ET status ensemble (comme l'agence) → l'affichage statut/kanban

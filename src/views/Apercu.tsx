@@ -156,7 +156,12 @@ export function Apercu() {
 
   const paid = d.invoices.filter((i) => i.status === "payee");
   const encaisse = paid.reduce((a, i) => a + parseAmount(i.amount), 0);
-  const facture = d.invoices.reduce((a, i) => a + parseAmount(i.amount), 0);
+  // « Facturé » = factures RÉELLEMENT émises → hors brouillons, exactement comme la
+  // courbe mensuelle (caMonthAgg) et le KPI de Stats. Sinon le total et la courbe de
+  // la MÊME carte suivent deux règles différentes.
+  const facture = d.invoices
+    .filter((i) => i.status !== "brouillon")
+    .reduce((a, i) => a + parseAmount(i.amount), 0);
 
   // Factures à relancer (retard)
   const retardInvoices = d.invoices.filter((i) => i.status === "retard");

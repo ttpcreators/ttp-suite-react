@@ -344,9 +344,10 @@ export function Stats() {
     { name: "Brouillon", value: byStatus.brouillon, color: COLORS.slate },
   ].filter((d) => d.value > 0);
 
-  // CA par créateur
+  // CA par créateur — « facturé » = hors brouillons, comme le KPI et la courbe.
   const caByCreator = new Map<string, number>();
   for (const iv of data.invoices) {
+    if (iv.status === "brouillon") continue;
     const key = iv.creator || "—";
     caByCreator.set(key, (caByCreator.get(key) ?? 0) + parseAmount(iv.amount));
   }
