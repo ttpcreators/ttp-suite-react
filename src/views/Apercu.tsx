@@ -26,7 +26,7 @@ const GLOBE_MARKERS: GlobeMarker[] = [
   { location: [-23.55, -46.63], size: 0.04 }, // São Paulo
 ];
 
-type Invoice = { ref: string; party: string; amount: string; date: string; status: string; creator: string | null };
+type Invoice = { id: string; ref: string; party: string; amount: string; date: string; status: string; creator: string | null };
 type Ev = { date: string | null; day: number | null; time: string | null; title: string; type: string; who: string | null };
 type Prospect = { brand: string; contact: string | null; value: string | null; stage: string | null };
 type Todo = { text: string; tag: string | null; creator: string | null; priority: string | null; done: boolean };
@@ -54,7 +54,7 @@ function evDate(e: Ev): string {
 }
 
 /** Graphique CA mensuel : aire + dégradé (même DA que la page Stats). */
-function RevenueArea({ points }: { points: { label: string; ca: number }[] }) {
+function RevenueArea({ points, name = "Facturé" }: { points: { label: string; ca: number }[]; name?: string }) {
   return (
     <ChartContainer config={{}} className="mt-4 h-[160px]">
       <AreaChart data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -68,7 +68,7 @@ function RevenueArea({ points }: { points: { label: string; ca: number }[] }) {
         <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickMargin={8} interval="preserveStartEnd" minTickGap={14} />
         <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(Number(v))} width={46} />
         <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ stroke: "#2b7fff", strokeWidth: 1, strokeOpacity: 0.4 }} />
-        <Area type="monotone" dataKey="ca" name="Facturé" stroke="#2b7fff" strokeWidth={2.5} fill="url(#apercuCA)" dot={false} activeDot={{ r: 4, fill: "#2b7fff", stroke: "var(--color-surface)", strokeWidth: 2 }} />
+        <Area type="monotone" dataKey="ca" name={name} stroke="#2b7fff" strokeWidth={2.5} fill="url(#apercuCA)" dot={false} activeDot={{ r: 4, fill: "#2b7fff", stroke: "var(--color-surface)", strokeWidth: 2 }} />
       </AreaChart>
     </ChartContainer>
   );
@@ -107,11 +107,19 @@ export function Apercu() {
   const { data: obj } = useAppState<Record<string, unknown> | null>(
     (s: AppState) => (s["objByMonth"] as Record<string, unknown>) ?? null,
   );
+  // Détails de facture (blob) : seule source de la DATE D'ÉMISSION — la colonne
+  // `invoices.date` contient l'ÉCHÉANCE (cf. Facturation `date: draft.dueDate`).
+  const { data: invDetails } = useAppState<Record<string, { issueDate?: string }>>(
+    (s: AppState) => (s["invoiceDetails"] as Record<string, { issueDate?: string }>) ?? {},
+  );
+  // Base du graphe : "emission" = ce que tu as facturé ce mois-là (vrai CA facturé,
+  // s'arrête au mois en cours) · "echeance" = quand l'argent doit rentrer (trésorerie).
+  const [caBasis, setCaBasis] = useState<"emission" | "echeance">("emission");
 
   useEffect(() => {
     let alive = true;
     Promise.all([
-      supabase.from("invoices").select("ref,party,amount,date,status,creator").order("sort_order"),
+      supabase.from("invoices").select("id,ref,party,amount,date,status,creator").order("sort_order"),
       supabase.from("events").select("day,date,time,title,type,who").or("deleted.is.null,deleted.eq.false").order("sort_order"),
       supabase.from("prospects").select("brand,contact,value,stage").order("sort_order"),
       supabase.from("todos").select("text,tag,creator,priority,done").order("sort_order"),
@@ -213,10 +221,14 @@ export function Apercu() {
   const recent = d.invoices.slice(0, 5);
 
   // Série mensuelle du CA facturé (aire + dégradé). Repli sur le MiniChart si trop peu de données.
+  const details = invDetails ?? {};
   const caMonthAgg = new Map<string, number>();
   for (const iv of d.invoices) {
     if (iv.status === "brouillon") continue; // « facturé » = factures émises, hors brouillons
-    const k = invMonthKey(iv.date);
+    // "emission" → mois où la facture a été ÉMISE (issueDate du blob ; repli sur `date`
+    // pour les factures legacy sans détails). "echeance" → mois où le client doit payer.
+    const basisDate = caBasis === "emission" ? details[iv.id]?.issueDate || iv.date : iv.date;
+    const k = invMonthKey(basisDate);
     if (!k) continue;
     caMonthAgg.set(k, (caMonthAgg.get(k) ?? 0) + parseAmount(iv.amount));
   }
@@ -265,10 +277,36 @@ export function Apercu() {
         <div className="mb-4 rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-foreground">Chiffre d'affaires facturé</div>
-              <div className="mt-0.5 text-[11px] text-faint">Évolution mensuelle</div>
+              <div className="text-sm font-semibold text-foreground">
+                {caBasis === "emission" ? "Chiffre d'affaires facturé" : "Encaissements attendus"}
+              </div>
+              <div className="mt-0.5 text-[11px] text-faint">
+                {caBasis === "emission" ? "Par mois de facturation" : "Par mois d'échéance"}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Base du graphe : ce que j'ai facturé (émission) vs quand ça doit rentrer (échéance). */}
+              <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
+                {(
+                  [
+                    ["emission", "Facturé"],
+                    ["echeance", "Attendu"],
+                  ] as const
+                ).map(([v, l]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setCaBasis(v)}
+                    aria-pressed={caBasis === v}
+                    className={
+                      "rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors " +
+                      (caBasis === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")
+                    }
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
               <div className="text-[22px] font-bold tracking-tight">{formatEuro(facture)}</div>
               {caDelta != null && (
                 <span
@@ -283,7 +321,7 @@ export function Apercu() {
               )}
             </div>
           </div>
-          <RevenueArea points={monthlyCA} />
+          <RevenueArea points={monthlyCA} name={caBasis === "emission" ? "Facturé" : "Attendu"} />
         </div>
       ) : (
         <MiniChart
