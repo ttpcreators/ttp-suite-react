@@ -6,7 +6,7 @@ import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import {
-  AddButton,
+  AddMenuButton,
   InlineForm,
   TextField,
   SelectField,
@@ -29,7 +29,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { useEffect, useState, type ReactNode } from "react";
-import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3 } from "lucide-react";
+import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3, UserRound, Building2 } from "lucide-react";
 
 type Priority = "haute" | "moyenne" | "basse";
 type Source = "agency" | "creator";
@@ -354,23 +354,32 @@ export function Todo() {
                 return `${openCount} tâche${openCount > 1 ? "s" : ""} en cours`;
               })()}
         </div>
-        <div className="flex items-center gap-2">
-          <AddButton
-            label="Tâche agence"
-            onClick={() => {
-              setCreator("");
-              setForceAgency(true);
-              setFormOpen(true);
-            }}
-          />
-          <AddButton
-            label="Tâche"
-            onClick={() => {
-              setForceAgency(false);
-              setFormOpen(true);
-            }}
-          />
-        </div>
+        <AddMenuButton
+          label="Tâche"
+          items={[
+            {
+              key: "creator",
+              label: "Pour une créatrice",
+              hint: "Tu choisis qui dans le formulaire",
+              icon: UserRound,
+              onClick: () => {
+                setForceAgency(false);
+                setFormOpen(true);
+              },
+            },
+            {
+              key: "agency",
+              label: "Pour l'agence",
+              hint: "Tâche interne, sans créatrice",
+              icon: Building2,
+              onClick: () => {
+                setCreator("");
+                setForceAgency(true);
+                setFormOpen(true);
+              },
+            },
+          ]}
+        />
       </div>
 
       <InlineForm

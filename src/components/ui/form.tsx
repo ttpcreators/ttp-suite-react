@@ -1,5 +1,7 @@
-import { type ReactNode, useLayoutEffect, useRef } from "react";
-import { Plus, X } from "lucide-react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Plus, X, ChevronDown, type LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "./select";
 
 const inputCls =
@@ -15,6 +17,96 @@ export function AddButton({ label, onClick }: { label: string; onClick: () => vo
     >
       <Plus className="h-3.5 w-3.5" /> {label}
     </button>
+  );
+}
+
+export type AddMenuItem = { key: string; label: string; hint?: string; icon?: LucideIcon; onClick: () => void };
+
+/**
+ * Bouton « + Label » AVEC menu déroulant : UN seul bouton dans l'en-tête, le choix se
+ * fait dans le menu — au lieu d'empiler plusieurs boutons côte à côte (illisible sur
+ * mobile). Menu rendu en portail et clampé dans le viewport (se retourne vers le haut
+ * s'il manque de place en bas), même mécanique qu'ActionMenu.
+ */
+export function AddMenuButton({ label, items }: { label: string; items: AddMenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  const toggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
+    setOpen(true);
+  };
+  const run = (item: AddMenuItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setOpen(false);
+    item.onClick();
+  };
+
+  const W = 240;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 768;
+  // Aligné à droite du bouton, mais jamais hors écran (marge 8px) → OK sur mobile.
+  const left = rect ? Math.min(Math.max(8, rect.right - W), Math.max(8, vw - W - 8)) : 0;
+  const spaceBelow = rect ? vh - rect.bottom - 8 : 0;
+  const spaceAbove = rect ? rect.top - 8 : 0;
+  const menuUp = !!rect && spaceBelow < 180 && spaceAbove > spaceBelow;
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={toggle}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+      >
+        <Plus className="h-3.5 w-3.5" /> {label}
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open &&
+        rect &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[70]"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+              }}
+            />
+            <div
+              role="menu"
+              className="fixed z-[71] overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-xl"
+              style={{ ...(menuUp ? { bottom: vh - rect.top + 6 } : { top: rect.bottom + 6 }), left, width: W }}
+            >
+              {items.map((it) => (
+                <button
+                  key={it.key}
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => run(it, e)}
+                  className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-rowhover"
+                >
+                  {it.icon && <it.icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] text-foreground">{it.label}</span>
+                    {it.hint && <span className="mt-0.5 block text-[11px] leading-snug text-faint">{it.hint}</span>}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body,
+        )}
+    </>
   );
 }
 
