@@ -267,7 +267,10 @@ export function Stats() {
     const a = parseAmount(iv.amount);
     if (iv.status in byStatus) byStatus[iv.status as keyof typeof byStatus] += a;
   }
-  const totalCA = byStatus.payee + byStatus.attente + byStatus.retard + byStatus.brouillon;
+  // « CA facturé » = factures RÉELLEMENT émises (payées + en attente + en retard).
+  // Les brouillons ne sont pas encore facturés → exclus (ils restent visibles à part
+  // dans le donut de répartition par statut).
+  const totalCA = byStatus.payee + byStatus.attente + byStatus.retard;
 
   // Série mensuelle RÉELLE du CA (depuis les échéances de factures parseables) → sparkline + variation MoM.
   const monthAgg = new Map<string, { tot: number; paid: number }>();
@@ -276,7 +279,7 @@ export function Stats() {
     if (!k) continue;
     const a = parseAmount(iv.amount);
     const cur = monthAgg.get(k) ?? { tot: 0, paid: 0 };
-    cur.tot += a;
+    if (iv.status !== "brouillon") cur.tot += a; // « facturé » = hors brouillons
     if (iv.status === "payee") cur.paid += a;
     monthAgg.set(k, cur);
   }

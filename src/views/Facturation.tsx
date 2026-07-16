@@ -27,6 +27,7 @@ import { useCreators } from "@/lib/useCreators";
 import { commissionMap } from "@/lib/commission";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
+import { totalsOf, type LineItem, type Totals } from "@/lib/invoice";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -42,8 +43,6 @@ type Row = {
   creator: string | null;
   sort_order: number | null;
 };
-
-type LineItem = { id: string; label: string; qty: number; unit: number };
 
 type BankAccount = { id: string; label: string; holder: string; bank: string; iban: string; bic: string };
 
@@ -82,8 +81,6 @@ type Draft = Details & {
   creator: string;
   status: InvoiceStatus;
 };
-
-type Totals = { ht: number; tva: number; ttc: number; commission: number; reversal: number };
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -152,14 +149,6 @@ function fmtQty(n: number): string {
   return Number.isInteger(n) ? String(n) : String(n).replace(".", ",");
 }
 
-function totalsOf(items: LineItem[], franchise: boolean, vatRate: number, commissionRate: number): Totals {
-  const ht = items.reduce((s, it) => s + (it.qty || 0) * (it.unit || 0), 0);
-  const tva = franchise ? 0 : ht * (vatRate / 100);
-  const ttc = ht + tva;
-  const commission = ht * (commissionRate / 100);
-  const reversal = ht - commission;
-  return { ht, tva, ttc, commission, reversal };
-}
 
 function firstName(name: string): string {
   return titleCase(name).split(" ")[0] ?? name;
@@ -679,8 +668,9 @@ export function Facturation() {
         ) : (
           filtered.map((r) => {
             const meta = metaOf(r.status);
-            // Taux vivant depuis le roster (source unique) → une modif de commission se répercute ici.
-            const rate = commissionFor(r.creator);
+            // Taux de CETTE facture si un taux spécifique a été saisi (invoiceDetails),
+            // sinon le taux vivant du roster. Cohérent avec Reversements (paie).
+            const rate = details[r.id]?.commissionRate ?? commissionFor(r.creator);
             const del = async () => {
               if (await dbTrash("invoices", r.id, r.party, formatEuro(parseAmount(r.amount)))) {
                 setRows(invoices.filter((x) => x.id !== r.id));

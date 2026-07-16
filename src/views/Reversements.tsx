@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";
 import { useCreators } from "@/lib/useCreators";
 import { commissionMap } from "@/lib/commission";
+import { totalsOf, type LineItem } from "@/lib/invoice";
 import { titleCase, initials } from "@/lib/utils";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -17,7 +18,9 @@ import { toast } from "@/components/ui/toast";
  * Les paiements sont stockés dans le blob agence `creatorPayouts`.
  */
 
-type Inv = { amount: string; status: string; creator: string | null };
+type Inv = { id: string; amount: string; status: string; creator: string | null };
+// Sous-ensemble d'invoiceDetails (blob) nécessaire au calcul du reversement.
+type InvDetails = { items: LineItem[]; franchise: boolean; vatRate: number; commissionRate: number };
 type Payout = { id: string; date: string; amount: number; note?: string };
 type PayoutsMap = Record<string, Payout[]>;
 
@@ -52,7 +55,7 @@ export function Reversements() {
     let alive = true;
     supabase
       .from("invoices")
-      .select("amount,status,creator")
+      .select("id,amount,status,creator")
       .then(({ data, error }) => {
         if (!alive) return;
         if (error) {
@@ -71,26 +74,56 @@ export function Reversements() {
   const rows: Row[] = useMemo(() => {
     if (!invoices) return [];
     const rosterCommission = commissionMap(creators);
-    const enc = new Map<string, number>();
+    const details = (app?.invoiceDetails as Record<string, InvDetails>) ?? {};
+    // Accumulateur EXACT par créateur. La commission + le dû se calculent sur le HT
+    // (via totalsOf, comme Facturation) → les 2 écrans donnent le même « dû au créateur ».
+    type Acc = { encaisse: number; ht: number; commission: number; du: number };
+    const acc = new Map<string, Acc>();
+    const bump = (c: string): Acc => {
+      let a = acc.get(c);
+      if (!a) { a = { encaisse: 0, ht: 0, commission: 0, du: 0 }; acc.set(c, a); }
+      return a;
+    };
     for (const iv of invoices) {
       if (iv.status !== "payee") continue;
       const c = (iv.creator || "").trim();
       if (!c) continue;
-      enc.set(c, (enc.get(c) ?? 0) + parseAmount(iv.amount));
+      const a = bump(c);
+      const d = details[iv.id];
+      if (d && Array.isArray(d.items)) {
+        // Facture détaillée : HT réel, TVA exclue de la commission, taux DE LA FACTURE, seuil inclus.
+        const t = totalsOf(d.items, d.franchise, d.vatRate, d.commissionRate);
+        a.encaisse += t.ttc;
+        a.ht += t.ht;
+        a.commission += t.commission;
+        a.du += t.reversal;
+      } else {
+        // Facture sans détails (legacy) : montant supposé = HT (cas franchise, défaut) + taux roster.
+        const rate = rosterCommission[c] ?? (commissions[c] != null ? commissions[c] : DEFAULT_COMMISSION);
+        const t = totalsOf([{ id: "x", label: "", qty: 1, unit: parseAmount(iv.amount) }], true, 0, rate);
+        a.encaisse += t.ttc;
+        a.ht += t.ht;
+        a.commission += t.commission;
+        a.du += t.reversal;
+      }
     }
     // Inclure aussi les créateurs qui ont déjà des paiements enregistrés.
-    for (const c of Object.keys(payoutsMap)) if (!enc.has(c)) enc.set(c, 0);
+    for (const c of Object.keys(payoutsMap)) if (!acc.has(c)) bump(c);
     const out: Row[] = [];
-    for (const [creator, encaisse] of enc) {
-      const rate = rosterCommission[creator] ?? (commissions[creator] != null ? commissions[creator] : DEFAULT_COMMISSION);
-      const commission = Math.round(encaisse * (rate / 100));
-      const du = encaisse - commission;
+    for (const [creator, x] of acc) {
+      const rosterRate = rosterCommission[creator] ?? (commissions[creator] != null ? commissions[creator] : DEFAULT_COMMISSION);
+      // Taux effectif affiché = commission / HT (juste même si les factures ont des taux
+      // différents ou passent sous le seuil). Repli sur le taux roster si pas de HT.
+      const rate = x.ht > 0 ? Math.round((x.commission / x.ht) * 100) : rosterRate;
+      const encaisse = Math.round(x.encaisse);
+      const commission = Math.round(x.commission);
+      const du = Math.round(x.du);
       const list = payoutsMap[creator] ?? [];
       const reverse = list.reduce((s, p) => s + (p.amount || 0), 0);
       out.push({ creator, encaisse, rate, commission, du, reverse, reste: du - reverse, payouts: list });
     }
     return out.sort((a, b) => b.reste - a.reste);
-  }, [invoices, commissions, payoutsMap, creators]);
+  }, [invoices, commissions, payoutsMap, creators, app]);
 
   const totalReste = rows.reduce((s, r) => s + Math.max(0, r.reste), 0);
   const totalDu = rows.reduce((s, r) => s + r.du, 0);

@@ -210,6 +210,7 @@ export function Apercu() {
   // Série mensuelle du CA facturé (aire + dégradé). Repli sur le MiniChart si trop peu de données.
   const caMonthAgg = new Map<string, number>();
   for (const iv of d.invoices) {
+    if (iv.status === "brouillon") continue; // « facturé » = factures émises, hors brouillons
     const k = invMonthKey(iv.date);
     if (!k) continue;
     caMonthAgg.set(k, (caMonthAgg.get(k) ?? 0) + parseAmount(iv.amount));
