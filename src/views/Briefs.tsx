@@ -1,13 +1,14 @@
 import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { cn } from "@/lib/utils";
-import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2 } from "lucide-react";
+import { cn, titleCase } from "@/lib/utils";
+import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown } from "lucide-react";
 import { useEffect, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
+import { printHtml } from "@/lib/printPdf";
 import { toast } from "@/components/ui/toast";
-import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
+import { AddButton, InlineForm, TextField, AutoGrowTextField, SelectField } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useCreators } from "@/lib/useCreators";
@@ -25,6 +26,9 @@ type Row = {
   status: string;
   budget: string;
   objectif: string;
+  /** Script / consignes en texte libre (écrit par l'agence ou la créatrice) —
+   *  c'est le corps du document PDF envoyé à la marque. Colonne `consignes` en base. */
+  consignes: string;
   sort_order: number;
 };
 type BadgeStatus = "success" | "warning" | "danger" | "neutral" | "info" | "loading";
@@ -53,6 +57,54 @@ function statusMeta(status: string): { variant: BadgeStatus; label: string } {
   return { variant: "warning", label: "En attente" };
 }
 
+function escHtml(s: string): string {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** Brief + script en HTML « pro » → impression navigateur → « Enregistrer en PDF ».
+ *  Document destiné à la MARQUE : même DA que la facture / le bilan de campagne. */
+function briefHTML(row: Row): string {
+  const burgundy = "#3d0000";
+  const meta = ([
+    ["Livrables", row.deliverables],
+    ["Objectif", row.objectif],
+    ["Budget", row.budget],
+    ["Échéance", frDate(row.due)],
+  ] as [string, string][]).filter(([, v]) => v && v !== "—");
+  const cell = (l: string, v: string) =>
+    `<td width="50%" style="padding:6px;vertical-align:top"><div style="border:1px solid #ececec;border-radius:12px;padding:12px 14px">` +
+    `<div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#8a8a8a">${escHtml(l)}</div>` +
+    `<div style="font-size:15px;font-weight:700;color:#111;margin-top:2px">${escHtml(v)}</div></div></td>`;
+  let metaRows = "";
+  for (let i = 0; i < meta.length; i += 2) {
+    metaRows += `<tr>${cell(meta[i][0], meta[i][1])}${meta[i + 1] ? cell(meta[i + 1][0], meta[i + 1][1]) : '<td width="50%"></td>'}</tr>`;
+  }
+  const script = (row.consignes || "").trim();
+  // white-space:pre-wrap → les sauts de ligne du script saisi sont conservés tels quels.
+  const scriptBlock = script
+    ? `<div style="margin-top:18px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8a8a8a;margin-bottom:8px">Script</div>` +
+      `<div style="font-size:14px;line-height:1.7;color:#222;white-space:pre-wrap">${escHtml(script)}</div></div>`
+    : `<p style="margin-top:18px;font-size:13px;color:#8a8a8a">Aucun script renseigné.</p>`;
+  // Le <title> devient le nom de fichier proposé à l'enregistrement PDF.
+  const title = `Brief ${row.brand}${row.creator ? " x " + titleCase(row.creator) : ""}`;
+  return (
+    `<!doctype html><html><head><meta charset="utf-8"><title>${escHtml(title)}</title>` +
+    `<style>@media print{body{background:#fff!important}.sheet{border:0!important;border-radius:0!important}}</style></head>` +
+    `<body style="margin:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;color:#111">` +
+    `<div style="max-width:640px;margin:0 auto;padding:24px">` +
+    `<div class="sheet" style="background:#fff;border-radius:18px;overflow:hidden;border:1px solid #ececec">` +
+    `<div style="background:${burgundy};color:#fff;padding:22px 26px">` +
+    `<div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:.85">TTP Creators · Brief &amp; script</div>` +
+    `<div style="font-size:24px;font-weight:800;margin-top:6px">${escHtml(row.brand)}${row.creator ? ` × ${escHtml(titleCase(row.creator))}` : ""}</div>` +
+    `</div><div style="padding:24px 26px">` +
+    (metaRows ? `<table style="width:100%;border-collapse:collapse">${metaRows}</table>` : "") +
+    scriptBlock +
+    `</div>` +
+    `<div style="border-top:1px solid #ececec;padding:16px 26px;font-size:12px;color:#8a8a8a">TTP Creators · Trust the Process · partnerships@ttpcreators.pro · ttpcreators.pro</div>` +
+    `</div></div></body></html>`
+  );
+}
+
 export function Briefs() {
   const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("briefs"));
   const [error, setError] = useState(false);
@@ -68,6 +120,7 @@ export function Briefs() {
   const [due, setDue] = useState("");
   const [budget, setBudget] = useState("");
   const [objectif, setObjectif] = useState("");
+  const [script, setScript] = useState("");
   const [status, setStatus] = useState("attente");
 
   const [editId, setEditId] = useState<string | null>(null);
@@ -75,13 +128,14 @@ export function Briefs() {
   const [editDeliverables, setEditDeliverables] = useState("");
   const [editDue, setEditDue] = useState("");
   const [editObjectif, setEditObjectif] = useState("");
+  const [editScript, setEditScript] = useState("");
 
   useEffect(() => {
     let active = true;
     (async () => {
       const { data, error } = await supabase
         .from("briefs")
-        .select("id, brand, creator, deliverables, due, status, budget, objectif, sort_order")
+        .select("id, brand, creator, deliverables, due, status, budget, objectif, consignes, sort_order")
         .order("sort_order");
       if (!active) return;
       if (error) {
@@ -111,7 +165,7 @@ export function Briefs() {
       due: due || "—",
       status,
       tone: "cyan",
-      consignes: "",
+      consignes: script.trim(),
       budget: budget || "—",
       objectif: objectif.trim() || "—",
       sort_order: nextOrder(rows ?? []),
@@ -131,6 +185,7 @@ export function Briefs() {
     setDue("");
     setBudget("");
     setObjectif("");
+    setScript("");
     setStatus("attente");
   };
 
@@ -140,6 +195,7 @@ export function Briefs() {
     setEditDeliverables(row.deliverables === "—" ? "" : row.deliverables);
     setEditDue(toISODate(row.due));
     setEditObjectif(row.objectif === "—" ? "" : row.objectif);
+    setEditScript(row.consignes ?? "");
   };
   const saveEdit = async (id: string) => {
     if (!editBrand.trim()) {
@@ -158,6 +214,7 @@ export function Briefs() {
       deliverables: editDeliverables.trim() || "—",
       due: dueVal,
       objectif: editObjectif.trim() || "—",
+      consignes: editScript.trim(),
     };
     if (!(await dbUpdate("briefs", id, patch))) {
       toast("Erreur — réessaie");
@@ -199,6 +256,13 @@ export function Briefs() {
             <TextField label="Livrables" value={editDeliverables} onChange={setEditDeliverables} placeholder="ex 3 posts · 1 reel" />
             <TextField label="Échéance" type="date" value={editDue} onChange={setEditDue} />
             <TextField label="Objectif" value={editObjectif} onChange={setEditObjectif} />
+            <AutoGrowTextField
+              label="Script"
+              value={editScript}
+              onChange={setEditScript}
+              placeholder="Le script à envoyer à la marque…"
+              className="min-w-full"
+            />
             <button
               type="button"
               onClick={() => saveEdit(row.id)}
@@ -227,6 +291,7 @@ export function Briefs() {
             <ActionMenu
               items={[
                 { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(row) },
+                { key: "pdf", label: "Script en PDF", icon: FileDown, onClick: () => printHtml(briefHTML(row)) },
                 { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: () => del(row), confirm: { title: "Mettre à la corbeille", message: `Déplacer le brief « ${row.brand} » vers la corbeille ? Tu pourras le restaurer.`, confirmLabel: "Mettre à la corbeille" } },
               ]}
             />
@@ -344,6 +409,13 @@ export function Briefs() {
         <TextField label="Budget" value={budget} onChange={setBudget} />
         <TextField label="Objectif" value={objectif} onChange={setObjectif} />
         <SelectField label="Statut" value={status} onChange={setStatus} options={STATUS_OPTS.map((s) => ({ value: s.value, label: s.label }))} />
+        <AutoGrowTextField
+          label="Script"
+          value={script}
+          onChange={setScript}
+          placeholder="Colle ici le script (écrit par toi ou la créatrice) — il devient le corps du PDF envoyé à la marque…"
+          className="min-w-full"
+        />
       </InlineForm>
 
       {content}

@@ -4,6 +4,7 @@ import { useSearch, matchQuery } from "@/lib/search";
 import { useLiveKey } from "@/lib/useLive";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { AddButton, InlineForm, SelectField } from "@/components/ui/form";
+import { FilterBar, type FilterOpt } from "@/components/ui/filter-bar";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
@@ -51,6 +52,15 @@ function slug(s: string): string {
 }
 
 type FileKind = "image" | "pdf" | "other";
+
+/** Tri de la liste (le tri par défaut « Plus récents » remplace l'ordre d'insertion). */
+const SORT_OPTIONS: FilterOpt[] = [
+  { value: "recent", label: "Plus récents" },
+  { value: "ancien", label: "Plus anciens" },
+  { value: "nom", label: "Nom A→Z" },
+  { value: "type", label: "Type" },
+];
+
 function fileKind(name: string): FileKind {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (["png", "jpg", "jpeg", "gif", "webp", "avif", "svg", "bmp"].includes(ext)) return "image";
@@ -71,6 +81,7 @@ export function Documents() {
   const [fileName, setFileName] = useState("");
   const [busy, setBusy] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string; kind: FileKind } | null>(null);
+  const [sort, setSort] = useState("recent");
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -211,7 +222,20 @@ export function Documents() {
     return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
   };
 
-  const filtered = (rows ?? []).filter((row) => matchQuery(query, row.name, row.type, row.creator));
+  // Horodatage sûr : un created_at illisible ne doit pas casser le tri (→ 0, en fin de liste).
+  const timeOf = (r: Row) => {
+    const t = new Date(r.created_at).getTime();
+    return Number.isNaN(t) ? 0 : t;
+  };
+  // `.filter()` renvoie un nouveau tableau → le `.sort()` ne mute jamais `rows`.
+  const filtered = (rows ?? [])
+    .filter((row) => matchQuery(query, row.name, row.type, row.creator))
+    .sort((a, b) => {
+      if (sort === "ancien") return timeOf(a) - timeOf(b);
+      if (sort === "nom") return (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" });
+      if (sort === "type") return (a.type || "").localeCompare(b.type || "", "fr") || timeOf(b) - timeOf(a);
+      return timeOf(b) - timeOf(a); // "recent" (défaut) : plus récents d'abord
+    });
 
   return (
     <div>
@@ -241,6 +265,12 @@ export function Documents() {
           options={[{ value: "", label: "—" }, ...creators.map((c) => ({ value: c.name, label: c.name }))]}
         />
       </InlineForm>
+
+      {rows !== null && rows.length > 1 && (
+        <div className="mb-3">
+          <FilterBar value={sort} options={SORT_OPTIONS} onChange={setSort} placeholder="Trier" />
+        </div>
+      )}
 
       <div className="rounded-2xl border border-border bg-card px-2 shadow-sm sm:px-5">
         {rows === null ? (
