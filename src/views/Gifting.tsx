@@ -36,7 +36,7 @@ export function Gifting() {
   const live = useLiveKey();
   const [rows, setRows] = useState<GiftRow[] | null>(() => getCache<GiftRow[]>("gifting"));
   const [error, setError] = useState(false);
-  const [view, setView] = useState<GView>("cards");
+  const [view, setView] = useState<GView>("list");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
