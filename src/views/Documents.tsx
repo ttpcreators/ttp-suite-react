@@ -51,7 +51,10 @@ function slug(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9.]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
-type FileKind = "image" | "pdf" | "other";
+type FileKind = "image" | "pdf" | "html" | "other";
+
+/** Fichier HTML (ex : contrats générés) — repéré à l'extension du chemin de stockage. */
+const isHtmlPath = (p: string) => /\.html?$/i.test(p);
 
 /** Tri de la liste (le tri par défaut « Plus récents » remplace l'ordre d'insertion). */
 const SORT_OPTIONS: FilterOpt[] = [
@@ -80,7 +83,7 @@ export function Documents() {
   const [docCreator, setDocCreator] = useState("");
   const [fileName, setFileName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string; kind: FileKind } | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string; kind: FileKind; html?: string } | null>(null);
   const [sort, setSort] = useState("recent");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -154,12 +157,35 @@ export function Documents() {
       toast("Fichier indisponible");
       return;
     }
+    const html = isHtmlPath(row.path);
+    // Pour un .html : on pré-ouvre l'onglet DANS le geste utilisateur (sinon le popup
+    // est bloqué après l'await du fetch).
+    const w = html ? window.open("", "_blank") : null;
     const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.path, 3600);
     if (error || !data?.signedUrl) {
+      w?.close();
       toast("Lien indisponible");
       return;
     }
-    window.open(data.signedUrl, "_blank");
+    if (!html) {
+      window.open(data.signedUrl, "_blank");
+      return;
+    }
+    // Supabase sert les .html en pièce/texte brut (sécurité anti-hébergement) → le
+    // navigateur affiche la SOURCE, avec les accents cassés. On récupère les octets
+    // (fetch.text() décode toujours en UTF-8 → règle le mojibake) et on écrit la page
+    // dans l'onglet, rendue proprement comme du HTML.
+    try {
+      const res = await fetch(data.signedUrl);
+      const src = await res.text();
+      if (w) {
+        w.document.open();
+        w.document.write(src);
+        w.document.close();
+      }
+    } catch {
+      if (w) w.location.href = data.signedUrl; // repli
+    }
   };
 
   const preview = async (row: Row) => {
@@ -171,6 +197,18 @@ export function Documents() {
     if (error || !data?.signedUrl) {
       toast("Aperçu indisponible");
       return;
+    }
+    // HTML : on récupère le contenu et on l'affiche via `srcDoc` (rendu correct, quel
+    // que soit le content-type servi par Supabase).
+    if (isHtmlPath(row.path)) {
+      try {
+        const res = await fetch(data.signedUrl);
+        const html = await res.text();
+        setPreviewDoc({ name: row.name, url: data.signedUrl, kind: "html", html });
+        return;
+      } catch {
+        /* repli : lien d'ouverture */
+      }
     }
     setPreviewDoc({ name: row.name, url: data.signedUrl, kind: fileKind(row.name) });
   };
@@ -350,15 +388,33 @@ export function Documents() {
             <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
               <span className="truncate text-[13px] font-semibold text-foreground">{previewDoc.name}</span>
               <div className="flex shrink-0 items-center gap-1">
-                <a
-                  href={previewDoc.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                  title="Ouvrir dans un onglet"
-                >
-                  <Download className="h-4 w-4" />
-                </a>
+                {previewDoc.kind === "html" ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const w = window.open("", "_blank");
+                      if (w && previewDoc.html) {
+                        w.document.open();
+                        w.document.write(previewDoc.html);
+                        w.document.close();
+                      }
+                    }}
+                    className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                    title="Ouvrir dans un onglet"
+                  >
+                    <Download className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <a
+                    href={previewDoc.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                    title="Ouvrir dans un onglet"
+                  >
+                    <Download className="h-4 w-4" />
+                  </a>
+                )}
                 <button
                   type="button"
                   onClick={() => setPreviewDoc(null)}
@@ -374,6 +430,8 @@ export function Documents() {
                 <img src={previewDoc.url} alt={previewDoc.name} className="max-h-[74vh] w-auto rounded-lg object-contain" />
               ) : previewDoc.kind === "pdf" ? (
                 <iframe title={previewDoc.name} src={previewDoc.url} className="h-[74vh] w-full rounded-lg bg-white" />
+              ) : previewDoc.kind === "html" ? (
+                <iframe title={previewDoc.name} srcDoc={previewDoc.html} sandbox="" className="h-[74vh] w-full rounded-lg bg-white" />
               ) : (
                 <div className="flex flex-col items-center gap-3 py-10 text-center">
                   <FileText className="h-10 w-10 text-faint" />
