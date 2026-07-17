@@ -3,7 +3,7 @@ import { Copy, Check, Plus, Trash2, Save, FileText, Eye, X } from "lucide-react"
 import { cn, initials, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { printHtml } from "@/lib/printPdf";
-import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, parseAmount, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { TextField } from "@/components/ui/form";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
@@ -21,15 +21,39 @@ const TYPE_META: Record<CtType, { chip: string; label: string; title: string }> 
 
 type Term = { l: string; v: string };
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Socle de clauses — rédigé au droit français, vérifié sur Légifrance.
+//
+// Choix structurants (ne pas « simplifier » sans revérifier) :
+//  • Le DROIT D'AUTEUR (CPI) et le DROIT À L'IMAGE (art. 9 C. civ.) sont DEUX régimes
+//    distincts → deux clauses séparées. La Cour de cassation (Civ. 1re, 11 déc. 2008,
+//    n° 07-19.494 ; 9 juil. 2009, n° 07-19.758) juge que l'art. 9 est « seul applicable
+//    en matière de cession de droit à l'image, à l'exclusion notamment du CPI », et que
+//    détenir les droits sur l'ŒUVRE ne donne PAS le droit d'utiliser l'IMAGE de la
+//    personne pour la promouvoir : autorisation distincte requise.
+//  • Le droit moral (art. L121-1 CPI) est perpétuel, inaliénable et imprescriptible →
+//    on ne le « rachète » jamais, on le rappelle.
+//  • Cession per-livrable : la cession globale des œuvres FUTURES est nulle (L131-1).
+//    Chaque droit cédé fait l'objet d'une mention distincte et le domaine d'exploitation
+//    est délimité quant à l'étendue, la destination, le lieu et la durée (L131-3).
+//  • INDÉPENDANCE : une clause « ceci n'est pas un contrat de travail » ne vaut rien
+//    face à la présomption de salariat du mannequin (L7123-3/-4, non renversée par la
+//    qualification des parties ni par l'autonomie ni par le statut). Ce qui protège,
+//    c'est la RÉALITÉ : liberté éditoriale du créateur + redevance d'exploitation
+//    proportionnelle (L7123-6), jamais un forfait « droits image » déguisé.
+// ══════════════════════════════════════════════════════════════════════════════
 const CLAUSES: Term[] = [
   { l: "Art. 1 — Objet", v: "Le présent contrat définit les conditions de la prestation et les engagements réciproques des parties." },
   { l: "Art. 2 — Rémunération & paiement", v: "Les sommes sont versées par virement à 30 jours. Tout retard entraîne des pénalités au taux BCE + 10 pts et une indemnité forfaitaire de 40 € (art. L441-10 C. com.)." },
-  { l: "Art. 3 — Propriété intellectuelle", v: "La cession des droits d'exploitation est limitée aux supports, territoires et durée stipulés. Toute réutilisation hors périmètre fait l'objet d'un avenant." },
-  { l: "Art. 4 — Données personnelles (RGPD)", v: "Les parties traitent les données conformément au Règlement (UE) 2016/679 (RGPD) et à la loi Informatique et Libertés. Finalité limitée à l'exécution du contrat." },
-  { l: "Art. 5 — Transparence publicitaire", v: "Tout contenu sponsorisé est identifié comme tel (« Publicité » / « Partenariat rémunéré »), conformément aux lignes directrices ARPP et au droit de la consommation UE." },
-  { l: "Art. 6 — Droit de rétractation", v: "Conformément à la Directive 2011/83/UE, un délai de rétractation de 14 jours s'applique sauf renonciation expresse pour exécution immédiate." },
-  { l: "Art. 7 — Confidentialité & résiliation", v: "Obligation de confidentialité réciproque. Résiliation possible pour manquement grave après mise en demeure restée infructueuse sous 15 jours." },
-  { l: "Art. 8 — Droit applicable & litiges", v: "Contrat régi par le droit français. À défaut d'accord amiable (médiation préalable), compétence exclusive des tribunaux de Lyon." },
+  { l: "Art. 3 — Droits d'auteur sur les contenus", v: "Le créateur conserve la propriété de ses contenus. La cession éventuelle de droits d'exploitation porte sur des contenus déterminés (jamais sur ses œuvres futures — art. L131-1 CPI) : chaque droit cédé fait l'objet d'une mention distincte, le domaine d'exploitation étant délimité quant à son étendue, sa destination, son lieu et sa durée (art. L131-3 CPI). Toute réutilisation hors périmètre fait l'objet d'un avenant." },
+  { l: "Art. 4 — Droit à l'image", v: "L'autorisation d'utiliser l'image de la personne du créateur est distincte de la cession des droits d'auteur (art. 9 C. civ.) et limitée aux supports, au territoire, à la durée et aux contextes expressément stipulés. Elle exclut tout usage de nature à porter atteinte à sa réputation. Aucun usage hors de ce cadre sans accord écrit." },
+  { l: "Art. 5 — Droit moral", v: "Le droit moral du créateur sur ses œuvres est inaliénable, perpétuel et imprescriptible (art. L121-1 CPI) : respect de son nom, de sa qualité et de l'intégrité de l'œuvre. Toute modification substantielle d'un contenu requiert son accord." },
+  { l: "Art. 6 — Indépendance des parties", v: "Le créateur agit en prestataire indépendant : il conserve sa liberté éditoriale et de réalisation, n'est soumis à aucun lien de subordination et assume ses propres cotisations sociales. Aucune stipulation du contrat ne saurait caractériser un contrat de travail." },
+  { l: "Art. 7 — Transparence publicitaire", v: "Tout contenu à visée commerciale est identifié de façon claire et lisible (« Publicité » ou « Collaboration commerciale »), conformément à la loi n° 2023-451 du 9 juin 2023 encadrant l'influence commerciale (modifiée par l'ord. n° 2024-978 du 6 nov. 2024), au droit de la consommation et aux recommandations de l'ARPP. Le cas échéant, les images retouchées (« Images retouchées ») et générées par IA (« Images virtuelles ») sont signalées." },
+  { l: "Art. 8 — Données personnelles (RGPD)", v: "Les parties traitent les données conformément au Règlement (UE) 2016/679 (RGPD) et à la loi Informatique et Libertés. Finalité limitée à l'exécution du contrat." },
+  { l: "Art. 9 — Confidentialité & résiliation", v: "Obligation de confidentialité réciproque. Résiliation possible pour manquement grave après mise en demeure restée infructueuse sous 15 jours." },
+  { l: "Art. 10 — Force majeure", v: "Aucune partie n'est responsable d'un manquement dû à un cas de force majeure au sens de l'art. 1218 C. civ. ; les obligations sont suspendues le temps de l'empêchement." },
+  { l: "Art. 11 — Droit applicable & litiges", v: "Contrat régi par le droit français. À défaut d'accord amiable (médiation préalable), compétence des tribunaux de Lyon (art. 42 CPC — sous réserve des règles impératives protégeant le for du défendeur non-commerçant)." },
 ];
 
 // ══════════════════════════════════════════════════════════════════
@@ -144,15 +168,21 @@ function rightsClause(s: Scenario): string {
   }
 }
 
-/** Clauses adaptées au cas de figure : Art. 2/3 réécrits + clauses optionnelles (exclusivité, défraiement). */
-function buildClauses(s: Scenario): Term[] {
+/** Seuil (HT) au-delà duquel la vérification de vigilance URSSAF est obligatoire (art. R8222-1). */
+const VIGILANCE_SEUIL_EUR = 5000;
+
+/**
+ * Clauses adaptées au cas de figure : Art. 2/3 réécrits + clauses optionnelles.
+ * `htValue` sert à insérer la clause de vigilance sociale quand elle devient obligatoire.
+ */
+function buildClauses(s: Scenario, htValue = 0): Term[] {
   const base: Term[] = [
     CLAUSES[0], // Art. 1 — Objet
     { l: "Art. 2 — Rémunération & paiement", v: payClause(s.payment) },
-    { l: "Art. 3 — Propriété intellectuelle & droits d'usage", v: rightsClause(s) },
-    ...CLAUSES.slice(3), // Art. 4 → 8
+    { l: "Art. 3 — Droits d'auteur & droits d'usage", v: rightsClause(s) },
+    ...CLAUSES.slice(3), // Art. 4 (droit à l'image) → Art. 11 (litiges)
   ];
-  let n = 9;
+  let n = base.length + 1;
   const opt: Term[] = [];
   if (s.exclScope !== "non") {
     const detail =
@@ -163,6 +193,12 @@ function buildClauses(s: Scenario): Term[] {
   }
   if (s.defraiement) {
     opt.push({ l: `Art. ${n++} — Frais & défraiement`, v: "L'Annonceur prend en charge les produits nécessaires à la prestation ainsi que les frais de déplacement et d'hébergement engagés à sa demande, sur présentation de justificatifs." });
+  }
+  // Prestation ≥ 5 000 € HT → le donneur d'ordre DOIT vérifier la vigilance URSSAF, à la
+  // signature et tous les 6 mois (art. L8222-1, R8222-1, D8222-5 C. trav.), sous peine de
+  // solidarité financière (L8222-2). On matérialise l'obligation dans le contrat.
+  if (htValue >= VIGILANCE_SEUIL_EUR) {
+    opt.push({ l: `Art. ${n++} — Vigilance sociale`, v: "La prestation étant d'un montant au moins égal à 5 000 € HT, le créateur remet à la signature, puis tous les six mois jusqu'au terme, une attestation de vigilance URSSAF de moins de six mois (art. L8222-1, R8222-1 et D8222-5 C. trav.), dont l'authenticité est vérifiée auprès de l'organisme de recouvrement." });
   }
   return [...base, ...opt];
 }
@@ -415,8 +451,11 @@ export function Contrats() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctType, brand, ctName, deliverables, value, exclLabel, duration, commClean, collab, rights, rightsDuration, territory, payLabel, tvaLabel, defraiement]);
 
-  const allClauses: Term[] = [...buildClauses(scenario), ...extra.map((e) => ({ l: e.l, v: e.v }))];
-  const nextClauseNo = buildClauses(scenario).length + 1 + extra.length;
+  // Valeur HT (approx : en franchise 293 B, HT ≈ montant affiché) → déclenche la clause
+  // de vigilance URSSAF au-delà de 5 000 € HT.
+  const htNum = parseAmount(value);
+  const allClauses: Term[] = [...buildClauses(scenario, htNum), ...extra.map((e) => ({ l: e.l, v: e.v }))];
+  const nextClauseNo = buildClauses(scenario, htNum).length + 1 + extra.length;
   const isBrand = ctType !== "repr";
 
   const contractText = useMemo(() => {
