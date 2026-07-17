@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, ChevronLeft, Pencil } from "lucide-react";
+import { Check, ChevronLeft, Pencil, LayoutGrid, List, Table2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -79,11 +79,14 @@ const DEFAULT_CHECKLISTS: Checklist[] = [
   { id: "default", name: "Collaboration type", done: {} },
 ];
 
+type ChecklistView = "cards" | "list" | "table";
+
 export function Checklist() {
   const { data, loading } = useAppState<Checklist[]>(
     (s: AppState) => (s["checklists"] as Checklist[]) ?? DEFAULT_CHECKLISTS
   );
   const [lists, setLists] = useState<Checklist[]>(DEFAULT_CHECKLISTS);
+  const [view, setView] = useState<ChecklistView>("cards");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
@@ -127,10 +130,19 @@ export function Checklist() {
   };
 
   const removeChecklist = async (id: string) => {
-    await persistFresh((fresh) => fresh.filter((c) => c.id !== id));
+    // `persistFresh` prévient déjà en cas d'échec : ne pas annoncer une suppression
+    // qui n'a pas été enregistrée.
+    const ok = await persistFresh((fresh) => fresh.filter((c) => c.id !== id));
+    if (!ok) return;
     if (selectedId === id) setSelectedId(null);
     toast("Checklist supprimée");
   };
+
+  const askRemove = (ck: Checklist) =>
+    setPendingDel({
+      message: `Supprimer la checklist « ${ck.name} » ? Cette action est irréversible.`,
+      run: () => removeChecklist(ck.id),
+    });
 
   const startEdit = (ck: Checklist) => {
     setEditingId(ck.id);
@@ -181,11 +193,28 @@ export function Checklist() {
 
   const selected = lists.find((c) => c.id === selectedId) ?? null;
 
+  /* La boîte de confirmation est rendue dans les DEUX vues : la vue liste sortait en
+     `return` avant de l'atteindre, donc le bouton supprimer armait `pendingDel` sans
+     que rien ne l'affiche — la suppression n'était jamais confirmée, donc jamais faite. */
+  const confirmDialog = pendingDel && (
+    <ConfirmDialog
+      title="Supprimer la checklist"
+      message={pendingDel.message}
+      confirmLabel="Supprimer"
+      danger
+      onCancel={() => setPendingDel(null)}
+      onConfirm={() => {
+        pendingDel.run();
+        setPendingDel(null);
+      }}
+    />
+  );
+
   /* ─────────────────────────── VUE LISTE ─────────────────────────── */
   if (!selected) {
     return (
       <div>
-        <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-foreground">
               Checklists
@@ -194,7 +223,36 @@ export function Checklist() {
               {lists.length} checklist{lists.length > 1 ? "s" : ""}
             </div>
           </div>
-          <AddButton label="Nouvelle checklist" onClick={() => setFormOpen(true)} />
+          <div className="flex items-center gap-2">
+            {lists.length > 0 && (
+              <div className="flex items-center gap-1 rounded-xl border border-border bg-panel p-1">
+                {(
+                  [
+                    ["cards", LayoutGrid, "Cartes"],
+                    ["list", List, "Liste"],
+                    ["table", Table2, "Tableau"],
+                  ] as [ChecklistView, typeof LayoutGrid, string][]
+                ).map(([v, Icon, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setView(v)}
+                    title={label}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                      view === v
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">{label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <AddButton label="Nouvelle checklist" onClick={() => setFormOpen(true)} />
+          </div>
         </div>
 
         <InlineForm
@@ -219,40 +277,106 @@ export function Checklist() {
           <div className="rounded-2xl border border-dashed border-border bg-panel/50 px-5 py-10 text-center text-[13px] text-muted-foreground">
             Aucune checklist. Crée-en une pour démarrer.
           </div>
-        ) : (
+        ) : view === "cards" ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {lists.map((ck) => {
               const dc = doneCountOf(ck);
               const pct = TOTAL_STEPS ? Math.round((dc / TOTAL_STEPS) * 100) : 0;
               return (
-                <button
+                <div
                   key={ck.id}
-                  type="button"
-                  onClick={() => setSelectedId(ck.id)}
-                  className="group flex flex-col gap-3 rounded-2xl border border-border bg-panel p-5 text-left shadow-sm transition-colors hover:bg-rowhover"
+                  className="group flex flex-col gap-3 rounded-2xl border border-border bg-panel p-5 shadow-sm transition-colors hover:bg-rowhover"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(ck.id)}
+                      className="min-w-0 flex-1 text-left"
+                    >
                       <div className="truncate text-sm font-semibold text-foreground">
                         {ck.name}
                       </div>
                       <div className="mt-0.5 text-[11px] text-faint tabular-nums">
                         {dc} / {TOTAL_STEPS} étapes
                       </div>
-                    </div>
+                    </button>
                     <div className="flex items-center gap-2">
                       <span className="text-lg font-bold tabular-nums text-foreground">
                         {pct}%
                       </span>
-                      <DeleteButton onClick={() => setPendingDel({ message: `Supprimer la checklist « ${ck.name} » ? Cette action est irréversible.`, run: () => removeChecklist(ck.id) })} />
+                      <DeleteButton onClick={() => askRemove(ck)} />
                     </div>
                   </div>
-                  <Progress value={pct} className="h-2" />
-                </button>
+                  <button type="button" onClick={() => setSelectedId(ck.id)} aria-label={`Ouvrir ${ck.name}`}>
+                    <Progress value={pct} className="h-2" />
+                  </button>
+                </div>
               );
             })}
           </div>
+        ) : view === "list" ? (
+          <div className="overflow-hidden rounded-2xl border border-border bg-panel shadow-sm">
+            {lists.map((ck) => {
+              const dc = doneCountOf(ck);
+              const pct = TOTAL_STEPS ? Math.round((dc / TOTAL_STEPS) * 100) : 0;
+              return (
+                <div
+                  key={ck.id}
+                  className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-rowhover"
+                >
+                  <button type="button" onClick={() => setSelectedId(ck.id)} className="min-w-0 flex-1 text-left">
+                    <div className="truncate text-[13px] font-semibold text-foreground">{ck.name}</div>
+                    <div className="mt-0.5 text-[11px] text-faint tabular-nums">{dc} / {TOTAL_STEPS} étapes</div>
+                  </button>
+                  <div className="hidden w-40 shrink-0 sm:block">
+                    <Progress value={pct} className="h-1.5" />
+                  </div>
+                  <span className="w-12 shrink-0 text-right text-sm font-bold tabular-nums text-foreground">{pct}%</span>
+                  <DeleteButton onClick={() => askRemove(ck)} />
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-border bg-panel shadow-sm">
+            <table className="w-full min-w-[480px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-border text-[10px] font-semibold uppercase tracking-wide text-faint">
+                  <th className="px-4 py-3">Checklist</th>
+                  <th className="px-4 py-3 text-right">Étapes</th>
+                  <th className="px-4 py-3 text-right">Avancement</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {lists.map((ck) => {
+                  const dc = doneCountOf(ck);
+                  const pct = TOTAL_STEPS ? Math.round((dc / TOTAL_STEPS) * 100) : 0;
+                  return (
+                    <tr key={ck.id} className="border-b border-border last:border-b-0 hover:bg-rowhover">
+                      <td className="px-4 py-3">
+                        <button type="button" onClick={() => setSelectedId(ck.id)} className="text-left text-[13px] font-semibold text-foreground hover:text-primary">
+                          {ck.name}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-right text-[12px] tabular-nums text-muted-foreground">{dc} / {TOTAL_STEPS}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="hidden w-24 sm:block"><Progress value={pct} className="h-1.5" /></div>
+                          <span className="w-10 text-right text-[13px] font-bold tabular-nums text-foreground">{pct}%</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end"><DeleteButton onClick={() => askRemove(ck)} /></div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
+        {confirmDialog}
       </div>
     );
   }
@@ -400,19 +524,7 @@ export function Checklist() {
           );
         })}
       </div>
-      {pendingDel && (
-        <ConfirmDialog
-          title="Supprimer la checklist"
-          message={pendingDel.message}
-          confirmLabel="Supprimer"
-          danger
-          onCancel={() => setPendingDel(null)}
-          onConfirm={() => {
-            pendingDel.run();
-            setPendingDel(null);
-          }}
-        />
-      )}
+      {confirmDialog}
     </div>
   );
 }
