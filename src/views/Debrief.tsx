@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileBarChart, Pencil, Share2, Download, LayoutGrid, List, Table2, Trash2, Send, Eye, X, FileText } from "lucide-react";
+import { FileBarChart, Pencil, Share2, Download, LayoutGrid, List, Table2, Trash2, Send, Eye, X, FileText, Activity } from "lucide-react";
 import {
   useAppState,
   saveAppStateKey,
@@ -19,6 +19,7 @@ import { useCreators } from "@/lib/useCreators";
 import { cn, titleCase } from "@/lib/utils";
 import { DebriefCalculator, ShotStrip, useShotUrls, resolveShots, type CalcState } from "@/views/DebriefCalculator";
 import { printHtml } from "@/lib/printPdf";
+import { totalsOf as engTotals, parseNum as engParse, fmtCompact, fmtPct } from "@/lib/engagement";
 
 /** Une petite statistique de campagne (label / valeur). */
 type Kpi = { l: string; v: string };
@@ -205,6 +206,7 @@ export function Debrief() {
   const list: Debrief[] = local ?? data ?? (data === null && !loading ? SEED : []);
 
   const [view, setView] = useState<DebriefView>("cards");
+  const [viewD, setViewD] = useState<Debrief | null>(null); // fiche détail (clic sur une ligne)
   const [formOpen, setFormOpen] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [brand, setBrand] = useState("");
@@ -420,6 +422,7 @@ export function Debrief() {
   const actions = (d: Debrief, index: number) => (
     <ActionMenu
       items={[
+        { key: "view", label: "Voir la fiche", icon: Eye, onClick: () => setViewD(d) },
         { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(index) },
         { key: "sharebrand", label: "Partager à la marque", icon: Send, onClick: () => openShare(d) },
         { key: "preview", label: "Aperçu / PDF", icon: Eye, onClick: () => printDebrief(d) },
@@ -656,7 +659,8 @@ export function Debrief() {
           {list.map((d, index) => (
             <div
               key={`${d.brand}-${index}`}
-              className="flex items-center gap-3 border-b border-border px-4 py-3.5 last:border-b-0 hover:bg-rowhover"
+              onClick={() => setViewD(d)}
+              className="flex cursor-pointer items-center gap-3 border-b border-border px-4 py-3.5 last:border-b-0 hover:bg-rowhover"
             >
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13px] font-semibold text-foreground">
@@ -673,7 +677,7 @@ export function Debrief() {
               <span className="hidden shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-signaltext sm:inline">
                 ROI {d.roi}
               </span>
-              <div className="flex shrink-0 items-center gap-1">{actions(d, index)}</div>
+              <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>{actions(d, index)}</div>
             </div>
           ))}
         </div>
@@ -693,7 +697,11 @@ export function Debrief() {
             </thead>
             <tbody>
               {list.map((d, index) => (
-                <tr key={`${d.brand}-${index}`} className="border-b border-border last:border-b-0 hover:bg-rowhover">
+                <tr
+                  key={`${d.brand}-${index}`}
+                  onClick={() => setViewD(d)}
+                  className="cursor-pointer border-b border-border last:border-b-0 hover:bg-rowhover"
+                >
                   <td className="px-4 py-3 text-[13px] font-semibold text-foreground">{d.brand}</td>
                   <td className="px-4 py-3 text-[13px] text-muted-foreground">{titleCase(d.creator)}</td>
                   <td className="px-4 py-3 text-[12px] text-faint">{d.period}</td>
@@ -704,7 +712,7 @@ export function Debrief() {
                       {d.roi}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1">{actions(d, index)}</div>
                   </td>
                 </tr>
@@ -760,6 +768,162 @@ export function Debrief() {
           </div>
         </div>
       )}
+
+      {/* Fiche détail (clic sur une ligne / « Voir la fiche ») */}
+      {viewD && (
+        <DebriefDetail
+          d={viewD}
+          onClose={() => setViewD(null)}
+          onEdit={() => {
+            const i = list.findIndex((x) => debriefSig(x) === debriefSig(viewD));
+            setViewD(null);
+            if (i >= 0) startEdit(i);
+          }}
+          onShare={() => {
+            const d = viewD;
+            setViewD(null);
+            openShare(d);
+          }}
+          onPdf={() => printDebrief(viewD)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Fiche détaillée d'un debrief : tout ce qui est saisi, en lecture, dans une modale. */
+function DebriefDetail({
+  d,
+  onClose,
+  onEdit,
+  onShare,
+  onPdf,
+}: {
+  d: Debrief;
+  onClose: () => void;
+  onEdit: () => void;
+  onShare: () => void;
+  onPdf: () => void;
+}) {
+  const kpis = d.kpis.filter((k) => k.v && k.v !== "—");
+  // Résumé d'engagement recalculé depuis la saisie du calculateur (si présente).
+  const calc = d.calc;
+  const hasCalc = !!calc && (calc.stats.length > 0 || !!calc.followers);
+  const override = calc?.mode === "global" ? engParse(calc.postsCount) : undefined;
+  const t = hasCalc ? engTotals(calc!.stats, engParse(calc!.followers), override) : null;
+  const er = t ? (calc!.basis === "followers" ? t.erFollowers : t.erReach) : null;
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-6" onClick={onClose}>
+      <div className="my-2 w-full max-w-2xl rounded-2xl border border-border bg-surface shadow-xl" onClick={(e) => e.stopPropagation()}>
+        {/* En-tête */}
+        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+          <div className="min-w-0">
+            <div className="truncate text-base font-semibold text-foreground">
+              {d.brand} {d.creator && <span className="text-faint">× {titleCase(d.creator)}</span>}
+            </div>
+            {d.period && d.period !== "—" && <div className="mt-0.5 text-[12px] text-faint">{d.period}</div>}
+          </div>
+          <div className="flex items-center gap-2">
+            {d.roi && d.roi !== "—" && (
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-signaltext">
+                ROI {d.roi}
+              </span>
+            )}
+            <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-4">
+          {/* Budget → CA */}
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Budget <b className="text-foreground">{d.budget}</b></span>
+            <span className="text-faint">→</span>
+            <span className="text-muted-foreground">CA généré <b className="text-signaltext">{d.revenue}</b></span>
+            {d.deliverables && d.deliverables !== "—" && <span className="text-[12px] text-faint">· {d.deliverables}</span>}
+          </div>
+
+          {d.summary && d.summary !== "—" && (
+            <p className="text-[13px] leading-relaxed text-muted-foreground">{d.summary}</p>
+          )}
+
+          {/* Taux d'engagement calculé */}
+          {t && (
+            <div className="rounded-xl border border-border bg-panel p-3.5">
+              <div className="mb-2.5 flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-faint">
+                <Activity className="h-3.5 w-3.5" /> Engagement calculé
+                <span className="ml-auto text-faint">{t.posts} publication{t.posts > 1 ? "s" : ""}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  ["Taux retenu", fmtPct(er)],
+                  ["Couverture", fmtCompact(t.reach)],
+                  ["Interactions", fmtCompact(t.interactions)],
+                  ["Vues", fmtCompact(t.views)],
+                ].map(([l, v]) => (
+                  <div key={l} className="rounded-lg bg-surface px-2.5 py-2">
+                    <div className="text-[8px] font-semibold uppercase tracking-wide text-faint">{l}</div>
+                    <div className="mt-0.5 text-[15px] font-bold leading-none tabular-nums text-foreground">{v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* KPIs saisis */}
+          {kpis.length > 0 && (
+            <div>
+              <div className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-faint">Indicateurs</div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {kpis.map((k, i) => (
+                  <div key={i} className="rounded-xl bg-panel px-3 py-2.5">
+                    <div className="text-[8px] font-semibold uppercase tracking-wide text-faint">{k.l}</div>
+                    <div className="mt-1 text-lg font-bold leading-none tracking-tight text-foreground">{k.v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Points forts */}
+          {d.highlights.length > 0 && (
+            <div>
+              <div className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-faint">Points forts</div>
+              <ul className="space-y-1.5">
+                {d.highlights.map((h, i) => (
+                  <li key={i} className="flex items-start gap-2 text-[13px] text-foreground">
+                    <span className="mt-0.5 shrink-0 font-bold text-signaltext">✓</span>
+                    <span className="flex-1">{h}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Captures */}
+          {d.calc?.shots && d.calc.shots.length > 0 && (
+            <div>
+              <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-faint">Captures des stats</div>
+              <ShotStrip shots={d.calc.shots} />
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-5 py-3.5">
+          <button type="button" onClick={onEdit} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <Pencil className="h-3.5 w-3.5" /> Modifier
+          </button>
+          <button type="button" onClick={onPdf} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <FileText className="h-3.5 w-3.5" /> Aperçu / PDF
+          </button>
+          <button type="button" onClick={onShare} className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
+            <Send className="h-3.5 w-3.5" /> Partager à la marque
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
