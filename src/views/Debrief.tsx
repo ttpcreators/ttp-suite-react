@@ -17,9 +17,26 @@ import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/f
 import { ActionMenu } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
 import { cn, titleCase } from "@/lib/utils";
+import { DebriefCalculator, ShotStrip, useShotUrls, resolveShots, type CalcState } from "@/views/DebriefCalculator";
+import { printHtml } from "@/lib/printPdf";
 
 /** Une petite statistique de campagne (label / valeur). */
 type Kpi = { l: string; v: string };
+
+/** État vierge du calculateur d'engagement. */
+const CALC_EMPTY: CalcState = { mode: "global", stats: [], followers: "", postsCount: "", basis: "reach", shots: [] };
+
+/** Un blob legacy/partiel ne contient pas `calc` → forme garantie ici. */
+function normCalc(c: Partial<CalcState> | undefined): CalcState {
+  return {
+    mode: c?.mode === "detail" ? "detail" : "global",
+    stats: Array.isArray(c?.stats) ? c.stats : [],
+    followers: c?.followers ?? "",
+    postsCount: c?.postsCount ?? "",
+    basis: c?.basis === "followers" ? "followers" : "reach",
+    shots: Array.isArray(c?.shots) ? c.shots : [],
+  };
+}
 
 /** Un debrief de campagne : bilan marque × créateur avec ROI et points forts. */
 type Debrief = {
@@ -34,6 +51,8 @@ type Debrief = {
   summary: string;
   kpis: Kpi[];
   highlights: string[];
+  /** Saisie du calculateur d'engagement + captures jointes (optionnel : blobs legacy). */
+  calc?: CalcState;
 };
 
 /** Valeurs de départ utiles quand le blob 'debriefData' est vide. */
@@ -102,8 +121,12 @@ function debriefSig(d: Debrief): string {
   return JSON.stringify([d.brand, d.creator, d.period, d.budget, d.revenue, d.summary, d.deliverables, d.kpis, d.highlights]);
 }
 
-/** Bilan de campagne en HTML « pro » (aperçu, email, impression PDF). */
-function debriefHTML(d: Debrief): string {
+/**
+ * Bilan de campagne en HTML « pro » (aperçu, email, impression PDF).
+ * `shotUrls` = URL signées déjà résolues (chemin → URL) ; sans elles, l'annexe captures
+ * est simplement omise plutôt que d'afficher des images cassées.
+ */
+function debriefHTML(d: Debrief, shotUrls: Record<string, string> = {}): string {
   const burgundy = "#3d0000";
   const kpis = d.kpis.filter((k) => k.v && k.v !== "—");
   const cell = (k: Kpi) =>
@@ -118,6 +141,16 @@ function debriefHTML(d: Debrief): string {
     .filter(Boolean)
     .map((h) => `<div style="margin:5px 0;font-size:14px;color:#222"><span style="color:#16a34a;font-weight:700">✓</span>&nbsp; ${escHtml(h)}</div>`)
     .join("");
+  const shots = (d.calc?.shots ?? []).map((s) => shotUrls[s.path]).filter(Boolean);
+  const shotsBlock = shots.length
+    ? `<div style="margin-top:20px;border-top:1px solid #ececec;padding-top:14px">` +
+      `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8a8a8a;margin-bottom:8px">Annexe — captures des statistiques</div>` +
+      `<table style="border-collapse:collapse"><tr>` +
+      shots
+        .map((u) => `<td style="padding:4px;vertical-align:top"><img src="${escHtml(u)}" alt="" style="width:120px;border:1px solid #ececec;border-radius:8px;display:block"></td>`)
+        .join("") +
+      `</tr></table></div>`
+    : "";
   return (
     `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
     `<body style="margin:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;color:#111">` +
@@ -136,6 +169,7 @@ function debriefHTML(d: Debrief): string {
     (d.summary && d.summary !== "—" ? `<p style="margin:16px 0;font-size:14px;line-height:1.6;color:#222">${escHtml(d.summary)}</p>` : "") +
     (kpis.length ? `<table style="width:100%;border-collapse:collapse;margin:8px 0">${kpiRows}</table>` : "") +
     (highlights ? `<div style="margin-top:16px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8a8a8a;margin-bottom:6px">Points forts</div>${highlights}</div>` : "") +
+    shotsBlock +
     `</div>` +
     `<div style="border-top:1px solid #ececec;padding:16px 26px;font-size:12px;color:#8a8a8a">TTP Creators · Trust the Process · partnerships@ttpcreators.pro · ttpcreators.pro</div>` +
     `</div></div></body></html>`
@@ -144,12 +178,13 @@ function debriefHTML(d: Debrief): string {
 
 type DebriefView = "cards" | "list" | "table";
 
-/** Garantit que kpis/highlights sont des tableaux (blob partiel/legacy toléré). */
+/** Garantit que kpis/highlights/calc ont la bonne forme (blob partiel/legacy toléré). */
 function normDebrief(d: Debrief): Debrief {
   return {
     ...d,
     kpis: Array.isArray(d.kpis) ? d.kpis : [],
     highlights: Array.isArray(d.highlights) ? d.highlights : [],
+    calc: d.calc ? normCalc(d.calc) : undefined,
   };
 }
 
@@ -184,6 +219,7 @@ export function Debrief() {
   const [clics, setClics] = useState("");
   const [ventes, setVentes] = useState("");
   const [highlightsText, setHighlightsText] = useState("");
+  const [calc, setCalc] = useState<CalcState>(CALC_EMPTY);
 
   // Partage à la marque (email)
   const [shareD, setShareD] = useState<Debrief | null>(null);
@@ -191,6 +227,9 @@ export function Debrief() {
   const [shareSubject, setShareSubject] = useState("");
   const [shareVia, setShareVia] = useState<"gmail" | "resend">("gmail");
   const [shareSending, setShareSending] = useState(false);
+  // Captures du debrief en cours de partage : résolues ici pour que l'aperçu ET l'email
+  // partent avec les mêmes URL signées (7 j de validité côté marque).
+  const shareShotUrls = useShotUrls(shareD?.calc?.shots);
 
   const creatorOptions = [
     { value: "", label: "— Choisir —" },
@@ -210,6 +249,7 @@ export function Debrief() {
     setClics("");
     setVentes("");
     setHighlightsText("");
+    setCalc(CALC_EMPTY);
     setEditIndex(null);
   }
   const kpiVal = (d: Debrief, label: string) => d.kpis.find((k) => k.l.toLowerCase().startsWith(label.toLowerCase().slice(0, 5)))?.v ?? "";
@@ -234,6 +274,7 @@ export function Debrief() {
     setClics(kpiVal(d, "Clics"));
     setVentes(kpiVal(d, "Ventes"));
     setHighlightsText(d.highlights.join("\n"));
+    setCalc(normCalc(d.calc));
     setFormOpen(true);
   }
 
@@ -269,6 +310,7 @@ export function Debrief() {
       summary: summary.trim() || "—",
       kpis,
       highlights,
+      calc,
     };
     resetForm();
     setFormOpen(false);
@@ -337,14 +379,12 @@ export function Debrief() {
     setShareSubject(`Bilan de campagne — ${d.brand}`);
     setShareVia("gmail");
   }
-  function printDebrief(d: Debrief) {
-    const w = window.open("", "_blank");
-    if (w) {
-      w.document.write(debriefHTML(d));
-      w.document.close();
-      w.focus();
-      w.print();
-    } else toast("Autorise les pop-ups pour imprimer");
+  // `printHtml` = iframe caché même origine → pas de pop-up à autoriser (et cohérent
+  // avec Contrats / Briefs). L'await sur les captures ne pose donc plus de problème
+  // de « geste utilisateur perdu » comme avec window.open.
+  async function printDebrief(d: Debrief) {
+    printHtml(debriefHTML(d, await resolveShots(d.calc?.shots)));
+    toast("Dans la fenêtre : choisis « Enregistrer au format PDF »");
   }
   async function sendDebriefEmail() {
     if (!shareD || shareSending) return;
@@ -356,7 +396,7 @@ export function Debrief() {
     const subject = shareSubject.trim() || `Bilan de campagne — ${shareD.brand}`;
     setShareSending(true);
     try {
-      const html = debriefHTML(shareD);
+      const html = debriefHTML(shareD, shareShotUrls);
       const jsonOf = async (error: unknown, data: unknown) => {
         if (error && (error as { context?: { json?: () => Promise<unknown> } }).context?.json)
           return await (error as { context: { json: () => Promise<unknown> } }).context.json().catch(() => null);
@@ -495,6 +535,15 @@ export function Debrief() {
         <TextField label="Engagement" value={engagement} onChange={setEngagement} placeholder="6,4 %" className="sm:min-w-[110px] flex-1" />
         <TextField label="Clics" value={clics} onChange={setClics} placeholder="9 200" className="sm:min-w-[110px] flex-1" />
         <TextField label="Ventes attribuées" value={ventes} onChange={setVentes} placeholder="310" className="sm:min-w-[130px] flex-1" />
+        <DebriefCalculator
+          slug={safeName(creator || brand)}
+          state={calc}
+          onChange={setCalc}
+          onApply={({ reach: r, engagement: e }) => {
+            if (r) setReach(r);
+            setEngagement(e);
+          }}
+        />
         <label className="flex min-w-full flex-col gap-1.5">
           <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Points forts (un par ligne)</span>
           <textarea
@@ -592,6 +641,9 @@ export function Debrief() {
                 </div>
               )}
 
+              {/* Captures des stats jointes (privées — URL signées) */}
+              <ShotStrip shots={d.calc?.shots} />
+
               {/* Barre d'actions */}
               <div className="mt-4 flex items-center justify-end gap-1 border-t border-border pt-3">
                 {actions(d, index)}
@@ -688,7 +740,7 @@ export function Debrief() {
               </div>
               <div>
                 <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Aperçu (ce que reçoit la marque)</div>
-                <iframe title="Aperçu debrief" srcDoc={debriefHTML(shareD)} sandbox="" className="h-[44vh] w-full rounded-lg border border-border bg-white" />
+                <iframe title="Aperçu debrief" srcDoc={debriefHTML(shareD, shareShotUrls)} sandbox="" className="h-[44vh] w-full rounded-lg border border-border bg-white" />
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3.5">

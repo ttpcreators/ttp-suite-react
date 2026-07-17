@@ -30,7 +30,7 @@ function loadImage(file: File): Promise<HTMLImageElement> {
 /** Redimensionne (côté le plus long ≤ maxDim) puis réencode l'image → Blob léger.
  *  Réduit ~5–10× le poids (2 Mo → ~200–400 Ko) : pages rapides + free tier Supabase
  *  préservé. Convertit aussi les HEIC iPhone en JPEG au passage. */
-async function downscaleImage(file: File, maxDim: number, mime: string, quality?: number): Promise<Blob> {
+export async function downscaleImage(file: File, maxDim: number, mime: string, quality?: number): Promise<Blob> {
   const img = await loadImage(file);
   const w = img.naturalWidth;
   const h = img.naturalHeight;
