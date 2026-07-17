@@ -21,6 +21,7 @@ import {
   Handshake,
   Wrench,
   Lightbulb,
+  Gift,
   Wallet,
   AlarmClock,
   CalendarClock,
@@ -43,6 +44,7 @@ export type ViewId =
   | "mediakit"
   | "mediakitAgence"
   | "briefs"
+  | "gifting"
   | "ideas"
   | "todo"
   | "planning"
@@ -98,6 +100,7 @@ export const NAV: NavFamily[] = [
     icon: Briefcase,
     items: [
       { id: "briefs", label: "Briefs", icon: FileText },
+      { id: "gifting", label: "Gifting", icon: Gift },
       { id: "ideas", label: "Idées", icon: Lightbulb },
       { id: "todo", label: "À faire", icon: ListChecks },
       { id: "planning", label: "Planning", icon: CalendarDays },

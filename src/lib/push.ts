@@ -16,7 +16,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 /** Signale à l'agence (push immédiat) qu'un créateur a ajouté quelque chose.
  *  Best-effort : ne bloque jamais l'action du créateur en cas d'échec. */
-export function notifyAgency(kind: "tache" | "idee" | "evenement" | "contact", creator: string, text: string) {
+export function notifyAgency(kind: "tache" | "idee" | "evenement" | "contact" | "gift", creator: string, text: string) {
   try {
     supabase.functions
       .invoke("daily-digest", { body: { event: "creator_activity", kind, creator, text: text.slice(0, 140) } })
@@ -29,7 +29,7 @@ export function notifyAgency(kind: "tache" | "idee" | "evenement" | "contact", c
 /** Notifie UN créateur (push immédiat sur ses appareils) quand l'agence lui
  *  ajoute quelque chose (tâche, document…). Best-effort : jamais bloquant. */
 export function notifyCreator(
-  kind: "task" | "document" | "brief" | "debrief" | "event" | "mediakit",
+  kind: "task" | "document" | "brief" | "debrief" | "event" | "mediakit" | "gift",
   creator: string,
   text: string,
 ) {

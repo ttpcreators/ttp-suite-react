@@ -22,6 +22,7 @@ const Apercu = lazy(() => import("@/views/Apercu").then((m) => ({ default: m.Ape
 const Stats = lazy(() => import("@/views/Stats").then((m) => ({ default: m.Stats })));
 const Facturation = lazy(() => import("@/views/Facturation").then((m) => ({ default: m.Facturation })));
 const Briefs = lazy(() => import("@/views/Briefs").then((m) => ({ default: m.Briefs })));
+const Gifting = lazy(() => import("@/views/Gifting").then((m) => ({ default: m.Gifting })));
 const Idees = lazy(() => import("@/views/Idees").then((m) => ({ default: m.Idees })));
 const Todo = lazy(() => import("@/views/Todo").then((m) => ({ default: m.Todo })));
 const Planning = lazy(() => import("@/views/Planning").then((m) => ({ default: m.Planning })));
@@ -57,6 +58,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   relances: Relances,
   echeances: Echeances,
   briefs: Briefs,
+  gifting: Gifting,
   ideas: Idees,
   todo: Todo,
   planning: Planning,

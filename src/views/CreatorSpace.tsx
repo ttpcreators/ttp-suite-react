@@ -9,9 +9,13 @@ import {
   ListChecks,
   Lightbulb,
   FileText,
+  Gift,
   CalendarDays,
   Files,
   Receipt,
+  Mail,
+  ShieldCheck,
+  Package,
   LogOut,
   Moon,
   Sun,
@@ -49,6 +53,7 @@ import { parseAmount, formatEuro } from "@/lib/appState";
 import { useLiveKey } from "@/lib/useLive";
 import { AvatarUpload } from "@/components/ui/avatar-upload";
 import { SuiviPanel, type SuiviEntry } from "@/views/EngagementSuivi";
+import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, type Gift as GiftRow } from "@/lib/gifting";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -83,7 +88,7 @@ type Doc = { id: string; name: string; type: string | null; size: string | null;
 type Invoice = { ref: string; party: string; amount: string | null; date: string | null; status: string | null };
 type Contact = { id: string; brand: string; person: string | null; role: string | null; email: string | null; phone: string | null; sort_order?: number };
 
-type Tab = "accueil" | "evolution" | "debrief" | "todo" | "ideas" | "briefs" | "planning" | "contacts" | "documents" | "facturation";
+type Tab = "accueil" | "evolution" | "debrief" | "todo" | "ideas" | "briefs" | "gifting" | "planning" | "contacts" | "documents" | "facturation";
 const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "accueil", label: "Accueil", icon: LayoutDashboard },
   { id: "evolution", label: "Évolution", icon: TrendingUp },
@@ -91,6 +96,7 @@ const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "todo", label: "À faire", icon: ListChecks },
   { id: "ideas", label: "Idées", icon: Lightbulb },
   { id: "briefs", label: "Briefs", icon: FileText },
+  { id: "gifting", label: "Gifting", icon: Gift },
   { id: "planning", label: "Planning", icon: CalendarDays },
   { id: "contacts", label: "Contacts", icon: Contact },
   { id: "documents", label: "Documents", icon: Files },
@@ -101,7 +107,7 @@ const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
 // même composant que l'espace agence) : on tape une famille → ses pages se déploient.
 const MOBILE_FAMILIES: { id: string; label: string; icon: typeof LayoutDashboard; items: Tab[] }[] = [
   { id: "espace", label: "Mon espace", icon: LayoutDashboard, items: ["accueil", "evolution", "debrief"] },
-  { id: "travail", label: "Mon travail", icon: ListChecks, items: ["todo", "ideas", "briefs", "planning", "contacts"] },
+  { id: "travail", label: "Mon travail", icon: ListChecks, items: ["todo", "ideas", "briefs", "gifting", "planning", "contacts"] },
   { id: "fichiers", label: "Fichiers", icon: Files, items: ["documents", "facturation"] },
 ];
 
@@ -327,6 +333,7 @@ export function CreatorSpace({
   const [todos, setTodos] = useState<Todo[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [briefs, setBriefs] = useState<Brief[]>([]);
+  const [gifts, setGifts] = useState<GiftRow[]>([]);
   const [events, setEvents] = useState<Ev[]>([]);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -394,6 +401,7 @@ export function CreatorSpace({
     supabase.from("todos").select("id,text,descr,due,priority,done,status,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setTodos((data as Todo[]) ?? []));
     supabase.from("ideas").select("id,text,status,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
     supabase.from("briefs").select("id,brand,deliverables,due,status").eq("creator", name).then(({ data }) => alive && setBriefs((data as Brief[]) ?? []));
+    supabase.from("gifting").select(GIFT_COLS).eq("creator", name).order("sort_order", { ascending: false }).then(({ data }) => alive && setGifts((data as GiftRow[]) ?? []));
     supabase.from("events").select("id,date,day,time,title,type,who").or("deleted.is.null,deleted.eq.false").then(({ data }) => {
       if (!alive) return;
       const rows = (data as (Ev & { who: string | null })[]) ?? [];
@@ -434,6 +442,61 @@ export function CreatorSpace({
   const setBriefStatus = async (id: string, status: string) => {
     setBriefs((prev) => prev.map((b) => (b.id === id ? { ...b, status } : b)));
     if (!(await dbUpdate("briefs", id, { status }))) toast("Erreur — réessaie");
+  };
+
+  // ── Gifting côté créateur : voir ses cadeaux, marquer publié, signaler un cadeau reçu.
+  const setGiftStatus = async (id: string, status: string) => {
+    setGifts((prev) => prev.map((g) => (g.id === id ? { ...g, status } : g)));
+    if (!(await dbUpdate("gifting", id, { status }))) toast("Erreur — réessaie");
+  };
+  const [giOpen, setGiOpen] = useState(false);
+  const [giBrand, setGiBrand] = useState("");
+  const [giProduct, setGiProduct] = useState("");
+  const [giValue, setGiValue] = useState("");
+  const [giContactName, setGiContactName] = useState("");
+  const [giContactEmail, setGiContactEmail] = useState("");
+  const [giReceivedOn, setGiReceivedOn] = useState("");
+  const addGift = async () => {
+    const b = giBrand.trim();
+    const p = giProduct.trim();
+    if (!b && !p) {
+      toast("Indique la marque ou le produit");
+      return;
+    }
+    const email = giContactEmail.trim().toLowerCase();
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      toast("Email de l'interlocuteur invalide");
+      return;
+    }
+    // RLS : le créateur ne peut insérer QUE pour lui-même (creator = name).
+    const row = {
+      creator: name,
+      brand: b || null,
+      product: p || null,
+      value: giValue.trim() || null,
+      contact_name: giContactName.trim() || null,
+      contact_email: email || null,
+      received_on: giReceivedOn || null,
+      status: "recu",
+      mentions: DEFAULT_MENTIONS,
+      source: "creator",
+      sort_order: nextOrder(gifts),
+    };
+    const created = await dbInsert("gifting", row);
+    if (!created) {
+      toast("Erreur — réessaie");
+      return;
+    }
+    setGifts([created as unknown as GiftRow, ...gifts]);
+    notifyAgency("gift", name, b || p); // push immédiat côté agence
+    toast("Cadeau signalé ✓");
+    setGiOpen(false);
+    setGiBrand("");
+    setGiProduct("");
+    setGiValue("");
+    setGiContactName("");
+    setGiContactEmail("");
+    setGiReceivedOn("");
   };
 
   const addTodo = async () => {
@@ -1674,6 +1737,88 @@ export function CreatorSpace({
                     </div>
                   </div>
                 ))
+              )}
+            </div>
+          )}
+
+          {tab === "gifting" && (
+            <div className="space-y-4">
+              {/* Rappel mentions — visible en haut, c'est le point clé pour le créateur */}
+              <div className="flex items-start gap-2.5 rounded-2xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3 text-[12px] leading-relaxed text-amber-700 dark:text-amber-300">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Un cadeau reçu d'une marque est un partenariat : dès que tu le montres, indique-le clairement
+                  (« <b>Produit offert</b> » ou « <b>Cadeau</b> »). C'est une obligation légale (loi n° 2023-451).
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{gifts.length}</span> {gifts.length > 1 ? "cadeaux" : "cadeau"}
+                </div>
+                <AddButton label="Signaler un cadeau" onClick={() => setGiOpen(true)} />
+              </div>
+
+              <InlineForm
+                open={giOpen}
+                title="Signaler un cadeau reçu"
+                onClose={() => setGiOpen(false)}
+                onSubmit={addGift}
+                submitLabel="Signaler"
+              >
+                <TextField label="Marque" value={giBrand} onChange={setGiBrand} placeholder="ex Sézane" className="sm:min-w-[160px] flex-1" />
+                <TextField label="Produit reçu" value={giProduct} onChange={setGiProduct} placeholder="ex Sac + foulard" className="sm:min-w-[180px] flex-[2]" />
+                <TextField label="Valeur estimée" value={giValue} onChange={setGiValue} placeholder="≈ 220 €" className="sm:min-w-[110px] flex-1" />
+                <TextField label="Interlocuteur" value={giContactName} onChange={setGiContactName} placeholder="ex Julie (RP)" className="sm:min-w-[140px] flex-1" />
+                <TextField label="Email interlocuteur" value={giContactEmail} onChange={setGiContactEmail} type="email" placeholder="julie@marque.com" className="sm:min-w-[170px] flex-1" />
+                <TextField label="Date de réception" value={giReceivedOn} onChange={setGiReceivedOn} type="date" className="sm:min-w-[150px] flex-1" />
+              </InlineForm>
+
+              {gifts.length === 0 ? (
+                <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
+                  Aucun cadeau pour le moment. Signale un produit reçu pour le tracer.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {gifts.map((g) => (
+                    <div key={g.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                      <div className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold text-foreground">{g.brand || "—"}</div>
+                          {g.product && (
+                            <div className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                              <Package className="h-3.5 w-3.5 shrink-0 text-faint" /> <span className="truncate">{g.product}</span>
+                              {g.value && <span className="shrink-0 text-faint">· {g.value}</span>}
+                            </div>
+                          )}
+                        </div>
+                        <div className="w-[168px] shrink-0">
+                          <StatusSelect value={g.status ?? "recu"} options={GIFT_STATUS} onChange={(v) => setGiftStatus(g.id, v)} />
+                        </div>
+                      </div>
+
+                      {g.content_expected && (
+                        <div className="mt-2.5 rounded-lg bg-amber-500/10 px-3 py-2 text-[12px] font-medium text-amber-700 dark:text-amber-300">
+                          Contenu attendu par la marque{g.deliverables ? ` : ${g.deliverables}` : ""}
+                        </div>
+                      )}
+
+                      <div className="mt-2.5 flex items-start gap-1.5 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] leading-snug text-amber-700 dark:text-amber-300">
+                        <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span>{g.mentions || DEFAULT_MENTIONS}</span>
+                      </div>
+
+                      {g.contact_email && (
+                        <a href={`mailto:${g.contact_email}`} className="mt-2.5 flex items-center gap-1.5 text-[12px] text-primary hover:underline">
+                          <Mail className="h-3.5 w-3.5 shrink-0" />
+                          {g.contact_name ? `${g.contact_name} · ` : ""}{g.contact_email}
+                        </a>
+                      )}
+                      {g.received_on && <div className="mt-1.5 text-[11px] text-faint">Reçu le {frDate(g.received_on)}</div>}
+                      {g.note && <p className="mt-2 text-[12px] leading-relaxed text-faint">{g.note}</p>}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}

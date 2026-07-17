@@ -95,6 +95,17 @@ create table if not exists public.briefs (
   note text, sort_order int default 0, created_at timestamptz default now()
 );
 
+-- Gifting : cadeaux/dotations produits reçus par les créateurs (cf. sql/gifting.sql).
+create table if not exists public.gifting (
+  id uuid primary key default gen_random_uuid(),
+  creator text, brand text, product text, value text,
+  contact_name text, contact_email text, received_on date,
+  content_expected boolean default false, deliverables text,
+  status text default 'recu', mentions text, note text,
+  source text default 'agency', sort_order int default 0,
+  created_at timestamptz default now()
+);
+
 create table if not exists public.ideas (
   id uuid primary key default gen_random_uuid(),
   text text not null, creator text, status text default 'À explorer',
@@ -159,6 +170,8 @@ create index if not exists prospects_sort_idx   on public.prospects (sort_order)
 create index if not exists invoices_sort_idx    on public.invoices  (sort_order);
 create index if not exists todos_creator_idx    on public.todos     (creator);
 create index if not exists briefs_creator_idx   on public.briefs    (creator);
+create index if not exists gifting_creator_idx  on public.gifting   (creator);
+create index if not exists gifting_sort_idx     on public.gifting   (sort_order);
 create index if not exists ideas_creator_idx    on public.ideas     (creator);
 create index if not exists events_who_idx        on public.events    (who);
 create index if not exists messages_thread_idx  on public.messages (thread_key, created_at);
@@ -222,7 +235,7 @@ do $$
 declare r record; t text;
 declare tbls text[] := array[
   'creators','contacts','invoices','prospects','module_rows',
-  'todos','briefs','ideas','events','messages','profiles','documents'
+  'todos','briefs','gifting','ideas','events','messages','profiles','documents'
 ];
 begin
   for r in select policyname, tablename from pg_policies
@@ -297,6 +310,8 @@ create policy module_rows_agency on public.module_rows for all to authenticated 
 create policy todos_scoped  on public.todos  for all to authenticated
   using (public.is_agency() or creator = public.my_creator()) with check (public.is_agency() or creator = public.my_creator());
 create policy briefs_scoped on public.briefs for all to authenticated
+  using (public.is_agency() or creator = public.my_creator()) with check (public.is_agency() or creator = public.my_creator());
+create policy gifting_scoped on public.gifting for all to authenticated
   using (public.is_agency() or creator = public.my_creator()) with check (public.is_agency() or creator = public.my_creator());
 create policy ideas_scoped  on public.ideas  for all to authenticated
   using (public.is_agency() or creator = public.my_creator()) with check (public.is_agency() or creator = public.my_creator());
