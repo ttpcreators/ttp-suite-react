@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Copy, Search } from "lucide-react";
+import { Copy, Search, Eye, X, LayoutGrid, List as ListIcon } from "lucide-react";
 import { useSearch, matchQuery } from "@/lib/search";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
@@ -102,6 +102,14 @@ export function Templates() {
   // Filtres de vue locaux à la page (catégorie active + recherche locale).
   const [activeCategory, setActiveCategory] = useState<string>("Tous");
   const [localQuery, setLocalQuery] = useState("");
+  // Vue des modèles (mémorisée) + aperçu plein texte (le corps est tronqué en carte).
+  const [viewT, setViewT] = useState<"cards" | "list">(
+    () => (localStorage.getItem("ttp:tpl-view") === "list" ? "list" : "cards"),
+  );
+  useEffect(() => {
+    localStorage.setItem("ttp:tpl-view", viewT);
+  }, [viewT]);
+  const [preview, setPreview] = useState<Template | null>(null);
 
   // On repasse en mode « live » (local=null) dès que la donnée du blob change : ainsi les
   // ajouts faits par l'autre compte agence apparaissent, au lieu de rester gelés sur `local`.
@@ -240,6 +248,23 @@ export function Templates() {
               className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-xs text-foreground placeholder:text-faint outline-none transition-colors focus:border-primary"
             />
           </div>
+          <div className="flex shrink-0 items-center gap-1 rounded-xl border border-border bg-surface p-1">
+            {([["cards", "Cartes", LayoutGrid], ["list", "Liste", ListIcon]] as const).map(([m, label, Icon]) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setViewT(m)}
+                title={label}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                  viewT === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -270,39 +295,127 @@ export function Templates() {
                   {items.length} {items.length > 1 ? "modèles" : "modèle"}
                 </span>
               </div>
-              <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
-                {items.map((t, i) => (
-                  <article
-                    key={cat + t.title + i}
-                    className="flex flex-col rounded-2xl border border-border bg-surface p-4 shadow-sm"
-                  >
-                    <div className="flex items-start justify-between gap-2.5">
-                      <h3 className="text-sm font-semibold text-foreground">{t.title}</h3>
+              {viewT === "cards" ? (
+                <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
+                  {items.map((t, i) => (
+                    <article
+                      key={cat + t.title + i}
+                      className="flex flex-col rounded-2xl border border-border bg-surface p-4 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-2.5">
+                        <h3 className="text-sm font-semibold text-foreground">{t.title}</h3>
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full bg-rowhover px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide",
+                            CATEGORY_TONE[t.category] ?? "text-muted-foreground",
+                          )}
+                        >
+                          {t.category}
+                        </span>
+                      </div>
+                      {/* Aperçu tronqué : le texte complet s'ouvre via « Voir ». */}
+                      <p className="mt-2.5 flex-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground line-clamp-5">
+                        {t.body}
+                      </p>
+                      <div className="mt-3.5 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPreview(t)}
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border py-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                        >
+                          <Eye className="h-3.5 w-3.5" /> Voir
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => copy(t.body)}
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-foreground py-2.5 text-[10px] font-semibold uppercase tracking-wide text-background transition-opacity hover:opacity-90"
+                        >
+                          <Copy className="h-3.5 w-3.5" /> Copier
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+                  {items.map((t, i) => (
+                    <div
+                      key={cat + t.title + i}
+                      onClick={() => setPreview(t)}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-rowhover",
+                        i > 0 && "border-t border-border",
+                      )}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13px] font-semibold text-foreground">{t.title}</div>
+                        <div className="mt-0.5 truncate text-[11px] text-faint">{t.body.replace(/\s+/g, " ")}</div>
+                      </div>
                       <span
                         className={cn(
-                          "shrink-0 rounded-full bg-rowhover px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide",
+                          "hidden shrink-0 rounded-full bg-rowhover px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide sm:inline",
                           CATEGORY_TONE[t.category] ?? "text-muted-foreground",
                         )}
                       >
                         {t.category}
                       </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copy(t.body);
+                        }}
+                        title="Copier"
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-panel hover:text-foreground"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
                     </div>
-                    <p className="mt-2.5 flex-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground line-clamp-5">
-                      {t.body}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => copy(t.body)}
-                      className="mt-3.5 inline-flex items-center justify-center gap-1.5 rounded-xl bg-foreground py-2.5 text-[10px] font-semibold uppercase tracking-wide text-background transition-opacity hover:opacity-90"
-                    >
-                      <Copy className="h-3.5 w-3.5" /> Copier
-                    </button>
-                  </article>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </section>
           );
         })}
+
+      {/* Aperçu plein texte — le corps est tronqué dans les cartes/lignes. */}
+      {preview && (
+        <div
+          className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-6"
+          onClick={() => setPreview(null)}
+        >
+          <div
+            className="my-2 w-full max-w-2xl rounded-2xl border border-border bg-surface shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+              <div className="min-w-0">
+                <div className="truncate text-base font-semibold text-foreground">{preview.title}</div>
+                <div className="mt-0.5 text-[11px] uppercase tracking-wide text-faint">{preview.category}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreview(null)}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="max-h-[62vh] overflow-y-auto px-5 py-4">
+              <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{preview.body}</p>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">
+              <button
+                type="button"
+                onClick={() => copy(preview.body)}
+                className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                <Copy className="h-3.5 w-3.5" /> Copier le message
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
