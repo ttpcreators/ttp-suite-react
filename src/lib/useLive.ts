@@ -20,10 +20,18 @@ type Listener = () => void;
 const listeners = new Set<Listener>();
 let started = false;
 const POLL_MS = 20000;
+// Anti-rebond : au retour d'onglet, `focus` ET `visibilitychange` se déclenchent
+// coup sur coup → sans garde, chaque vue re-fetchait DEUX fois. On ignore tout tick
+// qui suit le précédent de moins de MIN_GAP_MS (le poll de 20 s n'est pas affecté).
+const MIN_GAP_MS = 5000;
+let lastFire = 0;
 
 function fireAll() {
   // On ne rafraîchit que si l'onglet est visible (économise la bande passante).
   if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+  const now = Date.now();
+  if (now - lastFire < MIN_GAP_MS) return;
+  lastFire = now;
   listeners.forEach((l) => {
     try {
       l();

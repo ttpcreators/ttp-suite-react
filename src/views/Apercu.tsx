@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, lazy, Suspense, type ReactNode } from "react";
 import { motion } from "motion/react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, initials } from "@/lib/utils";
@@ -7,10 +7,11 @@ import { parseAmount, formatEuro, useAppState, type AppState } from "@/lib/appSt
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { LocationTag } from "@/components/ui/location-tag";
 import { MiniChart } from "@/components/ui/mini-chart";
-import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
-import { invMonthKey, monthsBetween, monthLabel, momDelta, fmtCompact } from "@/lib/timeSeries";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { invMonthKey, monthsBetween, monthLabel, momDelta } from "@/lib/timeSeries";
 import { TrendingUp, TrendingDown, Users, ListChecks, CalendarDays } from "lucide-react";
+
+// Graphique recharts lazy-chargé : sort la lib (~101 Ko gzip) du premier écran.
+const RevenueArea = lazy(() => import("./charts/RevenueArea"));
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { Globe, type GlobeMarker } from "@/components/ui/cobe-globe";
@@ -53,26 +54,6 @@ function evDate(e: Ev): string {
   return "9999-12-31";
 }
 
-/** Graphique CA mensuel : aire + dégradé (même DA que la page Stats). */
-function RevenueArea({ points, name = "Facturé" }: { points: { label: string; ca: number }[]; name?: string }) {
-  return (
-    <ChartContainer config={{}} className="mt-4 h-[160px]">
-      <AreaChart data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id="apercuCA" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#2b7fff" stopOpacity={0.24} />
-            <stop offset="100%" stopColor="#2b7fff" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.6} vertical={false} />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickMargin={8} interval="preserveStartEnd" minTickGap={14} />
-        <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(Number(v))} width={46} />
-        <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ stroke: "#2b7fff", strokeWidth: 1, strokeOpacity: 0.4 }} />
-        <Area type="monotone" dataKey="ca" name={name} stroke="#2b7fff" strokeWidth={2.5} fill="url(#apercuCA)" dot={false} activeDot={{ r: 4, fill: "#2b7fff", stroke: "var(--color-surface)", strokeWidth: 2 }} />
-      </AreaChart>
-    </ChartContainer>
-  );
-}
 
 function Card({
   children,
@@ -321,7 +302,9 @@ export function Apercu() {
               )}
             </div>
           </div>
-          <RevenueArea points={monthlyCA} name={caBasis === "emission" ? "Facturé" : "Attendu"} />
+          <Suspense fallback={<div className="mt-4 h-[160px] animate-pulse rounded-xl bg-panel/50" />}>
+            <RevenueArea points={monthlyCA} name={caBasis === "emission" ? "Facturé" : "Attendu"} />
+          </Suspense>
         </div>
       ) : (
         <MiniChart

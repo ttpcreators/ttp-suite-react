@@ -1,8 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, lazy, Suspense, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import NumberFlow from "@number-flow/react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
-import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { fmtCompact } from "@/lib/timeSeries";
 import {
   LayoutDashboard,
@@ -171,26 +169,8 @@ function frTime(s: string): number {
   return new Date(Number(y), Number(m[2]) - 1, Number(m[1])).getTime();
 }
 
-/** Graphique d'évolution des abonnés (même DA que l'Aperçu agence : aire + dégradé). */
-function FollowerArea({ points }: { points: { label: string; abonnes: number }[] }) {
-  return (
-    <ChartContainer config={{}} className="mt-4 h-[170px]">
-      <AreaChart data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id="csFollowers" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#2b7fff" stopOpacity={0.24} />
-            <stop offset="100%" stopColor="#2b7fff" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.6} vertical={false} />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickMargin={8} interval="preserveStartEnd" minTickGap={14} />
-        <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(Number(v))} width={40} />
-        <Tooltip content={<ChartTooltip unit="" />} cursor={{ stroke: "#2b7fff", strokeWidth: 1, strokeOpacity: 0.4 }} />
-        <Area type="monotone" dataKey="abonnes" name="Abonnés" stroke="#2b7fff" strokeWidth={2.5} fill="url(#csFollowers)" dot={false} activeDot={{ r: 4, fill: "#2b7fff", stroke: "var(--color-surface)", strokeWidth: 2 }} />
-      </AreaChart>
-    </ChartContainer>
-  );
-}
+// Graphique recharts lazy-chargé : sort la lib (~101 Ko gzip) du premier écran créateur.
+const FollowerArea = lazy(() => import("./charts/FollowerArea"));
 
 /** Sous-menu déployé d'une famille (liste ses pages). */
 function CreatorMobileMenu({ ids, onSelect }: { ids: Tab[]; onSelect: (id: Tab) => void }) {
@@ -989,7 +969,9 @@ export function CreatorSpace({
                   )}
                 </div>
                 {followerPoints.length >= 2 ? (
-                  <FollowerArea points={followerPoints} />
+                  <Suspense fallback={<div className="mt-4 h-[170px] animate-pulse rounded-xl bg-panel/50" />}>
+                    <FollowerArea points={followerPoints} />
+                  </Suspense>
                 ) : (
                   <div className="mt-4 grid h-[120px] place-items-center rounded-xl bg-panel/40 px-4 text-center text-xs leading-relaxed text-muted-foreground">
                     {suivi === null
@@ -1283,7 +1265,9 @@ export function CreatorSpace({
                         {fmtCompact(followerPoints[followerPoints.length - 1].abonnes)}
                       </div>
                     </div>
-                    <FollowerArea points={followerPoints} />
+                    <Suspense fallback={<div className="mt-4 h-[170px] animate-pulse rounded-xl bg-panel/50" />}>
+                      <FollowerArea points={followerPoints} />
+                    </Suspense>
                   </Card>
                 )}
                 <SuiviPanel entries={suivi} lockedCreator={name} />
