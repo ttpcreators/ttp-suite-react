@@ -11,6 +11,7 @@ import { toast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { RepresentationContract } from "@/views/RepresentationContract";
 import { useNavSub } from "@/lib/navSub";
+import { ttpLogoImg } from "@/lib/pdfDoc";
 
 type CtType = "marque" | "repr" | "ugc";
 
@@ -281,6 +282,7 @@ function contractHTML(o: {
 body{font-family:'Inter',-apple-system,Arial,sans-serif;color:#18181b;max-width:820px;margin:0 auto;padding:44px 40px;background:#fff;font-size:13px;line-height:1.55}
 .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0069FE;padding-bottom:18px}
 .brand{font-size:15px;font-weight:800}
+.idblock{display:flex;align-items:center;gap:10px}
 .muted{color:#71717a}
 .faint{color:#a1a1aa;font-size:11px}
 .kind{margin-top:22px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#0069FE;font-weight:700}
@@ -299,7 +301,7 @@ td{padding:9px 0;border-bottom:1px solid #ececef;font-weight:600}
 @media print{body{padding:0}}
 </style></head><body>
 <div class="top">
-  <div><div class="brand">TTP CREATORS</div><div class="faint">Lyon · France · partnerships@ttpcreators.pro</div></div>
+  <div class="idblock">${ttpLogoImg(34)}<div><div class="brand">TTP CREATORS</div><div class="faint">Lyon · France · partnerships@ttpcreators.pro</div></div></div>
   <div style="text-align:right"><div class="faint">Réf. ${esc(ref)}</div></div>
 </div>
 <div class="kind">${esc(meta.label)}</div>

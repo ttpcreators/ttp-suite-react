@@ -18,6 +18,25 @@ export function esc(s: unknown): string {
   return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
 }
 
+/**
+ * URL ABSOLUE du monogramme TTP (`public/logo.png`), pour l'en-tête des documents.
+ * Absolue et non relative : les documents sont rendus dans un iframe `srcdoc`
+ * (base `about:srcdoc`) — une URL relative y est ambiguë selon les navigateurs.
+ */
+export function ttpLogoUrl(): string {
+  const base = import.meta.env.BASE_URL || "/";
+  try {
+    return new URL(`${base}logo.png`, window.location.href).href;
+  } catch {
+    return `${base}logo.png`;
+  }
+}
+
+/** Bloc identité « logo + nom (+ mentions) » réutilisé par facture / contrat / doc. */
+export function ttpLogoImg(sizePx = 34): string {
+  return `<img src="${esc(ttpLogoUrl())}" alt="TTP Creators" width="${sizePx}" height="${sizePx}" style="width:${sizePx}px;height:${sizePx}px;border-radius:${Math.round(sizePx / 5)}px;display:block;flex:none">`;
+}
+
 const CSS = `
 *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 :root{
@@ -30,8 +49,9 @@ body{font-family:var(--sans);color:var(--ink);font-size:10.5pt;line-height:1.6;
   -webkit-font-smoothing:antialiased}
 .wrap{max-width:186mm;margin:0 auto;padding:14mm 12mm}
 /* En-tête : marque à gauche, référence/date à droite, filet dessous. */
-.mast{display:flex;align-items:baseline;justify-content:space-between;gap:8mm;
+.mast{display:flex;align-items:center;justify-content:space-between;gap:8mm;
   padding-bottom:3.5mm;border-bottom:.6pt solid var(--line)}
+.mast .id{display:flex;align-items:center;gap:3mm}
 .mast .brand,.mast .ref{font-family:var(--mono);font-size:7.5pt;letter-spacing:.18em;
   text-transform:uppercase;color:var(--faint)}
 .mast .brand{color:var(--ink)}
@@ -97,7 +117,7 @@ export function pdfShell(o: {
     `<!doctype html><html lang="fr"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width,initial-scale=1">` +
     `<title>${esc(o.title)}</title><style>${CSS}</style></head><body><div class="wrap">` +
-    `<header class="mast"><span class="brand">TTP Creators</span>` +
+    `<header class="mast"><span class="id">${ttpLogoImg(30)}<span class="brand">TTP Creators</span></span>` +
     `<span class="ref">${o.ref ? esc(o.ref) + " · " : ""}${esc(today)}</span></header>` +
     `<p class="eyebrow">${esc(o.eyebrow)}</p>` +
     `<h1>${o.heading}</h1>` +

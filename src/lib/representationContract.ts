@@ -1,3 +1,4 @@
+import { ttpLogoUrl } from "@/lib/pdfDoc";
 /**
  * Générateur de CONTRAT DE REPRÉSENTATION (agence × créateur) — data-driven.
  * Spec produite + revue juridique/complétude par un workflow multi-agents,
@@ -305,7 +306,7 @@ li{margin:2px 0}
 .ft{margin-top:26px;border-top:1px solid #e4e4e7;padding-top:12px;text-align:center;color:#a1a1aa;font-size:10px}
 @media print{body{padding:0}}
 </style></head><body>
-<div class="hd"><div class="b">${esc(RC_META.brandTitle)}</div><div class="s">${esc(RC_META.brandSubtitle)}</div></div>
+<div class="hd"><img src="${esc(ttpLogoUrl())}" alt="TTP" style="width:38px;height:38px;border-radius:8px;display:block;margin:0 auto 10px"><div class="b">${esc(RC_META.brandTitle)}</div><div class="s">${esc(RC_META.brandSubtitle)}</div></div>
 <div class="conf">Confidentiel</div>
 <h1>${esc(c.title)}</h1>
 ${c.subtitle ? `<div class="sub">${esc(c.subtitle)}</div>` : ""}

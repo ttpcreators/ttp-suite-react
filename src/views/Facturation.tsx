@@ -28,6 +28,7 @@ import { commissionMap } from "@/lib/commission";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { totalsOf, type LineItem, type Totals } from "@/lib/invoice";
+import { ttpLogoImg } from "@/lib/pdfDoc";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -259,11 +260,12 @@ td{padding:10px 6px;border-bottom:1px solid #ececef;font-size:13px}
 .tr.total{border-top:2px solid #18181b;margin-top:6px;padding-top:10px;font-size:17px;font-weight:700}
 .block{margin-top:22px}
 .block-t{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;font-weight:700;margin-bottom:5px}
+.idblock{display:flex;align-items:center;gap:10px}
 .legal{margin-top:34px;border-top:1px solid #ececef;padding-top:14px;font-size:10.5px;color:#a1a1aa;line-height:1.6}
 @media print{body{padding:0}}
 </style></head><body>
 <div class="top">
-  <div><div class="brand">${esc(issuer.name)}</div><div class="faint">${issuerLegal}</div></div>
+  <div class="idblock">${ttpLogoImg(34)}<div><div class="brand">${esc(issuer.name)}</div><div class="faint">${issuerLegal}</div></div></div>
   <div class="right"><h1>FACTURE</h1><div class="ref muted">N° ${esc(ref)}</div>
   <div class="ref muted">Émise le ${frDate(d.issueDate)}</div>
   <div class="ref muted">Échéance : ${frDate(d.dueDate)}</div>
