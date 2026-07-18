@@ -28,7 +28,6 @@ import {
   Settings,
   Activity,
   Mail,
-  Building2,
   CreditCard,
   FolderOpen,
   type LucideIcon,
@@ -44,7 +43,6 @@ export type ViewId =
   | "echeances"
   | "roster"
   | "mediakit"
-  | "mediakitAgence"
   | "briefs"
   | "gifting"
   | "ideas"
@@ -93,7 +91,6 @@ export const NAV: NavFamily[] = [
       { id: "roster", label: "Roster", icon: Users },
       { id: "suivi", label: "Suivi engagement", icon: Activity },
       { id: "mediakit", label: "Media kit", icon: ImageIcon },
-      { id: "mediakitAgence", label: "Media kit agence", icon: Building2 },
     ],
   },
   {

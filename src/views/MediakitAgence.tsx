@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2, Save, ExternalLink, Building2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
 import { ImageField } from "@/components/ui/image-field";
-import { MediakitEditor } from "@/views/MediakitEditor";
 
 /**
  * Éditeur du MEDIA KIT AGENCE (deck global ttpcreators.pro/mediakit/agence/).
@@ -74,46 +72,8 @@ const LBL = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-f
 const CARD = "rounded-2xl border border-border bg-surface p-4 shadow-sm";
 const PUBLIC_URL = "https://ttpcreators.pro/mediakit/agence/";
 
-export function MediakitAgence() {
-  const [tab, setTab] = useState<"agence" | "creatrices">("agence");
-  return (
-    <div className="space-y-4">
-      <div className="flex w-fit items-center gap-1 rounded-full border border-border bg-surface p-1">
-        {(
-          [
-            ["agence", "Agence"],
-            ["creatrices", "Créatrices"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={cn(
-              "rounded-full px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-              tab === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {tab === "creatrices" ? (
-        <div>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Édite le media kit de chaque créatrice ici — ça met à jour <strong>à la fois</strong> le deck agence et sa
-            page perso <span className="text-faint">(ttpcreators.pro/mediakit/&lt;lien&gt;)</span>.
-          </p>
-          <MediakitEditor />
-        </div>
-      ) : (
-        <AgencyTab />
-      )}
-    </div>
-  );
-}
-
-function AgencyTab() {
+/** Éditeur du deck agence (onglet « Agence » de la page Media kit unifiée). */
+export function AgencyTab() {
   const [kit, setKit] = useState<FullAgencyKit>(() => withDefaults({}));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

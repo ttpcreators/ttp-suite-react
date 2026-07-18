@@ -13,6 +13,7 @@ import { RecipientPicker } from "@/components/ui/recipient-picker";
 import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
 import { MediakitEditor } from "@/views/MediakitEditor";
+import { AgencyTab } from "@/views/MediakitAgence";
 
 /**
  * Media kit = bibliothèque de fichiers. L'agence dépose les media kits qu'elle a
@@ -637,14 +638,19 @@ function MediakitFiles() {
   );
 }
 
+type MkTab = "creatrices" | "agence" | "files";
+
 /**
- * Page « Media kit » = 2 onglets :
- *  - EN LIGNE : éditeur des données du media kit web (→ ttpcreators.pro/mediakit).
- *  - FICHIERS : bibliothèque des media kits déposés (PDF/liens) + envoi par mail.
+ * Page « Media kit » UNIFIÉE = 3 onglets (fusion de l'ancienne « Media kit » et de
+ * « Media kit agence », qui faisaient doublon sur l'éditeur par créatrice) :
+ *  - CRÉATRICES : éditeur en ligne du media kit de chaque créatrice
+ *                 (→ ttpcreators.pro/mediakit/<lien>, alimente aussi le deck agence).
+ *  - AGENCE     : contenu de cadrage du deck agence (→ /mediakit/agence/).
+ *  - FICHIERS   : bibliothèque des media kits déposés (PDF/liens) + envoi par mail.
  */
 export function Mediakit() {
-  const [tab, setTab] = useState<"online" | "files">("online");
-  const tabBtn = (id: "online" | "files", label: string) => (
+  const [tab, setTab] = useState<MkTab>("creatrices");
+  const tabBtn = (id: MkTab, label: string) => (
     <button
       type="button"
       onClick={() => setTab(id)}
@@ -659,10 +665,23 @@ export function Mediakit() {
   return (
     <div className="space-y-4">
       <div className="inline-flex rounded-xl border border-border bg-surface p-1 text-[11px] font-semibold uppercase tracking-wide">
-        {tabBtn("online", "En ligne")}
+        {tabBtn("creatrices", "Créatrices")}
+        {tabBtn("agence", "Agence")}
         {tabBtn("files", "Fichiers")}
       </div>
-      {tab === "online" ? <MediakitEditor /> : <MediakitFiles />}
+      {tab === "creatrices" ? (
+        <div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Édite le media kit de chaque créatrice ici — ça met à jour <strong>à la fois</strong> sa page perso
+            <span className="text-faint"> (ttpcreators.pro/mediakit/&lt;lien&gt;)</span> et le deck agence.
+          </p>
+          <MediakitEditor />
+        </div>
+      ) : tab === "agence" ? (
+        <AgencyTab />
+      ) : (
+        <MediakitFiles />
+      )}
     </div>
   );
 }
