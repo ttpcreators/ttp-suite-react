@@ -2,7 +2,8 @@ import { useEffect, useState, type ReactNode, type MouseEvent as ReactMouseEvent
 import { ChevronRight, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type SbItem = { id: string; label: string; icon: LucideIcon; badge?: number | string };
+export type SbChild = { id: string; label: string };
+export type SbItem = { id: string; label: string; icon: LucideIcon; badge?: number | string; children?: SbChild[] };
 export type SbGroup = { id: string; label: string; icon: LucideIcon; items: SbItem[] };
 
 function Row({
@@ -50,12 +51,14 @@ function Row({
 function Group({
   group,
   activeId,
+  activeSub,
   onSelect,
   onItemContext,
 }: {
   group: SbGroup;
   activeId: string;
-  onSelect: (id: string) => void;
+  activeSub?: string | null;
+  onSelect: (id: string, sub?: string) => void;
   onItemContext?: (id: string, e: ReactMouseEvent) => void;
 }) {
   // Toutes les sections OUVERTES par défaut (sidebar aérée, sous-pages visibles) ;
@@ -105,15 +108,40 @@ function Group({
         )}
       >
         <div className="flex min-h-0 flex-col gap-0.5 overflow-hidden pt-0.5">
-          {group.items.map((item) => (
-            <Row
-              key={item.id}
-              item={item}
-              active={item.id === activeId}
-              onClick={() => onSelect(item.id)}
-              onContext={onItemContext ? (e) => onItemContext(item.id, e) : undefined}
-            />
-          ))}
+          {group.items.map((item) => {
+            // Une sous-page (3e niveau) est active → on ne surligne pas le parent.
+            const childActive = !!item.children && item.id === activeId && item.children.some((c) => c.id === activeSub);
+            return (
+              <div key={item.id} className="flex flex-col">
+                <Row
+                  item={item}
+                  active={item.id === activeId && !childActive}
+                  onClick={() => onSelect(item.id)}
+                  onContext={onItemContext ? (e) => onItemContext(item.id, e) : undefined}
+                />
+                {item.children && item.children.length > 0 && (
+                  <div className="ml-[26px] mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
+                    {item.children.map((c) => {
+                      const on = item.id === activeId && activeSub === c.id;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => onSelect(item.id, c.id)}
+                          className={cn(
+                            "select-none rounded-[6px] py-1.5 pl-2.5 pr-2 text-left text-[12px] tracking-wide transition-colors",
+                            on ? "bg-rowhover font-medium text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
+                          )}
+                        >
+                          {c.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -128,6 +156,7 @@ function Group({
 export function SidebarNav({
   groups,
   activeId,
+  activeSub,
   onSelect,
   onItemContext,
   header,
@@ -135,7 +164,8 @@ export function SidebarNav({
 }: {
   groups: SbGroup[];
   activeId: string;
-  onSelect: (id: string) => void;
+  activeSub?: string | null;
+  onSelect: (id: string, sub?: string) => void;
   onItemContext?: (id: string, e: ReactMouseEvent) => void;
   header?: ReactNode;
   footer?: ReactNode;
@@ -145,7 +175,7 @@ export function SidebarNav({
       {header}
       <nav className="mt-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {groups.map((g) => (
-          <Group key={g.id} group={g} activeId={activeId} onSelect={onSelect} onItemContext={onItemContext} />
+          <Group key={g.id} group={g} activeId={activeId} activeSub={activeSub} onSelect={onSelect} onItemContext={onItemContext} />
         ))}
       </nav>
       {footer && <div className="mt-auto border-t border-border pt-3">{footer}</div>}

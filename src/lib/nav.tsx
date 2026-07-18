@@ -61,7 +61,9 @@ export type ViewId =
   | "suivi"
   | "corbeille";
 
-export type NavItem = { id: ViewId; label: string; icon: LucideIcon };
+/** Sous-page d'une page (3e niveau de nav) : `id` = onglet ciblé dans la vue parente. */
+export type NavChild = { id: string; label: string };
+export type NavItem = { id: ViewId; label: string; icon: LucideIcon; children?: NavChild[] };
 export type NavFamily = {
   id: string;
   label: string;
@@ -90,7 +92,16 @@ export const NAV: NavFamily[] = [
     items: [
       { id: "roster", label: "Roster", icon: Users },
       { id: "suivi", label: "Suivi engagement", icon: Activity },
-      { id: "mediakit", label: "Media kit", icon: ImageIcon },
+      {
+        id: "mediakit",
+        label: "Media kit",
+        icon: ImageIcon,
+        children: [
+          { id: "creatrices", label: "Créatrices" },
+          { id: "agence", label: "Agence" },
+          { id: "files", label: "Fichiers" },
+        ],
+      },
     ],
   },
   {
@@ -125,7 +136,16 @@ export const NAV: NavFamily[] = [
       { id: "contacts", label: "Contacts", icon: Contact },
       { id: "mails", label: "Mails", icon: Mail },
       { id: "prospection", label: "Prospection", icon: Search },
-      { id: "contrats", label: "Contrats", icon: ScrollText },
+      {
+        id: "contrats",
+        label: "Contrats",
+        icon: ScrollText,
+        children: [
+          { id: "marque", label: "Marque × Créateur" },
+          { id: "repr", label: "Représentation" },
+          { id: "ugc", label: "Contrat UGC" },
+        ],
+      },
     ],
   },
   {

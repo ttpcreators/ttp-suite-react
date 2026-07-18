@@ -10,6 +10,7 @@ import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/u
 import { toast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { RepresentationContract } from "@/views/RepresentationContract";
+import { useNavSub } from "@/lib/navSub";
 
 type CtType = "marque" | "repr" | "ugc";
 
@@ -338,6 +339,11 @@ export function Contrats() {
   const configs = localCfg ?? cfgData ?? {};
 
   const [ctType, setCtType] = useState<CtType>("marque");
+  // Sous-page demandée depuis la sidebar (Contrats → Marque × Créateur / Représentation / UGC).
+  const navSub = useNavSub();
+  useEffect(() => {
+    if (navSub === "marque" || navSub === "repr" || navSub === "ugc") setCtType(navSub);
+  }, [navSub]);
   const [creatorName, setCreatorName] = useState("");
   const [brand, setBrand] = useState("Sephora");
   const [value, setValue] = useState("32 000 €");

@@ -14,6 +14,7 @@ import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
 import { MediakitEditor } from "@/views/MediakitEditor";
 import { AgencyTab } from "@/views/MediakitAgence";
+import { useNavSub } from "@/lib/navSub";
 
 /**
  * Media kit = bibliothèque de fichiers. L'agence dépose les media kits qu'elle a
@@ -650,6 +651,11 @@ type MkTab = "creatrices" | "agence" | "files";
  */
 export function Mediakit() {
   const [tab, setTab] = useState<MkTab>("creatrices");
+  // Sous-page demandée depuis la sidebar (Media kit → Créatrices / Agence / Fichiers).
+  const sub = useNavSub();
+  useEffect(() => {
+    if (sub === "creatrices" || sub === "agence" || sub === "files") setTab(sub);
+  }, [sub]);
   const tabBtn = (id: MkTab, label: string) => (
     <button
       type="button"

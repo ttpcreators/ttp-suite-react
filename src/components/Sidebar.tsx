@@ -10,11 +10,12 @@ const GROUPS: SbGroup[] = NAV.map((f) => ({
   id: f.id,
   label: f.label,
   icon: f.icon,
-  items: f.items.map((i) => ({ id: i.id, label: i.label, icon: i.icon })),
+  items: f.items.map((i) => ({ id: i.id, label: i.label, icon: i.icon, children: i.children })),
 }));
 
 export function Sidebar({
   active,
+  activeSub,
   onSelect,
   onLogout,
   space,
@@ -22,7 +23,8 @@ export function Sidebar({
   onItemContext,
 }: {
   active: ViewId;
-  onSelect: (id: ViewId) => void;
+  activeSub?: string | null;
+  onSelect: (id: ViewId, sub?: string) => void;
   onLogout: () => void;
   space: "agency" | "portal";
   onSpaceChange: (s: "agency" | "portal") => void;
@@ -178,7 +180,8 @@ export function Sidebar({
     <SidebarNav
       groups={GROUPS}
       activeId={active}
-      onSelect={(id) => onSelect(id as ViewId)}
+      activeSub={activeSub}
+      onSelect={(id, sub) => onSelect(id as ViewId, sub)}
       onItemContext={onItemContext ? (id, e) => onItemContext(id as ViewId, e) : undefined}
       header={header}
       footer={footer}

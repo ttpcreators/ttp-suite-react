@@ -12,6 +12,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Login } from "@/components/Login";
 import { NAV, findItem, type NavItem, type ViewId } from "@/lib/nav";
+import { NavSubContext } from "@/lib/navSub";
 import { supabase } from "@/lib/supabase";
 import { SearchContext } from "@/lib/search";
 import { AgencyAvatar } from "@/components/ui/agency-avatar";
@@ -245,6 +246,9 @@ export default function App() {
   // Ref vers l'onglet actif : navigateCurrentTab (stable) lit la valeur à jour.
   const activeRef = useRef(active);
   activeRef.current = active;
+  // Sous-onglet demandé (3e niveau de nav : Media kit → Agence…). Transitoire : posé au
+  // clic d'une sous-page, lu par la vue à son montage. Réinitialisé sur toute autre nav.
+  const [sub, setSub] = useState<string | null>(null);
   // Volet secondaire (multi-pages côte à côte, desktop) + son menu contextuel.
   const [splitView, setSplitView] = useState<ViewId | null>(() => {
     try {
@@ -395,8 +399,9 @@ export default function App() {
     };
   }, [session, profileReload]);
 
-  const select = (id: ViewId) => {
+  const select = (id: ViewId, subId?: string) => {
     navigateCurrentTab(id);
+    setSub(subId ?? null); // sous-page ciblée (ou reset si nav normale)
     setMobileTab(null);
     setQuery("");
     setDetailCreator(null);
@@ -406,6 +411,7 @@ export default function App() {
   const openInNewTab = (id: ViewId) => {
     setTabs((prev) => addTab(prev, id) as ViewId[]);
     setActive(id);
+    setSub(null);
     setMobileTab(null);
     setQuery("");
     setDetailCreator(null);
@@ -422,6 +428,7 @@ export default function App() {
   // Clic sur un onglet : bascule dessus (et referme un éventuel drill-down).
   const switchTab = (id: ViewId) => {
     setActive(id);
+    setSub(null);
     setDetailCreator(null);
     setSpace("agency");
   };
@@ -572,7 +579,9 @@ export default function App() {
     ) : detailCreator ? (
       <CreatorDetail name={detailCreator} onBack={() => setDetailCreator(null)} onOpenPortal={openPortal} />
     ) : (
-      <ViewContent active={active} onOpenCreator={openDetail} />
+      <NavSubContext.Provider value={sub}>
+        <ViewContent active={active} onOpenCreator={openDetail} />
+      </NavSubContext.Provider>
     );
   const primaryTitle = detailCreator ?? (space === "portal" ? "Portail créateur" : title);
   const showPrimaryH1 = space !== "portal" && !detailCreator && active !== "apercu";
@@ -587,6 +596,7 @@ export default function App() {
           <div className="hidden h-full md:block">
             <Sidebar
               active={active}
+              activeSub={sub}
               onSelect={select}
               onLogout={logout}
               space={space}
