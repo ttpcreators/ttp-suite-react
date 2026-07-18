@@ -451,7 +451,23 @@ export function Todo() {
               options={TODO_FILTERS.map((f) => ({ value: f.id, label: f.label }))}
             />
           )}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Accès direct Tous / Agence (le déroulant reste pour une créatrice précise). */}
+            <div className="flex items-center gap-1 self-start rounded-full border border-border bg-surface p-1">
+              {([[null, "Tous"], ["__agency__", "Agence"]] as const).map(([val, label]) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setCreatorFilter(val)}
+                  className={cn(
+                    "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                    creatorFilter === val ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <Select value={creatorSelectValue} onValueChange={onCreatorSelect}>
               <SelectTrigger
                 className="h-9 w-auto min-w-[190px] rounded-full bg-surface"
