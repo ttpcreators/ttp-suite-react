@@ -380,6 +380,13 @@ export function CreatorSpace({
   const [idOpen, setIdOpen] = useState(false);
   const [idText, setIdText] = useState("");
   // édition inline d'une idée
+  // Vue des idées : liste simple ou colonnes par statut (kanban). Mémorisée.
+  const [ideaView, setIdeaView] = useState<"liste" | "colonnes">(
+    () => (localStorage.getItem("ttp:cs-idea-view") === "colonnes" ? "colonnes" : "liste"),
+  );
+  useEffect(() => {
+    localStorage.setItem("ttp:cs-idea-view", ideaView);
+  }, [ideaView]);
   const [ideaEditId, setIdeaEditId] = useState<string | null>(null);
   const [ideaEditText, setIdeaEditText] = useState("");
   // add-contact form
@@ -603,6 +610,77 @@ export function CreatorSpace({
     if (!(await dbUpdate("ideas", id, { text: t }))) toast("Erreur — réessaie");
     else toast("Idée modifiée ✓");
   };
+
+  /** Carte d'une idée (mode lecture ou édition) — partagée par les vues Liste et Colonnes. */
+  const ideaCard = (x: Idea) =>
+    ideaEditId === x.id ? (
+      <div key={x.id} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+        <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Modifier l'idée</span>
+        <textarea
+          value={ideaEditText}
+          onChange={(e) => setIdeaEditText(e.target.value)}
+          rows={3}
+          autoFocus
+          placeholder="Ton idée de contenu…"
+          className="w-full resize-y rounded-lg border border-border bg-panel px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+        />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => saveIdeaEdit(x.id)}
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            <Check className="h-3.5 w-3.5" /> Enregistrer
+          </button>
+          <button
+            type="button"
+            onClick={() => setIdeaEditId(null)}
+            className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+            title="Annuler"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    ) : (
+      <div key={x.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+        <div className="flex items-start gap-3">
+          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-indigo" />
+          <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{x.text}</div>
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2.5">
+          <div className="w-[150px] max-w-[60%]">
+            <StatusSelect value={x.status ?? "À faire"} options={IDEA_STATUS} onChange={(s) => setIdeaStatus(x, s)} />
+          </div>
+          <ActionMenu
+            items={[
+              {
+                key: "edit",
+                label: "Modifier l'idée",
+                icon: Pencil,
+                onClick: () => {
+                  setIdeaEditId(x.id);
+                  setIdeaEditText(x.text);
+                },
+              },
+              {
+                key: "delete",
+                label: "Supprimer",
+                icon: Trash2,
+                danger: true,
+                onClick: async () => {
+                  if (await dbDelete("ideas", x.id)) {
+                    setIdeas((prev) => prev.filter((y) => y.id !== x.id));
+                    toast("Supprimé");
+                  }
+                },
+                confirm: { title: "Supprimer l'idée", message: `Supprimer « ${x.text} » ? Cette action est irréversible.` },
+              },
+            ]}
+          />
+        </div>
+      </div>
+    );
 
   const addContact = async () => {
     if (!ctBrand.trim() && !ctPerson.trim()) {
@@ -1550,94 +1628,66 @@ export function CreatorSpace({
           {/* Idées */}
           {tab === "ideas" && (
             <>
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div className="text-sm text-muted-foreground">{ideas.length} idée{ideas.length > 1 ? "s" : ""}</div>
-                <AddButton label="Idée" onClick={() => setIdOpen(true)} />
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm text-muted-foreground">
+                  {ideas.length} idée{ideas.length > 1 ? "s" : ""}
+                </div>
+                <div className="flex items-center gap-2">
+                  {ideas.length > 0 && (
+                    <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
+                      {([["liste", "Liste", List], ["colonnes", "Colonnes", Columns3]] as const).map(([m, label, Icon]) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setIdeaView(m)}
+                          className={
+                            "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors " +
+                            (ideaView === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")
+                          }
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <AddButton label="Idée" onClick={() => setIdOpen(true)} />
+                </div>
               </div>
               <InlineForm open={idOpen} title="Nouvelle idée" onClose={() => setIdOpen(false)} onSubmit={addIdea}>
                 <AutoGrowTextField label="Idée de contenu" value={idText} onChange={setIdText} placeholder="Décris ton idée — le champ s'agrandit tout seul…" className="min-w-full" />
               </InlineForm>
-              <div className="flex flex-col gap-3">
-                {ideas.length === 0 ? (
-                  <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">Aucune idée. Ajoute la première 💡</div>
-                ) : (
-                  ideas.map((x) =>
-                    ideaEditId === x.id ? (
-                      <div key={x.id} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                        <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Modifier l'idée</span>
-                        <textarea
-                          value={ideaEditText}
-                          onChange={(e) => setIdeaEditText(e.target.value)}
-                          rows={3}
-                          autoFocus
-                          placeholder="Ton idée de contenu…"
-                          className="w-full resize-y rounded-lg border border-border bg-panel px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                        />
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => saveIdeaEdit(x.id)}
-                            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
-                          >
-                            <Check className="h-3.5 w-3.5" /> Enregistrer
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setIdeaEditId(null)}
-                            className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                            title="Annuler"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
+              {ideas.length === 0 ? (
+                <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">Aucune idée. Ajoute la première 💡</div>
+              ) : ideaView === "liste" ? (
+                <div className="flex flex-col gap-3">{ideas.map(ideaCard)}</div>
+              ) : (
+                /* Colonnes par statut (kanban) — défile horizontalement sur mobile. */
+                <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 xl:grid-cols-4">
+                  {IDEA_STATUS.map((s) => {
+                    const col = ideas.filter((i) => (i.status ?? "À faire") === s.value);
+                    return (
+                      <div
+                        key={s.value}
+                        className="flex w-[78vw] shrink-0 flex-col gap-2 rounded-2xl border border-border bg-panel/50 p-2.5 sm:w-auto sm:shrink"
+                      >
+                        <div className="flex items-center gap-2 px-1">
+                          <span className={"size-2 shrink-0 rounded-full " + s.dot} />
+                          <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{s.label}</span>
+                          <span className="ml-auto text-[11px] tabular-nums text-faint">{col.length}</span>
                         </div>
+                        {col.length === 0 ? (
+                          <div className="px-1 pb-1 text-[11px] text-faint">—</div>
+                        ) : (
+                          col.map(ideaCard)
+                        )}
                       </div>
-                    ) : (
-                      <div key={x.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                        {/* Ligne 1 : puce + texte de l'idée (pleine largeur) */}
-                        <div className="flex items-start gap-3">
-                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-indigo" />
-                          <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{x.text}</div>
-                        </div>
-                        {/* Ligne 2 : statut + actions */}
-                        <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2.5">
-                          <div className="w-[150px]">
-                            <StatusSelect value={x.status ?? "À faire"} options={IDEA_STATUS} onChange={(s) => setIdeaStatus(x, s)} />
-                          </div>
-                          <ActionMenu
-                            items={[
-                              {
-                                key: "edit",
-                                label: "Modifier l'idée",
-                                icon: Pencil,
-                                onClick: () => {
-                                  setIdeaEditId(x.id);
-                                  setIdeaEditText(x.text);
-                                },
-                              },
-                              {
-                                key: "delete",
-                                label: "Supprimer",
-                                icon: Trash2,
-                                danger: true,
-                                onClick: async () => {
-                                  if (await dbDelete("ideas", x.id)) {
-                                    setIdeas((prev) => prev.filter((y) => y.id !== x.id));
-                                    toast("Supprimé");
-                                  }
-                                },
-                                confirm: { title: "Supprimer l'idée", message: `Supprimer « ${x.text} » ? Cette action est irréversible.` },
-                              },
-                            ]}
-                          />
-                        </div>
-                      </div>
-                    ),
-                  )
-                )}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
-
           {/* Contacts du créateur — visibles par l'agence (table partagée, RLS cloisonnée) */}
           {tab === "contacts" && (
             <>
