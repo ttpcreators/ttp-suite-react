@@ -82,7 +82,7 @@ type Creator = {
 };
 type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; status?: string | null; sort_order?: number };
 type Idea = { id: string; text: string; status: string | null; sort_order?: number };
-type Brief = { id: string; brand: string; deliverables: string | null; due: string | null; status: string | null };
+type Brief = { id: string; brand: string; deliverables: string | null; due: string | null; status: string | null; consignes: string | null };
 type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string; type: string };
 type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null };
 type Invoice = { ref: string; party: string; amount: string | null; date: string | null; status: string | null };
@@ -424,7 +424,7 @@ export function CreatorSpace({
       });
     supabase.from("todos").select("id,text,descr,due,priority,done,status,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setTodos((data as Todo[]) ?? []));
     supabase.from("ideas").select("id,text,status,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
-    supabase.from("briefs").select("id,brand,deliverables,due,status").eq("creator", name).then(({ data }) => alive && setBriefs((data as Brief[]) ?? []));
+    supabase.from("briefs").select("id,brand,deliverables,due,status,consignes").eq("creator", name).then(({ data }) => alive && setBriefs((data as Brief[]) ?? []));
     supabase.from("gifting").select(GIFT_COLS).eq("creator", name).order("sort_order", { ascending: false }).then(({ data }) => alive && setGifts((data as GiftRow[]) ?? []));
     supabase.from("events").select("id,date,day,time,title,type,who").or("deleted.is.null,deleted.eq.false").then(({ data }) => {
       if (!alive) return;
@@ -466,6 +466,25 @@ export function CreatorSpace({
   const setBriefStatus = async (id: string, status: string) => {
     setBriefs((prev) => prev.map((b) => (b.id === id ? { ...b, status } : b)));
     if (!(await dbUpdate("briefs", id, { status }))) toast("Erreur — réessaie");
+  };
+
+  // ── Script du brief rempli PAR LE CRÉATEUR (colonne `consignes`, la même que
+  // l'agence lit et exporte en PDF). RLS `briefs_scoped` autorise déjà l'écriture
+  // sur ses propres briefs — aucun SQL supplémentaire.
+  const [briefScriptId, setBriefScriptId] = useState<string | null>(null);
+  const [briefScriptText, setBriefScriptText] = useState("");
+  const saveBriefScript = async (id: string) => {
+    const t = briefScriptText.trim();
+    const prev = briefs.find((b) => b.id === id)?.consignes ?? null;
+    setBriefs((list) => list.map((b) => (b.id === id ? { ...b, consignes: t || null } : b)));
+    setBriefScriptId(null);
+    if (!(await dbUpdate("briefs", id, { consignes: t || null }))) {
+      setBriefs((list) => list.map((b) => (b.id === id ? { ...b, consignes: prev } : b)));
+      toast("Erreur — réessaie");
+      return;
+    }
+    notifyAgency("idee", name, `Script — ${briefs.find((b) => b.id === id)?.brand ?? ""}`);
+    toast("Script enregistré ✓ — ton agence le voit");
   };
 
   // ── Gifting côté créateur : voir ses cadeaux, marquer publié, signaler un cadeau reçu.
@@ -1812,14 +1831,66 @@ export function CreatorSpace({
                 <div className="p-6 text-sm text-muted-foreground">Aucun brief pour le moment.</div>
               ) : (
                 briefs.map((b, i) => (
-                  <div key={b.id} className={"flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3 " + (i > 0 ? "border-t border-border" : "")}>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold">{b.brand}</div>
-                      <div className="truncate text-xs text-faint">{b.deliverables} · échéance {frDate(b.due)}</div>
+                  <div key={b.id} className={"px-4 py-3 " + (i > 0 ? "border-t border-border" : "")}>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold">{b.brand}</div>
+                        <div className="truncate text-xs text-faint">{b.deliverables} · échéance {frDate(b.due)}</div>
+                      </div>
+                      <div className="w-full sm:w-[150px] sm:shrink-0">
+                        <StatusSelect value={b.status ?? "attente"} options={BRIEF_STATUS} onChange={(v) => setBriefStatus(b.id, v)} />
+                      </div>
                     </div>
-                    <div className="w-full sm:w-[150px] sm:shrink-0">
-                      <StatusSelect value={b.status ?? "attente"} options={BRIEF_STATUS} onChange={(v) => setBriefStatus(b.id, v)} />
-                    </div>
+
+                    {/* Script écrit par le créateur — visible et exportable par l'agence */}
+                    {briefScriptId === b.id ? (
+                      <div className="mt-3 flex flex-col gap-2 rounded-xl border border-border bg-panel p-3">
+                        <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Mon script</span>
+                        <textarea
+                          value={briefScriptText}
+                          onChange={(e) => setBriefScriptText(e.target.value)}
+                          rows={6}
+                          autoFocus
+                          placeholder={"Écris ton script ici…\n\nHook :\nCorps :\nCall to action :"}
+                          className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => saveBriefScript(b.id)}
+                            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                          >
+                            <Check className="h-3.5 w-3.5" /> Enregistrer
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBriefScriptId(null)}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                            title="Annuler"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-2">
+                        {b.consignes && (
+                          <p className="mb-2 whitespace-pre-wrap rounded-xl bg-panel px-3 py-2 text-[13px] leading-relaxed text-muted-foreground">
+                            {b.consignes}
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBriefScriptId(b.id);
+                            setBriefScriptText(b.consignes ?? "");
+                          }}
+                          className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover"
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> {b.consignes ? "Modifier mon script" : "Écrire mon script"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
