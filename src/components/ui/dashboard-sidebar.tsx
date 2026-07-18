@@ -58,18 +58,33 @@ function Group({
   onSelect: (id: string) => void;
   onItemContext?: (id: string, e: ReactMouseEvent) => void;
 }) {
-  // Au chargement : groupes repliés (effet aéré) ; seul le groupe de la page
-  // active reste ouvert. Se rouvre si un de ses items devient actif (recherche…).
+  // Toutes les sections OUVERTES par défaut (sidebar aérée, sous-pages visibles) ;
+  // chaque section reste repliable et son état est MÉMORISÉ (localStorage). Le groupe
+  // de la page active se rouvre toujours (navigation / recherche).
   const containsActive = group.items.some((i) => i.id === activeId);
-  const [open, setOpen] = useState(containsActive);
+  const storageKey = `ttp:sb-group:${group.id}`;
+  const [open, setOpen] = useState(() => {
+    if (typeof localStorage === "undefined") return true;
+    return localStorage.getItem(storageKey) !== "0"; // défaut : ouvert
+  });
   useEffect(() => {
     if (containsActive) setOpen(true);
   }, [containsActive]);
+  const toggle = () =>
+    setOpen((o) => {
+      const next = !o;
+      try {
+        localStorage.setItem(storageKey, next ? "1" : "0");
+      } catch {
+        /* stockage indispo : on garde juste l'état en mémoire */
+      }
+      return next;
+    });
   return (
     <div className="flex flex-col">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         className="group/h flex select-none items-center justify-between rounded-[6px] px-2.5 py-1.5 text-left transition-colors hover:bg-rowhover/60"
       >
         <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground">
@@ -128,7 +143,7 @@ export function SidebarNav({
   return (
     <aside className="flex h-full w-[240px] shrink-0 flex-col p-3">
       {header}
-      <nav className="mt-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <nav className="mt-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {groups.map((g) => (
           <Group key={g.id} group={g} activeId={activeId} onSelect={onSelect} onItemContext={onItemContext} />
         ))}
