@@ -428,32 +428,37 @@ export function Todo() {
       {/* Barre de filtres */}
       {rows !== null && rows.length > 0 && (
         <div className="mb-4 flex flex-col gap-2.5">
-          {/* Bascule de vue : liste ↔ colonnes par statut */}
-          <div className="flex items-center gap-1 self-start rounded-full border border-border bg-surface p-1">
-            {([["liste", "Liste", List], ["colonnes", "Colonnes", Columns3]] as const).map(([mode, label, Icon]) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setViewMode(mode)}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-                  viewMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" /> {label}
-              </button>
-            ))}
+          {/* Ligne 1 — statut (gauche) + bascule de vue (droite) */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {viewMode === "liste" && (
+                <FilterBar
+                  value={todoFilter}
+                  onChange={(v) => setTodoFilter(v as TodoFilter)}
+                  options={TODO_FILTERS.map((f) => ({ value: f.id, label: f.label }))}
+                />
+              )}
+            </div>
+            <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
+              {([["liste", "Liste", List], ["colonnes", "Colonnes", Columns3]] as const).map(([mode, label, Icon]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setViewMode(mode)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                    viewMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" /> {label}
+                </button>
+              ))}
+            </div>
           </div>
-          {viewMode === "liste" && (
-            <FilterBar
-              value={todoFilter}
-              onChange={(v) => setTodoFilter(v as TodoFilter)}
-              options={TODO_FILTERS.map((f) => ({ value: f.id, label: f.label }))}
-            />
-          )}
+
+          {/* Ligne 2 — périmètre (Tous / Agence / une créatrice) · priorité */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Accès direct Tous / Agence (le déroulant reste pour une créatrice précise). */}
-            <div className="flex items-center gap-1 self-start rounded-full border border-border bg-surface p-1">
+            <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
               {([[null, "Tous"], ["__agency__", "Agence"]] as const).map(([val, label]) => (
                 <button
                   key={label}
@@ -469,17 +474,10 @@ export function Todo() {
               ))}
             </div>
             <Select value={creatorSelectValue} onValueChange={onCreatorSelect}>
-              <SelectTrigger
-                className="h-9 w-auto min-w-[190px] rounded-full bg-surface"
-                placeholder="Tous les créateurs"
-              />
+              <SelectTrigger className="h-9 w-auto min-w-[170px] rounded-full bg-surface" placeholder="Une créatrice…" />
               <SelectContent>
-                <SelectItem index={0} value={ALL}>
-                  Tous
-                </SelectItem>
-                <SelectItem index={1} value="__agency__">
-                  Agence
-                </SelectItem>
+                <SelectItem index={0} value={ALL}>Tous</SelectItem>
+                <SelectItem index={1} value="__agency__">Agence</SelectItem>
                 {creators.map((c, i) => (
                   <SelectItem key={c.id} index={i + 2} value={c.name}>
                     {titleCase(c.name)}
@@ -487,12 +485,13 @@ export function Todo() {
                 ))}
               </SelectContent>
             </Select>
+            <span className="mx-0.5 hidden h-6 w-px bg-border md:block" />
+            <FilterBar
+              value={priorityFilter ?? "__all__"}
+              onChange={(v) => setPriorityFilter(v === "__all__" ? null : (v as Priority))}
+              options={priorityPills.map((p) => ({ value: p.value ?? "__all__", label: p.label }))}
+            />
           </div>
-          <FilterBar
-            value={priorityFilter ?? "__all__"}
-            onChange={(v) => setPriorityFilter(v === "__all__" ? null : (v as Priority))}
-            options={priorityPills.map((p) => ({ value: p.value ?? "__all__", label: p.label }))}
-          />
         </div>
       )}
 
