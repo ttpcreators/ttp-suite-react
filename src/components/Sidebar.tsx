@@ -21,6 +21,7 @@ export function Sidebar({
   space,
   onSpaceChange,
   onItemContext,
+  onItemSplit,
 }: {
   active: ViewId;
   activeSub?: string | null;
@@ -29,6 +30,7 @@ export function Sidebar({
   space: "agency" | "portal";
   onSpaceChange: (s: "agency" | "portal") => void;
   onItemContext?: (id: ViewId, e: ReactMouseEvent) => void;
+  onItemSplit?: (id: ViewId) => void;
 }) {
   // Sidebar repliable en rail d'icônes (mémorisé).
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("ttp:sidebar-collapsed") === "1");
@@ -183,6 +185,7 @@ export function Sidebar({
       activeSub={activeSub}
       onSelect={(id, sub) => onSelect(id as ViewId, sub)}
       onItemContext={onItemContext ? (id, e) => onItemContext(id as ViewId, e) : undefined}
+      onItemSplit={onItemSplit ? (id) => onItemSplit(id as ViewId) : undefined}
       header={header}
       footer={footer}
     />

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronRight, type LucideIcon } from "lucide-react";
+import { ChevronRight, Columns2, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type SbChild = { id: string; label: string };
@@ -11,40 +11,59 @@ function Row({
   active,
   onClick,
   onContext,
+  onSplit,
 }: {
   item: SbItem;
   active: boolean;
   onClick: () => void;
   onContext?: (e: ReactMouseEvent) => void;
+  /** Ouvre cette page « à côté » (vue partagée) — bouton révélé au survol. */
+  onSplit?: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      onContextMenu={onContext}
-      className={cn(
-        "group flex w-full select-none items-center justify-between rounded-[7px] py-[7px] pl-3 pr-2.5 text-left transition-colors",
-        active
-          ? "bg-rowhover font-medium text-foreground"
-          : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
-      )}
-    >
-      <span className="flex min-w-0 items-center gap-2.5">
-        <item.icon
-          className={cn(
-            "h-4 w-4 shrink-0 transition-colors",
-            active ? "text-primary" : "text-faint group-hover:text-foreground/70",
-          )}
-          strokeWidth={1.75}
-        />
-        <span className="truncate text-[13px] tracking-wide">{item.label}</span>
-      </span>
-      {item.badge != null && (
-        <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary/10 px-1.5 text-[10px] font-semibold text-primary">
-          {item.badge}
+    <div className="group relative flex items-center">
+      <button
+        type="button"
+        onClick={onClick}
+        onContextMenu={onContext}
+        className={cn(
+          "flex w-full select-none items-center justify-between rounded-[7px] py-[7px] pl-3 pr-2.5 text-left transition-colors",
+          active
+            ? "bg-rowhover font-medium text-foreground"
+            : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
+        )}
+      >
+        <span className="flex min-w-0 items-center gap-2.5">
+          <item.icon
+            className={cn(
+              "h-4 w-4 shrink-0 transition-colors",
+              active ? "text-primary" : "text-faint group-hover:text-foreground/70",
+            )}
+            strokeWidth={1.75}
+          />
+          <span className="truncate text-[13px] tracking-wide">{item.label}</span>
         </span>
+        {item.badge != null && (
+          <span className="mr-6 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary/10 px-1.5 text-[10px] font-semibold text-primary">
+            {item.badge}
+          </span>
+        )}
+      </button>
+      {onSplit && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSplit();
+          }}
+          title="Ouvrir à côté (2 pages côte à côte)"
+          aria-label="Ouvrir à côté"
+          className="absolute right-1.5 grid h-6 w-6 place-items-center rounded-md text-faint opacity-0 transition-opacity hover:bg-surface hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          <Columns2 className="h-3.5 w-3.5" />
+        </button>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -54,12 +73,14 @@ function Group({
   activeSub,
   onSelect,
   onItemContext,
+  onItemSplit,
 }: {
   group: SbGroup;
   activeId: string;
   activeSub?: string | null;
   onSelect: (id: string, sub?: string) => void;
   onItemContext?: (id: string, e: ReactMouseEvent) => void;
+  onItemSplit?: (id: string) => void;
 }) {
   // Toutes les sections OUVERTES par défaut (sidebar aérée, sous-pages visibles) ;
   // chaque section reste repliable et son état est MÉMORISÉ (localStorage). Le groupe
@@ -118,6 +139,7 @@ function Group({
                   active={item.id === activeId && !childActive}
                   onClick={() => onSelect(item.id)}
                   onContext={onItemContext ? (e) => onItemContext(item.id, e) : undefined}
+                  onSplit={onItemSplit ? () => onItemSplit(item.id) : undefined}
                 />
                 {item.children && item.children.length > 0 && (
                   <div className="ml-[26px] mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
@@ -159,6 +181,7 @@ export function SidebarNav({
   activeSub,
   onSelect,
   onItemContext,
+  onItemSplit,
   header,
   footer,
 }: {
@@ -167,6 +190,7 @@ export function SidebarNav({
   activeSub?: string | null;
   onSelect: (id: string, sub?: string) => void;
   onItemContext?: (id: string, e: ReactMouseEvent) => void;
+  onItemSplit?: (id: string) => void;
   header?: ReactNode;
   footer?: ReactNode;
 }) {
@@ -175,7 +199,15 @@ export function SidebarNav({
       {header}
       <nav className="mt-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {groups.map((g) => (
-          <Group key={g.id} group={g} activeId={activeId} activeSub={activeSub} onSelect={onSelect} onItemContext={onItemContext} />
+          <Group
+            key={g.id}
+            group={g}
+            activeId={activeId}
+            activeSub={activeSub}
+            onSelect={onSelect}
+            onItemContext={onItemContext}
+            onItemSplit={onItemSplit}
+          />
         ))}
       </nav>
       {footer && <div className="mt-auto border-t border-border pt-3">{footer}</div>}

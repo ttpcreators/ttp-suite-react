@@ -602,6 +602,9 @@ export default function App() {
               space={space}
               onSpaceChange={changeSpace}
               onItemContext={onItemContext}
+              onItemSplit={(id) => {
+                if (id !== active) setSplitView(id);
+              }}
             />
           </div>
 
