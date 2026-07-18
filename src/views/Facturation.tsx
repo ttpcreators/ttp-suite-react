@@ -677,9 +677,10 @@ export function Facturation() {
                 toast("Déplacé dans la corbeille");
               }
             };
+            const openPreview = () => setPreview({ html: buildHTML(r), ref: r.ref, email: detailsFor(r).clientEmail, brand: r.party });
             const menuItems: ActionItem[] = [
               { key: "edit", label: "Modifier", icon: Pencil, onClick: () => openEdit(r) },
-              { key: "preview", label: "Aperçu", icon: Eye, onClick: () => setPreview({ html: buildHTML(r), ref: r.ref, email: detailsFor(r).clientEmail, brand: r.party }) },
+              { key: "preview", label: "Aperçu", icon: Eye, onClick: openPreview },
               { key: "send", label: "Envoyer au client", icon: Send, onClick: () => sendInvoice(r) },
               { key: "download", label: "Télécharger", icon: Download, onClick: () => downloadInvoice(r) },
               { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: del, confirm: { title: "Supprimer la facture", message: `Supprimer la facture ${r.ref} (${r.party}) ? Cette action est irréversible.` } },
@@ -692,7 +693,10 @@ export function Facturation() {
             return (
               <div key={r.id} className="border-b border-border last:border-b-0">
                 {/* Desktop : ligne type tableau */}
-                <div className="hidden items-center gap-3 rounded-xl px-4 py-3 transition-colors hover:bg-rowhover md:grid md:grid-cols-[0.8fr_2fr_1.1fr_1fr_1fr_1.4fr]">
+                <div
+                  onClick={openPreview}
+                  className="hidden cursor-pointer items-center gap-3 rounded-xl px-4 py-3 transition-colors hover:bg-rowhover md:grid md:grid-cols-[0.8fr_2fr_1.1fr_1fr_1fr_1.4fr]"
+                >
                   <span className="text-[11px] font-medium text-faint">#{r.ref}</span>
                   <span className="truncate text-sm font-medium text-foreground">{r.party}</span>
                   <span className="text-right text-sm font-semibold text-foreground">{formatEuro(parseAmount(r.amount))}</span>
@@ -700,12 +704,14 @@ export function Facturation() {
                   <span className="text-center text-[11px] font-medium text-muted-foreground">{frDate(r.date)}</span>
                   <span className="flex items-center justify-end gap-2">
                     <AnimatedBadge status={meta.badge} size="sm">{meta.label}</AnimatedBadge>
-                    <ActionMenu items={menuItems} />
+                    <span onClick={(e) => e.stopPropagation()}>
+                      <ActionMenu items={menuItems} />
+                    </span>
                   </span>
                 </div>
 
                 {/* Mobile : carte compacte */}
-                <div className="flex flex-col gap-2 px-3 py-3 md:hidden">
+                <div onClick={openPreview} className="flex cursor-pointer flex-col gap-2 px-3 py-3 md:hidden">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 text-[10px] font-medium text-faint">
@@ -721,7 +727,9 @@ export function Facturation() {
                   </div>
                   <div className="mt-0.5 flex items-center justify-between border-t border-border pt-2.5">
                     <span className="text-[11px] font-medium text-muted-foreground">Échéance · {frDate(r.date)}</span>
-                    <ActionMenu items={menuItems} />
+                    <span onClick={(e) => e.stopPropagation()}>
+                      <ActionMenu items={menuItems} />
+                    </span>
                   </div>
                 </div>
               </div>
