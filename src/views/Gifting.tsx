@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Gift, Mail, Package, CalendarClock, Pencil, Trash2, LayoutGrid, List as ListIcon, ShieldCheck, Info } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Gift, Mail, Package, CalendarClock, Pencil, Trash2, LayoutGrid, List as ListIcon, ShieldCheck, Info, Eye, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
@@ -37,6 +37,7 @@ export function Gifting() {
   const [rows, setRows] = useState<GiftRow[] | null>(() => getCache<GiftRow[]>("gifting"));
   const [error, setError] = useState(false);
   const [view, setView] = useState<GView>("list");
+  const [viewG, setViewG] = useState<GiftRow | null>(null); // fiche détail (clic sur une ligne)
 
   const [formOpen, setFormOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -188,6 +189,7 @@ export function Gifting() {
   const actions = (g: GiftRow) => (
     <ActionMenu
       items={[
+        { key: "view", label: "Voir la fiche", icon: Eye, onClick: () => setViewG(g) },
         { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(g) },
         {
           key: "del",
@@ -305,7 +307,11 @@ export function Gifting() {
       ) : view === "cards" ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {list.map((g) => (
-            <article key={g.id} className="flex flex-col rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <article
+              key={g.id}
+              onClick={() => setViewG(g)}
+              className="flex cursor-pointer flex-col rounded-2xl border border-border bg-surface p-5 shadow-sm transition-colors hover:bg-rowhover/40"
+            >
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold text-foreground">
@@ -318,7 +324,7 @@ export function Gifting() {
                     </div>
                   )}
                 </div>
-                <div className="w-[168px] shrink-0">
+                <div className="w-[168px] shrink-0" onClick={(e) => e.stopPropagation()}>
                   <StatusSelect value={g.status ?? "recu"} options={GIFT_STATUS} onChange={(v) => changeStatus(g, v)} />
                 </div>
               </div>
@@ -340,7 +346,7 @@ export function Gifting() {
                 <div className="mt-2.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
                   <Mail className="h-3.5 w-3.5 shrink-0 text-faint" />
                   {g.contact_email ? (
-                    <a href={`mailto:${g.contact_email}`} className="truncate text-primary hover:underline">
+                    <a href={`mailto:${g.contact_email}`} onClick={(e) => e.stopPropagation()} className="truncate text-primary hover:underline">
                       {g.contact_name ? `${g.contact_name} · ` : ""}{g.contact_email}
                     </a>
                   ) : (
@@ -357,14 +363,18 @@ export function Gifting() {
 
               {g.note && <p className="mt-2.5 text-[12px] leading-relaxed text-faint">{g.note}</p>}
 
-              <div className="mt-3 flex items-center justify-end gap-1 border-t border-border pt-2.5">{actions(g)}</div>
+              <div className="mt-3 flex items-center justify-end gap-1 border-t border-border pt-2.5" onClick={(e) => e.stopPropagation()}>{actions(g)}</div>
             </article>
           ))}
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
           {list.map((g) => (
-            <div key={g.id} className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-rowhover">
+            <div
+              key={g.id}
+              onClick={() => setViewG(g)}
+              className="flex cursor-pointer items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-rowhover"
+            >
               <span className={cn("size-2 shrink-0 rounded-full", giftStatusMeta(g.status).dot)} title={giftStatusMeta(g.status).label} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13px] font-semibold text-foreground">
@@ -376,14 +386,14 @@ export function Gifting() {
                   {g.received_on && <span>{frDate(g.received_on)}</span>}
                   {g.content_expected && <span className="text-amber-600 dark:text-amber-400">contenu attendu</span>}
                   {g.contact_email && (
-                    <a href={`mailto:${g.contact_email}`} className="text-primary hover:underline">{g.contact_email}</a>
+                    <a href={`mailto:${g.contact_email}`} onClick={(e) => e.stopPropagation()} className="text-primary hover:underline">{g.contact_email}</a>
                   )}
                 </div>
               </div>
-              <div className="hidden w-[168px] shrink-0 sm:block">
+              <div className="hidden w-[168px] shrink-0 sm:block" onClick={(e) => e.stopPropagation()}>
                 <StatusSelect value={g.status ?? "recu"} options={GIFT_STATUS} onChange={(v) => changeStatus(g, v)} />
               </div>
-              {actions(g)}
+              <div onClick={(e) => e.stopPropagation()}>{actions(g)}</div>
             </div>
           ))}
         </div>
@@ -399,6 +409,89 @@ export function Gifting() {
           </span>
         </div>
       )}
+
+      {/* Fiche détail (clic sur une carte/ligne) */}
+      {viewG && (
+        <GiftDetail
+          g={viewG}
+          onClose={() => setViewG(null)}
+          onEdit={() => {
+            const g = viewG;
+            setViewG(null);
+            startEdit(g);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Fiche détaillée d'un gifting : tout ce qui est saisi, en lecture, dans une modale. */
+function GiftDetail({ g, onClose, onEdit }: { g: GiftRow; onClose: () => void; onEdit: () => void }) {
+  const st = giftStatusMeta(g.status);
+  const rows: [string, ReactNode][] = [
+    ["Créateur", g.creator ? titleCase(g.creator) : "—"],
+    ["Marque / expéditeur", g.brand || "—"],
+    ["Produit", g.product || "—"],
+    ["Valeur estimée", g.value || "—"],
+    ["Reçu le", g.received_on ? frDate(g.received_on) : "—"],
+    ["Interlocuteur", g.contact_name || "—"],
+    [
+      "Email",
+      g.contact_email ? (
+        <a href={`mailto:${g.contact_email}`} className="text-primary hover:underline">{g.contact_email}</a>
+      ) : (
+        "—"
+      ),
+    ],
+    ["Contenu attendu", g.content_expected ? g.deliverables || "Oui" : "Non — sans contrepartie"],
+  ];
+  return (
+    <div className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-6" onClick={onClose}>
+      <div className="my-2 w-full max-w-lg rounded-2xl border border-border bg-surface shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+          <div className="min-w-0">
+            <div className="truncate text-base font-semibold text-foreground">
+              {g.brand || g.product || "Gifting"} {g.creator && <span className="text-faint">→ {titleCase(g.creator)}</span>}
+            </div>
+            <div className="mt-1 inline-flex items-center gap-1.5 text-[12px] text-muted-foreground">
+              <span className={cn("size-1.5 rounded-full", st.dot)} /> {st.label}
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="max-h-[70vh] overflow-y-auto px-5 py-2">
+          <dl className="divide-y divide-border">
+            {rows.map(([k, v]) => (
+              <div key={k} className="flex items-start justify-between gap-4 py-2.5">
+                <dt className="shrink-0 text-[12px] text-faint">{k}</dt>
+                <dd className="min-w-0 text-right text-[13px] font-medium text-foreground">{v}</dd>
+              </div>
+            ))}
+          </dl>
+
+          {g.mentions && (
+            <div className="mb-3 mt-1 flex items-start gap-1.5 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] leading-snug text-amber-700 dark:text-amber-300">
+              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" /> <span>{g.mentions}</span>
+            </div>
+          )}
+          {g.note && (
+            <div className="mb-3">
+              <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-faint">Note</div>
+              <p className="text-[13px] leading-relaxed text-muted-foreground">{g.note}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">
+          <button type="button" onClick={onEdit} className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
+            <Pencil className="h-3.5 w-3.5" /> Modifier
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
