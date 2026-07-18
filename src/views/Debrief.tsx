@@ -19,6 +19,7 @@ import { useCreators } from "@/lib/useCreators";
 import { cn, titleCase } from "@/lib/utils";
 import { DebriefCalculator, ShotStrip, useShotUrls, resolveShots, type CalcState } from "@/views/DebriefCalculator";
 import { printHtml } from "@/lib/printPdf";
+import { pdfShell, pdfHeading, pdfMeta, pdfSection, pdfKpis, pdfTicks, pdfShots } from "@/lib/pdfDoc";
 import { totalsOf as engTotals, parseNum as engParse, fmtCompact, fmtPct } from "@/lib/engagement";
 
 /** Une petite statistique de campagne (label / valeur). */
@@ -175,6 +176,38 @@ function debriefHTML(d: Debrief, shotUrls: Record<string, string> = {}): string 
     `<div style="border-top:1px solid #ececec;padding:16px 26px;font-size:12px;color:#8a8a8a">TTP Creators · Trust the Process · partnerships@ttpcreators.pro · ttpcreators.pro</div>` +
     `</div></div></body></html>`
   );
+}
+
+/**
+ * PDF du debrief — identité de document partagée (cf. `src/lib/pdfDoc.ts`).
+ * SÉPARÉ de `debriefHTML` : celui-ci sert de corps d'EMAIL (Gmail/Resend) et doit
+ * rester en tableaux + styles en ligne. Ne pas fusionner les deux.
+ */
+function debriefPdfHTML(d: Debrief, shotUrls: Record<string, string> = {}): string {
+  const money =
+    `<div class="money"><span>Budget <b>${escHtml(d.budget)}</b></span>` +
+    `<span class="arrow">→</span><span>CA généré <b>${escHtml(d.revenue)}</b></span>` +
+    (d.roi && d.roi !== "—" ? `<span class="roi">ROI ${escHtml(d.roi)}</span>` : "") +
+    `</div>`;
+  const shots = (d.calc?.shots ?? []).map((s) => shotUrls[s.path]).filter(Boolean);
+  const body =
+    money +
+    pdfMeta([
+      ["Créateur", d.creator ? titleCase(d.creator) : ""],
+      ["Période", d.period],
+      ["Livrables", d.deliverables],
+    ]) +
+    (d.summary && d.summary !== "—" ? pdfSection("Synthèse", `<p class="pre">${escHtml(d.summary)}</p>`) : "") +
+    (d.kpis.length ? pdfSection("Indicateurs", pdfKpis(d.kpis)) : "") +
+    (d.highlights.length ? pdfSection("Points forts", pdfTicks(d.highlights)) : "") +
+    (shots.length ? pdfSection("Captures des statistiques", pdfShots(shots)) : "");
+  return pdfShell({
+    title: `Debrief ${d.brand}${d.creator ? " x " + titleCase(d.creator) : ""}`,
+    eyebrow: "Bilan de campagne",
+    heading: pdfHeading(d.brand, d.creator ? titleCase(d.creator) : undefined),
+    sub: d.period && d.period !== "—" ? d.period : undefined,
+    body,
+  });
 }
 
 type DebriefView = "cards" | "list" | "table";
@@ -385,7 +418,7 @@ export function Debrief() {
   // avec Contrats / Briefs). L'await sur les captures ne pose donc plus de problème
   // de « geste utilisateur perdu » comme avec window.open.
   async function printDebrief(d: Debrief) {
-    printHtml(debriefHTML(d, await resolveShots(d.calc?.shots)));
+    printHtml(debriefPdfHTML(d, await resolveShots(d.calc?.shots)));
     toast("Dans la fenêtre : choisis « Enregistrer au format PDF »");
   }
   async function sendDebriefEmail() {

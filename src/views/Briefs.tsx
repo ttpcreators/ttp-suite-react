@@ -7,6 +7,7 @@ import { useEffect, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { printHtml } from "@/lib/printPdf";
+import { pdfShell, pdfHeading, pdfMeta, pdfSection } from "@/lib/pdfDoc";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, AutoGrowTextField, SelectField } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
@@ -63,46 +64,30 @@ function escHtml(s: string): string {
 
 /** Brief + script en HTML « pro » → impression navigateur → « Enregistrer en PDF ».
  *  Document destiné à la MARQUE : même DA que la facture / le bilan de campagne. */
+/** PDF du brief — identité de document partagée (cf. `src/lib/pdfDoc.ts`). */
 function briefHTML(row: Row): string {
-  const burgundy = "#3d0000";
-  const meta = ([
-    ["Livrables", row.deliverables],
-    ["Objectif", row.objectif],
-    ["Budget", row.budget],
-    ["Échéance", frDate(row.due)],
-  ] as [string, string][]).filter(([, v]) => v && v !== "—");
-  const cell = (l: string, v: string) =>
-    `<td width="50%" style="padding:6px;vertical-align:top"><div style="border:1px solid #ececec;border-radius:12px;padding:12px 14px">` +
-    `<div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#8a8a8a">${escHtml(l)}</div>` +
-    `<div style="font-size:15px;font-weight:700;color:#111;margin-top:2px">${escHtml(v)}</div></div></td>`;
-  let metaRows = "";
-  for (let i = 0; i < meta.length; i += 2) {
-    metaRows += `<tr>${cell(meta[i][0], meta[i][1])}${meta[i + 1] ? cell(meta[i + 1][0], meta[i + 1][1]) : '<td width="50%"></td>'}</tr>`;
-  }
   const script = (row.consignes || "").trim();
-  // white-space:pre-wrap → les sauts de ligne du script saisi sont conservés tels quels.
-  const scriptBlock = script
-    ? `<div style="margin-top:18px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8a8a8a;margin-bottom:8px">Script</div>` +
-      `<div style="font-size:14px;line-height:1.7;color:#222;white-space:pre-wrap">${escHtml(script)}</div></div>`
-    : `<p style="margin-top:18px;font-size:13px;color:#8a8a8a">Aucun script renseigné.</p>`;
-  // Le <title> devient le nom de fichier proposé à l'enregistrement PDF.
-  const title = `Brief ${row.brand}${row.creator ? " x " + titleCase(row.creator) : ""}`;
-  return (
-    `<!doctype html><html><head><meta charset="utf-8"><title>${escHtml(title)}</title>` +
-    `<style>@media print{body{background:#fff!important}.sheet{border:0!important;border-radius:0!important}}</style></head>` +
-    `<body style="margin:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;color:#111">` +
-    `<div style="max-width:640px;margin:0 auto;padding:24px">` +
-    `<div class="sheet" style="background:#fff;border-radius:18px;overflow:hidden;border:1px solid #ececec">` +
-    `<div style="background:${burgundy};color:#fff;padding:22px 26px">` +
-    `<div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:.85">TTP Creators · Brief &amp; script</div>` +
-    `<div style="font-size:24px;font-weight:800;margin-top:6px">${escHtml(row.brand)}${row.creator ? ` × ${escHtml(titleCase(row.creator))}` : ""}</div>` +
-    `</div><div style="padding:24px 26px">` +
-    (metaRows ? `<table style="width:100%;border-collapse:collapse">${metaRows}</table>` : "") +
-    scriptBlock +
-    `</div>` +
-    `<div style="border-top:1px solid #ececec;padding:16px 26px;font-size:12px;color:#8a8a8a">TTP Creators · Trust the Process · partnerships@ttpcreators.pro · ttpcreators.pro</div>` +
-    `</div></div></body></html>`
-  );
+  const body =
+    pdfMeta([
+      ["Créateur", row.creator ? titleCase(row.creator) : ""],
+      ["Livrables", row.deliverables],
+      ["Objectif", row.objectif],
+      ["Budget", row.budget],
+      ["Échéance", frDate(row.due)],
+    ]) +
+    pdfSection(
+      "Script",
+      script
+        ? `<div class="pre">${escHtml(script)}</div>`
+        : `<p class="muted">Aucun script renseigné.</p>`,
+    );
+  return pdfShell({
+    // Le <title> devient le nom de fichier proposé à l'enregistrement PDF.
+    title: `Brief ${row.brand}${row.creator ? " x " + titleCase(row.creator) : ""}`,
+    eyebrow: "Brief & script",
+    heading: pdfHeading(row.brand, row.creator ? titleCase(row.creator) : undefined),
+    body,
+  });
 }
 
 export function Briefs() {
