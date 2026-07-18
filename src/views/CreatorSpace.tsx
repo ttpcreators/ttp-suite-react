@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense, type ReactNode } from "react";
+import { useEffect, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { fmtCompact } from "@/lib/timeSeries";
@@ -12,6 +12,7 @@ import {
   Files,
   Image as ImageIcon,
   Receipt,
+  Upload,
   Mail,
   ShieldCheck,
   Package,
@@ -540,6 +541,58 @@ export function CreatorSpace({
     toast("Cadeau signalé ✓");
     resetGiftForm();
   };
+  // ── Dépôt d'une facture par le créateur (« si jamais l'agence oublie »).
+  // Le créateur n'écrit JAMAIS dans `invoices` (le CA resterait falsifiable) : il dépose
+  // un FICHIER que l'agence valide. Le chemin DOIT être `creator-uploads/<auth.uid()>/…`
+  // — c'est cette contrainte (côté RLS) qui empêche de forger une ligne pointant vers le
+  // fichier d'une autre créatrice.
+  const invFileRef = useRef<HTMLInputElement>(null);
+  const [invUploading, setInvUploading] = useState(false);
+  const sendInvoiceFile = async (file: File) => {
+    if (file.size > 15 * 1024 * 1024) {
+      toast("Fichier trop lourd (max 15 Mo)");
+      return;
+    }
+    setInvUploading(true);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u?.user?.id;
+      if (!uid) {
+        toast("Session expirée — reconnecte-toi");
+        return;
+      }
+      const ext = (file.name.split(".").pop() || "pdf").toLowerCase().replace(/[^a-z0-9]/g, "") || "pdf";
+      const path = `creator-uploads/${uid}/facture-${Date.now()}.${ext}`;
+      const up = await supabase.storage.from("documents").upload(path, file, {
+        contentType: file.type || undefined,
+        upsert: false,
+      });
+      if (up.error) {
+        toast("Envoi échoué — réessaie");
+        return;
+      }
+      const created = await dbInsert("documents", {
+        creator: name,
+        name: `Facture — ${titleCase(name)} — ${new Date().toLocaleDateString("fr-FR")}`,
+        type: "facture",
+        size: `${Math.max(1, Math.round(file.size / 1024))} Ko`,
+        path,
+        sort_order: 0,
+      });
+      if (!created) {
+        // Ligne refusée → on ne laisse pas un fichier orphelin dans le bucket.
+        await supabase.storage.from("documents").remove([path]).catch(() => {});
+        toast("Envoi échoué — réessaie");
+        return;
+      }
+      setDocs((prev) => [created as unknown as Doc, ...prev]);
+      notifyAgency("facture", name, `Facture déposée — ${titleCase(name)}`);
+      toast("Facture envoyée à ton agence ✓");
+    } finally {
+      setInvUploading(false);
+    }
+  };
+
   /** Ouvre un document : lien externe (Drive/Canva…) tel quel, sinon URL signée du bucket. */
   const openDocFile = async (doc: Doc) => {
     if (!doc.path) return;
@@ -2167,6 +2220,64 @@ export function CreatorSpace({
           {/* Facturation */}
           {tab === "facturation" && (
             <div className="flex flex-col gap-4">
+              {/* Dépôt de facture — filet de sécurité si l'agence oublie de la saisir */}
+              <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold">Envoyer une facture</div>
+                    <div className="mt-0.5 text-[11px] text-faint">
+                      Ta facture n'apparaît pas ci-dessous ? Dépose-la, ton agence la reçoit aussitôt.
+                    </div>
+                  </div>
+                  <input
+                    ref={invFileRef}
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg,.webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (f) sendInvoiceFile(f);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => invFileRef.current?.click()}
+                    disabled={invUploading}
+                    className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    <Upload className="h-3.5 w-3.5" /> {invUploading ? "Envoi…" : "Déposer ma facture"}
+                  </button>
+                </div>
+
+                {docs.filter((d) => d.type === "facture").length > 0 && (
+                  <div className="mt-3 border-t border-border pt-3">
+                    <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-faint">
+                      Déposées par toi
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {docs
+                        .filter((d) => d.type === "facture")
+                        .map((doc) => (
+                          <div key={doc.id} className="flex items-center gap-2.5">
+                            <FileText className="h-3.5 w-3.5 shrink-0 text-faint" />
+                            <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{doc.name}</span>
+                            {doc.path && (
+                              <button
+                                type="button"
+                                onClick={() => openDocFile(doc)}
+                                className="shrink-0 text-[11px] font-semibold text-primary transition-opacity hover:opacity-80"
+                              >
+                                Ouvrir
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
                   <div className="text-[9px] font-semibold uppercase tracking-wider text-faint">Encaissé</div>

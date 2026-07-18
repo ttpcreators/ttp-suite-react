@@ -30,6 +30,7 @@ tu retrouves tout d'un coup d'œil, et c'est **versionné dans Git**.
 | Limite taille/type du bucket `avatars` (anti-abus hébergement, LOW) | Dashboard → Storage → avatars (max size + `image/*`) | ⏳ optionnel | — |
 | **Media kit agence** : table singleton `agency_mediakit` + vue anon `public_agency_mediakit` (contenu éditable du deck agence) | [`media-kit-agence.sql`](media-kit-agence.sql) | ✅ Appliqué (2026-07-15) | ✅ vue anon = HTTP 200 (1 ligne `data`) ; éditeur charge + enregistre |
 | **Gifting** : table `gifting` (cadeaux/dotations créateurs) + RLS motif `briefs` (agence + créateur sur ses lignes) | [`gifting.sql`](gifting.sql) | ✅ Appliqué (2026-07-18) | ✅ anon : SELECT = 200 `[]` (scoppé) ; INSERT = 401 `42501` (RLS écriture) |
+| **Dépôt de facture par le créateur** : INSERT `documents` + storage limités à `creator-uploads/<auth.uid()>/…` (la contrainte de chemin ferme la fuite inter-créateurs) | [`creator-depot-facture.sql`](creator-depot-facture.sql) | ⏳ **À lancer** | — |
 
 > Les deux migrations « À lancer » ci-dessus peuvent être exécutées **en un seul bloc**
 > (elles sont idempotentes). Après application, relancer les **tests synthétiques** (comptes

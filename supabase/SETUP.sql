@@ -352,6 +352,15 @@ create policy documents_agency on public.documents for all to authenticated
   using (public.is_agency()) with check (public.is_agency());
 create policy documents_creator_read on public.documents for select to authenticated
   using (public.is_agency() or creator = public.my_creator());
+-- Dépôt de facture par le créateur (cf. sql/creator-depot-facture.sql) : INSERT autorisé
+-- UNIQUEMENT pour lui-même ET dans SON dossier `creator-uploads/<auth.uid()>/…`. La
+-- contrainte de chemin est ce qui empêche de forger une ligne pointant vers le fichier
+-- d'un autre créateur (que documents_obj_creator_read lui signerait). Pas d'UPDATE/DELETE.
+create policy documents_creator_insert on public.documents for insert to authenticated
+  with check (
+    creator = public.my_creator()
+    and path like 'creator-uploads/' || auth.uid()::text || '/%'
+  );
 
 -- ----------------------------------------------------------------------------
 -- 6) STORAGE : bucket privé `documents` (binaires des fichiers)
@@ -371,6 +380,11 @@ drop policy if exists documents_obj_creator_read on storage.objects;
 create policy documents_obj_agency on storage.objects for all to authenticated
   using (bucket_id = 'documents' and public.is_agency())
   with check (bucket_id = 'documents' and public.is_agency());
+create policy documents_obj_creator_insert on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'documents'
+    and name like 'creator-uploads/' || auth.uid()::text || '/%'
+  );
 create policy documents_obj_creator_read on storage.objects for select to authenticated
   using (
     bucket_id = 'documents'
