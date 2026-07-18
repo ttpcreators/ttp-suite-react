@@ -10,6 +10,7 @@ import {
   Gift,
   CalendarDays,
   Files,
+  Image as ImageIcon,
   Receipt,
   Mail,
   ShieldCheck,
@@ -46,6 +47,7 @@ import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
+import { SidebarNav } from "@/components/ui/dashboard-sidebar";
 import { EventCalendar, type Ev as CalEv } from "@/components/ui/event-calendar";
 import { parseAmount, formatEuro } from "@/lib/appState";
 import { useLiveKey } from "@/lib/useLive";
@@ -86,28 +88,63 @@ type Doc = { id: string; name: string; type: string | null; size: string | null;
 type Invoice = { ref: string; party: string; amount: string | null; date: string | null; status: string | null };
 type Contact = { id: string; brand: string; person: string | null; role: string | null; email: string | null; phone: string | null; sort_order?: number };
 
-type Tab = "accueil" | "evolution" | "debrief" | "todo" | "ideas" | "briefs" | "gifting" | "planning" | "contacts" | "documents" | "facturation";
-const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: "accueil", label: "Accueil", icon: LayoutDashboard },
-  { id: "evolution", label: "Évolution", icon: TrendingUp },
-  { id: "debrief", label: "Debrief", icon: BarChart3 },
-  { id: "todo", label: "À faire", icon: ListChecks },
-  { id: "ideas", label: "Idées", icon: Lightbulb },
-  { id: "briefs", label: "Briefs", icon: FileText },
-  { id: "gifting", label: "Gifting", icon: Gift },
-  { id: "planning", label: "Planning", icon: CalendarDays },
-  { id: "contacts", label: "Contacts", icon: Contact },
-  { id: "documents", label: "Documents", icon: Files },
-  { id: "facturation", label: "Facturation", icon: Receipt },
-];
+type Tab =
+  | "accueil" | "evolution" | "debrief"
+  | "todo" | "ideas" | "briefs" | "gifting" | "planning"
+  | "mediakit" | "documents" | "contacts" | "facturation";
 
-// Regroupement des onglets en familles pour la nav mobile animée (ExpandableTabs,
-// même composant que l'espace agence) : on tape une famille → ses pages se déploient.
-const MOBILE_FAMILIES: { id: string; label: string; icon: typeof LayoutDashboard; items: Tab[] }[] = [
-  { id: "espace", label: "Mon espace", icon: LayoutDashboard, items: ["accueil", "evolution", "debrief"] },
-  { id: "travail", label: "Mon travail", icon: ListChecks, items: ["todo", "ideas", "briefs", "gifting", "planning", "contacts"] },
-  { id: "fichiers", label: "Fichiers", icon: Files, items: ["documents", "facturation"] },
+/**
+ * Nav de l'espace créateur — SOURCE UNIQUE, groupée comme la sidebar agence.
+ * Alimente à la fois le menu desktop (SidebarNav, sections repliables), le rail
+ * replié et la nav mobile → les trois ne peuvent plus diverger.
+ * Les ids de groupe sont préfixés `cs-` pour ne pas partager l'état d'ouverture
+ * (localStorage) avec les groupes de l'espace agence.
+ */
+const CREATOR_GROUPS: {
+  id: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  items: { id: Tab; label: string; icon: typeof LayoutDashboard }[];
+}[] = [
+  {
+    id: "cs-espace",
+    label: "Mon espace",
+    icon: LayoutDashboard,
+    items: [
+      { id: "accueil", label: "Accueil", icon: LayoutDashboard },
+      { id: "evolution", label: "Évolution", icon: TrendingUp },
+      { id: "debrief", label: "Debrief", icon: BarChart3 },
+    ],
+  },
+  {
+    id: "cs-travail",
+    label: "Mon travail",
+    icon: ListChecks,
+    items: [
+      { id: "todo", label: "À faire", icon: ListChecks },
+      { id: "ideas", label: "Idées", icon: Lightbulb },
+      { id: "briefs", label: "Briefs", icon: FileText },
+      { id: "gifting", label: "Gifting", icon: Gift },
+      { id: "planning", label: "Planning", icon: CalendarDays },
+    ],
+  },
+  {
+    id: "cs-ressources",
+    label: "Ressources",
+    icon: Files,
+    items: [
+      { id: "mediakit", label: "Media kit", icon: ImageIcon },
+      { id: "documents", label: "Documents", icon: Files },
+      { id: "contacts", label: "Contacts", icon: Contact },
+      { id: "facturation", label: "Facturation", icon: Receipt },
+    ],
+  },
 ];
+const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = CREATOR_GROUPS.flatMap((g) => g.items);
+// Nav mobile animée (ExpandableTabs) — dérivée des mêmes groupes.
+const MOBILE_FAMILIES: { id: string; label: string; icon: typeof LayoutDashboard; items: Tab[] }[] = CREATOR_GROUPS.map(
+  (g) => ({ id: g.id, label: g.label, icon: g.icon, items: g.items.map((i) => i.id) }),
+);
 
 /** Carte animée (identique à l'Aperçu agence : entrée douce + délai décalé). */
 function Card({ children, className = "", index = 0, onClick }: { children: ReactNode; className?: string; index?: number; onClick?: () => void }) {
@@ -476,6 +513,20 @@ export function CreatorSpace({
     notifyAgency("gift", name, b || p); // push immédiat côté agence
     toast("Cadeau signalé ✓");
     resetGiftForm();
+  };
+  /** Ouvre un document : lien externe (Drive/Canva…) tel quel, sinon URL signée du bucket. */
+  const openDocFile = async (doc: Doc) => {
+    if (!doc.path) return;
+    if (/^https?:\/\//i.test(doc.path)) {
+      window.open(doc.path, "_blank");
+      return;
+    }
+    const { data, error } = await supabase.storage.from("documents").createSignedUrl(doc.path, 3600);
+    if (error || !data?.signedUrl) {
+      toast("Lien indisponible — réessaie");
+      return;
+    }
+    window.open(data.signedUrl, "_blank");
   };
   const resetGiftForm = () => {
     setGiOpen(false);
@@ -848,63 +899,55 @@ export function CreatorSpace({
             </div>
           </aside>
         ) : (
-          <aside className="hidden w-[240px] shrink-0 flex-col p-3 md:flex">
-            <div className="flex items-center gap-3 px-1.5 py-2.5">
-              <div className="h-8 w-8 shrink-0 overflow-hidden rounded-lg bg-[#14181E]">
-                <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-semibold leading-tight">Espace créateur</div>
-                <div className="text-[11px] text-faint">TTP Creators</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSbCollapsed(true)}
-                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                title="Replier le menu"
-                aria-label="Replier le menu"
-              >
-                <PanelLeftClose className="h-4 w-4" />
-              </button>
-            </div>
-            <nav className="mt-3 flex flex-1 flex-col gap-0.5 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {TABS.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setTab(t.id)}
-                  className={
-                    "group flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-[9px] text-left text-[13px] transition-colors " +
-                    (tab === t.id ? "bg-rowhover font-medium text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")
-                  }
-                >
-                  <t.icon
-                    className={"h-4 w-4 shrink-0 " + (tab === t.id ? "text-primary" : "text-faint group-hover:text-foreground/70")}
-                    strokeWidth={1.75}
-                  />
-                  {t.label}
-                </button>
-              ))}
-            </nav>
-            <div className="mt-auto flex flex-col gap-0.5 border-t border-border pt-3">
-              <button
-                type="button"
-                onClick={onToggleTheme}
-                className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-              >
-                {dark ? <Sun className="h-4 w-4 text-faint" /> : <Moon className="h-4 w-4 text-faint" />}
-                <span className="text-[13px]">{dark ? "Mode clair" : "Mode sombre"}</span>
-              </button>
-              <button
-                type="button"
-                onClick={onLogout}
-                className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-              >
-                <LogOut className="h-4 w-4 text-faint" />
-                <span className="text-[13px]">Se déconnecter</span>
-              </button>
-            </div>
-          </aside>
+          /* Menu desktop : MÊME composant que l'espace agence (sections repliables,
+             état mémorisé) — les deux espaces restent visuellement cohérents. */
+          <div className="hidden h-full md:block">
+            <SidebarNav
+              groups={CREATOR_GROUPS}
+              activeId={tab}
+              onSelect={(id) => setTab(id as Tab)}
+              header={
+                <div className="flex items-center gap-3 px-1.5 py-2.5">
+                  <div className="h-8 w-8 shrink-0 overflow-hidden rounded-lg bg-[#14181E]">
+                    <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-semibold leading-tight">Espace créateur</div>
+                    <div className="text-[11px] text-faint">TTP Creators</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSbCollapsed(true)}
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                    title="Replier le menu"
+                    aria-label="Replier le menu"
+                  >
+                    <PanelLeftClose className="h-4 w-4" />
+                  </button>
+                </div>
+              }
+              footer={
+                <div className="flex flex-col gap-0.5">
+                  <button
+                    type="button"
+                    onClick={onToggleTheme}
+                    className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                  >
+                    {dark ? <Sun className="h-4 w-4 text-faint" /> : <Moon className="h-4 w-4 text-faint" />}
+                    <span className="text-[13px]">{dark ? "Mode clair" : "Mode sombre"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                  >
+                    <LogOut className="h-4 w-4 text-faint" />
+                    <span className="text-[13px]">Se déconnecter</span>
+                  </button>
+                </div>
+              }
+            />
+          </div>
         )}
 
         {/* Panneau principal — pb-28 sur mobile pour dégager la barre flottante du bas */}
@@ -1864,6 +1907,96 @@ export function CreatorSpace({
                 }
               }}
             />
+          )}
+
+          {/* Media kit — la créatrice consulte SA page publique générée */}
+          {tab === "mediakit" && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold">Mon media kit</div>
+                  <div className="mt-0.5 text-[11px] text-faint">
+                    {mkLive === true
+                      ? "Ta page publique — à partager aux marques"
+                      : mkLive === null
+                        ? "Vérification de ta page…"
+                        : "En préparation avec ton agence"}
+                  </div>
+                </div>
+                {mkLive === true && mkUrl && (
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(mkUrl);
+                        toast("Lien copié ✓");
+                      }}
+                      className="grid h-9 w-9 place-items-center rounded-lg bg-panel text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                      title="Copier le lien"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
+                    <a
+                      href={mkUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" /> Ouvrir
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Aperçu intégré de la page publique (le bouton « Télécharger en PDF »
+                  vit dans la page elle-même — pas de lien PDF en dur, il est versionné). */}
+              {mkLive === true && mkUrl ? (
+                <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+                  <iframe title="Mon media kit" src={mkUrl} className="h-[68vh] w-full bg-white" />
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border bg-surface px-6 py-12 text-center shadow-sm">
+                  <ImageIcon className="mx-auto h-8 w-8 text-faint" />
+                  <div className="mt-3 text-sm font-medium text-foreground">
+                    {mkLive === null ? "Vérification de ta page…" : "Media kit en préparation"}
+                  </div>
+                  <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
+                    Ton agence prépare ta page. Elle s'affichera ici dès qu'elle sera en ligne.
+                  </p>
+                </div>
+              )}
+
+              {/* Fichiers media kit déposés par l'agence (PDF / liens) */}
+              {docs.filter((d) => d.type === "mediakit").length > 0 && (
+                <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+                  <div className="border-b border-border px-4 py-2.5 text-[9px] font-semibold uppercase tracking-wider text-faint">
+                    Fichiers déposés par l'agence
+                  </div>
+                  {docs
+                    .filter((d) => d.type === "mediakit")
+                    .map((doc, i) => (
+                      <div key={doc.id} className={"flex items-center gap-3 px-4 py-3 " + (i > 0 ? "border-t border-border" : "")}>
+                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo/15 text-indigo">
+                          <FileText className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold">{doc.name}</div>
+                          <div className="truncate text-xs text-faint">{doc.size ?? ""}</div>
+                        </div>
+                        {doc.path && (
+                          <button
+                            type="button"
+                            onClick={() => openDocFile(doc)}
+                            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" /> Ouvrir
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Documents */}
