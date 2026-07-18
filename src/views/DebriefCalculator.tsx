@@ -210,7 +210,10 @@ export function DebriefCalculator({
   };
   const patchRow = (id: string, patch: Partial<Row>) => pushRows(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 
-  const stats = rows.map(rowToStat);
+  // En mode « global », seule la 1re ligne (les totaux) est affichée et compte : les
+  // lignes détaillées éventuelles (issues d'un passage en mode détaillé) sont ignorées
+  // du calcul, sinon elles gonfleraient en douce couverture/interactions/taux.
+  const stats = (mode === "global" ? rows.slice(0, 1) : rows).map(rowToStat);
   const override = mode === "global" ? parseNum(postsCount) : undefined;
   const t: EngTotals = totalsOf(stats, parseNum(followers), override);
   const er = basis === "reach" ? t.erReach : t.erFollowers;
@@ -263,12 +266,13 @@ export function DebriefCalculator({
     }
   };
 
-  const removeShot = async (path: string) => {
+  const removeShot = (path: string) => {
+    // On retire seulement la capture de la liste EN COURS d'édition. On NE supprime PAS
+    // le fichier du storage ici : tant que le debrief n'est pas ré-enregistré, la version
+    // persistée le référence encore — le supprimer casserait durablement la vignette
+    // (et le PDF/email). Le fichier orphelin en storage est inoffensif (bucket privé).
     set({ shots: shots.filter((s) => s.path !== path) });
     signCache.delete(path);
-    // Best-effort : si la suppression du fichier échoue, le debrief ne le référence
-    // plus de toute façon — on ne bloque pas l'utilisateur là-dessus.
-    await supabase.storage.from("documents").remove([path]).catch(() => {});
   };
 
   const modeBtn = (m: CalcMode, Icon: typeof Rows3, label: string, hint: string) => (

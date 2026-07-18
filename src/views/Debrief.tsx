@@ -539,6 +539,10 @@ export function Debrief() {
         <TextField label="Clics" value={clics} onChange={setClics} placeholder="9 200" className="sm:min-w-[110px] flex-1" />
         <TextField label="Ventes attribuées" value={ventes} onChange={setVentes} placeholder="310" className="sm:min-w-[130px] flex-1" />
         <DebriefCalculator
+          // Remonte le composant quand on change de debrief édité SANS fermer le
+          // formulaire (ex : « Modifier » sur une autre ligne). Sinon la copie locale
+          // des lignes (`rows`, initialisée une seule fois) reste celle du précédent.
+          key={editIndex ?? "new"}
           slug={safeName(creator || brand)}
           state={calc}
           onChange={setCalc}
@@ -810,7 +814,9 @@ function DebriefDetail({
   const calc = d.calc;
   const hasCalc = !!calc && (calc.stats.length > 0 || !!calc.followers);
   const override = calc?.mode === "global" ? engParse(calc.postsCount) : undefined;
-  const t = hasCalc ? engTotals(calc!.stats, engParse(calc!.followers), override) : null;
+  // Même règle que le calculateur : en mode global, seule la 1re ligne (totaux) compte.
+  const calcStats = calc ? (calc.mode === "global" ? calc.stats.slice(0, 1) : calc.stats) : [];
+  const t = hasCalc ? engTotals(calcStats, engParse(calc!.followers), override) : null;
   const er = t ? (calc!.basis === "followers" ? t.erFollowers : t.erReach) : null;
 
   return (

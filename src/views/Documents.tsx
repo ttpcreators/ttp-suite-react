@@ -56,6 +56,24 @@ type FileKind = "image" | "pdf" | "html" | "other";
 /** Fichier HTML (ex : contrats générés) — repéré à l'extension du chemin de stockage. */
 const isHtmlPath = (p: string) => /\.html?$/i.test(p);
 
+/**
+ * Rend du HTML dans un onglet, MAIS dans une iframe `sandbox` (scripts désactivés) :
+ * un fichier HTML uploadé (média-kit d'une marque, etc.) ne doit jamais exécuter de
+ * script dans NOTRE origine (il pourrait lire la session Supabase). Le document
+ * extérieur qu'on écrit ne contient que l'iframe (aucun script) ; le contenu non fiable
+ * vit à l'intérieur, neutralisé. L'attribut `srcdoc` est échappé pour rester valide.
+ */
+function renderHtmlInWindow(w: Window, html: string) {
+  const srcdoc = html.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  w.document.open();
+  w.document.write(
+    `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Document</title>` +
+      `<style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100vh;display:block}</style></head>` +
+      `<body><iframe sandbox srcdoc="${srcdoc}"></iframe></body></html>`,
+  );
+  w.document.close();
+}
+
 /** Tri de la liste (le tri par défaut « Plus récents » remplace l'ordre d'insertion). */
 const SORT_OPTIONS: FilterOpt[] = [
   { value: "recent", label: "Plus récents" },
@@ -161,6 +179,12 @@ export function Documents() {
     // Pour un .html : on pré-ouvre l'onglet DANS le geste utilisateur (sinon le popup
     // est bloqué après l'await du fetch).
     const w = html ? window.open("", "_blank") : null;
+    if (html && !w) {
+      // window.open a renvoyé null → bloqué par le navigateur. On prévient plutôt que
+      // d'échouer en silence (l'utilisateur croirait que le bouton ne marche pas).
+      toast("Autorise les pop-ups pour ouvrir le contrat");
+      return;
+    }
     const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.path, 3600);
     if (error || !data?.signedUrl) {
       w?.close();
@@ -178,11 +202,7 @@ export function Documents() {
     try {
       const res = await fetch(data.signedUrl);
       const src = await res.text();
-      if (w) {
-        w.document.open();
-        w.document.write(src);
-        w.document.close();
-      }
+      if (w) renderHtmlInWindow(w, src);
     } catch {
       if (w) w.location.href = data.signedUrl; // repli
     }
@@ -393,11 +413,11 @@ export function Documents() {
                     type="button"
                     onClick={() => {
                       const w = window.open("", "_blank");
-                      if (w && previewDoc.html) {
-                        w.document.open();
-                        w.document.write(previewDoc.html);
-                        w.document.close();
+                      if (!w) {
+                        toast("Autorise les pop-ups pour ouvrir ce fichier");
+                        return;
                       }
+                      if (previewDoc.html) renderHtmlInWindow(w, previewDoc.html);
                     }}
                     className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                     title="Ouvrir dans un onglet"

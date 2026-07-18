@@ -21,6 +21,12 @@ describe("parseNum — lecture des chiffres relevés sur une capture", () => {
     expect(parseNum("1,234.5")).toBe(1234.5); // format anglais mixte
     expect(parseNum("1.234,5")).toBe(1234.5); // format français mixte
   });
+  it("lit les virgules de milliers anglaises, y compris multiples", () => {
+    expect(parseNum("1,200,000")).toBe(1_200_000); // ne devient PAS 1.2
+    expect(parseNum("12,345")).toBe(12_345);
+    expect(parseNum("123,456,789")).toBe(123_456_789);
+    expect(parseNum("6,42")).toBe(6.42); // décimale française préservée
+  });
   it("renvoie 0 — jamais NaN — sur une saisie illisible", () => {
     expect(parseNum("")).toBe(0);
     expect(parseNum("abc")).toBe(0);

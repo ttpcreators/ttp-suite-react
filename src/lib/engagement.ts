@@ -82,7 +82,11 @@ export function parseNum(input: string | number | null | undefined): number {
     // Les deux : le DERNIER est la décimale, l'autre est un séparateur de milliers.
     num = num.lastIndexOf(",") > num.lastIndexOf(".") ? num.replace(/\./g, "").replace(",", ".") : num.replace(/,/g, "");
   } else if (num.includes(",")) {
-    num = num.replace(",", ".");
+    // Virgule seule : soit séparateur(s) de milliers (« 1,200,000 », « 12,345 »),
+    // soit décimale française (« 6,42 »). Des groupes de 3 chiffres → milliers (on
+    // retire toutes les virgules) ; sinon c'est la décimale. (Un simple replace(",",".")
+    // ne remplaçait que la 1re virgule → « 1,200,000 » devenait 1.2.)
+    num = /^\d{1,3}(,\d{3})+$/.test(num) ? num.replace(/,/g, "") : num.replace(",", ".");
   } else if (num.includes(".")) {
     // Un point + exactement 3 chiffres derrière et pas de suffixe → séparateur de milliers.
     const after = num.slice(num.lastIndexOf(".") + 1);

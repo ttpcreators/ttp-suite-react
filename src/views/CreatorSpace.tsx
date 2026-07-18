@@ -446,8 +446,13 @@ export function CreatorSpace({
 
   // ── Gifting côté créateur : voir ses cadeaux, marquer publié, signaler un cadeau reçu.
   const setGiftStatus = async (id: string, status: string) => {
-    setGifts((prev) => prev.map((g) => (g.id === id ? { ...g, status } : g)));
-    if (!(await dbUpdate("gifting", id, { status }))) toast("Erreur — réessaie");
+    const prev = gifts.find((g) => g.id === id)?.status ?? null;
+    setGifts((list) => list.map((g) => (g.id === id ? { ...g, status } : g)));
+    if (!(await dbUpdate("gifting", id, { status }))) {
+      // Échec : on remet l'ancien statut, sinon l'UI ment jusqu'au prochain refetch.
+      setGifts((list) => list.map((g) => (g.id === id ? { ...g, status: prev } : g)));
+      toast("Erreur — réessaie");
+    }
   };
   const [giOpen, setGiOpen] = useState(false);
   const [giBrand, setGiBrand] = useState("");
@@ -490,6 +495,9 @@ export function CreatorSpace({
     setGifts([created as unknown as GiftRow, ...gifts]);
     notifyAgency("gift", name, b || p); // push immédiat côté agence
     toast("Cadeau signalé ✓");
+    resetGiftForm();
+  };
+  const resetGiftForm = () => {
     setGiOpen(false);
     setGiBrand("");
     setGiProduct("");
@@ -1762,7 +1770,7 @@ export function CreatorSpace({
               <InlineForm
                 open={giOpen}
                 title="Signaler un cadeau reçu"
-                onClose={() => setGiOpen(false)}
+                onClose={resetGiftForm}
                 onSubmit={addGift}
                 submitLabel="Signaler"
               >

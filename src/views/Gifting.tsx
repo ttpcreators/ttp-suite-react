@@ -162,8 +162,13 @@ export function Gifting() {
   }
 
   async function changeStatus(g: GiftRow, next: string) {
+    const prevStatus = g.status;
     setRows((prev) => (prev ?? []).map((r) => (r.id === g.id ? { ...r, status: next } : r)));
-    if (!(await dbUpdate("gifting", g.id, { status: next }))) toast("Erreur — réessaie");
+    if (!(await dbUpdate("gifting", g.id, { status: next }))) {
+      // Échec (RLS/réseau) : on remet l'ancien statut, sinon l'UI ment jusqu'au refetch.
+      setRows((prev) => (prev ?? []).map((r) => (r.id === g.id ? { ...r, status: prevStatus } : r)));
+      toast("Erreur — réessaie");
+    }
   }
 
   async function remove(g: GiftRow) {
@@ -173,7 +178,12 @@ export function Gifting() {
     } else toast("Erreur — réessaie");
   }
 
-  const attente = useMemo(() => list.filter((g) => g.content_expected && g.status !== "publie" && g.status !== "clos").length, [list]);
+  // « En attente » = contenu attendu, pas encore publié/clos ET pas refusé (un cadeau
+  // refusé n'a plus de contenu en attente).
+  const attente = useMemo(
+    () => list.filter((g) => g.content_expected && g.status !== "publie" && g.status !== "clos" && g.status !== "refuse").length,
+    [list],
+  );
 
   const actions = (g: GiftRow) => (
     <ActionMenu
