@@ -2,9 +2,18 @@
 
 > **But de ce document** : permettre à n'importe qui (toi sur un autre compte, un futur
 > dev, ou une nouvelle session Claude) de **reprendre le projet entièrement**, sans rien
-> perdre. Tout est expliqué ici. Si tu ne lis qu'un fichier, lis celui-ci.
+> perdre. Il décrit le socle **durable** : projet, accès, architecture, déploiement, base,
+> sécurité, pièges.
 >
-> _Dernière mise à jour : 2026-07-13._
+> _Socle rédigé le 2026-07-13._
+
+> ⚠️ **À LIRE JUSTE APRÈS — l'état RÉCENT n'est pas dans ce fichier.**
+> Deux grosses sessions ont eu lieu les **2026-07-18 et 19** (module Gifting, calculateur
+> d'engagement, contrats durcis au droit FR, refonte de la navigation, perfs, espace
+> créateur enrichi, PDF refondus…). Tout est décrit — avec **les décisions de sécurité à
+> ne pas défaire** et les **points restés ouverts** — dans :
+> **[`docs/HANDOFF-2026-07-18.md`](docs/HANDOFF-2026-07-18.md)**.
+> Le présent fichier reste valable pour le socle ; le handoff fait foi pour l'état courant.
 
 ---
 
