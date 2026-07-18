@@ -1,9 +1,9 @@
 # TTP Suite — application (agence + espace créateur)
 
 App de gestion de l'agence **TTP Creators** : côté **agence** (roster, factures, contrats,
-planning, contacts, stats, mails, media kits…) et **espace créateur** (ses tâches, briefs,
-factures, suivi, media kit). **En production sur https://app.ttpcreators.pro.** Toute
-modif poussée sur `main` met l'app à jour en ~1-2 min. Agir en conséquence.
+planning, contacts, stats, mails, media kits, gifting…) et **espace créateur** (ses tâches,
+briefs, factures, gifting, suivi, media kit). **En production sur https://app.ttpcreators.pro.**
+Toute modif poussée sur `main` met l'app à jour en ~1-2 min. Agir en conséquence.
 
 > Repo frère : le **site vitrine** `websitettpcreators` (public, ttpcreators.pro) — il
 > héberge aussi les **media kits** publics (`/mediakit/<slug>/`) générés depuis la vue

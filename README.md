@@ -8,6 +8,15 @@ Deux espaces dans une seule app : **Agence** (pilotage complet) et **Créateur**
 media kits, contrats, debriefs, suivi d'engagement, et un **cockpit email** (envoi
 Gmail/Resend, historique, relances, alertes de réception).
 
+**Modules récents** :
+- **Gifting** — suivi des cadeaux/dotations marques (agence + créateur) : provenance
+  (email de l'interlocuteur), contenu attendu ou non, statut, et rappel des mentions
+  obligatoires (« Produit offert »/« Cadeau », loi n° 2023-451).
+- **Debrief** — calculateur de taux d'engagement à partir des captures d'insights
+  (deux bases : couverture / abonnés), captures jointes, et fiche détail au clic.
+- **Contrats** — socle de clauses durci au droit français (droit à l'image ≠ droit
+  d'auteur, présomption mannequin, vigilance URSSAF ≥ 5 000 € HT).
+
 ---
 
 ## Stack
