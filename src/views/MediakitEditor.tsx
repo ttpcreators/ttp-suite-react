@@ -47,7 +47,12 @@ type MediaKit = {
   platforms?: PlatformBlock[];
   brands?: BrandRow[];
   photos?: Record<string, string | null>; // hero, contact, + une capture par plateforme (clé = instagram/tiktok/…)
+  /** Captures d'insights affichées sur le media kit public (6 max). URLs publiques. */
+  statsShots?: string[];
 };
+
+/** Nombre max de captures de stats sur un media kit. */
+const MAX_STATS_SHOTS = 6;
 
 // Champs SUPPLÉMENTAIRES par plateforme (en plus de followers / ER / tranche d'âge).
 const PLATFORM_FIELDS: Record<string, { key: keyof PlatformBlock; label: string }[]> = {
@@ -406,6 +411,51 @@ export function MediakitEditor() {
               Portraits verticaux conseillés (ils remplissent toute la hauteur). Les captures de profil s'ajoutent dans
               chaque bloc « Plateforme » ci-dessous. Les images sont optimisées automatiquement — après un upload, clique
               « Enregistrer » en haut.
+            </p>
+          </section>
+
+          {/* ---------------- CAPTURES DE STATS ---------------- */}
+          <section className={`${CARD} xl:col-span-2`}>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-foreground">Captures de stats</h3>
+              <span className="text-[11px] font-medium text-faint">
+                {(mk.statsShots ?? []).length}/{MAX_STATS_SHOTS}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              {(mk.statsShots ?? []).map((u, i) => (
+                <ImageField
+                  key={`${i}-${u}`}
+                  label=""
+                  slug={mk.slug ?? ""}
+                  field={`stat-${i}`}
+                  url={u}
+                  // La corbeille de l'ImageField renvoie null → on retire la capture de la liste.
+                  onChange={(nu) => {
+                    const next = [...(mk.statsShots ?? [])];
+                    if (nu) next[i] = nu;
+                    else next.splice(i, 1);
+                    patch({ statsShots: next });
+                  }}
+                  boxClass="h-40 w-[104px]"
+                />
+              ))}
+              {(mk.statsShots ?? []).length < MAX_STATS_SHOTS && (
+                <ImageField
+                  label=""
+                  slug={mk.slug ?? ""}
+                  field={`stat-${(mk.statsShots ?? []).length}`}
+                  url={null}
+                  onChange={(nu) => {
+                    if (nu) patch({ statsShots: [...(mk.statsShots ?? []), nu].slice(0, MAX_STATS_SHOTS) });
+                  }}
+                  boxClass="h-40 w-[104px]"
+                />
+              )}
+            </div>
+            <p className="mt-2 text-[11px] text-faint">
+              Jusqu'à {MAX_STATS_SHOTS} captures d'insights (portée, audience, vues…). Elles s'affichent sur le media kit
+              public et dans le PDF. Après un upload, clique « Enregistrer » en haut.
             </p>
           </section>
 
