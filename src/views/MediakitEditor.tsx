@@ -124,7 +124,14 @@ function frTime(s: string): number {
 
 type HistLike = { creator?: string; platform?: string; date?: string; followers?: string; er?: string };
 
-export function MediakitEditor() {
+/**
+ * Éditeur du media kit d'une créatrice. `mode` choisit les sections affichées :
+ *  - "standard" (défaut) : profil, audience, photos, captures, plateformes, marques ;
+ *  - "ugc" : uniquement le kit UGC (personnalité, quotidien, matériel, portfolio).
+ * Les DEUX modes partagent le même chargement/sauvegarde du blob `creators.mediakit`
+ * (mêmes garde-fous) → un onglet « UGC » réutilise ce composant sans rien dupliquer.
+ */
+export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc" }) {
   const creators = useCreators();
   const [selId, setSelId] = useState("");
   const selected = creators.find((c) => c.id === selId) ?? null;
@@ -346,6 +353,8 @@ export function MediakitEditor() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {mode === "standard" && (
+          <>
           {/* ---------------- PROFIL ---------------- */}
           <section className={CARD}>
             <h3 className="mb-3 text-sm font-semibold text-foreground">Profil</h3>
@@ -574,8 +583,11 @@ export function MediakitEditor() {
               kit ; sans logo, le nom s'affiche en toutes lettres.
             </p>
           </section>
+          </>
+          )}
 
           {/* ---------------- MEDIA KIT UGC (format à part) ---------------- */}
+          {mode === "ugc" && (
           <section className={`${CARD} xl:col-span-2`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
@@ -712,6 +724,7 @@ export function MediakitEditor() {
               </div>
             )}
           </section>
+          )}
         </div>
       )}
     </div>

@@ -639,7 +639,7 @@ function MediakitFiles() {
   );
 }
 
-type MkTab = "creatrices" | "agence" | "files";
+type MkTab = "creatrices" | "ugc" | "agence" | "files";
 
 /**
  * Page « Media kit » UNIFIÉE = 3 onglets (fusion de l'ancienne « Media kit » et de
@@ -654,7 +654,7 @@ export function Mediakit() {
   // Sous-page demandée depuis la sidebar (Media kit → Créatrices / Agence / Fichiers).
   const sub = useNavSub();
   useEffect(() => {
-    if (sub === "creatrices" || sub === "agence" || sub === "files") setTab(sub);
+    if (sub === "creatrices" || sub === "ugc" || sub === "agence" || sub === "files") setTab(sub);
   }, [sub]);
   const tabBtn = (id: MkTab, label: string) => (
     <button
@@ -672,6 +672,7 @@ export function Mediakit() {
     <div className="space-y-4">
       <div className="inline-flex rounded-xl border border-border bg-surface p-1 text-[11px] font-semibold uppercase tracking-wide">
         {tabBtn("creatrices", "Créatrices")}
+        {tabBtn("ugc", "UGC")}
         {tabBtn("agence", "Agence")}
         {tabBtn("files", "Fichiers")}
       </div>
@@ -682,6 +683,14 @@ export function Mediakit() {
             <span className="text-faint"> (ttpcreators.pro/mediakit/&lt;lien&gt;)</span> et le deck agence.
           </p>
           <MediakitEditor />
+        </div>
+      ) : tab === "ugc" ? (
+        <div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Media kit <strong>UGC</strong> — format orienté personne (personnalité, quotidien, matériel, portfolio),
+            page séparée <span className="text-faint">(/mediakit/&lt;lien&gt;/ugc/)</span>. Choisis une créatrice puis active-le.
+          </p>
+          <MediakitEditor mode="ugc" />
         </div>
       ) : tab === "agence" ? (
         <AgencyTab />
