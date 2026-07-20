@@ -8,6 +8,7 @@ import {
   Lightbulb,
   FileText,
   Gift,
+  Sparkles,
   CalendarDays,
   Files,
   Image as ImageIcon,
@@ -79,7 +80,7 @@ type Creator = {
   instagram: string | null;
   tiktok: string | null;
   email_pro: string | null;
-  mediakit: { slug?: string } | null; // blob media kit (on n'a besoin ici que du slug)
+  mediakit: { slug?: string; ugc?: { enabled?: boolean } } | null; // blob media kit (slug + activation UGC)
 };
 type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; status?: string | null; sort_order?: number };
 type Idea = { id: string; text: string; status: string | null; sort_order?: number };
@@ -2110,6 +2111,16 @@ export function CreatorSpace({
                     >
                       <Copy className="h-4 w-4" />
                     </button>
+                    {creator?.mediakit?.ugc?.enabled && (
+                      <a
+                        href={`${mkUrl}ugc/`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" /> Kit UGC
+                      </a>
+                    )}
                     <a
                       href={mkUrl}
                       target="_blank"
