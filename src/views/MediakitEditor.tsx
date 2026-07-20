@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon } from "lucide-react";
+import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon, Check, Sparkles } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { ImageField } from "@/components/ui/image-field";
 import { dbUpdate } from "@/lib/db";
 import { useCreators } from "@/lib/useCreators";
 import { getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
-import { titleCase } from "@/lib/utils";
+import { titleCase, cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 
@@ -49,10 +49,30 @@ type MediaKit = {
   photos?: Record<string, string | null>; // hero, contact, + une capture par plateforme (clé = instagram/tiktok/…)
   /** Captures d'insights affichées sur le media kit public (6 max). URLs publiques. */
   statsShots?: string[];
+  /** Media kit UGC — format à part (personnalité, quotidien, matériel, portfolio),
+   *  page publique séparée `/mediakit/<slug>/ugc/`. Ne remplace PAS le kit chiffré. */
+  ugc?: UgcKit;
+};
+
+/** Contenu du media kit UGC (orienté personne, pas audience). */
+type UgcKit = {
+  enabled?: boolean;
+  intro?: string; // qui il est, personnalité, univers
+  region?: string; // ex « Sud de la France »
+  home?: string; // ex « Maison », « Appartement »
+  pets?: string; // ex « Chien », « Chat », « Chien + chat »
+  sports?: string; // sports / activités régulières
+  gear?: string[]; // matériel : DJI, appareil photo, iPhone, ringlight…
+  collabs?: string[]; // anciennes collaborations UGC
+  portfolio?: string[]; // URLs d'images d'anciens contenus UGC
+  handle?: string; // @ (indicatif)
+  followers?: string; // abonnés (indicatif)
 };
 
 /** Nombre max de captures de stats sur un media kit. */
 const MAX_STATS_SHOTS = 6;
+/** Nombre max de visuels dans le portfolio UGC. */
+const MAX_UGC_PORTFOLIO = 12;
 
 // Champs SUPPLÉMENTAIRES par plateforme (en plus de followers / ER / tranche d'âge).
 const PLATFORM_FIELDS: Record<string, { key: keyof PlatformBlock; label: string }[]> = {
@@ -240,6 +260,12 @@ export function MediakitEditor() {
   // ---- petites listes éditables ----
   const setTags = (tags: string[]) => patch({ tags });
   const setBrands = (brands: BrandRow[]) => patch({ brands });
+  const ugc = mk.ugc ?? {};
+  const patchUgc = (p: Partial<UgcKit>) => setMk((m) => ({ ...m, ugc: { ...(m.ugc ?? {}), ...p } }));
+  // Liste texte (matériel, collabs) éditée en une ligne par entrée.
+  const ugcLines = (v: string[] | undefined) => (v ?? []).join("\n");
+  const setUgcLines = (key: "gear" | "collabs", raw: string) =>
+    patchUgc({ [key]: raw.split("\n").map((s) => s.trim()).filter(Boolean) } as Partial<UgcKit>);
   const setPlatforms = (platforms: PlatformBlock[]) => patch({ platforms });
 
   const publicUrl = mk.slug ? `https://ttpcreators.pro/mediakit/${mk.slug}/` : null;
@@ -269,6 +295,16 @@ export function MediakitEditor() {
                 className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
               >
                 <ExternalLink className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Voir le media kit</span>
+              </a>
+            )}
+            {publicUrl && mk.ugc?.enabled && (
+              <a
+                href={`${publicUrl}ugc/`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              >
+                <Sparkles className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Voir le kit UGC</span>
               </a>
             )}
             <button
@@ -537,6 +573,144 @@ export function MediakitEditor() {
               Ajoute le logo de chaque marque (PNG à fond transparent idéal) — il s'affiche dans le mur de logos du media
               kit ; sans logo, le nom s'affiche en toutes lettres.
             </p>
+          </section>
+
+          {/* ---------------- MEDIA KIT UGC (format à part) ---------------- */}
+          <section className={`${CARD} xl:col-span-2`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-foreground">Media kit UGC</h3>
+                <p className="mt-1 max-w-xl text-[11px] leading-relaxed text-faint">
+                  Un format à part, orienté <strong>personne</strong> (personnalité, quotidien, matériel, portfolio) plutôt
+                  que chiffres. Page publique séparée : <span className="text-muted-foreground">/mediakit/{mk.slug || "…"}/ugc/</span>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => patchUgc({ enabled: !ugc.enabled })}
+                className={cn(
+                  "flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                  ugc.enabled ? "bg-signalsoft text-signaltext" : "border border-border text-muted-foreground hover:bg-rowhover",
+                )}
+              >
+                <span className={cn("grid h-4 w-4 shrink-0 place-items-center rounded", ugc.enabled ? "bg-primary text-primary-foreground" : "border border-border")}>
+                  {ugc.enabled && <Check className="h-3 w-3" />}
+                </span>
+                {ugc.enabled ? "Activé" : "Activer pour ce créateur"}
+              </button>
+            </div>
+
+            {ugc.enabled && (
+              <div className="mt-4 flex flex-col gap-4">
+                <div>
+                  <label className={LBL}>Présentation (qui il est, sa personnalité, son univers)</label>
+                  <textarea
+                    value={ugc.intro ?? ""}
+                    onChange={(e) => patchUgc({ intro: e.target.value })}
+                    rows={4}
+                    placeholder="Ex : Créateur lifestyle basé dans le sud, passionné de rando et de café de spécialité…"
+                    className={IN + " resize-y leading-relaxed"}
+                  />
+                </div>
+
+                {/* Cadre de vie */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <label className={LBL}>Région</label>
+                    <input value={ugc.region ?? ""} onChange={(e) => patchUgc({ region: e.target.value })} placeholder="Sud de la France" className={IN} />
+                  </div>
+                  <div>
+                    <label className={LBL}>Logement</label>
+                    <input value={ugc.home ?? ""} onChange={(e) => patchUgc({ home: e.target.value })} placeholder="Maison / Appartement" className={IN} />
+                  </div>
+                  <div>
+                    <label className={LBL}>Animaux</label>
+                    <input value={ugc.pets ?? ""} onChange={(e) => patchUgc({ pets: e.target.value })} placeholder="Chien, chat…" className={IN} />
+                  </div>
+                  <div>
+                    <label className={LBL}>Sports / activités</label>
+                    <input value={ugc.sports ?? ""} onChange={(e) => patchUgc({ sports: e.target.value })} placeholder="Yoga, surf, running…" className={IN} />
+                  </div>
+                </div>
+
+                {/* Matériel + anciennes collabs */}
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div>
+                    <label className={LBL}>Matériel (un par ligne)</label>
+                    <textarea
+                      value={ugcLines(ugc.gear)}
+                      onChange={(e) => setUgcLines("gear", e.target.value)}
+                      rows={4}
+                      placeholder={"DJI Osmo Pocket 3\nAppareil photo Sony\niPhone 15 Pro\nRinglight"}
+                      className={IN + " resize-y leading-relaxed"}
+                    />
+                  </div>
+                  <div>
+                    <label className={LBL}>Anciennes collaborations UGC (une par ligne)</label>
+                    <textarea
+                      value={ugcLines(ugc.collabs)}
+                      onChange={(e) => setUgcLines("collabs", e.target.value)}
+                      rows={4}
+                      placeholder={"Sephora\nRespire\nGymshark"}
+                      className={IN + " resize-y leading-relaxed"}
+                    />
+                  </div>
+                </div>
+
+                {/* @ + abonnés (indicatif) */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className={LBL}>@ (indicatif)</label>
+                    <input value={ugc.handle ?? ""} onChange={(e) => patchUgc({ handle: e.target.value.replace(/^@/, "") })} placeholder="pseudo" className={IN} />
+                  </div>
+                  <div>
+                    <label className={LBL}>Abonnés (indicatif)</label>
+                    <input value={ugc.followers ?? ""} onChange={(e) => patchUgc({ followers: e.target.value })} placeholder="Ex : 25 K" className={IN} />
+                  </div>
+                </div>
+
+                {/* Portfolio visuel */}
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className={LBL + " mb-0"}>Portfolio — anciens contenus UGC</label>
+                    <span className="text-[11px] font-medium text-faint">{(ugc.portfolio ?? []).length}/{MAX_UGC_PORTFOLIO}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    {(ugc.portfolio ?? []).map((u, i) => (
+                      <ImageField
+                        key={`${i}-${u}`}
+                        label=""
+                        slug={mk.slug ?? ""}
+                        field={`ugc-${i}`}
+                        url={u}
+                        onChange={(nu) => {
+                          const next = [...(ugc.portfolio ?? [])];
+                          if (nu) next[i] = nu;
+                          else next.splice(i, 1);
+                          patchUgc({ portfolio: next });
+                        }}
+                        boxClass="h-40 w-[104px]"
+                      />
+                    ))}
+                    {(ugc.portfolio ?? []).length < MAX_UGC_PORTFOLIO && (
+                      <ImageField
+                        label=""
+                        slug={mk.slug ?? ""}
+                        field={`ugc-${(ugc.portfolio ?? []).length}`}
+                        url={null}
+                        onChange={(nu) => {
+                          if (nu) patchUgc({ portfolio: [...(ugc.portfolio ?? []), nu].slice(0, MAX_UGC_PORTFOLIO) });
+                        }}
+                        boxClass="h-40 w-[104px]"
+                      />
+                    )}
+                  </div>
+                  <p className="mt-2 text-[11px] text-faint">
+                    Jusqu'à {MAX_UGC_PORTFOLIO} visuels d'anciens contenus. Après un upload, clique « Enregistrer » en haut.
+                  </p>
+                </div>
+              </div>
+            )}
           </section>
         </div>
       )}
