@@ -1,329 +1,346 @@
 import { useEffect, useMemo, useState } from "react";
-import { Info } from "lucide-react";
+import { Info, Plus, Trash2, Copy, Users, Sparkles } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useCreators } from "@/lib/useCreators";
 import { formatEuro } from "@/lib/appState";
 import { cn, titleCase } from "@/lib/utils";
+import { toast } from "@/components/ui/toast";
 import { PlatformIcon } from "@/components/ui/platform-icon";
-
-/**
- * Calculateur de tarif influence — basé sur la méthode standard du marché 2026
- * (pas de chiffres aléatoires) :
- *   Prix = (abonnés / 1000) × CPM plateforme/format × multiplicateur de niche
- *          × multiplicateur d'engagement, puis options (exclusivité, droits).
- *
- * CPM (€/1000 abonnés), multiplicateurs de niche (0,7→1,5) et d'engagement
- * (0,7 <1% → 1,35 >8%) issus des barèmes 2026 (Influencer Marketing Hub,
- * InfluenceFlow, Shopify, Meltwater). Le résultat est une FOURCHETTE pour ne
- * pas sous-vendre. Auto-rempli depuis la fiche pour un créateur de l'agence ;
- * saisie manuelle pour un profil externe / autre agence.
- */
-
-type Fmt = { key: string; label: string; cpm: [number, number] };
-type Plat = { key: PlatKey; label: string; formats: Fmt[] };
-type PlatKey = "instagram" | "tiktok" | "youtube" | "x";
-
-const PLATFORMS: Plat[] = [
-  {
-    key: "instagram",
-    label: "Instagram",
-    formats: [
-      { key: "reel", label: "Reel", cpm: [16, 32] },
-      { key: "post", label: "Post feed", cpm: [9, 18] },
-      { key: "carrousel", label: "Carrousel", cpm: [10, 20] },
-      { key: "story", label: "Story (×3)", cpm: [7, 14] },
-      { key: "pack", label: "Pack (reel + post + 3 stories)", cpm: [30, 58] },
-    ],
-  },
-  {
-    key: "tiktok",
-    label: "TikTok",
-    formats: [
-      { key: "video", label: "Vidéo", cpm: [11, 23] },
-      { key: "pack", label: "Pack (3 vidéos)", cpm: [30, 63] },
-    ],
-  },
-  {
-    key: "youtube",
-    label: "YouTube",
-    formats: [
-      { key: "integration", label: "Intégration", cpm: [18, 37] },
-      { key: "dedicated", label: "Vidéo dédiée", cpm: [55, 110] },
-      { key: "short", label: "Short", cpm: [10, 22] },
-    ],
-  },
-  { key: "x", label: "X", formats: [{ key: "post", label: "Post", cpm: [4, 9] }] },
-];
-
-const NICHES = [
-  { value: "lifestyle", label: "Lifestyle", m: 1.0 },
-  { value: "beaute", label: "Mode / Beauté", m: 1.1 },
-  { value: "food", label: "Food", m: 1.0 },
-  { value: "sport", label: "Sport / Fitness", m: 1.1 },
-  { value: "voyage", label: "Voyage", m: 1.05 },
-  { value: "tech", label: "Tech", m: 1.3 },
-  { value: "finance", label: "Finance / B2B / Luxe", m: 1.5 },
-  { value: "gaming", label: "Gaming", m: 0.9 },
-  { value: "divertissement", label: "Divertissement / Meme", m: 0.7 },
-];
-
-function parseFollowers(s: string): number {
-  const str = String(s ?? "").trim().replace(/\s/g, "").replace(",", ".").toLowerCase();
-  const m = /^([\d.]+)\s*([km])?/.exec(str);
-  if (!m) return 0;
-  let n = parseFloat(m[1]) || 0;
-  if (m[2] === "k") n *= 1000;
-  else if (m[2] === "m") n *= 1_000_000;
-  return Math.round(n);
-}
-function parseEr(s: string): number {
-  const m = /([\d.,]+)/.exec(String(s ?? ""));
-  return m ? parseFloat(m[1].replace(",", ".")) || 0 : 0;
-}
-function engMult(er: number): number {
-  if (er < 1) return 0.7;
-  if (er < 2) return 0.85;
-  if (er < 3.5) return 1.0;
-  if (er < 6) return 1.15;
-  if (er < 8) return 1.25;
-  return 1.35;
-}
-function tier(f: number): string {
-  if (f < 10_000) return "Nano";
-  if (f < 100_000) return "Micro";
-  if (f < 500_000) return "Mid-tier";
-  if (f < 1_000_000) return "Macro";
-  return "Méga";
-}
-function roundNice(n: number): number {
-  if (n <= 0) return 0;
-  const step = n < 1000 ? 10 : n < 10_000 ? 50 : 100;
-  return Math.round(n / step) * step;
-}
+import {
+  INF_PLATFORMS, NICHES, nicheMult, infFormat, tier, computeInfluence, parseFollowers, parseEr,
+  UGC_TYPES, UGC_LEVELS, UGC_USAGE, ugcLevelMult, computeUgc,
+  type PlatKey, type InfItem, type UgcItem,
+} from "@/lib/pricing";
 
 const EXTERNAL = "__external__";
+let _rid = 0;
+const rid = () => `p${Date.now().toString(36)}${(_rid += 1)}`;
+
+const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15";
+const SEL = IN;
+const LBL = "text-[9px] font-semibold uppercase tracking-wide text-faint";
+
+type Mode = "influence" | "ugc";
+type InfRow = { id: string; platform: PlatKey; format: string; qty: number; followers: string; er: string };
+type UgcRow = { id: string; type: string; qty: number };
 
 export function Pricing() {
   const creators = useCreators();
-
+  const [mode, setMode] = useState<Mode>("influence");
   const [creatorId, setCreatorId] = useState<string>(EXTERNAL);
-  const [platKey, setPlatKey] = useState<PlatKey>("instagram");
-  const [fmtKey, setFmtKey] = useState<string>("reel");
   const [niche, setNiche] = useState<string>("lifestyle");
-  const [followers, setFollowers] = useState<string>("");
-  const [engagement, setEngagement] = useState<string>("");
-  const [qty, setQty] = useState<number>(1);
-  const [excl, setExcl] = useState(false);
-  const [usage, setUsage] = useState(false);
+  const [level, setLevel] = useState<string>("confirme");
 
-  const plat = PLATFORMS.find((p) => p.key === platKey) ?? PLATFORMS[0];
-  const fmt = plat.formats.find((f) => f.key === fmtKey) ?? plat.formats[0];
+  // Audience PAR PLATEFORME, pré-remplie depuis le media kit de la créatrice.
+  const [platMap, setPlatMap] = useState<Record<string, { followers: string; er: string }>>({});
+  const [fallback, setFallback] = useState<{ followers: string; er: string }>({ followers: "", er: "" });
 
-  // Auto-remplissage depuis la fiche d'un créateur de l'agence.
+  const [infRows, setInfRows] = useState<InfRow[]>([
+    { id: rid(), platform: "instagram", format: "reel", qty: 1, followers: "", er: "" },
+  ]);
+  const [infOpts, setInfOpts] = useState({ exclusivite: false, droitsUsage: false, remisePct: 0 });
+
+  const [ugcRows, setUgcRows] = useState<UgcRow[]>([{ id: rid(), type: "video_court", qty: 2 }]);
+  const [ugcOpts, setUgcOpts] = useState({ usage: "none", exclusivite: false, rushes: false, montage: false, express: false });
+
+  // Charge le media kit du créateur → audience par plateforme + niche.
   useEffect(() => {
-    if (creatorId === EXTERNAL) return;
+    if (creatorId === EXTERNAL) {
+      setPlatMap({});
+      setFallback({ followers: "", er: "" });
+      return;
+    }
     let alive = true;
-    supabase
-      .from("creators")
-      .select("followers,er,niche")
-      .eq("id", creatorId)
-      .limit(1)
-      .then(({ data }) => {
-        if (!alive) return;
-        const row = data?.[0] as { followers?: string; er?: string; niche?: string } | undefined;
-        if (!row) return;
-        if (row.followers) setFollowers(String(row.followers));
-        if (row.er) setEngagement(String(row.er));
-        if (row.niche) {
-          const n = row.niche.toLowerCase();
-          const match = NICHES.find((x) => x.label.toLowerCase().includes(n) || n.includes(x.value));
-          if (match) setNiche(match.value);
-        }
-      });
-    return () => {
-      alive = false;
-    };
+    supabase.from("creators").select("followers,er,niche,mediakit").eq("id", creatorId).limit(1).then(({ data }) => {
+      if (!alive) return;
+      const row = data?.[0] as { followers?: string; er?: string; niche?: string; mediakit?: { platforms?: { key?: string; followers?: string; er?: string }[] } } | undefined;
+      if (!row) return;
+      const map: Record<string, { followers: string; er: string }> = {};
+      for (const p of row.mediakit?.platforms ?? []) {
+        if (p.key) map[p.key] = { followers: String(p.followers ?? ""), er: String(p.er ?? "") };
+      }
+      setPlatMap(map);
+      setFallback({ followers: String(row.followers ?? ""), er: String(row.er ?? "") });
+      if (row.niche) {
+        const n = row.niche.toLowerCase();
+        const match = NICHES.find((x) => x.label.toLowerCase().includes(n) || n.includes(x.value));
+        if (match) setNiche(match.value);
+      }
+      // Re-remplit les lignes influence vides avec l'audience de leur plateforme.
+      setInfRows((rows) => rows.map((r) => audienceFor(r, map, { followers: String(row.followers ?? ""), er: String(row.er ?? "") })));
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creatorId]);
 
-  const calc = useMemo(() => {
-    const f = parseFollowers(followers);
-    const er = parseEr(engagement);
-    const nm = NICHES.find((x) => x.value === niche)?.m ?? 1;
-    const em = engMult(er);
-    const addon = 1 + (excl ? 0.25 : 0) + (usage ? 0.3 : 0);
-    const q = Math.max(1, qty || 1);
-    const unit = (cpm: number) => (f / 1000) * cpm * nm * em * addon;
-    const min = roundNice(unit(fmt.cpm[0]) * q);
-    const max = roundNice(unit(fmt.cpm[1]) * q);
-    const mid = roundNice((min + max) / 2);
-    return { f, er, nm, em, addon, q, min, max, mid };
-  }, [followers, engagement, niche, excl, usage, qty, fmt]);
+  /** Renseigne followers/er d'une ligne depuis l'audience de sa plateforme (média kit → sinon fiche). */
+  function audienceFor(r: InfRow, map: Record<string, { followers: string; er: string }>, fb: { followers: string; er: string }): InfRow {
+    const a = map[r.platform] || fb;
+    return { ...r, followers: r.followers || a.followers || "", er: r.er || a.er || "" };
+  }
 
-  const has = calc.f > 0;
+  const infItems: InfItem[] = infRows.map((r) => ({ platform: r.platform, format: r.format, qty: r.qty, followers: parseFollowers(r.followers), er: parseEr(r.er) }));
+  const inf = useMemo(() => computeInfluence(infItems, nicheMult(niche), infOpts), [infItems, niche, infOpts]);
+  const ugcItems: UgcItem[] = ugcRows.map((r) => ({ type: r.type, qty: r.qty }));
+  const ugc = useMemo(() => computeUgc(ugcItems, ugcLevelMult(level), ugcOpts), [ugcItems, level, ugcOpts]);
+
+  const result = mode === "influence" ? inf : ugc;
+  const hasResult = result.max > 0;
   const selName = creators.find((c) => c.id === creatorId)?.name;
 
-  const Num = ({ label, value, onChange, ph }: { label: string; value: string; onChange: (v: string) => void; ph?: string }) => (
-    <label className="flex flex-1 flex-col gap-1.5" style={{ minWidth: 130 }}>
-      <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={ph}
-        className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm font-semibold text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15"
-      />
-    </label>
-  );
+  // ── Modif de lignes influence ──
+  const setInf = (id: string, patch: Partial<InfRow>) =>
+    setInfRows((rows) => rows.map((r) => {
+      if (r.id !== id) return r;
+      const next = { ...r, ...patch };
+      // Changement de plateforme → format valide + ré-auto-remplissage audience.
+      if (patch.platform && patch.platform !== r.platform) {
+        next.format = INF_PLATFORMS.find((p) => p.key === patch.platform)!.formats[0].key;
+        const a = platMap[patch.platform] || fallback;
+        next.followers = a.followers || "";
+        next.er = a.er || "";
+      }
+      return next;
+    }));
+  const addInf = () => setInfRows((rows) => [...rows, audienceFor({ id: rid(), platform: "instagram", format: "reel", qty: 1, followers: "", er: "" }, platMap, fallback)]);
+
+  const copyQuote = () => {
+    const who = creatorId !== EXTERNAL && selName ? titleCase(selName) : "Créateur";
+    let txt = "";
+    if (mode === "influence") {
+      txt = `Proposition tarifaire — ${who}\n\n`;
+      inf.itemsPriced.forEach(({ item, min, max }) => {
+        const fmt = infFormat(item.platform, item.format);
+        txt += `• ${INF_PLATFORMS.find((p) => p.key === item.platform)?.label} — ${fmt?.label} ×${item.qty} : ${formatEuro(min)}–${formatEuro(max)}\n`;
+      });
+      if (infOpts.exclusivite) txt += "• Exclusivité incluse\n";
+      if (infOpts.droitsUsage) txt += "• Droits d'usage / ads inclus\n";
+      txt += `\nTotal : ${formatEuro(inf.min)} – ${formatEuro(inf.max)} HT (cible ${formatEuro(inf.mid)}).`;
+    } else {
+      txt = `Proposition UGC — ${who}\n\n`;
+      ugc.itemsPriced.forEach(({ item, min, max }) => {
+        txt += `• ${UGC_TYPES.find((t) => t.key === item.type)?.label} ×${item.qty} : ${formatEuro(min)}–${formatEuro(max)}\n`;
+      });
+      const u = UGC_USAGE.find((x) => x.value === ugcOpts.usage);
+      if (u && u.value !== "none") txt += `• Droits : ${u.label}\n`;
+      txt += `\nTotal : ${formatEuro(ugc.min)} – ${formatEuro(ugc.max)} HT (cible ${formatEuro(ugc.mid)}).`;
+    }
+    navigator.clipboard?.writeText(txt).then(() => toast("Proposition copiée ✓")).catch(() => toast("Copie impossible"));
+  };
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-[1.25fr_1fr]">
-      {/* ENTRÉES */}
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
+      {/* ============ ENTRÉES ============ */}
       <div className="flex flex-col gap-4">
+        {/* Mode + créateur */}
         <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Créateur</span>
-            <select
-              value={creatorId}
-              onChange={(e) => setCreatorId(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15"
-            >
-              <option value={EXTERNAL}>— Externe / autre agence (saisie manuelle)</option>
-              {creators.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {titleCase(c.name)} (auto)
-                </option>
-              ))}
-            </select>
-            {creatorId !== EXTERNAL && (
-              <span className="text-[11px] text-faint">Abonnés & engagement pré-remplis depuis la fiche — modifiables.</span>
-            )}
-          </div>
-
-          {/* Plateforme */}
-          <div className="mt-4 flex flex-wrap gap-2">
-            {PLATFORMS.map((p) => (
+          <div className="flex w-fit items-center gap-1 rounded-full border border-border bg-panel p-1">
+            {([["influence", "Influence", Users], ["ugc", "UGC", Sparkles]] as const).map(([m, label, Icon]) => (
               <button
-                key={p.key}
+                key={m}
                 type="button"
-                onClick={() => {
-                  setPlatKey(p.key);
-                  setFmtKey(p.formats[0].key);
-                }}
+                onClick={() => setMode(m)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[11px] font-semibold transition-colors",
-                  p.key === platKey ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:bg-rowhover",
+                  "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                  mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <PlatformIcon platform={p.key} className="h-3.5 w-3.5" />
-                {p.label}
+                <Icon className="h-3.5 w-3.5" /> {label}
               </button>
             ))}
           </div>
+          <p className="mt-2 text-[11px] leading-snug text-faint">
+            {mode === "influence"
+              ? "Le créateur publie sur SON compte — prix basé sur l'audience de chaque plateforme."
+              : "Le créateur livre du contenu que la MARQUE exploite — forfait par livrable, selon les droits."}
+          </p>
 
-          {/* Format + niche */}
-          <div className="mt-4 flex flex-wrap gap-3">
-            <label className="flex flex-1 flex-col gap-1.5" style={{ minWidth: 150 }}>
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Format</span>
-              <select
-                value={fmtKey}
-                onChange={(e) => setFmtKey(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-              >
-                {plat.formats.map((f) => (
-                  <option key={f.key} value={f.key}>{f.label}</option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-1 flex-col gap-1.5" style={{ minWidth: 150 }}>
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Niche</span>
-              <select
-                value={niche}
-                onChange={(e) => setNiche(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-              >
-                {NICHES.map((n) => (
-                  <option key={n.value} value={n.value}>{n.label} (×{n.m})</option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          {/* Abonnés + engagement + quantité */}
-          <div className="mt-3 flex flex-wrap gap-3">
-            <Num label="Abonnés" value={followers} onChange={setFollowers} ph="ex 45 000 ou 45K" />
-            <Num label="Taux d'engagement (%)" value={engagement} onChange={setEngagement} ph="ex 3,5" />
-            <label className="flex flex-col gap-1.5" style={{ minWidth: 90 }}>
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Quantité</span>
-              <input
-                type="number"
-                min={1}
-                value={qty}
-                onChange={(e) => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm font-semibold text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-              />
-            </label>
-          </div>
-
-          {/* Options */}
-          <div className="mt-4 flex flex-wrap gap-4">
-            <label className="flex cursor-pointer items-center gap-2 select-none text-[12px] font-medium text-foreground">
-              <input type="checkbox" checked={excl} onChange={(e) => setExcl(e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
-              Exclusivité <span className="text-faint">(+25 %)</span>
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 select-none text-[12px] font-medium text-foreground">
-              <input type="checkbox" checked={usage} onChange={(e) => setUsage(e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
-              Droits d'usage / ads <span className="text-faint">(+30 %)</span>
-            </label>
+          <div className="mt-4 flex flex-col gap-1.5">
+            <span className={LBL}>Créateur</span>
+            <select value={creatorId} onChange={(e) => setCreatorId(e.target.value)} className={SEL}>
+              <option value={EXTERNAL}>— Externe / manuel</option>
+              {creators.map((c) => (
+                <option key={c.id} value={c.id}>{titleCase(c.name)} (auto)</option>
+              ))}
+            </select>
           </div>
         </div>
+
+        {/* ---- INFLUENCE ---- */}
+        {mode === "influence" ? (
+          <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+              <label className="flex flex-1 flex-col gap-1.5" style={{ minWidth: 160 }}>
+                <span className={LBL}>Niche (du créateur)</span>
+                <select value={niche} onChange={(e) => setNiche(e.target.value)} className={SEL}>
+                  {NICHES.map((n) => <option key={n.value} value={n.value}>{n.label} (×{n.m})</option>)}
+                </select>
+              </label>
+            </div>
+
+            <span className={LBL}>Livrables du package</span>
+            <div className="mt-2 flex flex-col gap-2">
+              {infRows.map((r) => {
+                const plat = INF_PLATFORMS.find((p) => p.key === r.platform)!;
+                return (
+                  <div key={r.id} className="rounded-xl border border-border bg-panel p-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select value={r.platform} onChange={(e) => setInf(r.id, { platform: e.target.value as PlatKey })} className="rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none focus:border-primary">
+                        {INF_PLATFORMS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                      </select>
+                      <select value={r.format} onChange={(e) => setInf(r.id, { format: e.target.value })} className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none focus:border-primary">
+                        {plat.formats.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+                      </select>
+                      <input type="number" min={1} value={r.qty} onChange={(e) => setInf(r.id, { qty: Math.max(1, parseInt(e.target.value, 10) || 1) })} title="Quantité" className="w-14 rounded-md border border-border bg-surface px-2 py-1.5 text-center text-[13px] tabular-nums outline-none focus:border-primary" />
+                      {infRows.length > 1 && (
+                        <button type="button" onClick={() => setInfRows((rows) => rows.filter((x) => x.id !== r.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <label className="flex flex-1 items-center gap-1.5" style={{ minWidth: 130 }}>
+                        <PlatformIcon platform={r.platform} className="h-3.5 w-3.5 shrink-0 text-faint" />
+                        <input value={r.followers} onChange={(e) => setInf(r.id, { followers: e.target.value })} placeholder="abonnés (cette plateforme)" className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none focus:border-primary" />
+                      </label>
+                      <input value={r.er} onChange={(e) => setInf(r.id, { er: e.target.value })} placeholder="engagement %" className="w-28 rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none focus:border-primary" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <button type="button" onClick={addInf} className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+              <Plus className="h-3.5 w-3.5" /> Ajouter un livrable
+            </button>
+
+            <div className="mt-4 flex flex-wrap items-center gap-4">
+              <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-foreground">
+                <input type="checkbox" checked={infOpts.exclusivite} onChange={(e) => setInfOpts((o) => ({ ...o, exclusivite: e.target.checked }))} className="h-4 w-4 accent-[var(--primary)]" />
+                Exclusivité <span className="text-faint">+25 %</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-foreground">
+                <input type="checkbox" checked={infOpts.droitsUsage} onChange={(e) => setInfOpts((o) => ({ ...o, droitsUsage: e.target.checked }))} className="h-4 w-4 accent-[var(--primary)]" />
+                Droits d'usage / ads <span className="text-faint">+30 %</span>
+              </label>
+              <label className="flex items-center gap-2 text-[12px] font-medium text-foreground">
+                Remise pack
+                <input type="number" min={0} max={50} value={infOpts.remisePct} onChange={(e) => setInfOpts((o) => ({ ...o, remisePct: Math.min(50, Math.max(0, parseInt(e.target.value, 10) || 0)) }))} className="w-16 rounded-md border border-border bg-surface px-2 py-1 text-center text-[13px] tabular-nums outline-none focus:border-primary" />
+                <span className="text-faint">%</span>
+              </label>
+            </div>
+          </div>
+        ) : (
+          /* ---- UGC ---- */
+          <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+            <div className="mb-3 flex flex-wrap items-end gap-3">
+              <label className="flex flex-1 flex-col gap-1.5" style={{ minWidth: 160 }}>
+                <span className={LBL}>Niveau du créateur UGC</span>
+                <select value={level} onChange={(e) => setLevel(e.target.value)} className={SEL}>
+                  {UGC_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label} (×{l.m})</option>)}
+                </select>
+              </label>
+              <label className="flex flex-1 flex-col gap-1.5" style={{ minWidth: 160 }}>
+                <span className={LBL}>Droits d'exploitation</span>
+                <select value={ugcOpts.usage} onChange={(e) => setUgcOpts((o) => ({ ...o, usage: e.target.value }))} className={SEL}>
+                  {UGC_USAGE.map((u) => <option key={u.value} value={u.value}>{u.label}{u.m ? ` (+${Math.round(u.m * 100)} %)` : ""}</option>)}
+                </select>
+              </label>
+            </div>
+
+            <span className={LBL}>Livrables UGC</span>
+            <div className="mt-2 flex flex-col gap-2">
+              {ugcRows.map((r) => (
+                <div key={r.id} className="flex items-center gap-2 rounded-xl border border-border bg-panel p-2.5">
+                  <select value={r.type} onChange={(e) => setUgcRows((rows) => rows.map((x) => (x.id === r.id ? { ...x, type: e.target.value } : x)))} className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none focus:border-primary">
+                    {UGC_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                  </select>
+                  <input type="number" min={1} value={r.qty} onChange={(e) => setUgcRows((rows) => rows.map((x) => (x.id === r.id ? { ...x, qty: Math.max(1, parseInt(e.target.value, 10) || 1) } : x)))} title="Quantité" className="w-14 rounded-md border border-border bg-surface px-2 py-1.5 text-center text-[13px] tabular-nums outline-none focus:border-primary" />
+                  {ugcRows.length > 1 && (
+                    <button type="button" onClick={() => setUgcRows((rows) => rows.filter((x) => x.id !== r.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={() => setUgcRows((rows) => [...rows, { id: rid(), type: "video_court", qty: 1 }])} className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+              <Plus className="h-3.5 w-3.5" /> Ajouter un livrable
+            </button>
+
+            <div className="mt-4 flex flex-wrap items-center gap-4">
+              {([["exclusivite", "Exclusivité", "+25 %"], ["rushes", "Rushes / fichiers bruts", "+15 %"], ["montage", "Montage avancé", "+20 %"], ["express", "Livraison express", "+20 %"]] as const).map(([k, label, pct]) => (
+                <label key={k} className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-foreground">
+                  <input type="checkbox" checked={ugcOpts[k]} onChange={(e) => setUgcOpts((o) => ({ ...o, [k]: e.target.checked }))} className="h-4 w-4 accent-[var(--primary)]" />
+                  {label} <span className="text-faint">{pct}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex items-start gap-2 rounded-2xl border border-border bg-surface p-4 text-[11px] leading-snug text-muted-foreground shadow-sm">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-faint" />
           <span>
-            Méthode 2026 : <b>(abonnés / 1000) × CPM plateforme × niche × engagement</b>. CPM & multiplicateurs issus des barèmes marché
-            2026 (Influencer Marketing Hub, InfluenceFlow, Shopify, Meltwater). Fourchette indicative HT — la valeur exacte dépend de la marque, des droits et de la durée.
+            {mode === "influence"
+              ? "Somme des livrables, chacun à (abonnés/1000) × CPM × niche × engagement, puis options et remise. Fourchette HT indicative — barèmes marché 2026."
+              : "Le prix UGC ne dépend PAS de l'audience : forfait de production × niveau, dont les DROITS d'exploitation sont le vrai levier. Fourchette HT indicative — barèmes marché 2026."}
           </span>
         </div>
       </div>
 
-      {/* RÉSULTAT */}
-      <div className="flex flex-col rounded-2xl bg-foreground p-6 text-background">
-        <div className="text-xs font-semibold uppercase tracking-wide text-signal">Tarif conseillé</div>
-        <div className="mt-1 text-[11px] text-faint">
-          {plat.label} · {fmt.label}
-          {creatorId !== EXTERNAL && selName ? ` · ${titleCase(selName)}` : ""}
+      {/* ============ RÉSULTAT ============ */}
+      <div className="flex flex-col rounded-2xl bg-foreground p-6 text-background lg:sticky lg:top-4 lg:self-start">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs font-semibold uppercase tracking-wide text-signal">
+            {mode === "influence" ? "Package influence" : "Package UGC"}
+          </div>
+          {hasResult && (
+            <button type="button" onClick={copyQuote} className="flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-background transition-colors hover:bg-white/20">
+              <Copy className="h-3.5 w-3.5" /> Copier
+            </button>
+          )}
         </div>
+        {creatorId !== EXTERNAL && selName && <div className="mt-1 text-[11px] text-faint">{titleCase(selName)}</div>}
 
-        {has ? (
+        {hasResult ? (
           <>
             <div className="mt-4">
-              <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Fourchette conseillée</div>
+              <div className={LBL}>Fourchette conseillée (HT)</div>
               <div className="mt-1 text-2xl font-bold tracking-tight text-background sm:text-3xl">
-                {formatEuro(calc.min)} <span className="text-faint">–</span> {formatEuro(calc.max)}
+                {formatEuro(result.min)} <span className="text-faint">–</span> {formatEuro(result.max)}
               </div>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="text-[11px] text-faint">Prix cible</span>
-                <span className="text-lg font-bold text-signal">{formatEuro(calc.mid)}</span>
-                {calc.q > 1 && <span className="text-[10px] text-faint">pour {calc.q} contenus</span>}
+                <span className="text-lg font-bold text-signal">{formatEuro(result.mid)}</span>
               </div>
             </div>
 
-            {/* Détail du calcul */}
+            {/* Détail par livrable */}
             <div className="mt-4 flex flex-col gap-1.5 border-t border-white/10 pt-3 text-[11px]">
-              <Line l="Palier" v={`${tier(calc.f)} · ${calc.f.toLocaleString("fr-FR")} abonnés`} />
-              <Line l="CPM (€/1000)" v={`${fmt.cpm[0]} – ${fmt.cpm[1]} €`} />
-              <Line l="× Niche" v={`×${calc.nm}`} />
-              <Line l="× Engagement" v={`×${calc.em} (${calc.er || 0}%)`} />
-              {(excl || usage) && <Line l="× Options" v={`×${calc.addon.toFixed(2)}`} />}
+              {(mode === "influence" ? inf.itemsPriced : ugc.itemsPriced).map((r, i) => {
+                const label =
+                  mode === "influence"
+                    ? `${INF_PLATFORMS.find((p) => p.key === (r.item as InfItem).platform)?.label} · ${infFormat((r.item as InfItem).platform, (r.item as InfItem).format)?.label} ×${r.item.qty}`
+                    : `${UGC_TYPES.find((t) => t.key === (r.item as UgcItem).type)?.label} ×${r.item.qty}`;
+                return <Line key={i} l={label} v={r.max > 0 ? `${formatEuro(r.min)}–${formatEuro(r.max)}` : "—"} />;
+              })}
+              {result.addon > 1 && <Line l="× Options" v={`×${result.addon.toFixed(2)}`} />}
+              {mode === "influence" && inf.itemsPriced[0] && (
+                <Line l="Palier (1re plateforme)" v={tier(parseFollowers(infRows[0]?.followers))} />
+              )}
             </div>
 
             <div className="mt-4 rounded-xl bg-white/[0.06] p-3 text-[11px] leading-snug text-faint">
-              💡 Ne descends pas sous <span className="font-semibold text-background">{formatEuro(calc.min)}</span> sans contrepartie
-              (visibilité, série de collabs). Le juste prix se défend avec l'engagement ({calc.er || 0}%) et le palier {tier(calc.f)}.
+              💡 {mode === "influence"
+                ? <>Ne descends pas sous <span className="font-semibold text-background">{formatEuro(result.min)}</span> sans contrepartie. Le juste prix se défend avec l'engagement et le palier de chaque plateforme.</>
+                : <>Le prix monte surtout avec les <span className="font-semibold text-background">droits d'exploitation</span> : un contenu diffusé en ads pendant 6 mois vaut bien plus qu'un post organique.</>}
             </div>
           </>
         ) : (
           <div className="mt-6 text-sm text-faint">
-            Choisis un créateur (ou « Externe ») et renseigne les <b>abonnés</b> pour obtenir une fourchette de prix.
+            {mode === "influence"
+              ? "Ajoute des livrables et renseigne les abonnés de chaque plateforme pour obtenir une fourchette."
+              : "Ajoute des livrables UGC pour obtenir une fourchette."}
           </div>
         )}
       </div>
@@ -334,8 +351,8 @@ export function Pricing() {
 function Line({ l, v }: { l: string; v: string }) {
   return (
     <div className="flex justify-between gap-3">
-      <span className="text-faint">{l}</span>
-      <span className="font-medium text-background">{v}</span>
+      <span className="min-w-0 truncate text-faint">{l}</span>
+      <span className="shrink-0 font-medium text-background tabular-nums">{v}</span>
     </div>
   );
 }
