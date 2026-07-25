@@ -211,8 +211,13 @@ export function Briefs() {
   };
   const changeStatus = async (id: string, next: string) => {
     // MAJ optimiste → la carte se déplace immédiatement dans la bonne colonne.
+    const prevStatus = (rows ?? []).find((r) => r.id === id)?.status;
     setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, status: next } : r)));
-    if (!(await dbUpdate("briefs", id, { status: next }))) toast("Erreur — réessaie");
+    if (!(await dbUpdate("briefs", id, { status: next }))) {
+      // Échec (RLS/réseau) : on remet l'ancien statut au lieu de laisser l'UI mentir.
+      setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, status: prevStatus ?? null } : r)));
+      toast("Erreur — réessaie");
+    }
   };
   const del = async (row: Row) => {
     if (await dbTrash("briefs", row.id, row.brand, row.creator || undefined)) {

@@ -143,10 +143,14 @@ export function Idees() {
   };
 
   const updateStatus = async (id: string, status: string) => {
+    const prev = rows;
     const next = (rows ?? []).map((r) => (r.id === id ? { ...r, status } : r));
     setRows(next);
     setCache("ideas", next);
     if (!(await dbUpdate("ideas", id, { status }))) {
+      // Échec : on restaure l'état ET le cache pour ne pas afficher un faux statut.
+      setRows(prev);
+      if (prev) setCache("ideas", prev);
       toast("Erreur — réessaie");
     }
   };
