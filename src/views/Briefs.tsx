@@ -215,7 +215,7 @@ export function Briefs() {
     setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, status: next } : r)));
     if (!(await dbUpdate("briefs", id, { status: next }))) {
       // Échec (RLS/réseau) : on remet l'ancien statut au lieu de laisser l'UI mentir.
-      setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, status: prevStatus ?? null } : r)));
+      setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, status: prevStatus ?? r.status } : r)));
       toast("Erreur — réessaie");
     }
   };
