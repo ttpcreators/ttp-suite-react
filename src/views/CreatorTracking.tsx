@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Save, Target, GripVertical } from "lucide-react";
+import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle } from "lucide-react";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { cn } from "@/lib/utils";
 import {
   norm, normProfile, emptyProfile, PROFILES_KEY, CADENCE_FIELDS, cadenceTotal,
-  PLATFORMS_PRIO, platPrioLabel, type EditorialProfile, type PlatPrio, type Cadence,
+  PLATFORMS_PRIO, platPrioLabel, MONTHLY_KEY, emptyMonth, monthLabel, currentMonth,
+  type EditorialProfile, type PlatPrio, type Cadence, type MonthEntry,
 } from "@/lib/creatorTracking";
 
 const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15";
@@ -155,5 +156,146 @@ export function EditorialProfileCard({ name }: { name: string }) {
         <p className="mt-1.5 text-[11px] text-faint">Écris « OK » quand c'est à jour ; tout autre texte lève une alerte de conformité.</p>
       </div>
     </section>
+  );
+}
+
+/**
+ * SUIVI MENSUEL : un enregistrement par mois — cadence RÉELLE publiée comparée à la
+ * cadence recommandée (fiche éditoriale), ER Insta/TikTok, vues moyennes, faits
+ * marquants, dérive éditoriale. Blob agence `creatorMonthly`, clé = nom.
+ */
+export function MonthlyTracking({ name }: { name: string }) {
+  const key = norm(name);
+  const { data: monthlyMap, loading } = useAppState<Record<string, MonthEntry[]>>((s: AppState) => (s[MONTHLY_KEY] as Record<string, MonthEntry[]>) ?? {});
+  const { data: profileMap } = useAppState<Record<string, EditorialProfile>>((s: AppState) => (s[PROFILES_KEY] as Record<string, EditorialProfile>) ?? {});
+  const reco = normProfile(profileMap?.[key]).cadenceReco;
+
+  const [local, setLocal] = useState<MonthEntry[] | null>(null);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (!loading && loadedKey !== key) {
+      setLocal((monthlyMap?.[key] ?? []).map((m) => ({ ...emptyMonth(m.month), ...m })));
+      setLoadedKey(key);
+    }
+  }, [loading, monthlyMap, key, loadedKey]);
+
+  const list = local ?? [];
+  const sorted = [...list].sort((a, b) => b.month.localeCompare(a.month)); // récent d'abord
+  const editMonth = (month: string, patch: Partial<MonthEntry>) => setLocal((l) => (l ?? []).map((m) => (m.month === month ? { ...m, ...patch } : m)));
+  const editCad = (month: string, k: keyof Cadence, v: number) => setLocal((l) => (l ?? []).map((m) => (m.month === month ? { ...m, cadence: { ...m.cadence, [k]: Math.max(0, v || 0) } } : m)));
+  const addMonth = () => {
+    const m = currentMonth();
+    if (list.some((x) => x.month === m)) return toast("Le mois en cours existe déjà");
+    setLocal((l) => [emptyMonth(m), ...(l ?? [])]);
+  };
+
+  const save = async () => {
+    if (saving || loadedKey !== key) return;
+    setSaving(true);
+    invalidateAppState();
+    const fresh = ((await getAppState())[MONTHLY_KEY] as Record<string, MonthEntry[]>) ?? {};
+    const ok = await saveAppStateKey(MONTHLY_KEY, { ...fresh, [key]: list });
+    setSaving(false);
+    toast(ok ? "Suivi mensuel enregistré ✓" : "Erreur — réessaie");
+  };
+
+  const recoTotal = cadenceTotal(reco);
+
+  return (
+    <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <CalendarRange className="h-4 w-4 text-muted-foreground" /> Suivi mensuel
+        </div>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={addMonth} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <Plus className="h-3.5 w-3.5" /> Ajouter le mois
+          </button>
+          <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+            <Save className="h-3.5 w-3.5" /> {saving ? "…" : "Enregistrer"}
+          </button>
+        </div>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border bg-panel/40 px-4 py-8 text-center text-[13px] text-muted-foreground">
+          Aucun mois suivi. « Ajouter le mois » crée l'enregistrement du mois en cours.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {sorted.map((m) => {
+            const realTotal = cadenceTotal(m.cadence);
+            const ratio = recoTotal > 0 ? realTotal / recoTotal : 1;
+            const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : ratio >= 0.7 ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-rose-500/10 text-rose-600 dark:text-rose-400";
+            return (
+              <div key={m.month} className="rounded-xl border border-border bg-panel/40 p-3.5">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-semibold text-foreground">{monthLabel(m.month)}</span>
+                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums", badge)}>
+                      {realTotal}{recoTotal > 0 ? ` / ${recoTotal}` : ""} contenus
+                    </span>
+                    {m.derive && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                        <AlertTriangle className="h-3 w-3" /> Dérive
+                      </span>
+                    )}
+                  </div>
+                  <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.month !== m.month))} className="grid h-7 w-7 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {/* Cadence réelle vs recommandée */}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {CADENCE_FIELDS.map((f) => (
+                    <label key={f.key} className="flex flex-col gap-1">
+                      <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">
+                        {f.short} <span className="text-faint/70">/ {reco[f.key]}</span>
+                      </span>
+                      <input type="number" min={0} value={m.cadence[f.key]} onChange={(e) => editCad(m.month, f.key, parseInt(e.target.value, 10) || 0)} className={cn("w-full rounded-lg border bg-surface px-2 py-1.5 text-center text-sm tabular-nums outline-none focus:border-primary", reco[f.key] > 0 && m.cadence[f.key] < reco[f.key] ? "border-amber-400/50" : "border-border")} />
+                    </label>
+                  ))}
+                </div>
+
+                {/* ER + vues */}
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  <Field label="ER Instagram"><input value={m.erInsta} onChange={(e) => editMonth(m.month, { erInsta: e.target.value })} placeholder="3,5 %" className={IN} /></Field>
+                  <Field label="ER TikTok"><input value={m.erTiktok} onChange={(e) => editMonth(m.month, { erTiktok: e.target.value })} placeholder="6 %" className={IN} /></Field>
+                  <Field label="Vues moyennes"><input value={m.vuesMoy} onChange={(e) => editMonth(m.month, { vuesMoy: e.target.value })} placeholder="45 K" className={IN} /></Field>
+                </div>
+
+                {/* Faits marquants */}
+                <div className="mt-2">
+                  <label className={LBL}>Faits marquants du mois</label>
+                  <textarea value={m.faits} onChange={(e) => editMonth(m.month, { faits: e.target.value })} rows={2} placeholder="Ex : Reel viral 300K, collab Sephora signée, baisse de régularité mi-mois…" className={IN + " resize-y leading-relaxed"} />
+                </div>
+
+                {/* Dérive éditoriale */}
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start">
+                  <button type="button" onClick={() => editMonth(m.month, { derive: !m.derive })} className={cn("flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-semibold transition-colors", m.derive ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border border-border text-muted-foreground hover:bg-rowhover")}>
+                    <span className={cn("grid h-4 w-4 place-items-center rounded", m.derive ? "bg-amber-500 text-white" : "border border-border")}>{m.derive && "!"}</span>
+                    Dérive éditoriale
+                  </button>
+                  {m.derive && (
+                    <input value={m.deriveNote} onChange={(e) => editMonth(m.month, { deriveNote: e.target.value })} placeholder="Décris l'écart à la ligne éditoriale…" className={IN} />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className={LBL + " mb-0"}>{label}</span>
+      {children}
+    </label>
   );
 }
