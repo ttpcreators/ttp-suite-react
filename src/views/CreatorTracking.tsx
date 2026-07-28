@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle, MessageSquare } from "lucide-react";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
 import { PlatformIcon } from "@/components/ui/platform-icon";
@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
 import {
   norm, normProfile, emptyProfile, PROFILES_KEY, CADENCE_FIELDS, cadenceTotal,
   PLATFORMS_PRIO, platPrioLabel, MONTHLY_KEY, emptyMonth, monthLabel, currentMonth,
-  type EditorialProfile, type PlatPrio, type Cadence, type MonthEntry,
+  JOURNAL_KEY, EXCHANGE_META,
+  type EditorialProfile, type PlatPrio, type Cadence, type MonthEntry, type JournalEntry, type ExchangeType,
 } from "@/lib/creatorTracking";
 
 const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15";
@@ -297,5 +298,90 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className={LBL + " mb-0"}>{label}</span>
       {children}
     </label>
+  );
+}
+
+let _jid = 0;
+const jid = () => `j${Date.now().toString(36)}${(_jid += 1)}`;
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * JOURNAL D'ACCOMPAGNEMENT : timeline chronologique des échanges (appel/message/
+ * réunion), décisions, actions à suivre et prochain point. Blob agence `creatorJournal`.
+ */
+export function JournalCard({ name }: { name: string }) {
+  const key = norm(name);
+  const { data: map, loading } = useAppState<Record<string, JournalEntry[]>>((s: AppState) => (s[JOURNAL_KEY] as Record<string, JournalEntry[]>) ?? {});
+  const [local, setLocal] = useState<JournalEntry[] | null>(null);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (!loading && loadedKey !== key) {
+      setLocal((map?.[key] ?? []).slice());
+      setLoadedKey(key);
+    }
+  }, [loading, map, key, loadedKey]);
+
+  const list = local ?? [];
+  const sorted = [...list].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const edit = (id: string, patch: Partial<JournalEntry>) => setLocal((l) => (l ?? []).map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  const add = () => setLocal((l) => [{ id: jid(), date: todayISO(), type: "appel", resume: "", decisions: "", actions: "", prochainPoint: "" }, ...(l ?? [])]);
+
+  const save = async () => {
+    if (saving || loadedKey !== key) return;
+    setSaving(true);
+    invalidateAppState();
+    const fresh = ((await getAppState())[JOURNAL_KEY] as Record<string, JournalEntry[]>) ?? {};
+    const ok = await saveAppStateKey(JOURNAL_KEY, { ...fresh, [key]: list });
+    setSaving(false);
+    toast(ok ? "Journal enregistré ✓" : "Erreur — réessaie");
+  };
+
+  return (
+    <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <MessageSquare className="h-4 w-4 text-muted-foreground" /> Journal d'accompagnement
+        </div>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <Plus className="h-3.5 w-3.5" /> Échange
+          </button>
+          <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+            <Save className="h-3.5 w-3.5" /> {saving ? "…" : "Enregistrer"}
+          </button>
+        </div>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border bg-panel/40 px-4 py-8 text-center text-[13px] text-muted-foreground">
+          Aucun échange noté. « Échange » ajoute un point (appel, message, réunion).
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {sorted.map((e) => (
+            <div key={e.id} className="relative rounded-xl border border-border bg-panel/40 p-3.5 pl-4">
+              <span className="absolute left-0 top-3.5 h-[calc(100%-1.75rem)] w-[3px] rounded-full bg-primary/40" />
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <input type="date" value={e.date} onChange={(ev) => edit(e.id, { date: ev.target.value })} className="rounded-md border border-border bg-surface px-2 py-1 text-[12px] outline-none focus:border-primary" />
+                <select value={e.type} onChange={(ev) => edit(e.id, { type: ev.target.value as ExchangeType })} className="rounded-md border border-border bg-surface px-2 py-1 text-[12px] font-semibold outline-none focus:border-primary">
+                  {(Object.keys(EXCHANGE_META) as ExchangeType[]).map((t) => <option key={t} value={t}>{EXCHANGE_META[t].label}</option>)}
+                </select>
+                <div className="flex-1" />
+                <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.id !== e.id))} className="grid h-7 w-7 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                <Field label="Résumé de l'échange"><textarea value={e.resume} onChange={(ev) => edit(e.id, { resume: ev.target.value })} rows={2} placeholder="Ce qui s'est dit…" className={IN + " resize-y"} /></Field>
+                <Field label="Décisions prises"><textarea value={e.decisions} onChange={(ev) => edit(e.id, { decisions: ev.target.value })} rows={2} placeholder="Ce qui a été décidé…" className={IN + " resize-y"} /></Field>
+                <Field label="Actions à suivre"><textarea value={e.actions} onChange={(ev) => edit(e.id, { actions: ev.target.value })} rows={2} placeholder="Qui fait quoi…" className={IN + " resize-y"} /></Field>
+                <Field label="Prochain point prévu"><input type="date" value={e.prochainPoint} onChange={(ev) => edit(e.id, { prochainPoint: ev.target.value })} className={IN} /></Field>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

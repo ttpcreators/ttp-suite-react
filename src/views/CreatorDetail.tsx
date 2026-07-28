@@ -53,7 +53,7 @@ function fmtCompact(n: number): string {
   return String(Math.round(n));
 }
 import { AvatarUpload } from "@/components/ui/avatar-upload";
-import { EditorialProfileCard, MonthlyTracking } from "@/views/CreatorTracking";
+import { EditorialProfileCard, MonthlyTracking, JournalCard } from "@/views/CreatorTracking";
 
 type Creator = {
   id: string;
@@ -491,6 +491,7 @@ export function CreatorDetail({
       <div className="mb-4 flex flex-col gap-4">
         <EditorialProfileCard name={name} />
         <MonthlyTracking name={name} />
+        <JournalCard name={name} />
       </div>
 
       {/* Plateformes — logo cliquable (ouvre le profil) + abonnés/taux de la
