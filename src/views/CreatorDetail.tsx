@@ -53,6 +53,7 @@ function fmtCompact(n: number): string {
   return String(Math.round(n));
 }
 import { AvatarUpload } from "@/components/ui/avatar-upload";
+import { EditorialProfileCard } from "@/views/CreatorTracking";
 
 type Creator = {
   id: string;
@@ -484,6 +485,11 @@ export function CreatorDetail({
         )}
         {stat("CA · encaissé", caEncaisse > 0 ? formatEuro(caEncaisse) : null)}
         {stat("Reach", c?.reach ?? null)}
+      </div>
+
+      {/* Suivi éditorial : fiche de référence (piliers, objectifs 90j, cadence…) */}
+      <div className="mb-4">
+        <EditorialProfileCard name={name} />
       </div>
 
       {/* Plateformes — logo cliquable (ouvre le profil) + abonnés/taux de la
