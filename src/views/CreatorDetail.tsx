@@ -53,7 +53,7 @@ function fmtCompact(n: number): string {
   return String(Math.round(n));
 }
 import { AvatarUpload } from "@/components/ui/avatar-upload";
-import { EditorialProfileCard, MonthlyTracking, JournalCard } from "@/views/CreatorTracking";
+import { EditorialProfileCard, MonthlyTracking, JournalCard, CreatorAlerts } from "@/views/CreatorTracking";
 
 type Creator = {
   id: string;
@@ -487,8 +487,9 @@ export function CreatorDetail({
         {stat("Reach", c?.reach ?? null)}
       </div>
 
-      {/* Suivi éditorial : fiche de référence + suivi mensuel (réel vs recommandé) */}
+      {/* Suivi éditorial : alertes + fiche de référence + suivi mensuel + journal */}
       <div className="mb-4 flex flex-col gap-4">
+        <CreatorAlerts name={name} />
         <EditorialProfileCard name={name} />
         <MonthlyTracking name={name} />
         <JournalCard name={name} />

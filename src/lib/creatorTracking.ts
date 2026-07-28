@@ -152,3 +152,32 @@ export function trajectoryOf(alerts: Alert[]): Trajectory {
   if (alerts.length > 0) return "surveiller";
   return "bonne";
 }
+
+// ───────────────────── dérivés pour le tableau de bord ──────────────────
+
+/** Jours restants avant la fin d'un deal (début + durée en mois). null si date invalide. */
+export function contractDaysLeft(start: string, months: number): number | null {
+  const d = new Date(start);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setMonth(d.getMonth() + (months || 0));
+  return Math.ceil((d.getTime() - Date.now()) / 86_400_000);
+}
+
+/** Dernier mois suivi (le plus récent). */
+export function lastMonthOf(entries: MonthEntry[] | undefined): MonthEntry | undefined {
+  if (!entries?.length) return undefined;
+  return [...entries].sort((a, b) => b.month.localeCompare(a.month))[0];
+}
+
+/** Date du dernier échange noté (journal), ou null. */
+export function lastContact(journal: JournalEntry[] | undefined): string | null {
+  if (!journal?.length) return null;
+  return [...journal].sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0].date || null;
+}
+
+/** Prochaine date de « prochain point » à venir (>= aujourd'hui), ou null. */
+export function nextPoint(journal: JournalEntry[] | undefined): string | null {
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = (journal ?? []).map((j) => j.prochainPoint).filter((d) => d && d >= today).sort();
+  return upcoming[0] ?? null;
+}

@@ -3,11 +3,13 @@ import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle,
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
 import { PlatformIcon } from "@/components/ui/platform-icon";
-import { cn } from "@/lib/utils";
+import { cn, titleCase } from "@/lib/utils";
+import { useCreators } from "@/lib/useCreators";
 import {
   norm, normProfile, emptyProfile, PROFILES_KEY, CADENCE_FIELDS, cadenceTotal,
   PLATFORMS_PRIO, platPrioLabel, MONTHLY_KEY, emptyMonth, monthLabel, currentMonth,
-  JOURNAL_KEY, EXCHANGE_META,
+  JOURNAL_KEY, EXCHANGE_META, computeAlerts, trajectoryOf, TRAJECTORY_META,
+  contractDaysLeft, lastMonthOf, lastContact, nextPoint,
   type EditorialProfile, type PlatPrio, type Cadence, type MonthEntry, type JournalEntry, type ExchangeType,
 } from "@/lib/creatorTracking";
 
@@ -383,5 +385,120 @@ export function JournalCard({ name }: { name: string }) {
         </div>
       )}
     </section>
+  );
+}
+
+// ───────────────────────── alertes + roster trajectoire ─────────────────────
+
+type CtDeadline = { id: string; creator: string; start: string; months: number };
+const frShort = (iso: string | null): string => {
+  if (!iso) return "—";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+};
+
+/** Lit tous les blobs de suivi (profils, mensuel, journal, échéances) en une fois. */
+function useTracking() {
+  const { data: profiles } = useAppState<Record<string, EditorialProfile>>((s: AppState) => (s[PROFILES_KEY] as Record<string, EditorialProfile>) ?? {});
+  const { data: monthly } = useAppState<Record<string, MonthEntry[]>>((s: AppState) => (s[MONTHLY_KEY] as Record<string, MonthEntry[]>) ?? {});
+  const { data: journal } = useAppState<Record<string, JournalEntry[]>>((s: AppState) => (s[JOURNAL_KEY] as Record<string, JournalEntry[]>) ?? {});
+  const { data: deadlines } = useAppState<CtDeadline[]>((s: AppState) => (s["contractDeadlines"] as CtDeadline[]) ?? []);
+  return { profiles: profiles ?? {}, monthly: monthly ?? {}, journal: journal ?? {}, deadlines: deadlines ?? [] };
+}
+function deadlineDaysFor(name: string, deadlines: CtDeadline[]): number | null {
+  const e = deadlines.find((d) => norm(d.creator) === norm(name));
+  return e ? contractDaysLeft(e.start, e.months) : null;
+}
+
+/** Bandeau d'alertes d'un créateur (haut de sa fiche). */
+export function CreatorAlerts({ name }: { name: string }) {
+  const { profiles, monthly, deadlines } = useTracking();
+  const k = norm(name);
+  const alerts = computeAlerts({ profile: normProfile(profiles[k]), lastMonth: lastMonthOf(monthly[k]), deadlineInDays: deadlineDaysFor(name, deadlines) });
+  const traj = trajectoryOf(alerts);
+  const meta = TRAJECTORY_META[traj];
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm">
+      <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+        <span className={cn("size-2.5 rounded-full", meta.dot)} /> {meta.label}
+      </span>
+      {alerts.length > 0 && <span className="text-faint">·</span>}
+      {alerts.map((a, i) => (
+        <span key={i} className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold", a.level === "danger" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400")}>
+          <AlertTriangle className="h-3 w-3" /> {a.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Tableau de bord ROSTER : trajectoire, dernier contact, prochain point, alertes. */
+export function RosterTracking({ onOpen }: { onOpen?: (name: string) => void }) {
+  const creators = useCreators();
+  const t = useTracking();
+  const rows = creators
+    .map((c) => {
+      const k = norm(c.name);
+      const alerts = computeAlerts({ profile: normProfile(t.profiles[k]), lastMonth: lastMonthOf(t.monthly[k]), deadlineInDays: deadlineDaysFor(c.name, t.deadlines) });
+      return { name: c.name, traj: trajectoryOf(alerts), alerts, last: lastContact(t.journal[k]), next: nextPoint(t.journal[k]) };
+    })
+    .sort((a, b) => (a.traj === "difficulte" ? -2 : a.traj === "surveiller" ? -1 : 0) - (b.traj === "difficulte" ? -2 : b.traj === "surveiller" ? -1 : 0) || b.alerts.length - a.alerts.length);
+
+  const counts = { difficulte: rows.filter((r) => r.traj === "difficulte").length, surveiller: rows.filter((r) => r.traj === "surveiller").length, bonne: rows.filter((r) => r.traj === "bonne").length };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        {(["bonne", "surveiller", "difficulte"] as const).map((tr) => (
+          <div key={tr} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+            <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">
+              <span className={cn("size-2 rounded-full", TRAJECTORY_META[tr].dot)} /> {TRAJECTORY_META[tr].label}
+            </div>
+            <div className="mt-1 text-2xl font-bold tabular-nums text-foreground">{counts[tr]}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
+        <table className="w-full min-w-[720px] border-collapse text-left">
+          <thead>
+            <tr className="border-b border-border bg-panel text-[10px] font-semibold uppercase tracking-wide text-faint">
+              <th className="px-4 py-3">Créateur</th>
+              <th className="px-4 py-3">Trajectoire</th>
+              <th className="px-4 py-3">Dernier contact</th>
+              <th className="px-4 py-3">Prochain point</th>
+              <th className="px-4 py-3">Alertes actives</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.name} onClick={() => onOpen?.(r.name)} className={cn("border-b border-border last:border-b-0 hover:bg-rowhover", onOpen && "cursor-pointer")}>
+                <td className="px-4 py-3 text-[13px] font-semibold text-foreground">{titleCase(r.name)}</td>
+                <td className="px-4 py-3">
+                  <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+                    <span className={cn("size-2 rounded-full", TRAJECTORY_META[r.traj].dot)} /> {TRAJECTORY_META[r.traj].label}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-[12px] text-muted-foreground">{frShort(r.last)}</td>
+                <td className="px-4 py-3 text-[12px] text-muted-foreground">{frShort(r.next)}</td>
+                <td className="px-4 py-3">
+                  {r.alerts.length === 0 ? (
+                    <span className="text-[11px] text-faint">—</span>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {r.alerts.map((a, i) => (
+                        <span key={i} className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", a.level === "danger" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400")}>
+                          {a.label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

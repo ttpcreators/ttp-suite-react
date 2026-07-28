@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   emptyCadence, cadenceTotal, emptyProfile, normProfile, emptyMonth,
-  computeAlerts, trajectoryOf, type EditorialProfile,
+  computeAlerts, trajectoryOf, contractDaysLeft, lastMonthOf, lastContact, nextPoint,
+  type EditorialProfile, type MonthEntry, type JournalEntry,
 } from "./creatorTracking";
 
 describe("cadence", () => {
@@ -57,5 +58,39 @@ describe("trajectoryOf", () => {
     expect(trajectoryOf([])).toBe("bonne");
     expect(trajectoryOf([{ kind: "derive", label: "", level: "warn" }])).toBe("surveiller");
     expect(trajectoryOf([{ kind: "sousperf", label: "", level: "danger" }, { kind: "derive", label: "", level: "warn" }])).toBe("difficulte");
+  });
+});
+
+describe("dérivés dashboard", () => {
+  it("contractDaysLeft : différence en jours (négatif si échu)", () => {
+    const in10 = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
+    // deal démarré aujourd'hui-10j+... plus simple : start = dans 10j, 0 mois → ~10j
+    expect(contractDaysLeft(in10, 0)).toBeGreaterThanOrEqual(9);
+    expect(contractDaysLeft("pas une date", 12)).toBeNull();
+    const pastStart = new Date(Date.now() - 400 * 86_400_000).toISOString().slice(0, 10);
+    expect(contractDaysLeft(pastStart, 12)).toBeLessThan(0); // 12 mois après un début il y a 400j → échu
+  });
+  it("lastMonthOf prend le mois le plus récent", () => {
+    const ms: MonthEntry[] = [emptyMonth("2026-05"), emptyMonth("2026-07"), emptyMonth("2026-06")];
+    expect(lastMonthOf(ms)?.month).toBe("2026-07");
+    expect(lastMonthOf([])).toBeUndefined();
+  });
+  it("lastContact = date la plus récente du journal", () => {
+    const j: JournalEntry[] = [
+      { id: "1", date: "2026-07-01", type: "appel", resume: "", decisions: "", actions: "", prochainPoint: "" },
+      { id: "2", date: "2026-07-15", type: "message", resume: "", decisions: "", actions: "", prochainPoint: "" },
+    ];
+    expect(lastContact(j)).toBe("2026-07-15");
+    expect(lastContact([])).toBeNull();
+  });
+  it("nextPoint = prochain point futur le plus proche", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const future = new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 10);
+    const j: JournalEntry[] = [
+      { id: "1", date: today, type: "appel", resume: "", decisions: "", actions: "", prochainPoint: "2020-01-01" }, // passé → ignoré
+      { id: "2", date: today, type: "appel", resume: "", decisions: "", actions: "", prochainPoint: future },
+    ];
+    expect(nextPoint(j)).toBe(future);
+    expect(nextPoint([])).toBeNull();
   });
 });

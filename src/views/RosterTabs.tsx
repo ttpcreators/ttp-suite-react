@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { Users, BarChart3, Tag, Clapperboard } from "lucide-react";
+import { Users, BarChart3, Tag, Clapperboard, Radar } from "lucide-react";
 import { Roster } from "./Roster";
 import { Engagement } from "./Engagement";
 import { Pricing } from "./Pricing";
 import { Ugc } from "./Ugc";
+import { RosterTracking } from "./CreatorTracking";
 
-type Tab = "roster" | "ugc" | "engagement" | "pricing";
+type Tab = "roster" | "suivi" | "ugc" | "engagement" | "pricing";
 const TABS = [
   { id: "roster", label: "Roster", icon: Users },
+  { id: "suivi", label: "Suivi", icon: Radar },
   { id: "ugc", label: "UGC", icon: Clapperboard },
   { id: "engagement", label: "Engagement", icon: BarChart3 },
   { id: "pricing", label: "Pricing", icon: Tag },
@@ -35,6 +37,7 @@ export function RosterTabs({ onOpen }: { onOpen?: (name: string) => void }) {
         ))}
       </div>
       {tab === "roster" && <Roster onOpen={onOpen} />}
+      {tab === "suivi" && <RosterTracking onOpen={onOpen} />}
       {tab === "ugc" && <Ugc />}
       {tab === "engagement" && <Engagement />}
       {tab === "pricing" && <Pricing />}
