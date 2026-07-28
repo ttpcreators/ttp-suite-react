@@ -761,6 +761,38 @@ with (security_invoker = false) as
   select data from public.agency_mediakit where id = 1;
 grant select on public.public_agency_mediakit to anon, authenticated;
 
+-- ----------------------------------------------------------------------------
+-- FEUILLE DE ROUTE PARTAGÉE (suivi créateurs) — cf. sql/creator-roadmap.sql
+-- L'agence écrit `roadmap` (partageable), le créateur lit + reporte sa cadence
+-- dans `self_cadence`. Le suivi complet (mensuel, journal, alertes) reste agence.
+-- ----------------------------------------------------------------------------
+create table if not exists public.creator_roadmap (
+  creator text primary key,
+  roadmap jsonb,
+  self_cadence jsonb,
+  updated_at timestamptz default now()
+);
+alter table public.creator_roadmap enable row level security;
+drop policy if exists creator_roadmap_read on public.creator_roadmap;
+create policy creator_roadmap_read on public.creator_roadmap for select to authenticated
+  using (public.is_agency() or creator = public.my_creator());
+drop policy if exists creator_roadmap_write on public.creator_roadmap;
+create policy creator_roadmap_write on public.creator_roadmap for all to authenticated
+  using (public.is_agency() or creator = public.my_creator())
+  with check (public.is_agency() or creator = public.my_creator());
+create or replace function public.creator_roadmap_guard() returns trigger
+  language plpgsql security definer as $$
+begin
+  if not public.is_agency() then
+    if tg_op = 'INSERT' then new.roadmap := null; else new.roadmap := old.roadmap; end if;
+  end if;
+  new.updated_at := now();
+  return new;
+end $$;
+drop trigger if exists creator_roadmap_guard_iu on public.creator_roadmap;
+create trigger creator_roadmap_guard_iu before insert or update on public.creator_roadmap
+  for each row execute function public.creator_roadmap_guard();
+
 -- ============================================================================
 -- FIN. Vérif rapide (en étant DÉCONNECTÉ, ces requêtes doivent renvoyer 0 ligne) :
 --   select * from public.creators;

@@ -64,6 +64,31 @@ export function normProfile(p: Partial<EditorialProfile> | undefined): Editorial
   };
 }
 
+// ───────────── feuille de route PARTAGÉE avec le créateur (table SQL) ─────────
+// Le créateur ne peut pas lire le blob agence : le STRICT partageable de la fiche
+// (SANS la conformité ni la date d'entrée internes) est recopié dans la table
+// `creator_roadmap` (RLS : agence écrit, créateur lit). Le créateur y écrit en
+// retour sa cadence RÉELLE auto-déclarée, mois par mois.
+export const ROADMAP_TABLE = "creator_roadmap";
+export type Roadmap = Pick<EditorialProfile, "piliers" | "positionnement" | "tonalite" | "plateformes" | "objectifs90" | "cadenceReco">;
+export type SelfCadence = Record<string, Cadence>; // "AAAA-MM" → cadence déclarée
+
+/** Sous-ensemble partageable d'une fiche éditoriale (ce que le créateur voit). */
+export function roadmapFrom(p: EditorialProfile): Roadmap {
+  return { piliers: p.piliers, positionnement: p.positionnement, tonalite: p.tonalite, plateformes: p.plateformes, objectifs90: p.objectifs90, cadenceReco: p.cadenceReco };
+}
+/** Forme garantie d'une feuille de route lue depuis la table (blob partiel toléré). */
+export function normRoadmap(r: Partial<Roadmap> | null | undefined): Roadmap {
+  const p = normProfile(r ?? undefined);
+  return roadmapFrom(p);
+}
+/** Un blob self_cadence toléré → cadences propres par mois. */
+export function normSelfCadence(s: SelfCadence | null | undefined): SelfCadence {
+  const out: SelfCadence = {};
+  if (s && typeof s === "object") for (const [m, c] of Object.entries(s)) out[m] = { ...emptyCadence(), ...(c ?? {}) };
+  return out;
+}
+
 // ─────────────────────────────── suivi mensuel ───────────────────────────
 
 export type MonthEntry = {

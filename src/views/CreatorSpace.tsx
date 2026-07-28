@@ -33,6 +33,7 @@ import {
   Columns3,
   PanelLeftClose,
   PanelLeftOpen,
+  Target,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
@@ -55,6 +56,7 @@ import { parseAmount, formatEuro } from "@/lib/appState";
 import { useLiveKey } from "@/lib/useLive";
 import { AvatarUpload } from "@/components/ui/avatar-upload";
 import { SuiviPanel, type SuiviEntry } from "@/views/EngagementSuivi";
+import { CreatorRoadmap } from "@/views/CreatorTracking";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, type Gift as GiftRow } from "@/lib/gifting";
 
 const BASE = import.meta.env.BASE_URL;
@@ -91,7 +93,7 @@ type Invoice = { ref: string; party: string; amount: string | null; date: string
 type Contact = { id: string; brand: string; person: string | null; role: string | null; email: string | null; phone: string | null; sort_order?: number };
 
 type Tab =
-  | "accueil" | "evolution" | "debrief"
+  | "accueil" | "evolution" | "debrief" | "roadmap"
   | "todo" | "ideas" | "briefs" | "gifting" | "planning"
   | "mediakit" | "documents" | "contacts" | "facturation";
 
@@ -116,6 +118,7 @@ const CREATOR_GROUPS: {
       { id: "accueil", label: "Accueil", icon: LayoutDashboard },
       { id: "evolution", label: "Évolution", icon: TrendingUp },
       { id: "debrief", label: "Debrief", icon: BarChart3 },
+      { id: "roadmap", label: "Ma feuille de route", icon: Target },
     ],
   },
   {
@@ -2083,6 +2086,9 @@ export function CreatorSpace({
               }}
             />
           )}
+
+          {/* Ma feuille de route — partagée par l'agence (lecture) + report de cadence */}
+          {tab === "roadmap" && <CreatorRoadmap name={name} />}
 
           {/* Media kit — la créatrice consulte SA page publique générée */}
           {tab === "mediakit" && (

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   emptyCadence, cadenceTotal, emptyProfile, normProfile, emptyMonth,
   computeAlerts, trajectoryOf, contractDaysLeft, lastMonthOf, lastContact, nextPoint,
+  roadmapFrom, normRoadmap, normSelfCadence,
   type EditorialProfile, type MonthEntry, type JournalEntry,
 } from "./creatorTracking";
 
@@ -92,5 +93,25 @@ describe("dérivés dashboard", () => {
     ];
     expect(nextPoint(j)).toBe(future);
     expect(nextPoint([])).toBeNull();
+  });
+});
+
+describe("feuille de route partagée", () => {
+  it("roadmapFrom n'expose PAS la conformité ni la date d'entrée", () => {
+    const p: EditorialProfile = { ...emptyProfile(), conformite: "à vérifier", dateEntree: "2026-01-01", positionnement: "Fitness", piliers: ["a", "b"] };
+    const r = roadmapFrom(p);
+    expect(r.positionnement).toBe("Fitness");
+    expect(r.piliers).toEqual(["a", "b"]);
+    expect("conformite" in r).toBe(false);
+    expect("dateEntree" in r).toBe(false);
+  });
+  it("normRoadmap tolère un blob null/partiel", () => {
+    expect(normRoadmap(null).piliers).toEqual([]);
+    expect(normRoadmap({ piliers: ["x"] }).piliers).toEqual(["x"]);
+  });
+  it("normSelfCadence complète chaque mois et ignore les entrées vides", () => {
+    const s = normSelfCadence({ "2026-07": { reels: 5 } as never });
+    expect(s["2026-07"]).toEqual({ ...emptyCadence(), reels: 5 });
+    expect(normSelfCadence(null)).toEqual({});
   });
 });

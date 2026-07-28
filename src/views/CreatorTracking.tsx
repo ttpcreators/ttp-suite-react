@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle, MessageSquare } from "lucide-react";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import {
-  norm, normProfile, emptyProfile, PROFILES_KEY, CADENCE_FIELDS, cadenceTotal,
+  norm, normProfile, emptyProfile, PROFILES_KEY, CADENCE_FIELDS, cadenceTotal, emptyCadence,
   PLATFORMS_PRIO, platPrioLabel, MONTHLY_KEY, emptyMonth, monthLabel, currentMonth,
   JOURNAL_KEY, EXCHANGE_META, computeAlerts, trajectoryOf, TRAJECTORY_META,
   contractDaysLeft, lastMonthOf, lastContact, nextPoint,
-  type EditorialProfile, type PlatPrio, type Cadence, type MonthEntry, type JournalEntry, type ExchangeType,
+  ROADMAP_TABLE, roadmapFrom, normRoadmap, normSelfCadence,
+  type EditorialProfile, type PlatPrio, type Cadence, type MonthEntry, type JournalEntry, type ExchangeType, type SelfCadence,
 } from "@/lib/creatorTracking";
 
 const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15";
@@ -52,8 +54,18 @@ export function EditorialProfileCard({ name }: { name: string }) {
     invalidateAppState();
     const fresh = ((await getAppState())[PROFILES_KEY] as Record<string, EditorialProfile>) ?? {};
     const ok = await saveAppStateKey(PROFILES_KEY, { ...fresh, [key]: cur });
+    // Miroir best-effort : recopie le partageable dans la table lue par le créateur.
+    // `creator` = nom EXACT (= my_creator()), pas normalisé. N'écrase pas self_cadence
+    // (upsert ne touche que les colonnes fournies). Une erreur ici (ex : SQL pas encore
+    // lancé) ne bloque pas l'agence — le blob reste la source de vérité.
+    if (ok) {
+      const { error } = await supabase.from(ROADMAP_TABLE).upsert({ creator: name, roadmap: roadmapFrom(cur) }, { onConflict: "creator" });
+      setSaving(false);
+      toast(error ? "Fiche enregistrée ✓ (partage créateur indispo — SQL creator-roadmap ?)" : "Fiche éditoriale enregistrée ✓");
+      return;
+    }
     setSaving(false);
-    toast(ok ? "Fiche éditoriale enregistrée ✓" : "Erreur — réessaie");
+    toast("Erreur — réessaie");
   };
 
   const recoTotal = cadenceTotal(cur.cadenceReco);
@@ -183,6 +195,16 @@ export function MonthlyTracking({ name }: { name: string }) {
     }
   }, [loading, monthlyMap, key, loadedKey]);
 
+  // Cadence RÉELLE auto-déclarée par le créateur (table creator_roadmap) — lecture seule
+  // ici, pour la comparer à l'évaluation de l'agence. Best-effort (table peut manquer).
+  const [selfCad, setSelfCad] = useState<SelfCadence>({});
+  useEffect(() => {
+    let alive = true;
+    supabase.from("creator_roadmap").select("self_cadence").eq("creator", name).maybeSingle()
+      .then(({ data }) => { if (alive) setSelfCad(normSelfCadence((data?.self_cadence as SelfCadence) ?? {})); });
+    return () => { alive = false; };
+  }, [name]);
+
   const list = local ?? [];
   const sorted = [...list].sort((a, b) => b.month.localeCompare(a.month)); // récent d'abord
   const editMonth = (month: string, patch: Partial<MonthEntry>) => setLocal((l) => (l ?? []).map((m) => (m.month === month ? { ...m, ...patch } : m)));
@@ -261,6 +283,22 @@ export function MonthlyTracking({ name }: { name: string }) {
                     </label>
                   ))}
                 </div>
+
+                {/* Cadence auto-déclarée par le créateur (rappel, lecture seule) */}
+                {selfCad[m.month] && (
+                  <button
+                    type="button"
+                    onClick={() => editMonth(m.month, { cadence: { ...selfCad[m.month] } })}
+                    title="Cliquer pour reprendre ces chiffres dans ton évaluation"
+                    className="mt-2 flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-dashed border-border bg-panel/40 px-3 py-2 text-left text-[11px] text-muted-foreground transition-colors hover:bg-rowhover"
+                  >
+                    <span className="font-semibold uppercase tracking-wide text-faint">Déclaré par le créateur</span>
+                    {CADENCE_FIELDS.map((f) => (
+                      <span key={f.key} className="tabular-nums">{f.short} <span className="font-semibold text-foreground">{selfCad[m.month][f.key]}</span></span>
+                    ))}
+                    <span className="ml-auto text-[10px] text-faint">↳ reprendre</span>
+                  </button>
+                )}
 
                 {/* ER + vues */}
                 <div className="mt-2 grid grid-cols-3 gap-2">
@@ -499,6 +537,145 @@ export function RosterTracking({ onOpen }: { onOpen?: (name: string) => void }) 
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ───────────────────── côté CRÉATEUR : ma feuille de route ───────────────────
+
+/**
+ * Vue CRÉATEUR de sa feuille de route (lecture seule : piliers, positionnement,
+ * ton, plateformes, objectifs 90 j, cadence recommandée) + report de SA cadence
+ * réelle du mois. Lit/écrit UNIQUEMENT sa ligne `creator_roadmap` (RLS) ; le
+ * journal, les alertes et l'évaluation de l'agence lui restent invisibles.
+ */
+export function CreatorRoadmap({ name }: { name: string }) {
+  const [roadmap, setRoadmap] = useState<Record<string, unknown> | null>(null);
+  const [selfCad, setSelfCad] = useState<SelfCadence>({});
+  const [loading, setLoading] = useState(true);
+  const [month, setMonth] = useState<string>(currentMonth());
+  const [draft, setDraft] = useState<Cadence>(emptyCadence());
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    supabase.from("creator_roadmap").select("roadmap, self_cadence").eq("creator", name).maybeSingle()
+      .then(({ data }) => {
+        if (!alive) return;
+        setRoadmap((data?.roadmap as Record<string, unknown>) ?? null);
+        setSelfCad(normSelfCadence((data?.self_cadence as SelfCadence) ?? {}));
+        setLoading(false);
+      });
+    return () => { alive = false; };
+  }, [name]);
+
+  // À chaque changement de mois sélectionné, précharge la cadence déjà déclarée.
+  useEffect(() => { setDraft(selfCad[month] ? { ...selfCad[month] } : emptyCadence()); }, [month, selfCad]);
+
+  const rm = normRoadmap(roadmap as never);
+  const hasRoadmap = roadmap != null;
+
+  const saveCadence = async () => {
+    if (saving) return;
+    setSaving(true);
+    const next = { ...selfCad, [month]: draft };
+    const { error } = await supabase.from("creator_roadmap").upsert({ creator: name, self_cadence: next }, { onConflict: "creator" });
+    setSaving(false);
+    if (error) return toast("Erreur — réessaie");
+    setSelfCad(next);
+    toast("Cadence du mois envoyée à l'agence ✓");
+  };
+
+  if (loading) return <div className="rounded-2xl border border-border bg-surface p-8 text-center text-[13px] text-muted-foreground shadow-sm">Chargement…</div>;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Feuille de route (lecture seule) */}
+      <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Target className="h-4 w-4 text-muted-foreground" /> Ma feuille de route
+        </div>
+        {!hasRoadmap ? (
+          <div className="rounded-xl border border-dashed border-border bg-panel/40 px-4 py-8 text-center text-[13px] text-muted-foreground">
+            Ta feuille de route n'est pas encore définie. Ton agence la partagera ici prochainement.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {rm.positionnement && <RoadRow label="Niche & positionnement">{rm.positionnement}</RoadRow>}
+            {rm.tonalite && <RoadRow label="Ton de voix">{rm.tonalite}</RoadRow>}
+            {rm.piliers.length > 0 && (
+              <div>
+                <div className={LBL}>Piliers de contenu</div>
+                <div className="flex flex-wrap gap-2">
+                  {rm.piliers.map((p, i) => <span key={i} className="rounded-lg bg-panel px-3 py-1.5 text-[12px] font-medium text-foreground">{p}</span>)}
+                </div>
+              </div>
+            )}
+            {rm.plateformes.length > 0 && (
+              <div>
+                <div className={LBL}>Plateformes prioritaires</div>
+                <div className="flex flex-wrap gap-2">
+                  {rm.plateformes.map((pl) => (
+                    <span key={pl} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[12px] font-semibold text-foreground">
+                      <PlatformIcon platform={pl} className="h-3.5 w-3.5" /> {platPrioLabel[pl]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {rm.objectifs90 && <RoadRow label="Objectifs 90 jours">{rm.objectifs90}</RoadRow>}
+            {cadenceTotal(rm.cadenceReco) > 0 && (
+              <div>
+                <div className={LBL}>Cadence recommandée / mois</div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {CADENCE_FIELDS.map((f) => (
+                    <div key={f.key} className="rounded-lg bg-panel px-2.5 py-2 text-center">
+                      <div className="text-lg font-bold tabular-nums text-foreground">{rm.cadenceReco[f.key]}</div>
+                      <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{f.short}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Reporter ma cadence du mois */}
+      <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <CalendarRange className="h-4 w-4 text-muted-foreground" /> Reporter ma cadence
+          </div>
+          <input type="month" value={month} onChange={(e) => setMonth(e.target.value || currentMonth())} className="rounded-lg border border-border bg-surface px-3 py-2 text-[12px] outline-none focus:border-primary" />
+        </div>
+        <p className="mb-3 text-[12px] text-muted-foreground">Indique ce que tu as réellement publié ce mois-ci — ça aide ton agence à suivre ta régularité.</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {CADENCE_FIELDS.map((f) => (
+            <label key={f.key} className="flex flex-col gap-1">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">
+                {f.label}{rm.cadenceReco[f.key] > 0 && <span className="text-faint/70"> / {rm.cadenceReco[f.key]}</span>}
+              </span>
+              <input type="number" min={0} value={draft[f.key]} onChange={(e) => setDraft({ ...draft, [f.key]: Math.max(0, parseInt(e.target.value, 10) || 0) })} className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-center text-sm tabular-nums outline-none focus:border-primary" />
+            </label>
+          ))}
+        </div>
+        <div className="mt-3 flex items-center justify-between">
+          <span className="text-[12px] text-muted-foreground">Total : <span className="font-semibold tabular-nums text-foreground">{cadenceTotal(draft)}</span> contenus</span>
+          <button type="button" onClick={saveCadence} disabled={saving} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+            <Save className="h-3.5 w-3.5" /> {saving ? "Envoi…" : "Envoyer ma cadence"}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function RoadRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className={LBL}>{label}</div>
+      <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{children}</p>
     </div>
   );
 }
