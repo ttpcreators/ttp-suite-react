@@ -103,8 +103,9 @@ export function Templates() {
   const [activeCategory, setActiveCategory] = useState<string>("Tous");
   const [localQuery, setLocalQuery] = useState("");
   // Vue des modèles (mémorisée) + aperçu plein texte (le corps est tronqué en carte).
+  // Défaut = LISTE ; on ne retombe sur « cartes » que si c'est le choix explicite mémorisé.
   const [viewT, setViewT] = useState<"cards" | "list">(
-    () => (localStorage.getItem("ttp:tpl-view") === "list" ? "list" : "cards"),
+    () => (localStorage.getItem("ttp:tpl-view") === "cards" ? "cards" : "list"),
   );
   useEffect(() => {
     localStorage.setItem("ttp:tpl-view", viewT);
