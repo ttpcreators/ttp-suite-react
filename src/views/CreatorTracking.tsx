@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle, MessageSquare } from "lucide-react";
+import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle, MessageSquare, Pencil, X, Phone, MessageCircle, Users } from "lucide-react";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
@@ -18,6 +18,55 @@ import {
 const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15";
 const LBL = "mb-1 block text-[10px] font-semibold uppercase tracking-wide text-faint";
 
+type Mode = "view" | "edit";
+
+/** Un profil est-il vide (→ ouvrir directement en édition) ? */
+function profileIsEmpty(p: EditorialProfile): boolean {
+  return p.piliers.filter(Boolean).length === 0 && !p.positionnement && !p.tonalite && !p.objectifs90 && p.plateformes.length === 0 && cadenceTotal(p.cadenceReco) === 0 && !p.conformite && !p.dateEntree;
+}
+const frDMY = (iso: string): string => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+};
+const EXCHANGE_ICON: Record<ExchangeType, typeof Phone> = { appel: Phone, message: MessageCircle, reunion: Users };
+
+/** Bouton « Modifier » (passe une carte en édition) — homogène sur les 3 cartes. */
+function EditBtn({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+      <Pencil className="h-3.5 w-3.5" /> Modifier
+    </button>
+  );
+}
+/** Bloc lecture « label + valeur » (rien si vide). */
+function ReadBlock({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className={LBL}>{label}</div>
+      <div className="text-[13px] leading-relaxed text-foreground">{children}</div>
+    </div>
+  );
+}
+/** Tuiles de cadence (réel + éventuel /reco), lecture seule. */
+function CadenceTiles({ cadence, reco }: { cadence: Cadence; reco?: Cadence }) {
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+      {CADENCE_FIELDS.map((f) => {
+        const r = reco?.[f.key] ?? 0;
+        const below = r > 0 && cadence[f.key] < r;
+        return (
+          <div key={f.key} className={cn("rounded-xl border bg-panel/50 px-2.5 py-2.5 text-center", below ? "border-amber-400/50" : "border-border")}>
+            <div className={cn("text-lg font-bold tabular-nums", below ? "text-amber-600 dark:text-amber-400" : "text-foreground")}>
+              {cadence[f.key]}{r > 0 && <span className="text-[11px] font-medium text-faint"> / {r}</span>}
+            </div>
+            <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-faint">{f.short}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * Fiche ÉDITORIALE d'un créateur (piliers, tonalité, objectifs 90 j, plateformes
  * prioritaires, CADENCE RECOMMANDÉE, date d'entrée, conformité). Composant autonome :
@@ -31,13 +80,17 @@ export function EditorialProfileCard({ name }: { name: string }) {
   const [p, setP] = useState<EditorialProfile | null>(null);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [mode, setMode] = useState<Mode>("view");
 
   // Copie locale initialisée UNE fois par créateur (ne pas écraser une édition en cours
   // à chaque tick de rafraîchissement). Se ré-initialise quand on change de créateur.
+  // Ouvre en LECTURE si la fiche a du contenu, sinon directement en édition.
   useEffect(() => {
     if (!loading && loadedKey !== key) {
-      setP(normProfile(data?.[key]));
+      const np = normProfile(data?.[key]);
+      setP(np);
       setLoadedKey(key);
+      setMode(profileIsEmpty(np) ? "edit" : "view");
     }
   }, [loading, data, key, loadedKey]);
 
@@ -61,12 +114,15 @@ export function EditorialProfileCard({ name }: { name: string }) {
     if (ok) {
       const { error } = await supabase.from(ROADMAP_TABLE).upsert({ creator: name, roadmap: roadmapFrom(cur) }, { onConflict: "creator" });
       setSaving(false);
+      setMode("view");
       toast(error ? "Fiche enregistrée ✓ (partage créateur indispo — SQL creator-roadmap ?)" : "Fiche éditoriale enregistrée ✓");
       return;
     }
     setSaving(false);
     toast("Erreur — réessaie");
   };
+  // Annuler l'édition : recharge la copie depuis le blob et repasse en lecture.
+  const cancel = () => { setP(normProfile(data?.[key])); setMode("view"); };
 
   const recoTotal = cadenceTotal(cur.cadenceReco);
 
@@ -76,16 +132,87 @@ export function EditorialProfileCard({ name }: { name: string }) {
         <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <Target className="h-4 w-4 text-muted-foreground" /> Fiche éditoriale
         </div>
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving || loading || loadedKey !== key}
-          className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
-          <Save className="h-3.5 w-3.5" /> {saving ? "Enregistrement…" : "Enregistrer"}
-        </button>
+        {mode === "view" ? (
+          <EditBtn onClick={() => setMode("edit")} />
+        ) : (
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover">
+              <X className="h-3.5 w-3.5" /> Annuler
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving || loading || loadedKey !== key}
+              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              <Save className="h-3.5 w-3.5" /> {saving ? "Enregistrement…" : "Enregistrer"}
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* ─────────── LECTURE ─────────── */}
+      {mode === "view" && (
+        profileIsEmpty(cur) ? (
+          <div className="rounded-xl border border-dashed border-border bg-panel/40 px-4 py-8 text-center text-[13px] text-muted-foreground">
+            Fiche éditoriale vide. <button type="button" onClick={() => setMode("edit")} className="font-semibold text-primary underline-offset-2 hover:underline">La remplir</button> pour cadrer la ligne du créateur.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {cur.piliers.filter(Boolean).length > 0 && (
+                <ReadBlock label="Piliers de contenu">
+                  <div className="flex flex-wrap gap-1.5">
+                    {cur.piliers.filter(Boolean).map((p2, i) => <span key={i} className="rounded-lg bg-panel px-2.5 py-1 text-[12px] font-medium text-foreground">{p2}</span>)}
+                  </div>
+                </ReadBlock>
+              )}
+              {cur.plateformes.length > 0 && (
+                <ReadBlock label="Plateformes prioritaires">
+                  <div className="flex flex-wrap gap-1.5">
+                    {cur.plateformes.map((pl) => (
+                      <span key={pl} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-[12px] font-semibold text-foreground">
+                        <PlatformIcon platform={pl} className="h-3.5 w-3.5" /> {platPrioLabel[pl]}
+                      </span>
+                    ))}
+                  </div>
+                </ReadBlock>
+              )}
+              {cur.positionnement && <ReadBlock label="Niche & positionnement">{cur.positionnement}</ReadBlock>}
+              {cur.tonalite && <ReadBlock label="Ton de voix">{cur.tonalite}</ReadBlock>}
+            </div>
+            {cur.objectifs90 && (
+              <ReadBlock label="Objectifs 90 jours">
+                <p className="whitespace-pre-wrap rounded-xl bg-panel/50 px-3.5 py-3 leading-relaxed">{cur.objectifs90}</p>
+              </ReadBlock>
+            )}
+            {recoTotal > 0 && (
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className={LBL + " mb-0"}>Cadence recommandée / mois</span>
+                  <span className="text-[11px] text-faint">{recoTotal} contenus/mois</span>
+                </div>
+                <CadenceTiles cadence={cur.cadenceReco} />
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border pt-3">
+              {cur.dateEntree && <ReadBlock label="Entrée agence">{frDMY(cur.dateEntree)}</ReadBlock>}
+              {cur.conformite && (
+                <ReadBlock label="Conformité (loi 2023-451)">
+                  {(() => { const ok = ["ok", "conforme", "à jour", "a jour"].includes(norm(cur.conformite)); return (
+                    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold", ok ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400")}>
+                      {ok ? "✓ " : <AlertTriangle className="h-3 w-3" />} {cur.conformite}
+                    </span>
+                  ); })()}
+                </ReadBlock>
+              )}
+            </div>
+          </div>
+        )
+      )}
+
+      {/* ─────────── ÉDITION ─────────── */}
+      {mode === "edit" && (<>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Piliers */}
         <div>
@@ -170,6 +297,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
         <input value={cur.conformite} onChange={(e) => set({ conformite: e.target.value })} placeholder="Ex : OK / à vérifier — mentions « Publicité » systématiques ?" className={IN} />
         <p className="mt-1.5 text-[11px] text-faint">Écris « OK » quand c'est à jour ; tout autre texte lève une alerte de conformité.</p>
       </div>
+      </>)}
     </section>
   );
 }
@@ -188,10 +316,13 @@ export function MonthlyTracking({ name }: { name: string }) {
   const [local, setLocal] = useState<MonthEntry[] | null>(null);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [mode, setMode] = useState<Mode>("view");
   useEffect(() => {
     if (!loading && loadedKey !== key) {
-      setLocal((monthlyMap?.[key] ?? []).map((m) => ({ ...emptyMonth(m.month), ...m })));
+      const arr = (monthlyMap?.[key] ?? []).map((m) => ({ ...emptyMonth(m.month), ...m }));
+      setLocal(arr);
       setLoadedKey(key);
+      setMode(arr.length === 0 ? "edit" : "view");
     }
   }, [loading, monthlyMap, key, loadedKey]);
 
@@ -222,8 +353,10 @@ export function MonthlyTracking({ name }: { name: string }) {
     const fresh = ((await getAppState())[MONTHLY_KEY] as Record<string, MonthEntry[]>) ?? {};
     const ok = await saveAppStateKey(MONTHLY_KEY, { ...fresh, [key]: list });
     setSaving(false);
+    if (ok) setMode("view");
     toast(ok ? "Suivi mensuel enregistré ✓" : "Erreur — réessaie");
   };
+  const cancel = () => { setLocal((monthlyMap?.[key] ?? []).map((m) => ({ ...emptyMonth(m.month), ...m }))); setMode("view"); };
 
   const recoTotal = cadenceTotal(reco);
 
@@ -233,17 +366,76 @@ export function MonthlyTracking({ name }: { name: string }) {
         <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <CalendarRange className="h-4 w-4 text-muted-foreground" /> Suivi mensuel
         </div>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={addMonth} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-            <Plus className="h-3.5 w-3.5" /> Ajouter le mois
-          </button>
-          <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
-            <Save className="h-3.5 w-3.5" /> {saving ? "…" : "Enregistrer"}
-          </button>
-        </div>
+        {mode === "view" ? (
+          <EditBtn onClick={() => setMode("edit")} />
+        ) : (
+          <div className="flex items-center gap-2">
+            {sorted.length > 0 && (
+              <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover">
+                <X className="h-3.5 w-3.5" /> Annuler
+              </button>
+            )}
+            <button type="button" onClick={addMonth} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+              <Plus className="h-3.5 w-3.5" /> Ajouter le mois
+            </button>
+            <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+              <Save className="h-3.5 w-3.5" /> {saving ? "…" : "Enregistrer"}
+            </button>
+          </div>
+        )}
       </div>
 
-      {sorted.length === 0 ? (
+      {/* ─────────── LECTURE ─────────── */}
+      {mode === "view" && (
+        sorted.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border bg-panel/40 px-4 py-8 text-center text-[13px] text-muted-foreground">
+            Aucun mois suivi. <button type="button" onClick={() => setMode("edit")} className="font-semibold text-primary underline-offset-2 hover:underline">Ajouter un mois</button> pour suivre la cadence réelle.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {sorted.map((m) => {
+              const realTotal = cadenceTotal(m.cadence);
+              const ratio = recoTotal > 0 ? realTotal / recoTotal : 1;
+              const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : ratio >= 0.7 ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-rose-500/10 text-rose-600 dark:text-rose-400";
+              return (
+                <div key={m.month} className="rounded-xl border border-border bg-panel/40 p-4">
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <span className="text-[13px] font-semibold text-foreground">{monthLabel(m.month)}</span>
+                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums", badge)}>{realTotal}{recoTotal > 0 ? ` / ${recoTotal}` : ""} contenus</span>
+                    {m.derive && <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400"><AlertTriangle className="h-3 w-3" /> Dérive</span>}
+                  </div>
+                  <CadenceTiles cadence={m.cadence} reco={reco} />
+                  {selfCad[m.month] && (
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-dashed border-border bg-panel/40 px-3 py-2 text-[11px] text-muted-foreground">
+                      <span className="font-semibold uppercase tracking-wide text-faint">Déclaré par le créateur</span>
+                      {CADENCE_FIELDS.map((f) => <span key={f.key} className="tabular-nums">{f.short} <span className="font-semibold text-foreground">{selfCad[m.month][f.key]}</span></span>)}
+                    </div>
+                  )}
+                  {(m.erInsta || m.erTiktok || m.vuesMoy) && (
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {[{ l: "ER Instagram", v: m.erInsta }, { l: "ER TikTok", v: m.erTiktok }, { l: "Vues moyennes", v: m.vuesMoy }].map((x) => (
+                        <div key={x.l} className="rounded-xl bg-panel/60 px-3 py-2.5">
+                          <div className="text-[15px] font-bold text-foreground">{x.v || "—"}</div>
+                          <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-faint">{x.l}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {m.faits && <p className="mt-3 whitespace-pre-wrap rounded-xl bg-panel/50 px-3.5 py-3 text-[13px] leading-relaxed text-foreground">{m.faits}</p>}
+                  {m.derive && m.deriveNote && (
+                    <div className="mt-2 flex items-start gap-2 rounded-xl bg-amber-500/5 px-3.5 py-3 text-[13px] leading-relaxed text-amber-700 dark:text-amber-300">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{m.deriveNote}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {/* ─────────── ÉDITION ─────────── */}
+      {mode === "edit" && (sorted.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-panel/40 px-4 py-8 text-center text-[13px] text-muted-foreground">
           Aucun mois suivi. « Ajouter le mois » crée l'enregistrement du mois en cours.
         </div>
@@ -327,7 +519,7 @@ export function MonthlyTracking({ name }: { name: string }) {
             );
           })}
         </div>
-      )}
+      ))}
     </section>
   );
 }
@@ -355,10 +547,13 @@ export function JournalCard({ name }: { name: string }) {
   const [local, setLocal] = useState<JournalEntry[] | null>(null);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [mode, setMode] = useState<Mode>("view");
   useEffect(() => {
     if (!loading && loadedKey !== key) {
-      setLocal((map?.[key] ?? []).slice());
+      const arr = (map?.[key] ?? []).slice();
+      setLocal(arr);
       setLoadedKey(key);
+      setMode(arr.length === 0 ? "edit" : "view");
     }
   }, [loading, map, key, loadedKey]);
 
@@ -374,8 +569,10 @@ export function JournalCard({ name }: { name: string }) {
     const fresh = ((await getAppState())[JOURNAL_KEY] as Record<string, JournalEntry[]>) ?? {};
     const ok = await saveAppStateKey(JOURNAL_KEY, { ...fresh, [key]: list });
     setSaving(false);
+    if (ok) setMode("view");
     toast(ok ? "Journal enregistré ✓" : "Erreur — réessaie");
   };
+  const cancel = () => { setLocal((map?.[key] ?? []).slice()); setMode("view"); };
 
   return (
     <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
@@ -383,17 +580,61 @@ export function JournalCard({ name }: { name: string }) {
         <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <MessageSquare className="h-4 w-4 text-muted-foreground" /> Journal d'accompagnement
         </div>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-            <Plus className="h-3.5 w-3.5" /> Échange
-          </button>
-          <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
-            <Save className="h-3.5 w-3.5" /> {saving ? "…" : "Enregistrer"}
-          </button>
-        </div>
+        {mode === "view" ? (
+          <EditBtn onClick={() => setMode("edit")} />
+        ) : (
+          <div className="flex items-center gap-2">
+            {sorted.length > 0 && (
+              <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover">
+                <X className="h-3.5 w-3.5" /> Annuler
+              </button>
+            )}
+            <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+              <Plus className="h-3.5 w-3.5" /> Échange
+            </button>
+            <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+              <Save className="h-3.5 w-3.5" /> {saving ? "…" : "Enregistrer"}
+            </button>
+          </div>
+        )}
       </div>
 
-      {sorted.length === 0 ? (
+      {/* ─────────── LECTURE ─────────── */}
+      {mode === "view" && (
+        sorted.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border bg-panel/40 px-4 py-8 text-center text-[13px] text-muted-foreground">
+            Aucun échange noté. <button type="button" onClick={() => setMode("edit")} className="font-semibold text-primary underline-offset-2 hover:underline">Ajouter un échange</button> (appel, message, réunion).
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {sorted.map((e) => {
+              const Icon = EXCHANGE_ICON[e.type];
+              return (
+                <div key={e.id} className="relative rounded-xl border border-border bg-panel/40 p-4 pl-5">
+                  <span className="absolute left-0 top-4 h-[calc(100%-2rem)] w-[3px] rounded-full bg-primary/40" />
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                      <Icon className="h-3.5 w-3.5" /> {EXCHANGE_META[e.type].label}
+                    </span>
+                    <span className="text-[12px] font-medium text-muted-foreground">{frDMY(e.date)}</span>
+                    {e.prochainPoint && <span className="ml-auto text-[11px] text-faint">Prochain point : <span className="font-semibold text-foreground">{frDMY(e.prochainPoint)}</span></span>}
+                  </div>
+                  {e.resume && <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{e.resume}</p>}
+                  {(e.decisions || e.actions) && (
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {e.decisions && <div className="rounded-lg bg-panel/60 px-3 py-2"><div className={LBL}>Décisions</div><p className="whitespace-pre-wrap text-[12px] leading-relaxed text-foreground">{e.decisions}</p></div>}
+                      {e.actions && <div className="rounded-lg bg-panel/60 px-3 py-2"><div className={LBL}>Actions à suivre</div><p className="whitespace-pre-wrap text-[12px] leading-relaxed text-foreground">{e.actions}</p></div>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {/* ─────────── ÉDITION ─────────── */}
+      {mode === "edit" && (sorted.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-panel/40 px-4 py-8 text-center text-[13px] text-muted-foreground">
           Aucun échange noté. « Échange » ajoute un point (appel, message, réunion).
         </div>
@@ -421,7 +662,7 @@ export function JournalCard({ name }: { name: string }) {
             </div>
           ))}
         </div>
-      )}
+      ))}
     </section>
   );
 }
