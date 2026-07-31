@@ -79,10 +79,10 @@ const PLATFORM_LABELS: Record<string, string> = {
  * CRÉATEUR (`lockedCreator` = verrouillé sur soi, entries déjà filtrées par la
  * fonction serveur — un créateur ne voit jamais les mesures des autres).
  */
-export function SuiviPanel({ entries, lockedCreator }: { entries: SuiviEntry[]; lockedCreator?: string }) {
+export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries: SuiviEntry[]; lockedCreator?: string; initialCreator?: string }) {
   // Sélecteur créateur (ceux qui ont au moins une mesure)
   const creatorNames = useMemo(() => [...new Set(entries.map((h) => h.creator))], [entries]);
-  const [selCreator, setSelCreator] = useState("");
+  const [selCreator, setSelCreator] = useState(initialCreator ?? "");
   const creator = lockedCreator || selCreator || creatorNames[0] || "";
   const sameCreator = (h: HistEntry) => h.creator.trim().toLowerCase() === creator.trim().toLowerCase();
 
@@ -350,17 +350,150 @@ export function SuiviPanel({ entries, lockedCreator }: { entries: SuiviEntry[]; 
   );
 }
 
-/** Page agence : tout l'historique (blob agence) + sélecteur de créateur. */
+/**
+ * Vue « TOUS les créateurs » : une ligne par créateur mesuré (sur sa mesure la
+ * plus récente, toutes plateformes confondues) — dernier taux + tendance,
+ * abonnés, nombre de mesures, meilleur taux. Triable ; clic → ouvre le détail.
+ */
+type Row = { creator: string; platform: string; lastEr: number; dEr: number | null; followers: number; measures: number; bestEr: number; verdict: string };
+type SortKey = "lastEr" | "followers" | "measures" | "bestEr";
+
+function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: (creator: string) => void }) {
+  const [sort, setSort] = useState<SortKey>("lastEr");
+  const rows = useMemo<Row[]>(() => {
+    const names = [...new Set(entries.map((h) => h.creator))];
+    return names.map((name) => {
+      const mine = entries.filter((h) => h.creator.trim().toLowerCase() === name.trim().toLowerCase());
+      // Plus récente = date la plus grande, puis index le plus faible (blob = récent en tête).
+      const ordered = mine.map((h, i) => ({ h, i, t: frTime(h.date) })).sort((a, b) => b.t - a.t || a.i - b.i);
+      const latest = ordered[0].h;
+      // Δ vs mesure précédente SUR LA MÊME plateforme que la dernière.
+      const samePlat = ordered.filter((x) => x.h.platform === latest.platform);
+      const prev = samePlat[1]?.h;
+      const dEr = prev ? Math.round((parseEr(latest.er) - parseEr(prev.er)) * 100) / 100 : null;
+      return {
+        creator: name,
+        platform: latest.platform,
+        lastEr: parseEr(latest.er),
+        dEr,
+        followers: num(latest.followers),
+        measures: mine.length,
+        bestEr: Math.max(...mine.map((h) => parseEr(h.er))),
+        verdict: latest.verdict,
+      };
+    }).sort((a, b) => b[sort] - a[sort]);
+  }, [entries, sort]);
+
+  const avgEr = rows.length ? Math.round((rows.reduce((a, r) => a + r.lastEr, 0) / rows.length) * 100) / 100 : 0;
+  const bestGlobal = rows.length ? Math.max(...rows.map((r) => r.bestEr)) : 0;
+  const th = (k: SortKey, label: string, align = "text-right") => (
+    <th className={cn("px-4 py-3", align)}>
+      <button type="button" onClick={() => setSort(k)} className={cn("inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-foreground", sort === k ? "text-foreground" : "")}>
+        {label}{sort === k && <TrendingDown className="h-3 w-3" />}
+      </button>
+    </th>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { l: "Créateurs suivis", v: String(rows.length), icon: Users },
+          { l: "Taux moyen", v: `${String(avgEr).replace(".", ",")} %`, icon: Activity },
+          { l: "Meilleur taux", v: rows.length ? `${String(bestGlobal).replace(".", ",")} %` : "—", icon: TrendingUp },
+        ].map((c) => (
+          <div key={c.l} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+            <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-faint"><c.icon className="h-3 w-3" /> {c.l}</div>
+            <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums">{c.v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
+        <table className="w-full min-w-[680px] border-collapse text-left">
+          <thead>
+            <tr className="border-b border-border bg-panel text-[10px] font-semibold uppercase tracking-wide text-faint">
+              <th className="px-4 py-3">Créateur</th>
+              <th className="px-4 py-3">Plateforme</th>
+              {th("lastEr", "Dernier taux")}
+              {th("followers", "Abonnés")}
+              {th("measures", "Mesures")}
+              {th("bestEr", "Meilleur")}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.creator} onClick={() => onOpen(r.creator)} className="cursor-pointer border-b border-border last:border-b-0 hover:bg-rowhover">
+                <td className="px-4 py-3 text-[13px] font-semibold text-foreground">{titleCase(r.creator)}</td>
+                <td className="px-4 py-3">
+                  <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+                    <PlatformIcon platform={r.platform} className="h-3.5 w-3.5" /> {PLATFORM_LABELS[r.platform] ?? r.platform}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex flex-col items-end">
+                    <span className="text-sm font-bold tabular-nums text-foreground">{String(r.lastEr).replace(".", ",")} %</span>
+                    {r.dEr !== null && r.dEr !== 0 && (
+                      <span className={cn("flex items-center gap-0.5 text-[10px] font-semibold", r.dEr > 0 ? "text-signaltext" : "text-rose-500")}>
+                        {r.dEr > 0 ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}{r.dEr > 0 ? "+" : ""}{String(r.dEr).replace(".", ",")}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-right text-[13px] tabular-nums text-muted-foreground">{r.followers > 0 ? fmtCompact(r.followers) : "—"}</td>
+                <td className="px-4 py-3 text-right text-[13px] tabular-nums text-muted-foreground">{r.measures}</td>
+                <td className="px-4 py-3 text-right text-[13px] font-semibold tabular-nums text-foreground">{String(r.bestEr).replace(".", ",")} %</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="px-1 text-[11px] text-faint">Clique une ligne pour voir l'évolution détaillée du créateur.</p>
+    </div>
+  );
+}
+
+/** Page agence : tout l'historique (blob agence) — vue « Tous » ou détail d'un créateur. */
 export function EngagementSuivi() {
   const { data: hist, loading } = useAppState<HistEntry[]>(
     (s: AppState) => ((s["engagementHistory"] as HistEntry[]) ?? []),
   );
   const entries = useMemo(() => (hist ?? []).filter((h) => h.creator && h.creator !== "Calcul libre"), [hist]);
+  const [view, setView] = useState<"all" | "one">("all");
+  const [focus, setFocus] = useState<string | undefined>(undefined);
+
   if (loading)
     return (
       <AnimatedBadge status="loading" size="sm">
         Chargement du suivi…
       </AnimatedBadge>
     );
-  return <SuiviPanel entries={entries} />;
+
+  return (
+    <div className="space-y-4">
+      {/* Bascule Tous / Un créateur */}
+      <div className="flex w-fit gap-1 rounded-xl bg-panel p-1">
+        {([["all", "Tous les créateurs"], ["one", "Un créateur"]] as const).map(([m, label]) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setView(m)}
+            className={cn(
+              "flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-colors",
+              view === m ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {m === "all" ? <Users className="h-4 w-4" /> : <Activity className="h-4 w-4" />} {label}
+          </button>
+        ))}
+      </div>
+
+      {view === "all" ? (
+        <AllCreatorsPanel entries={entries} onOpen={(c) => { setFocus(c); setView("one"); }} />
+      ) : (
+        // key = focus → re-monte avec le créateur cliqué pré-sélectionné
+        <SuiviPanel key={focus ?? "one"} entries={entries} initialCreator={focus} />
+      )}
+    </div>
+  );
 }
