@@ -228,7 +228,7 @@ export function Portal({
             onClick={() => setTab(t.id)}
             className={
               "flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-semibold transition-colors " +
-              (tab === t.id ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")
+              (tab === t.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")
             }
           >
             <t.icon className="h-4 w-4" /> {t.label}

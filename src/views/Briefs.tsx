@@ -380,7 +380,7 @@ export function Briefs() {
                 onClick={() => setView(v.id)}
                 className={cn(
                   "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
-                  view === v.id ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  view === v.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <v.icon className="h-3.5 w-3.5" /> {v.label}

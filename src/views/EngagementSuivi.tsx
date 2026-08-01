@@ -480,7 +480,7 @@ export function EngagementSuivi() {
             onClick={() => setView(m)}
             className={cn(
               "flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-colors",
-              view === m ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              view === m ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
             )}
           >
             {m === "all" ? <Users className="h-4 w-4" /> : <Activity className="h-4 w-4" />} {label}
