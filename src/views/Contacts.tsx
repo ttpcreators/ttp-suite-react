@@ -720,26 +720,26 @@ export function Contacts() {
         <TextField label="Téléphone" value={phone} onChange={setPhone} />
       </InlineForm>
 
-      <div className="rounded-xl border border-border bg-card px-5 shadow-sm">
-        {currentRows.length === 0 ? (
-          <div className="py-8 text-center text-xs text-muted-foreground">
-            Aucun contact
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="py-8 text-center text-sm text-muted-foreground">
-            {query.trim()
-              ? `Aucun résultat pour « ${query} »`
-              : "Aucun contact pour ce filtre"}
-          </div>
-        ) : (
-          filtered.map((row) => (
+      {currentRows.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-surface p-6 text-center text-sm text-muted-foreground shadow-sm">
+          Aucun contact
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-surface p-6 text-center text-sm text-muted-foreground shadow-sm">
+          {query.trim()
+            ? `Aucun résultat pour « ${query} »`
+            : "Aucun contact pour ce filtre"}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {filtered.map((row) => (
             <div
               key={row.id}
               onClick={() => setSelected(row)}
-              className="flex cursor-pointer items-center gap-3.5 border-b border-border py-3.5 last:border-b-0 hover:bg-rowhover"
+              className="flex cursor-pointer items-center gap-3.5 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-colors hover:bg-rowhover"
             >
               {/* Avatar */}
-              <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[9px] bg-surface text-[11px] font-bold text-foreground">
+              <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[9px] bg-panel text-[11px] font-bold text-foreground">
                 {initials(row.person)}
               </div>
 
@@ -799,9 +799,9 @@ export function Contacts() {
                 ]}
               />
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Fiche détail contact */}
       {selected && (
