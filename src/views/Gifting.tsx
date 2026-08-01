@@ -368,12 +368,12 @@ export function Gifting() {
           ))}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+        <div className="flex flex-col gap-2.5">
           {list.map((g) => (
             <div
               key={g.id}
               onClick={() => setViewG(g)}
-              className="flex cursor-pointer items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-rowhover"
+              className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm transition-colors hover:bg-rowhover"
             >
               <span className={cn("size-2 shrink-0 rounded-full", giftStatusMeta(g.status).dot)} title={giftStatusMeta(g.status).label} />
               <div className="min-w-0 flex-1">

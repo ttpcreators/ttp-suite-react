@@ -648,8 +648,8 @@ export function Facturation() {
       />
 
       {/* Liste */}
-      <div className="overflow-hidden rounded-xl border border-border bg-surface p-2 shadow-sm">
-        <div className="hidden grid-cols-[0.8fr_2fr_1.1fr_1fr_1fr_1.4fr] gap-3 px-4 py-3 text-[9px] font-semibold uppercase tracking-wider text-faint md:grid">
+      <div className="space-y-2.5">
+        <div className="hidden grid-cols-[0.8fr_2fr_1.1fr_1fr_1fr_1.4fr] gap-3 px-4 pb-1 text-[9px] font-semibold uppercase tracking-wider text-faint md:grid">
           <span>Réf.</span>
           <span>Marque × Créateur</span>
           <span className="text-right">Montant TTC</span>
@@ -659,12 +659,12 @@ export function Facturation() {
         </div>
 
         {rows.length === 0 ? (
-          <div className="px-4 py-8 text-center">
+          <div className="rounded-2xl border border-border bg-surface px-4 py-8 text-center shadow-sm">
             <div className="text-sm font-medium text-foreground">Aucune facture</div>
             <div className="mt-1.5 text-xs text-faint">Crée ta première facture avec « + Facture ».</div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+          <div className="rounded-2xl border border-border bg-surface px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">
             {query.trim() ? `Aucun résultat pour « ${query} »` : "Aucune facture pour ce statut."}
           </div>
         ) : (
@@ -693,7 +693,7 @@ export function Facturation() {
               </span>
             );
             return (
-              <div key={r.id} className="border-b border-border last:border-b-0">
+              <div key={r.id} className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
                 {/* Desktop : ligne type tableau */}
                 <div
                   onClick={openPreview}

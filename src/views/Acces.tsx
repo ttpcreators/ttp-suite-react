@@ -41,7 +41,7 @@ function AccountRow({ a, onDelete }: { a: AccessAccount; onDelete: (a: AccessAcc
   const cloud = a.cloud ? cloudBadge(a.cloud) : null;
 
   return (
-    <div className="flex items-center gap-3 rounded-xl px-4 py-3 transition-colors hover:bg-rowhover">
+    <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm transition-colors hover:bg-rowhover">
       <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface text-xs font-semibold text-muted-foreground">
         {initials(avatarSource)}
       </div>
@@ -260,7 +260,7 @@ export function Acces() {
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun résultat pour « {query} »</div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-border bg-card p-2 shadow-sm">
+        <div className="flex flex-col gap-2.5">
           {filtered.map((a, i) => (
             <AccountRow key={`${a.email}-${i}`} a={a} onDelete={removeAccount} />
           ))}

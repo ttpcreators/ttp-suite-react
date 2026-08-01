@@ -225,11 +225,11 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-border bg-card p-2 shadow-sm">
+        <div>
           {/* En-tête de tableau (desktop) */}
           <div
             className={cn(
-              "hidden items-center px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-faint md:grid",
+              "mb-1 hidden items-center px-4 pb-2 text-[10px] font-semibold uppercase tracking-wider text-faint md:grid",
               cols,
             )}
           >
@@ -242,6 +242,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
             <span />
           </div>
 
+          <div className="flex flex-col gap-2.5">
           {filtered.map((c) => {
             const label = STATUS_LABEL[c.status] ?? "ACTIF";
             const dot = statusDot(c.status);
@@ -250,7 +251,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                 key={c.id}
                 onClick={() => onOpen?.(c.name)}
                 className={cn(
-                  "cursor-pointer rounded-xl px-4 py-2.5 transition-colors hover:bg-rowhover",
+                  "cursor-pointer rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm transition-colors hover:bg-rowhover",
                   "flex items-center gap-3 md:grid",
                   cols,
                 )}
@@ -342,6 +343,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
               </div>
             );
           })}
+          </div>
         </div>
       )}
     </>
