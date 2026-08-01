@@ -5,6 +5,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { AddButton, InlineForm, SelectField } from "@/components/ui/form";
 import { FilterBar, type FilterOpt } from "@/components/ui/filter-bar";
+import { PeriodFilter, periodsFrom, inPeriod } from "@/components/ui/period-filter";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
@@ -103,6 +104,7 @@ export function Documents() {
   const [busy, setBusy] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string; kind: FileKind; html?: string } | null>(null);
   const [sort, setSort] = useState("recent");
+  const [period, setPeriod] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -286,8 +288,9 @@ export function Documents() {
     return Number.isNaN(t) ? 0 : t;
   };
   // `.filter()` renvoie un nouveau tableau → le `.sort()` ne mute jamais `rows`.
+  const periods = periodsFrom((rows ?? []).map((r) => r.created_at));
   const filtered = (rows ?? [])
-    .filter((row) => matchQuery(query, row.name, row.type, row.creator))
+    .filter((row) => matchQuery(query, row.name, row.type, row.creator) && inPeriod(row.created_at, period))
     .sort((a, b) => {
       if (sort === "ancien") return timeOf(a) - timeOf(b);
       if (sort === "nom") return (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" });
@@ -325,8 +328,9 @@ export function Documents() {
       </InlineForm>
 
       {rows !== null && rows.length > 1 && (
-        <div className="mb-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <FilterBar value={sort} options={SORT_OPTIONS} onChange={setSort} placeholder="Trier" />
+          {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} />}
         </div>
       )}
 

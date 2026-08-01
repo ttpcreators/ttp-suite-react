@@ -23,6 +23,7 @@ import { toast } from "@/components/ui/toast";
 import { AddButton, TextField, SelectField } from "@/components/ui/form";
 import { ActionMenu, type ActionItem } from "@/components/ui/action-menu";
 import { FilterBar } from "@/components/ui/filter-bar";
+import { PeriodFilter, periodsFrom, inPeriod } from "@/components/ui/period-filter";
 import { useCreators } from "@/lib/useCreators";
 import { commissionMap } from "@/lib/commission";
 import { useLiveKey } from "@/lib/useLive";
@@ -367,6 +368,7 @@ export function Facturation() {
   const inited = useRef(false);
 
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "Tous">("Tous");
+  const [period, setPeriod] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [issuerDraft, setIssuerDraft] = useState<Issuer | null>(null);
   const [banksOpen, setBanksOpen] = useState(false);
@@ -443,8 +445,9 @@ export function Facturation() {
     };
   };
 
+  const periods = periodsFrom(rows.map((r) => r.date));
   const filtered = rows.filter(
-    (r) => matchQuery(query, r.ref, r.party, r.creator, r.status) && (statusFilter === "Tous" || r.status === statusFilter),
+    (r) => matchQuery(query, r.ref, r.party, r.creator, r.status) && (statusFilter === "Tous" || r.status === statusFilter) && inPeriod(r.date, period),
   );
   const statusChips: { value: InvoiceStatus | "Tous"; label: string }[] = [{ value: "Tous", label: "Tous" }, ...STATUS_OPTIONS];
 
@@ -640,12 +643,14 @@ export function Facturation() {
       </div>
 
       {/* Filtres (pastilles desktop · sélecteur mobile) */}
-      <FilterBar
-        className="mb-4"
-        value={statusFilter}
-        onChange={(v) => setStatusFilter(v as InvoiceStatus | "Tous")}
-        options={statusChips}
-      />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <FilterBar
+          value={statusFilter}
+          onChange={(v) => setStatusFilter(v as InvoiceStatus | "Tous")}
+          options={statusChips}
+        />
+        {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} allLabel="Toutes échéances" />}
+      </div>
 
       {/* Liste */}
       <div className="space-y-2.5">

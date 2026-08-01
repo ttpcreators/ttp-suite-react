@@ -15,6 +15,7 @@ import { notifyCreator } from "@/lib/push";
 import { toISODate, frDate } from "@/lib/dates";
 import { cn, titleCase } from "@/lib/utils";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, giftStatusMeta, type Gift as GiftRow } from "@/lib/gifting";
+import { PeriodFilter, periodsFrom, inPeriod } from "@/components/ui/period-filter";
 
 type GView = "cards" | "list";
 
@@ -76,6 +77,9 @@ export function Gifting() {
 
   const list = rows ?? [];
   const loading = rows === null;
+  const [period, setPeriod] = useState("");
+  const periods = periodsFrom(list.map((g) => g.received_on));
+  const shown = period ? list.filter((g) => inPeriod(g.received_on, period)) : list;
 
   const creatorOptions = [
     { value: "", label: "— Choisir —" },
@@ -212,8 +216,8 @@ export function Gifting() {
             <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>
           ) : (
             <>
-              <span className="font-semibold text-foreground">{list.length}</span>
-              <span>{list.length > 1 ? "cadeaux suivis" : "cadeau suivi"}</span>
+              <span className="font-semibold text-foreground">{shown.length}</span>
+              <span>{shown.length > 1 ? "cadeaux suivis" : "cadeau suivi"}</span>
               {attente > 0 && (
                 <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
                   {attente} contenu{attente > 1 ? "s" : ""} en attente
@@ -242,6 +246,7 @@ export function Gifting() {
               ))}
             </div>
           )}
+          {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} />}
           <AddButton label="Gifting" onClick={openCreate} />
         </div>
       </div>
@@ -296,17 +301,17 @@ export function Gifting() {
         <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>
         </div>
-      ) : list.length === 0 ? (
+      ) : shown.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center shadow-sm">
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-signalsoft text-signaltext">
             <Gift className="size-5" />
           </div>
-          <div className="text-sm font-medium text-foreground">Aucun gifting suivi</div>
-          <div className="mt-1.5 text-xs text-faint">Ajoute un cadeau reçu pour tracer sa provenance et le contenu attendu.</div>
+          <div className="text-sm font-medium text-foreground">{period ? "Aucun gifting sur cette période" : "Aucun gifting suivi"}</div>
+          <div className="mt-1.5 text-xs text-faint">{period ? "Change de période ou choisis « Toutes périodes »." : "Ajoute un cadeau reçu pour tracer sa provenance et le contenu attendu."}</div>
         </div>
       ) : view === "cards" ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {list.map((g) => (
+          {shown.map((g) => (
             <article
               key={g.id}
               onClick={() => setViewG(g)}
@@ -369,7 +374,7 @@ export function Gifting() {
         </div>
       ) : (
         <div className="flex flex-col gap-2.5">
-          {list.map((g) => (
+          {shown.map((g) => (
             <div
               key={g.id}
               onClick={() => setViewG(g)}
