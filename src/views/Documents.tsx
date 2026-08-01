@@ -330,27 +330,27 @@ export function Documents() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-border bg-card px-2 shadow-sm sm:px-5">
+      <div>
         {rows === null ? (
-          <div className="px-2 py-3">
+          <div className="rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm">
             <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>
           </div>
         ) : error ? (
-          <div className="px-2 py-3">
+          <div className="rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm">
             <AnimatedBadge status="danger" size="sm">Erreur de chargement</AnimatedBadge>
           </div>
         ) : rows.length === 0 ? (
-          <div className="px-2 py-6 text-sm text-muted-foreground">Aucun document — ajoute le premier 📎</div>
+          <div className="rounded-2xl border border-border bg-surface px-4 py-6 text-sm text-muted-foreground shadow-sm">Aucun document — ajoute le premier 📎</div>
         ) : query.trim() && filtered.length === 0 ? (
-          <div className="px-2 py-8 text-center text-sm text-muted-foreground">Aucun résultat pour « {query} »</div>
+          <div className="rounded-2xl border border-border bg-surface px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">Aucun résultat pour « {query} »</div>
         ) : (
-          <ul>
-            {filtered.map((row, index) => {
+          <ul className="flex flex-col gap-2.5">
+            {filtered.map((row) => {
               const meta = metaFor(row.type);
               const Icon = meta.icon;
               const details = [row.size, formatDate(row.created_at)].filter(Boolean).join(" · ");
               return (
-                <li key={row.id} className={cn("flex items-center gap-3.5 py-3.5", index > 0 && "border-t border-border")}>
+                <li key={row.id} className="flex items-center gap-3.5 rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm transition-colors hover:bg-rowhover">
                   <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", meta.className)}>
                     <Icon className="size-4" />
                   </div>

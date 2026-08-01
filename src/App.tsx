@@ -587,6 +587,9 @@ export default function App() {
   const showPrimaryH1 = space !== "portal" && !detailCreator && active !== "apercu";
   // Multi-pages actif dès qu'il y a ≥ 2 onglets ou un volet latéral.
   const multi = tabs.length > 1 || splitView != null;
+  // Overlay = fiche créateur ou portail (rendus PAR-DESSUS les onglets nav, qui
+  // restent montés en dessous pour ne pas perdre leur état).
+  const overlayActive = space === "portal" || !!detailCreator;
 
   return (
     <SearchContext.Provider value={{ query, setQuery }}>
@@ -655,32 +658,31 @@ export default function App() {
                     </section>
                   </div>
                 ) : (
-                  /* ≥ 2 onglets, un seul visible. Cas nav pur : TOUS les onglets restent
-                     MONTÉS (masqués avec `hidden`) pour préserver leur état (formulaires,
-                     sous-page, scroll) au changement d'onglet. Sinon (fiche / portail),
-                     rendu simple d'origine. */
+                  /* ≥ 2 onglets, un seul visible. TOUS les onglets nav restent MONTÉS
+                     (masqués via `hidden`) — même quand une fiche/portail s'ouvre par
+                     dessus — pour préserver leur état (saisie Media kit, sous-page,
+                     scroll) au changement d'onglet ET à l'ouverture d'une fiche. */
                   <div className="flex-1 overflow-y-auto pb-24 md:pb-7">
                     <main className="px-4 pt-5 md:px-6">
-                      {!detailCreator && space !== "portal" ? (
-                        tabs.map((id) => {
-                          const tabTitle = findItem(id)?.label ?? (id === "corbeille" ? "Corbeille" : "Aperçu");
-                          return (
-                            <div key={id} hidden={id !== active}>
-                              <ErrorBoundary variant="inline" label="Cette page" resetKey={`tab:${id}`}>
-                                <Suspense fallback={PANE_FALLBACK}>
-                                  <NavSubContext.Provider value={id === active ? sub : null}>
-                                    {id !== "apercu" && (
-                                      <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">{tabTitle}</h1>
-                                    )}
-                                    <ViewContent active={id} onOpenCreator={openDetail} />
-                                  </NavSubContext.Provider>
-                                </Suspense>
-                              </ErrorBoundary>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <ErrorBoundary variant="inline" label="Cette page" resetKey={`${space}:${detailCreator ?? ""}:${active}`}>
+                      {tabs.map((id) => {
+                        const tabTitle = findItem(id)?.label ?? (id === "corbeille" ? "Corbeille" : "Aperçu");
+                        return (
+                          <div key={id} hidden={overlayActive || id !== active}>
+                            <ErrorBoundary variant="inline" label="Cette page" resetKey={`tab:${id}`}>
+                              <Suspense fallback={PANE_FALLBACK}>
+                                <NavSubContext.Provider value={id === active ? sub : null}>
+                                  {id !== "apercu" && (
+                                    <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">{tabTitle}</h1>
+                                  )}
+                                  <ViewContent active={id} onOpenCreator={openDetail} />
+                                </NavSubContext.Provider>
+                              </Suspense>
+                            </ErrorBoundary>
+                          </div>
+                        );
+                      })}
+                      {overlayActive && (
+                        <ErrorBoundary variant="inline" label="Cette page" resetKey={`${space}:${detailCreator ?? ""}`}>
                           <Suspense fallback={PANE_FALLBACK}>{mainInner}</Suspense>
                         </ErrorBoundary>
                       )}

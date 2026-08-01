@@ -59,6 +59,19 @@ function fmtCompact(n: number): string {
   if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
   return String(Math.round(n));
 }
+/** "jj/mm/aaaa" → "aaaa-mm" (regroupement par mois). */
+function ymOf(s: string): string {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/.exec((s ?? "").trim());
+  if (!m) return "";
+  const y = m[3].length === 2 ? "20" + m[3] : m[3];
+  return `${y}-${m[2].padStart(2, "0")}`;
+}
+function ymLabel(ym: string): string {
+  const [y, mo] = ym.split("-").map(Number);
+  if (!y || !mo) return ym;
+  const s = new Date(y, mo - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 /** Somme des interactions d'une entrée (tout sauf les clés de base). */
 function interactionsOf(h: HistEntry): number {
   return Object.entries(h.vals ?? {})
@@ -360,10 +373,14 @@ type SortKey = "lastEr" | "followers" | "measures" | "bestEr";
 
 function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: (creator: string) => void }) {
   const [sort, setSort] = useState<SortKey>("lastEr");
+  const [period, setPeriod] = useState(""); // "" = toutes périodes ; sinon "aaaa-mm"
+  // Périodes disponibles (mois présents dans les mesures), récent d'abord.
+  const periods = useMemo(() => [...new Set(entries.map((h) => ymOf(h.date)).filter(Boolean))].sort((a, b) => b.localeCompare(a)), [entries]);
   const rows = useMemo<Row[]>(() => {
     const names = [...new Set(entries.map((h) => h.creator))];
     return names.map((name) => {
-      const mine = entries.filter((h) => h.creator.trim().toLowerCase() === name.trim().toLowerCase());
+      const mine = entries.filter((h) => h.creator.trim().toLowerCase() === name.trim().toLowerCase() && (!period || ymOf(h.date) === period));
+      if (mine.length === 0) return null; // aucun relevé sur la période → exclu
       // Plus récente = date la plus grande, puis index le plus faible (blob = récent en tête).
       const ordered = mine.map((h, i) => ({ h, i, t: frTime(h.date) })).sort((a, b) => b.t - a.t || a.i - b.i);
       const latest = ordered[0].h;
@@ -381,13 +398,13 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
         bestEr: Math.max(...mine.map((h) => parseEr(h.er))),
         verdict: latest.verdict,
       };
-    }).sort((a, b) => b[sort] - a[sort]);
-  }, [entries, sort]);
+    }).filter((r): r is Row => r !== null).sort((a, b) => b[sort] - a[sort]);
+  }, [entries, sort, period]);
 
   const avgEr = rows.length ? Math.round((rows.reduce((a, r) => a + r.lastEr, 0) / rows.length) * 100) / 100 : 0;
   const bestGlobal = rows.length ? Math.max(...rows.map((r) => r.bestEr)) : 0;
   const th = (k: SortKey, label: string, align = "text-right") => (
-    <th className={cn("px-4 py-3", align)}>
+    <th className={cn("px-4 pb-1", align)}>
       <button type="button" onClick={() => setSort(k)} className={cn("inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-foreground", sort === k ? "text-foreground" : "")}>
         {label}{sort === k && <TrendingDown className="h-3 w-3" />}
       </button>
@@ -409,12 +426,25 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
         ))}
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
-        <table className="w-full min-w-[680px] border-collapse text-left">
+      {/* Filtre par période (mois/année) */}
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-faint">Période</span>
+        <select
+          value={period}
+          onChange={(e) => setPeriod(e.target.value)}
+          className="rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15"
+        >
+          <option value="">Toutes périodes (dernier relevé)</option>
+          {periods.map((p) => <option key={p} value={p}>{ymLabel(p)}</option>)}
+        </select>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[680px] border-separate [border-spacing:0_10px] text-left">
           <thead>
-            <tr className="border-b border-border bg-panel text-[10px] font-semibold uppercase tracking-wide text-faint">
-              <th className="px-4 py-3">Créateur</th>
-              <th className="px-4 py-3">Plateforme</th>
+            <tr className="text-[10px] font-semibold uppercase tracking-wide text-faint">
+              <th className="px-4 pb-1">Créateur</th>
+              <th className="px-4 pb-1">Plateforme</th>
               {th("lastEr", "Dernier taux")}
               {th("followers", "Abonnés")}
               {th("measures", "Mesures")}
@@ -423,7 +453,7 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.creator} onClick={() => onOpen(r.creator)} className="cursor-pointer border-b border-border last:border-b-0 hover:bg-rowhover">
+              <tr key={r.creator} onClick={() => onOpen(r.creator)} className="cursor-pointer bg-surface shadow-sm transition-colors hover:bg-rowhover [&>td]:border-y [&>td]:border-border [&>td:first-child]:rounded-l-2xl [&>td:first-child]:border-l [&>td:last-child]:rounded-r-2xl [&>td:last-child]:border-r">
                 <td className="px-4 py-3 text-[13px] font-semibold text-foreground">{titleCase(r.creator)}</td>
                 <td className="px-4 py-3">
                   <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">

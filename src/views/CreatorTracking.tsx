@@ -738,20 +738,20 @@ export function RosterTracking({ onOpen }: { onOpen?: (name: string) => void }) 
         ))}
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
-        <table className="w-full min-w-[720px] border-collapse text-left">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] border-separate [border-spacing:0_10px] text-left">
           <thead>
-            <tr className="border-b border-border bg-panel text-[10px] font-semibold uppercase tracking-wide text-faint">
-              <th className="px-4 py-3">Créateur</th>
-              <th className="px-4 py-3">Trajectoire</th>
-              <th className="px-4 py-3">Dernier contact</th>
-              <th className="px-4 py-3">Prochain point</th>
-              <th className="px-4 py-3">Alertes actives</th>
+            <tr className="text-[10px] font-semibold uppercase tracking-wide text-faint">
+              <th className="px-4 pb-1">Créateur</th>
+              <th className="px-4 pb-1">Trajectoire</th>
+              <th className="px-4 pb-1">Dernier contact</th>
+              <th className="px-4 pb-1">Prochain point</th>
+              <th className="px-4 pb-1">Alertes actives</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.name} onClick={() => onOpen?.(r.name)} className={cn("border-b border-border last:border-b-0 hover:bg-rowhover", onOpen && "cursor-pointer")}>
+              <tr key={r.name} onClick={() => onOpen?.(r.name)} className={cn("bg-surface shadow-sm transition-colors hover:bg-rowhover [&>td]:border-y [&>td]:border-border [&>td:first-child]:rounded-l-2xl [&>td:first-child]:border-l [&>td:last-child]:rounded-r-2xl [&>td:last-child]:border-r", onOpen && "cursor-pointer")}>
                 <td className="px-4 py-3 text-[13px] font-semibold text-foreground">{titleCase(r.name)}</td>
                 <td className="px-4 py-3">
                   <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
