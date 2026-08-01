@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, FileText, CalendarDays, Files, LayoutDashboard, ListChecks, Lightbulb } from "lucide-react";
+import { ArrowLeft, FileText, CalendarDays, Files, LayoutDashboard, ListChecks, Lightbulb, Contact } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
 import { frDate } from "@/lib/dates";
@@ -27,6 +27,7 @@ type Ev = { date: string | null; day: number | null; time: string | null; title:
 type Doc = { name: string; type: string | null; size: string | null; created_at: string | null };
 type Idea = { text: string; status: string | null };
 type Todo = { text: string; done: boolean; priority: string | null };
+type Ct = { id: string; brand: string; person: string | null; role: string | null; email: string | null; phone: string | null };
 type HistEntry = { date: string; creator: string; platform: string; platformLabel: string; followers: string };
 
 // ── Icônes réseaux (inline — lucide n'a plus les logos de marque) ──
@@ -84,12 +85,13 @@ function fmtCompact(n: number): string {
   return String(Math.round(n));
 }
 
-type Tab = "accueil" | "briefs" | "planning" | "documents";
+type Tab = "accueil" | "briefs" | "planning" | "documents" | "contacts";
 const TABS: { id: Tab; label: string; icon: typeof FileText }[] = [
   { id: "accueil", label: "Accueil", icon: LayoutDashboard },
   { id: "briefs", label: "Briefs", icon: FileText },
   { id: "planning", label: "Planning", icon: CalendarDays },
   { id: "documents", label: "Documents", icon: Files },
+  { id: "contacts", label: "Contacts", icon: Contact },
 ];
 
 export function Portal({
@@ -110,6 +112,7 @@ export function Portal({
   const [docs, setDocs] = useState<Doc[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [contacts, setContacts] = useState<Ct[]>([]);
   const live = useLiveKey();
   const { data: histData } = useAppState<HistEntry[]>((s: AppState) => (s["engagementHistory"] as HistEntry[]) ?? []);
 
@@ -122,6 +125,7 @@ export function Portal({
     supabase.from("documents").select("name,type,size,created_at").eq("creator", name).then(({ data }) => alive && setDocs((data as Doc[]) ?? []));
     supabase.from("ideas").select("text,status").eq("creator", name).then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
     supabase.from("todos").select("text,done,priority").eq("creator", name).then(({ data }) => alive && setTodos((data as Todo[]) ?? []));
+    supabase.from("contacts").select("id,brand,person,role,email,phone,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setContacts((data as Ct[]) ?? []));
     return () => {
       alive = false;
     };
@@ -393,6 +397,40 @@ export function Portal({
             ))
           )}
         </div>
+      )}
+
+      {tab === "contacts" && (
+        <>
+          <div className="mb-4 text-sm text-muted-foreground">
+            {contacts.length} contact{contacts.length > 1 ? "s" : ""} du créateur, visibles par l'agence
+          </div>
+          {contacts.length === 0 ? (
+            <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">
+              Aucun contact pour ce créateur.
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {contacts.map((ct) => (
+                <div key={ct.id} className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-panel text-muted-foreground">
+                    <Contact className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-foreground">{ct.brand}</div>
+                    <div className="truncate text-xs text-faint">
+                      {[ct.person && ct.person !== "—" ? ct.person : "", ct.role].filter(Boolean).join(" · ") || "—"}
+                    </div>
+                    {(ct.email || ct.phone) && (
+                      <div className="truncate text-[11px] text-muted-foreground">
+                        {[ct.email, ct.phone].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
