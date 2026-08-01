@@ -28,7 +28,7 @@ export function RosterTabs({ onOpen }: { onOpen?: (name: string) => void }) {
             className={
               "flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-colors " +
               (tab === t.id
-                ? "bg-surface text-foreground shadow-sm"
+                ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground")
             }
           >
