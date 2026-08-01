@@ -655,17 +655,35 @@ export default function App() {
                     </section>
                   </div>
                 ) : (
-                  /* ≥ 2 onglets mais un seul visible → contenu simple défilant. */
+                  /* ≥ 2 onglets, un seul visible. Cas nav pur : TOUS les onglets restent
+                     MONTÉS (masqués avec `hidden`) pour préserver leur état (formulaires,
+                     sous-page, scroll) au changement d'onglet. Sinon (fiche / portail),
+                     rendu simple d'origine. */
                   <div className="flex-1 overflow-y-auto pb-24 md:pb-7">
                     <main className="px-4 pt-5 md:px-6">
-                      <ErrorBoundary variant="inline" label="Cette page" resetKey={`${space}:${detailCreator ?? ""}:${active}`}>
-                        <Suspense fallback={PANE_FALLBACK}>
-                          {showPrimaryH1 && (
-                            <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">{title}</h1>
-                          )}
-                          {mainInner}
-                        </Suspense>
-                      </ErrorBoundary>
+                      {!detailCreator && space !== "portal" ? (
+                        tabs.map((id) => {
+                          const tabTitle = findItem(id)?.label ?? (id === "corbeille" ? "Corbeille" : "Aperçu");
+                          return (
+                            <div key={id} hidden={id !== active}>
+                              <ErrorBoundary variant="inline" label="Cette page" resetKey={`tab:${id}`}>
+                                <Suspense fallback={PANE_FALLBACK}>
+                                  <NavSubContext.Provider value={id === active ? sub : null}>
+                                    {id !== "apercu" && (
+                                      <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">{tabTitle}</h1>
+                                    )}
+                                    <ViewContent active={id} onOpenCreator={openDetail} />
+                                  </NavSubContext.Provider>
+                                </Suspense>
+                              </ErrorBoundary>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <ErrorBoundary variant="inline" label="Cette page" resetKey={`${space}:${detailCreator ?? ""}:${active}`}>
+                          <Suspense fallback={PANE_FALLBACK}>{mainInner}</Suspense>
+                        </ErrorBoundary>
+                      )}
                     </main>
                   </div>
                 )}
