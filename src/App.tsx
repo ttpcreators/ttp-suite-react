@@ -266,6 +266,11 @@ export default function App() {
   const [mobileTab, setMobileTab] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [detailCreator, setDetailCreator] = useState<string | null>(null);
+  // Cache keep-alive : les vues déjà visitées restent MONTÉES (masquées) pour
+  // préserver leur état (saisie Media kit, sous-page, scroll) — que la navigation
+  // passe par les onglets, la sidebar (qui remplace le contenu de l'onglet) ou le
+  // retour d'une fiche. Capé aux plus récentes pour borner la mémoire.
+  const [visitedIds, setVisitedIds] = useState<ViewId[]>([]);
   const [space, setSpace] = useState<"agency" | "portal">("agency");
   const [portalCreator, setPortalCreator] = useState<string | null>(null);
   const [profile, setProfile] = useState<
@@ -308,6 +313,11 @@ export default function App() {
   // Invariant : l'onglet actif fait toujours partie de la liste.
   useEffect(() => {
     setTabs((prev) => (prev.includes(active) ? prev : [...prev, active]));
+  }, [active]);
+
+  // Mémorise les vues visitées (cache keep-alive), 8 max.
+  useEffect(() => {
+    setVisitedIds((prev) => (prev.includes(active) ? prev : [...prev, active].slice(-8)));
   }, [active]);
 
   // Anti double-montage : jamais la MÊME vue dans les deux volets (évite les ids
@@ -587,9 +597,11 @@ export default function App() {
   const showPrimaryH1 = space !== "portal" && !detailCreator && active !== "apercu";
   // Multi-pages actif dès qu'il y a ≥ 2 onglets ou un volet latéral.
   const multi = tabs.length > 1 || splitView != null;
-  // Overlay = fiche créateur ou portail (rendus PAR-DESSUS les onglets nav, qui
-  // restent montés en dessous pour ne pas perdre leur état).
+  // Overlay = fiche créateur ou portail (rendus PAR-DESSUS les vues nav, qui
+  // restent montées en dessous pour ne pas perdre leur état).
   const overlayActive = space === "portal" || !!detailCreator;
+  // Vues gardées montées = onglets ouverts ∪ vues récemment visitées.
+  const aliveIds = [...new Set<ViewId>([...tabs, ...visitedIds])];
 
   return (
     <SearchContext.Provider value={{ query, setQuery }}>
@@ -664,7 +676,7 @@ export default function App() {
                      scroll) au changement d'onglet ET à l'ouverture d'une fiche. */
                   <div className="flex-1 overflow-y-auto pb-24 md:pb-7">
                     <main className="px-4 pt-5 md:px-6">
-                      {tabs.map((id) => {
+                      {aliveIds.map((id) => {
                         const tabTitle = findItem(id)?.label ?? (id === "corbeille" ? "Corbeille" : "Aperçu");
                         return (
                           <div key={id} hidden={overlayActive || id !== active}>
