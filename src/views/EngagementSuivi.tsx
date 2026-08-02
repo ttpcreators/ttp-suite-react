@@ -419,9 +419,9 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
           { l: "Taux moyen", v: `${String(avgEr).replace(".", ",")} %`, icon: Activity },
           { l: "Meilleur taux", v: rows.length ? `${String(bestGlobal).replace(".", ",")} %` : "—", icon: TrendingUp },
         ].map((c) => (
-          <div key={c.l} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-            <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-faint"><c.icon className="h-3 w-3" /> {c.l}</div>
-            <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums">{c.v}</div>
+          <div key={c.l} className="rounded-2xl border border-border bg-surface p-3.5 shadow-sm sm:p-4">
+            <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-faint"><c.icon className="h-3 w-3 shrink-0" /> <span className="truncate">{c.l}</span></div>
+            <div className="mt-1 text-xl font-bold tracking-tight tabular-nums sm:text-2xl">{c.v}</div>
           </div>
         ))}
       </div>
@@ -439,7 +439,38 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
         </select>
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Mobile : cartes empilées (le tableau large ne tient pas) */}
+      <div className="flex flex-col gap-2.5 md:hidden">
+        {rows.map((r) => (
+          <button
+            key={r.creator}
+            type="button"
+            onClick={() => onOpen(r.creator)}
+            className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3.5 text-left shadow-sm transition-colors hover:bg-rowhover"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13px] font-semibold text-foreground">{titleCase(r.creator)}</div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
+                <PlatformIcon platform={r.platform} className="h-3 w-3 shrink-0" /> {PLATFORM_LABELS[r.platform] ?? r.platform}
+                <span className="text-faint">·</span> {r.followers > 0 ? fmtCompact(r.followers) : "—"} ab.
+                <span className="text-faint">·</span> {r.measures} mes.
+                <span className="text-faint">·</span> record {String(r.bestEr).replace(".", ",")} %
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-col items-end">
+              <span className="text-base font-bold tabular-nums text-foreground">{String(r.lastEr).replace(".", ",")} %</span>
+              {r.dEr !== null && r.dEr !== 0 && (
+                <span className={cn("flex items-center gap-0.5 text-[10px] font-semibold", r.dEr > 0 ? "text-signaltext" : "text-rose-500")}>
+                  {r.dEr > 0 ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}{r.dEr > 0 ? "+" : ""}{String(r.dEr).replace(".", ",")}
+                </span>
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Desktop : tableau */}
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[680px] border-separate [border-spacing:0_10px] text-left">
           <thead>
             <tr className="text-[10px] font-semibold uppercase tracking-wide text-faint">
