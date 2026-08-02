@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BellRing, Smartphone, Sunrise, Sun, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, KeyRound, Eye, EyeOff, Copy, Plus, Trash2, Save } from "lucide-react";
+import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, KeyRound, Eye, EyeOff, Copy, Plus, Trash2, Save } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useTheme } from "@/lib/theme";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
@@ -208,6 +209,8 @@ export function Parametres() {
     if (!ok) toast("Erreur d'enregistrement — réessaie");
   };
 
+  const { dark, toggle: toggleTheme } = useTheme();
+
   // Notifications push de CET appareil
   const { state, busy, enable, disable, sendTest } = usePush();
   const [testing, setTesting] = useState(false);
@@ -227,6 +230,20 @@ export function Parametres() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      {/* Apparence (thème) — pratique surtout sur mobile où l'icône a quitté le bandeau */}
+      <Section
+        icon={dark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+        title="Apparence"
+        hint="Thème clair ou sombre de l'application (propre à cet appareil)."
+      >
+        <PrefRow
+          label="Mode sombre"
+          hint="Bascule toute l'app en thème sombre."
+          checked={dark}
+          onChange={() => toggleTheme()}
+        />
+      </Section>
+
       {/* Cet appareil */}
       <Section
         icon={<Smartphone className="h-4 w-4" />}

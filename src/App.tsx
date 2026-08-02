@@ -15,6 +15,7 @@ import { NAV, findItem, type NavItem, type ViewId } from "@/lib/nav";
 import { NavSubContext } from "@/lib/navSub";
 import { supabase } from "@/lib/supabase";
 import { SearchContext } from "@/lib/search";
+import { ThemeContext } from "@/lib/theme";
 import { AgencyAvatar } from "@/components/ui/agency-avatar";
 
 // Vues chargées à la demande (code-splitting → démarrage plus léger, mobile compris).
@@ -559,10 +560,11 @@ export default function App() {
           </div>
         </div>
         <Notifications items={notifs} onDismiss={dismissNotifs} />
+        {/* Thème : desktop uniquement (sur mobile → Paramètres → Apparence, gain de place) */}
         <button
           type="button"
           onClick={toggleTheme}
-          className="grid h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"
+          className="hidden h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover md:grid"
           aria-label="Basculer le thème"
         >
           {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -604,6 +606,7 @@ export default function App() {
   const aliveIds = [...new Set<ViewId>([...tabs, ...visitedIds])];
 
   return (
+    <ThemeContext.Provider value={{ dark, toggle: toggleTheme }}>
     <SearchContext.Provider value={{ query, setQuery }}>
       <div className="h-[100dvh] bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]">
         <div className="flex h-full overflow-hidden rounded-[22px]">
@@ -783,5 +786,6 @@ export default function App() {
       </div>
       <Toaster />
     </SearchContext.Provider>
+    </ThemeContext.Provider>
   );
 }
