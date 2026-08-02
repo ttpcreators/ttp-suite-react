@@ -288,13 +288,23 @@ export function Stats() {
   const months = fullMonths.slice(-8);
   const caSeries = months.map((m) => monthAgg.get(m)?.tot ?? 0);
   const paidSeries = months.map((m) => monthAgg.get(m)?.paid ?? 0);
-  const hasCaSeries = caSeries.length >= 2 && caSeries.some((v) => v > 0);
-  const caDelta = hasCaSeries ? momDelta(caSeries) : null;
-  const paidDelta = hasCaSeries ? momDelta(paidSeries) : null;
-  // Valeurs du mois PRÉCÉDENT → pied comparatif « Vs <mois> : <valeur> » sur les cartes.
-  const prevMonthLbl = months.length >= 2 ? monthLabel(months[months.length - 2]) : "";
-  const prevCa = hasCaSeries ? formatEuro(caSeries[caSeries.length - 2]) : undefined;
-  const prevPaid = hasCaSeries ? formatEuro(paidSeries[paidSeries.length - 2]) : undefined;
+  // Comparaison mois-sur-mois FIABLE : on prend les 2 derniers mois AVEC activité.
+  // (monthsBetween comble les mois vides avec 0 → sans ça, un mois « trou » juste avant
+  //  le dernier annulerait le badge, car on ne divise pas par 0.)
+  const lastTwoWithData = (series: number[]) => {
+    const pts = months.map((m, i) => ({ m, v: series[i] })).filter((x) => x.v > 0);
+    const last = pts[pts.length - 1];
+    const prev = pts[pts.length - 2];
+    return {
+      prevValue: prev ? prev.v : null,
+      prevLabel: prev ? monthLabel(prev.m) : "",
+      delta: last && prev && prev.v > 0 ? ((last.v - prev.v) / prev.v) * 100 : null,
+    };
+  };
+  const caMoM = lastTwoWithData(caSeries);
+  const paidMoM = lastTwoWithData(paidSeries);
+  const prevCa = caMoM.prevValue != null ? formatEuro(caMoM.prevValue) : undefined;
+  const prevPaid = paidMoM.prevValue != null ? formatEuro(paidMoM.prevValue) : undefined;
 
   // Série complète (toutes les échéances) pour le graphique vedette avec sélecteur de période.
   const revenuePoints = fullMonths.map((m) => ({
@@ -383,18 +393,18 @@ export function Stats() {
           icon={Receipt}
           label="CA facturé"
           value={formatEuro(totalCA)}
-          delta={caDelta}
+          delta={caMoM.delta}
           lastValue={prevCa}
-          compareLabel={prevMonthLbl ? `Vs ${prevMonthLbl}` : undefined}
+          compareLabel={caMoM.prevLabel ? `Vs ${caMoM.prevLabel}` : undefined}
           hint={`${data.invoices.length} facture${data.invoices.length > 1 ? "s" : ""}`}
         />
         <StatCard
           icon={Wallet}
           label="Encaissé"
           value={formatEuro(byStatus.payee)}
-          delta={paidDelta}
+          delta={paidMoM.delta}
           lastValue={prevPaid}
-          compareLabel={prevMonthLbl ? `Vs ${prevMonthLbl}` : undefined}
+          compareLabel={paidMoM.prevLabel ? `Vs ${paidMoM.prevLabel}` : undefined}
           hint="payé"
         />
         <StatCard icon={Clock} label="En attente + retard" value={formatEuro(byStatus.attente + byStatus.retard)} hint="à suivre" />
