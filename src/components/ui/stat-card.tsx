@@ -1,3 +1,4 @@
+import { type ReactNode } from "react";
 import { ArrowUp, ArrowDown, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,9 @@ export function StatCard({
   spark,
   sparkColor = "#2b7fff",
   hint,
+  lastValue,
+  compareLabel = "Vs mois dernier",
+  action,
 }: {
   icon?: LucideIcon;
   label: string;
@@ -56,15 +60,28 @@ export function StatCard({
   spark?: number[];
   sparkColor?: string;
   hint?: string;
+  /** Valeur de comparaison (mois précédent…) → pied « Vs mois dernier : <valeur> ». */
+  lastValue?: string;
+  compareLabel?: string;
+  /** Emplacement en haut à droite (ex : menu ⋯ d'actions). */
+  action?: ReactNode;
 }) {
   const hasDelta = delta != null && Number.isFinite(delta);
   const up = (delta ?? 0) >= 0;
-  const footer = spark && spark.length >= 2 ? deltaLabel : deltaLabel ?? hint;
+  const compareFooter = lastValue ? (
+    <>
+      {compareLabel} : <span className="font-medium text-foreground">{lastValue}</span>
+    </>
+  ) : null;
+  const footer = compareFooter ?? (spark && spark.length >= 2 ? deltaLabel : deltaLabel ?? hint);
   return (
     <div className="flex flex-col rounded-xl border border-border bg-surface p-4 shadow-sm">
-      {/* Titre */}
-      <div className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
-        {Icon && <Icon className="h-3.5 w-3.5 text-faint" />} {label}
+      {/* Titre (+ action optionnelle à droite) */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+          {Icon && <Icon className="h-3.5 w-3.5 text-faint" />} {label}
+        </div>
+        {action && <div className="-me-1 -mt-0.5 shrink-0">{action}</div>}
       </div>
 
       {/* Valeur + variation */}
