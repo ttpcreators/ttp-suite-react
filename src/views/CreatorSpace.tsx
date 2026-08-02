@@ -880,18 +880,29 @@ export function CreatorSpace({
     return [...m.values()].sort((a, b) => (toNum(b.followers) ?? 0) - (toNum(a.followers) ?? 0));
   })();
   const totalFollowers = platformLatest.reduce((a, e) => a + (toNum(e.followers) ?? 0), 0);
-  // Évolution des abonnés (depuis les mesures agence) — 1 point par date (valeur max = plateforme principale).
-  const followerPoints = (() => {
-    const byDate = new Map<number, number>();
+  // Évolution des abonnés (mesures agence) — UNE série par PLATEFORME (IG/TikTok/…),
+  // pour distinguer les réseaux ; si le créateur n'en a qu'un, ça reste une courbe.
+  const followerSeries = (() => {
+    const ORDER = ["instagram", "tiktok", "youtube", "x", "snapchat"];
+    const byDate = new Map<number, Record<string, number>>();
+    const platsSet = new Set<string>();
     for (const e of suivi ?? []) {
       const t = frTime(e.date);
-      if (!t) continue;
-      byDate.set(t, Math.max(byDate.get(t) ?? 0, toNum(e.followers) ?? 0));
+      const f = toNum(e.followers) ?? 0;
+      const pf = (e.platform || "").toLowerCase();
+      if (!t || f <= 0 || !pf) continue;
+      platsSet.add(pf);
+      const rec = byDate.get(t) ?? {};
+      rec[pf] = Math.max(rec[pf] ?? 0, f);
+      byDate.set(t, rec);
     }
-    return [...byDate.entries()]
+    const platforms = [...ORDER.filter((p) => platsSet.has(p)), ...[...platsSet].filter((p) => !ORDER.includes(p))];
+    const points = [...byDate.entries()]
       .sort((a, b) => a[0] - b[0])
-      .map(([t, f]) => ({ label: new Intl.DateTimeFormat("fr-FR", { month: "short" }).format(new Date(t)).replace(".", ""), abonnes: f }))
-      .filter((p) => p.abonnes > 0);
+      .map(([t, rec]) => ({ label: new Intl.DateTimeFormat("fr-FR", { month: "short" }).format(new Date(t)).replace(".", ""), ...rec }));
+    const last = points[points.length - 1] as unknown as Record<string, number> | undefined;
+    const lastTotal = last ? platforms.reduce((s, p) => s + (typeof last[p] === "number" ? last[p] : 0), 0) : 0;
+    return { points, platforms, lastTotal };
   })();
   const filteredTodos =
     todoFilter === "encours" ? todos.filter((t) => !t.done) : todoFilter === "terminees" ? todos.filter((t) => t.done) : todos;
@@ -1164,15 +1175,15 @@ export function CreatorSpace({
                     <div className="text-sm font-semibold text-foreground">Évolution des abonnés</div>
                     <div className="mt-0.5 text-[11px] text-faint">D'après les mesures de ton agence</div>
                   </div>
-                  {followerPoints.length > 0 && (
+                  {followerSeries.points.length > 0 && (
                     <div className="text-2xl font-bold tracking-tight text-foreground">
-                      {fmtCompact(followerPoints[followerPoints.length - 1].abonnes)}
+                      {fmtCompact(followerSeries.lastTotal)}
                     </div>
                   )}
                 </div>
-                {followerPoints.length >= 2 ? (
+                {followerSeries.points.length >= 2 ? (
                   <Suspense fallback={<div className="mt-4 h-[170px] animate-pulse rounded-xl bg-panel/50" />}>
-                    <FollowerArea points={followerPoints} />
+                    <FollowerArea points={followerSeries.points} platforms={followerSeries.platforms} />
                   </Suspense>
                 ) : (
                   <div className="mt-4 grid h-[120px] place-items-center rounded-xl bg-panel/40 px-4 text-center text-xs leading-relaxed text-muted-foreground">
@@ -1456,7 +1467,7 @@ export function CreatorSpace({
               </AnimatedBadge>
             ) : (
               <div className="flex flex-col gap-4">
-                {followerPoints.length >= 2 && (
+                {followerSeries.points.length >= 2 && (
                   <Card index={0}>
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -1464,11 +1475,11 @@ export function CreatorSpace({
                         <div className="mt-0.5 text-[11px] text-faint">D'après les mesures de ton agence</div>
                       </div>
                       <div className="text-2xl font-bold tracking-tight text-foreground">
-                        {fmtCompact(followerPoints[followerPoints.length - 1].abonnes)}
+                        {fmtCompact(followerSeries.lastTotal)}
                       </div>
                     </div>
                     <Suspense fallback={<div className="mt-4 h-[170px] animate-pulse rounded-xl bg-panel/50" />}>
-                      <FollowerArea points={followerPoints} />
+                      <FollowerArea points={followerSeries.points} platforms={followerSeries.platforms} />
                     </Suspense>
                   </Card>
                 )}
