@@ -291,7 +291,6 @@ export function Stats() {
   const hasCaSeries = caSeries.length >= 2 && caSeries.some((v) => v > 0);
   const caDelta = hasCaSeries ? momDelta(caSeries) : null;
   const paidDelta = hasCaSeries ? momDelta(paidSeries) : null;
-  const lastMonthLbl = months.length ? monthLabel(months[months.length - 1]) : "";
   // Valeurs du mois PRÉCÉDENT → pied comparatif « Vs <mois> : <valeur> » sur les cartes.
   const prevMonthLbl = months.length >= 2 ? monthLabel(months[months.length - 2]) : "";
   const prevCa = hasCaSeries ? formatEuro(caSeries[caSeries.length - 2]) : undefined;
@@ -385,9 +384,6 @@ export function Stats() {
           label="CA facturé"
           value={formatEuro(totalCA)}
           delta={caDelta}
-          deltaLabel={hasCaSeries ? `évolution mensuelle · ${lastMonthLbl}` : undefined}
-          spark={hasCaSeries ? caSeries : undefined}
-          sparkColor="#2b7fff"
           lastValue={prevCa}
           compareLabel={prevMonthLbl ? `Vs ${prevMonthLbl}` : undefined}
           hint={`${data.invoices.length} facture${data.invoices.length > 1 ? "s" : ""}`}
@@ -397,9 +393,6 @@ export function Stats() {
           label="Encaissé"
           value={formatEuro(byStatus.payee)}
           delta={paidDelta}
-          deltaLabel={hasCaSeries ? "vs mois précédent" : undefined}
-          spark={hasCaSeries ? paidSeries : undefined}
-          sparkColor="#16a34a"
           lastValue={prevPaid}
           compareLabel={prevMonthLbl ? `Vs ${prevMonthLbl}` : undefined}
           hint="payé"

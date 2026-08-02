@@ -40,7 +40,6 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
  * (optionnelle). Style aligné sur la DA.
  */
 export function StatCard({
-  icon: Icon,
   label,
   value,
   delta,
@@ -75,26 +74,26 @@ export function StatCard({
   ) : null;
   const footer = compareFooter ?? (spark && spark.length >= 2 ? deltaLabel : deltaLabel ?? hint);
   return (
-    <div className="flex flex-col rounded-xl border border-border bg-surface p-4 shadow-sm">
+    <div className="flex flex-col rounded-xl border border-border bg-surface p-5 shadow-sm">
       {/* Titre (+ action optionnelle à droite) */}
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
-          {Icon && <Icon className="h-3.5 w-3.5 text-faint" />} {label}
-        </div>
+        <div className="text-sm font-medium text-muted-foreground">{label}</div>
         {action && <div className="-me-1 -mt-0.5 shrink-0">{action}</div>}
       </div>
 
-      {/* Valeur + variation */}
-      <div className="mt-2.5 flex flex-wrap items-center gap-2">
-        <span className="whitespace-nowrap text-2xl font-bold tracking-tight text-foreground">{value}</span>
+      {/* Valeur + variation (badge pilule coloré) */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
+        <span className="whitespace-nowrap text-2xl font-semibold tracking-tight text-foreground">{value}</span>
         {hasDelta && (
           <span
             className={cn(
-              "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold",
-              up ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/12 text-rose-500",
+              "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium",
+              up
+                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
+                : "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400",
             )}
           >
-            {up ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+            {up ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />}
             {Math.abs(delta as number).toFixed(1).replace(".", ",")} %
           </span>
         )}
@@ -109,7 +108,7 @@ export function StatCard({
 
       {/* Pied : évolution ou contexte, séparé par un filet */}
       {footer && (
-        <div className="mt-auto border-t border-border pt-2.5 text-[11px] text-muted-foreground">{footer}</div>
+        <div className="mt-3 border-t border-border pt-2.5 text-xs text-muted-foreground">{footer}</div>
       )}
     </div>
   );
