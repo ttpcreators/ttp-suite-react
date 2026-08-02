@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Users, TrendingUp, TrendingDown, Receipt, Wallet, Clock, FileText, Contact as ContactIcon, Activity } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { parseAmount, formatEuro } from "@/lib/appState";
+import { parseAmount, formatEuro, useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { titleCase, cn } from "@/lib/utils";
 import { invMonthKey, monthsBetween, momDelta, monthLabel, fmtCompact } from "@/lib/timeSeries";
 import { useLiveKey } from "@/lib/useLive";
@@ -27,6 +27,9 @@ import {
 type CreatorRow = { name: string; followers: string | null; er: string | null; reach: string | null; ca: string | null; status: string | null };
 type InvRow = { amount: string; status: string; creator: string | null; date: string | null };
 type CountRow = { id: string };
+
+/** Instantané mensuel des indicateurs « état du moment » (blob `statsSnapshots`). */
+type Snap = { activeCreators: number; totalFollowers: number; avgEr: number; briefs: number };
 
 type StatsData = {
   creators: CreatorRow[];
@@ -210,6 +213,9 @@ export function Stats() {
   const [cmpMonths, setCmpMonths] = useState<1 | 3 | 6 | 12>(3);
   const [cmpAgainst, setCmpAgainst] = useState<"prev" | "year">("prev");
   const live = useLiveKey();
+  // Instantanés mensuels (blob agence) → variation MoM des cartes « état du moment ».
+  const { data: snaps } = useAppState<Record<string, Snap>>((s: AppState) => (s["statsSnapshots"] as Record<string, Snap>) ?? {});
+  const snapWrote = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -245,6 +251,26 @@ export function Stats() {
     };
   }, [live]);
 
+  // Enregistre (1×/montage) l'instantané du mois courant → permet la variation MoM
+  // des cartes « état du moment » dès qu'un mois précédent existe. Fusion atomique.
+  useEffect(() => {
+    if (!data || snapWrote.current) return;
+    snapWrote.current = true;
+    const ym = new Date().toISOString().slice(0, 7); // "aaaa-mm"
+    const cur: Snap = {
+      activeCreators: data.creators.filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif").length,
+      totalFollowers: data.creators.reduce((s, c) => s + parseCompact(c.followers), 0),
+      avgEr: (() => { const v = data.creators.map((c) => parsePct(c.er)).filter((x) => x > 0); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : 0; })(),
+      briefs: data.briefs,
+    };
+    (async () => {
+      invalidateAppState();
+      const fresh = ((await getAppState())["statsSnapshots"] as Record<string, Snap>) ?? {};
+      if (JSON.stringify(fresh[ym]) === JSON.stringify(cur)) return; // déjà à jour ce mois
+      await saveAppStateKey("statsSnapshots", { ...fresh, [ym]: cur });
+    })();
+  }, [data]);
+
   if (error) {
     return <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Impossible de charger les statistiques.</div>;
   }
@@ -261,6 +287,13 @@ export function Stats() {
   const totalFollowers = data.creators.reduce((s, c) => s + parseCompact(c.followers), 0);
   const erVals = data.creators.map((c) => parsePct(c.er)).filter((v) => v > 0);
   const avgEr = erVals.length ? erVals.reduce((s, v) => s + v, 0) / erVals.length : 0;
+
+  // Variation MoM depuis l'instantané du mois PRÉCÉDENT (le plus récent < mois courant).
+  const curYM = new Date().toISOString().slice(0, 7);
+  const prevKey = Object.keys(snaps ?? {}).filter((k) => k < curYM).sort().pop();
+  const prevSnap = prevKey ? (snaps as Record<string, Snap>)[prevKey] : undefined;
+  const prevLbl = prevKey ? monthLabel(prevKey) : "";
+  const snapDelta = (curVal: number, key: keyof Snap) => (prevSnap && prevSnap[key] > 0 ? ((curVal - prevSnap[key]) / prevSnap[key]) * 100 : null);
 
   const byStatus = { payee: 0, attente: 0, retard: 0, brouillon: 0 };
   for (const iv of data.invoices) {
@@ -408,10 +441,42 @@ export function Stats() {
           hint="payé"
         />
         <StatCard icon={Clock} label="En attente + retard" value={formatEuro(byStatus.attente + byStatus.retard)} hint="à suivre" />
-        <StatCard icon={Users} label="Créateurs actifs" value={`${activeCreators}`} hint={`${data.creators.length} au total`} />
-        <StatCard icon={TrendingUp} label="Followers cumulés" value={fmtCompact(totalFollowers)} hint="tous créateurs" />
-        <StatCard icon={Activity} label="Engagement moyen" value={`${avgEr.toFixed(1).replace(".", ",")} %`} hint={`${erVals.length} mesuré${erVals.length > 1 ? "s" : ""}`} />
-        <StatCard icon={FileText} label="Briefs" value={`${data.briefs}`} hint={`${data.ideas} idées · ${data.todos} à faire`} />
+        <StatCard
+          icon={Users}
+          label="Créateurs actifs"
+          value={`${activeCreators}`}
+          delta={snapDelta(activeCreators, "activeCreators")}
+          lastValue={prevSnap ? String(prevSnap.activeCreators) : undefined}
+          compareLabel={prevLbl ? `Vs ${prevLbl}` : undefined}
+          hint={`${data.creators.length} au total`}
+        />
+        <StatCard
+          icon={TrendingUp}
+          label="Followers cumulés"
+          value={fmtCompact(totalFollowers)}
+          delta={snapDelta(totalFollowers, "totalFollowers")}
+          lastValue={prevSnap ? fmtCompact(prevSnap.totalFollowers) : undefined}
+          compareLabel={prevLbl ? `Vs ${prevLbl}` : undefined}
+          hint="tous créateurs"
+        />
+        <StatCard
+          icon={Activity}
+          label="Engagement moyen"
+          value={`${avgEr.toFixed(1).replace(".", ",")} %`}
+          delta={snapDelta(avgEr, "avgEr")}
+          lastValue={prevSnap ? `${prevSnap.avgEr.toFixed(1).replace(".", ",")} %` : undefined}
+          compareLabel={prevLbl ? `Vs ${prevLbl}` : undefined}
+          hint={`${erVals.length} mesuré${erVals.length > 1 ? "s" : ""}`}
+        />
+        <StatCard
+          icon={FileText}
+          label="Briefs"
+          value={`${data.briefs}`}
+          delta={snapDelta(data.briefs, "briefs")}
+          lastValue={prevSnap ? String(prevSnap.briefs) : undefined}
+          compareLabel={prevLbl ? `Vs ${prevLbl}` : undefined}
+          hint={`${data.ideas} idées · ${data.todos} à faire`}
+        />
         <StatCard icon={ContactIcon} label="Contacts" value={`${data.contacts}`} hint="réseau agence" />
       </div>
 
