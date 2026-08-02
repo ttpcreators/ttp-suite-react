@@ -57,6 +57,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { AvatarUpload } from "@/components/ui/avatar-upload";
 import { SuiviPanel, type SuiviEntry } from "@/views/EngagementSuivi";
 import { CreatorRoadmap } from "@/views/CreatorTracking";
+import { ScaledPreview } from "@/components/ui/scaled-preview";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, type Gift as GiftRow } from "@/lib/gifting";
 
 const BASE = import.meta.env.BASE_URL;
@@ -2159,7 +2160,11 @@ export function CreatorSpace({
                   vit dans la page elle-même — pas de lien PDF en dur, il est versionné). */}
               {mkLive === true && mkUrl ? (
                 <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-                  <iframe title="Mon media kit" src={mkUrl} className="h-[68vh] w-full bg-white" />
+                  {/* Desktop : iframe pleine largeur. Mobile : rendu paysage « ordinateur » mis à l'échelle. */}
+                  <iframe title="Mon media kit" src={mkUrl} className="hidden h-[68vh] w-full bg-white md:block" />
+                  <div className="md:hidden">
+                    <ScaledPreview src={mkUrl} title="Mon media kit" height="60vh" />
+                  </div>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-border bg-surface px-6 py-12 text-center shadow-sm">
