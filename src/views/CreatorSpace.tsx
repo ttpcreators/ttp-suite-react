@@ -971,30 +971,35 @@ export function CreatorSpace({
       </div>
     ) : null;
 
-  const coordRow = (label: string, val: string | null, copyable = false, platform?: string) => (
-    <div className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-0">
-      <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-faint" title={label}>
-        {platform ? <PlatformIcon platform={platform} className="h-4 w-4 text-foreground" /> : null}
-        {platform ? <span className="sr-only">{label}</span> : label}
-      </span>
-      <div className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate text-xs text-foreground">{val || "—"}</span>
-        {copyable && val && (
+  // Ligne de coordonnée : label (+ icône réseau) au-dessus, valeur dessous (qui peut
+  // passer à la ligne, plus de troncature). Les champs vides sont masqués (plus épuré).
+  const coordRow = (label: string, val: string | null, copyable = false, platform?: string) => {
+    if (!val || !val.trim() || val === "—") return null;
+    return (
+      <div className="flex items-start justify-between gap-2 border-b border-border py-2.5 last:border-0">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+            {platform ? <PlatformIcon platform={platform} className="h-3.5 w-3.5 text-foreground" /> : null}
+            {label}
+          </div>
+          <div className="mt-1 break-words text-[13px] font-medium text-foreground">{val}</div>
+        </div>
+        {copyable && (
           <button
             type="button"
             onClick={() => {
               navigator.clipboard?.writeText(val);
               toast(`${label} copié ✓`);
             }}
-            className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+            className="mt-4 grid h-7 w-7 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-foreground"
             title={`Copier ${label.toLowerCase()}`}
           >
-            <Copy className="h-3 w-3" />
+            <Copy className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
-    </div>
-  );
+    );
+  };
 
   const editInput = (label: string, k: keyof Creator, placeholder?: string, type?: string) => (
     <label className="flex flex-col gap-1">
