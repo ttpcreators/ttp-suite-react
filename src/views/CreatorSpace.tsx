@@ -1130,8 +1130,8 @@ export function CreatorSpace({
           {/* Header (façon Aperçu agence : petit bonjour + gros titre, avatar à droite) */}
           <div className="mb-5 flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="mb-1.5 text-sm text-foreground">Bonjour {firstName} ✌️</div>
-              <div className="text-[26px] font-semibold tracking-tight md:text-[30px]">Mon espace</div>
+              <div className="mb-1.5 text-sm text-foreground">Ton espace ✌️</div>
+              <div className="text-[26px] font-semibold tracking-tight md:text-[30px]">Hello {firstName}</div>
             </div>
             <AvatarUpload
               creatorId={creator?.id}
