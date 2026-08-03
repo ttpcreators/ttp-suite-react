@@ -214,6 +214,7 @@ function frTime(s: string): number {
 
 // Graphique recharts lazy-chargé : sort la lib (~101 Ko gzip) du premier écran créateur.
 const FollowerArea = lazy(() => import("./charts/FollowerArea"));
+const CreatorStatsCard = lazy(() => import("./charts/CreatorStatsCard"));
 
 /** Sous-menu déployé d'une famille (liste ses pages). */
 function CreatorMobileMenu({ ids, onSelect }: { ids: Tab[]; onSelect: (id: Tab) => void }) {
@@ -1551,6 +1552,11 @@ export function CreatorSpace({
               </AnimatedBadge>
             ) : (
               <div className="flex flex-col gap-4">
+                {suivi.length > 0 && (
+                  <Suspense fallback={<div className="h-[320px] animate-pulse rounded-2xl bg-panel/50" />}>
+                    <CreatorStatsCard entries={suivi} />
+                  </Suspense>
+                )}
                 {followerSeries.points.length >= 2 && (
                   <Card index={0}>
                     <div className="flex items-start justify-between gap-3">
