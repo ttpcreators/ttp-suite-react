@@ -13,7 +13,7 @@ import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useEffect, useRef, useState } from "react";
-import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, Trash2, type LucideIcon } from "lucide-react";
+import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, Trash2, BarChart3, type LucideIcon } from "lucide-react";
 
 type Row = {
   id: string;
@@ -32,6 +32,7 @@ const DOC_TYPE_META: Record<string, TypeMeta> = {
   brief: { label: "Brief", icon: PencilLine, className: "bg-indigo/15 text-indigo", tagClassName: "bg-indigo/10 text-indigo" },
   mediakit: { label: "Media kit", icon: LayoutGrid, className: "bg-signal/15 text-signaltext", tagClassName: "bg-signal/10 text-signaltext" },
   facture: { label: "Facture", icon: ReceiptText, className: "bg-cyan/15 text-cyan", tagClassName: "bg-cyan/10 text-cyan" },
+  stats: { label: "Stats", icon: BarChart3, className: "bg-amber/15 text-amber", tagClassName: "bg-amber/10 text-amber" },
   autre: { label: "Document", icon: FileText, className: "bg-primary/15 text-primary", tagClassName: "bg-primary/10 text-primary" },
 };
 const metaFor = (type: string): TypeMeta => DOC_TYPE_META[type] ?? DOC_TYPE_META.autre;
