@@ -30,7 +30,7 @@ export function GooeyTabs({
             {value === t.value && (
               <motion.div
                 layoutId={`gootab-${fid}`}
-                className="absolute inset-0 rounded-lg bg-surface"
+                className="absolute inset-0 rounded-lg bg-primary"
                 transition={{ type: "spring", bounce: 0.12, duration: 0.5 }}
               />
             )}
@@ -45,7 +45,7 @@ export function GooeyTabs({
           onClick={() => onChange(t.value)}
           className={cn(
             "relative z-10 flex-1 rounded-lg text-[12px] font-medium transition-colors",
-            value === t.value ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+            value === t.value ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
           {t.label}
