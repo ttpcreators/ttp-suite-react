@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { cn } from "@/lib/utils";
+import { cn, titleCase } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { useLiveKey } from "@/lib/useLive";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -107,6 +107,7 @@ export function Documents() {
   const [sort, setSort] = useState("recent");
   const [period, setPeriod] = useState("");
   const [openType, setOpenType] = useState<string | null>(null); // dossier ouvert (null = grille)
+  const [creatorFilter, setCreatorFilter] = useState(""); // "" = tous les créateurs
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -292,13 +293,16 @@ export function Documents() {
   // `.filter()` renvoie un nouveau tableau → le `.sort()` ne mute jamais `rows`.
   const periods = periodsFrom((rows ?? []).map((r) => r.created_at));
   const filtered = (rows ?? [])
-    .filter((row) => matchQuery(query, row.name, row.type, row.creator) && inPeriod(row.created_at, period))
+    .filter((row) => matchQuery(query, row.name, row.type, row.creator) && inPeriod(row.created_at, period) && (!creatorFilter || (row.creator ?? "") === creatorFilter))
     .sort((a, b) => {
       if (sort === "ancien") return timeOf(a) - timeOf(b);
       if (sort === "nom") return (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" });
       if (sort === "type") return (a.type || "").localeCompare(b.type || "", "fr") || timeOf(b) - timeOf(a);
       return timeOf(b) - timeOf(a); // "recent" (défaut) : plus récents d'abord
     });
+
+  // Créateurs ayant au moins un document (pour le sélecteur « par créateur »).
+  const docCreators = [...new Set(((rows ?? []).map((r) => r.creator).filter(Boolean) as string[]))].sort((a, b) => a.localeCompare(b, "fr"));
 
   // Dossiers « portails » par type — pour ne pas se noyer dans la masse.
   const TYPE_ORDER = ["stats", "facture", "mediakit", "brief", "autre"];
@@ -375,7 +379,19 @@ export function Documents() {
       {rows !== null && rows.length > 1 && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <FilterBar value={sort} options={SORT_OPTIONS} onChange={setSort} placeholder="Trier" />
-          {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} />}
+          <div className="flex flex-wrap items-center gap-2">
+            {docCreators.length > 0 && (
+              <select
+                value={creatorFilter}
+                onChange={(e) => setCreatorFilter(e.target.value)}
+                className="rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15"
+              >
+                <option value="">Tous les créateurs</option>
+                {docCreators.map((c) => <option key={c} value={c}>{titleCase(c)}</option>)}
+              </select>
+            )}
+            {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} />}
+          </div>
         </div>
       )}
 
