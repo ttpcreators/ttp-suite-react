@@ -58,6 +58,7 @@ import { AvatarUpload } from "@/components/ui/avatar-upload";
 import { SuiviPanel, type SuiviEntry } from "@/views/EngagementSuivi";
 import { CreatorRoadmap } from "@/views/CreatorTracking";
 import { ScaledPreview } from "@/components/ui/scaled-preview";
+import { WelcomeModal } from "@/components/ui/welcome-modal";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, type Gift as GiftRow } from "@/lib/gifting";
 
 const BASE = import.meta.env.BASE_URL;
@@ -604,6 +605,7 @@ export function CreatorSpace({
   // `creator-uploads/<auth.uid()>/…` → ligne `documents` (type « stats ») + notif agence.
   const statsFileRef = useRef<HTMLInputElement>(null);
   const [statsUploading, setStatsUploading] = useState(false);
+  const [statsModalOpen, setStatsModalOpen] = useState(false);
   const sendStatsFiles = async (files: FileList | null) => {
     const list = Array.from(files ?? []).slice(0, 6); // 6 captures max
     if (list.length === 0) return;
@@ -646,6 +648,7 @@ export function CreatorSpace({
       if (ok > 0) {
         notifyAgency("stats", name, `${ok} capture${ok > 1 ? "s" : ""} de stats — ${titleCase(name)}`);
         toast(`${ok} capture${ok > 1 ? "s" : ""} envoyée${ok > 1 ? "s" : ""} à ton agence ✓`);
+        setStatsModalOpen(false);
       }
     } finally {
       setStatsUploading(false);
@@ -1224,15 +1227,27 @@ export function CreatorSpace({
             <div className="flex flex-col gap-4">
               <PushCard />
 
-              {/* Envoyer mes stats — guide + upload direct (arrive chez l'agence) */}
-              <Card index={0}>
-                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              {/* Envoyer mes stats — barre compacte + modale (guide + upload) */}
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-3.5 shadow-sm">
+                <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
                   <BarChart3 className="h-4 w-4 text-primary" /> Envoyer mes stats
                 </div>
-                <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
-                  Pour garder ton media kit à jour, envoie à ton agence les captures de tes statistiques — c'est ce qui prouve ton audience aux marques.
-                </p>
-                <div className="mt-3 rounded-xl bg-panel/50 p-3.5 text-[12px] leading-relaxed text-muted-foreground">
+                <button type="button" onClick={() => setStatsModalOpen(true)} className="rounded-lg bg-primary px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
+                  Envoyer
+                </button>
+              </div>
+              <input ref={statsFileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => sendStatsFiles(e.target.files)} />
+              <WelcomeModal
+                open={statsModalOpen}
+                onClose={() => setStatsModalOpen(false)}
+                icon={<BarChart3 className="h-5 w-5 text-primary" />}
+                title="Envoyer mes stats"
+                description="Pour garder ton media kit à jour, envoie à ton agence les captures de tes statistiques — c'est ce qui prouve ton audience aux marques."
+                primaryLabel={statsUploading ? "Envoi en cours…" : "Envoyer mes captures"}
+                onPrimary={() => statsFileRef.current?.click()}
+                primaryDisabled={statsUploading}
+              >
+                <div className="rounded-xl bg-panel/50 p-3.5 text-[12px] leading-relaxed text-muted-foreground">
                   <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-faint">Ce qu'il faut screenshoter (sur 30 jours)</div>
                   <ul className="flex flex-col gap-1.5">
                     <li className="flex gap-2"><PlatformIcon platform="instagram" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground" /><span><span className="font-medium text-foreground">Instagram</span> → Compte pro → <span className="font-medium text-foreground">Statistiques (Insights)</span> : vues, comptes touchés, taux d'engagement, abonnés.</span></li>
@@ -1241,17 +1256,8 @@ export function CreatorSpace({
                   </ul>
                   <div className="mt-2 text-faint">Astuce : captures nettes, chiffres bien visibles 📸</div>
                 </div>
-                <input ref={statsFileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => sendStatsFiles(e.target.files)} />
-                <button
-                  type="button"
-                  onClick={() => statsFileRef.current?.click()}
-                  disabled={statsUploading}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-[13px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
-                >
-                  <Upload className="h-4 w-4" /> {statsUploading ? "Envoi en cours…" : "Envoyer mes captures"}
-                </button>
-                <div className="mt-1.5 text-center text-[10px] text-faint">Jusqu'à 6 images · elles arrivent directement chez ton agence, qui est notifiée.</div>
-              </Card>
+                <div className="mt-2 text-center text-[10px] text-faint">Jusqu'à 6 images · elles arrivent directement chez ton agence, qui est notifiée.</div>
+              </WelcomeModal>
 
               {/* Évolution des abonnés — même graphique que l'Aperçu agence */}
               <Card index={1}>
