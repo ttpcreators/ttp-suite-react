@@ -13,7 +13,7 @@ import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useEffect, useRef, useState } from "react";
-import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, Trash2, BarChart3, type LucideIcon } from "lucide-react";
+import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, Trash2, BarChart3, ChevronLeft, type LucideIcon } from "lucide-react";
 
 type Row = {
   id: string;
@@ -106,6 +106,7 @@ export function Documents() {
   const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string; kind: FileKind; html?: string } | null>(null);
   const [sort, setSort] = useState("recent");
   const [period, setPeriod] = useState("");
+  const [openType, setOpenType] = useState<string | null>(null); // dossier ouvert (null = grille)
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -299,6 +300,49 @@ export function Documents() {
       return timeOf(b) - timeOf(a); // "recent" (défaut) : plus récents d'abord
     });
 
+  // Dossiers « portails » par type — pour ne pas se noyer dans la masse.
+  const TYPE_ORDER = ["stats", "facture", "mediakit", "brief", "autre"];
+  const normType = (t: string | null | undefined) => (t && t in DOC_TYPE_META && t !== "autre" ? t : "autre");
+  const typeCount: Record<string, number> = {};
+  for (const r of filtered) typeCount[normType(r.type)] = (typeCount[normType(r.type)] ?? 0) + 1;
+  const folders = TYPE_ORDER.filter((t) => (typeCount[t] ?? 0) > 0);
+
+  // Carte document réutilisable (liste plate en recherche + dans un dossier).
+  const docCard = (row: Row) => {
+    const meta = metaFor(row.type);
+    const Icon = meta.icon;
+    const details = [row.size, formatDate(row.created_at)].filter(Boolean).join(" · ");
+    return (
+      <li key={row.id} className="flex items-center gap-3.5 rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm transition-colors hover:bg-rowhover">
+        <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", meta.className)}>
+          <Icon className="size-4" />
+        </div>
+        <button type="button" onClick={() => openDoc(row)} className="min-w-0 flex-1 text-left" title="Ouvrir / télécharger">
+          <div className="truncate text-[13px] font-semibold text-foreground hover:underline">{row.name}</div>
+          <div className="mt-0.5 truncate text-[10px] text-faint">{details}</div>
+        </button>
+        {row.creator ? (
+          <span className="hidden shrink-0 whitespace-nowrap rounded-md bg-rowhover px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground sm:inline">
+            {row.creator}
+          </span>
+        ) : null}
+        <span className={cn("shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide", meta.tagClassName)}>{meta.label}</span>
+        <ActionMenu
+          items={[
+            ...(row.path
+              ? [
+                  { key: "preview", label: "Prévisualiser", icon: Eye, onClick: () => preview(row) },
+                  { key: "share", label: "Partager le lien", icon: Share2, onClick: () => share(row) },
+                  { key: "download", label: "Télécharger", icon: Download, onClick: () => openDoc(row) },
+                ]
+              : []),
+            { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => del(row), confirm: { title: "Supprimer le document", message: `Supprimer « ${row.name} » ? Cette action est irréversible.` } },
+          ]}
+        />
+      </li>
+    );
+  };
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -348,56 +392,53 @@ export function Documents() {
           <div className="rounded-2xl border border-border bg-surface px-4 py-6 text-sm text-muted-foreground shadow-sm">Aucun document — ajoute le premier 📎</div>
         ) : query.trim() && filtered.length === 0 ? (
           <div className="rounded-2xl border border-border bg-surface px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">Aucun résultat pour « {query} »</div>
+        ) : query.trim() ? (
+          /* Recherche : liste plate transversale */
+          <ul className="flex flex-col gap-2.5">{filtered.map(docCard)}</ul>
+        ) : openType ? (
+          /* Dossier ouvert */
+          <div>
+            <button
+              type="button"
+              onClick={() => setOpenType(null)}
+              className="mb-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Tous les dossiers
+            </button>
+            <div className="mb-2.5 flex items-center gap-2 text-sm font-semibold text-foreground">
+              {(() => {
+                const M = metaFor(openType);
+                return (
+                  <>
+                    <span className={cn("grid size-7 place-items-center rounded-lg", M.className)}><M.icon className="size-3.5" /></span>
+                    {M.label} <span className="font-normal text-faint">· {typeCount[openType]}</span>
+                  </>
+                );
+              })()}
+            </div>
+            <ul className="flex flex-col gap-2.5">{filtered.filter((r) => normType(r.type) === openType).map(docCard)}</ul>
+          </div>
         ) : (
-          <ul className="flex flex-col gap-2.5">
-            {filtered.map((row) => {
-              const meta = metaFor(row.type);
-              const Icon = meta.icon;
-              const details = [row.size, formatDate(row.created_at)].filter(Boolean).join(" · ");
+          /* Grille de dossiers par type (« portails ») */
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {folders.map((t) => {
+              const M = metaFor(t);
               return (
-                <li key={row.id} className="flex items-center gap-3.5 rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm transition-colors hover:bg-rowhover">
-                  <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", meta.className)}>
-                    <Icon className="size-4" />
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setOpenType(t)}
+                  className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 text-left shadow-sm transition-colors hover:bg-rowhover"
+                >
+                  <div className={cn("flex size-11 shrink-0 items-center justify-center rounded-xl", M.className)}><M.icon className="size-5" /></div>
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-semibold text-foreground">{M.label}</div>
+                    <div className="text-[11px] text-faint">{typeCount[t]} document{typeCount[t] > 1 ? "s" : ""}</div>
                   </div>
-
-                  <button type="button" onClick={() => openDoc(row)} className="min-w-0 flex-1 text-left" title="Ouvrir / télécharger">
-                    <div className="truncate text-[13px] font-semibold text-foreground hover:underline">{row.name}</div>
-                    <div className="mt-0.5 truncate text-[10px] text-faint">{details}</div>
-                  </button>
-
-                  {row.creator ? (
-                    <span className="hidden shrink-0 whitespace-nowrap rounded-md bg-rowhover px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground sm:inline">
-                      {row.creator}
-                    </span>
-                  ) : null}
-
-                  <span className={cn("shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide", meta.tagClassName)}>
-                    {meta.label}
-                  </span>
-
-                  <ActionMenu
-                    items={[
-                      ...(row.path
-                        ? [
-                            { key: "preview", label: "Prévisualiser", icon: Eye, onClick: () => preview(row) },
-                            { key: "share", label: "Partager le lien", icon: Share2, onClick: () => share(row) },
-                            { key: "download", label: "Télécharger", icon: Download, onClick: () => openDoc(row) },
-                          ]
-                        : []),
-                      {
-                        key: "delete",
-                        label: "Supprimer",
-                        icon: Trash2,
-                        danger: true,
-                        onClick: () => del(row),
-                        confirm: { title: "Supprimer le document", message: `Supprimer « ${row.name} » ? Cette action est irréversible.` },
-                      },
-                    ]}
-                  />
-                </li>
+                </button>
               );
             })}
-          </ul>
+          </div>
         )}
       </div>
 
