@@ -1242,19 +1242,32 @@ export function CreatorSpace({
                 onClose={() => setStatsModalOpen(false)}
                 icon={<BarChart3 className="h-5 w-5 text-primary" />}
                 title="Envoyer mes stats"
-                description="Pour garder ton media kit à jour, envoie à ton agence les captures de tes statistiques — c'est ce qui prouve ton audience aux marques."
+                description="Les captures des 30 derniers jours — c'est ce qui prouve ton audience aux marques."
                 primaryLabel={statsUploading ? "Envoi en cours…" : "Envoyer mes captures"}
                 onPrimary={() => statsFileRef.current?.click()}
                 primaryDisabled={statsUploading}
               >
+                <div className="mb-3 flex items-start gap-2 rounded-xl bg-primary/5 px-3.5 py-2.5 text-[12px] leading-relaxed text-foreground">
+                  <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <span>À envoyer <span className="font-semibold">en début de chaque mois</span> (statistiques des 30 derniers jours).</span>
+                </div>
                 <div className="rounded-xl bg-panel/50 p-3.5 text-[12px] leading-relaxed text-muted-foreground">
-                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-faint">Ce qu'il faut screenshoter (sur 30 jours)</div>
-                  <ul className="flex flex-col gap-1.5">
-                    <li className="flex gap-2"><PlatformIcon platform="instagram" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground" /><span><span className="font-medium text-foreground">Instagram</span> → Compte pro → <span className="font-medium text-foreground">Statistiques (Insights)</span> : vues, comptes touchés, taux d'engagement, abonnés.</span></li>
-                    <li className="flex gap-2"><PlatformIcon platform="tiktok" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground" /><span><span className="font-medium text-foreground">TikTok</span> → Profil → Outils créateurs → <span className="font-medium text-foreground">Analytics</span> : vues, abonnés, taux d'engagement.</span></li>
-                    <li className="flex gap-2"><span className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-foreground">+</span><span>Une capture de ton <span className="font-medium text-foreground">nombre d'abonnés</span> par réseau.</span></li>
+                  <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+                    <PlatformIcon platform="instagram" className="h-3.5 w-3.5 text-foreground" /> Instagram · Statistiques (Insights) · 30 j
+                  </div>
+                  <ul className="flex flex-col gap-1 pl-0.5">
+                    <li>• <span className="font-medium text-foreground">Impressions / vues</span> (30 j)</li>
+                    <li>• <span className="font-medium text-foreground">Likes cumulés, commentaires, partages, enregistrements</span> (30 j)</li>
+                    <li>• Comptes touchés, taux d'engagement, abonnés</li>
+                    <li>• <span className="font-medium text-foreground">Démographie</span> : pays, âge, genre</li>
                   </ul>
-                  <div className="mt-2 text-faint">Astuce : captures nettes, chiffres bien visibles 📸</div>
+                  <div className="mb-2 mt-3 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+                    <PlatformIcon platform="tiktok" className="h-3.5 w-3.5 text-foreground" /> TikTok · Analytics · 30 j
+                  </div>
+                  <ul className="flex flex-col gap-1 pl-0.5">
+                    <li>• Vues, abonnés, taux d'engagement</li>
+                  </ul>
+                  <div className="mt-3 text-faint">+ une capture de ton <span className="font-medium text-foreground">nombre d'abonnés</span> par réseau. Astuce : captures nettes, chiffres bien visibles 📸</div>
                 </div>
                 <div className="mt-2 text-center text-[10px] text-faint">Jusqu'à 6 images · elles arrivent directement chez ton agence, qui est notifiée.</div>
               </WelcomeModal>
