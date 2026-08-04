@@ -34,6 +34,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Target,
+  Share2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
@@ -1254,6 +1255,27 @@ export function CreatorSpace({
                   <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                   <span>À envoyer <span className="font-semibold">en début de chaque mois</span> (statistiques des 30 derniers jours).</span>
                 </div>
+
+                {/* La méthode la plus simple : l'app Edits d'Instagram */}
+                <div className="mb-3 rounded-xl border border-primary/25 bg-primary/[0.04] p-3.5">
+                  <div className="mb-2.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                    <Share2 className="h-3.5 w-3.5" /> La méthode la plus simple
+                  </div>
+                  <ol className="flex flex-col gap-2.5">
+                    {[
+                      <>Ouvre l'app <span className="font-semibold text-foreground">Edits</span> d'Instagram sur ton téléphone.</>,
+                      <>Va sur l'onglet <span className="font-semibold text-foreground">Statistiques</span> (en bas à droite).</>,
+                      <>Appuie sur <span className="font-semibold text-foreground">Partager</span> et envoie-nous la capture ici. 👇</>,
+                    ].map((step, i) => (
+                      <li key={i} className="flex items-start gap-2.5 text-[12px] leading-relaxed text-foreground">
+                        <span className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">{i + 1}</span>
+                        <span>{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
+                <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wide text-faint">Ou capture toi-même — ce qu'on regarde</div>
                 <div className="rounded-xl bg-panel/50 p-3.5 text-[12px] leading-relaxed text-muted-foreground">
                   <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
                     <PlatformIcon platform="instagram" className="h-3.5 w-3.5 text-foreground" /> Instagram · Statistiques (Insights) · 30 j
