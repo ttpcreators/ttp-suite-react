@@ -164,7 +164,15 @@ export const NAV: NavFamily[] = [
     label: "Réglages",
     icon: Wrench,
     items: [
-      { id: "acces", label: "Accès", icon: KeyRound },
+      {
+        id: "acces",
+        label: "Accès",
+        icon: KeyRound,
+        children: [
+          { id: "comptes", label: "Comptes app" },
+          { id: "emails", label: "E-mails créateurs" },
+        ],
+      },
       { id: "parametres", label: "Paramètres", icon: Settings },
     ],
   },

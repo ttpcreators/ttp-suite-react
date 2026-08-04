@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Eye, EyeOff, Trash2, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { initials, titleCase } from "@/lib/utils";
+import { initials, titleCase, cn } from "@/lib/utils";
+import { useNavSub } from "@/lib/navSub";
+import { CredentialVault } from "@/views/CredentialVault";
 import { useSearch, matchQuery } from "@/lib/search";
 import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
@@ -107,6 +109,13 @@ export function Acces() {
   );
   const { query } = useSearch();
   const creators = useCreators();
+
+  // Sous-page (nav 3e niveau) : « Comptes app » (défaut) ou « E-mails créateurs » (coffre).
+  const navSub = useNavSub();
+  const [section, setSection] = useState<"comptes" | "emails">("comptes");
+  useEffect(() => {
+    if (navSub === "comptes" || navSub === "emails") setSection(navSub);
+  }, [navSub]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -232,6 +241,24 @@ export function Acces() {
 
   return (
     <>
+      {/* Sous-pages : Comptes app / E-mails créateurs */}
+      <div className="mb-4 inline-flex rounded-xl border border-border bg-surface p-1 text-[11px] font-semibold uppercase tracking-wide">
+        {([["comptes", "Comptes app"], ["emails", "E-mails créateurs"]] as const).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setSection(id)}
+            className={cn("rounded-lg px-4 py-2 transition-colors", section === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {section === "emails" ? (
+        <CredentialVault />
+      ) : (
+      <>
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="text-sm text-muted-foreground">
           {loading ? "Chargement…" : `${rows.length} accès`}
@@ -265,6 +292,8 @@ export function Acces() {
             <AccountRow key={`${a.email}-${i}`} a={a} onDelete={removeAccount} />
           ))}
         </div>
+      )}
+      </>
       )}
     </>
   );
