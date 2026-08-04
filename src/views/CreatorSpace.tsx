@@ -36,6 +36,7 @@ import {
   Target,
   Share2,
   Plus,
+  FileChartColumn,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
@@ -132,7 +133,7 @@ const CREATOR_GROUPS: {
     items: [
       { id: "accueil", label: "Accueil", icon: LayoutDashboard },
       { id: "evolution", label: "Évolution", icon: TrendingUp },
-      { id: "debrief", label: "Debrief", icon: BarChart3 },
+      { id: "debrief", label: "Debrief", icon: FileChartColumn },
       { id: "roadmap", label: "Ma feuille de route", icon: Target },
     ],
   },
@@ -1720,8 +1721,8 @@ export function CreatorSpace({
               </AnimatedBadge>
             ) : debriefs.length === 0 ? (
               <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center shadow-sm">
-                <BarChart3 className="mx-auto h-8 w-8 text-faint" />
-                <div className="mt-2 text-sm font-medium text-foreground">Aucun debrief pour l'instant</div>
+                <div className="mx-auto w-fit"><FileCard formatFile="doc" /></div>
+                <div className="mt-3 text-sm font-medium text-foreground">Aucun debrief pour l'instant</div>
                 <p className="mt-1 text-xs text-muted-foreground">Les bilans de tes campagnes apparaîtront ici.</p>
               </div>
             ) : (

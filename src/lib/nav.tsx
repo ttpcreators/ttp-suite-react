@@ -11,7 +11,7 @@ import {
   Contact,
   Search,
   ScrollText,
-  BarChart3,
+  FileChartColumn,
   TrendingUp,
   LayoutTemplate,
   CheckCircle2,
@@ -111,7 +111,7 @@ export const NAV: NavFamily[] = [
     icon: Briefcase,
     items: [
       { id: "briefs", label: "Briefs", icon: FileText },
-      { id: "debrief", label: "Debrief", icon: BarChart3 },
+      { id: "debrief", label: "Debrief", icon: FileChartColumn },
       { id: "gifting", label: "Gifting", icon: Gift },
       { id: "ideas", label: "Idées", icon: Lightbulb },
       { id: "todo", label: "À faire", icon: ListChecks },
