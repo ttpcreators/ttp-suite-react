@@ -28,12 +28,15 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { useEffect, useState, type ReactNode } from "react";
-import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3, UserRound, Building2 } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3, UserRound, Building2, Plus, Upload } from "lucide-react";
+import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
 
 type Priority = "haute" | "moyenne" | "basse";
 type Source = "agency" | "creator";
 
+type Subtask = { id: string; text: string; done: boolean };
+type Attachment = { name: string; size: string; path: string };
 type Row = {
   id: string;
   text: string;
@@ -47,7 +50,12 @@ type Row = {
   status?: string | null;
   sort_order: number;
   created_at: string | null;
+  subtasks?: Subtask[] | null;
+  attachments?: Attachment[] | null;
 };
+
+let _stid = 0;
+const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
 
 const TODO_STATUS_OPTS: StatusOption[] = [
   { value: "À faire", label: "À faire", dot: "bg-primary" },
@@ -154,6 +162,59 @@ export function Todo() {
   const [todoFilter, setTodoFilter] = useState<TodoFilter>("encours");
   const [selectedTodo, setSelectedTodo] = useState<Row | null>(null);
   const [confirmDone, setConfirmDone] = useState<Row | null>(null); // anti-missclick « fait »
+  const [subInput, setSubInput] = useState(""); // saisie nouvelle sous-tâche
+  const attFileRef = useRef<HTMLInputElement>(null);
+  const [attUploading, setAttUploading] = useState(false);
+
+  // Persiste un patch de tâche (sous-tâches / pièces jointes) : base + local + fiche.
+  const patchTodo = async (id: string, patch: Partial<Row>) => {
+    const ok = await dbUpdate("todos", id, patch);
+    if (!ok) { toast("Erreur — lance le SQL sous-tâches/pièces jointes ?"); return; }
+    setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    setSelectedTodo((prev) => (prev?.id === id ? { ...prev, ...patch } : prev));
+  };
+  // Sous-tâches (checklist)
+  const addSubtask = (todo: Row) => {
+    const t = subInput.trim();
+    if (!t) return;
+    setSubInput("");
+    patchTodo(todo.id, { subtasks: [...(todo.subtasks ?? []), { id: stid(), text: t, done: false }] });
+  };
+  const toggleSubtask = (todo: Row, sid: string) =>
+    patchTodo(todo.id, { subtasks: (todo.subtasks ?? []).map((s) => (s.id === sid ? { ...s, done: !s.done } : s)) });
+  const delSubtask = (todo: Row, sid: string) =>
+    patchTodo(todo.id, { subtasks: (todo.subtasks ?? []).filter((s) => s.id !== sid) });
+  // Pièces jointes (bucket `documents`, chemin todo-attachments/<id>/…)
+  const uploadAttachments = async (todo: Row, files: FileList | null) => {
+    const list = Array.from(files ?? []);
+    if (list.length === 0) return;
+    setAttUploading(true);
+    try {
+      const added: Attachment[] = [];
+      for (const file of list) {
+        if (file.size > 15 * 1024 * 1024) { toast(`« ${file.name} » trop lourd (max 15 Mo)`); continue; }
+        const ext = (file.name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const path = `todo-attachments/${todo.id}/${Date.now()}-${added.length}${ext ? "." + ext : ""}`;
+        const up = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined, upsert: false });
+        if (up.error) { toast("Envoi échoué — réessaie"); continue; }
+        added.push({ name: file.name, size: `${Math.max(1, Math.round(file.size / 1024))} Ko`, path });
+      }
+      if (added.length) await patchTodo(todo.id, { attachments: [...(todo.attachments ?? []), ...added] });
+    } finally {
+      setAttUploading(false);
+      if (attFileRef.current) attFileRef.current.value = "";
+    }
+  };
+  const openAttachment = async (att: Attachment) => {
+    if (/^https?:\/\//i.test(att.path)) { window.open(att.path, "_blank"); return; }
+    const { data, error } = await supabase.storage.from("documents").createSignedUrl(att.path, 3600);
+    if (error || !data?.signedUrl) { toast("Lien indisponible — réessaie"); return; }
+    window.open(data.signedUrl, "_blank");
+  };
+  const removeAttachment = async (todo: Row, path: string) => {
+    await supabase.storage.from("documents").remove([path]).catch(() => {});
+    patchTodo(todo.id, { attachments: (todo.attachments ?? []).filter((a) => a.path !== path) });
+  };
 
   // Mode de vue : liste classique ↔ colonnes par statut (kanban). Mémorisé.
   const [viewMode, setViewMode] = useState<"liste" | "colonnes">(
@@ -735,7 +796,7 @@ export function Todo() {
           }}
         >
           <div
-            className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-sm"
+            className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-surface p-6 shadow-sm"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-start justify-between gap-3">
@@ -908,6 +969,56 @@ export function Todo() {
                   </DetailBlock>
                 )}
               </div>
+
+              {/* Sous-tâches (checklist) */}
+              {(() => {
+                const subs = selectedTodo.subtasks ?? [];
+                const done = subs.filter((s) => s.done).length;
+                return (
+                  <DetailBlock label={`Sous-tâches${subs.length ? ` · ${done}/${subs.length}` : ""}`}>
+                    {subs.length > 0 && (
+                      <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-panel">
+                        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${subs.length ? (done / subs.length) * 100 : 0}%` }} />
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-1.5">
+                      {subs.map((s) => (
+                        <div key={s.id} className="group flex items-center gap-2 rounded-lg border border-border bg-panel/40 px-2.5 py-1.5">
+                          <button type="button" onClick={() => toggleSubtask(selectedTodo, s.id)} className={cn("grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors", s.done ? "border-primary bg-primary text-primary-foreground" : "border-faint")}>
+                            {s.done && <Check className="h-3 w-3" />}
+                          </button>
+                          <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
+                          <button type="button" onClick={() => delSubtask(selectedTodo, s.id)} className="shrink-0 text-faint opacity-0 transition-opacity hover:text-[#E5484D] group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                        </div>
+                      ))}
+                    </div>
+                    <form onSubmit={(e) => { e.preventDefault(); addSubtask(selectedTodo); }} className="mt-2 flex items-center gap-2">
+                      <input value={subInput} onChange={(e) => setSubInput(e.target.value)} placeholder="Ajouter une sous-tâche…" className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary" />
+                      <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90"><Plus className="h-4 w-4" /></button>
+                    </form>
+                  </DetailBlock>
+                );
+              })()}
+
+              {/* Pièces jointes */}
+              <DetailBlock label={`Pièces jointes${(selectedTodo.attachments ?? []).length ? ` · ${(selectedTodo.attachments ?? []).length}` : ""}`}>
+                <div className="flex flex-col gap-2">
+                  {(selectedTodo.attachments ?? []).map((a) => (
+                    <div key={a.path} className="group flex items-center gap-3 rounded-lg border border-border bg-panel/40 p-2.5">
+                      <button type="button" onClick={() => openAttachment(a)} className="shrink-0" title="Ouvrir"><FileCard formatFile={fileFormatOf(a.name)} /></button>
+                      <button type="button" onClick={() => openAttachment(a)} className="min-w-0 flex-1 text-left">
+                        <div className="truncate text-[13px] font-medium text-foreground hover:underline">{a.name}</div>
+                        <div className="text-[11px] text-faint">{a.size}</div>
+                      </button>
+                      <button type="button" onClick={() => removeAttachment(selectedTodo, a.path)} className="shrink-0 text-faint opacity-0 transition-opacity hover:text-[#E5484D] group-hover:opacity-100" title="Retirer"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  ))}
+                  <input ref={attFileRef} type="file" multiple className="hidden" onChange={(e) => uploadAttachments(selectedTodo, e.target.files)} />
+                  <button type="button" onClick={() => attFileRef.current?.click()} disabled={attUploading} className="flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border px-3 py-2.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
+                    <Upload className="h-4 w-4" /> {attUploading ? "Envoi…" : "Ajouter un fichier"}
+                  </button>
+                </div>
+              </DetailBlock>
             </div>
             )}
           </div>

@@ -793,6 +793,12 @@ drop trigger if exists creator_roadmap_guard_iu on public.creator_roadmap;
 create trigger creator_roadmap_guard_iu before insert or update on public.creator_roadmap
   for each row execute function public.creator_roadmap_guard();
 
+-- ----------------------------------------------------------------------------
+-- TÂCHES : sous-tâches (checklist) + pièces jointes — cf. sql/todos-subtasks-attachments.sql
+-- ----------------------------------------------------------------------------
+alter table public.todos add column if not exists subtasks jsonb;
+alter table public.todos add column if not exists attachments jsonb;
+
 -- ============================================================================
 -- FIN. Vérif rapide (en étant DÉCONNECTÉ, ces requêtes doivent renvoyer 0 ligne) :
 --   select * from public.creators;
