@@ -1298,6 +1298,19 @@ export function CreatorSpace({
             <div className="flex flex-col gap-4">
               <PushCard />
 
+              {/* Globe interactif — touche déco (glisse pour le faire tourner) */}
+              <Card className="overflow-hidden">
+                <div className="flex flex-col items-center gap-0.5 text-center">
+                  <div className="text-sm font-semibold text-foreground">Le monde de TTP 🌍</div>
+                  <div className="text-[11px] text-faint">Glisse pour le faire tourner</div>
+                </div>
+                <div className="mx-auto mt-3 w-full max-w-[280px]">
+                  <Suspense fallback={<div className="mx-auto aspect-square w-full max-w-[280px] animate-pulse rounded-full bg-panel/50" />}>
+                    <GlobeStickers dark={dark} />
+                  </Suspense>
+                </div>
+              </Card>
+
               {/* Envoyer mes stats — barre compacte + modale (guide + upload) */}
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-3.5 shadow-sm">
                 <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
@@ -1633,19 +1646,6 @@ export function CreatorSpace({
                   </div>
                 </Card>
               </div>
-
-              {/* Globe interactif — touche déco (glisse pour le faire tourner) */}
-              <Card className="overflow-hidden">
-                <div className="flex flex-col items-center gap-0.5 text-center">
-                  <div className="text-sm font-semibold text-foreground">Le monde de TTP 🌍</div>
-                  <div className="text-[11px] text-faint">Glisse pour le faire tourner</div>
-                </div>
-                <div className="mx-auto mt-3 w-full max-w-[280px]">
-                  <Suspense fallback={<div className="mx-auto aspect-square w-full max-w-[280px] animate-pulse rounded-full bg-panel/50" />}>
-                    <GlobeStickers dark={dark} />
-                  </Suspense>
-                </div>
-              </Card>
             </div>
           )}
 
