@@ -36,7 +36,7 @@ import {
   Target,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { titleCase } from "@/lib/utils";
+import { titleCase, cn } from "@/lib/utils";
 import { frDate, toISODate } from "@/lib/dates";
 import { notifyAgency } from "@/lib/push";
 import { PushCard } from "@/components/ui/push-card";
@@ -1044,30 +1044,32 @@ export function CreatorSpace({
 
   // Ligne de coordonnée : label (+ icône réseau) au-dessus, valeur dessous (qui peut
   // passer à la ligne, plus de troncature). Les champs vides sont masqués (plus épuré).
-  const coordRow = (label: string, val: string | null, copyable = false, platform?: string) => {
+  // Carte « bento » d'une coordonnée : label (+ icône réseau) + valeur + copie.
+  // Champs vides masqués. `wide` = carte pleine largeur (email, adresse).
+  const coordRow = (label: string, val: string | null, copyable = false, platform?: string, wide = false) => {
     if (!val || !val.trim() || val === "—") return null;
     return (
-      <div className="flex items-start justify-between gap-2 border-b border-border py-2.5 last:border-0">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
-            {platform ? <PlatformIcon platform={platform} className="h-3.5 w-3.5 text-foreground" /> : null}
-            {label}
-          </div>
-          <div className="mt-1 break-words text-[13px] font-medium text-foreground">{val}</div>
+      <div className={cn("rounded-xl border border-border bg-panel/40 p-3 transition-colors hover:bg-rowhover", wide && "sm:col-span-2")}>
+        <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+          {platform ? <PlatformIcon platform={platform} className="h-3.5 w-3.5 text-foreground" /> : null}
+          {label}
         </div>
-        {copyable && (
-          <button
-            type="button"
-            onClick={() => {
-              navigator.clipboard?.writeText(val);
-              toast(`${label} copié ✓`);
-            }}
-            className="mt-4 grid h-7 w-7 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-            title={`Copier ${label.toLowerCase()}`}
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </button>
-        )}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 break-words text-[13px] font-medium text-foreground">{val}</div>
+          {copyable && (
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard?.writeText(val);
+                toast(`${label} copié ✓`);
+              }}
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border bg-surface text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+              title={`Copier ${label.toLowerCase()}`}
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
     );
   };
@@ -1412,21 +1414,17 @@ export function CreatorSpace({
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -8 }}
                           transition={{ duration: 0.2 }}
-                          className="grid grid-cols-1 gap-x-8 gap-y-0 md:grid-cols-2"
+                          className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"
                         >
-                          <div>
-                            {coordRow("Ville", creator?.ville ?? null)}
-                            {coordRow("Téléphone", creator?.phone ?? null, true)}
-                            {coordRow("Email perso", creator?.email ?? null, true)}
-                            {coordRow("Email pro", creator?.email_pro ?? null, true)}
-                          </div>
-                          <div>
-                            {coordRow("Adresse", creator?.address ?? null)}
-                            {coordRow("SIREN", creator?.siren ?? null)}
-                            {coordRow("Naissance", frDate(creator?.birth))}
-                            {coordRow("Instagram", creator?.instagram ?? null, true, "instagram")}
-                            {coordRow("TikTok", creator?.tiktok ?? null, true, "tiktok")}
-                          </div>
+                          {coordRow("Ville", creator?.ville ?? null)}
+                          {coordRow("Téléphone", creator?.phone ?? null, true)}
+                          {coordRow("SIREN", creator?.siren ?? null, true)}
+                          {coordRow("Naissance", frDate(creator?.birth))}
+                          {coordRow("Instagram", creator?.instagram ?? null, true, "instagram")}
+                          {coordRow("TikTok", creator?.tiktok ?? null, true, "tiktok")}
+                          {coordRow("Email perso", creator?.email ?? null, true, undefined, true)}
+                          {coordRow("Email pro", creator?.email_pro ?? null, true, undefined, true)}
+                          {coordRow("Adresse", creator?.address ?? null, true, undefined, true)}
                         </motion.div>
                       )}
                     </AnimatePresence>
