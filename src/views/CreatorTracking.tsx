@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle, MessageSquare, Pencil, X, Phone, MessageCircle, Users } from "lucide-react";
+import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle, MessageSquare, Pencil, X, Phone, MessageCircle, Users, Compass, Mic, Sparkles, Film, GalleryHorizontalEnd, CircleDashed, Music2, MonitorPlay, Check, type LucideIcon } from "lucide-react";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
@@ -784,6 +784,15 @@ export function RosterTracking({ onOpen }: { onOpen?: (name: string) => void }) 
 
 // ───────────────────── côté CRÉATEUR : ma feuille de route ───────────────────
 
+// Icône par format de contenu (report de cadence + cadence recommandée).
+const FMT_ICON: Record<keyof Cadence, LucideIcon> = {
+  reels: Film,
+  carrousels: GalleryHorizontalEnd,
+  stories: CircleDashed,
+  tiktoks: Music2,
+  youtube: MonitorPlay,
+};
+
 /**
  * Vue CRÉATEUR de sa feuille de route (lecture seule : piliers, positionnement,
  * ton, plateformes, objectifs 90 j, cadence recommandée) + report de SA cadence
@@ -829,52 +838,97 @@ export function CreatorRoadmap({ name }: { name: string }) {
 
   if (loading) return <div className="rounded-2xl border border-border bg-surface p-8 text-center text-[13px] text-muted-foreground shadow-sm">Chargement…</div>;
 
+  const recoTot = cadenceTotal(rm.cadenceReco);
+  const draftTot = cadenceTotal(draft);
+
   return (
     <div className="flex flex-col gap-4">
-      {/* Feuille de route (lecture seule) */}
-      <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-        <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Target className="h-4 w-4 text-muted-foreground" /> Ma feuille de route
+      {/* Feuille de route (lecture seule) — carte premium */}
+      <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+        {/* En-tête façon héros */}
+        <div className="relative overflow-hidden border-b border-border bg-gradient-to-br from-primary/12 via-primary/5 to-transparent px-5 py-4">
+          <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-primary/10 blur-2xl" />
+          <div className="relative flex items-center gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/30">
+              <Target className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[15px] font-bold text-foreground">Ma feuille de route</div>
+              <div className="text-[11px] text-muted-foreground">Ta stratégie de contenu, définie avec ton agence</div>
+            </div>
+          </div>
         </div>
+
         {!hasRoadmap ? (
-          <div className="rounded-xl border border-dashed border-border bg-panel/40 px-4 py-8 text-center text-[13px] text-muted-foreground">
-            Ta feuille de route n'est pas encore définie. Ton agence la partagera ici prochainement.
+          <div className="p-5">
+            <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-panel/40 px-4 py-10 text-center">
+              <Compass className="h-6 w-6 text-faint" />
+              <p className="text-[13px] text-muted-foreground">Ta feuille de route n'est pas encore définie.<br />Ton agence la partagera ici prochainement.</p>
+            </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
-            {rm.positionnement && <RoadRow label="Niche & positionnement">{rm.positionnement}</RoadRow>}
-            {rm.tonalite && <RoadRow label="Ton de voix">{rm.tonalite}</RoadRow>}
+          <div className="flex flex-col gap-4 p-5">
+            {/* Niche + Ton : 2 bento */}
+            {(rm.positionnement || rm.tonalite) && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {rm.positionnement && <BentoField icon={Compass} label="Niche & positionnement">{rm.positionnement}</BentoField>}
+                {rm.tonalite && <BentoField icon={Mic} label="Ton de voix">{rm.tonalite}</BentoField>}
+              </div>
+            )}
+
+            {/* Piliers de contenu — pastilles teintées primary */}
             {rm.piliers.length > 0 && (
               <div>
                 <div className={LBL}>Piliers de contenu</div>
                 <div className="flex flex-wrap gap-2">
-                  {rm.piliers.map((p, i) => <span key={i} className="rounded-lg bg-panel px-3 py-1.5 text-[12px] font-medium text-foreground">{p}</span>)}
-                </div>
-              </div>
-            )}
-            {rm.plateformes.length > 0 && (
-              <div>
-                <div className={LBL}>Plateformes prioritaires</div>
-                <div className="flex flex-wrap gap-2">
-                  {rm.plateformes.map((pl) => (
-                    <span key={pl} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[12px] font-semibold text-foreground">
-                      <PlatformIcon platform={pl} className="h-3.5 w-3.5" /> {platPrioLabel[pl]}
+                  {rm.piliers.map((p, i) => (
+                    <span key={i} className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/[0.07] px-3 py-1.5 text-[12px] font-semibold text-primary">
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary" /> {p}
                     </span>
                   ))}
                 </div>
               </div>
             )}
-            {rm.objectifs90 && <RoadRow label="Objectifs 90 jours">{rm.objectifs90}</RoadRow>}
-            {cadenceTotal(rm.cadenceReco) > 0 && (
+
+            {/* Plateformes prioritaires */}
+            {rm.plateformes.length > 0 && (
+              <div>
+                <div className={LBL}>Plateformes prioritaires</div>
+                <div className="flex flex-wrap gap-2">
+                  {rm.plateformes.map((pl) => (
+                    <span key={pl} className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel/60 px-3.5 py-2 text-[12.5px] font-semibold text-foreground shadow-sm">
+                      <PlatformIcon platform={pl} className="h-4 w-4" /> {platPrioLabel[pl]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Objectifs 90 jours — « north star » mis en avant */}
+            {rm.objectifs90 && (
+              <div className="relative overflow-hidden rounded-xl border border-primary/25 bg-primary/[0.05] p-4">
+                <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                  <Sparkles className="h-3.5 w-3.5" /> Objectifs 90 jours
+                </div>
+                <p className="whitespace-pre-wrap text-[13px] font-medium leading-relaxed text-foreground">{rm.objectifs90}</p>
+              </div>
+            )}
+
+            {/* Cadence recommandée — tuiles par format */}
+            {recoTot > 0 && (
               <div>
                 <div className={LBL}>Cadence recommandée / mois</div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                  {CADENCE_FIELDS.map((f) => (
-                    <div key={f.key} className="rounded-lg bg-panel px-2.5 py-2 text-center">
-                      <div className="text-lg font-bold tabular-nums text-foreground">{rm.cadenceReco[f.key]}</div>
-                      <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{f.short}</div>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                  {CADENCE_FIELDS.map((f) => {
+                    const Icon = FMT_ICON[f.key];
+                    return (
+                      <div key={f.key} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-panel/50 px-2 py-3">
+                        <Icon className="h-4 w-4 text-primary" />
+                        <div className="text-xl font-bold tabular-nums text-foreground">{rm.cadenceReco[f.key]}</div>
+                        <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{f.short}</div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -883,40 +937,80 @@ export function CreatorRoadmap({ name }: { name: string }) {
       </section>
 
       {/* Reporter ma cadence du mois */}
-      <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-        <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <CalendarRange className="h-4 w-4 text-muted-foreground" /> Reporter ma cadence
+      <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-panel text-primary">
+              <CalendarRange className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[15px] font-bold text-foreground">Reporter ma cadence</div>
+              <div className="text-[11px] text-muted-foreground">Ce que tu as réellement publié — pour suivre ta régularité</div>
+            </div>
           </div>
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value || currentMonth())} className="rounded-lg border border-border bg-surface px-3 py-2 text-[12px] outline-none focus:border-primary" />
+          <input type="month" value={month} onChange={(e) => setMonth(e.target.value || currentMonth())} className="rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium outline-none focus:border-primary" />
         </div>
-        <p className="mb-3 text-[12px] text-muted-foreground">Indique ce que tu as réellement publié ce mois-ci — ça aide ton agence à suivre ta régularité.</p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-          {CADENCE_FIELDS.map((f) => (
-            <label key={f.key} className="flex flex-col gap-1">
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">
-                {f.label}{rm.cadenceReco[f.key] > 0 && <span className="text-faint/70"> / {rm.cadenceReco[f.key]}</span>}
-              </span>
-              <input type="number" min={0} value={draft[f.key]} onChange={(e) => setDraft({ ...draft, [f.key]: Math.max(0, parseInt(e.target.value, 10) || 0) })} className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-center text-sm tabular-nums outline-none focus:border-primary" />
-            </label>
-          ))}
-        </div>
-        <div className="mt-3 flex items-center justify-between">
-          <span className="text-[12px] text-muted-foreground">Total : <span className="font-semibold tabular-nums text-foreground">{cadenceTotal(draft)}</span> contenus</span>
-          <button type="button" onClick={saveCadence} disabled={saving} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
-            <Save className="h-3.5 w-3.5" /> {saving ? "Envoi…" : "Envoyer ma cadence"}
-          </button>
+
+        <div className="p-5">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+            {CADENCE_FIELDS.map((f) => {
+              const Icon = FMT_ICON[f.key];
+              const reco = rm.cadenceReco[f.key];
+              const val = draft[f.key];
+              const pct = reco > 0 ? Math.min(100, (val / reco) * 100) : 0;
+              const reached = reco > 0 && val >= reco;
+              return (
+                <label key={f.key} className="flex flex-col gap-1.5 rounded-xl border border-border bg-panel/40 p-2.5 transition-colors focus-within:border-primary">
+                  <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+                    <Icon className="h-3.5 w-3.5 text-muted-foreground" /> {f.short}
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={draft[f.key]}
+                    onChange={(e) => setDraft({ ...draft, [f.key]: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                    className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-center text-lg font-bold tabular-nums text-foreground outline-none focus:border-primary"
+                  />
+                  {reco > 0 && (
+                    <>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-panel">
+                        <div className={cn("h-full rounded-full transition-all", reached ? "bg-emerald-500" : "bg-primary")} style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="flex items-center justify-center gap-1 text-center text-[9px] text-faint">
+                        {reached && <Check className="h-3 w-3 text-emerald-500" />}objectif {reco}
+                      </span>
+                    </>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[12px] text-muted-foreground">Total :</span>
+              <span className="text-lg font-bold tabular-nums text-foreground">{draftTot}</span>
+              <span className="text-[12px] text-muted-foreground">contenu{draftTot > 1 ? "s" : ""}</span>
+              {recoTot > 0 && <span className="text-[11px] text-faint">/ {recoTot} recommandés</span>}
+            </div>
+            <button type="button" onClick={saveCadence} disabled={saving} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground shadow-sm shadow-primary/25 transition-opacity hover:opacity-90 disabled:opacity-50">
+              <Save className="h-3.5 w-3.5" /> {saving ? "Envoi…" : "Envoyer ma cadence"}
+            </button>
+          </div>
         </div>
       </section>
     </div>
   );
 }
 
-function RoadRow({ label, children }: { label: string; children: React.ReactNode }) {
+/** Bento pour un champ texte de la feuille de route (niche, ton…). */
+function BentoField({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <div className={LBL}>{label}</div>
-      <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{children}</p>
+    <div className="rounded-xl border border-border bg-panel/40 p-3.5">
+      <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+        <Icon className="h-3.5 w-3.5 text-muted-foreground" /> {label}
+      </div>
+      <p className="whitespace-pre-wrap text-[13px] font-medium leading-relaxed text-foreground">{children}</p>
     </div>
   );
 }
