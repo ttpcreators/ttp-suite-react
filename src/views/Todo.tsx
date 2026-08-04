@@ -94,6 +94,18 @@ function PriorityDot({ priority }: { priority: Priority }) {
   );
 }
 
+// Couleurs de priorité : barre d'accent (à gauche de la carte) + pilule.
+const PRIO_ACCENT: Record<Priority, string> = {
+  haute: "bg-rose-500",
+  moyenne: "bg-amber-500",
+  basse: "bg-slate-300 dark:bg-slate-600",
+};
+const PRIO_PILL: Record<Priority, string> = {
+  haute: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  moyenne: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  basse: "bg-panel text-faint",
+};
+
 // Formate created_at en fr-FR ; rien si absent.
 const formatCreatedAt = (created_at: string | null): string | null =>
   created_at ? new Date(created_at).toLocaleDateString("fr-FR") : null;
@@ -642,7 +654,9 @@ export function Todo() {
               }
             };
             return (
-              <div key={row.id} className="rounded-2xl border border-border bg-card shadow-sm">
+              <div key={row.id} className="relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md">
+              {/* Accent de priorité (barre gauche) */}
+              <span className={cn("absolute left-0 top-0 h-full w-1", PRIO_ACCENT[row.priority])} />
               <div
                 role="button"
                 tabIndex={0}
@@ -653,7 +667,7 @@ export function Todo() {
                     setSelectedTodo(row);
                   }
                 }}
-                className="flex cursor-pointer items-center gap-3 rounded-2xl p-4 transition-colors hover:bg-rowhover"
+                className="flex cursor-pointer items-center gap-3 rounded-2xl py-3.5 pl-5 pr-4 transition-colors hover:bg-rowhover"
               >
                 {/* Case à cocher animée (barre progressive) */}
                 <Checkbox
@@ -662,49 +676,44 @@ export function Todo() {
                   onClick={(e) => e.stopPropagation()}
                   onCheckedChange={(v) => (v === true ? setConfirmDone(row) : markDone(row, false))}
                   title={row.done ? "Marquer à refaire" : "Marquer comme fait"}
-                  className="peer shrink-0"
+                  className="peer size-5 shrink-0"
                 />
 
-                {/* Texte + description */}
+                {/* Texte + description + méta */}
                 <div className="min-w-0 flex-1">
                   <label
                     htmlFor={`todo-${row.id}`}
                     onClick={(e) => e.stopPropagation()}
                     className={cn(
-                      "relative inline-block max-w-full cursor-pointer truncate align-top text-[13px] font-medium text-foreground transition-colors after:absolute after:left-0 after:top-1/2 after:h-px after:bg-current after:transition-all after:duration-300 after:content-['']",
-                      row.done
-                        ? "text-muted-foreground after:w-full"
-                        : "after:w-0"
+                      "relative inline-block max-w-full cursor-pointer truncate align-top text-sm font-semibold text-foreground transition-colors after:absolute after:left-0 after:top-1/2 after:h-px after:bg-current after:transition-all after:duration-300 after:content-['']",
+                      row.done ? "text-muted-foreground after:w-full" : "after:w-0",
                     )}
                   >
                     {row.text}
                   </label>
                   {row.descr && (
-                    <p className="mt-0.5 truncate text-[11px] leading-relaxed text-faint">
-                      {row.descr}
-                    </p>
+                    <p className="mt-0.5 truncate text-[11px] leading-relaxed text-faint">{row.descr}</p>
                   )}
-                  {formatCreatedAt(row.created_at) && (
-                    <p className="mt-0.5 truncate text-[10px] leading-relaxed text-faint">
-                      créée le {formatCreatedAt(row.created_at)}
-                    </p>
-                  )}
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-faint">
+                    <span className="inline-flex items-center gap-1 font-medium text-muted-foreground">
+                      {row.creator ? <UserRound className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}
+                      {row.creator ? titleCase(row.creator) : "Agence"}
+                    </span>
+                    {row.source === "creator" && (<><span>·</span><span className="text-signaltext">du créateur</span></>)}
+                    {formatCreatedAt(row.created_at) && (<><span>·</span><span>créée le {formatCreatedAt(row.created_at)}</span></>)}
+                    {(row.subtasks?.length ?? 0) > 0 && (<><span>·</span><span>{(row.subtasks ?? []).filter((s) => s.done).length}/{row.subtasks!.length} sous-tâches</span></>)}
+                    {(row.attachments?.length ?? 0) > 0 && (<><span>·</span><span>📎 {row.attachments!.length}</span></>)}
+                  </div>
                 </div>
 
-                {/* Méta : statut + origine + créateur + priorité */}
+                {/* Méta droite : priorité + statut + menu */}
                 <div className="flex shrink-0 items-center gap-2">
+                  <span className={cn("hidden rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide sm:inline", PRIO_PILL[row.priority])}>
+                    {prioOf(row.priority).label}
+                  </span>
                   <div onClick={(e) => e.stopPropagation()}>
                     <StatusSelect value={todoStatus(row)} options={TODO_STATUS_OPTS} onChange={updateStatus} />
                   </div>
-                  {row.source === "creator" && (
-                    <span className="hidden rounded-md bg-signalsoft px-2 py-[3px] text-[8px] font-semibold uppercase tracking-wider text-signaltext sm:inline">
-                      Du créateur
-                    </span>
-                  )}
-                  <span className="hidden rounded-md bg-rowhover px-2 py-[3px] text-[8px] font-semibold uppercase tracking-wider text-muted-foreground sm:inline">
-                    {row.creator ? titleCase(row.creator) : "Agence"}
-                  </span>
-                  <PriorityDot priority={row.priority} />
                   <ActionMenu
                     items={[
                       {
