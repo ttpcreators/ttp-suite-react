@@ -35,6 +35,7 @@ import {
   PanelLeftOpen,
   Target,
   Share2,
+  Plus,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
@@ -88,7 +89,17 @@ type Creator = {
   email_pro: string | null;
   mediakit: { slug?: string; ugc?: { enabled?: boolean } } | null; // blob media kit (slug + activation UGC)
 };
-type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; status?: string | null; sort_order?: number };
+type Subtask = { id: string; text: string; done: boolean };
+type Attachment = { name: string; size: string; path: string };
+type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; status?: string | null; sort_order?: number; subtasks?: Subtask[] | null; attachments?: Attachment[] | null };
+
+let _stid = 0;
+const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
+// Priorité : barre d'accent (bord gauche de la carte) + pilule.
+const PRIO_ACCENT: Record<string, string> = { haute: "bg-rose-500", moyenne: "bg-amber-500", basse: "bg-slate-300 dark:bg-slate-600" };
+const PRIO_PILL: Record<string, string> = { haute: "bg-rose-500/10 text-rose-600 dark:text-rose-400", moyenne: "bg-amber-500/10 text-amber-600 dark:text-amber-400", basse: "bg-panel text-faint" };
+const prioAccent = (p: string | null) => PRIO_ACCENT[p ?? "moyenne"] ?? PRIO_ACCENT.moyenne;
+const prioPill = (p: string | null) => PRIO_PILL[p ?? "moyenne"] ?? PRIO_PILL.moyenne;
 type Idea = { id: string; text: string; status: string | null; sort_order?: number };
 type Brief = { id: string; brand: string; deliverables: string | null; due: string | null; status: string | null; consignes: string | null };
 type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string; type: string };
@@ -304,6 +315,9 @@ export function CreatorSpace({
   const [mobileTab, setMobileTab] = useState<string | null>(null); // famille déployée (nav mobile)
   const [confirmDoneTodo, setConfirmDoneTodo] = useState<Todo | null>(null); // anti-missclick « fait »
   const [taskView, setTaskView] = useState<Todo | null>(null); // fiche tâche (texte complet)
+  const [subInput, setSubInput] = useState(""); // saisie nouvelle sous-tâche
+  const attFileRef = useRef<HTMLInputElement>(null);
+  const [attUploading, setAttUploading] = useState(false);
   const live = useLiveKey();
   // Historique d'engagement du créateur — via la fonction serveur creator-history
   // (le blob agence est inaccessible aux créateurs ; le serveur filtre sur SON nom).
@@ -432,7 +446,7 @@ export function CreatorSpace({
         if (error) console.error("Espace créateur — chargement de la fiche échoué:", error);
         if (alive) setCreator((data?.[0] as Creator) ?? null);
       });
-    supabase.from("todos").select("id,text,descr,due,priority,done,status,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setTodos((data as Todo[]) ?? []));
+    supabase.from("todos").select("id,text,descr,due,priority,done,status,sort_order,subtasks,attachments").eq("creator", name).order("sort_order").then(({ data }) => alive && setTodos((data as Todo[]) ?? []));
     supabase.from("ideas").select("id,text,status,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
     supabase.from("briefs").select("id,brand,deliverables,due,status,consignes").eq("creator", name).then(({ data }) => alive && setBriefs((data as Brief[]) ?? []));
     supabase.from("gifting").select(GIFT_COLS).eq("creator", name).order("sort_order", { ascending: false }).then(({ data }) => alive && setGifts((data as GiftRow[]) ?? []));
@@ -1018,6 +1032,58 @@ export function CreatorSpace({
     setTodos((prev) => prev.map((x) => (x.id === tdEditId ? { ...x, ...patch } : x)));
     toast("Tâche modifiée ✓");
     setTdEditId(null);
+  };
+
+  // Sous-tâches + pièces jointes (même feature que la page « À faire » de l'agence).
+  // Persiste un patch → base + liste + fiche ouverte.
+  const patchTodo = async (id: string, patch: Partial<Todo>) => {
+    if (!(await dbUpdate("todos", id, patch))) { toast("Erreur — réessaie"); return; }
+    setTodos((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    setTaskView((prev) => (prev?.id === id ? { ...prev, ...patch } : prev));
+  };
+  const addSubtask = (todo: Todo) => {
+    const t = subInput.trim();
+    if (!t) return;
+    setSubInput("");
+    patchTodo(todo.id, { subtasks: [...(todo.subtasks ?? []), { id: stid(), text: t, done: false }] });
+  };
+  const toggleSubtask = (todo: Todo, sid: string) =>
+    patchTodo(todo.id, { subtasks: (todo.subtasks ?? []).map((s) => (s.id === sid ? { ...s, done: !s.done } : s)) });
+  const delSubtask = (todo: Todo, sid: string) =>
+    patchTodo(todo.id, { subtasks: (todo.subtasks ?? []).filter((s) => s.id !== sid) });
+  // Pièces jointes : upload cloisonné `creator-uploads/<uid>/…` (RLS), bucket documents.
+  const uploadAttachments = async (todo: Todo, files: FileList | null) => {
+    const list = Array.from(files ?? []);
+    if (list.length === 0) return;
+    setAttUploading(true);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u?.user?.id;
+      if (!uid) { toast("Session expirée — reconnecte-toi"); return; }
+      const added: Attachment[] = [];
+      for (const file of list) {
+        if (file.size > 15 * 1024 * 1024) { toast(`« ${file.name} » trop lourd (max 15 Mo)`); continue; }
+        const ext = (file.name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const path = `creator-uploads/${uid}/todo-attachments/${todo.id}/${Date.now()}-${added.length}${ext ? "." + ext : ""}`;
+        const up = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined, upsert: false });
+        if (up.error) { toast("Envoi échoué — réessaie"); continue; }
+        added.push({ name: file.name, size: `${Math.max(1, Math.round(file.size / 1024))} Ko`, path });
+      }
+      if (added.length) await patchTodo(todo.id, { attachments: [...(todo.attachments ?? []), ...added] });
+    } finally {
+      setAttUploading(false);
+      if (attFileRef.current) attFileRef.current.value = "";
+    }
+  };
+  const openAttachment = async (att: Attachment) => {
+    if (/^https?:\/\//i.test(att.path)) { window.open(att.path, "_blank"); return; }
+    const { data, error } = await supabase.storage.from("documents").createSignedUrl(att.path, 3600);
+    if (error || !data?.signedUrl) { toast("Lien indisponible — réessaie"); return; }
+    window.open(data.signedUrl, "_blank");
+  };
+  const removeAttachment = async (todo: Todo, path: string) => {
+    await supabase.storage.from("documents").remove([path]).catch(() => {});
+    patchTodo(todo.id, { attachments: (todo.attachments ?? []).filter((a) => a.path !== path) });
   };
 
 
@@ -1755,6 +1821,12 @@ export function CreatorSpace({
                             <div key={t.id} className="rounded-xl border border-border bg-surface p-3 shadow-sm">
                               <button type="button" onClick={() => setTaskView(t)} className="block w-full text-left">
                                 <span className={"block line-clamp-2 break-words text-[12.5px] font-medium leading-snug " + (t.done ? "text-muted-foreground line-through" : "text-foreground")}>{t.text}</span>
+                                {((t.subtasks?.length ?? 0) > 0 || (t.attachments?.length ?? 0) > 0) && (
+                                  <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[10px] text-faint">
+                                    {(t.subtasks?.length ?? 0) > 0 && <span>{(t.subtasks ?? []).filter((s) => s.done).length}/{t.subtasks!.length} sous-tâches</span>}
+                                    {(t.attachments?.length ?? 0) > 0 && <span>📎 {t.attachments!.length}</span>}
+                                  </span>
+                                )}
                               </button>
                               <div className="mt-2 flex items-center justify-between gap-2">
                                 <AnimatedBadge status={prioBadge(t.priority)} size="sm">{titleCase(t.priority ?? "moyenne")}</AnimatedBadge>
@@ -1776,10 +1848,14 @@ export function CreatorSpace({
                     {todoFilter === "terminees" ? "Aucune tâche terminée." : "Aucune tâche."}
                   </div>
                 ) : (
-                  filteredTodos.map((t) => (
-                    <div key={t.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                      {/* Ligne 1 : case + titre (jusqu'à 2 lignes) + description */}
-                      <div className="flex items-start gap-3">
+                  filteredTodos.map((t) => {
+                    const subs = t.subtasks ?? [];
+                    const subDone = subs.filter((s) => s.done).length;
+                    return (
+                    <div key={t.id} className="relative overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition-shadow hover:shadow-md">
+                      {/* Accent de priorité (barre gauche) */}
+                      <span className={cn("absolute left-0 top-0 h-full w-1", prioAccent(t.priority))} />
+                      <div className="flex items-start gap-3 py-3.5 pl-5 pr-4">
                         <button
                           type="button"
                           onClick={() => (t.done ? markTodo(t, false) : setConfirmDoneTodo(t))}
@@ -1792,16 +1868,19 @@ export function CreatorSpace({
                           {t.done && <Check className="h-3.5 w-3.5" />}
                         </button>
                         <button type="button" onClick={() => setTaskView(t)} className="min-w-0 flex-1 text-left">
-                          <div className={"line-clamp-2 break-words text-sm font-medium leading-snug " + (t.done ? "text-muted-foreground line-through" : "text-foreground")}>{t.text}</div>
-                          {t.descr && <div className="mt-0.5 line-clamp-2 break-words text-xs leading-relaxed text-faint">{t.descr}</div>}
+                          <div className={"break-words text-sm font-semibold leading-snug " + (t.done ? "text-muted-foreground line-through" : "text-foreground")}>{t.text}</div>
+                          {t.descr && <div className="mt-0.5 line-clamp-2 break-words text-[11px] leading-relaxed text-faint">{t.descr}</div>}
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-faint">
+                            {t.due && t.due !== "—" && <span>Échéance {frDate(t.due)}</span>}
+                            {subs.length > 0 && (<>{t.due && t.due !== "—" && <span>·</span>}<span>{subDone}/{subs.length} sous-tâches</span></>)}
+                            {(t.attachments?.length ?? 0) > 0 && (<><span>·</span><span>📎 {t.attachments!.length}</span></>)}
+                          </div>
                         </button>
-                      </div>
-                      {/* Ligne 2 : priorité à gauche · actions à droite */}
-                      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2.5">
-                        <AnimatedBadge status={prioBadge(t.priority)} size="sm">
-                          {titleCase(t.priority ?? "moyenne")}
-                        </AnimatedBadge>
-                        <div className="flex items-center gap-1.5">
+                        {/* Méta droite : pilule priorité + éditer + menu */}
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <span className={cn("hidden rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide sm:inline", prioPill(t.priority))}>
+                            {titleCase(t.priority ?? "moyenne")}
+                          </span>
                           <button
                             type="button"
                             onClick={() => (tdEditId === t.id ? setTdEditId(null) : startEditTodo(t))}
@@ -1829,18 +1908,23 @@ export function CreatorSpace({
                           />
                         </div>
                       </div>
-                      <InlineForm
-                        open={tdEditId === t.id}
-                        title="Modifier la tâche"
-                        onClose={() => setTdEditId(null)}
-                        onSubmit={saveEditTodo}
-                      >
-                        <TextField label="Tâche" value={teText} onChange={setTeText} />
-                        <AutoGrowTextField label="Description" value={teDesc} onChange={setTeDesc} className="min-w-full" />
-                        <SelectField label="Priorité" value={tePrio} onChange={setTePrio} options={PRIORITY_OPTIONS} />
-                      </InlineForm>
+                      {tdEditId === t.id && (
+                        <div className="px-5 pb-2">
+                          <InlineForm
+                            open
+                            title="Modifier la tâche"
+                            onClose={() => setTdEditId(null)}
+                            onSubmit={saveEditTodo}
+                          >
+                            <TextField label="Tâche" value={teText} onChange={setTeText} />
+                            <AutoGrowTextField label="Description" value={teDesc} onChange={setTeDesc} className="min-w-full" />
+                            <SelectField label="Priorité" value={tePrio} onChange={setTePrio} options={PRIORITY_OPTIONS} />
+                          </InlineForm>
+                        </div>
+                      )}
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
               )}
@@ -2537,6 +2621,63 @@ export function CreatorSpace({
             {taskView.due && taskView.due !== "—" && (
               <div className="mt-4 text-xs text-faint">Échéance · {frDate(taskView.due)}</div>
             )}
+
+            {/* Sous-tâches (checklist) */}
+            {(() => {
+              const subs = taskView.subtasks ?? [];
+              const done = subs.filter((s) => s.done).length;
+              return (
+                <div className="mt-5 flex flex-col gap-1.5 border-t border-border pt-4">
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">
+                    Sous-tâches{subs.length ? ` · ${done}/${subs.length}` : ""}
+                  </span>
+                  {subs.length > 0 && (
+                    <div className="mb-1 h-1.5 w-full overflow-hidden rounded-full bg-panel">
+                      <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${subs.length ? (done / subs.length) * 100 : 0}%` }} />
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-1.5">
+                    {subs.map((s) => (
+                      <div key={s.id} className="group flex items-center gap-2 rounded-lg border border-border bg-panel/40 px-2.5 py-1.5">
+                        <button type="button" onClick={() => toggleSubtask(taskView, s.id)} className={cn("grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors", s.done ? "border-primary bg-primary text-primary-foreground" : "border-faint")}>
+                          {s.done && <Check className="h-3 w-3" />}
+                        </button>
+                        <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
+                        <button type="button" onClick={() => delSubtask(taskView, s.id)} className="shrink-0 text-faint opacity-0 transition-opacity hover:text-[#E5484D] group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                      </div>
+                    ))}
+                  </div>
+                  <form onSubmit={(e) => { e.preventDefault(); addSubtask(taskView); }} className="mt-1.5 flex items-center gap-2">
+                    <input value={subInput} onChange={(e) => setSubInput(e.target.value)} placeholder="Ajouter une sous-tâche…" className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary" />
+                    <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90"><Plus className="h-4 w-4" /></button>
+                  </form>
+                </div>
+              );
+            })()}
+
+            {/* Pièces jointes */}
+            <div className="mt-4 flex flex-col gap-1.5 border-t border-border pt-4">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">
+                Pièces jointes{(taskView.attachments ?? []).length ? ` · ${(taskView.attachments ?? []).length}` : ""}
+              </span>
+              <div className="flex flex-col gap-2">
+                {(taskView.attachments ?? []).map((a) => (
+                  <div key={a.path} className="group flex items-center gap-3 rounded-lg border border-border bg-panel/40 p-2.5">
+                    <button type="button" onClick={() => openAttachment(a)} className="shrink-0" title="Ouvrir"><FileCard formatFile={fileFormatOf(a.name)} /></button>
+                    <button type="button" onClick={() => openAttachment(a)} className="min-w-0 flex-1 text-left">
+                      <div className="truncate text-[13px] font-medium text-foreground hover:underline">{a.name}</div>
+                      <div className="text-[11px] text-faint">{a.size}</div>
+                    </button>
+                    <button type="button" onClick={() => removeAttachment(taskView, a.path)} className="shrink-0 text-faint opacity-0 transition-opacity hover:text-[#E5484D] group-hover:opacity-100" title="Retirer"><Trash2 className="h-4 w-4" /></button>
+                  </div>
+                ))}
+                <input ref={attFileRef} type="file" multiple className="hidden" onChange={(e) => uploadAttachments(taskView, e.target.files)} />
+                <button type="button" onClick={() => attFileRef.current?.click()} disabled={attUploading} className="flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border px-3 py-2.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
+                  <Upload className="h-4 w-4" /> {attUploading ? "Envoi…" : "Ajouter un fichier"}
+                </button>
+              </div>
+            </div>
+
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
