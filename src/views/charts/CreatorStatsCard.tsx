@@ -82,14 +82,14 @@ export default function CreatorStatsCard({ entries }: { entries: Entry[] }) {
           <div className="text-sm font-semibold text-foreground">Mes statistiques</div>
           <div className="text-[11px] text-faint">D'après les mesures de ton agence</div>
         </div>
-        <div className="flex">
+        <div className="flex overflow-x-auto border-t border-border sm:border-t-0 sm:border-l">
           {METRICS.map((m) => (
             <button
               key={m.key}
               type="button"
               onClick={() => setActive(m.key)}
               className={cn(
-                "flex flex-1 flex-col justify-center gap-0.5 border-t border-border px-4 py-3 text-left transition-colors even:border-l sm:min-w-[7rem] sm:border-l sm:border-t-0",
+                "flex min-w-[6.5rem] flex-1 flex-col justify-center gap-0.5 border-l border-border px-4 py-3 text-left transition-colors first:border-l-0",
                 active === m.key ? "bg-panel/60" : "hover:bg-rowhover",
               )}
             >

@@ -428,22 +428,15 @@ export function Documents() {
             >
               <ChevronLeft className="h-3.5 w-3.5" /> Tous les dossiers
             </button>
-            <div className="mb-2.5 flex items-center gap-2 text-sm font-semibold text-foreground">
-              {(() => {
-                const M = metaFor(openType);
-                return (
-                  <>
-                    <span className={cn("grid size-7 place-items-center rounded-lg", M.className)}><M.icon className="size-3.5" /></span>
-                    {M.label} <span className="font-normal text-faint">· {typeCount[openType]}</span>
-                  </>
-                );
-              })()}
+            <div className="mb-3 flex items-center gap-3 text-sm font-semibold text-foreground">
+              <FileCard formatFile={TYPE_FMT[openType] ?? "doc"} />
+              <span>{metaFor(openType).label} <span className="font-normal text-faint">· {typeCount[openType]}</span></span>
             </div>
             <ul className="flex flex-col gap-2.5">{filtered.filter((r) => normType(r.type) === openType).map(docCard)}</ul>
           </div>
         ) : (
           /* Grille de dossiers par type (« portails ») */
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {folders.map((t) => {
               const M = metaFor(t);
               return (
