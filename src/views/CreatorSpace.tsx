@@ -229,6 +229,7 @@ function frTime(s: string): number {
 // Graphique recharts lazy-chargé : sort la lib (~101 Ko gzip) du premier écran créateur.
 const FollowerArea = lazy(() => import("./charts/FollowerArea"));
 const CreatorStatsCard = lazy(() => import("./charts/CreatorStatsCard"));
+const GlobeStickers = lazy(() => import("@/components/ui/cobe-globe-stickers"));
 
 /** Sous-menu déployé d'une famille (liste ses pages). */
 function CreatorMobileMenu({ ids, onSelect }: { ids: Tab[]; onSelect: (id: Tab) => void }) {
@@ -1632,6 +1633,19 @@ export function CreatorSpace({
                   </div>
                 </Card>
               </div>
+
+              {/* Globe interactif — touche déco (glisse pour le faire tourner) */}
+              <Card className="overflow-hidden">
+                <div className="flex flex-col items-center gap-0.5 text-center">
+                  <div className="text-sm font-semibold text-foreground">Le monde de TTP 🌍</div>
+                  <div className="text-[11px] text-faint">Glisse pour le faire tourner</div>
+                </div>
+                <div className="mx-auto mt-3 w-full max-w-[280px]">
+                  <Suspense fallback={<div className="mx-auto aspect-square w-full max-w-[280px] animate-pulse rounded-full bg-panel/50" />}>
+                    <GlobeStickers dark={dark} />
+                  </Suspense>
+                </div>
+              </Card>
             </div>
           )}
 
