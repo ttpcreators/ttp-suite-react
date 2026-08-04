@@ -1572,7 +1572,7 @@ export function CreatorSpace({
                     )}
                   </div>
                   {openTodos.length === 0 ? (
-                    <div className="py-2 text-xs text-muted-foreground">Rien à faire 🎉</div>
+                    <div className="py-2 text-xs text-muted-foreground">Rien à faire</div>
                   ) : (
                     openTodos.slice(0, 5).map((t) => (
                       <div key={t.id} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
@@ -2006,7 +2006,7 @@ export function CreatorSpace({
                 <AutoGrowTextField label="Idée de contenu" value={idText} onChange={setIdText} placeholder="Décris ton idée — le champ s'agrandit tout seul…" className="min-w-full" />
               </InlineForm>
               {ideas.length === 0 ? (
-                <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">Aucune idée. Ajoute la première 💡</div>
+                <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">Aucune idée. Ajoute la première</div>
               ) : ideaView === "liste" ? (
                 <div className="flex flex-col gap-3">{ideas.map(ideaCard)}</div>
               ) : (

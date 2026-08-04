@@ -123,11 +123,12 @@ export function GlobeStickers({
     let animationId = 0;
     let phi = 0;
     let size = 0;
+    let running = false;
 
     // cobe v2 n'expose pas onRender → on pilote le globe via update() dans notre
     // propre boucle, et on y projette les stickers (même orientation exactement).
     function frame() {
-      if (!globe) return;
+      if (!globe || !running) return;
       const curPhi = phi + phiOffsetRef.current + dragOffset.current.phi;
       const curTheta = 0.2 + thetaOffsetRef.current + dragOffset.current.theta;
       globe.update({ phi: curPhi, theta: curTheta });
@@ -147,6 +148,12 @@ export function GlobeStickers({
       }
       animationId = requestAnimationFrame(frame);
     }
+    const start = () => { if (!running && globe) { running = true; frame(); } };
+    const stop = () => { running = false; if (animationId) cancelAnimationFrame(animationId); animationId = 0; };
+
+    // Ne fait tourner la boucle que quand le globe est réellement visible à
+    // l'écran (pas juste monté) → 0 conso batterie/CPU quand on scrolle ailleurs.
+    let io: IntersectionObserver | null = null;
 
     function init() {
       size = canvas.offsetWidth;
@@ -168,8 +175,12 @@ export function GlobeStickers({
         markers: [],
         opacity: 0.85,
       });
-      frame();
       requestAnimationFrame(() => canvas && (canvas.style.opacity = "1"));
+      io = new IntersectionObserver(
+        (entries) => (entries[0]?.isIntersecting ? start() : stop()),
+        { threshold: 0.01 },
+      );
+      io.observe(canvas);
     }
 
     if (canvas.offsetWidth > 0) {
@@ -185,7 +196,8 @@ export function GlobeStickers({
     }
 
     return () => {
-      if (animationId) cancelAnimationFrame(animationId);
+      stop();
+      if (io) io.disconnect();
       if (globe) globe.destroy();
     };
   }, [markers, speed, dark]);
