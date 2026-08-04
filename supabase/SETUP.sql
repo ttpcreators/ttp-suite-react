@@ -799,6 +799,11 @@ create trigger creator_roadmap_guard_iu before insert or update on public.creato
 alter table public.todos add column if not exists subtasks jsonb;
 alter table public.todos add column if not exists attachments jsonb;
 
+-- ----------------------------------------------------------------------------
+-- IDÉES : sous-tâches (checklist) — cf. sql/ideas-subtasks.sql
+-- ----------------------------------------------------------------------------
+alter table public.ideas add column if not exists subtasks jsonb;
+
 -- ============================================================================
 -- FIN. Vérif rapide (en étant DÉCONNECTÉ, ces requêtes doivent renvoyer 0 ligne) :
 --   select * from public.creators;

@@ -222,15 +222,20 @@ export function Apercu() {
   const hasMonthlyCA = monthlyCA.length >= 2 && monthlyCA.some((p) => p.ca > 0);
   const caDelta = hasMonthlyCA ? momDelta(monthlyCA.map((p) => p.ca)) : null;
 
+  const todayLabel = (() => {
+    const s = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  })();
+
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="mb-1.5 text-sm text-foreground">
-            Hello Marc ✌️
+          <div className="mb-1.5 flex items-center gap-1.5 text-sm text-muted-foreground">
+            <CalendarDays className="h-4 w-4 text-faint" /> {todayLabel}
           </div>
           <div className="text-[26px] font-semibold tracking-tight md:text-[30px]">
-            Aperçu financier
+            Hello toi ✌️
           </div>
         </div>
         <LocationTag city="Lyon" country="France" timezone="CET" />
