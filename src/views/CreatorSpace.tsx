@@ -59,6 +59,7 @@ import { SuiviPanel, type SuiviEntry } from "@/views/EngagementSuivi";
 import { CreatorRoadmap } from "@/views/CreatorTracking";
 import { ScaledPreview } from "@/components/ui/scaled-preview";
 import { WelcomeModal } from "@/components/ui/welcome-modal";
+import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, type Gift as GiftRow } from "@/lib/gifting";
 
 const BASE = import.meta.env.BASE_URL;
@@ -2321,36 +2322,21 @@ export function CreatorSpace({
 
           {/* Documents */}
           {tab === "documents" && (
-            <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-              {docs.length === 0 ? (
-                <div className="p-6 text-sm text-muted-foreground">Aucun document.</div>
-              ) : (
-                docs.map((doc, i) => (
-                  <div key={doc.id} className={"flex items-center gap-3 px-4 py-3 " + (i > 0 ? "border-t border-border" : "")}>
-                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo/15 text-indigo">
-                      <FileText className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold">{doc.name}</div>
+            docs.length === 0 ? (
+              <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">Aucun document.</div>
+            ) : (
+              <div className="flex flex-col gap-2.5">
+                {docs.map((doc) => (
+                  <div key={doc.id} className="flex items-center gap-4 rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm transition-colors hover:bg-rowhover">
+                    <div className="shrink-0 self-center pr-1"><FileCard formatFile={fileFormatOf(doc.name, doc.type)} /></div>
+                    <button type="button" onClick={() => openDocFile(doc)} className="min-w-0 flex-1 text-left" title="Ouvrir / télécharger">
+                      <div className="truncate text-sm font-semibold text-foreground hover:underline">{doc.name}</div>
                       <div className="truncate text-xs text-faint">{[doc.type === "mediakit" ? "Media kit" : doc.type, doc.size].filter(Boolean).join(" · ")}</div>
-                    </div>
+                    </button>
                     {doc.path && (
                       <button
                         type="button"
-                        onClick={async () => {
-                          // Media kit « par lien » : le path est une URL externe (Drive/Canva…),
-                          // pas un objet du bucket → ouvrir directement (createSignedUrl échouerait).
-                          if (/^https?:\/\//i.test(doc.path!)) {
-                            window.open(doc.path!, "_blank");
-                            return;
-                          }
-                          const { data, error } = await supabase.storage.from("documents").createSignedUrl(doc.path!, 3600);
-                          if (error || !data?.signedUrl) {
-                            toast("Lien indisponible — réessaie");
-                            return;
-                          }
-                          window.open(data.signedUrl, "_blank");
-                        }}
+                        onClick={() => openDocFile(doc)}
                         title="Ouvrir"
                         className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                       >
@@ -2358,9 +2344,9 @@ export function CreatorSpace({
                       </button>
                     )}
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )
           )}
 
           {/* Facturation */}

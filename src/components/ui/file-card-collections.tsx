@@ -289,4 +289,22 @@ export const FileCard = ({ formatFile, className }: FileCardProps) => {
   );
 };
 
+// Déduit le format d'icône d'un fichier depuis son extension (repli sémantique par
+// type de document TTP : stats → image, facture/mediakit/brief → pdf, sinon doc).
+const EXT_FMT: Record<string, FormatFileProps> = {
+  pdf: "pdf", doc: "doc", docx: "doc", txt: "txt", md: "md", mdx: "mdx",
+  xls: "xls", xlsx: "xlsx", csv: "csv", ppt: "ppt", pptx: "pptx",
+  zip: "zip", rar: "rar", tar: "tar", gz: "gz",
+  png: "png", jpg: "jpg", jpeg: "jpeg", webp: "img", gif: "img", heic: "img", svg: "img",
+  mp4: "video", mov: "video", webm: "video", avi: "video",
+  html: "html", js: "js", jsx: "jsx", tsx: "tsx", ts: "code", css: "css", json: "json",
+};
+export function fileFormatOf(name: string, type?: string | null): FormatFileProps {
+  const ext = (name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (ext && EXT_FMT[ext]) return EXT_FMT[ext];
+  if (type === "stats") return "img";
+  if (type === "facture" || type === "mediakit" || type === "brief") return "pdf";
+  return "doc";
+}
+
 export default FileCard;
