@@ -6,6 +6,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { AddButton, InlineForm, SelectField } from "@/components/ui/form";
 import { FilterBar, type FilterOpt } from "@/components/ui/filter-bar";
 import { PeriodFilter, periodsFrom, inPeriod } from "@/components/ui/period-filter";
+import { FileCard, type FormatFileProps } from "@/components/ui/file-card-collections";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
@@ -36,6 +37,23 @@ const DOC_TYPE_META: Record<string, TypeMeta> = {
   autre: { label: "Document", icon: FileText, className: "bg-primary/15 text-primary", tagClassName: "bg-primary/10 text-primary" },
 };
 const metaFor = (type: string): TypeMeta => DOC_TYPE_META[type] ?? DOC_TYPE_META.autre;
+
+// Extension de fichier → format d'icône FileCard (repli sémantique par type de doc).
+const EXT_FMT: Record<string, FormatFileProps> = {
+  pdf: "pdf", doc: "doc", docx: "doc", txt: "txt", md: "md", mdx: "mdx",
+  xls: "xls", xlsx: "xlsx", csv: "csv", ppt: "ppt", pptx: "pptx",
+  zip: "zip", rar: "rar", tar: "tar", gz: "gz",
+  png: "png", jpg: "jpg", jpeg: "jpeg", webp: "img", gif: "img", heic: "img", svg: "img",
+  mp4: "video", mov: "video", webm: "video", avi: "video",
+  html: "html", js: "js", jsx: "jsx", tsx: "tsx", ts: "code", css: "css", json: "json",
+};
+const fmtOf = (name: string, type: string | null): FormatFileProps => {
+  const ext = (name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (ext && EXT_FMT[ext]) return EXT_FMT[ext];
+  if (type === "stats") return "img";
+  if (type === "facture" || type === "mediakit" || type === "brief") return "pdf";
+  return "doc";
+};
 
 const TYPE_OPTIONS = [
   { value: "brief", label: "Brief" },
@@ -314,13 +332,10 @@ export function Documents() {
   // Carte document réutilisable (liste plate en recherche + dans un dossier).
   const docCard = (row: Row) => {
     const meta = metaFor(row.type);
-    const Icon = meta.icon;
     const details = [row.size, formatDate(row.created_at)].filter(Boolean).join(" · ");
     return (
-      <li key={row.id} className="flex items-center gap-3.5 rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm transition-colors hover:bg-rowhover">
-        <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", meta.className)}>
-          <Icon className="size-4" />
-        </div>
+      <li key={row.id} className="flex items-center gap-4 rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm transition-colors hover:bg-rowhover">
+        <div className="shrink-0 self-center pr-1"><FileCard formatFile={fmtOf(row.name, row.type)} /></div>
         <button type="button" onClick={() => openDoc(row)} className="min-w-0 flex-1 text-left" title="Ouvrir / télécharger">
           <div className="truncate text-[13px] font-semibold text-foreground hover:underline">{row.name}</div>
           <div className="mt-0.5 truncate text-[10px] text-faint">{details}</div>
