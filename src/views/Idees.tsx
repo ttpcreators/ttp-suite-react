@@ -10,10 +10,12 @@ import {
   InlineForm,
   TextField,
   AutoGrowTextField,
+  SelectField,
 } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { FilterBar } from "@/components/ui/filter-bar";
-import { Trash2, MessageSquarePlus, Check, X, Pencil } from "lucide-react";
+import { useCreators } from "@/lib/useCreators";
+import { Trash2, MessageSquarePlus, Check, X, Pencil, UserRound } from "lucide-react";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useEffect, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
@@ -54,10 +56,15 @@ export function Idees() {
   const [error, setError] = useState<boolean>(false);
   const live = useLiveKey();
 
+  const creators = useCreators();
+  const creatorOptions = creators.map((c) => ({ value: c.name, label: titleCase(c.name) }));
+
   const [formOpen, setFormOpen] = useState(false);
   const [text, setText] = useState("");
   const [note, setNote] = useState("");
+  const [formCreator, setFormCreator] = useState(""); // "" = idée générale (aucune créatrice)
   const [statusFilter, setStatusFilter] = useState<string>(ALL_STATUS);
+  const [creatorFilter, setCreatorFilter] = useState<string>(""); // "" = toutes ; "__general__" = non assignées
   // Édition inline du texte d'une idée.
   const [editId, setEditId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -114,7 +121,7 @@ export function Idees() {
     }
     const row = {
       text: text.trim(),
-      creator: null,
+      creator: formCreator || null,
       status: "À faire",
       source: "agency",
       sort_order: nextOrder(rows ?? []),
@@ -129,10 +136,11 @@ export function Idees() {
     setRows(nextRows);
     setCache("ideas", nextRows);
     if (note.trim()) await saveNote(createdRow.id, note);
-    toast("Idée ajoutée ✓");
+    toast(formCreator ? `Idée envoyée à ${titleCase(formCreator)} ✓` : "Idée ajoutée ✓");
     setFormOpen(false);
     setText("");
     setNote("");
+    setFormCreator("");
   };
 
   const startEdit = (row: Row) => {
@@ -187,9 +195,16 @@ export function Idees() {
   const filtered =
     rows === null
       ? null
-      : statusFilter === ALL_STATUS
-        ? rows
-        : rows.filter((r) => (r.status ?? "À faire") === statusFilter);
+      : rows.filter((r) => {
+          const statusOk = statusFilter === ALL_STATUS || (r.status ?? "À faire") === statusFilter;
+          const creatorOk =
+            creatorFilter === ""
+              ? true
+              : creatorFilter === "__general__"
+                ? !r.creator
+                : (r.creator ?? "").toLowerCase() === creatorFilter.toLowerCase();
+          return statusOk && creatorOk;
+        });
 
   return (
     <div>
@@ -204,11 +219,29 @@ export function Idees() {
 
       {/* Barre de filtres par statut (pastilles desktop · sélecteur mobile) */}
       <FilterBar
-        className="mb-4"
+        className="mb-3"
         value={statusFilter}
         onChange={setStatusFilter}
         options={[{ value: ALL_STATUS, label: "Tous" }, ...STATUS_FILTERS.map((s) => ({ value: s, label: s }))]}
       />
+
+      {/* Filtre par créatrice — voir les idées d'une créatrice en particulier */}
+      {creators.length > 0 && (
+        <div className="mb-4 flex items-center gap-2">
+          <UserRound className="h-4 w-4 shrink-0 text-faint" />
+          <select
+            value={creatorFilter}
+            onChange={(e) => setCreatorFilter(e.target.value)}
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
+          >
+            <option value="">Toutes les créatrices</option>
+            <option value="__general__">Idées générales (non assignées)</option>
+            {creatorOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <InlineForm
         open={formOpen}
@@ -217,6 +250,12 @@ export function Idees() {
         onSubmit={submit}
       >
         <AutoGrowTextField label="Idée" value={text} onChange={setText} placeholder="Décris ton idée — le champ s'agrandit tout seul…" className="min-w-full" />
+        <SelectField
+          label="Pour quelle créatrice ? (apparaît dans son espace)"
+          value={formCreator}
+          onChange={setFormCreator}
+          options={[{ value: "", label: "Idée générale (aucune créatrice)" }, ...creatorOptions]}
+        />
         <TextField label="Commentaire (optionnel)" value={note} onChange={setNote} placeholder="Infos, rappel, lien…" />
       </InlineForm>
 

@@ -1390,18 +1390,17 @@ export function CreatorSpace({
               {/* Raccourcis rapides vers les pages clés */}
               <div className="grid grid-cols-3 gap-3">
                 {([
-                  { id: "todo", label: "À faire", Icon: ListChecks, cls: "bg-primary/10 text-primary" },
-                  { id: "ideas", label: "Idées", Icon: Lightbulb, cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
-                  { id: "planning", label: "Planning", Icon: CalendarDays, cls: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
-                ] as const).map(({ id, label, Icon, cls }) => (
+                  { id: "todo", label: "À faire", Icon: ListChecks },
+                  { id: "ideas", label: "Idées", Icon: Lightbulb },
+                  { id: "planning", label: "Planning", Icon: CalendarDays },
+                ] as const).map(({ id, label, Icon }) => (
                   <button
                     key={id}
                     type="button"
                     onClick={() => setTab(id as Tab)}
-                    className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                    className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface px-3 py-3.5 text-xs font-semibold text-foreground shadow-sm transition-colors hover:bg-rowhover"
                   >
-                    <span className={cn("grid h-11 w-11 place-items-center rounded-full", cls)}><Icon className="h-5 w-5" /></span>
-                    <span className="text-[12px] font-semibold text-foreground">{label}</span>
+                    <Icon className="h-4 w-4 text-primary" /> <span>{label}</span>
                   </button>
                 ))}
               </div>

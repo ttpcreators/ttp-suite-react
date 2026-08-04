@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { FileBarChart, Pencil, Share2, Download, LayoutGrid, List, Table2, Trash2, Send, Eye, X, FileText, Activity } from "lucide-react";
+import { Pencil, Share2, Download, LayoutGrid, List, Table2, Trash2, Send, Eye, X, FileText, Activity } from "lucide-react";
+import { FileCard } from "@/components/ui/file-card-collections";
 import {
   useAppState,
   saveAppStateKey,
@@ -611,9 +612,7 @@ export function Debrief() {
         </div>
       ) : list.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center shadow-sm">
-          <div className="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-signalsoft text-signaltext">
-            <FileBarChart className="size-5" />
-          </div>
+          <div className="mx-auto mb-3 w-fit"><FileCard formatFile="doc" /></div>
           <div className="text-sm font-medium text-foreground">Aucun debrief pour le moment</div>
           <div className="mt-1.5 text-xs text-faint">
             Crée un bilan de campagne avec le bouton « + Debrief ».
