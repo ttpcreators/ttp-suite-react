@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
-import { titleCase } from "@/lib/utils";
+import { titleCase, cn } from "@/lib/utils";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
+import { SubtaskChecklist, type Subtask } from "@/components/ui/subtask-checklist";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
@@ -26,6 +27,7 @@ type Row = {
   status: string | null;
   source: string | null;
   sort_order: number | null;
+  subtasks?: Subtask[] | null;
 };
 
 const STATUS_OPTS: StatusOption[] = [
@@ -34,6 +36,15 @@ const STATUS_OPTS: StatusOption[] = [
   { value: "En cours", label: "En cours", dot: "bg-cyan" },
   { value: "Publiée", label: "Publiée", dot: "bg-signal" },
 ];
+
+// Barre d'accent (bord gauche de la carte) selon le statut de l'idée.
+const IDEA_ACCENT: Record<string, string> = {
+  "À explorer": "bg-indigo",
+  "À faire": "bg-primary",
+  "En cours": "bg-cyan",
+  "Publiée": "bg-signal",
+};
+const ideaAccent = (s: string | null) => IDEA_ACCENT[s ?? "À faire"] ?? "bg-primary";
 
 const STATUS_FILTERS = ["À explorer", "À faire", "En cours", "Publiée"];
 const ALL_STATUS = "__all__";
@@ -78,7 +89,7 @@ export function Idees() {
     let active = true;
     supabase
       .from("ideas")
-      .select("id, text, creator, status, source, sort_order")
+      .select("id, text, creator, status, source, sort_order, subtasks")
       .order("sort_order")
       .then(({ data, error }) => {
         if (!active) return;
@@ -155,6 +166,14 @@ export function Idees() {
     }
   };
 
+  // Sous-tâches (checklist interne à l'idée) — persiste base + cache.
+  const saveSubtasks = async (id: string, subtasks: Subtask[]) => {
+    const next = (rows ?? []).map((r) => (r.id === id ? { ...r, subtasks } : r));
+    setRows(next);
+    setCache("ideas", next);
+    if (!(await dbUpdate("ideas", id, { subtasks }))) toast("Erreur — lance le SQL sous-tâches ?");
+  };
+
   const removeRow = async (id: string) => {
     const r = (rows ?? []).find((x) => x.id === id);
     if (await dbTrash("ideas", id, r?.text ?? "Idée", r?.creator ?? undefined)) {
@@ -218,8 +237,9 @@ export function Idees() {
           {(filtered ?? []).map((row) => (
             <div
               key={row.id}
-              className="rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:bg-rowhover"
+              className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 pl-5 shadow-sm transition-colors hover:bg-rowhover"
             >
+              <span className={cn("absolute left-0 top-0 h-full w-1", ideaAccent(row.status))} />
               {editId === row.id ? (
                 <div className="flex flex-col gap-2">
                   <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Modifier l'idée</span>
@@ -356,6 +376,13 @@ export function Idees() {
                   <MessageSquarePlus className="h-3.5 w-3.5" /> Ajouter un commentaire
                 </button>
               )}
+
+              {/* Sous-tâches (checklist repliable) */}
+              <SubtaskChecklist
+                className="mt-3"
+                value={row.subtasks ?? []}
+                onChange={(next) => saveSubtasks(row.id, next)}
+              />
             </div>
           ))}
         </div>

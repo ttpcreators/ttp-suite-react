@@ -63,6 +63,7 @@ import { CreatorRoadmap } from "@/views/CreatorTracking";
 import { ScaledPreview } from "@/components/ui/scaled-preview";
 import { WelcomeModal } from "@/components/ui/welcome-modal";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
+import { SubtaskChecklist } from "@/components/ui/subtask-checklist";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, type Gift as GiftRow } from "@/lib/gifting";
 
 const BASE = import.meta.env.BASE_URL;
@@ -101,7 +102,10 @@ const PRIO_ACCENT: Record<string, string> = { haute: "bg-rose-500", moyenne: "bg
 const PRIO_PILL: Record<string, string> = { haute: "bg-rose-500/10 text-rose-600 dark:text-rose-400", moyenne: "bg-amber-500/10 text-amber-600 dark:text-amber-400", basse: "bg-panel text-faint" };
 const prioAccent = (p: string | null) => PRIO_ACCENT[p ?? "moyenne"] ?? PRIO_ACCENT.moyenne;
 const prioPill = (p: string | null) => PRIO_PILL[p ?? "moyenne"] ?? PRIO_PILL.moyenne;
-type Idea = { id: string; text: string; status: string | null; sort_order?: number };
+type Idea = { id: string; text: string; status: string | null; sort_order?: number; subtasks?: Subtask[] | null };
+// Barre d'accent (bord gauche de la carte idée) selon le statut.
+const IDEA_ACCENT: Record<string, string> = { "À explorer": "bg-indigo", "À faire": "bg-primary", "En cours": "bg-cyan", "Publiée": "bg-signal" };
+const ideaAccent = (s: string | null) => IDEA_ACCENT[s ?? "À faire"] ?? "bg-primary";
 type Brief = { id: string; brand: string; deliverables: string | null; due: string | null; status: string | null; consignes: string | null };
 type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string; type: string };
 type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null };
@@ -449,7 +453,7 @@ export function CreatorSpace({
         if (alive) setCreator((data?.[0] as Creator) ?? null);
       });
     supabase.from("todos").select("id,text,descr,due,priority,done,status,sort_order,subtasks,attachments").eq("creator", name).order("sort_order").then(({ data }) => alive && setTodos((data as Todo[]) ?? []));
-    supabase.from("ideas").select("id,text,status,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
+    supabase.from("ideas").select("id,text,status,sort_order,subtasks").eq("creator", name).order("sort_order").then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
     supabase.from("briefs").select("id,brand,deliverables,due,status,consignes").eq("creator", name).then(({ data }) => alive && setBriefs((data as Brief[]) ?? []));
     supabase.from("gifting").select(GIFT_COLS).eq("creator", name).order("sort_order", { ascending: false }).then(({ data }) => alive && setGifts((data as GiftRow[]) ?? []));
     supabase.from("events").select("id,date,day,time,title,type,who").or("deleted.is.null,deleted.eq.false").then(({ data }) => {
@@ -752,6 +756,11 @@ export function CreatorSpace({
     if (!(await dbUpdate("ideas", x.id, { status }))) toast("Erreur — réessaie");
   };
 
+  const saveIdeaSubtasks = async (id: string, subtasks: Subtask[]) => {
+    setIdeas((prev) => prev.map((y) => (y.id === id ? { ...y, subtasks } : y)));
+    if (!(await dbUpdate("ideas", id, { subtasks }))) toast("Erreur — lance le SQL sous-tâches ?");
+  };
+
   const saveIdeaEdit = async (id: string) => {
     const t = ideaEditText.trim();
     if (!t) {
@@ -796,11 +805,9 @@ export function CreatorSpace({
         </div>
       </div>
     ) : (
-      <div key={x.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-        <div className="flex items-start gap-3">
-          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-indigo" />
-          <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{x.text}</div>
-        </div>
+      <div key={x.id} className="relative overflow-hidden rounded-2xl border border-border bg-surface p-4 pl-5 shadow-sm">
+        <span className={cn("absolute left-0 top-0 h-full w-1", ideaAccent(x.status))} />
+        <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{x.text}</div>
         <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2.5">
           <div className="w-[150px] max-w-[60%]">
             <StatusSelect value={x.status ?? "À faire"} options={IDEA_STATUS} onChange={(s) => setIdeaStatus(x, s)} />
@@ -832,6 +839,8 @@ export function CreatorSpace({
             ]}
           />
         </div>
+        {/* Sous-tâches (checklist repliable) */}
+        <SubtaskChecklist className="mt-3" value={x.subtasks ?? []} onChange={(next) => saveIdeaSubtasks(x.id, next)} />
       </div>
     );
 
@@ -1377,6 +1386,25 @@ export function CreatorSpace({
                 </div>
                 <div className="mt-2 text-center text-[10px] text-faint">Jusqu'à 6 images · elles arrivent directement chez ton agence, qui est notifiée.</div>
               </WelcomeModal>
+
+              {/* Raccourcis rapides vers les pages clés */}
+              <div className="grid grid-cols-3 gap-3">
+                {([
+                  { id: "todo", label: "À faire", Icon: ListChecks, cls: "bg-primary/10 text-primary" },
+                  { id: "ideas", label: "Idées", Icon: Lightbulb, cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+                  { id: "planning", label: "Planning", Icon: CalendarDays, cls: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
+                ] as const).map(({ id, label, Icon, cls }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setTab(id as Tab)}
+                    className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                  >
+                    <span className={cn("grid h-11 w-11 place-items-center rounded-full", cls)}><Icon className="h-5 w-5" /></span>
+                    <span className="text-[12px] font-semibold text-foreground">{label}</span>
+                  </button>
+                ))}
+              </div>
 
               {/* Évolution des abonnés — même graphique que l'Aperçu agence */}
               <Card index={1}>
