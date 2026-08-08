@@ -3,6 +3,10 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* Fait suivre le thème aux contrôles NATIFs (pickers date/mois, spinners
+     number, menus <select>, cases à cocher, scrollbars) — sinon ils restent
+     blancs en dark. */
+  color-scheme: light;
   --radius: 0.75rem;
   --background: #eaebef;
   --foreground: #18181b;
@@ -39,6 +43,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: #000000;
   --foreground: #fafafa;
   --card: #18181b;
