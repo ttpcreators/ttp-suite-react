@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Target, Pencil } from "lucide-react";
+import { useState, lazy, Suspense } from "react";
+import { Target, Pencil, TrendingUp } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import {
   useAppState,
@@ -23,8 +23,43 @@ type Objective = {
   tone: string;
 };
 
-/** Blob 'objByMonth' : indexé par offset de mois ("0" = mois courant). */
+/**
+ * Blob 'objByMonth' : indexé par mois ABSOLU ("AAAA-MM"). Ancien format = clé
+ * "0" (offset = mois courant) → repli/migration transparente vers le mois courant.
+ */
 type ObjByMonth = Record<string, Objective[]>;
+
+const ObjectivesTrend = lazy(() => import("./charts/ObjectivesTrend"));
+
+const monthKeyOf = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+const CURRENT_KEY = monthKeyOf();
+const isMonthKey = (k: string) => /^\d{4}-\d{2}$/.test(k);
+function monthTitle(key: string) {
+  const [y, m] = key.split("-").map(Number);
+  const s = new Date(y, (m || 1) - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function monthShort(key: string) {
+  const [y, m] = key.split("-").map(Number);
+  const d = new Date(y, (m || 1) - 1, 1);
+  const mois = d.toLocaleDateString("fr-FR", { month: "short" }).replace(".", "");
+  return y === new Date().getFullYear() ? mois : `${mois} ${String(y).slice(2)}`;
+}
+/** Progression moyenne (%) par mois, tous mois avec données (legacy "0" → mois courant si absent). */
+function monthlyTrend(obj: ObjByMonth) {
+  const map = new Map<string, Objective[]>();
+  for (const [k, v] of Object.entries(obj)) {
+    if (Array.isArray(v) && v.length && isMonthKey(k)) map.set(k, v);
+  }
+  if (!map.has(CURRENT_KEY) && Array.isArray(obj["0"]) && obj["0"].length) map.set(CURRENT_KEY, obj["0"]);
+  return [...map.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([key, arr]) => ({
+      month: key,
+      label: monthShort(key),
+      pct: Math.round(arr.reduce((s, o) => s + (Number(o.pct) || 0), 0) / arr.length),
+    }));
+}
 
 /** Valeurs de départ utiles quand le blob est vide (mois courant). */
 const SEED: Objective[] = [
@@ -41,7 +76,15 @@ export function Objectifs() {
   // Copie locale : le blob n'est chargé qu'une fois, on maintient l'état ici.
   const [local, setLocal] = useState<ObjByMonth | null>(null);
   const obj: ObjByMonth = local ?? data ?? {};
-  const list: Objective[] = obj["0"] ?? (Object.keys(obj).length === 0 ? SEED : []);
+
+  // Mois sélectionné (clé absolue "AAAA-MM"). Par défaut : mois courant.
+  const [selectedMonth, setSelectedMonth] = useState<string>(CURRENT_KEY);
+  // Liste du mois choisi (repli legacy "0" pour le mois courant ; SEED si blob vide).
+  const monthList: Objective[] | undefined =
+    obj[selectedMonth] ?? (selectedMonth === CURRENT_KEY ? obj["0"] : undefined);
+  const list: Objective[] =
+    monthList ?? (Object.keys(obj).length === 0 && selectedMonth === CURRENT_KEY ? SEED : []);
+  const trend = monthlyTrend(obj);
 
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
@@ -94,9 +137,11 @@ export function Objectifs() {
     // Relecture fraîche avant merge (évite d'écraser une écriture concurrente).
     invalidateAppState();
     const freshObj = ((await getAppState())["objByMonth"] as ObjByMonth) ?? {};
-    const freshList = freshObj["0"] ?? [];
+    const useLegacy = selectedMonth === CURRENT_KEY && freshObj[selectedMonth] === undefined && Array.isArray(freshObj["0"]);
+    const freshList = freshObj[selectedMonth] ?? (useLegacy ? freshObj["0"] : []) ?? [];
     const next: Objective[] = isEdit ? freshList.map((o, i) => (i === editIndex ? item : o)) : [item, ...freshList];
-    const nextObj: ObjByMonth = { ...freshObj, "0": next };
+    const nextObj: ObjByMonth = { ...freshObj, [selectedMonth]: next };
+    if (useLegacy) delete nextObj["0"]; // migre l'ancien format vers la clé absolue
     setLocal(nextObj);
     setName("");
     setTarget("");
@@ -110,9 +155,11 @@ export function Objectifs() {
   async function remove(index: number) {
     invalidateAppState();
     const freshObj = ((await getAppState())["objByMonth"] as ObjByMonth) ?? {};
-    const freshList = freshObj["0"] ?? [];
+    const useLegacy = selectedMonth === CURRENT_KEY && freshObj[selectedMonth] === undefined && Array.isArray(freshObj["0"]);
+    const freshList = freshObj[selectedMonth] ?? (useLegacy ? freshObj["0"] : []) ?? [];
     const next = freshList.filter((_, i) => i !== index);
-    const nextObj: ObjByMonth = { ...freshObj, "0": next };
+    const nextObj: ObjByMonth = { ...freshObj, [selectedMonth]: next };
+    if (useLegacy) delete nextObj["0"];
     setLocal(nextObj);
     const ok = await saveAppStateKey("objByMonth", nextObj);
     toast(ok ? "Supprimé" : "Erreur — réessaie");
@@ -120,7 +167,7 @@ export function Objectifs() {
 
   return (
     <div className="space-y-4">
-      {/* En-tête : résumé + action */}
+      {/* En-tête : résumé + sélecteur de mois + action */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {loading ? (
@@ -137,7 +184,17 @@ export function Objectifs() {
             </>
           )}
         </div>
-        <AddButton label="Objectif" onClick={openAdd} />
+        <div className="flex items-center gap-2">
+          <input
+            type="month"
+            value={selectedMonth}
+            max={CURRENT_KEY}
+            onChange={(e) => setSelectedMonth(e.target.value || CURRENT_KEY)}
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground outline-none focus:border-primary"
+            title="Choisir le mois"
+          />
+          <AddButton label="Objectif" onClick={openAdd} />
+        </div>
       </div>
 
       <InlineForm
@@ -191,14 +248,17 @@ export function Objectifs() {
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-signalsoft text-signaltext">
             <Target className="size-5" />
           </div>
-          <div className="text-sm font-medium text-foreground">Aucun objectif ce mois-ci</div>
+          <div className="text-sm font-medium text-foreground">Aucun objectif — {monthTitle(selectedMonth)}</div>
           <div className="mt-1.5 text-xs text-faint">
             Ajoute un objectif avec le bouton « + Objectif ».
           </div>
         </div>
       ) : (
         <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="mb-4 text-sm font-semibold text-foreground">Objectifs par créateur</div>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-foreground">Objectifs par créateur</div>
+            <div className="rounded-full bg-panel px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{monthTitle(selectedMonth)}</div>
+          </div>
           <ul className="divide-y divide-border">
             {list.map((o, index) => {
               const pct = Math.max(0, Math.min(100, Number(o.pct) || 0));
@@ -241,6 +301,26 @@ export function Objectifs() {
           </ul>
         </div>
       )}
+
+      {/* Suivi dans le temps — progression moyenne par mois */}
+      {!loading && !error && (
+        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <TrendingUp className="h-4 w-4 text-primary" /> Suivi des objectifs
+          </div>
+          <p className="mb-2 mt-0.5 text-[11px] text-faint">Progression moyenne par mois</p>
+          {trend.length === 0 ? (
+            <div className="grid h-[180px] place-items-center px-4 text-center text-xs text-muted-foreground">
+              Renseigne l'avancement de tes objectifs — la courbe de progression apparaîtra ici, mois après mois.
+            </div>
+          ) : (
+            <Suspense fallback={<div className="h-[200px] animate-pulse rounded-xl bg-panel/50" />}>
+              <ObjectivesTrend points={trend} />
+            </Suspense>
+          )}
+        </div>
+      )}
+
       {pendingDel && (
         <ConfirmDialog
           title="Supprimer l'objectif"
