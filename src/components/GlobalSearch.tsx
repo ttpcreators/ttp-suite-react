@@ -78,8 +78,8 @@ export function GlobalSearch({
 
   return (
     <div className="relative w-full max-w-[220px] sm:max-w-md md:max-w-xl">
-      {/* Champ contrôlé (pilule sombre) — 100% synchro avec la requête */}
-      <div className="flex h-11 items-center gap-2.5 rounded-full bg-foreground px-4 text-background shadow-sm ring-1 ring-border/50">
+      {/* Champ contrôlé — pilule sombre en clair, GRISE en dark (pas blanche) */}
+      <div className="flex h-11 items-center gap-2.5 rounded-full bg-foreground px-4 text-background shadow-sm ring-1 ring-border/50 dark:bg-secondary dark:text-foreground dark:ring-border">
         <SearchIcon className="h-4 w-4 shrink-0 opacity-80" />
         <input
           type="text"
@@ -98,7 +98,7 @@ export function GlobalSearch({
             }
           }}
           placeholder="Rechercher une page, un créateur, une facture…"
-          className="h-full min-w-0 flex-1 bg-transparent text-sm text-background outline-none placeholder:text-background/50"
+          className="h-full min-w-0 flex-1 bg-transparent text-sm text-background outline-none placeholder:text-background/50 dark:text-foreground dark:placeholder:text-muted-foreground"
         />
         {query && (
           <button
@@ -107,7 +107,7 @@ export function GlobalSearch({
               setQuery("");
               setOpen(false);
             }}
-            className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-background/60 transition-colors hover:text-background"
+            className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-background/60 transition-colors hover:text-background dark:text-muted-foreground dark:hover:text-foreground"
             aria-label="Effacer la recherche"
           >
             <X className="h-3.5 w-3.5" />

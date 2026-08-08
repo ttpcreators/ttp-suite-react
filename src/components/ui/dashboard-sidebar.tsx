@@ -182,10 +182,18 @@ function ItemBlock({
   );
 }
 
+/**
+ * Un GROUPE = un dossier repliable (icône + label + chevron). Contrôlé par le
+ * parent (accordéon : un seul dossier ouvert à la fois → sidebar jamais
+ * surchargée). Quand il est replié mais contient la page active, une pastille
+ * primary le signale.
+ */
 function Group({
   group,
   activeId,
   activeSub,
+  open,
+  onToggle,
   onSelect,
   onItemContext,
   onItemSplit,
@@ -193,44 +201,43 @@ function Group({
   group: SbGroup;
   activeId: string;
   activeSub?: string | null;
+  open: boolean;
+  onToggle: () => void;
   onSelect: (id: string, sub?: string) => void;
   onItemContext?: (id: string, e: ReactMouseEvent) => void;
   onItemSplit?: (id: string) => void;
 }) {
-  // Toutes les sections OUVERTES par défaut (sidebar aérée) ; repliable + mémorisé.
-  // Le groupe de la page active se rouvre toujours.
   const containsActive = group.items.some((i) => i.id === activeId);
-  const storageKey = `ttp:sb-group:${group.id}`;
-  const [open, setOpen] = useState(() => {
-    if (typeof localStorage === "undefined") return true;
-    return localStorage.getItem(storageKey) !== "0"; // défaut : ouvert
-  });
-  useEffect(() => {
-    if (containsActive) setOpen(true);
-  }, [containsActive]);
-  const toggle = () =>
-    setOpen((o) => {
-      const next = !o;
-      try {
-        localStorage.setItem(storageKey, next ? "1" : "0");
-      } catch {
-        /* stockage indispo : on garde juste l'état en mémoire */
-      }
-      return next;
-    });
   return (
     <div className="flex flex-col">
       <button
         type="button"
-        onClick={toggle}
-        className="group/h flex select-none items-center justify-between rounded-[6px] px-2.5 py-1.5 text-left transition-colors hover:bg-rowhover/60"
+        onClick={onToggle}
+        aria-expanded={open}
+        className={cn(
+          "group/h flex select-none items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left transition-colors hover:bg-rowhover",
+          open && "bg-rowhover/50",
+        )}
       >
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+        <group.icon
+          className={cn(
+            "h-[18px] w-[18px] shrink-0 transition-colors",
+            containsActive ? "text-primary" : "text-faint group-hover/h:text-foreground/70",
+          )}
+          strokeWidth={1.75}
+        />
+        <span
+          className={cn(
+            "flex-1 truncate text-[12.5px] font-semibold tracking-wide transition-colors",
+            containsActive ? "text-foreground" : "text-foreground/70 group-hover/h:text-foreground",
+          )}
+        >
           {group.label}
         </span>
+        {!open && containsActive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
         <ChevronRight
           className={cn(
-            "h-3.5 w-3.5 text-faint/60 transition-transform duration-200 group-hover/h:text-faint",
+            "h-3.5 w-3.5 shrink-0 text-faint/60 transition-transform duration-200 group-hover/h:text-faint",
             open && "rotate-90",
           )}
           strokeWidth={2}
@@ -242,18 +249,20 @@ function Group({
           open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
         )}
       >
-        <div className="flex min-h-0 flex-col gap-0.5 overflow-hidden pt-0.5">
-          {group.items.map((item) => (
-            <ItemBlock
-              key={item.id}
-              item={item}
-              activeId={activeId}
-              activeSub={activeSub}
-              onSelect={onSelect}
-              onItemContext={onItemContext}
-              onItemSplit={onItemSplit}
-            />
-          ))}
+        <div className="min-h-0 overflow-hidden">
+          <div className="mb-0.5 ml-[9px] mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
+            {group.items.map((item) => (
+              <ItemBlock
+                key={item.id}
+                item={item}
+                activeId={activeId}
+                activeSub={activeSub}
+                onSelect={onSelect}
+                onItemContext={onItemContext}
+                onItemSplit={onItemSplit}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -284,16 +293,26 @@ export function SidebarNav({
   header?: ReactNode;
   footer?: ReactNode;
 }) {
+  // Accordéon : un seul dossier ouvert à la fois. Celui de la page active s'ouvre
+  // automatiquement (navigation, recherche) ; un clic sur un autre dossier bascule.
+  const activeGroupId = groups.find((g) => g.items.some((i) => i.id === activeId))?.id ?? null;
+  const [openGroup, setOpenGroup] = useState<string | null>(activeGroupId ?? groups[0]?.id ?? null);
+  useEffect(() => {
+    if (activeGroupId) setOpenGroup(activeGroupId);
+  }, [activeGroupId]);
+
   return (
     <aside className="flex h-full w-[240px] shrink-0 flex-col p-3">
       {header}
-      <nav className="mt-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <nav className="mt-1 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {groups.map((g) => (
           <Group
             key={g.id}
             group={g}
             activeId={activeId}
             activeSub={activeSub}
+            open={openGroup === g.id}
+            onToggle={() => setOpenGroup((cur) => (cur === g.id ? null : g.id))}
             onSelect={onSelect}
             onItemContext={onItemContext}
             onItemSplit={onItemSplit}
