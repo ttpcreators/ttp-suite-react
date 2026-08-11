@@ -233,7 +233,15 @@ function frTime(s: string): number {
 }
 
 // Graphique recharts lazy-chargé : sort la lib (~101 Ko gzip) du premier écran créateur.
-const FollowerArea = lazy(() => import("./charts/FollowerArea"));
+const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
+// Libellé + couleur de marque par plateforme (glass abonnés par réseau).
+const FOLLOWER_PLAT: Record<string, { label: string; color: string }> = {
+  instagram: { label: "Instagram", color: "#E1306C" },
+  tiktok: { label: "TikTok", color: "#0ea5e9" },
+  youtube: { label: "YouTube", color: "#ef4444" },
+  x: { label: "X", color: "#64748b" },
+  snapchat: { label: "Snapchat", color: "#f59e0b" },
+};
 const CreatorStatsCard = lazy(() => import("./charts/CreatorStatsCard"));
 const GlobeStickers = lazy(() => import("@/components/ui/cobe-globe-stickers"));
 
@@ -991,6 +999,23 @@ export function CreatorSpace({
     const lastTotal = last ? platforms.reduce((s, p) => s + (typeof last[p] === "number" ? last[p] : 0), 0) : 0;
     return { points, platforms, lastTotal };
   })();
+
+  // Un « glass chart » par réseau (IG, TikTok…) — gros chiffre + courbe par plateforme.
+  const followerGlassGrid = (
+    <div className={cn("grid gap-4", followerSeries.platforms.length > 1 ? "sm:grid-cols-2" : "grid-cols-1")}>
+      {followerSeries.platforms.map((p) => {
+        const meta = FOLLOWER_PLAT[p] ?? { label: titleCase(p), color: "#2b7fff" };
+        const pts = followerSeries.points
+          .map((pt) => ({ label: pt.label, value: Number((pt as Record<string, unknown>)[p] ?? 0) }))
+          .filter((x) => x.value > 0);
+        return (
+          <Suspense key={p} fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-panel/50" />}>
+            <GlassStatChart title={meta.label} subtitle="Abonnés" points={pts} format={(n) => fmtCompact(n)} color={meta.color} height={170} compareLabel="vs relevé préc." />
+          </Suspense>
+        );
+      })}
+    </div>
+  );
   const filteredTodos =
     todoFilter === "encours" ? todos.filter((t) => !t.done) : todoFilter === "terminees" ? todos.filter((t) => t.done) : todos;
 
@@ -1411,31 +1436,27 @@ export function CreatorSpace({
                 ))}
               </div>
 
-              {/* Évolution des abonnés — même graphique que l'Aperçu agence */}
-              <Card index={1}>
-                <div className="flex items-start justify-between gap-3">
+              {/* Évolution des abonnés — un glass chart par réseau */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-3 px-1">
                   <div>
                     <div className="text-sm font-semibold text-foreground">Évolution des abonnés</div>
                     <div className="mt-0.5 text-[11px] text-faint">D'après les mesures de ton agence</div>
                   </div>
                   {followerSeries.points.length > 0 && (
-                    <div className="text-2xl font-bold tracking-tight text-foreground">
-                      {fmtCompact(followerSeries.lastTotal)}
-                    </div>
+                    <div className="text-2xl font-bold tracking-tight text-foreground">{fmtCompact(followerSeries.lastTotal)}</div>
                   )}
                 </div>
                 {followerSeries.points.length >= 2 ? (
-                  <Suspense fallback={<div className="mt-4 h-[170px] animate-pulse rounded-xl bg-panel/50" />}>
-                    <FollowerArea points={followerSeries.points} platforms={followerSeries.platforms} />
-                  </Suspense>
+                  followerGlassGrid
                 ) : (
-                  <div className="mt-4 grid h-[120px] place-items-center rounded-xl bg-panel/40 px-4 text-center text-xs leading-relaxed text-muted-foreground">
+                  <div className="grid h-[120px] place-items-center rounded-2xl border border-border bg-surface px-4 text-center text-xs leading-relaxed text-muted-foreground shadow-sm">
                     {suivi === null
                       ? "Chargement…"
                       : "Pas encore assez de mesures pour tracer la courbe. Ton agence doit enregistrer au moins 2 relevés d'abonnés à des dates différentes."}
                   </div>
                 )}
-              </Card>
+              </div>
 
               {/* Mes infos — carte premium : toggle Statistiques / Coordonnées + chiffres animés */}
               <Card index={0}>
@@ -1712,20 +1733,16 @@ export function CreatorSpace({
                   </Suspense>
                 )}
                 {followerSeries.points.length >= 2 && (
-                  <Card index={0}>
-                    <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-3 px-1">
                       <div>
                         <div className="text-sm font-semibold text-foreground">Évolution des abonnés</div>
                         <div className="mt-0.5 text-[11px] text-faint">D'après les mesures de ton agence</div>
                       </div>
-                      <div className="text-2xl font-bold tracking-tight text-foreground">
-                        {fmtCompact(followerSeries.lastTotal)}
-                      </div>
+                      <div className="text-2xl font-bold tracking-tight text-foreground">{fmtCompact(followerSeries.lastTotal)}</div>
                     </div>
-                    <Suspense fallback={<div className="mt-4 h-[170px] animate-pulse rounded-xl bg-panel/50" />}>
-                      <FollowerArea points={followerSeries.points} platforms={followerSeries.platforms} />
-                    </Suspense>
-                  </Card>
+                    {followerGlassGrid}
+                  </div>
                 )}
                 <SuiviPanel entries={suivi} lockedCreator={name} />
               </div>
