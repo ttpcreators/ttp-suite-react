@@ -37,6 +37,7 @@ import {
   Share2,
   Plus,
   FileChartColumn,
+  HelpCircle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
@@ -1326,9 +1327,14 @@ export function CreatorSpace({
                 <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
                   <BarChart3 className="h-4 w-4 text-primary" /> Envoyer mes stats
                 </div>
-                <button type="button" onClick={() => setStatsModalOpen(true)} className="rounded-lg bg-primary px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
-                  Envoyer
-                </button>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setStatsModalOpen(true)} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/5">
+                    <HelpCircle className="h-3.5 w-3.5" /> Comment faire&nbsp;?
+                  </button>
+                  <button type="button" onClick={() => setStatsModalOpen(true)} className="rounded-lg bg-primary px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
+                    Envoyer
+                  </button>
+                </div>
               </div>
               <input ref={statsFileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => sendStatsFiles(e.target.files)} />
               <WelcomeModal
