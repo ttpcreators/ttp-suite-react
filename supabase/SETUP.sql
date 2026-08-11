@@ -804,6 +804,11 @@ alter table public.todos add column if not exists attachments jsonb;
 -- ----------------------------------------------------------------------------
 alter table public.ideas add column if not exists subtasks jsonb;
 
+-- ----------------------------------------------------------------------------
+-- CONTACTS : dernier contact (anti sur-contact) — cf. sql/contacts-last-contacted.sql
+-- ----------------------------------------------------------------------------
+alter table public.contacts add column if not exists last_contacted timestamptz;
+
 -- ============================================================================
 -- FIN. Vérif rapide (en étant DÉCONNECTÉ, ces requêtes doivent renvoyer 0 ligne) :
 --   select * from public.creators;

@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip } from "lucide-react";
+import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, Clock, AlertTriangle } from "lucide-react";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
@@ -34,7 +34,27 @@ type Row = {
   phone: string;
   sort_order: number;
   creator?: string | null; // renseigné = contact ajouté par ce créateur
+  last_contacted?: string | null; // dernier email SORTANT vers ce contact (ISO)
 };
+
+// Suivi du sur-contact : en-deçà de ce seuil (jours), on alerte de ne pas relancer.
+const RECENT_DAYS = 30;
+/** Nombre de jours depuis une date ISO (null si absente/invalide). */
+function daysSince(iso?: string | null): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return null;
+  return Math.floor((Date.now() - t) / 86400000);
+}
+/** Libellé « dernier contact » lisible. */
+function lastContactLabel(d: number | null): string {
+  if (d == null) return "Jamais contacté";
+  if (d <= 0) return "Contacté aujourd'hui";
+  if (d === 1) return "Contacté hier";
+  if (d < 30) return `Contacté il y a ${d} j`;
+  if (d < 60) return "Contacté il y a ~1 mois";
+  return `Contacté il y a ${Math.round(d / 30)} mois`;
+}
 
 /** Un message Gmail de l'historique avec un contact. */
 type MailMsg = { id: string; from: string; to?: string; subject: string; date: string; snippet: string; direction: "in" | "out" };
@@ -270,6 +290,18 @@ export function Contacts() {
   };
 
   // Historique des mails Gmail avec le contact ouvert (fiche détail).
+  // Marque des contacts comme « contactés » (dernier email sortant). Met à jour
+  // l'état + la base. Appelé à chaque envoi depuis l'app ET en réconciliation Gmail.
+  const markContacted = async (emails: string[], whenISO?: string) => {
+    const when = whenISO ?? new Date().toISOString();
+    const set = new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean));
+    if (!set.size) return;
+    setRows((prev) => (prev ? prev.map((r) => (r.email && set.has(r.email.trim().toLowerCase()) ? { ...r, last_contacted: when } : r)) : prev));
+    setSelected((prev) => (prev && prev.email && set.has(prev.email.trim().toLowerCase()) ? { ...prev, last_contacted: when } : prev));
+    const targets = (rows ?? []).filter((r) => r.email && set.has(r.email.trim().toLowerCase()));
+    await Promise.all(targets.map((r) => dbUpdate("contacts", r.id, { last_contacted: when }).catch(() => false)));
+  };
+
   const [history, setHistory] = useState<MailMsg[] | null>(null);
   const [historyBusy, setHistoryBusy] = useState(false);
   useEffect(() => {
@@ -284,14 +316,22 @@ export function Contacts() {
       if (error && (error as { context?: { json?: () => Promise<unknown> } }).context?.json)
         res = (await (error as { context: { json: () => Promise<unknown> } }).context.json().catch(() => null)) as typeof res;
       if (!alive) return;
-      setHistory(res?.ok ? res.messages ?? [] : []);
+      const msgs = res?.ok ? res.messages ?? [] : [];
+      setHistory(msgs);
       setHistoryBusy(false);
+      // Réconcilie « dernier contact » depuis le dernier message SORTANT réel (Gmail).
+      const outs = msgs.filter((m) => m.direction === "out").map((m) => new Date(m.date).getTime()).filter((t) => Number.isFinite(t));
+      if (outs.length) {
+        const lastOut = Math.max(...outs);
+        const stored = selected?.last_contacted ? new Date(selected.last_contacted).getTime() : 0;
+        if (lastOut > stored + 1000) markContacted([email], new Date(lastOut).toISOString());
+      }
     })();
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected]);
+  }, [selected?.id]);
 
   useEffect(() => {
     let active = true;
@@ -473,6 +513,7 @@ export function Contacts() {
           return;
         }
         toast(`Envoyé depuis Gmail ✓ (${sent}/${recipients.length} destinataire${recipients.length > 1 ? "s" : ""})`);
+        await markContacted(recipients);
       } else {
         const { data, error } = await supabase.functions.invoke("send-email", {
           body: { to: recipients, subject, html, attachments: attachments.map((a) => ({ filename: a.filename, contentBase64: a.contentBase64 })) },
@@ -486,6 +527,7 @@ export function Contacts() {
           return;
         }
         toast(`Email envoyé ✓ (${res.sent}/${res.total} destinataire${(res.total ?? 0) > 1 ? "s" : ""})`);
+        await markContacted(recipients);
       }
       setMailOpen(false);
       setMailRecipients([]);
@@ -768,6 +810,25 @@ export function Contacts() {
                 </span>
               )}
 
+              {/* Récence de contact (dernier email sortant) */}
+              {row.last_contacted && (() => {
+                const d = daysSince(row.last_contacted);
+                if (d == null) return null;
+                const recent = d < RECENT_DAYS;
+                const short = d <= 0 ? "auj." : d === 1 ? "1 j" : d < 30 ? `${d} j` : `${Math.round(d / 30)} m`;
+                return (
+                  <span
+                    title={lastContactLabel(d)}
+                    className={cn(
+                      "hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-[8px] font-semibold uppercase tracking-wide sm:inline-flex",
+                      recent ? "bg-amber-500/15 text-amber-700 dark:text-amber-300" : "bg-rowhover text-faint",
+                    )}
+                  >
+                    <Clock className="h-2.5 w-2.5" /> {short}
+                  </span>
+                );
+              })()}
+
               {/* Pastille tag */}
               <span className="shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {row.tag}
@@ -849,6 +910,22 @@ export function Contacts() {
               <CopyField label="Email" value={selected.email} />
               <CopyField label="Téléphone" value={selected.phone} />
             </div>
+
+            {selected.email && (() => {
+              const histOut = (history ?? []).filter((m) => m.direction === "out").map((m) => new Date(m.date).getTime()).filter((t) => Number.isFinite(t));
+              const lastMs = Math.max(selected.last_contacted ? new Date(selected.last_contacted).getTime() : 0, histOut.length ? Math.max(...histOut) : 0);
+              const lastDays = lastMs ? Math.floor((Date.now() - lastMs) / 86400000) : null;
+              const recent = lastDays != null && lastDays < RECENT_DAYS;
+              return (
+                <div className={cn("mt-4 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[12px]", recent ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300" : "border-border bg-panel text-muted-foreground")}>
+                  {recent ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <Clock className="h-4 w-4 shrink-0 text-faint" />}
+                  <span>
+                    <span className="font-semibold">{lastContactLabel(lastDays)}</span>
+                    {recent && " — évite de le relancer trop vite"}
+                  </span>
+                </div>
+              );
+            })()}
 
             {selected.email && (
               <div className="mt-4">
