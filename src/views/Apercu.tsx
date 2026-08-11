@@ -7,11 +7,11 @@ import { parseAmount, formatEuro, useAppState, type AppState } from "@/lib/appSt
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { LocationTag } from "@/components/ui/location-tag";
 import { MiniChart } from "@/components/ui/mini-chart";
-import { invMonthKey, monthsBetween, monthLabel, momDelta } from "@/lib/timeSeries";
-import { TrendingUp, TrendingDown, Users, ListChecks, CalendarDays } from "lucide-react";
+import { invMonthKey, monthsBetween, monthLabel } from "@/lib/timeSeries";
+import { Users, ListChecks, CalendarDays } from "lucide-react";
 
 // Graphique recharts lazy-chargé : sort la lib (~101 Ko gzip) du premier écran.
-const RevenueArea = lazy(() => import("./charts/RevenueArea"));
+const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { Globe, type GlobeMarker } from "@/components/ui/cobe-globe";
@@ -220,7 +220,6 @@ export function Apercu() {
     .slice(-12)
     .map((k) => ({ label: monthLabel(k), ca: caMonthAgg.get(k) ?? 0 }));
   const hasMonthlyCA = monthlyCA.length >= 2 && monthlyCA.some((p) => p.ca > 0);
-  const caDelta = hasMonthlyCA ? momDelta(monthlyCA.map((p) => p.ca)) : null;
 
   const todayLabel = (() => {
     const s = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -260,55 +259,40 @@ export function Apercu() {
       </div>
 
       {hasMonthlyCA ? (
-        <div className="mb-4 rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-foreground">
-                {caBasis === "emission" ? "Chiffre d'affaires facturé" : "Encaissements attendus"}
-              </div>
-              <div className="mt-0.5 text-[11px] text-faint">
-                {caBasis === "emission" ? "Par mois de facturation" : "Par mois d'échéance"}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Base du graphe : ce que j'ai facturé (émission) vs quand ça doit rentrer (échéance). */}
-              <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
-                {(
-                  [
-                    ["emission", "Facturé"],
-                    ["echeance", "Attendu"],
-                  ] as const
-                ).map(([v, l]) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setCaBasis(v)}
-                    aria-pressed={caBasis === v}
-                    className={
-                      "rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors " +
-                      (caBasis === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")
-                    }
-                  >
-                    {l}
-                  </button>
-                ))}
-              </div>
-              <div className="text-[22px] font-bold tracking-tight">{formatEuro(facture)}</div>
-              {caDelta != null && (
-                <span
+        <div className="mb-4 flex flex-col gap-2">
+          {/* Base du graphe : facturé (émission) vs attendu (échéance) */}
+          <div className="flex justify-end">
+            <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
+              {(
+                [
+                  ["emission", "Facturé"],
+                  ["echeance", "Attendu"],
+                ] as const
+              ).map(([v, l]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setCaBasis(v)}
+                  aria-pressed={caBasis === v}
                   className={
-                    "flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold " +
-                    (caDelta >= 0 ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/12 text-rose-500")
+                    "rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors " +
+                    (caBasis === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")
                   }
                 >
-                  {caDelta >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                  {Math.abs(caDelta) > 999 ? ">999" : Math.abs(caDelta).toFixed(1).replace(".", ",")} %
-                </span>
-              )}
+                  {l}
+                </button>
+              ))}
             </div>
           </div>
-          <Suspense fallback={<div className="mt-4 h-[160px] animate-pulse rounded-xl bg-panel/50" />}>
-            <RevenueArea points={monthlyCA} name={caBasis === "emission" ? "Facturé" : "Attendu"} />
+          <Suspense fallback={<div className="h-[320px] animate-pulse rounded-2xl bg-panel/50" />}>
+            <GlassStatChart
+              title={caBasis === "emission" ? "Chiffre d'affaires facturé" : "Encaissements attendus"}
+              subtitle={caBasis === "emission" ? "Par mois de facturation" : "Par mois d'échéance"}
+              points={monthlyCA.map((p) => ({ label: p.label, value: p.ca }))}
+              format={(n) => formatEuro(n)}
+              height={200}
+              compareLabel="vs mois préc."
+            />
           </Suspense>
         </div>
       ) : (
