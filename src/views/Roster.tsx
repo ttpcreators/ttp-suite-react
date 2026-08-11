@@ -10,7 +10,7 @@ import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { Trash2, Check, RefreshCw } from "lucide-react";
+import { Trash2, Check, RefreshCw, ChevronUp, ChevronDown } from "lucide-react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 
@@ -171,6 +171,28 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
     toast(done ? `${titleCase(c.name)} · données à jour ✓` : "Marqué à mettre à jour");
   };
 
+  // Réordonner (flèches ↑↓) — l'ordre `creators.sort_order` pilote le Roster,
+  // le media kit AGENCE et le site vitrine (vue public_roster triée par sort_order).
+  const move = async (id: string, dir: "up" | "down") => {
+    const full = [...rows];
+    const i = full.findIndex((r) => r.id === id);
+    const j = dir === "up" ? i - 1 : i + 1;
+    if (i < 0 || j < 0 || j >= full.length) return;
+    [full[i], full[j]] = [full[j], full[i]];
+    // Réindexe 0..n-1 (ordre propre, sans collision) puis persiste ce qui a changé.
+    const prev = new Map(rows.map((r) => [r.id, r.sort_order]));
+    const reindexed = full.map((r, idx) => ({ ...r, sort_order: idx }));
+    setRows(reindexed);
+    setCache("roster", reindexed);
+    const changed = reindexed.filter((r) => prev.get(r.id) !== r.sort_order);
+    const oks = await Promise.all(changed.map((r) => dbUpdate("creators", r.id, { sort_order: r.sort_order })));
+    if (oks.some((ok) => !ok)) {
+      setRows(rows); // rollback optimiste
+      setCache("roster", rows);
+      toast("Ordre non enregistré — réessaie");
+    }
+  };
+
   const filtered = rows.filter((c) =>
     matchQuery(query, c.name, c.handle, c.niche, c.platform),
   );
@@ -320,8 +342,35 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                   </div>
                 </div>
 
-                {/* Action supprimer */}
-                <div className="flex shrink-0 items-center justify-end md:col-start-7">
+                {/* Réordonner (↑↓) + action supprimer */}
+                <div className="flex shrink-0 items-center justify-end gap-1 md:col-start-7">
+                  {!query.trim() && (() => {
+                    const idx = rows.findIndex((r) => r.id === c.id);
+                    return (
+                      <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          disabled={idx <= 0}
+                          onClick={() => move(c.id, "up")}
+                          title="Monter"
+                          aria-label="Monter"
+                          className="grid h-4 w-6 place-items-center rounded text-faint transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+                        >
+                          <ChevronUp className="h-3.5 w-3.5" strokeWidth={2.25} />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx >= rows.length - 1}
+                          onClick={() => move(c.id, "down")}
+                          title="Descendre"
+                          aria-label="Descendre"
+                          className="grid h-4 w-6 place-items-center rounded text-faint transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+                        >
+                          <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.25} />
+                        </button>
+                      </div>
+                    );
+                  })()}
                   <ActionMenu
                     items={[
                       {
