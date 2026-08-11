@@ -469,7 +469,7 @@ export function Facturation() {
       issueDate: todayISO(),
       dueDate: todayISO(),
       items: [{ id: uid(), label: "", qty: 1, unit: 0 }],
-      franchise: true,
+      franchise: false, // nouvelles factures : TVA 20 % par défaut (modifiable par facture)
       vatRate: 20,
       commissionRate: DEFAULT_COMMISSION,
       bankId: banks[0]?.id ?? "",
