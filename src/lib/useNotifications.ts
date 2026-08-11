@@ -85,6 +85,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
             title: "Nouvelle tâche d'un créateur",
             description: `${t.creator ? titleCase(t.creator) : "Créateur"} · ${t.text}`,
             time: agoLabel(t.created_at),
+            kind: "creator",
           }),
         );
       }
@@ -95,6 +96,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
             title: "Nouvelle idée d'un créateur",
             description: `${i.creator ? titleCase(i.creator) : "Créateur"} · ${i.text}`,
             time: agoLabel(i.created_at),
+            kind: "creator",
           }),
         );
       }
@@ -105,6 +107,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
             title: "Nouvel évènement d'un créateur",
             description: `${e.who ? titleCase(e.who) : "Créateur"} · ${e.title}`,
             time: agoLabel(e.created_at),
+            kind: "creator",
           }),
         );
       }
@@ -117,6 +120,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
             title: "Nouvel email reçu",
             description: `${e.contact_name || e.contact_email || "Contact"} · ${e.subject || "(sans objet)"}`,
             time: agoLabel(e.created_at),
+            kind: "email",
           }),
         );
       }
@@ -126,6 +130,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           title: "Facture en retard",
           description: `${i.party} · ${i.amount}`,
           time: "à relancer",
+          kind: "facture",
         }),
       );
       ((br.data as { id: string; brand: string; creator: string | null }[]) ?? []).forEach((b) =>
@@ -134,6 +139,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           title: "Brief à valider",
           description: `${b.brand}${b.creator ? ` × ${titleCase(b.creator)}` : ""}`,
           time: "en attente",
+          kind: "brief",
         }),
       );
       ((ev.data as { id: string; date: string; time: string; title: string }[]) ?? []).forEach((e) =>
@@ -142,6 +148,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           title: "Événement à venir",
           description: `${e.title}${e.time && e.time !== "—" ? ` · ${e.time}` : ""}`,
           time: e.date,
+          kind: "event",
         }),
       );
       // Contrats bientôt échus (≤ 60 jours) ou déjà expirés.
@@ -155,6 +162,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           title: left < 0 ? "Contrat expiré" : "Contrat à renouveler",
           description: `${titleCase(d.creator)} · ${d.type}`,
           time: left < 0 ? `expiré depuis ${-left} j` : `expire dans ${left} j`,
+          kind: "contrat",
         });
       });
       // Ne réaffiche jamais ce qui a été effacé (persisté dans le blob).

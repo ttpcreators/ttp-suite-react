@@ -5,13 +5,27 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Card } from "@/components/ui/card";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
+
+export type NotifKind = "creator" | "email" | "facture" | "brief" | "event" | "contrat";
 
 export interface NotificationItem {
   id: string;
   title: string;
   description: string;
   time: string;
+  kind?: NotifKind;
 }
+
+/** Types de notifications (ordre d'affichage des filtres). */
+export const NOTIF_KINDS: { value: NotifKind; label: string }[] = [
+  { value: "creator", label: "Créateurs" },
+  { value: "email", label: "Emails" },
+  { value: "facture", label: "Factures" },
+  { value: "brief", label: "Briefs" },
+  { value: "event", label: "Agenda" },
+  { value: "contrat", label: "Contrats" },
+];
 
 /** Bouton d'activation des notifications push (par téléphone) — au-dessus de la liste. */
 function PushRow() {
@@ -93,10 +107,23 @@ export function Notifications({
 }) {
   const [notifications, setNotifications] = React.useState<NotificationItem[]>(items);
   const [activeId, setActiveId] = React.useState<string | null>(null);
+  const [filter, setFilter] = React.useState<"all" | NotifKind>("all");
 
   React.useEffect(() => {
     setNotifications(items);
   }, [items]);
+
+  // Compteur par type + liste filtrée. Si le type filtré disparaît → retour à « Tout ».
+  const counts = React.useMemo(() => {
+    const m: Partial<Record<NotifKind, number>> = {};
+    for (const n of notifications) if (n.kind) m[n.kind] = (m[n.kind] ?? 0) + 1;
+    return m;
+  }, [notifications]);
+  const activeKinds = NOTIF_KINDS.filter((k) => counts[k.value]);
+  React.useEffect(() => {
+    if (filter !== "all" && !counts[filter]) setFilter("all");
+  }, [counts, filter]);
+  const shown = filter === "all" ? notifications : notifications.filter((n) => n.kind === filter);
 
   const remove = (id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
@@ -138,11 +165,37 @@ export function Notifications({
             )}
           </div>
           <PushRow />
+
+          {/* Filtres par type (onglet actif en bleu + compteur) */}
+          {activeKinds.length >= 2 && (
+            <div className="flex gap-1.5 overflow-x-auto border-b border-border px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {[{ value: "all" as const, label: "Tout", count: notifications.length }, ...activeKinds.map((k) => ({ value: k.value, label: k.label, count: counts[k.value] ?? 0 }))].map((t) => {
+                const on = filter === t.value;
+                return (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => setFilter(t.value)}
+                    className={cn(
+                      "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold transition-colors",
+                      on ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground",
+                    )}
+                  >
+                    {t.label}
+                    <span className={cn("grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold tabular-nums", on ? "bg-white/25 text-primary-foreground" : "bg-primary/10 text-primary")}>{t.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {notifications.length === 0 ? (
             <div className="p-6 text-center text-sm text-muted-foreground">Aucune notification 🎉</div>
+          ) : shown.length === 0 ? (
+            <div className="p-6 text-center text-sm text-muted-foreground">Aucune notification de ce type.</div>
           ) : (
             <ul className="divide-y divide-border">
-              {notifications.map((item) => {
+              {shown.map((item) => {
                 const isActive = activeId === item.id;
                 return (
                   <li key={item.id} className="flex items-center justify-between p-4 transition hover:bg-rowhover/50">
