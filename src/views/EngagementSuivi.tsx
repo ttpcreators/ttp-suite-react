@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, lazy, Suspense } from "react";
 import { Activity, TrendingUp, TrendingDown, Users, Hash } from "lucide-react";
+
+const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
 import {
   AreaChart,
   Area,
@@ -403,6 +405,28 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
 
   const avgEr = rows.length ? Math.round((rows.reduce((a, r) => a + r.lastEr, 0) / rows.length) * 100) / 100 : 0;
   const bestGlobal = rows.length ? Math.max(...rows.map((r) => r.bestEr)) : 0;
+
+  // Tendance : taux d'engagement moyen du ROSTER par mois (toutes plateformes/créateurs).
+  const erTrend = useMemo(() => {
+    const byMonth = new Map<string, { sum: number; n: number }>();
+    for (const e of entries) {
+      const key = ymOf(e.date);
+      if (!key) continue;
+      const er = parseEr(e.er);
+      if (!(er > 0)) continue;
+      const rec = byMonth.get(key) ?? { sum: 0, n: 0 };
+      rec.sum += er;
+      rec.n += 1;
+      byMonth.set(key, rec);
+    }
+    return [...byMonth.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, r]) => {
+        const [y, mo] = key.split("-").map(Number);
+        const label = new Date(y, mo - 1, 1).toLocaleDateString("fr-FR", { month: "short" }).replace(".", "");
+        return { label, value: Math.round((r.sum / r.n) * 100) / 100 };
+      });
+  }, [entries]);
   const th = (k: SortKey, label: string, align = "text-right") => (
     <th className={cn("px-4 pb-1", align)}>
       <button type="button" onClick={() => setSort(k)} className={cn("inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-foreground", sort === k ? "text-foreground" : "")}>
@@ -438,6 +462,21 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
           {periods.map((p) => <option key={p} value={p}>{ymLabel(p)}</option>)}
         </select>
       </div>
+
+      {/* Tendance du taux d'engagement moyen du roster (glass) */}
+      {erTrend.length >= 2 && (
+        <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-panel/50" />}>
+          <GlassStatChart
+            title="Taux d'engagement moyen du roster"
+            subtitle="Moyenne de tous les créateurs, par mois"
+            points={erTrend}
+            format={(n) => `${n.toFixed(2).replace(".", ",")} %`}
+            color="#16a34a"
+            height={190}
+            compareLabel="vs mois préc."
+          />
+        </Suspense>
+      )}
 
       {/* Mobile : cartes empilées (le tableau large ne tient pas) */}
       <div className="flex flex-col gap-2.5 md:hidden">
