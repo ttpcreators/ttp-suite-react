@@ -349,7 +349,7 @@ export function Login() {
       </div>
 
       {/* Right : form */}
-      <div className="flex w-full min-w-0 items-center justify-center bg-background px-6 py-10 sm:p-8 lg:w-1/2">
+      <div className="flex w-full min-w-0 items-center justify-center bg-surface px-6 py-10 sm:p-8 lg:w-1/2">
         <div className="mx-auto w-full max-w-[360px]">
           <div className="mb-10 mt-2 text-center lg:mt-0">
             <h1 className="mb-2 text-3xl font-bold tracking-tight">Bon retour 👋</h1>
