@@ -13,11 +13,11 @@ export type Ev = {
   who: string | null;
   description?: string | null;
   /** Catégorie de la puce. Par défaut "event" (vrai rendez-vous, modifiable).
-   *  "brief" / "todo" = échéances superposées en LECTURE SEULE (clic = navigation). */
-  kind?: "event" | "brief" | "todo";
+   *  "brief" / "todo" / "facture" = échéances superposées en LECTURE SEULE (clic = navigation). */
+  kind?: "event" | "brief" | "todo" | "facture";
 };
 
-type Kind = "event" | "brief" | "todo";
+type Kind = "event" | "brief" | "todo" | "facture";
 
 type View = "month" | "week" | "list";
 
@@ -71,16 +71,19 @@ function evKind(e: Ev): Kind {
 function chipBg(e: Ev) {
   if (e.kind === "brief") return "bg-amber";
   if (e.kind === "todo") return "bg-indigo";
+  if (e.kind === "facture") return "bg-emerald-500";
   return typeBg(e.type);
 }
 function chipText(e: Ev) {
   if (e.kind === "brief") return "text-amber";
   if (e.kind === "todo") return "text-indigo";
+  if (e.kind === "facture") return "text-emerald-500";
   return typeText(e.type);
 }
 function chipLabel(e: Ev) {
   if (e.kind === "brief") return "Brief";
   if (e.kind === "todo") return "To-do";
+  if (e.kind === "facture") return "Facture";
   return typeLabel(e.type);
 }
 
@@ -88,6 +91,7 @@ const KIND_META: { id: Kind; label: string; dot: string }[] = [
   { id: "event", label: "Événements", dot: "bg-primary" },
   { id: "brief", label: "Briefs", dot: "bg-amber" },
   { id: "todo", label: "To-do", dot: "bg-indigo" },
+  { id: "facture", label: "Factures", dot: "bg-emerald-500" },
 ];
 
 // ─── Helpers de date (locaux, sans dépendance) ───────────────────────────────
@@ -172,8 +176,8 @@ export function EventCalendar({
   onCreate: (e: Omit<Ev, "id">) => void;
   onUpdate: (id: string, patch: Partial<Ev>) => void;
   onDelete: (id: string) => void;
-  /** Clic sur une échéance brief/to-do (lecture seule) → navigation vers sa page. */
-  onNavigate?: (kind: "brief" | "todo") => void;
+  /** Clic sur une échéance brief/to-do/facture (lecture seule) → navigation vers sa page. */
+  onNavigate?: (kind: "brief" | "todo" | "facture") => void;
   creators?: { name: string }[];
 }) {
   const [cursor, setCursor] = useState(() => {
@@ -185,7 +189,7 @@ export function EventCalendar({
   const [view, setView] = useState<View>("month");
   const [draft, setDraft] = useState<Draft | null>(null);
   // Filtres de catégorie (événements / briefs / to-do) — actifs par défaut.
-  const [kinds, setKinds] = useState<Record<Kind, boolean>>({ event: true, brief: true, todo: true });
+  const [kinds, setKinds] = useState<Record<Kind, boolean>>({ event: true, brief: true, todo: true, facture: true });
 
   const tKey = todayKey();
 
@@ -246,7 +250,7 @@ export function EventCalendar({
   }
   // Un vrai événement s'édite ; une échéance brief/to-do renvoie vers sa page.
   function handleEventClick(e: Ev) {
-    if (e.kind === "brief" || e.kind === "todo") {
+    if (e.kind === "brief" || e.kind === "todo" || e.kind === "facture") {
       onNavigate?.(e.kind);
       return;
     }

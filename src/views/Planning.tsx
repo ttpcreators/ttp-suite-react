@@ -56,7 +56,8 @@ export function Planning() {
     Promise.all([
       supabase.from("briefs").select("id,brand,creator,due"),
       supabase.from("todos").select("id,text,creator,due,done"),
-    ]).then(([b, t]) => {
+      supabase.from("invoices").select("id,ref,party,date,status"),
+    ]).then(([b, t, iv]) => {
       if (!alive) return;
       const out: Ev[] = [];
       for (const r of (b.data as Record<string, unknown>[] | null) ?? []) {
@@ -84,6 +85,22 @@ export function Planning() {
           type: "deadline",
           who: (r.creator as string | null) ?? null,
           kind: "todo",
+        });
+      }
+      // Échéances de FACTURES (non payées / non brouillon) → puces « Facture ».
+      for (const r of (iv.data as Record<string, unknown>[] | null) ?? []) {
+        const status = String(r.status ?? "");
+        if (status === "payee" || status === "brouillon") continue;
+        const date = toISODate(r.date);
+        if (!date) continue;
+        out.push({
+          id: `facture:${r.id}`,
+          date,
+          time: "",
+          title: `Facture ${String(r.ref ?? "").trim()}${r.party ? ` · ${r.party}` : ""}`.trim(),
+          type: "deadline",
+          who: null,
+          kind: "facture",
         });
       }
       setOverlays(out);
@@ -165,7 +182,7 @@ export function Planning() {
         onDelete={onDelete}
         onNavigate={(kind) =>
           window.dispatchEvent(
-            new CustomEvent("ttp-navigate", { detail: kind === "brief" ? "briefs" : "todo" }),
+            new CustomEvent("ttp-navigate", { detail: kind === "brief" ? "briefs" : kind === "facture" ? "facturation" : "todo" }),
           )
         }
         creators={creators}
