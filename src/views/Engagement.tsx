@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import { Activity, Check, Save, Pencil, X, ArrowUpRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+
+const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
 import { useCreators, invalidateCreators } from "@/lib/useCreators";
 import { dbUpdate } from "@/lib/db";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState } from "@/lib/appState";
@@ -334,6 +336,29 @@ export function Engagement() {
     setSavedOk(false);
   };
 
+  // Tendance du taux d'engagement moyen par mois (moyenne des calculs enregistrés).
+  const erTrend = (() => {
+    const byMonth = new Map<string, { sum: number; n: number }>();
+    for (const h of history) {
+      const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(h.date || "");
+      if (!m) continue;
+      const key = `${m[3]}-${m[2]}`;
+      const er = parseFloat(String(h.er ?? "").replace(/\s/g, "").replace("%", "").replace(",", "."));
+      if (!Number.isFinite(er) || er <= 0) continue;
+      const rec = byMonth.get(key) ?? { sum: 0, n: 0 };
+      rec.sum += er;
+      rec.n += 1;
+      byMonth.set(key, rec);
+    }
+    return [...byMonth.entries()]
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .map(([key, r]) => {
+        const [y, mo] = key.split("-").map(Number);
+        const label = new Date(y, mo - 1, 1).toLocaleDateString("fr-FR", { month: "short" }).replace(".", "");
+        return { label, value: Math.round((r.sum / r.n) * 100) / 100 };
+      });
+  })();
+
   return (
     <div className="space-y-4">
       {/* Plateforme + formule */}
@@ -497,6 +522,21 @@ export function Engagement() {
           </div>
         </div>
       </div>
+
+      {/* Tendance du taux d'engagement moyen (glass) */}
+      {erTrend.length >= 2 && (
+        <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-panel/50" />}>
+          <GlassStatChart
+            title="Taux d'engagement moyen"
+            subtitle="Moyenne de tes calculs, par mois"
+            points={erTrend}
+            format={(n) => `${n.toFixed(2).replace(".", ",")} %`}
+            color="#16a34a"
+            height={180}
+            compareLabel="vs mois préc."
+          />
+        </Suspense>
+      )}
 
       {/* Historique des calculs */}
       {history.length > 0 && (

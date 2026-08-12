@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import { Users, TrendingUp, TrendingDown, Receipt, Wallet, Clock, FileText, Contact as ContactIcon, Activity } from "lucide-react";
+
+const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
 import { supabase } from "@/lib/supabase";
 import { parseAmount, formatEuro, useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { titleCase, cn } from "@/lib/utils";
@@ -558,7 +560,21 @@ export function Stats() {
         )}
       </div>
 
-      {/* Graphique vedette : chiffre d'affaires */}
+      {/* Vedette « glass » : CA facturé par mois (gros chiffre + tendance) */}
+      {hasRevenue && (
+        <Suspense fallback={<div className="h-[320px] animate-pulse rounded-2xl bg-panel/50" />}>
+          <GlassStatChart
+            title="Chiffre d'affaires facturé"
+            subtitle="Par mois — vue d'ensemble"
+            points={revenuePoints.map((p) => ({ label: p.label, value: p.ca }))}
+            format={(n) => formatEuro(n)}
+            height={200}
+            compareLabel="vs mois préc."
+          />
+        </Suspense>
+      )}
+
+      {/* Graphique détaillé : facturé vs encaissé + sélecteur de période */}
       {hasRevenue && <RevenueChart points={revenuePoints} />}
 
       {/* Graphiques */}
