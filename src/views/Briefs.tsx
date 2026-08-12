@@ -2,8 +2,8 @@ import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn, titleCase } from "@/lib/utils";
-import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown } from "lucide-react";
-import { useEffect, useState, type ReactElement } from "react";
+import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown, Paperclip, FileText } from "lucide-react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { printHtml } from "@/lib/printPdf";
@@ -31,6 +31,9 @@ type Row = {
    *  c'est le corps du document PDF envoyé à la marque. Colonne `consignes` en base. */
   consignes: string;
   sort_order: number;
+  /** PDF joint (facultatif) : uploadé dans le bucket documents, aussi inséré comme
+   *  ligne `documents` (type brief) → visible dans Docs + le portail créateur. */
+  pdf?: { name: string; path: string; docId?: string } | null;
 };
 type BadgeStatus = "success" | "warning" | "danger" | "neutral" | "info" | "loading";
 
@@ -120,7 +123,7 @@ export function Briefs() {
     (async () => {
       const { data, error } = await supabase
         .from("briefs")
-        .select("id, brand, creator, deliverables, due, status, budget, objectif, consignes, sort_order")
+        .select("id, brand, creator, deliverables, due, status, budget, objectif, consignes, sort_order, pdf")
         .order("sort_order");
       if (!active) return;
       if (error) {
@@ -226,6 +229,72 @@ export function Briefs() {
     }
   };
 
+  // ── PDF joint au brief → aussi inséré comme ligne `documents` (type brief) pour
+  //    apparaître dans Documents (agence) ET l'espace/portail du créateur. ──
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const attachTargetRef = useRef<Row | null>(null);
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
+
+  const patchRow = (id: string, patch: Partial<Row>) =>
+    setRows((prev) => {
+      const next = (prev ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r));
+      setCache("briefs", next);
+      return next;
+    });
+
+  const triggerAttach = (row: Row) => {
+    attachTargetRef.current = row;
+    pdfInputRef.current?.click();
+  };
+
+  const onPdfPicked = async (files: FileList | null) => {
+    const file = files?.[0];
+    const row = attachTargetRef.current;
+    if (pdfInputRef.current) pdfInputRef.current.value = "";
+    attachTargetRef.current = null;
+    if (!file || !row) return;
+    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name)) return toast("Choisis un fichier PDF");
+    if (file.size > 20 * 1024 * 1024) return toast("PDF trop lourd (max 20 Mo)");
+    setPdfBusy(row.id);
+    try {
+      // Remplace un PDF existant : on nettoie l'ancien fichier + son doc.
+      if (row.pdf?.path) await supabase.storage.from("documents").remove([row.pdf.path]).catch(() => {});
+      if (row.pdf?.docId) await supabase.from("documents").delete().eq("id", row.pdf.docId).then(() => {}, () => {});
+      const slug = (row.brand || "brief").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "brief";
+      const path = `briefs/${slug}-${Date.now()}.pdf`;
+      const up = await supabase.storage.from("documents").upload(path, file, { contentType: "application/pdf", upsert: false });
+      if (up.error) return toast("Upload échoué — réessaie");
+      const docName = `Brief — ${row.brand}${row.creator ? ` — ${titleCase(row.creator)}` : ""}`;
+      const doc = await dbInsert("documents", { creator: row.creator || null, name: docName, type: "brief", size: `${Math.max(1, Math.round(file.size / 1024))} Ko`, path, sort_order: 0 });
+      const pdf = { name: file.name, path, docId: (doc as { id?: string } | null)?.id };
+      if (!(await dbUpdate("briefs", row.id, { pdf }))) {
+        await supabase.storage.from("documents").remove([path]).catch(() => {});
+        return toast("Erreur — lance le SQL « briefs.pdf » ?");
+      }
+      patchRow(row.id, { pdf });
+      if (row.creator) notifyCreator("brief", row.creator, `PDF joint au brief ${row.brand}`);
+      toast("PDF joint ✓ — visible dans Documents et le portail créateur");
+    } finally {
+      setPdfBusy(null);
+    }
+  };
+
+  const openPdf = async (row: Row) => {
+    if (!row.pdf?.path) return;
+    const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.pdf.path, 3600);
+    if (error || !data?.signedUrl) return toast("Lien indisponible — réessaie");
+    window.open(data.signedUrl, "_blank");
+  };
+
+  const removePdf = async (row: Row) => {
+    const pdf = row.pdf;
+    patchRow(row.id, { pdf: null });
+    await dbUpdate("briefs", row.id, { pdf: null });
+    if (pdf?.path) await supabase.storage.from("documents").remove([pdf.path]).catch(() => {});
+    if (pdf?.docId) await supabase.from("documents").delete().eq("id", pdf.docId).then(() => {}, () => {});
+    toast("PDF retiré");
+  };
+
   const creatorOptions = [{ value: "", label: "—" }, ...creators.map((c) => ({ value: c.name, label: c.name }))];
 
   const filtered = (rows ?? []).filter((row) => matchQuery(query, row.brand, row.creator, row.deliverables, row.status));
@@ -282,6 +351,13 @@ export function Briefs() {
               items={[
                 { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(row) },
                 { key: "pdf", label: "Script en PDF", icon: FileDown, onClick: () => printHtml(briefHTML(row)) },
+                ...(row.pdf
+                  ? [
+                      { key: "pdfopen", label: "Ouvrir le PDF joint", icon: FileText, onClick: () => openPdf(row) },
+                      { key: "pdfreplace", label: "Remplacer le PDF", icon: Paperclip, onClick: () => triggerAttach(row) },
+                      { key: "pdfremove", label: "Retirer le PDF joint", icon: X, danger: true, onClick: () => removePdf(row) },
+                    ]
+                  : [{ key: "attach", label: pdfBusy === row.id ? "Envoi du PDF…" : "Joindre un PDF", icon: Paperclip, onClick: () => triggerAttach(row) }]),
                 { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: () => del(row), confirm: { title: "Mettre à la corbeille", message: `Déplacer le brief « ${row.brand} » vers la corbeille ? Tu pourras le restaurer.`, confirmLabel: "Mettre à la corbeille" } },
               ]}
             />
@@ -313,6 +389,18 @@ export function Briefs() {
         <div className="mt-3">
           <StatusSelect value={colKey(row.status)} options={STATUS_OPTS} onChange={(v) => changeStatus(row.id, v)} />
         </div>
+
+        {row.pdf && (
+          <button
+            type="button"
+            onClick={() => openPdf(row)}
+            title="Ouvrir le PDF joint"
+            className="mt-3 flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/[0.06] px-3 py-2 text-left text-[11px] font-medium text-primary transition-colors hover:bg-primary/10"
+          >
+            <FileText className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{row.pdf.name}</span>
+          </button>
+        )}
 
         <div className="mt-3 flex items-center gap-1.5 border-t border-border pt-2.5 text-[11px] text-muted-foreground">
           <CalendarClock className="h-3.5 w-3.5 shrink-0 text-faint" />
@@ -365,6 +453,8 @@ export function Briefs() {
 
   return (
     <div>
+      {/* Input caché pour joindre un PDF à un brief (cible = attachTargetRef) */}
+      <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => onPdfPicked(e.target.files)} />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="text-sm text-muted-foreground">{rows === null ? "Chargement…" : `${rows.length} brief${rows.length > 1 ? "s" : ""}`}</div>

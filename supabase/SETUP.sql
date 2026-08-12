@@ -809,6 +809,11 @@ alter table public.ideas add column if not exists subtasks jsonb;
 -- ----------------------------------------------------------------------------
 alter table public.contacts add column if not exists last_contacted timestamptz;
 
+-- ----------------------------------------------------------------------------
+-- BRIEFS : PDF joint (jsonb {name,path,docId}) — cf. sql/briefs-pdf.sql
+-- ----------------------------------------------------------------------------
+alter table public.briefs add column if not exists pdf jsonb;
+
 -- ============================================================================
 -- FIN. Vérif rapide (en étant DÉCONNECTÉ, ces requêtes doivent renvoyer 0 ligne) :
 --   select * from public.creators;
