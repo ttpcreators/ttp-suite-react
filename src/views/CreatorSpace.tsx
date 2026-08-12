@@ -65,6 +65,7 @@ import { ScaledPreview } from "@/components/ui/scaled-preview";
 import { WelcomeModal } from "@/components/ui/welcome-modal";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
 import { SubtaskChecklist } from "@/components/ui/subtask-checklist";
+import { AgentPlan, type PlanTask } from "@/components/ui/agent-plan";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, type Gift as GiftRow } from "@/lib/gifting";
 
 const BASE = import.meta.env.BASE_URL;
@@ -1913,36 +1914,22 @@ export function CreatorSpace({
                     {todoFilter === "terminees" ? "Aucune tâche terminée." : "Aucune tâche."}
                   </div>
                 ) : (
-                  filteredTodos.map((t) => {
-                    const subs = t.subtasks ?? [];
-                    const subDone = subs.filter((s) => s.done).length;
-                    return (
-                    <div key={t.id} className="relative overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition-shadow hover:shadow-md">
-                      {/* Accent de priorité (barre gauche) */}
-                      <span className={cn("absolute left-0 top-0 h-full w-1", prioAccent(t.priority))} />
-                      <div className="flex items-start gap-3 py-3.5 pl-5 pr-4">
-                        <button
-                          type="button"
-                          onClick={() => (t.done ? markTodo(t, false) : setConfirmDoneTodo(t))}
-                          className={
-                            "mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors " +
-                            (t.done ? "border-primary bg-primary text-primary-foreground" : "border-faint hover:border-primary")
-                          }
-                          aria-label={t.done ? "Marquer à refaire" : "Marquer fait"}
-                        >
-                          {t.done && <Check className="h-3.5 w-3.5" />}
-                        </button>
-                        <button type="button" onClick={() => setTaskView(t)} className="min-w-0 flex-1 text-left">
-                          <div className={"break-words text-sm font-semibold leading-snug " + (t.done ? "text-muted-foreground line-through" : "text-foreground")}>{t.text}</div>
-                          {t.descr && <div className="mt-0.5 line-clamp-2 break-words text-[11px] leading-relaxed text-faint">{t.descr}</div>}
-                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-faint">
-                            {t.due && t.due !== "—" && <span>Échéance {frDate(t.due)}</span>}
-                            {subs.length > 0 && (<>{t.due && t.due !== "—" && <span>·</span>}<span>{subDone}/{subs.length} sous-tâches</span></>)}
-                            {(t.attachments?.length ?? 0) > 0 && (<><span>·</span><span>📎 {t.attachments!.length}</span></>)}
-                          </div>
-                        </button>
-                        {/* Méta droite : pilule priorité + éditer + menu */}
-                        <div className="flex shrink-0 items-center gap-1.5">
+                  <AgentPlan
+                    tasks={filteredTodos.map((t): PlanTask => ({
+                      id: t.id,
+                      title: t.text,
+                      status: cStatus(t),
+                      done: t.done,
+                      accent: prioAccent(t.priority),
+                      subtasks: t.subtasks ?? [],
+                      meta: (
+                        <>
+                          {t.due && t.due !== "—" && <span>Échéance {frDate(t.due)}</span>}
+                          {(t.attachments?.length ?? 0) > 0 && <span>📎 {t.attachments!.length}</span>}
+                        </>
+                      ),
+                      right: (
+                        <>
                           <span className={cn("hidden rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide sm:inline", prioPill(t.priority))}>
                             {titleCase(t.priority ?? "moyenne")}
                           </span>
@@ -1971,25 +1958,29 @@ export function CreatorSpace({
                               },
                             ]}
                           />
-                        </div>
-                      </div>
-                      {tdEditId === t.id && (
+                        </>
+                      ),
+                      footer: tdEditId === t.id ? (
                         <div className="px-5 pb-2">
-                          <InlineForm
-                            open
-                            title="Modifier la tâche"
-                            onClose={() => setTdEditId(null)}
-                            onSubmit={saveEditTodo}
-                          >
+                          <InlineForm open title="Modifier la tâche" onClose={() => setTdEditId(null)} onSubmit={saveEditTodo}>
                             <TextField label="Tâche" value={teText} onChange={setTeText} />
                             <AutoGrowTextField label="Description" value={teDesc} onChange={setTeDesc} className="min-w-full" />
                             <SelectField label="Priorité" value={tePrio} onChange={setTePrio} options={PRIORITY_OPTIONS} />
                           </InlineForm>
                         </div>
-                      )}
-                    </div>
-                    );
-                  })
+                      ) : undefined,
+                    }))}
+                    onCycleStatus={(id) => {
+                      const t = todos.find((x) => x.id === id);
+                      if (!t) return;
+                      const order = ["À faire", "En cours", "Fait"];
+                      setTodoStatus(t, order[(order.indexOf(cStatus(t)) + 1) % order.length]);
+                    }}
+                    onToggleSubtask={(taskId, subId) => { const t = todos.find((x) => x.id === taskId); if (t) toggleSubtask(t, subId); }}
+                    onAddSubtask={(taskId, text) => { const t = todos.find((x) => x.id === taskId); if (t) patchTodo(taskId, { subtasks: [...(t.subtasks ?? []), { id: stid(), text, done: false }] }); }}
+                    onDelSubtask={(taskId, subId) => { const t = todos.find((x) => x.id === taskId); if (t) delSubtask(t, subId); }}
+                    onOpenTask={(id) => { const t = todos.find((x) => x.id === id); if (t) setTaskView(t); }}
+                  />
                 )}
               </div>
               )}
