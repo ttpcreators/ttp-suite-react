@@ -61,6 +61,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { AvatarUpload } from "@/components/ui/avatar-upload";
 import { SuiviPanel, type SuiviEntry } from "@/views/EngagementSuivi";
 import { CreatorRoadmap } from "@/views/CreatorTracking";
+import { CreatorGuide } from "@/views/CreatorGuide";
 import { ScaledPreview } from "@/components/ui/scaled-preview";
 import { WelcomeModal } from "@/components/ui/welcome-modal";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
@@ -115,7 +116,7 @@ type Invoice = { ref: string; party: string; amount: string | null; date: string
 type Contact = { id: string; brand: string; person: string | null; role: string | null; email: string | null; phone: string | null; sort_order?: number };
 
 type Tab =
-  | "accueil" | "evolution" | "debrief" | "roadmap"
+  | "accueil" | "guide" | "evolution" | "debrief" | "roadmap"
   | "todo" | "ideas" | "briefs" | "gifting" | "planning"
   | "mediakit" | "documents" | "contacts" | "facturation";
 
@@ -138,6 +139,7 @@ const CREATOR_GROUPS: {
     icon: LayoutDashboard,
     items: [
       { id: "accueil", label: "Accueil", icon: LayoutDashboard },
+      { id: "guide", label: "Guide", icon: HelpCircle },
       { id: "evolution", label: "Évolution", icon: TrendingUp },
       { id: "debrief", label: "Debrief", icon: FileChartColumn },
       { id: "roadmap", label: "Ma feuille de route", icon: Target },
@@ -1330,6 +1332,11 @@ export function CreatorSpace({
           {/* Contenu des onglets — barrière d'erreur : un onglet qui plante
               n'emporte pas la navigation (la sidebar reste cliquable). */}
           <ErrorBoundary variant="inline" label="Cette page" resetKey={tab}>
+          {/* Guide — comment utiliser l'app (mobile + ordi) + réflexe À faire */}
+          {tab === "guide" && (
+            <CreatorGuide firstName={firstName} onGoto={(t) => setTab(t as Tab)} onSendStats={() => setStatsModalOpen(true)} />
+          )}
+
           {/* Accueil */}
           {tab === "accueil" && (
             <div className="flex flex-col gap-4">
