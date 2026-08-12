@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pencil, Share2, Download, LayoutGrid, List, Table2, Trash2, Send, Eye, X, FileText, Activity } from "lucide-react";
 import { FileCard } from "@/components/ui/file-card-collections";
 import {
@@ -239,6 +239,24 @@ export function Debrief() {
   const [local, setLocal] = useState<Debrief[] | null>(null);
   const list: Debrief[] = local ?? data ?? (data === null && !loading ? SEED : []);
 
+  // Rappel : briefs (campagnes) TERMINÉS ou échus, pas encore débriefés → à débriefer.
+  const [briefRows, setBriefRows] = useState<{ id: string; brand: string; creator: string | null; status: string; due: string | null }[]>([]);
+  useEffect(() => {
+    supabase.from("briefs").select("id, brand, creator, status, due").then(({ data: b }) => setBriefRows((b as typeof briefRows) ?? []));
+  }, []);
+  const brandKey = (s: string | null) => (s || "").toLowerCase().split(/[×x·]/)[0].trim();
+  const duePast = (due: string | null) => {
+    const t = (due || "").trim();
+    let iso = "";
+    if (/^\d{4}-\d{2}-\d{2}/.test(t)) iso = t.slice(0, 10);
+    else { const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(t); if (m) iso = `${m[3]}-${m[2]}-${m[1]}`; }
+    return iso ? iso < new Date().toISOString().slice(0, 10) : false;
+  };
+  const briefDone = (b: { status: string; due: string | null }) =>
+    (b.status || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").includes("termin") || duePast(b.due);
+  const debriefedKeys = new Set(list.map((d) => brandKey(d.brand)).filter(Boolean));
+  const needsDebrief = briefRows.filter((b) => b.brand && briefDone(b) && !debriefedKeys.has(brandKey(b.brand)));
+
   const [view, setView] = useState<DebriefView>("cards");
   const [viewD, setViewD] = useState<Debrief | null>(null); // fiche détail (clic sur une ligne)
   const [formOpen, setFormOpen] = useState(false);
@@ -292,6 +310,14 @@ export function Debrief() {
 
   function openCreate() {
     resetForm();
+    setFormOpen(true);
+  }
+
+  // Crée un débrief pré-rempli à partir d'un brief (marque + créateur).
+  function createFromBrief(b: { brand: string; creator: string | null }) {
+    resetForm();
+    setBrand(b.brand || "");
+    setCreator(b.creator || "");
     setFormOpen(true);
   }
 
@@ -596,6 +622,34 @@ export function Debrief() {
           />
         </label>
       </InlineForm>
+
+      {/* Rappel : campagnes (briefs) terminées sans débrief → à débriefer */}
+      {needsDebrief.length > 0 && (
+        <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] p-4">
+          <div className="mb-2.5 flex items-center gap-2 text-[13px] font-semibold text-amber-700 dark:text-amber-300">
+            <FileText className="h-4 w-4 shrink-0" /> {needsDebrief.length} campagne{needsDebrief.length > 1 ? "s" : ""} à débriefer
+          </div>
+          <div className="flex flex-col gap-2">
+            {needsDebrief.map((b) => (
+              <div key={b.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3.5 py-2.5">
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-semibold text-foreground">{b.brand}</div>
+                  <div className="truncate text-[11px] text-faint">
+                    {b.creator ? titleCase(b.creator) : "—"} · brief {(b.status || "").toLowerCase().includes("termin") ? "terminé" : "échéance passée"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => createFromBrief(b)}
+                  className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                >
+                  Créer le débrief
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Contenu */}
       {loading ? (
