@@ -20,7 +20,6 @@ import { useLiveKey } from "@/lib/useLive";
 import { toISODate, frDate } from "@/lib/dates";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
-import { Checkbox } from "@/components/ui/checkbox";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import {
   Select,
@@ -31,6 +30,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3, UserRound, Building2, Plus, Upload } from "lucide-react";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
+import { AgentPlan, type PlanTask } from "@/components/ui/agent-plan";
 
 type Priority = "haute" | "moyenne" | "basse";
 type Source = "agency" | "creator";
@@ -643,156 +643,103 @@ export function Todo() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {filtered.map((row) => {
-            const updateStatus = async (status: string) => {
-              if (await dbUpdate("todos", row.id, { status, done: status === "Fait" })) {
-                setRows((prev) => (prev ?? []).map((r) => (r.id === row.id ? { ...r, status, done: status === "Fait" } : r)));
-                setSelectedTodo((prev) => (prev?.id === row.id ? { ...prev, status, done: status === "Fait" } : prev));
-              } else {
-                toast("Statut non enregistré — la colonne « status » manque (lance le SQL)");
-              }
-            };
-            return (
-              <div key={row.id} className="relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md">
-              {/* Accent de priorité (barre gauche) */}
-              <span className={cn("absolute left-0 top-0 h-full w-1", PRIO_ACCENT[row.priority])} />
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setSelectedTodo(row)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setSelectedTodo(row);
-                  }
-                }}
-                className="flex cursor-pointer items-center gap-3 rounded-2xl py-3.5 pl-5 pr-4 transition-colors hover:bg-rowhover"
-              >
-                {/* Case à cocher animée (barre progressive) */}
-                <Checkbox
-                  id={`todo-${row.id}`}
-                  checked={row.done}
-                  onClick={(e) => e.stopPropagation()}
-                  onCheckedChange={(v) => (v === true ? setConfirmDone(row) : markDone(row, false))}
-                  title={row.done ? "Marquer à refaire" : "Marquer comme fait"}
-                  className="peer size-5 shrink-0"
-                />
-
-                {/* Texte + description + méta */}
-                <div className="min-w-0 flex-1">
-                  <label
-                    htmlFor={`todo-${row.id}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className={cn(
-                      "relative inline-block max-w-full cursor-pointer truncate align-top text-sm font-semibold text-foreground transition-colors after:absolute after:left-0 after:top-1/2 after:h-px after:bg-current after:transition-all after:duration-300 after:content-['']",
-                      row.done ? "text-muted-foreground after:w-full" : "after:w-0",
-                    )}
-                  >
-                    {row.text}
-                  </label>
-                  {row.descr && (
-                    <p className="mt-0.5 truncate text-[11px] leading-relaxed text-faint">{row.descr}</p>
-                  )}
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-faint">
-                    <span className="inline-flex items-center gap-1 font-medium text-muted-foreground">
-                      {row.creator ? <UserRound className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}
-                      {row.creator ? titleCase(row.creator) : "Agence"}
-                    </span>
-                    {row.source === "creator" && (<><span>·</span><span className="text-signaltext">du créateur</span></>)}
-                    {formatCreatedAt(row.created_at) && (<><span>·</span><span>créée le {formatCreatedAt(row.created_at)}</span></>)}
-                    {(row.subtasks?.length ?? 0) > 0 && (<><span>·</span><span>{(row.subtasks ?? []).filter((s) => s.done).length}/{row.subtasks!.length} sous-tâches</span></>)}
-                    {(row.attachments?.length ?? 0) > 0 && (<><span>·</span><span>📎 {row.attachments!.length}</span></>)}
-                  </div>
-                </div>
-
-                {/* Méta droite : priorité + statut + menu */}
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className={cn("hidden rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide sm:inline", PRIO_PILL[row.priority])}>
-                    {prioOf(row.priority).label}
-                  </span>
-                  <div onClick={(e) => e.stopPropagation()}>
-                    <StatusSelect value={todoStatus(row)} options={TODO_STATUS_OPTS} onChange={updateStatus} />
-                  </div>
-                  <ActionMenu
-                    items={[
-                      {
-                        key: "delete",
-                        label: "Supprimer",
-                        icon: Trash2,
-                        danger: true,
-                        onClick: async () => {
-                          if (await dbTrash("todos", row.id, row.text, row.creator ?? undefined)) {
-                            removeRow(row.id);
-                            toast("Déplacé dans la corbeille");
-                          } else {
-                            toast("Erreur — réessaie");
-                          }
-                        },
-                        confirm: { title: "Supprimer la tâche", message: `Supprimer « ${row.text} » ? Tu pourras la restaurer depuis la corbeille.` },
+        <AgentPlan
+          tasks={filtered.map((row): PlanTask => ({
+            id: row.id,
+            title: row.text,
+            status: todoStatus(row),
+            done: row.done,
+            accent: PRIO_ACCENT[row.priority],
+            subtasks: row.subtasks ?? [],
+            meta: (
+              <>
+                <span className="inline-flex items-center gap-1 font-medium text-muted-foreground">
+                  {row.creator ? <UserRound className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}
+                  {row.creator ? titleCase(row.creator) : "Agence"}
+                </span>
+                {row.source === "creator" && <span className="text-signaltext">du créateur</span>}
+                {formatCreatedAt(row.created_at) && <span>créée le {formatCreatedAt(row.created_at)}</span>}
+                {(row.attachments?.length ?? 0) > 0 && <span>📎 {row.attachments!.length}</span>}
+              </>
+            ),
+            right: (
+              <>
+                <span className={cn("hidden rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide sm:inline", PRIO_PILL[row.priority])}>
+                  {prioOf(row.priority).label}
+                </span>
+                <ActionMenu
+                  items={[
+                    {
+                      key: "delete",
+                      label: "Supprimer",
+                      icon: Trash2,
+                      danger: true,
+                      onClick: async () => {
+                        if (await dbTrash("todos", row.id, row.text, row.creator ?? undefined)) {
+                          removeRow(row.id);
+                          toast("Déplacé dans la corbeille");
+                        } else {
+                          toast("Erreur — réessaie");
+                        }
                       },
-                    ]}
-                  />
+                      confirm: { title: "Supprimer la tâche", message: `Supprimer « ${row.text} » ? Tu pourras la restaurer depuis la corbeille.` },
+                    },
+                  ]}
+                />
+              </>
+            ),
+            footer: noteEditId === row.id ? (
+              <div className="flex flex-col gap-2 border-t border-border px-4 py-3">
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Avancement / commentaire</span>
+                <textarea
+                  value={noteEditText}
+                  onChange={(e) => setNoteEditText(e.target.value)}
+                  rows={2}
+                  autoFocus
+                  placeholder="Où en es-tu ? Note ton avancement, un blocage, un lien…"
+                  className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => { await saveNote(row.id, noteEditText); setNoteEditId(null); toast("Commentaire enregistré ✓"); }}
+                    className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                  >
+                    <Check className="h-3.5 w-3.5" /> Enregistrer
+                  </button>
+                  <button type="button" onClick={() => setNoteEditId(null)} className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground" title="Annuler">
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
-
-                {/* Commentaire d'avancement — directement sous la carte */}
-                {noteEditId === row.id ? (
-                  <div className="flex flex-col gap-2 border-t border-border px-4 py-3">
-                    <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Avancement / commentaire</span>
-                    <textarea
-                      value={noteEditText}
-                      onChange={(e) => setNoteEditText(e.target.value)}
-                      rows={2}
-                      autoFocus
-                      placeholder="Où en es-tu ? Note ton avancement, un blocage, un lien…"
-                      className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                    />
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await saveNote(row.id, noteEditText);
-                          setNoteEditId(null);
-                          toast("Commentaire enregistré ✓");
-                        }}
-                        className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
-                      >
-                        <Check className="h-3.5 w-3.5" /> Enregistrer
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNoteEditId(null)}
-                        className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                        title="Annuler"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ) : notes[row.id] ? (
-                  <button
-                    type="button"
-                    onClick={() => startNote(row.id)}
-                    className="flex w-full items-start gap-2 border-t border-border px-4 py-2.5 text-left transition-colors hover:bg-rowhover"
-                    title="Modifier le commentaire"
-                  >
-                    <MessageSquarePlus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" />
-                    <span className="whitespace-pre-wrap text-[12px] leading-relaxed text-muted-foreground">{notes[row.id]}</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => startNote(row.id)}
-                    className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                  >
-                    <MessageSquarePlus className="h-3.5 w-3.5" /> Ajouter un commentaire d'avancement
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
+            ) : notes[row.id] ? (
+              <button type="button" onClick={() => startNote(row.id)} className="flex w-full items-start gap-2 border-t border-border px-4 py-2.5 text-left transition-colors hover:bg-rowhover" title="Modifier le commentaire">
+                <MessageSquarePlus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" />
+                <span className="whitespace-pre-wrap text-[12px] leading-relaxed text-muted-foreground">{notes[row.id]}</span>
+              </button>
+            ) : (
+              <button type="button" onClick={() => startNote(row.id)} className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                <MessageSquarePlus className="h-3.5 w-3.5" /> Ajouter un commentaire d'avancement
+              </button>
+            ),
+          }))}
+          onCycleStatus={async (id) => {
+            const row = (rows ?? []).find((r) => r.id === id);
+            if (!row) return;
+            const order = ["À faire", "En cours", "Fait"];
+            const status = order[(order.indexOf(todoStatus(row)) + 1) % order.length];
+            if (await dbUpdate("todos", id, { status, done: status === "Fait" })) {
+              setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, status, done: status === "Fait" } : r)));
+              setSelectedTodo((prev) => (prev?.id === id ? { ...prev, status, done: status === "Fait" } : prev));
+            } else {
+              toast("Statut non enregistré — la colonne « status » manque (lance le SQL)");
+            }
+          }}
+          onToggleSubtask={(taskId, subId) => { const row = (rows ?? []).find((r) => r.id === taskId); if (row) toggleSubtask(row, subId); }}
+          onAddSubtask={(taskId, text) => { const row = (rows ?? []).find((r) => r.id === taskId); if (row) patchTodo(taskId, { subtasks: [...(row.subtasks ?? []), { id: stid(), text, done: false }] }); }}
+          onDelSubtask={(taskId, subId) => { const row = (rows ?? []).find((r) => r.id === taskId); if (row) delSubtask(row, subId); }}
+          onOpenTask={(id) => { const row = (rows ?? []).find((r) => r.id === id); if (row) setSelectedTodo(row); }}
+        />
       )}
 
       {/* Panneau de détail */}
