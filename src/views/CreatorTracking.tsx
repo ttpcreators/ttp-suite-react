@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle, MessageSquare, Pencil, X, Phone, MessageCircle, Users, Compass, Mic, Sparkles, Film, GalleryHorizontalEnd, CircleDashed, Music2, MonitorPlay, Check, type LucideIcon } from "lucide-react";
+import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle, MessageSquare, Pencil, X, Phone, MessageCircle, Users, Compass, Mic, Sparkles, Film, GalleryHorizontalEnd, CircleDashed, Music2, MonitorPlay, Check, ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
@@ -81,6 +81,8 @@ export function EditorialProfileCard({ name }: { name: string }) {
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("view");
+  const [step, setStep] = useState(0); // étape du wizard d'édition
+  const enterEdit = () => { setStep(0); setMode("edit"); };
 
   // Copie locale initialisée UNE fois par créateur (ne pas écraser une édition en cours
   // à chaque tick de rafraîchissement). Se ré-initialise quand on change de créateur.
@@ -133,21 +135,11 @@ export function EditorialProfileCard({ name }: { name: string }) {
           <Target className="h-4 w-4 text-muted-foreground" /> Fiche éditoriale
         </div>
         {mode === "view" ? (
-          <EditBtn onClick={() => setMode("edit")} />
+          <EditBtn onClick={enterEdit} />
         ) : (
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover">
-              <X className="h-3.5 w-3.5" /> Annuler
-            </button>
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving || loading || loadedKey !== key}
-              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              <Save className="h-3.5 w-3.5" /> {saving ? "Enregistrement…" : "Enregistrer"}
-            </button>
-          </div>
+          <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover">
+            <X className="h-3.5 w-3.5" /> Annuler
+          </button>
         )}
       </div>
 
@@ -155,7 +147,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
       {mode === "view" && (
         profileIsEmpty(cur) ? (
           <div className="rounded-xl border border-dashed border-border bg-panel/40 px-4 py-8 text-center text-[13px] text-muted-foreground">
-            Fiche éditoriale vide. <button type="button" onClick={() => setMode("edit")} className="font-semibold text-primary underline-offset-2 hover:underline">La remplir</button> pour cadrer la ligne du créateur.
+            Fiche éditoriale vide. <button type="button" onClick={enterEdit} className="font-semibold text-primary underline-offset-2 hover:underline">La remplir</button> pour cadrer la ligne du créateur.
           </div>
         ) : (
           <div className="flex flex-col gap-4">
@@ -211,93 +203,142 @@ export function EditorialProfileCard({ name }: { name: string }) {
         )
       )}
 
-      {/* ─────────── ÉDITION ─────────── */}
-      {mode === "edit" && (<>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Piliers */}
-        <div>
-          <label className={LBL}>Piliers de contenu</label>
-          <div className="flex flex-col gap-2">
-            {cur.piliers.map((pil, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <GripVertical className="h-3.5 w-3.5 shrink-0 text-faint" />
-                <input
-                  value={pil}
-                  onChange={(e) => set({ piliers: cur.piliers.map((x, j) => (j === i ? e.target.value : x)) })}
-                  placeholder={`Pilier ${i + 1} (ex : routine sport, coulisses…)`}
-                  className={IN}
-                />
-                <button type="button" onClick={() => set({ piliers: cur.piliers.filter((_, j) => j !== i) })} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-          <button type="button" onClick={() => set({ piliers: [...cur.piliers, ""] })} className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-            <Plus className="h-3.5 w-3.5" /> Ajouter un pilier
-          </button>
-        </div>
-
-        {/* Positionnement + tonalité + plateformes + date */}
-        <div className="flex flex-col gap-3">
+      {/* ─────────── ÉDITION (wizard multi-étapes) ─────────── */}
+      {mode === "edit" && (() => {
+        const STEPS = ["Positionnement", "Piliers", "Plateformes", "Objectifs", "Agence"];
+        const lastStep = STEPS.length - 1;
+        const s = Math.min(step, lastStep);
+        return (
           <div>
-            <label className={LBL}>Niche & positionnement</label>
-            <input value={cur.positionnement} onChange={(e) => set({ positionnement: e.target.value })} placeholder="Ex : Fitness premium, esthétique épurée" className={IN} />
-          </div>
-          <div>
-            <label className={LBL}>Tonalité / ton de voix</label>
-            <input value={cur.tonalite} onChange={(e) => set({ tonalite: e.target.value })} placeholder="Ex : Bienveillant, direct, expert accessible" className={IN} />
-          </div>
-          <div>
-            <label className={LBL}>Plateformes prioritaires</label>
-            <div className="flex flex-wrap gap-2">
-              {PLATFORMS_PRIO.map((pl) => {
-                const on = cur.plateformes.includes(pl);
-                return (
-                  <button key={pl} type="button" onClick={() => togglePlat(pl)} className={cn("flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold transition-colors", on ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:bg-rowhover")}>
-                    <PlatformIcon platform={pl} className="h-3.5 w-3.5" /> {platPrioLabel[pl]}
+            {/* Indicateur de progression */}
+            <div className="mb-5">
+              <div className="mb-2 flex justify-between">
+                {STEPS.map((title, i) => (
+                  <button key={i} type="button" onClick={() => { if (i <= s) setStep(i); }} className="flex flex-1 flex-col items-center gap-1.5" aria-label={title}>
+                    <span className={cn("h-3.5 w-3.5 rounded-full transition-colors", i < s ? "bg-primary" : i === s ? "bg-primary ring-4 ring-primary/20" : "bg-muted")} />
+                    <span className={cn("hidden text-[10px] font-medium sm:block", i === s ? "text-primary" : "text-faint")}>{title}</span>
                   </button>
-                );
-              })}
+                ))}
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${(s / lastStep) * 100}%` }} />
+              </div>
+            </div>
+
+            {/* Contenu de l'étape */}
+            <div className="min-h-[190px]">
+              {s === 0 && (
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className={LBL}>Niche & positionnement</label>
+                    <input value={cur.positionnement} onChange={(e) => set({ positionnement: e.target.value })} placeholder="Ex : Fitness premium, esthétique épurée" className={IN} />
+                  </div>
+                  <div>
+                    <label className={LBL}>Tonalité / ton de voix</label>
+                    <input value={cur.tonalite} onChange={(e) => set({ tonalite: e.target.value })} placeholder="Ex : Bienveillant, direct, expert accessible" className={IN} />
+                  </div>
+                </div>
+              )}
+
+              {s === 1 && (
+                <div>
+                  <label className={LBL}>Piliers de contenu</label>
+                  <div className="flex flex-col gap-2">
+                    {cur.piliers.map((pil, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <GripVertical className="h-3.5 w-3.5 shrink-0 text-faint" />
+                        <input
+                          value={pil}
+                          onChange={(e) => set({ piliers: cur.piliers.map((x, j) => (j === i ? e.target.value : x)) })}
+                          placeholder={`Pilier ${i + 1} (ex : routine sport, coulisses…)`}
+                          className={IN}
+                        />
+                        <button type="button" onClick={() => set({ piliers: cur.piliers.filter((_, j) => j !== i) })} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" onClick={() => set({ piliers: [...cur.piliers, ""] })} className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                    <Plus className="h-3.5 w-3.5" /> Ajouter un pilier
+                  </button>
+                </div>
+              )}
+
+              {s === 2 && (
+                <div>
+                  <label className={LBL}>Plateformes prioritaires</label>
+                  <div className="flex flex-wrap gap-2">
+                    {PLATFORMS_PRIO.map((pl) => {
+                      const on = cur.plateformes.includes(pl);
+                      return (
+                        <button key={pl} type="button" onClick={() => togglePlat(pl)} className={cn("flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold transition-colors", on ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:bg-rowhover")}>
+                          <PlatformIcon platform={pl} className="h-3.5 w-3.5" /> {platPrioLabel[pl]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {s === 3 && (
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label className={LBL}>Objectifs 90 jours</label>
+                    <textarea value={cur.objectifs90} onChange={(e) => set({ objectifs90: e.target.value })} rows={3} placeholder="Ex : Passer de 45K à 60K abonnés, stabiliser 3 %+ d'engagement, lancer une série signature…" className={IN + " resize-y leading-relaxed"} />
+                  </div>
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <label className={LBL + " mb-0"}>Cadence recommandée / mois</label>
+                      <span className="text-[11px] text-faint">{recoTotal} contenus/mois</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                      {CADENCE_FIELDS.map((f) => (
+                        <label key={f.key} className="flex flex-col gap-1">
+                          <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">{f.label}</span>
+                          <input type="number" min={0} value={cur.cadenceReco[f.key]} onChange={(e) => setCad(f.key, parseInt(e.target.value, 10) || 0)} className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-center text-sm tabular-nums outline-none focus:border-primary" />
+                        </label>
+                      ))}
+                    </div>
+                    <p className="mt-1.5 text-[11px] text-faint">Sert de référence : le suivi mensuel compare le réel à cette cadence (et déclenche l'alerte sous-performance).</p>
+                  </div>
+                </div>
+              )}
+
+              {s === 4 && (
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label className={LBL}>Date d'entrée dans l'agence</label>
+                    <input type="date" value={cur.dateEntree} onChange={(e) => set({ dateEntree: e.target.value })} className={IN} />
+                  </div>
+                  <div>
+                    <label className={LBL}>Conformité (loi 2023-451)</label>
+                    <input value={cur.conformite} onChange={(e) => set({ conformite: e.target.value })} placeholder="Ex : OK / à vérifier — mentions « Publicité » systématiques ?" className={IN} />
+                    <p className="mt-1.5 text-[11px] text-faint">Écris « OK » quand c'est à jour ; tout autre texte lève une alerte de conformité.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Navigation du wizard */}
+            <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
+              <button type="button" onClick={() => setStep((x) => Math.max(0, x - 1))} disabled={s === 0} className="flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover disabled:pointer-events-none disabled:opacity-40">
+                <ChevronLeft className="h-4 w-4" /> Précédent
+              </button>
+              <span className="text-[11px] text-faint">Étape {s + 1} / {STEPS.length}</span>
+              {s < lastStep ? (
+                <button type="button" onClick={() => setStep((x) => Math.min(lastStep, x + 1))} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                  Suivant <ChevronRight className="h-4 w-4" />
+                </button>
+              ) : (
+                <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+                  <Check className="h-4 w-4" /> {saving ? "Enregistrement…" : "Enregistrer"}
+                </button>
+              )}
             </div>
           </div>
-          <div>
-            <label className={LBL}>Date d'entrée dans l'agence</label>
-            <input type="date" value={cur.dateEntree} onChange={(e) => set({ dateEntree: e.target.value })} className={IN} />
-          </div>
-        </div>
-      </div>
-
-      {/* Objectifs 90 jours */}
-      <div className="mt-4">
-        <label className={LBL}>Objectifs 90 jours</label>
-        <textarea value={cur.objectifs90} onChange={(e) => set({ objectifs90: e.target.value })} rows={3} placeholder="Ex : Passer de 45K à 60K abonnés, stabiliser 3 %+ d'engagement, lancer une série signature…" className={IN + " resize-y leading-relaxed"} />
-      </div>
-
-      {/* Cadence recommandée (cible mesurable) */}
-      <div className="mt-4">
-        <div className="mb-1 flex items-center justify-between">
-          <label className={LBL + " mb-0"}>Cadence recommandée / mois</label>
-          <span className="text-[11px] text-faint">{recoTotal} contenus/mois</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-          {CADENCE_FIELDS.map((f) => (
-            <label key={f.key} className="flex flex-col gap-1">
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">{f.label}</span>
-              <input type="number" min={0} value={cur.cadenceReco[f.key]} onChange={(e) => setCad(f.key, parseInt(e.target.value, 10) || 0)} className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-center text-sm tabular-nums outline-none focus:border-primary" />
-            </label>
-          ))}
-        </div>
-        <p className="mt-1.5 text-[11px] text-faint">Sert de référence : le suivi mensuel compare le réel à cette cadence (et déclenche l'alerte sous-performance).</p>
-      </div>
-
-      {/* Conformité */}
-      <div className="mt-4">
-        <label className={LBL}>Conformité (loi 2023-451)</label>
-        <input value={cur.conformite} onChange={(e) => set({ conformite: e.target.value })} placeholder="Ex : OK / à vérifier — mentions « Publicité » systématiques ?" className={IN} />
-        <p className="mt-1.5 text-[11px] text-faint">Écris « OK » quand c'est à jour ; tout autre texte lève une alerte de conformité.</p>
-      </div>
-      </>)}
+        );
+      })()}
     </section>
   );
 }
