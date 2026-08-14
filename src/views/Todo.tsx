@@ -235,10 +235,16 @@ export function Todo() {
   useEffect(() => { localStorage.setItem("ttp:todo-view", viewMode); }, [viewMode]);
 
   // Change le statut d'une tâche (utilisé par le kanban ; done dérivé de « Fait »).
+  // Prévient le créateur (si notifs activées) quand SA tâche/demande est terminée.
+  const notifyTaskDone = (row: Row, status: string) => {
+    if (status === "Fait" && row.creator) notifyCreator("task-done", row.creator, `« ${row.text} » — c'est fait ✓`);
+  };
+
   const setStatus = async (row: Row, status: string) => {
     if (await dbUpdate("todos", row.id, { status, done: status === "Fait" })) {
       setRows((prev) => (prev ?? []).map((r) => (r.id === row.id ? { ...r, status, done: status === "Fait" } : r)));
       setSelectedTodo((prev) => (prev?.id === row.id ? { ...prev, status, done: status === "Fait" } : prev));
+      notifyTaskDone(row, status);
     } else {
       toast("Statut non enregistré — la colonne « status » manque (lance le SQL)");
     }
@@ -250,6 +256,7 @@ export function Todo() {
     if (await dbUpdate("todos", row.id, { done: next, status })) {
       setRows((prev) => (prev ?? []).map((r) => (r.id === row.id ? { ...r, done: next, status } : r)));
       setSelectedTodo((prev) => (prev?.id === row.id ? { ...prev, done: next, status } : prev));
+      notifyTaskDone(row, status);
       toast(next ? "Fait ✓" : "À refaire");
     } else {
       toast("Erreur — réessaie");
@@ -731,6 +738,7 @@ export function Todo() {
             if (await dbUpdate("todos", id, { status, done: status === "Fait" })) {
               setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, status, done: status === "Fait" } : r)));
               setSelectedTodo((prev) => (prev?.id === id ? { ...prev, status, done: status === "Fait" } : prev));
+              notifyTaskDone(row, status);
             } else {
               toast("Statut non enregistré — la colonne « status » manque (lance le SQL)");
             }

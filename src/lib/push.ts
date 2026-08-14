@@ -29,7 +29,7 @@ export function notifyAgency(kind: "tache" | "idee" | "evenement" | "contact" | 
 /** Notifie UN créateur (push immédiat sur ses appareils) quand l'agence lui
  *  ajoute quelque chose (tâche, document…). Best-effort : jamais bloquant. */
 export function notifyCreator(
-  kind: "task" | "document" | "brief" | "debrief" | "event" | "mediakit" | "gift",
+  kind: "task" | "task-done" | "document" | "brief" | "debrief" | "event" | "mediakit" | "gift" | "idea" | "invoice" | "roadmap",
   creator: string,
   text: string,
 ) {

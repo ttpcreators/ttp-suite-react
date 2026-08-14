@@ -4,6 +4,7 @@ import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type App
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import { PlatformIcon } from "@/components/ui/platform-icon";
+import { notifyCreator } from "@/lib/push";
 import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import {
@@ -117,6 +118,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
       const { error } = await supabase.from(ROADMAP_TABLE).upsert({ creator: name, roadmap: roadmapFrom(cur) }, { onConflict: "creator" });
       setSaving(false);
       setMode("view");
+      if (!error) notifyCreator("roadmap", name, "Ta feuille de route a été mise à jour — jette un œil ✨");
       toast(error ? "Fiche enregistrée ✓ (partage créateur indispo — SQL creator-roadmap ?)" : "Fiche éditoriale enregistrée ✓");
       return;
     }

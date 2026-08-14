@@ -30,6 +30,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { totalsOf, type LineItem, type Totals } from "@/lib/invoice";
 import { ttpLogoImg } from "@/lib/pdfDoc";
+import { notifyCreator } from "@/lib/push";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -502,6 +503,7 @@ export function Facturation() {
     };
 
     let id = draft.id;
+    const wasPaid = id ? invoices.find((x) => x.id === id)?.status === "payee" : false;
     if (id) {
       if (!(await dbUpdate("invoices", id, summary))) {
         toast("Erreur — réessaie");
@@ -516,6 +518,10 @@ export function Facturation() {
       }
       id = (created as unknown as Row).id;
       setRows([created as unknown as Row, ...invoices]);
+    }
+    // Prévient le créateur (si notifs activées) quand SA facture passe à « Payée ».
+    if (!wasPaid && draft.status === "payee" && draft.creator) {
+      notifyCreator("invoice", draft.creator, `Ta facture ${draft.ref} a été réglée 💸`);
     }
 
     // Détails riches (blob)

@@ -15,6 +15,7 @@ import {
 import { ActionMenu } from "@/components/ui/action-menu";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { useCreators } from "@/lib/useCreators";
+import { notifyCreator } from "@/lib/push";
 import { Trash2, MessageSquarePlus, Check, X, Pencil, UserRound } from "lucide-react";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useEffect, useState } from "react";
@@ -136,6 +137,7 @@ export function Idees() {
     setRows(nextRows);
     setCache("ideas", nextRows);
     if (note.trim()) await saveNote(createdRow.id, note);
+    if (formCreator) notifyCreator("idea", formCreator, `Nouvelle idée : ${row.text.slice(0, 80)}`);
     toast(formCreator ? `Idée envoyée à ${titleCase(formCreator)} ✓` : "Idée ajoutée ✓");
     setFormOpen(false);
     setText("");

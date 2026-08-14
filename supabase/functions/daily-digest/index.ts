@@ -313,6 +313,11 @@ Deno.serve(async (req: Request) => {
       : body.kind === "debrief" ? "📊 Nouveau débrief de ton agence"
       : body.kind === "event" ? "📅 Nouvel évènement de ton agence"
       : body.kind === "mediakit" ? "🖼️ Nouveau media kit de ton agence"
+      : body.kind === "task-done" ? "✅ Ta demande est faite"
+      : body.kind === "idea" ? "💡 Une idée de ton agence"
+      : body.kind === "gift" ? "🎁 Nouveau cadeau / dotation"
+      : body.kind === "invoice" ? "💸 Mise à jour de ta facture"
+      : body.kind === "roadmap" ? "🎯 Ta feuille de route a été mise à jour"
       : "✓ Nouvelle tâche de ton agence";
     const payload = JSON.stringify({
       title,
