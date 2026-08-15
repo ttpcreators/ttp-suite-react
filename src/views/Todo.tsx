@@ -237,7 +237,7 @@ export function Todo() {
   // Change le statut d'une tâche (utilisé par le kanban ; done dérivé de « Fait »).
   // Prévient le créateur (si notifs activées) quand SA tâche/demande est terminée.
   const notifyTaskDone = (row: Row, status: string) => {
-    if (status === "Fait" && row.creator) notifyCreator("task-done", row.creator, `« ${row.text} » — c'est fait ✓`);
+    if (status === "Fait" && row.creator) notifyCreator("task-done", row.creator, `✅ Ta demande est faite : « ${row.text} »`);
   };
 
   const setStatus = async (row: Row, status: string) => {
