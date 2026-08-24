@@ -251,6 +251,7 @@ export function Contacts() {
   const [phone, setPhone] = useState("");
 
   const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS);
+  const [contactFilter, setContactFilter] = useState<"all" | "contacted" | "never">("all"); // déjà échangé ?
   const [importing, setImporting] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
@@ -666,6 +667,12 @@ export function Contacts() {
       const tagOk = tagFilter === ALL_TAGS || (row.tag ?? "").trim() === tagFilter;
       if (!tagOk) return false;
     }
+    // Filtre « déjà échangé » (basé sur le dernier contact suivi).
+    if (contactFilter !== "all") {
+      const contacted = !!row.last_contacted;
+      if (contactFilter === "contacted" && !contacted) return false;
+      if (contactFilter === "never" && contacted) return false;
+    }
     return matchQuery(query, row.brand, row.person, row.role, row.email, row.tag);
   });
 
@@ -733,6 +740,26 @@ export function Contacts() {
           ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "↳ Créateurs" }] : []),
         ]}
       />
+
+      {/* Filtre « déjà échangé » (orthogonal au tag) — basé sur le suivi de contact */}
+      <div className="mb-4 flex items-center gap-1.5">
+        <Clock className="h-3.5 w-3.5 shrink-0 text-faint" />
+        <div className="flex gap-1 rounded-xl bg-panel p-1">
+          {([["all", "Tous"], ["contacted", "Déjà contactés"], ["never", "Jamais contactés"]] as const).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setContactFilter(v)}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                contactFilter === v ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <InlineForm
         open={formOpen}
