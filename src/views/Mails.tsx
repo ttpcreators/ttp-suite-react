@@ -10,7 +10,7 @@ import { toast } from "@/components/ui/toast";
  * complet. Lecture seule (scope gmail.readonly via les fonctions gmail-history /
  * gmail-thread). Réservé à l'agence (les fonctions vérifient le rôle).
  */
-type Contact = { email: string; label: string; tag?: string };
+type Contact = { email: string; label: string; tag?: string; lastContacted?: string | null };
 type MailMsg = { id: string; threadId: string; from: string; to?: string; subject: string; date: string; snippet: string; direction: "in" | "out"; source?: string };
 type ThreadMsg = { id: string; from: string; to?: string; subject: string; date: string; html: string; text: string; direction: "in" | "out"; ts: number };
 
@@ -62,6 +62,8 @@ async function invokeJson<T>(fn: string, body: Record<string, unknown>): Promise
 export function Mails() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [query, setQuery] = useState("");
+  const [tagFilter, setTagFilter] = useState("__all__"); // filtre par niche/tag
+  const [contactFilter, setContactFilter] = useState<"all" | "contacted" | "never">("all"); // déjà échangé ?
   const [selected, setSelected] = useState<Contact | null>(null);
 
   const [history, setHistory] = useState<MailMsg[] | null>(null);
@@ -87,7 +89,7 @@ export function Mails() {
             .map((r) => {
               const person = [r.first_name, r.last_name].filter(Boolean).join(" ") || String(r.person ?? "");
               const label = [String(r.brand ?? ""), person].filter((x) => x && x !== "—").join(" · ") || String(r.email ?? "");
-              return { email: String(r.email ?? "").trim(), label, tag: String(r.tag ?? "").trim() };
+              return { email: String(r.email ?? "").trim(), label, tag: String(r.tag ?? "").trim(), lastContacted: r.last_contacted ? String(r.last_contacted) : null };
             })
             .filter((c) => EMAIL_RE.test(c.email)),
         );
@@ -180,11 +182,22 @@ export function Mails() {
     if (fresh?.ok) setThreadMsgs(fresh.messages ?? []);
   };
 
+  // Tags/niches réellement présents (pour le filtre) — hors « perso » (défaut créateurs).
+  const tagList = useMemo(
+    () => [...new Set(contacts.map((c) => (c.tag ?? "").trim()).filter((t) => t && t.toLowerCase() !== "perso"))],
+    [contacts],
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return contacts;
-    return contacts.filter((c) => c.label.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || (c.tag ?? "").toLowerCase().includes(q));
-  }, [contacts, query]);
+    return contacts.filter((c) => {
+      if (tagFilter !== "__all__" && (c.tag ?? "").trim() !== tagFilter) return false;
+      if (contactFilter === "contacted" && !c.lastContacted) return false;
+      if (contactFilter === "never" && c.lastContacted) return false;
+      if (q && !(c.label.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || (c.tag ?? "").toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [contacts, query, tagFilter, contactFilter]);
 
   return (
     <>
@@ -200,6 +213,43 @@ export function Mails() {
               className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
             />
           </div>
+
+          {/* Filtre par niche/tag (marques, agence…) — pastilles scrollables */}
+          {tagList.length > 0 && (
+            <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {[{ value: "__all__", label: "Tous" }, ...tagList.map((t) => ({ value: t, label: t }))].map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => setTagFilter(o.value)}
+                  className={cn(
+                    "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                    tagFilter === o.value ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground",
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Filtre « déjà échangé » (basé sur le suivi de contact) */}
+          <div className="mb-3 flex gap-1 rounded-xl bg-panel p-1">
+            {([["all", "Tous"], ["contacted", "Déjà échangé"], ["never", "Jamais"]] as const).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setContactFilter(v)}
+                className={cn(
+                  "flex-1 rounded-lg px-2 py-1.5 text-[10px] font-semibold transition-colors",
+                  contactFilter === v ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           <div className="max-h-[70vh] space-y-0.5 overflow-y-auto pr-1">
             {filtered.length === 0 ? (
               <div className="px-2 py-6 text-center text-[12px] text-faint">Aucun contact avec email.</div>
@@ -218,9 +268,15 @@ export function Mails() {
                     {initials(c.label)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[12px] font-semibold text-foreground">{c.label}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-[12px] font-semibold text-foreground">{c.label}</span>
+                      {c.lastContacted && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà échangé" />}
+                    </div>
                     <div className="truncate text-[11px] text-faint">{c.email}</div>
                   </div>
+                  {c.tag && c.tag.toLowerCase() !== "perso" && (
+                    <span className="ml-1 shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground">{c.tag}</span>
+                  )}
                 </button>
               ))
             )}
