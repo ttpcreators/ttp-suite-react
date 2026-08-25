@@ -390,12 +390,20 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
       const samePlat = ordered.filter((x) => x.h.platform === latest.platform);
       const prev = samePlat[1]?.h;
       const dEr = prev ? Math.round((parseEr(latest.er) - parseEr(prev.er)) * 100) / 100 : null;
+      // Abonnés CUMULÉS = somme du dernier relevé de CHAQUE plateforme du créateur.
+      const seenPlat = new Set<string>();
+      let cumFollowers = 0;
+      for (const { h } of ordered) {
+        if (seenPlat.has(h.platform)) continue;
+        seenPlat.add(h.platform);
+        cumFollowers += num(h.followers);
+      }
       return {
         creator: name,
         platform: latest.platform,
         lastEr: parseEr(latest.er),
         dEr,
-        followers: num(latest.followers),
+        followers: cumFollowers,
         measures: mine.length,
         bestEr: Math.max(...mine.map((h) => parseEr(h.er))),
         verdict: latest.verdict,
