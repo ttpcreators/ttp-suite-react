@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { parseAmount, formatEuro } from "@/lib/money";
+import { useAppState, type AppState } from "@/lib/appState";
+import { fmtCompact } from "@/lib/timeSeries";
 import { useSearch, matchQuery } from "@/lib/search";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -115,6 +117,38 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
       setCaByCreator(m);
     });
   }, [live]);
+
+  // Abonnés CUMULÉS par créateur = somme du DERNIER relevé de chaque plateforme
+  // (mesures d'engagement, blob `engagementHistory`). Clé = nom en minuscules.
+  const { data: engHist } = useAppState<{ creator?: string; platform?: string; followers?: string; date?: string }[]>(
+    (s: AppState) => (s["engagementHistory"] as { creator?: string; platform?: string; followers?: string; date?: string }[]) ?? [],
+  );
+  const cumFollowers = useMemo(() => {
+    const num = (v: unknown) => { const n = Number(String(v ?? "").replace(/\s/g, "").replace(",", ".")); return Number.isFinite(n) ? n : 0; };
+    const ts = (d?: string) => { const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(d ?? ""); return m ? new Date(+m[3], +m[2] - 1, +m[1]).getTime() : 0; };
+    const byCreator = new Map<string, { platform?: string; followers?: string; date?: string }[]>();
+    for (const h of engHist ?? []) {
+      const k = (h.creator ?? "").trim().toLowerCase();
+      if (!k) continue;
+      const arr = byCreator.get(k) ?? [];
+      arr.push(h);
+      byCreator.set(k, arr);
+    }
+    const out: Record<string, number> = {};
+    for (const [k, list] of byCreator) {
+      const ordered = [...list].sort((a, b) => ts(b.date) - ts(a.date));
+      const seen = new Set<string>();
+      let sum = 0;
+      for (const h of ordered) {
+        const pf = (h.platform ?? "").toLowerCase();
+        if (!pf || seen.has(pf)) continue;
+        seen.add(pf);
+        sum += num(h.followers);
+      }
+      if (sum > 0) out[k] = sum;
+    }
+    return out;
+  }, [engHist]);
 
   if (error) {
     return (
@@ -301,9 +335,9 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                   {c.niche}
                 </span>
 
-                {/* Abonnés / ER / CA — masqués sur mobile */}
+                {/* Abonnés (cumul tous réseaux depuis les mesures ; repli = valeur fiche) / ER / CA — masqués sur mobile */}
                 <span className="hidden text-right text-xs font-semibold text-foreground md:inline">
-                  {c.followers}
+                  {cumFollowers[c.name.trim().toLowerCase()] ? fmtCompact(cumFollowers[c.name.trim().toLowerCase()]) : c.followers}
                 </span>
                 <span className="hidden text-right text-xs font-semibold text-foreground md:inline">
                   {c.er}
