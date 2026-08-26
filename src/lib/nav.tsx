@@ -94,7 +94,6 @@ export const NAV: NavFamily[] = [
     items: [
       { id: "roster", label: "Roster", icon: Users },
       { id: "suivi", label: "Suivi engagement", icon: Activity },
-      { id: "vivier", label: "Vivier", icon: UserPlus },
       {
         id: "mediakit",
         label: "Media kit",
@@ -140,6 +139,7 @@ export const NAV: NavFamily[] = [
       { id: "contacts", label: "Contacts", icon: Contact },
       { id: "mails", label: "Mails", icon: Mail },
       { id: "prospection", label: "Prospection", icon: Search },
+      { id: "vivier", label: "Vivier", icon: UserPlus },
       {
         id: "contrats",
         label: "Contrats",
