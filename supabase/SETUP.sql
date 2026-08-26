@@ -814,6 +814,19 @@ alter table public.contacts add column if not exists last_contacted timestamptz;
 -- ----------------------------------------------------------------------------
 alter table public.briefs add column if not exists pdf jsonb;
 
+-- ----------------------------------------------------------------------------
+-- VIVIER CRÉATEURS : table creator_pool (agence-only) — cf. sql/creator-pool.sql
+-- ----------------------------------------------------------------------------
+create table if not exists public.creator_pool (
+  id uuid primary key default gen_random_uuid(),
+  name text not null, handle text, email text, tag text, note text,
+  last_contacted timestamptz, sort_order int default 0, created_at timestamptz default now()
+);
+alter table public.creator_pool enable row level security;
+drop policy if exists creator_pool_agency on public.creator_pool;
+create policy creator_pool_agency on public.creator_pool for all to authenticated
+  using (public.is_agency()) with check (public.is_agency());
+
 -- ============================================================================
 -- FIN. Vérif rapide (en étant DÉCONNECTÉ, ces requêtes doivent renvoyer 0 ligne) :
 --   select * from public.creators;

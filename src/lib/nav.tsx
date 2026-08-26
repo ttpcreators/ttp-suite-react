@@ -3,6 +3,7 @@ import {
   Target,
   Receipt,
   Users,
+  UserPlus,
   Image as ImageIcon,
   FileText,
   ListChecks,
@@ -42,6 +43,7 @@ export type ViewId =
   | "relances"
   | "echeances"
   | "roster"
+  | "vivier"
   | "mediakit"
   | "briefs"
   | "gifting"
@@ -92,6 +94,7 @@ export const NAV: NavFamily[] = [
     items: [
       { id: "roster", label: "Roster", icon: Users },
       { id: "suivi", label: "Suivi engagement", icon: Activity },
+      { id: "vivier", label: "Vivier", icon: UserPlus },
       {
         id: "mediakit",
         label: "Media kit",
