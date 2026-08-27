@@ -10,7 +10,7 @@ import { AddButton, InlineForm, TextField, AutoGrowTextField } from "@/component
 import { ActionMenu } from "@/components/ui/action-menu";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
-import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles } from "lucide-react";
+import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink } from "lucide-react";
 
 /**
  * VIVIER créateurs (hors roster) : répertoire de créateurs à SOLLICITER pour des
@@ -35,6 +35,15 @@ const ALL = "__all__";
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const esc = (s: unknown) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c] ?? c);
 
+/** @handle → nom d'utilisateur nettoyé (sans @, sans URL). */
+const igName = (handle?: string | null) =>
+  (handle ?? "").trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/[/?].*$/, "").replace(/\s/g, "");
+/** URL du profil Instagram, ou "" si pas de handle. */
+const igUrl = (handle?: string | null) => {
+  const h = igName(handle);
+  return h ? `https://www.instagram.com/${h}/` : "";
+};
+
 export function Vivier() {
   const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("vivier"));
   const [error, setError] = useState(false);
@@ -52,6 +61,9 @@ export function Vivier() {
   const [fEmail, setFEmail] = useState("");
   const [fTag, setFTag] = useState("");
   const [fNote, setFNote] = useState("");
+
+  // Fiche (détail au clic sur une ligne)
+  const [selected, setSelected] = useState<Row | null>(null);
 
   // Sollicitation email
   const [mailRow, setMailRow] = useState<Row | null>(null);
@@ -185,7 +197,7 @@ export function Vivier() {
       ) : (
         <div className="flex flex-col gap-2.5">
           {filtered.map((r) => (
-            <div key={r.id} className="flex items-center gap-3.5 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-colors hover:bg-rowhover">
+            <div key={r.id} onClick={() => setSelected(r)} className="flex cursor-pointer items-center gap-3.5 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-colors hover:bg-rowhover">
               <div className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[9px] bg-panel text-[11px] font-bold text-foreground">{initials(r.name)}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
@@ -193,25 +205,83 @@ export function Vivier() {
                   {r.last_contacted && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà contacté" />}
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-faint">
-                  {r.handle && <span className="inline-flex items-center gap-0.5"><AtSign className="h-3 w-3" />{r.handle.replace(/^@/, "")}</span>}
+                  {r.handle && (igUrl(r.handle) ? (
+                    <a href={igUrl(r.handle)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Ouvrir le profil Instagram" className="inline-flex items-center gap-0.5 font-medium text-primary hover:underline">
+                      <AtSign className="h-3 w-3" />{igName(r.handle)}
+                    </a>
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5"><AtSign className="h-3 w-3" />{r.handle.replace(/^@/, "")}</span>
+                  ))}
                   {r.email && <span className="truncate">{r.email}</span>}
                 </div>
                 {r.note && <div className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{r.note}</div>}
               </div>
               {r.tag && <span className="hidden shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground sm:inline">{r.tag}</span>}
               {r.email && (
-                <button type="button" onClick={() => openMail(r)} title="Solliciter par email" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary transition-colors hover:bg-primary/20">
+                <button type="button" onClick={(e) => { e.stopPropagation(); openMail(r); }} title="Solliciter par email" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary transition-colors hover:bg-primary/20">
                   <Mail className="h-4 w-4" />
                 </button>
               )}
-              <ActionMenu
-                items={[
-                  { key: "edit", label: "Modifier", icon: Pencil, onClick: () => openEdit(r) },
-                  { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => remove(r), confirm: { title: "Supprimer du vivier", message: `Retirer « ${r.name} » du vivier ? Tu pourras le restaurer depuis la corbeille.` } },
-                ]}
-              />
+              <div onClick={(e) => e.stopPropagation()}>
+                <ActionMenu
+                  items={[
+                    { key: "edit", label: "Modifier", icon: Pencil, onClick: () => openEdit(r) },
+                    { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => remove(r), confirm: { title: "Supprimer du vivier", message: `Retirer « ${r.name} » du vivier ? Tu pourras le restaurer depuis la corbeille.` } },
+                  ]}
+                />
+              </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Fiche créateur (détail) */}
+      {selected && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={() => setSelected(null)}>
+          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-start gap-3">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-panel text-sm font-bold text-foreground">{initials(selected.name)}</div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate text-base font-bold text-foreground">{selected.name}</span>
+                  {selected.last_contacted && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà contacté" />}
+                </div>
+                {selected.tag && <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{selected.tag}</div>}
+              </div>
+              <button type="button" onClick={() => setSelected(null)} className="shrink-0 text-faint transition-colors hover:text-foreground"><X className="h-5 w-5" /></button>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              {selected.handle && (igUrl(selected.handle) ? (
+                <a href={igUrl(selected.handle)} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[13px] font-semibold text-primary transition-colors hover:bg-primary/5">
+                  <AtSign className="h-4 w-4 shrink-0" /><span className="truncate">{igName(selected.handle)}</span>
+                  <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] font-medium text-faint">Instagram <ExternalLink className="h-3.5 w-3.5" /></span>
+                </a>
+              ) : (
+                <div className="flex items-center gap-2.5 rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[13px] font-medium text-foreground"><AtSign className="h-4 w-4 shrink-0 text-faint" /><span className="truncate">{selected.handle.replace(/^@/, "")}</span></div>
+              ))}
+              {selected.email && (
+                <a href={`mailto:${selected.email}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-2.5 rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover"><Mail className="h-4 w-4 shrink-0 text-faint" /><span className="truncate">{selected.email}</span></a>
+              )}
+              {selected.note && (
+                <div className="rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[12px] leading-relaxed text-muted-foreground">{selected.note}</div>
+              )}
+              {selected.last_contacted && (
+                <div className="px-1 text-[11px] text-faint">Dernier contact : {new Date(selected.last_contacted).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</div>
+              )}
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              {selected.email && (
+                <button type="button" onClick={() => { const r = selected; setSelected(null); openMail(r); }} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                  <Send className="h-3.5 w-3.5" /> Solliciter
+                </button>
+              )}
+              <button type="button" onClick={() => { const r = selected; setSelected(null); openEdit(r); }} className={cn("flex items-center justify-center gap-1.5 rounded-lg border border-border px-4 py-2.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover", !selected.email && "flex-1")}>
+                <Pencil className="h-3.5 w-3.5" /> Modifier
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
