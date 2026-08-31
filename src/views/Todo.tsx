@@ -13,7 +13,7 @@ import {
   AutoGrowTextField,
 } from "@/components/ui/form";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
-import { FilterBar } from "@/components/ui/filter-bar";
+import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
 import { useLiveKey } from "@/lib/useLive";
@@ -505,75 +505,95 @@ export function Todo() {
         )}
       </InlineForm>
 
-      {/* Barre de filtres */}
-      {rows !== null && rows.length > 0 && (
-        <div className="mb-4 flex flex-col gap-2.5">
-          {/* Ligne 1 — statut (gauche) + bascule de vue (droite) */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              {viewMode === "liste" && (
-                <FilterBar
-                  value={todoFilter}
-                  onChange={(v) => setTodoFilter(v as TodoFilter)}
-                  options={TODO_FILTERS.map((f) => ({ value: f.id, label: f.label }))}
-                />
-              )}
-            </div>
-            <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
-              {([["liste", "Liste", List], ["colonnes", "Colonnes", Columns3]] as const).map(([mode, label, Icon]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setViewMode(mode)}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-                    viewMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" /> {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Ligne 2 — périmètre (Tous / Agence / une créatrice) · priorité */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
-              {([[null, "Tous"], ["__agency__", "Agence"]] as const).map(([val, label]) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => setCreatorFilter(val)}
-                  className={cn(
-                    "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-                    creatorFilter === val ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <Select value={creatorSelectValue} onValueChange={onCreatorSelect}>
-              <SelectTrigger className="h-9 w-auto min-w-[170px] rounded-full bg-surface" placeholder="Une créatrice…" />
-              <SelectContent>
-                <SelectItem index={0} value={ALL}>Tous</SelectItem>
-                <SelectItem index={1} value="__agency__">Agence</SelectItem>
-                {creators.map((c, i) => (
-                  <SelectItem key={c.id} index={i + 2} value={c.name}>
-                    {titleCase(c.name)}
-                  </SelectItem>
+      {/* Panneau de filtres */}
+      {rows !== null && rows.length > 0 && (() => {
+        const activeCount =
+          (creatorFilter != null ? 1 : 0) +
+          (priorityFilter != null ? 1 : 0) +
+          (todoFilter !== "encours" ? 1 : 0);
+        const groups: FilterGroup[] = [
+          ...(viewMode === "liste"
+            ? [{
+                id: "statut",
+                label: "Statut",
+                value: todoFilter,
+                onChange: (v: string) => setTodoFilter(v as TodoFilter),
+                options: TODO_FILTERS.map((f) => {
+                  const n = filteredBase.filter((r) =>
+                    f.id === "encours" ? !r.done : f.id === "terminees" ? r.done : true,
+                  ).length;
+                  return { value: f.id, label: f.label, count: n };
+                }),
+              }]
+            : []),
+          {
+            id: "priorite",
+            label: "Priorité",
+            value: priorityFilter ?? "__all__",
+            onChange: (v: string) => setPriorityFilter(v === "__all__" ? null : (v as Priority)),
+            options: priorityPills.map((p) => ({ value: p.value ?? "__all__", label: p.label })),
+          },
+        ];
+        return (
+          <FilterPanel
+            className="mb-4"
+            activeCount={activeCount}
+            groups={groups}
+            onClear={() => { setCreatorFilter(null); setPriorityFilter(null); setTodoFilter("encours"); }}
+            right={
+              <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
+                {([["liste", "Liste", List], ["colonnes", "Colonnes", Columns3]] as const).map(([mode, label, Icon]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setViewMode(mode)}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                      viewMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{label}</span>
+                  </button>
                 ))}
-              </SelectContent>
-            </Select>
-            <span className="mx-0.5 hidden h-6 w-px bg-border md:block" />
-            <FilterBar
-              value={priorityFilter ?? "__all__"}
-              onChange={(v) => setPriorityFilter(v === "__all__" ? null : (v as Priority))}
-              options={priorityPills.map((p) => ({ value: p.value ?? "__all__", label: p.label }))}
-            />
-          </div>
-        </div>
-      )}
+              </div>
+            }
+            extra={
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Périmètre</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
+                    {([[null, "Tous"], ["__agency__", "Agence"]] as const).map(([val, label]) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => setCreatorFilter(val)}
+                        className={cn(
+                          "rounded-full px-3.5 py-1.5 text-[11px] font-semibold transition-colors",
+                          creatorFilter === val ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <Select value={creatorSelectValue} onValueChange={onCreatorSelect}>
+                    <SelectTrigger className="h-9 w-auto min-w-[170px] rounded-full bg-surface" placeholder="Une créatrice…" />
+                    <SelectContent>
+                      <SelectItem index={0} value={ALL}>Tous</SelectItem>
+                      <SelectItem index={1} value="__agency__">Agence</SelectItem>
+                      {creators.map((c, i) => (
+                        <SelectItem key={c.id} index={i + 2} value={c.name}>
+                          {titleCase(c.name)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            }
+          />
+        );
+      })()}
 
       {rows === null ? (
         <div className="rounded-xl border border-border bg-card shadow-sm px-4 py-3">

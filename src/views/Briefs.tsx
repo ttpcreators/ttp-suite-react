@@ -2,7 +2,8 @@ import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn, titleCase } from "@/lib/utils";
-import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown, Paperclip, FileText } from "lucide-react";
+import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown, Paperclip, FileText, UserRound } from "lucide-react";
+import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
@@ -101,6 +102,8 @@ export function Briefs() {
   const live = useLiveKey();
 
   const [view, setView] = useState<"board" | "list">("list");
+  const [statusFilter, setStatusFilter] = useState<string>("__all__");
+  const [creatorFilter, setCreatorFilter] = useState<string>("");
   const [formOpen, setFormOpen] = useState(false);
   const [brand, setBrand] = useState("");
   const [creator, setCreator] = useState("");
@@ -297,7 +300,13 @@ export function Briefs() {
 
   const creatorOptions = [{ value: "", label: "—" }, ...creators.map((c) => ({ value: c.name, label: c.name }))];
 
-  const filtered = (rows ?? []).filter((row) => matchQuery(query, row.brand, row.creator, row.deliverables, row.status));
+  const ALL = "__all__";
+  const filtered = (rows ?? []).filter((row) => {
+    if (!matchQuery(query, row.brand, row.creator, row.deliverables, row.status)) return false;
+    if (statusFilter !== ALL && colKey(row.status) !== statusFilter) return false;
+    if (creatorFilter !== "" && (row.creator ?? "").toLowerCase() !== creatorFilter.toLowerCase()) return false;
+    return true;
+  });
 
   // ---- rendu d'une carte (compacte pour le board, riche pour la liste) ----
   const renderCard = (row: Row, compact: boolean): ReactElement => {
@@ -446,7 +455,7 @@ export function Briefs() {
       </div>
     );
   } else if (filtered.length === 0) {
-    content = <div className="rounded-xl border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">{query.trim() ? `Aucun résultat pour « ${query} »` : "Aucun brief."}</div>;
+    content = <div className="rounded-xl border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">{query.trim() ? `Aucun résultat pour « ${query} »` : "Aucun brief pour ces filtres."}</div>;
   } else {
     content = <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">{filtered.map((r) => renderCard(r, false))}</div>;
   }
@@ -456,30 +465,76 @@ export function Briefs() {
       {/* Input caché pour joindre un PDF à un brief (cible = attachTargetRef) */}
       <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => onPdfPicked(e.target.files)} />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="text-sm text-muted-foreground">{rows === null ? "Chargement…" : `${rows.length} brief${rows.length > 1 ? "s" : ""}`}</div>
-          {/* Toggle vue */}
-          <div className="flex gap-1 rounded-lg bg-panel p-0.5">
-            {([
-              { id: "list", label: "Liste", icon: ListIcon },
-              { id: "board", label: "Colonnes", icon: Columns3 },
-            ] as const).map((v) => (
-              <button
-                key={v.id}
-                type="button"
-                onClick={() => setView(v.id)}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
-                  view === v.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <v.icon className="h-3.5 w-3.5" /> {v.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <div className="text-sm text-muted-foreground">{rows === null ? "Chargement…" : `${rows.length} brief${rows.length > 1 ? "s" : ""}`}</div>
         <AddButton label="Brief" onClick={() => setFormOpen(true)} />
       </div>
+
+      {/* Panneau de filtres */}
+      {rows !== null && rows.length > 0 && (() => {
+        const activeCount = (statusFilter !== ALL ? 1 : 0) + (creatorFilter !== "" ? 1 : 0);
+        const groups: FilterGroup[] = [
+          {
+            id: "statut",
+            label: "Statut",
+            value: statusFilter,
+            onChange: setStatusFilter,
+            options: [
+              { value: ALL, label: "Tous", count: rows.length },
+              ...STATUS_OPTS.map((s) => ({
+                value: s.value,
+                label: s.label,
+                count: rows.filter((r) => colKey(r.status) === s.value).length,
+              })),
+            ],
+          },
+        ];
+        return (
+          <FilterPanel
+            className="mb-4"
+            activeCount={activeCount}
+            groups={groups}
+            onClear={() => { setStatusFilter(ALL); setCreatorFilter(""); }}
+            right={
+              <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
+                {([
+                  { id: "list", label: "Liste", icon: ListIcon },
+                  { id: "board", label: "Colonnes", icon: Columns3 },
+                ] as const).map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => setView(v.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                      view === v.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <v.icon className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{v.label}</span>
+                  </button>
+                ))}
+              </div>
+            }
+            extra={creators.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Créateur</span>
+                <div className="flex items-center gap-2">
+                  <UserRound className="h-4 w-4 shrink-0 text-faint" />
+                  <select
+                    value={creatorFilter}
+                    onChange={(e) => setCreatorFilter(e.target.value)}
+                    className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
+                  >
+                    <option value="">Tous les créateurs</option>
+                    {creators.map((c) => (
+                      <option key={c.id} value={c.name}>{titleCase(c.name)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : undefined}
+          />
+        );
+      })()}
 
       <InlineForm open={formOpen} title="Nouveau brief" onClose={() => setFormOpen(false)} onSubmit={submit}>
         <TextField label="Marque" value={brand} onChange={setBrand} />

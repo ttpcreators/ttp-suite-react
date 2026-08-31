@@ -13,7 +13,7 @@ import {
   SelectField,
 } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { FilterBar } from "@/components/ui/filter-bar";
+import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
 import { Trash2, MessageSquarePlus, Check, X, Pencil, UserRound } from "lucide-react";
@@ -219,31 +219,54 @@ export function Idees() {
         <AddButton label="Idée" onClick={() => setFormOpen(true)} />
       </div>
 
-      {/* Barre de filtres par statut (pastilles desktop · sélecteur mobile) */}
-      <FilterBar
-        className="mb-3"
-        value={statusFilter}
-        onChange={setStatusFilter}
-        options={[{ value: ALL_STATUS, label: "Tous" }, ...STATUS_FILTERS.map((s) => ({ value: s, label: s }))]}
-      />
-
-      {/* Filtre par créatrice — voir les idées d'une créatrice en particulier */}
-      {creators.length > 0 && (
-        <div className="mb-4 flex items-center gap-2">
-          <UserRound className="h-4 w-4 shrink-0 text-faint" />
-          <select
-            value={creatorFilter}
-            onChange={(e) => setCreatorFilter(e.target.value)}
-            className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
-          >
-            <option value="">Toutes les créatrices</option>
-            <option value="__general__">Idées générales (non assignées)</option>
-            {creatorOptions.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-        </div>
-      )}
+      {/* Panneau de filtres */}
+      {rows !== null && rows.length > 0 && (() => {
+        const activeCount =
+          (statusFilter !== ALL_STATUS ? 1 : 0) + (creatorFilter !== "" ? 1 : 0);
+        const groups: FilterGroup[] = [
+          {
+            id: "statut",
+            label: "Statut",
+            value: statusFilter,
+            onChange: setStatusFilter,
+            options: [
+              { value: ALL_STATUS, label: "Tous", count: rows.length },
+              ...STATUS_FILTERS.map((s) => ({
+                value: s,
+                label: s,
+                count: rows.filter((r) => (r.status ?? "À faire") === s).length,
+              })),
+            ],
+          },
+        ];
+        return (
+          <FilterPanel
+            className="mb-4"
+            activeCount={activeCount}
+            groups={groups}
+            onClear={() => { setStatusFilter(ALL_STATUS); setCreatorFilter(""); }}
+            extra={creators.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Créatrice</span>
+                <div className="flex items-center gap-2">
+                  <UserRound className="h-4 w-4 shrink-0 text-faint" />
+                  <select
+                    value={creatorFilter}
+                    onChange={(e) => setCreatorFilter(e.target.value)}
+                    className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
+                  >
+                    <option value="">Toutes les créatrices</option>
+                    <option value="__general__">Idées générales (non assignées)</option>
+                    {creatorOptions.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : undefined}
+          />
+        );
+      })()}
 
       <InlineForm
         open={formOpen}
