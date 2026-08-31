@@ -28,7 +28,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3, UserRound, Building2, Plus, Upload } from "lucide-react";
+import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3, UserRound, Building2, Plus, Upload, Type, AlignLeft, CalendarClock } from "lucide-react";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
 import { AgentPlan, type PlanTask } from "@/components/ui/agent-plan";
 
@@ -471,14 +471,15 @@ export function Todo() {
         }}
         onSubmit={submit}
       >
-        <TextField label="Tâche" value={text} onChange={setText} />
-        <AutoGrowTextField label="Description" value={descr} onChange={setDescr} placeholder="Détaille la tâche — le champ s'agrandit tout seul…" className="min-w-full" />
-        <TextField label="Commentaire (optionnel)" value={note} onChange={setNote} placeholder="Infos en plus, rappel, lien…" />
+        <TextField label="Tâche" value={text} onChange={setText} icon={Type} placeholder="Ex : Contacter la marque…" />
+        <AutoGrowTextField label="Description" value={descr} onChange={setDescr} icon={AlignLeft} placeholder="Détaille la tâche — le champ s'agrandit tout seul…" className="min-w-full" />
+        <TextField label="Commentaire (optionnel)" value={note} onChange={setNote} icon={MessageSquarePlus} placeholder="Infos en plus, rappel, lien…" />
         <TextField
           label="Échéance"
           type="date"
           value={due}
           onChange={setDue}
+          icon={CalendarClock}
         />
         <SelectField
           label="Priorité"

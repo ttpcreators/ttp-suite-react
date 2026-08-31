@@ -4,8 +4,15 @@ import { Plus, X, ChevronDown, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "./select";
 
-const inputCls =
-  "w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15";
+// Enveloppe « input group » : la BORDURE + le halo de focus sont portés par le
+// conteneur (pas par l'input), et une icône optionnelle vit à l'intérieur du champ
+// — même principe que le composant de référence. L'input est transparent/sans bord.
+const shellCls =
+  "flex w-full items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm text-foreground transition-shadow focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15";
+const shellTopCls =
+  "flex w-full items-start gap-2 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground transition-shadow focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15";
+const bareCtrl =
+  "min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-faint";
 
 /** Bouton vert « + Label » (déclenche l'ouverture d'un formulaire). */
 export function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
@@ -126,6 +133,7 @@ export function TextField({
   placeholder,
   type = "text",
   className,
+  icon: Icon,
 }: {
   label: string;
   value: string;
@@ -133,16 +141,20 @@ export function TextField({
   placeholder?: string;
   type?: string;
   className?: string;
+  icon?: LucideIcon;
 }) {
   return (
     <Field label={label} className={className}>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={inputCls}
-      />
+      <div className={shellCls}>
+        {Icon && <Icon className="h-4 w-4 shrink-0 text-faint" />}
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={cn(bareCtrl, "py-2.5")}
+        />
+      </div>
     </Field>
   );
 }
@@ -154,6 +166,7 @@ export function TextAreaField({
   placeholder,
   rows = 3,
   className,
+  icon: Icon,
 }: {
   label: string;
   value: string;
@@ -161,16 +174,20 @@ export function TextAreaField({
   placeholder?: string;
   rows?: number;
   className?: string;
+  icon?: LucideIcon;
 }) {
   return (
     <Field label={label} className={className}>
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        rows={rows}
-        className={inputCls + " resize-y leading-relaxed"}
-      />
+      <div className={shellTopCls}>
+        {Icon && <Icon className="mt-0.5 h-4 w-4 shrink-0 text-faint" />}
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          rows={rows}
+          className={cn(bareCtrl, "resize-y leading-relaxed")}
+        />
+      </div>
     </Field>
   );
 }
@@ -184,6 +201,7 @@ export function AutoGrowTextField({
   placeholder,
   minRows = 2,
   className,
+  icon: Icon,
 }: {
   label: string;
   value: string;
@@ -191,6 +209,7 @@ export function AutoGrowTextField({
   placeholder?: string;
   minRows?: number;
   className?: string;
+  icon?: LucideIcon;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   // Recale la hauteur sur le contenu à chaque changement de valeur (y compris
@@ -203,14 +222,17 @@ export function AutoGrowTextField({
   }, [value]);
   return (
     <Field label={label} className={className}>
-      <textarea
-        ref={ref}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        rows={minRows}
-        className={inputCls + " resize-none overflow-hidden leading-relaxed"}
-      />
+      <div className={shellTopCls}>
+        {Icon && <Icon className="mt-0.5 h-4 w-4 shrink-0 text-faint" />}
+        <textarea
+          ref={ref}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          rows={minRows}
+          className={cn(bareCtrl, "resize-none overflow-hidden leading-relaxed")}
+        />
+      </div>
     </Field>
   );
 }
