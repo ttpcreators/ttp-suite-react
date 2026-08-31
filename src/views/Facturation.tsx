@@ -9,8 +9,11 @@ import {
   Trash2,
   Settings2,
   Landmark,
+  Wallet,
+  AlertTriangle,
   X,
 } from "lucide-react";
+import { StatsBento } from "@/components/ui/stats-bento";
 import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { cn, titleCase } from "@/lib/utils";
@@ -168,6 +171,16 @@ function frDate(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
   if (m) return `${m[3]}/${m[2]}/${m[1]}`; // ISO "AAAA-MM-JJ" → "JJ/MM/AAAA"
   return t; // déjà lisible : on ne réinterprète pas (pas de new Date qui inverse jour/mois)
+}
+
+/** Année + mois d'une date facture (ISO « AAAA-MM-JJ » ou fr « JJ/MM/AAAA »). */
+function ymOf(iso: string): { y: number; m: number } | null {
+  const t = String(iso ?? "").trim();
+  let m = /^(\d{4})-(\d{2})/.exec(t);
+  if (m) return { y: +m[1], m: +m[2] };
+  m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(t);
+  if (m) return { y: +m[3], m: +m[2] };
+  return null;
 }
 
 const esc = (s: unknown) =>
@@ -452,6 +465,18 @@ export function Facturation() {
   );
   const statusChips: { value: InvoiceStatus | "Tous"; label: string }[] = [{ value: "Tous", label: "Tous" }, ...STATUS_OPTIONS];
 
+  // ── Synthèse (bento) : encaissé de l'année + mensuel + impayés (sur TOUTES les factures) ──
+  const nowY = new Date().getFullYear();
+  const nowM = new Date().getMonth() + 1;
+  const paidThisYear = invoices.filter((r) => r.status === "payee" && ymOf(r.date)?.y === nowY);
+  const encaisse = paidThisYear.reduce((s, r) => s + parseAmount(r.amount), 0);
+  const monthly = Array.from({ length: 12 }, (_, i) =>
+    paidThisYear.filter((r) => ymOf(r.date)?.m === i + 1).reduce((s, r) => s + parseAmount(r.amount), 0),
+  );
+  const unpaid = invoices.filter((r) => r.status === "attente" || r.status === "retard");
+  const aEncaisser = unpaid.reduce((s, r) => s + parseAmount(r.amount), 0);
+  const nbRetard = invoices.filter((r) => r.status === "retard").length;
+
   // ── Éditeur ──
   function openCreate() {
     setDraft({
@@ -647,6 +672,29 @@ export function Facturation() {
           <AddButton label="Facture" onClick={openCreate} />
         </div>
       </div>
+
+      {/* Synthèse (bento) */}
+      {rows.length > 0 && (
+        <StatsBento
+          className="mb-5"
+          primary={{
+            eyebrow: `Encaissé · ${nowY}`,
+            value: formatEuro(encaisse),
+            caption: `${paidThisYear.length} facture${paidThisYear.length > 1 ? "s" : ""} réglée${paidThisYear.length > 1 ? "s" : ""} cette année.`,
+          }}
+          bars={{
+            label: "Encaissé ce mois",
+            value: formatEuro(monthly[nowM - 1] ?? 0),
+            series: monthly,
+          }}
+          small={{ value: String(unpaid.length), label: "Impayées" }}
+          accent={{
+            value: formatEuro(aEncaisser),
+            label: nbRetard > 0 ? `dont ${nbRetard} en retard` : "En attente de paiement",
+            icon: nbRetard > 0 ? AlertTriangle : Wallet,
+          }}
+        />
+      )}
 
       {/* Filtres (pastilles desktop · sélecteur mobile) */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
