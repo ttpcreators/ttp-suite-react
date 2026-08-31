@@ -16,6 +16,7 @@ import { toast } from "@/components/ui/toast";
 import { notifyCreator } from "@/lib/push";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
+import { StatsBento } from "@/components/ui/stats-bento";
 import { useCreators } from "@/lib/useCreators";
 import { cn, titleCase } from "@/lib/utils";
 import { DebriefCalculator, ShotStrip, useShotUrls, resolveShots, type CalcState } from "@/views/DebriefCalculator";
@@ -540,6 +541,21 @@ export function Debrief() {
           <AddButton label="Debrief" onClick={openCreate} />
         </div>
       </div>
+
+      {/* Synthèse (bento) */}
+      {list.length > 0 && (() => {
+        const sumRevenue = list.reduce((s, d) => s + parseAmount(d.revenue), 0);
+        const sumBudget = list.reduce((s, d) => s + parseAmount(d.budget), 0);
+        const roiStr = sumBudget > 0 ? (sumRevenue / sumBudget).toFixed(1).replace(".", ",") + "×" : "—";
+        return (
+          <StatsBento
+            primary={{ eyebrow: "CA généré · bilans", value: formatEuro(sumRevenue), caption: `${list.length} campagne${list.length > 1 ? "s" : ""} · budget ${formatEuro(sumBudget)}` }}
+            bars={{ label: "CA par campagne", value: `ROI ${roiStr}`, series: list.map((d) => parseAmount(d.revenue)) }}
+            small={{ value: String(list.length), label: "Campagnes" }}
+            accent={{ value: String(needsDebrief.length), label: "À débriefer", icon: Activity }}
+          />
+        );
+      })()}
 
       <InlineForm
         open={formOpen}

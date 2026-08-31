@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/form";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
+import { StatsBento } from "@/components/ui/stats-bento";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
 import { useLiveKey } from "@/lib/useLive";
@@ -423,6 +424,20 @@ export function Todo() {
     { label: "Basse", value: "basse" },
   ];
 
+  // ── Synthèse (bento) ──
+  const allRows = rows ?? [];
+  const nowY = new Date().getFullYear();
+  const nowM = new Date().getMonth();
+  const openTasks = allRows.filter((r) => !r.done);
+  const doneTasks = allRows.filter((r) => r.done);
+  const highOpen = openTasks.filter((r) => r.priority === "haute").length;
+  const monthlyCreated = Array.from({ length: 12 }, (_, i) =>
+    allRows.filter((r) => {
+      const d = r.created_at ? new Date(r.created_at) : null;
+      return d && !Number.isNaN(d.getTime()) && d.getFullYear() === nowY && d.getMonth() === i;
+    }).length,
+  );
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -461,6 +476,20 @@ export function Todo() {
           ]}
         />
       </div>
+
+      {rows !== null && rows.length > 0 && (
+        <StatsBento
+          className="mb-5"
+          primary={{
+            eyebrow: "À faire · en cours",
+            value: String(openTasks.length),
+            caption: `sur ${allRows.length} tâche${allRows.length > 1 ? "s" : ""} au total.`,
+          }}
+          bars={{ label: "Créées ce mois", value: String(monthlyCreated[nowM]), series: monthlyCreated }}
+          small={{ value: String(highOpen), label: "Prioritaires" }}
+          accent={{ value: String(doneTasks.length), label: "Tâches terminées", icon: Check }}
+        />
+      )}
 
       <InlineForm
         open={formOpen}

@@ -18,6 +18,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { RecipientPicker, type PickContact } from "@/components/ui/recipient-picker";
 import { FilterBar } from "@/components/ui/filter-bar";
+import { StatsBento } from "@/components/ui/stats-bento";
 import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
 
@@ -728,6 +729,23 @@ export function Contacts() {
           <AddButton label="Contact" onClick={openAdd} />
         </div>
       </div>
+
+      {/* Synthèse (bento) */}
+      {currentRows.length > 0 && (() => {
+        const total = currentRows.length;
+        const contacted = currentRows.filter((r) => r.last_contacted).length;
+        const withEmail = currentRows.filter((r) => (r.email ?? "").trim()).length;
+        const tagCounts = tagList.map((t) => currentRows.filter((r) => (r.tag ?? "").trim() === t).length);
+        return (
+          <StatsBento
+            className="mb-5"
+            primary={{ eyebrow: "Répertoire", value: String(total), caption: `${withEmail} avec email · ${tagList.length} catégorie${tagList.length > 1 ? "s" : ""}.` }}
+            bars={{ label: "Par catégorie", value: `${tagList.length} catégorie${tagList.length > 1 ? "s" : ""}`, series: tagCounts.length ? tagCounts : [0] }}
+            small={{ value: String(contacted), label: "Contactés" }}
+            accent={{ value: String(total - contacted), label: "Jamais contactés", icon: Mail }}
+          />
+        );
+      })()}
 
       {/* Barre de filtres par tag (pastilles desktop · sélecteur mobile) */}
       <FilterBar

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Check } from "lucide-react";
+import { Plus, Trash2, Check, Wallet } from "lucide-react";
+import { StatsBento } from "@/components/ui/stats-bento";
 import { supabase } from "@/lib/supabase";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";
 import { useCreators } from "@/lib/useCreators";
@@ -186,11 +187,21 @@ export function Reversements() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <SummaryCard label="Reste à reverser" value={formatEuro(totalReste)} tone="amber" />
-        <SummaryCard label="Total dû aux créateurs" value={formatEuro(totalDu)} tone="primary" />
-        <SummaryCard label="Déjà reversé" value={formatEuro(totalReverse)} tone="signal" />
-      </div>
+      {rows.length > 0 && (() => {
+        const nbAPayer = rows.filter((r) => r.reste > 0.5).length;
+        return (
+          <StatsBento
+            primary={{
+              eyebrow: "Reste à reverser",
+              value: formatEuro(totalReste),
+              caption: `${nbAPayer} créateur${nbAPayer > 1 ? "s" : ""} à payer · ${formatEuro(totalDu)} dû au total.`,
+            }}
+            bars={{ label: "Reste par créatrice", value: `${formatEuro(totalReverse)} reversés`, series: rows.map((r) => Math.max(0, r.reste)) }}
+            small={{ value: String(nbAPayer), label: "À payer" }}
+            accent={{ value: formatEuro(totalReverse), label: "Déjà reversé", icon: Wallet }}
+          />
+        );
+      })()}
 
       {rows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-8 text-center text-sm text-muted-foreground shadow-sm">
@@ -293,16 +304,6 @@ export function Reversements() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-function SummaryCard({ label, value, tone }: { label: string; value: string; tone: "amber" | "primary" | "signal" }) {
-  const toneCls = tone === "amber" ? "text-amber" : tone === "signal" ? "text-signaltext" : "text-primary";
-  return (
-    <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-      <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</div>
-      <div className={"mt-1.5 text-xl font-bold tracking-tight " + toneCls}>{value}</div>
     </div>
   );
 }

@@ -16,7 +16,8 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
-import { Trash2, MessageSquarePlus, Check, X, Pencil, UserRound } from "lucide-react";
+import { Trash2, MessageSquarePlus, Check, X, Pencil, UserRound, Sparkles } from "lucide-react";
+import { StatsBento } from "@/components/ui/stats-bento";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useEffect, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
@@ -218,6 +219,21 @@ export function Idees() {
         </div>
         <AddButton label="Idée" onClick={() => setFormOpen(true)} />
       </div>
+
+      {/* Synthèse (bento) */}
+      {rows !== null && rows.length > 0 && (() => {
+        const cnt = (s: string) => rows.filter((r) => (r.status ?? "À faire") === s).length;
+        const explorer = cnt("À explorer"), aFaire = cnt("À faire"), enCours = cnt("En cours"), publiee = cnt("Publiée");
+        return (
+          <StatsBento
+            className="mb-5"
+            primary={{ eyebrow: "Idées publiées", value: String(publiee), caption: `sur ${rows.length} idée${rows.length > 1 ? "s" : ""} au total.` }}
+            bars={{ label: "Par statut", value: `${enCours} en cours`, series: [explorer, aFaire, enCours, publiee] }}
+            small={{ value: String(enCours), label: "En cours" }}
+            accent={{ value: String(explorer), label: "À explorer", icon: Sparkles }}
+          />
+        );
+      })()}
 
       {/* Panneau de filtres */}
       {rows !== null && rows.length > 0 && (() => {

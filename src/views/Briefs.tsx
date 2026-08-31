@@ -2,8 +2,9 @@ import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn, titleCase } from "@/lib/utils";
-import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown, Paperclip, FileText, UserRound } from "lucide-react";
+import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown, Paperclip, FileText, UserRound, Clock } from "lucide-react";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
+import { StatsBento } from "@/components/ui/stats-bento";
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
@@ -468,6 +469,21 @@ export function Briefs() {
         <div className="text-sm text-muted-foreground">{rows === null ? "Chargement…" : `${rows.length} brief${rows.length > 1 ? "s" : ""}`}</div>
         <AddButton label="Brief" onClick={() => setFormOpen(true)} />
       </div>
+
+      {/* Synthèse (bento) */}
+      {rows !== null && rows.length > 0 && (() => {
+        const cnt = (k: string) => rows.filter((r) => colKey(r.status) === k).length;
+        const attente = cnt("attente"), valider = cnt("valider"), cours = cnt("cours"), termine = cnt("terminé");
+        return (
+          <StatsBento
+            className="mb-5"
+            primary={{ eyebrow: "Briefs terminés", value: String(termine), caption: `sur ${rows.length} brief${rows.length > 1 ? "s" : ""} au total.` }}
+            bars={{ label: "Par statut", value: `${cours} en cours`, series: [attente, valider, cours, termine] }}
+            small={{ value: String(attente), label: "En attente" }}
+            accent={{ value: String(valider), label: "À valider", icon: Clock }}
+          />
+        );
+      })()}
 
       {/* Panneau de filtres */}
       {rows !== null && rows.length > 0 && (() => {
