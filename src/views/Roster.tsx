@@ -236,8 +236,10 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
     (c) => c.status !== "inactif" && c.statsMonth !== NOW_MONTH,
   ).length;
 
+  // Dernière piste FIXE (72px) et non `auto` : sinon l'en-tête (col vide) et les
+  // lignes (flèches + menu ≈ 64px) répartissent différemment l'espace fr → décalage.
   const cols =
-    "grid-cols-[2.4fr_1fr_0.9fr_0.8fr_1.1fr_0.9fr_auto] gap-3";
+    "grid-cols-[2.4fr_1fr_0.9fr_0.8fr_1.1fr_0.9fr_72px] gap-3";
 
   return (
     <>

@@ -67,6 +67,7 @@ import { WelcomeModal } from "@/components/ui/welcome-modal";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
 import { SubtaskChecklist } from "@/components/ui/subtask-checklist";
 import { AgentPlan, type PlanTask } from "@/components/ui/agent-plan";
+import { StatsBento } from "@/components/ui/stats-bento";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, type Gift as GiftRow } from "@/lib/gifting";
 
 const BASE = import.meta.env.BASE_URL;
@@ -1828,6 +1829,15 @@ export function CreatorSpace({
           {/* À faire */}
           {tab === "todo" && (
             <>
+              {todos.length > 0 && (
+                <StatsBento
+                  className="mb-5"
+                  primary={{ eyebrow: "À faire · en cours", value: String(openTodos.length), caption: `sur ${todos.length} tâche${todos.length > 1 ? "s" : ""} au total.` }}
+                  bars={{ label: "Par statut", value: `${todos.filter((t) => t.done).length} terminées`, series: TODO_STATUS_OPTS.map((o) => todos.filter((t) => cStatus(t) === o.value).length) }}
+                  small={{ value: String(openTodos.filter((t) => t.priority === "haute").length), label: "Prioritaires" }}
+                  accent={{ value: String(todos.filter((t) => t.done).length), label: "Terminées", icon: Check }}
+                />
+              )}
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   {todoView === "liste" && (
@@ -1997,6 +2007,18 @@ export function CreatorSpace({
           {/* Idées */}
           {tab === "ideas" && (
             <>
+              {ideas.length > 0 && (() => {
+                const iCnt = (s: string) => ideas.filter((i) => (i.status ?? "À faire") === s).length;
+                return (
+                  <StatsBento
+                    className="mb-5"
+                    primary={{ eyebrow: "Idées publiées", value: String(iCnt("Publiée")), caption: `sur ${ideas.length} idée${ideas.length > 1 ? "s" : ""} au total.` }}
+                    bars={{ label: "Par statut", value: `${iCnt("En cours")} en cours`, series: IDEA_STATUS.map((o) => iCnt(o.value)) }}
+                    small={{ value: String(iCnt("En cours")), label: "En cours" }}
+                    accent={{ value: String(iCnt("À explorer")), label: "À explorer", icon: Sparkles }}
+                  />
+                );
+              })()}
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-muted-foreground">
                   {ideas.length} idée{ideas.length > 1 ? "s" : ""}
