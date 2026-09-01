@@ -286,28 +286,46 @@ export function representationHTML(config: Record<string, string>): string {
   const articles = c.articles
     .map((a) => `<section><h2>${esc([a.number, a.title].filter(Boolean).join(" — "))}</h2>${htmlBody(a.body)}</section>`)
     .join("");
+  const today = new Date().toLocaleDateString("fr-FR");
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(c.title)}</title>
 <style>
-*{box-sizing:border-box}
-body{font-family:'Inter',-apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#1a1a1a;max-width:820px;margin:0 auto;padding:48px 46px;font-size:12.5px;line-height:1.6}
-.hd{text-align:center;border-bottom:2px solid #b8933f;padding-bottom:16px;margin-bottom:6px}
-.hd .b{font-size:22px;font-weight:800;letter-spacing:.5px}
-.hd .s{color:#b8933f;font-size:12px;margin-top:2px}
-.conf{text-align:right;color:#a1a1aa;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;margin:8px 0 18px}
-h1{font-size:17px;text-align:center;letter-spacing:.3px;margin:22px 0 2px}
-.sub{text-align:center;color:#b8933f;font-weight:600;font-size:12px;margin-bottom:18px}
-h2{font-size:12.5px;font-weight:700;margin:20px 0 4px;color:#111}
-p{margin:5px 0}
-ul{margin:5px 0 5px 2px;padding-left:18px}
-li{margin:2px 0}
-.pre{margin-top:16px}
-.sign{margin-top:26px;white-space:pre-line;border-top:1px solid #e4e4e7;padding-top:14px}
-.ft{margin-top:26px;border-top:1px solid #e4e4e7;padding-top:12px;text-align:center;color:#a1a1aa;font-size:10px}
-@media print{body{padding:0}}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+:root{
+  --ink:#1b1a18;--muted:#6c6864;--faint:#a7a29c;--line:#e7e3dd;--gold:#9c7b34;
+  --serif:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,'Times New Roman',serif;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+}
+html,body{margin:0;background:#fff}
+body{font-family:var(--sans);color:var(--ink);font-size:10.5pt;line-height:1.62;
+  max-width:180mm;margin:0 auto;padding:16mm 15mm;-webkit-font-smoothing:antialiased}
+.mast{display:flex;justify-content:space-between;align-items:flex-start;gap:10mm;
+  padding-bottom:4mm;border-bottom:.6pt solid var(--gold)}
+.mast .id{display:flex;align-items:center;gap:3mm}
+.mast .wm{font-weight:700;font-size:9.5pt;letter-spacing:.18em;text-transform:uppercase}
+.mast .tl{font-size:8pt;color:var(--gold);margin-top:.6mm;letter-spacing:.02em}
+.mast .r{text-align:right;font-size:8pt;color:var(--faint);letter-spacing:.06em;line-height:1.55;text-transform:uppercase}
+h1{font-family:var(--serif);font-weight:600;font-size:20pt;line-height:1.15;letter-spacing:-.005em;
+  margin:13mm 0 0;text-wrap:balance}
+.sub{color:var(--gold);font-weight:600;font-size:9.5pt;letter-spacing:.02em;margin:2.5mm 0 0}
+h2{font-size:9.5pt;font-weight:700;letter-spacing:.02em;margin:8mm 0 2mm;color:var(--ink);break-after:avoid}
+h2::before{content:"";display:inline-block;width:5mm;height:1.1pt;background:var(--gold);
+  vertical-align:middle;margin-right:2.5mm}
+p{margin:2.5mm 0}
+ul{margin:2.5mm 0 2.5mm 0;padding-left:5mm}
+li{margin:1mm 0}
+.pre{margin-top:9mm}
+.muted{color:var(--muted)}
+.sign{margin-top:12mm;white-space:pre-line;border-top:.5pt solid var(--line);padding-top:5mm;line-height:1.75}
+.ft{margin-top:12mm;border-top:.5pt solid var(--line);padding-top:4mm;text-align:center;
+  color:var(--faint);font-size:7.5pt;letter-spacing:.05em;line-height:1.6}
+@page{size:A4;margin:16mm 15mm}
+@media print{body{max-width:none;padding:0}}
 </style></head><body>
-<div class="hd"><img src="${esc(ttpLogoUrl())}" alt="TTP" style="width:38px;height:38px;border-radius:8px;display:block;margin:0 auto 10px"><div class="b">${esc(RC_META.brandTitle)}</div><div class="s">${esc(RC_META.brandSubtitle)}</div></div>
-<div class="conf">Confidentiel</div>
+<div class="mast">
+  <div class="id"><img src="${esc(ttpLogoUrl())}" alt="TTP" style="width:28px;height:28px;border-radius:6px;display:block;flex:none"><div><div class="wm">${esc(RC_META.brandTitle)}</div><div class="tl">${esc(RC_META.brandSubtitle)}</div></div></div>
+  <div class="r">${esc(today)}<br>Confidentiel</div>
+</div>
 <h1>${esc(c.title)}</h1>
 ${c.subtitle ? `<div class="sub">${esc(c.subtitle)}</div>` : ""}
 <div class="pre"><h2>Préambule</h2>${htmlBody(c.preambule)}</div>

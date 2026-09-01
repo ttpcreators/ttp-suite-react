@@ -273,46 +273,71 @@ function contractHTML(o: {
   clauses: Term[];
 }): string {
   const { ref, meta, ctName, brand, parties, terms, clauses } = o;
-  const termRows = terms.map((t) => `<tr><th>${esc(t.l)}</th><td>${esc(t.v)}</td></tr>`).join("");
-  const clauseBlocks = clauses.map((c) => `<div class="cl"><div class="cl-t">${esc(c.l)}</div><div class="muted">${esc(c.v)}</div></div>`).join("");
+  const today = new Date().toLocaleDateString("fr-FR");
+  const termRows = terms
+    .map((t) => `<div class="row"><dt>${esc(t.l)}</dt><dd>${esc(t.v)}</dd></div>`)
+    .join("");
+  const clauseBlocks = clauses
+    .map(
+      (c, i) =>
+        `<section class="art"><h3><span class="n">${String(i + 1).padStart(2, "0")}</span>${esc(c.l)}</h3><p class="muted">${esc(c.v)}</p></section>`,
+    )
+    .join("");
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Contrat ${esc(ref)}</title>
 <style>
-*{box-sizing:border-box}
-body{font-family:'Inter',-apple-system,Arial,sans-serif;color:#18181b;max-width:820px;margin:0 auto;padding:44px 40px;background:#fff;font-size:13px;line-height:1.55}
-.top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0069FE;padding-bottom:18px}
-.brand{font-size:15px;font-weight:800}
-.idblock{display:flex;align-items:center;gap:10px}
-.muted{color:#71717a}
-.faint{color:#a1a1aa;font-size:11px}
-.kind{margin-top:22px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#0069FE;font-weight:700}
-h1{font-size:23px;letter-spacing:-.4px;margin:4px 0 0}
-.parties{margin-top:14px}
-table{width:100%;border-collapse:collapse;margin-top:18px}
-th{text-align:left;color:#71717a;font-weight:600;width:190px;padding:9px 0;border-bottom:1px solid #ececef;vertical-align:top}
-td{padding:9px 0;border-bottom:1px solid #ececef;font-weight:600}
-.clauses{margin-top:24px}
-.cl{margin-bottom:12px}
-.cl-t{font-weight:700;font-size:12px}
-.sign{display:flex;gap:40px;margin-top:44px}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+:root{
+  --ink:#1b1a18;--muted:#6c6864;--faint:#a7a29c;--line:#e7e3dd;
+  --serif:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,'Times New Roman',serif;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+}
+html,body{margin:0;background:#fff}
+body{font-family:var(--sans);color:var(--ink);font-size:10.5pt;line-height:1.62;
+  max-width:180mm;margin:0 auto;padding:16mm 15mm;-webkit-font-smoothing:antialiased}
+.mast{display:flex;justify-content:space-between;align-items:flex-start;gap:10mm;
+  padding-bottom:4mm;border-bottom:.5pt solid var(--ink)}
+.mast .id{display:flex;align-items:center;gap:3mm}
+.mast .wm{font-weight:700;font-size:9pt;letter-spacing:.16em;text-transform:uppercase}
+.mast .tl{font-size:8pt;color:var(--muted);margin-top:.6mm}
+.mast .r{text-align:right;font-size:8pt;color:var(--faint);letter-spacing:.04em;line-height:1.55}
+.conf{text-align:right;font-size:7pt;letter-spacing:.24em;text-transform:uppercase;color:var(--faint);margin-top:2mm}
+.kind{font-size:7.5pt;letter-spacing:.26em;text-transform:uppercase;color:var(--muted);margin:13mm 0 2.5mm}
+h1{font-family:var(--serif);font-weight:600;font-size:23pt;line-height:1.12;letter-spacing:-.01em;margin:0;text-wrap:balance}
+.parties{margin-top:5mm;color:var(--muted);font-size:9.5pt;line-height:1.55}
+.parties .p1{color:var(--ink);font-weight:500}
+.terms{margin:9mm 0 0;padding:0}
+.terms .row{display:flex;justify-content:space-between;align-items:baseline;gap:8mm;
+  padding:2.9mm 0;border-bottom:.5pt solid var(--line);break-inside:avoid}
+.terms dt{font-size:7.5pt;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0;flex:none}
+.terms dd{margin:0;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.arts{margin-top:11mm}
+.art{margin:0 0 6mm;break-inside:avoid}
+.art h3{font-size:10.5pt;font-weight:600;margin:0 0 1.6mm;display:flex;gap:3mm;align-items:baseline}
+.art h3 .n{font-family:var(--serif);font-size:10pt;color:var(--faint);font-variant-numeric:tabular-nums}
+.art .muted{color:var(--muted);margin:0;line-height:1.6}
+.sign{display:flex;gap:14mm;margin-top:15mm;break-inside:avoid}
 .sign>div{flex:1}
-.line{height:40px;border-bottom:1px solid #18181b}
-.legal{margin-top:28px;border-top:1px solid #ececef;padding-top:12px;font-size:10.5px;color:#a1a1aa}
-@media print{body{padding:0}}
+.sign .line{height:15mm;border-bottom:.6pt solid var(--ink)}
+.sign .cap{margin-top:2mm;font-size:7.5pt;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.legal{margin-top:12mm;padding-top:4mm;border-top:.5pt solid var(--line);
+  font-size:7.5pt;letter-spacing:.03em;color:var(--faint);line-height:1.6}
+@page{size:A4;margin:16mm 15mm}
+@media print{body{max-width:none;padding:0}}
 </style></head><body>
-<div class="top">
-  <div class="idblock">${ttpLogoImg(34)}<div><div class="brand">TTP CREATORS</div><div class="faint">Lyon · France · partnerships@ttpcreators.pro</div></div></div>
-  <div style="text-align:right"><div class="faint">Réf. ${esc(ref)}</div></div>
+<div class="mast">
+  <div class="id">${ttpLogoImg(28)}<div><div class="wm">TTP Creators</div><div class="tl">Lyon · France · partnerships@ttpcreators.pro</div></div></div>
+  <div class="r">Réf. ${esc(ref)}<br>${esc(today)}</div>
 </div>
+<div class="conf">Confidentiel</div>
 <div class="kind">${esc(meta.label)}</div>
 <h1>${esc(meta.title)}</h1>
-<div class="parties muted">Parties : TTP Creators &amp; ${esc(ctName)} × ${esc(brand || "[Marque]")}</div>
-<div class="parties muted">${esc(parties)}</div>
-<table>${termRows}</table>
-<div class="clauses">${clauseBlocks}</div>
+<div class="parties"><div class="p1">Parties : TTP Creators &amp; ${esc(ctName)} × ${esc(brand || "[Marque]")}</div>${esc(parties)}</div>
+<dl class="terms">${termRows}</dl>
+<div class="arts">${clauseBlocks}</div>
 <div class="sign">
-  <div><div class="line"></div><div class="faint" style="margin-top:6px">Pour TTP Creators</div></div>
-  <div><div class="line"></div><div class="faint" style="margin-top:6px">Pour ${esc(ctName)}</div></div>
+  <div><div class="line"></div><div class="cap">Pour TTP Creators</div></div>
+  <div><div class="line"></div><div class="cap">Pour ${esc(ctName)}</div></div>
 </div>
 <div class="legal">Contrat régi par le droit français · Conforme RGPD (UE 2016/679) · Directive 2011/83/UE · Fait à Lyon. Document généré par TTP Suite.</div>
 </body></html>`;
