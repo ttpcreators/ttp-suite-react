@@ -32,6 +32,7 @@ import { commissionMap } from "@/lib/commission";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { totalsOf, type LineItem, type Totals } from "@/lib/invoice";
+import { printHtml } from "@/lib/printPdf";
 import { ttpLogoImg } from "@/lib/pdfDoc";
 import { notifyCreator } from "@/lib/push";
 
@@ -282,6 +283,7 @@ td{padding:10px 6px;border-bottom:1px solid #ececef;font-size:13px}
 .block-t{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;font-weight:700;margin-bottom:5px}
 .idblock{display:flex;align-items:center;gap:10px}
 .legal{margin-top:34px;border-top:1px solid #ececef;padding-top:14px;font-size:10.5px;color:#a1a1aa;line-height:1.6}
+@page{size:A4;margin:16mm 14mm}
 @media print{body{padding:0}}
 </style></head><body>
 <div class="top">
@@ -610,17 +612,10 @@ export function Facturation() {
     return invoiceHTML({ issuer, bank, details: d, ref: r.ref, brand, creator: r.creator, totals: t, statusLabel: metaOf(r.status).label });
   }
 
+  // Export = impression navigateur → « Enregistrer au format PDF » : vrai PDF
+  // vectoriel (texte net, pas un .html), pagination gérée par le CSS @page.
   function downloadInvoice(r: Row) {
-    const blob = new Blob([buildHTML(r)], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `facture-${r.ref}.html`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toast("Facture téléchargée ✓ (ouvre-la puis Imprimer → PDF)");
+    printHtml(buildHTML(r));
   }
 
   function sendInvoice(r: Row) {
@@ -638,7 +633,7 @@ export function Facturation() {
     ].join("\n");
     const to = encodeURIComponent(d.clientEmail || "");
     window.location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    // On télécharge aussi le PDF pour la pièce jointe
+    // Ouvre aussi l'impression → « Enregistrer en PDF » pour joindre la facture au mail.
     downloadInvoice(r);
   }
 
@@ -753,7 +748,7 @@ export function Facturation() {
               { key: "edit", label: "Modifier", icon: Pencil, onClick: () => openEdit(r) },
               { key: "preview", label: "Aperçu", icon: Eye, onClick: openPreview },
               { key: "send", label: "Envoyer au client", icon: Send, onClick: () => sendInvoice(r) },
-              { key: "download", label: "Télécharger", icon: Download, onClick: () => downloadInvoice(r) },
+              { key: "download", label: "Enregistrer en PDF", icon: Download, onClick: () => downloadInvoice(r) },
               { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: del, confirm: { title: "Supprimer la facture", message: `Supprimer la facture ${r.ref} (${r.party}) ? Cette action est irréversible.` } },
             ];
             const margeChip = (
@@ -1040,17 +1035,9 @@ export function Facturation() {
               <button
                 type="button"
                 className={cn(ghostBtn, "flex items-center gap-1.5")}
-                onClick={() => {
-                  const w = window.open("", "_blank");
-                  if (w) {
-                    w.document.write(preview.html);
-                    w.document.close();
-                    w.focus();
-                    w.print();
-                  } else toast("Autorise les pop-ups pour imprimer");
-                }}
+                onClick={() => printHtml(preview.html)}
               >
-                <FileText className="h-3.5 w-3.5" /> Imprimer / PDF
+                <FileText className="h-3.5 w-3.5" /> Enregistrer en PDF
               </button>
             </>
           }
