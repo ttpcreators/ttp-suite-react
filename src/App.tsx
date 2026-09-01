@@ -8,6 +8,7 @@ import { GlobalSearch } from "@/components/GlobalSearch";
 import { Toaster } from "@/components/ui/toast";
 import { Notifications } from "@/components/ui/notifications";
 import { useNotifications } from "@/lib/useNotifications";
+import { useCreators } from "@/lib/useCreators";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Login } from "@/components/Login";
@@ -41,7 +42,6 @@ const Checklist = lazy(() => import("@/views/Checklist").then((m) => ({ default:
 const Mediakit = lazy(() => import("@/views/Mediakit").then((m) => ({ default: m.Mediakit })));
 const Templates = lazy(() => import("@/views/Templates").then((m) => ({ default: m.Templates })));
 const CreatorDetail = lazy(() => import("@/views/CreatorDetail").then((m) => ({ default: m.CreatorDetail })));
-const Portal = lazy(() => import("@/views/Portal").then((m) => ({ default: m.Portal })));
 const CreatorSpace = lazy(() => import("@/views/CreatorSpace").then((m) => ({ default: m.CreatorSpace })));
 const Corbeille = lazy(() => import("@/views/Corbeille").then((m) => ({ default: m.Corbeille })));
 const Reversements = lazy(() => import("@/views/Reversements").then((m) => ({ default: m.Reversements })));
@@ -276,6 +276,7 @@ export default function App() {
   const [visitedIds, setVisitedIds] = useState<ViewId[]>([]);
   const [space, setSpace] = useState<"agency" | "portal">("agency");
   const [portalCreator, setPortalCreator] = useState<string | null>(null);
+  const creators = useCreators();
   const [profile, setProfile] = useState<
     { role: string; creator_name: string | null } | null | undefined
   >(undefined);
@@ -541,6 +542,36 @@ export default function App() {
     );
   }
 
+  // Portail créateur (mode agence) : on rend le VRAI espace créateur en PLEIN ÉCRAN
+  // (mêmes onglets/données via RLS agence) avec une bannière de sortie + un sélecteur.
+  // → visualiser l'espace d'un créateur sans se déconnecter.
+  if (space === "portal") {
+    const pc = portalCreator ?? creators[0]?.name ?? null;
+    if (!pc) {
+      return (
+        <div className="grid min-h-screen place-items-center bg-background p-6 text-center">
+          <div>
+            <p className="text-sm text-muted-foreground">Aucun créateur dans le roster.</p>
+            <button type="button" onClick={() => setSpace("agency")} className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90">
+              Retour à l'espace agence
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <Suspense fallback={<div className="grid min-h-screen place-items-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+        <CreatorSpace
+          name={pc}
+          dark={dark}
+          onToggleTheme={toggleTheme}
+          onLogout={logout}
+          preview={{ onExit: () => setSpace("agency"), onPick: setPortalCreator, creators }}
+        />
+      </Suspense>
+    );
+  }
+
   // Barre du haut (recherche + profil + notifs + thème) — partagée normal/split.
   const topBar = (
     <header className="flex items-center gap-4 px-4 pt-5 md:px-6">
@@ -588,22 +619,21 @@ export default function App() {
   // Contenu principal (portail / fiche créateur / vue nav). Sans le <h1> ni la
   // barrière : chaque volet ajoute sa propre ErrorBoundary autour.
   const mainInner =
-    space === "portal" ? (
-      <Portal creator={portalCreator} onPick={setPortalCreator} onExit={() => setSpace("agency")} />
-    ) : detailCreator ? (
+    detailCreator ? (
       <CreatorDetail name={detailCreator} onBack={() => setDetailCreator(null)} onOpenPortal={openPortal} />
     ) : (
       <NavSubContext.Provider value={sub}>
         <ViewContent active={active} onOpenCreator={openDetail} />
       </NavSubContext.Provider>
     );
-  const primaryTitle = detailCreator ?? (space === "portal" ? "Portail créateur" : title);
-  const showPrimaryH1 = space !== "portal" && !detailCreator && active !== "apercu";
+  // (Le mode portail a déjà fait un return anticipé plus haut : ici space === "agency".)
+  const primaryTitle = detailCreator ?? title;
+  const showPrimaryH1 = !detailCreator && active !== "apercu";
   // Multi-pages actif dès qu'il y a ≥ 2 onglets ou un volet latéral.
   const multi = tabs.length > 1 || splitView != null;
-  // Overlay = fiche créateur ou portail (rendus PAR-DESSUS les vues nav, qui
-  // restent montées en dessous pour ne pas perdre leur état).
-  const overlayActive = space === "portal" || !!detailCreator;
+  // Overlay = fiche créateur (rendue PAR-DESSUS les vues nav, qui restent montées
+  // en dessous pour ne pas perdre leur état).
+  const overlayActive = !!detailCreator;
   // Vues gardées montées = onglets ouverts ∪ vues récemment visitées.
   const aliveIds = [...new Set<ViewId>([...tabs, ...visitedIds])];
 

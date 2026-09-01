@@ -38,6 +38,8 @@ import {
   Plus,
   FileChartColumn,
   HelpCircle,
+  Eye,
+  ArrowLeft,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
@@ -324,12 +326,22 @@ export function CreatorSpace({
   dark,
   onToggleTheme,
   onLogout,
+  preview,
 }: {
   name: string;
   dark: boolean;
   onToggleTheme: () => void;
   onLogout: () => void;
+  /**
+   * Mode « visualisation agence » : quand l'agence ouvre le portail d'un créateur,
+   * on rend le VRAI espace créateur (mêmes onglets/données, via RLS agence) avec une
+   * bannière de sortie + un sélecteur de créateur. Absent = espace créateur normal.
+   */
+  preview?: { onExit: () => void; onPick: (n: string) => void; creators: { id: string; name: string }[] };
 }) {
+  // En preview, les boutons « déconnexion » du menu deviennent « revenir à l'agence ».
+  const exitAction = preview ? preview.onExit : onLogout;
+  const exitTitle = preview ? "Revenir à l'espace agence" : "Se déconnecter";
   const [tab, setTab] = useState<Tab>("accueil");
   const [mobileTab, setMobileTab] = useState<string | null>(null); // famille déployée (nav mobile)
   const [confirmDoneTodo, setConfirmDoneTodo] = useState<Todo | null>(null); // anti-missclick « fait »
@@ -1196,8 +1208,34 @@ export function CreatorSpace({
   );
 
   return (
-    <div className="h-[100dvh] bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]">
-      <div className="flex h-full overflow-hidden rounded-[22px]">
+    <div className="flex h-[100dvh] flex-col bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]">
+      {preview && (
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-primary/30 bg-primary/[0.06] px-3 py-2">
+          <div className="flex items-center gap-2 text-[12px] font-semibold text-primary">
+            <Eye className="h-4 w-4" /> Mode agence · tu visualises l'espace de {firstName}
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={name}
+              onChange={(e) => preview.onPick(e.target.value)}
+              className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[12px] font-medium text-foreground outline-none focus:border-primary"
+              aria-label="Changer de créateur"
+            >
+              {preview.creators.map((cr) => (
+                <option key={cr.id} value={cr.name}>{titleCase(cr.name)}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={preview.onExit}
+              className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Espace agence
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="flex min-h-0 flex-1 overflow-hidden rounded-[22px]">
         {/* Sidebar desktop repliable */}
         {sbCollapsed ? (
           <aside className="hidden w-[68px] shrink-0 flex-col items-center p-2 md:flex">
@@ -1233,8 +1271,8 @@ export function CreatorSpace({
               <button type="button" onClick={onToggleTheme} title={dark ? "Mode clair" : "Mode sombre"} className="grid h-10 w-10 place-items-center rounded-[10px] text-faint transition-colors hover:bg-rowhover hover:text-foreground">
                 {dark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
               </button>
-              <button type="button" onClick={onLogout} title="Se déconnecter" className="grid h-10 w-10 place-items-center rounded-[10px] text-faint transition-colors hover:bg-rowhover hover:text-foreground">
-                <LogOut className="h-[18px] w-[18px]" strokeWidth={1.75} />
+              <button type="button" onClick={exitAction} title={exitTitle} className="grid h-10 w-10 place-items-center rounded-[10px] text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                {preview ? <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.75} /> : <LogOut className="h-[18px] w-[18px]" strokeWidth={1.75} />}
               </button>
             </div>
           </aside>
@@ -1278,11 +1316,11 @@ export function CreatorSpace({
                   </button>
                   <button
                     type="button"
-                    onClick={onLogout}
+                    onClick={exitAction}
                     className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                   >
-                    <LogOut className="h-4 w-4 text-faint" />
-                    <span className="text-[13px]">Se déconnecter</span>
+                    {preview ? <ArrowLeft className="h-4 w-4 text-faint" /> : <LogOut className="h-4 w-4 text-faint" />}
+                    <span className="text-[13px]">{exitTitle}</span>
                   </button>
                 </div>
               }
@@ -1307,8 +1345,8 @@ export function CreatorSpace({
               <button type="button" onClick={onToggleTheme} className="grid h-9 w-9 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover" aria-label="Thème">
                 {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
-              <button type="button" onClick={onLogout} className="grid h-9 w-9 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover" aria-label="Déconnexion">
-                <LogOut className="h-4 w-4" />
+              <button type="button" onClick={exitAction} className="grid h-9 w-9 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover" aria-label={exitTitle}>
+                {preview ? <ArrowLeft className="h-4 w-4" /> : <LogOut className="h-4 w-4" />}
               </button>
             </div>
           </div>
