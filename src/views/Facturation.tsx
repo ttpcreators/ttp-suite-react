@@ -70,6 +70,9 @@ type Details = {
   clientAddress: string;
   clientSiret: string;
   clientVat: string;
+  /** Référence TPO du client (ex. Tanke) — ex. « TPO20261470 ». Vide par défaut,
+   *  saisie manuellement avant de générer la facture. */
+  tpoRef: string;
   issueDate: string;
   dueDate: string;
   items: LineItem[];
@@ -259,6 +262,8 @@ h1{font-size:26px;letter-spacing:-.5px;margin:0}
 .brand{font-size:16px;font-weight:700;margin-bottom:4px}
 .muted{color:#71717a}
 .faint{color:#a1a1aa;font-size:11px}
+.tporef{margin-top:7px;font-size:11px;font-weight:700;color:#18181b}
+.tporef span{color:#a1a1aa;font-weight:600}
 .right{text-align:right}
 .ref{margin-top:6px;font-size:12px}
 .badge{display:inline-block;margin-top:8px;padding:4px 11px;border-radius:20px;background:#eef2ff;color:#4338ca;font-size:11px;font-weight:700}
@@ -291,6 +296,7 @@ td{padding:10px 6px;border-bottom:1px solid #ececef;font-size:13px}
   <div class="col"><div class="col-t">Facturé à</div>
     <div class="name">${esc(d.clientName || brand)}</div>
     <div class="faint">${clientLegal}</div>
+    ${d.tpoRef && d.tpoRef.trim() ? `<div class="tporef"><span>Réf. TPO</span> ${esc(d.tpoRef)}</div>` : ""}
   </div>
   <div class="col"><div class="col-t">Prestation</div>
     <div class="name">${esc(brand)}</div>
@@ -440,7 +446,8 @@ export function Facturation() {
 
   const detailsFor = (r: Row): Details => {
     const existing = details[r.id];
-    if (existing) return existing;
+    // Défaut `tpoRef` : les blobs legacy n'ont pas ce champ (ajouté après coup).
+    if (existing) return { ...existing, tpoRef: existing.tpoRef ?? "" };
     // Seed depuis une facture "legacy" (montant simple)
     return {
       clientName: r.party,
@@ -448,6 +455,7 @@ export function Facturation() {
       clientAddress: "",
       clientSiret: "",
       clientVat: "",
+      tpoRef: "",
       issueDate: todayISO(),
       dueDate: r.date && r.date !== "—" ? r.date : todayISO(),
       items: [{ id: uid(), label: r.party || "Prestation", qty: 1, unit: parseAmount(r.amount) }],
@@ -492,6 +500,7 @@ export function Facturation() {
       clientAddress: "",
       clientSiret: "",
       clientVat: "",
+      tpoRef: "",
       issueDate: todayISO(),
       dueDate: todayISO(),
       items: [{ id: uid(), label: "", qty: 1, unit: 0 }],
@@ -556,6 +565,7 @@ export function Facturation() {
       clientAddress: draft.clientAddress,
       clientSiret: draft.clientSiret,
       clientVat: draft.clientVat,
+      tpoRef: draft.tpoRef,
       issueDate: draft.issueDate,
       dueDate: draft.dueDate,
       items: draft.items,
@@ -838,6 +848,7 @@ export function Facturation() {
                 <TextField label="Adresse" value={draft.clientAddress} onChange={(v) => setDraft({ ...draft, clientAddress: v })} className="min-w-full flex-[2]" />
                 <TextField label="SIRET" value={draft.clientSiret} onChange={(v) => setDraft({ ...draft, clientSiret: v })} className="min-w-[150px] flex-1" />
                 <TextField label="N° TVA" value={draft.clientVat} onChange={(v) => setDraft({ ...draft, clientVat: v })} className="min-w-[150px] flex-1" />
+                <TextField label="Référence TPO" value={draft.tpoRef} onChange={(v) => setDraft({ ...draft, tpoRef: v.trim() })} placeholder="TPO20261470" className="min-w-[180px] flex-1" />
               </div>
             </div>
 
