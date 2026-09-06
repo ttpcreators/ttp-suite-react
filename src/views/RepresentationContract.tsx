@@ -272,7 +272,30 @@ export function RepresentationContract() {
         return;
       }
       setLocalHist([entry, ...hist]);
-      toast(creator ? "Contrat enregistré ✓ — visible dans le portail du créateur" : "Contrat enregistré ✓");
+
+      // Auto-échéance : crée/actualise le suivi d'échéance (Marc risque d'oublier).
+      // Bonus best-effort : n'empêche JAMAIS l'enregistrement du contrat s'il échoue.
+      let deadlineOk = false;
+      try {
+        const dlCreator = (creator ?? config.talentNom.trim()) || "";
+        if (dlCreator) {
+          const start = toISO(config.dateDebut) || toISO(config.dateSignature) || new Date().toISOString().slice(0, 10);
+          const months = Math.max(1, parseInt(config.dureeMois, 10) || 12);
+          type Dl = { id: string; creator: string; type: string; start: string; months: number; note?: string };
+          invalidateAppState();
+          const freshDl = ((await getAppState())["contractDeadlines"] as Dl[]) ?? [];
+          // Remplace l'éventuelle échéance « représentation » existante du même créateur (pas de doublon).
+          const kept = freshDl.filter((d) => !(d.type === "représentation" && d.creator.trim().toLowerCase() === dlCreator.trim().toLowerCase()));
+          const dl: Dl = { id: uid(), creator: dlCreator, type: "représentation", start, months, note: "Auto — contrat de représentation" };
+          deadlineOk = await saveAppStateKey("contractDeadlines", [dl, ...kept]);
+        }
+      } catch { /* échéance = bonus, on ignore l'erreur */ }
+
+      toast(
+        creator
+          ? `Contrat enregistré ✓ — portail du créateur${deadlineOk ? " · échéance suivie" : ""}`
+          : `Contrat enregistré ✓${deadlineOk ? " · échéance suivie" : ""}`,
+      );
     } finally {
       setSaving(false);
     }

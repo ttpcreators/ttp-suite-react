@@ -360,7 +360,7 @@ function SelectField({ label, value, onChange, opts }: { label: string; value: s
 }
 
 /** Un contrat archivé (généré depuis cette page) — stocké dans le blob app_state
- *  `contractHistory` pour consultation rapide. On garde le HTML rendu → ré-ouverture
+ *  `brandContractHistory` pour consultation rapide. On garde le HTML rendu → ré-ouverture
  *  et export PDF à l'identique, sans dépendre de la config du moment. */
 type ContractHistoryEntry = {
   id: string;
@@ -379,7 +379,7 @@ export function Contrats() {
   const [localCfg, setLocalCfg] = useState<ContractConfigs | null>(null);
   const configs = localCfg ?? cfgData ?? {};
   // Historique des contrats générés (blob app_state).
-  const { data: histData } = useAppState<ContractHistoryEntry[]>((s: AppState) => (s["contractHistory"] as ContractHistoryEntry[]) ?? []);
+  const { data: histData } = useAppState<ContractHistoryEntry[]>((s: AppState) => (s["brandContractHistory"] as ContractHistoryEntry[]) ?? []);
   const [localHist, setLocalHist] = useState<ContractHistoryEntry[] | null>(null);
   const history = localHist ?? histData ?? [];
 
@@ -586,10 +586,10 @@ export function Contrats() {
   // ── Historique des contrats (blob) — relecture fraîche avant merge ──
   const mutateHistory = async (fn: (fresh: ContractHistoryEntry[]) => ContractHistoryEntry[]) => {
     invalidateAppState();
-    const fresh = ((await getAppState())["contractHistory"] as ContractHistoryEntry[]) ?? [];
+    const fresh = ((await getAppState())["brandContractHistory"] as ContractHistoryEntry[]) ?? [];
     const next = fn(fresh);
     setLocalHist(next);
-    const ok = await saveAppStateKey("contractHistory", next);
+    const ok = await saveAppStateKey("brandContractHistory", next);
     if (!ok) toast("Erreur — réessaie");
     return ok;
   };
