@@ -237,11 +237,11 @@ export function Vivier() {
           ))}
         </div>
       )}
-      {/* Filtre par statut de scouting */}
-      <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* Filtre par statut de scouting (segmenté, cohérent avec « déjà contactés ») */}
+      <div className="mb-2 flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-panel p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {[{ v: "__all__" as const, label: "Tous", dot: "" }, ...STATUSES].map((s) => (
-          <button key={s.v} type="button" onClick={() => setStatusFilter(s.v)} className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors", statusFilter === s.v ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
-            {s.dot && <span className={cn("h-1.5 w-1.5 rounded-full", statusFilter === s.v ? "bg-primary-foreground" : s.dot)} />}
+          <button key={s.v} type="button" onClick={() => setStatusFilter(s.v)} className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors", statusFilter === s.v ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+            {s.dot && <span className={cn("h-1.5 w-1.5 rounded-full", s.dot)} />}
             {s.label}
           </button>
         ))}
