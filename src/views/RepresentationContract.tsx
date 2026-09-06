@@ -105,7 +105,9 @@ export function RepresentationContract() {
   // Historique des contrats enregistrés (blob agence ; le fichier va aussi dans documents).
   const { data: histData } = useAppState<ContractHist[]>((s: AppState) => (s["contractHistory"] as ContractHist[]) ?? []);
   const [localHist, setLocalHist] = useState<ContractHist[] | null>(null);
-  const hist = localHist ?? histData ?? [];
+  // Défensif : n'affiche que les entrées BIEN formées (le blob a pu contenir un temps
+  // des entrées d'un autre format — cf. fix collision brandContractHistory).
+  const hist = (localHist ?? histData ?? []).filter((e): e is ContractHist => !!e && typeof e.path === "string" && !!e.config);
   const [saving, setSaving] = useState(false);
   const [showHist, setShowHist] = useState(false);
 
