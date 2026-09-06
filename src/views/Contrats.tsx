@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Copy, Check, Plus, Trash2, Save, FileText, Eye, X } from "lucide-react";
+import { Copy, Check, Plus, Trash2, Save, FileText, Eye, X, History } from "lucide-react";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { printHtml } from "@/lib/printPdf";
@@ -359,11 +359,29 @@ function SelectField({ label, value, onChange, opts }: { label: string; value: s
   );
 }
 
+/** Un contrat archivé (généré depuis cette page) — stocké dans le blob app_state
+ *  `contractHistory` pour consultation rapide. On garde le HTML rendu → ré-ouverture
+ *  et export PDF à l'identique, sans dépendre de la config du moment. */
+type ContractHistoryEntry = {
+  id: string;
+  ts: number;
+  ctType: CtType;
+  ctName: string;
+  brand: string;
+  ref: string;
+  title: string;
+  html: string;
+};
+
 export function Contrats() {
   const creators = useCreators();
   const { data: cfgData } = useAppState<ContractConfigs>((s: AppState) => (s["contractConfigs"] as ContractConfigs) ?? {});
   const [localCfg, setLocalCfg] = useState<ContractConfigs | null>(null);
   const configs = localCfg ?? cfgData ?? {};
+  // Historique des contrats générés (blob app_state).
+  const { data: histData } = useAppState<ContractHistoryEntry[]>((s: AppState) => (s["contractHistory"] as ContractHistoryEntry[]) ?? []);
+  const [localHist, setLocalHist] = useState<ContractHistoryEntry[] | null>(null);
+  const history = localHist ?? histData ?? [];
 
   const [ctType, setCtType] = useState<CtType>("marque");
   // Sous-page demandée depuis la sidebar (Contrats → Marque × Créateur / Représentation / UGC).
@@ -391,7 +409,7 @@ export function Contrats() {
   const [copied, setCopied] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [caseName, setCaseName] = useState("Standard");
-  const [pendingDel, setPendingDel] = useState<null | { message: string; run: () => void }>(null);
+  const [pendingDel, setPendingDel] = useState<null | { title?: string; message: string; run: () => void }>(null);
 
   const ctName = creatorName || creators[0]?.name || "[Créateur]";
   const cases: ContractCase[] = configs[ctName] ?? [];
@@ -525,8 +543,10 @@ export function Contrats() {
 
   const downloadPDF = () => {
     // Ouvre la boîte d'impression → « Enregistrer au format PDF » (vrai PDF, texte net).
-    printHtml(buildHTML());
-    toast("Dans la fenêtre : choisis « Enregistrer au format PDF »");
+    const html = buildHTML();
+    archiveContract(html);
+    printHtml(html);
+    toast("Contrat archivé · choisis « Enregistrer au format PDF »");
   };
 
   // ── Cas de configuration (par créateur) ──
@@ -562,6 +582,27 @@ export function Contrats() {
     }));
     if (ok) toast("Cas supprimé");
   };
+
+  // ── Historique des contrats (blob) — relecture fraîche avant merge ──
+  const mutateHistory = async (fn: (fresh: ContractHistoryEntry[]) => ContractHistoryEntry[]) => {
+    invalidateAppState();
+    const fresh = ((await getAppState())["contractHistory"] as ContractHistoryEntry[]) ?? [];
+    const next = fn(fresh);
+    setLocalHist(next);
+    const ok = await saveAppStateKey("contractHistory", next);
+    if (!ok) toast("Erreur — réessaie");
+    return ok;
+  };
+  /** Archive le contrat courant. Dédoublonne (même HTML que le dernier archivé) et
+   *  plafonne à 100 entrées pour borner la taille du blob. */
+  const archiveContract = (html: string) => {
+    mutateHistory((fresh) => {
+      if (fresh.some((h) => h.html === html)) return fresh; // déjà archivé à l'identique
+      const entry: ContractHistoryEntry = { id: uid(), ts: Date.now(), ctType, ctName, brand, ref, title: meta.title, html };
+      return [entry, ...fresh].slice(0, 100);
+    });
+  };
+  const deleteHistory = (id: string) => mutateHistory((fresh) => fresh.filter((h) => h.id !== id));
 
   const typeToggle = (
     <>
@@ -769,6 +810,41 @@ export function Contrats() {
         </div>
       </div>
 
+      {/* ============ HISTORIQUE ============ */}
+      {history.length > 0 && (
+        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm lg:col-span-2">
+          <div className="mb-3 flex items-center gap-2">
+            <History className="h-4 w-4 text-faint" />
+            <span className="text-[13px] font-semibold text-foreground">Historique des contrats</span>
+            <span className="text-[11px] text-faint">· {history.length}</span>
+          </div>
+          <div className="flex max-h-[380px] flex-col gap-2 overflow-y-auto pr-0.5">
+            {history.map((h) => (
+              <div key={h.id} className="flex items-center gap-3 rounded-xl border border-border bg-panel/40 p-3 transition-colors hover:bg-rowhover">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate text-[13px] font-semibold text-foreground">{h.title}</span>
+                    <span className="shrink-0 rounded-full bg-panel px-2 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground">{TYPE_META[h.ctType]?.label ?? h.ctType}</span>
+                  </div>
+                  <div className="mt-0.5 truncate text-[11px] text-faint">
+                    {titleCase(h.ctName)}{h.brand ? ` × ${h.brand}` : ""} · {h.ref} · {new Date(h.ts).toLocaleDateString("fr-FR")}
+                  </div>
+                </div>
+                <button type="button" onClick={() => setPreview(h.html)} title="Aperçu" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-surface hover:text-foreground">
+                  <Eye className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={() => printHtml(h.html)} title="Enregistrer en PDF" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-surface hover:text-primary">
+                  <FileText className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={() => setPendingDel({ title: "Retirer de l'historique", message: `Retirer « ${h.title} » (${h.ref}) de l'historique ? Cette action est irréversible.`, run: () => deleteHistory(h.id) })} title="Supprimer" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-surface hover:text-rose-500">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {preview && (
         <Modal
           title={`Aperçu · ${ref}`}
@@ -780,7 +856,7 @@ export function Contrats() {
               <button
                 type="button"
                 className={cn(ghostBtn, "flex items-center gap-1.5")}
-                onClick={() => printHtml(preview)}
+                onClick={() => { archiveContract(preview); printHtml(preview); }}
               >
                 <FileText className="h-3.5 w-3.5" /> Enregistrer en PDF
               </button>
@@ -792,7 +868,7 @@ export function Contrats() {
       )}
       {pendingDel && (
         <ConfirmDialog
-          title="Supprimer le cas"
+          title={pendingDel.title ?? "Supprimer le cas"}
           message={pendingDel.message}
           confirmLabel="Supprimer"
           danger
