@@ -42,6 +42,7 @@ type MediaKit = {
     age?: PctRow[];
     gender?: { femmes?: string; hommes?: string };
     pays?: CountryRow[];
+    villes?: CountryRow[];
     formats?: PctRow[];
   };
   platforms?: PlatformBlock[];
@@ -76,10 +77,10 @@ const MAX_UGC_PORTFOLIO = 12;
 
 // Champs SUPPLÉMENTAIRES par plateforme (en plus de followers / ER / tranche d'âge).
 const PLATFORM_FIELDS: Record<string, { key: keyof PlatformBlock; label: string }[]> = {
+  // Alignés sur l'export de l'app Edits (ce que les créatrices envoient réellement).
   instagram: [
-    { key: "impressions30j", label: "Impressions / comptes touchés (30 j)" },
-    { key: "nonFollowersPct", label: "Non-followers touchés (%)" },
-    { key: "bestFormatPct", label: "Meilleur format — % (ex. Réels)" },
+    { key: "impressions30j", label: "Comptes touchés / spectateurs (30 j)" },
+    { key: "views30j", label: "Vues de reels (30 j)" },
   ],
   tiktok: [
     { key: "likesTotal", label: "J'aime cumulés" },
@@ -419,8 +420,16 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 </div>
               </div>
               <CountryList
+                title="Pays principaux"
+                placeholder="France"
                 rows={mk.audience?.pays ?? []}
                 onChange={(pays) => patchAudience({ pays })}
+              />
+              <CountryList
+                title="Villes principales"
+                placeholder="Paris"
+                rows={mk.audience?.villes ?? []}
+                onChange={(villes) => patchAudience({ villes })}
               />
               <PctList
                 title="Formats (Réels / Story / Publication…)"
@@ -820,17 +829,17 @@ function PctList({
   );
 }
 
-function CountryList({ rows, onChange }: { rows: CountryRow[]; onChange: (r: CountryRow[]) => void }) {
+function CountryList({ rows, onChange, title = "Localisation (pays)", placeholder = "France" }: { rows: CountryRow[]; onChange: (r: CountryRow[]) => void; title?: string; placeholder?: string }) {
   return (
     <div>
-      <label className={LBL}>Localisation (pays)</label>
+      <label className={LBL}>{title}</label>
       <div className="space-y-2">
         {rows.map((r, i) => (
           <div key={i} className="flex items-center gap-2">
             <input
               value={r.name}
               onChange={(e) => onChange(rows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
-              placeholder="France"
+              placeholder={placeholder}
               className={IN}
             />
             <div className="flex w-24 shrink-0 items-center gap-1">
@@ -856,7 +865,7 @@ function CountryList({ rows, onChange }: { rows: CountryRow[]; onChange: (r: Cou
           onClick={() => onChange([...rows, { name: "", pct: "" }])}
           className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
         >
-          <Plus className="h-3.5 w-3.5" /> Ajouter un pays
+          <Plus className="h-3.5 w-3.5" /> Ajouter une ligne
         </button>
       </div>
     </div>
