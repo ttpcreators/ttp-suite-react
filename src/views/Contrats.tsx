@@ -601,6 +601,20 @@ export function Contrats() {
       const entry: ContractHistoryEntry = { id: uid(), ts: Date.now(), ctType, ctName, brand, ref, title: meta.title, html };
       return [entry, ...fresh].slice(0, 100);
     });
+    // Auto-échéance de FIN de contrat : renseigne la page Échéances sans saisie manuelle.
+    // Début = aujourd'hui (date de génération), durée = champ « Durée » du contrat.
+    const months = parseInt(String(duration).replace(/[^0-9]/g, ""), 10);
+    if (ctName && ctName !== "[Créateur]" && months > 0) {
+      (async () => {
+        type Dl = { id: string; creator: string; type: string; start: string; months: number; note?: string };
+        invalidateAppState();
+        const fresh = ((await getAppState())["contractDeadlines"] as Dl[]) ?? [];
+        // Remplace l'échéance existante du même créateur ET même type (pas de doublon).
+        const kept = fresh.filter((d) => !(d.type === ctType && d.creator.trim().toLowerCase() === ctName.trim().toLowerCase()));
+        const dl: Dl = { id: uid(), creator: ctName, type: ctType, start: new Date().toISOString().slice(0, 10), months, note: `Auto — ${meta.label.toLowerCase()}` };
+        await saveAppStateKey("contractDeadlines", [dl, ...kept]);
+      })();
+    }
   };
   const deleteHistory = (id: string) => mutateHistory((fresh) => fresh.filter((h) => h.id !== id));
 
