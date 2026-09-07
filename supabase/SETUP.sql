@@ -185,6 +185,17 @@ create or replace function public.is_agency() returns boolean
   select coalesce((select p.role = 'agency' from public.profiles p where p.user_id = auth.uid()), false);
 $$;
 
+-- Niveau agence : 'founder' (accès total, Marc & Gianni) | 'member' (tout sauf
+-- Finance & Accès). is_founder() = agence ET fondateur. Voir sql/2026-09-08-agency-roles.sql.
+alter table public.profiles add column if not exists agency_role text not null default 'member';
+create or replace function public.is_founder() returns boolean
+  language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.profiles p
+    where p.user_id = auth.uid() and p.role = 'agency' and coalesce(p.agency_role,'member') = 'founder'
+  );
+$$;
+
 create or replace function public.my_creator() returns text
   language sql stable security definer as $$
   select creator_name from public.profiles where user_id = auth.uid();
@@ -299,10 +310,11 @@ create policy contacts_write on public.contacts for all to authenticated
 -- invoices : ÉCRITURE réservée à l'agence ; le créateur ne peut que LIRE les siennes.
 -- (Comme documents : un `for all` incluant le créateur le laissait modifier/insérer/
 --  supprimer ses propres factures — falsifier le CA, effacer une facture en retard.)
+-- Finance : l'accès AGENCE aux factures est réservé aux FONDATEURS (is_founder()).
 create policy invoices_agency       on public.invoices for all    to authenticated
-  using (public.is_agency()) with check (public.is_agency());
+  using (public.is_founder()) with check (public.is_founder());
 create policy invoices_creator_read on public.invoices for select to authenticated
-  using (public.is_agency() or creator = public.my_creator());
+  using (public.is_founder() or creator = public.my_creator());
 create policy prospects_agency   on public.prospects   for all to authenticated using (public.is_agency()) with check (public.is_agency());
 create policy module_rows_agency on public.module_rows for all to authenticated using (public.is_agency()) with check (public.is_agency());
 

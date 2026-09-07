@@ -296,6 +296,11 @@ export default function App() {
   // spinner infini). `profileReload` permet de relancer la tentative depuis l'UI.
   const [profileError, setProfileError] = useState(false);
   const [profileReload, setProfileReload] = useState(0);
+  // Niveau agence : 'founder' (Marc & Gianni, accès total) | 'member' (tout sauf
+  // Finance & Accès). Défaut 'founder' → jamais de lockout tant que le SQL n'est pas
+  // lancé (aucun membre n'existe avant la migration). Chargé à part = tolérant si la
+  // colonne agency_role n'existe pas encore.
+  const [agencyRole, setAgencyRole] = useState<string>("founder");
 
   // Navigue l'onglet COURANT vers `id` (comme un lien dans Chrome) : remplace la
   // page de l'onglet actif, ou bascule dessus s'il est déjà ouvert.
@@ -425,6 +430,25 @@ export default function App() {
     };
   }, [session, profileReload]);
 
+  // Niveau agence (fondateur/membre) — requête séparée & tolérante (colonne récente).
+  useEffect(() => {
+    if (!session) return;
+    let alive = true;
+    supabase
+      .from("profiles")
+      .select("agency_role")
+      .eq("user_id", session.user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!alive || error || !data) return;
+        const r = (data as { agency_role?: string | null }).agency_role;
+        if (r) setAgencyRole(r);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [session, profileReload]);
+
   const select = (id: ViewId, subId?: string) => {
     navigateCurrentTab(id);
     setSub(subId ?? null); // sous-page ciblée (ou reset si nav normale)
@@ -486,14 +510,22 @@ export default function App() {
     setDetailCreator(null);
   };
 
+  // Rôle agence : fondateur = accès total ; membre = tout SAUF Finance & Accès.
+  const isFounder = agencyRole === "founder";
+  const FOUNDER_ONLY: ViewId[] = ["facturation", "reversements", "relances", "echeances", "acces"];
+  const hiddenIds = isFounder ? [] : FOUNDER_ONLY;
+  const canSee = (id: ViewId) => !hiddenIds.includes(id);
+
   // Famille « Raccourcis » (pages épinglées) ajoutée en tête de la nav mobile aussi.
   const pinnedNavItems = pinned
+    .filter(canSee)
     .map((id) => findItem(id))
     .filter((i): i is NavItem => !!i)
     .map((i) => ({ id: i.id, label: i.label, icon: i.icon }));
+  const navFiltered = NAV.map((f) => ({ ...f, items: f.items.filter((i) => canSee(i.id)) })).filter((f) => f.items.length > 0);
   const mobileFamilies = pinnedNavItems.length
-    ? [{ id: "__pins__", label: "Raccourcis", icon: Star, items: pinnedNavItems }, ...NAV]
-    : NAV;
+    ? [{ id: "__pins__", label: "Raccourcis", icon: Star, items: pinnedNavItems }, ...navFiltered]
+    : navFiltered;
   const mobileItems = mobileFamilies.map((f) => ({
     id: f.id,
     label: f.label,
@@ -638,24 +670,36 @@ export default function App() {
 
   // Contenu principal (portail / fiche créateur / vue nav). Sans le <h1> ni la
   // barrière : chaque volet ajoute sa propre ErrorBoundary autour.
+  const accessDenied = (
+    <div className="grid h-full place-items-center p-6 text-center">
+      <div className="max-w-sm">
+        <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-xl bg-panel text-muted-foreground"><LogOut className="h-5 w-5" /></div>
+        <p className="text-sm font-semibold text-foreground">Accès réservé aux fondateurs</p>
+        <p className="mt-1 text-xs text-muted-foreground">Cette section (Finance / Accès) n'est pas accessible à ton profil. Contacte Marc ou Gianni si tu penses que c'est une erreur.</p>
+      </div>
+    </div>
+  );
   const mainInner =
     detailCreator ? (
       <CreatorDetail name={detailCreator} onBack={() => setDetailCreator(null)} onOpenPortal={openPortal} />
+    ) : !canSee(active) ? (
+      accessDenied
     ) : (
       <NavSubContext.Provider value={sub}>
         <ViewContent active={active} onOpenCreator={openDetail} />
       </NavSubContext.Provider>
     );
   // (Le mode portail a déjà fait un return anticipé plus haut : ici space === "agency".)
-  const primaryTitle = detailCreator ?? title;
+  const primaryTitle = detailCreator ?? (canSee(active) ? title : "Accès réservé");
   const showPrimaryH1 = !detailCreator && active !== "apercu";
   // Multi-pages actif dès qu'il y a ≥ 2 onglets ou un volet latéral.
   const multi = tabs.length > 1 || splitView != null;
   // Overlay = fiche créateur (rendue PAR-DESSUS les vues nav, qui restent montées
   // en dessous pour ne pas perdre leur état).
   const overlayActive = !!detailCreator;
-  // Vues gardées montées = onglets ouverts ∪ vues récemment visitées.
-  const aliveIds = [...new Set<ViewId>([...tabs, ...visitedIds])];
+  // Vues gardées montées = onglets ouverts ∪ vues récemment visitées (jamais une
+  // vue réservée aux fondateurs pour un membre).
+  const aliveIds = [...new Set<ViewId>([...tabs, ...visitedIds])].filter(canSee);
 
   return (
     <ThemeContext.Provider value={{ dark, toggle: toggleTheme }}>
@@ -672,8 +716,9 @@ export default function App() {
               space={space}
               onSpaceChange={changeSpace}
               onItemContext={onItemContext}
-              pinned={pinned}
+              pinned={pinned.filter(canSee)}
               onTogglePin={togglePin}
+              hidden={hiddenIds}
               onItemSplit={(id) => {
                 if (id !== active) setSplitView(id);
               }}

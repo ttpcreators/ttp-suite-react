@@ -11,16 +11,17 @@
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 
-async function isAgency(req: Request, sb: ReturnType<typeof getServiceClient>): Promise<boolean> {
+// La gestion des accès est réservée aux FONDATEURS (agence + agency_role='founder').
+async function isFounder(req: Request, sb: ReturnType<typeof getServiceClient>): Promise<boolean> {
   const authz = req.headers.get("Authorization") ?? "";
   const bearer = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
   if (!bearer) return false;
   const { data, error } = await sb.auth.getUser(bearer);
   if (error || !data?.user) return false;
   const { data: prof, error: profErr } = await sb
-    .from("profiles").select("role").eq("user_id", data.user.id).maybeSingle<{ role: string }>();
+    .from("profiles").select("role, agency_role").eq("user_id", data.user.id).maybeSingle<{ role: string; agency_role: string | null }>();
   if (profErr || !prof) return false; // fail-closed
-  return prof.role === "agency";
+  return prof.role === "agency" && (prof.agency_role ?? "member") === "founder";
 }
 
 Deno.serve(async (req: Request) => {
@@ -30,9 +31,9 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   const sb = getServiceClient();
-  if (!(await isAgency(req, sb))) return jsonRes({ error: "unauthorized" }, 401);
+  if (!(await isFounder(req, sb))) return jsonRes({ error: "unauthorized" }, 401);
 
-  let body: { email?: string; password?: string; role?: string; creator?: string } = {};
+  let body: { email?: string; password?: string; role?: string; creator?: string; agencyRole?: string } = {};
   try {
     body = await req.json();
   } catch {
@@ -42,6 +43,8 @@ Deno.serve(async (req: Request) => {
   const password = String(body.password ?? "");
   const role = body.role === "agency" ? "agency" : "creator";
   const creator = (body.creator ?? "").trim();
+  // Niveau agence du nouveau compte : 'founder' | 'member' (par défaut 'member').
+  const agencyRole = role === "agency" && body.agencyRole === "founder" ? "founder" : "member";
 
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return jsonRes({ error: "email_invalide" }, 400);
   if (password.length < 6) return jsonRes({ error: "mot_de_passe_trop_court" }, 400);
@@ -66,7 +69,7 @@ Deno.serve(async (req: Request) => {
   // rattachement créatrice. C'est désormais le SEUL endroit qui lie un compte à une
   // créatrice → on vérifie que l'upsert a réussi (sinon le compte ne verrait rien).
   const { error: profErr2 } = await sb.from("profiles").upsert(
-    { user_id: created.user.id, role, creator_name: creator || null },
+    { user_id: created.user.id, role, creator_name: creator || null, agency_role: agencyRole },
     { onConflict: "user_id" },
   );
   if (profErr2) {
@@ -76,5 +79,5 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  return jsonRes({ ok: true, userId: created.user.id, email, role, creator: creator || null });
+  return jsonRes({ ok: true, userId: created.user.id, email, role, creator: creator || null, agencyRole });
 });

@@ -24,6 +24,7 @@ export function Sidebar({
   onItemSplit,
   pinned,
   onTogglePin,
+  hidden,
 }: {
   active: ViewId;
   activeSub?: string | null;
@@ -37,17 +38,26 @@ export function Sidebar({
   pinned?: ViewId[];
   /** Épingle/détache une page (étoile au survol). */
   onTogglePin?: (id: ViewId) => void;
+  /** Pages masquées (ex. membre non-fondateur : Finance & Accès). */
+  hidden?: ViewId[];
 }) {
   const isPinned = (id: string) => (pinned ?? []).includes(id as ViewId);
+  const isHidden = (id: string) => (hidden ?? []).includes(id as ViewId);
   // Dossier « Raccourcis » (pages épinglées) ajouté en TÊTE, sans sous-pages
   // (un raccourci = lien direct). Clic droit sur une page → Épingler / Détacher.
   const GROUPS = useMemo<SbGroup[]>(() => {
+    // Familles filtrées (on retire les pages masquées, puis les familles vides).
+    const base = NAV_GROUPS
+      .map((g) => ({ ...g, items: g.items.filter((i) => !isHidden(i.id)) }))
+      .filter((g) => g.items.length > 0);
     const items = (pinned ?? [])
+      .filter((id) => !isHidden(id))
       .map((id) => findItem(id))
       .filter((i): i is NonNullable<typeof i> => !!i)
       .map((i) => ({ id: i.id, label: i.label, icon: i.icon }));
-    return items.length ? [{ id: "__pins__", label: "Raccourcis", icon: Star, items }, ...NAV_GROUPS] : NAV_GROUPS;
-  }, [pinned]);
+    return items.length ? [{ id: "__pins__", label: "Raccourcis", icon: Star, items }, ...base] : base;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinned, hidden]);
   // Sidebar repliable en rail d'icônes (mémorisé).
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("ttp:sidebar-collapsed") === "1");
   useEffect(() => {

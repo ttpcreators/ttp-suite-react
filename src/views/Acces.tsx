@@ -16,6 +16,8 @@ type AccessAccount = {
   email: string;
   pwd: string;
   role: "creator" | "agency";
+  /** Niveau agence : 'founder' (accès total) | 'member' (tout sauf Finance & Accès). */
+  level?: "founder" | "member";
   creator?: string;
   cloud?: string;
 };
@@ -39,7 +41,13 @@ function AccountRow({ a, onDelete }: { a: AccessAccount; onDelete: (a: AccessAcc
   const [shown, setShown] = useState(false);
   const avatarSource = a.role === "creator" && a.creator ? titleCase(a.creator) : a.email;
   const subtitle =
-    a.role === "creator" ? "Créateur" : `Agence / Équipe${a.creator ? ` · ${titleCase(a.creator)}` : ""}`;
+    a.role === "creator"
+      ? "Créateur"
+      : a.level === "founder"
+        ? "Agence · Fondateur"
+        : a.level === "member"
+          ? "Agence · Membre"
+          : "Agence / Équipe";
   const cloud = a.cloud ? cloudBadge(a.cloud) : null;
 
   return (
@@ -121,6 +129,7 @@ export function Acces() {
   const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState(genPwd());
   const [role, setRole] = useState<"creator" | "agency">("creator");
+  const [agencyLevel, setAgencyLevel] = useState<"founder" | "member">("member");
   const [creatorName, setCreatorName] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -128,6 +137,7 @@ export function Acces() {
     setEmail("");
     setPwd(genPwd());
     setRole("creator");
+    setAgencyLevel("member");
     setCreatorName("");
   };
 
@@ -150,7 +160,7 @@ export function Acces() {
     try {
       // 1) Crée le VRAI compte de connexion (fonction serveur, clé admin).
       const { data, error: fnErr } = await supabase.functions.invoke("create-access", {
-        body: { email: mail, password: pwd, role, creator: role === "creator" ? creatorName : "" },
+        body: { email: mail, password: pwd, role, creator: role === "creator" ? creatorName : "", agencyRole: role === "agency" ? agencyLevel : undefined },
       });
       // supabase-js met le corps JSON des réponses non-2xx dans error.context, pas data.
       let res = data as { ok?: boolean; error?: string } | null;
@@ -174,6 +184,7 @@ export function Acces() {
         email: mail,
         pwd,
         role,
+        level: role === "agency" ? agencyLevel : undefined,
         creator: role === "creator" ? creatorName : undefined,
         cloud: "ok",
       };
@@ -225,6 +236,17 @@ export function Acces() {
           { value: "agency", label: "Agence / Équipe" },
         ]}
       />
+      {role === "agency" && (
+        <SelectField
+          label="Niveau d'accès"
+          value={agencyLevel}
+          onChange={(v) => setAgencyLevel(v as "founder" | "member")}
+          options={[
+            { value: "member", label: "Membre (tout sauf Finance & Accès)" },
+            { value: "founder", label: "Fondateur (accès total)" },
+          ]}
+        />
+      )}
       {role === "creator" && (
         <SelectField
           label="Créateur"
