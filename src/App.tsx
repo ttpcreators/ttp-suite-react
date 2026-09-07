@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronRight, Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus, LogOut, Pin, PinOff } from "lucide-react";
+import { ChevronRight, Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus, LogOut, Pin, PinOff, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { restoreTabs, navigateTab, addTab, closeTab as closeTabState } from "@/lib/tabs";
 import type { Session } from "@supabase/supabase-js";
@@ -486,7 +486,15 @@ export default function App() {
     setDetailCreator(null);
   };
 
-  const mobileItems = NAV.map((f) => ({
+  // Famille « Raccourcis » (pages épinglées) ajoutée en tête de la nav mobile aussi.
+  const pinnedNavItems = pinned
+    .map((id) => findItem(id))
+    .filter((i): i is NavItem => !!i)
+    .map((i) => ({ id: i.id, label: i.label, icon: i.icon }));
+  const mobileFamilies = pinnedNavItems.length
+    ? [{ id: "__pins__", label: "Raccourcis", icon: Star, items: pinnedNavItems }, ...NAV]
+    : NAV;
+  const mobileItems = mobileFamilies.map((f) => ({
     id: f.id,
     label: f.label,
     icon: <f.icon className="h-4 w-4" />,
@@ -665,6 +673,7 @@ export default function App() {
               onSpaceChange={changeSpace}
               onItemContext={onItemContext}
               pinned={pinned}
+              onTogglePin={togglePin}
               onItemSplit={(id) => {
                 if (id !== active) setSplitView(id);
               }}

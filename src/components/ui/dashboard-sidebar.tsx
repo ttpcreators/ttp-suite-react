@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronRight, Columns2, type LucideIcon } from "lucide-react";
+import { ChevronRight, Columns2, Star, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type SbChild = { id: string; label: string };
@@ -15,6 +15,8 @@ function Row({
   hasChildren,
   open,
   onToggle,
+  pinned,
+  onTogglePin,
 }: {
   item: SbItem;
   active: boolean;
@@ -25,7 +27,15 @@ function Row({
   hasChildren?: boolean;
   open?: boolean;
   onToggle?: () => void;
+  /** Page épinglée (Raccourcis) → étoile pleine, toujours visible. */
+  pinned?: boolean;
+  /** Épingle/détache au survol (étoile). Absent = pas d'étoile. */
+  onTogglePin?: () => void;
 }) {
+  // Réserve la place à droite : chevron/split (right-1.5) + étoile épingle (right-8).
+  const pr = onTogglePin
+    ? (hasChildren ? "pr-[3.75rem]" : "pr-9")
+    : (hasChildren ? "pr-9" : "pr-2.5");
   return (
     <div className="group relative flex items-center">
       <button
@@ -33,8 +43,8 @@ function Row({
         onClick={onClick}
         onContextMenu={onContext}
         className={cn(
-          "flex w-full select-none items-center justify-between rounded-[7px] py-[7px] pl-3 pr-2.5 text-left transition-colors",
-          hasChildren && "pr-9",
+          "flex w-full select-none items-center justify-between rounded-[7px] py-[7px] pl-3 text-left transition-colors",
+          pr,
           active
             ? "bg-rowhover font-medium text-foreground"
             : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
@@ -87,6 +97,25 @@ function Row({
           </button>
         )
       )}
+      {/* Étoile d'épingle : pleine & permanente si épinglée, sinon révélée au survol. */}
+      {onTogglePin && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePin();
+          }}
+          title={pinned ? "Détacher des raccourcis" : "Épingler aux raccourcis"}
+          aria-label={pinned ? "Détacher des raccourcis" : "Épingler aux raccourcis"}
+          aria-pressed={pinned}
+          className={cn(
+            "absolute right-8 grid h-6 w-6 place-items-center rounded-md transition-opacity hover:bg-surface focus-visible:opacity-100",
+            pinned ? "text-amber-500 opacity-100" : "text-faint opacity-0 hover:text-amber-500 group-hover:opacity-100",
+          )}
+        >
+          <Star className={cn("h-3.5 w-3.5", pinned && "fill-current")} />
+        </button>
+      )}
     </div>
   );
 }
@@ -103,6 +132,8 @@ function ItemBlock({
   onSelect,
   onItemContext,
   onItemSplit,
+  isPinned,
+  onTogglePin,
 }: {
   item: SbItem;
   activeId: string;
@@ -110,6 +141,8 @@ function ItemBlock({
   onSelect: (id: string, sub?: string) => void;
   onItemContext?: (id: string, e: ReactMouseEvent) => void;
   onItemSplit?: (id: string) => void;
+  isPinned?: (id: string) => boolean;
+  onTogglePin?: (id: string) => void;
 }) {
   const hasChildren = !!item.children && item.children.length > 0;
   const parentActive = item.id === activeId;
@@ -148,6 +181,8 @@ function ItemBlock({
         }}
         onContext={onItemContext ? (e) => onItemContext(item.id, e) : undefined}
         onSplit={!hasChildren && onItemSplit ? () => onItemSplit(item.id) : undefined}
+        pinned={isPinned?.(item.id)}
+        onTogglePin={onTogglePin ? () => onTogglePin(item.id) : undefined}
       />
       {hasChildren && (
         <div
@@ -197,6 +232,8 @@ function Group({
   onSelect,
   onItemContext,
   onItemSplit,
+  isPinned,
+  onTogglePin,
 }: {
   group: SbGroup;
   activeId: string;
@@ -206,6 +243,8 @@ function Group({
   onSelect: (id: string, sub?: string) => void;
   onItemContext?: (id: string, e: ReactMouseEvent) => void;
   onItemSplit?: (id: string) => void;
+  isPinned?: (id: string) => boolean;
+  onTogglePin?: (id: string) => void;
 }) {
   const containsActive = group.items.some((i) => i.id === activeId);
   return (
@@ -260,6 +299,8 @@ function Group({
                 onSelect={onSelect}
                 onItemContext={onItemContext}
                 onItemSplit={onItemSplit}
+                isPinned={isPinned}
+                onTogglePin={onTogglePin}
               />
             ))}
           </div>
@@ -281,6 +322,8 @@ export function SidebarNav({
   onSelect,
   onItemContext,
   onItemSplit,
+  isPinned,
+  onTogglePin,
   header,
   footer,
 }: {
@@ -290,6 +333,8 @@ export function SidebarNav({
   onSelect: (id: string, sub?: string) => void;
   onItemContext?: (id: string, e: ReactMouseEvent) => void;
   onItemSplit?: (id: string) => void;
+  isPinned?: (id: string) => boolean;
+  onTogglePin?: (id: string) => void;
   header?: ReactNode;
   footer?: ReactNode;
 }) {
@@ -316,6 +361,8 @@ export function SidebarNav({
             onSelect={onSelect}
             onItemContext={onItemContext}
             onItemSplit={onItemSplit}
+            isPinned={isPinned}
+            onTogglePin={onTogglePin}
           />
         ))}
       </nav>

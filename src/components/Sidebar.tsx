@@ -23,6 +23,7 @@ export function Sidebar({
   onItemContext,
   onItemSplit,
   pinned,
+  onTogglePin,
 }: {
   active: ViewId;
   activeSub?: string | null;
@@ -34,7 +35,10 @@ export function Sidebar({
   onItemSplit?: (id: ViewId) => void;
   /** Pages épinglées → dossier « Raccourcis » en tête de la sidebar. */
   pinned?: ViewId[];
+  /** Épingle/détache une page (étoile au survol). */
+  onTogglePin?: (id: ViewId) => void;
 }) {
+  const isPinned = (id: string) => (pinned ?? []).includes(id as ViewId);
   // Dossier « Raccourcis » (pages épinglées) ajouté en TÊTE, sans sous-pages
   // (un raccourci = lien direct). Clic droit sur une page → Épingler / Détacher.
   const GROUPS = useMemo<SbGroup[]>(() => {
@@ -198,6 +202,8 @@ export function Sidebar({
       onSelect={(id, sub) => onSelect(id as ViewId, sub)}
       onItemContext={onItemContext ? (id, e) => onItemContext(id as ViewId, e) : undefined}
       onItemSplit={onItemSplit ? (id) => onItemSplit(id as ViewId) : undefined}
+      isPinned={isPinned}
+      onTogglePin={onTogglePin ? (id) => onTogglePin(id as ViewId) : undefined}
       header={header}
       footer={footer}
     />
