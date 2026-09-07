@@ -168,7 +168,7 @@ export function Vivier() {
     if (!created) { toast("Erreur — réessaie"); return; }
     const next = [created as unknown as Row, ...(rows ?? [])];
     setRows(next); setCache("vivier", next); setFormOpen(false);
-    toast("Créateur ajouté au vivier ✓");
+    toast("Créateur ajouté au scouting ✓");
   };
 
   const remove = async (r: Row) => {
@@ -265,7 +265,7 @@ export function Vivier() {
 
       {filtered.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface px-6 py-10 text-center text-sm text-muted-foreground shadow-sm">
-          {rows.length === 0 ? "Ton vivier est vide. Ajoute des créateurs à solliciter le jour où tu en as besoin ✨" : "Aucun créateur pour ces filtres."}
+          {rows.length === 0 ? "Ton scouting est vide. Ajoute des créateurs à repérer / solliciter le jour où tu en as besoin ✨" : "Aucun créateur pour ces filtres."}
         </div>
       ) : (
         <div className="flex flex-col gap-2.5">
@@ -311,7 +311,7 @@ export function Vivier() {
                 <ActionMenu
                   items={[
                     { key: "edit", label: "Modifier", icon: Pencil, onClick: () => openEdit(r) },
-                    { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => remove(r), confirm: { title: "Supprimer du vivier", message: `Retirer « ${r.name} » du vivier ? Tu pourras le restaurer depuis la corbeille.` } },
+                    { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => remove(r), confirm: { title: "Retirer du scouting", message: `Retirer « ${r.name} » du scouting ? Tu pourras le restaurer depuis la corbeille.` } },
                   ]}
                 />
               </div>

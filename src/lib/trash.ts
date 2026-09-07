@@ -29,7 +29,7 @@ export const TABLE_LABELS: Record<string, string> = {
   prospects: "Prospect",
   creators: "Créateur",
   invoices: "Facture",
-  creator_pool: "Vivier créateur",
+  creator_pool: "Scouting créateur",
 };
 
 let _uid = 0;
