@@ -1,12 +1,12 @@
-import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { LogOut, Trash2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { NAV, type ViewId } from "@/lib/nav";
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { LogOut, Trash2, PanelLeftClose, PanelLeftOpen, Star } from "lucide-react";
+import { NAV, findItem, type ViewId } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { SidebarNav, type SbGroup } from "@/components/ui/dashboard-sidebar";
 
 const BASE = import.meta.env.BASE_URL;
 
-const GROUPS: SbGroup[] = NAV.map((f) => ({
+const NAV_GROUPS: SbGroup[] = NAV.map((f) => ({
   id: f.id,
   label: f.label,
   icon: f.icon,
@@ -22,6 +22,7 @@ export function Sidebar({
   onSpaceChange,
   onItemContext,
   onItemSplit,
+  pinned,
 }: {
   active: ViewId;
   activeSub?: string | null;
@@ -31,7 +32,18 @@ export function Sidebar({
   onSpaceChange: (s: "agency" | "portal") => void;
   onItemContext?: (id: ViewId, e: ReactMouseEvent) => void;
   onItemSplit?: (id: ViewId) => void;
+  /** Pages épinglées → dossier « Raccourcis » en tête de la sidebar. */
+  pinned?: ViewId[];
 }) {
+  // Dossier « Raccourcis » (pages épinglées) ajouté en TÊTE, sans sous-pages
+  // (un raccourci = lien direct). Clic droit sur une page → Épingler / Détacher.
+  const GROUPS = useMemo<SbGroup[]>(() => {
+    const items = (pinned ?? [])
+      .map((id) => findItem(id))
+      .filter((i): i is NonNullable<typeof i> => !!i)
+      .map((i) => ({ id: i.id, label: i.label, icon: i.icon }));
+    return items.length ? [{ id: "__pins__", label: "Raccourcis", icon: Star, items }, ...NAV_GROUPS] : NAV_GROUPS;
+  }, [pinned]);
   // Sidebar repliable en rail d'icônes (mémorisé).
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("ttp:sidebar-collapsed") === "1");
   useEffect(() => {

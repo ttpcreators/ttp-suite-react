@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronRight, Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus, LogOut } from "lucide-react";
+import { ChevronRight, Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus, LogOut, Pin, PinOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { restoreTabs, navigateTab, addTab, closeTab as closeTabState } from "@/lib/tabs";
 import type { Session } from "@supabase/supabase-js";
@@ -9,6 +9,7 @@ import { Toaster } from "@/components/ui/toast";
 import { Notifications } from "@/components/ui/notifications";
 import { useNotifications } from "@/lib/useNotifications";
 import { useCreators } from "@/lib/useCreators";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Login } from "@/components/Login";
@@ -277,6 +278,17 @@ export default function App() {
   const [space, setSpace] = useState<"agency" | "portal">("agency");
   const [portalCreator, setPortalCreator] = useState<string | null>(null);
   const creators = useCreators();
+  // Pages épinglées (dossier « Raccourcis » en haut de la sidebar) — blob agence.
+  const { data: pinnedData } = useAppState<ViewId[]>((s: AppState) => (s["pinnedPages"] as ViewId[]) ?? []);
+  const [localPins, setLocalPins] = useState<ViewId[] | null>(null);
+  const pinned = localPins ?? pinnedData ?? [];
+  const togglePin = async (id: ViewId) => {
+    invalidateAppState();
+    const fresh = ((await getAppState())["pinnedPages"] as ViewId[]) ?? [];
+    const next = fresh.includes(id) ? fresh.filter((x) => x !== id) : [...fresh, id];
+    setLocalPins(next);
+    if (!(await saveAppStateKey("pinnedPages", next))) setLocalPins(fresh);
+  };
   const [profile, setProfile] = useState<
     { role: string; creator_name: string | null } | null | undefined
   >(undefined);
@@ -652,6 +664,7 @@ export default function App() {
               space={space}
               onSpaceChange={changeSpace}
               onItemContext={onItemContext}
+              pinned={pinned}
               onItemSplit={(id) => {
                 if (id !== active) setSplitView(id);
               }}
@@ -793,10 +806,22 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => {
+                  togglePin(ctxMenu.id);
+                  setCtxMenu(null);
+                }}
+                className="flex w-full items-center gap-2.5 border-t border-border px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-rowhover"
+              >
+                {pinned.includes(ctxMenu.id)
+                  ? <><PinOff className="h-4 w-4 text-faint" /> Détacher des raccourcis</>
+                  : <><Pin className="h-4 w-4 text-faint" /> Épingler aux raccourcis</>}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
                   if (ctxMenu.id !== active) setSplitView(ctxMenu.id);
                   setCtxMenu(null);
                 }}
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-rowhover"
+                className="flex w-full items-center gap-2.5 border-t border-border px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-rowhover"
               >
                 <Columns2 className="h-4 w-4 text-faint" /> Ouvrir à côté
               </button>
