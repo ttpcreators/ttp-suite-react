@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Pencil, CalendarClock } from "lucide-react";
+import { Pencil, CalendarClock, RefreshCw } from "lucide-react";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
@@ -37,6 +37,18 @@ function daysLeft(d: Date): number {
 }
 function frDate(d: Date): string {
   return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+/** "16/09/2026" ou "2026-09-16" → "2026-09-16" (ou "" si non reconnu). */
+function toISOloose(s: string | null | undefined): string {
+  const v = (s ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v);
+  return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : "";
+}
+/** Nombre de mois lu depuis un texte (« 12 mois », « 12 »). 0 si absent. */
+function monthsOf(s: string | null | undefined): number {
+  const n = parseInt(String(s ?? "").replace(/[^0-9]/g, ""), 10);
+  return Number.isFinite(n) ? n : 0;
 }
 
 type Blank = { creator: string; type: string; start: string; months: string; note: string };
@@ -113,6 +125,55 @@ export function Echeances() {
     if (ok) toast("Contrat supprimé");
   };
 
+  // Synchronise les échéances depuis les contrats DÉJÀ enregistrés (historique) :
+  //  - Représentation (blob `contractHistory`) : dates + durée depuis la config ;
+  //  - Marque/UGC (blob `brandContractHistory`) : durée lue dans le HTML archivé.
+  // N'ajoute que le MANQUANT (dédupe par créateur + type) → jamais de doublon.
+  const [syncing, setSyncing] = useState(false);
+  const syncFromContracts = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      invalidateAppState();
+      const st = await getAppState();
+      const existing = (st["contractDeadlines"] as Deadline[]) ?? [];
+      const seen = new Set(existing.map((d) => `${(d.type || "").toLowerCase()}|${d.creator.trim().toLowerCase()}`));
+      const added: Deadline[] = [];
+      const push = (creator: string, type: string, start: string, months: number) => {
+        const c = creator.trim();
+        if (!c || c === "[Créateur]" || !start || months <= 0) return;
+        const k = `${type.toLowerCase()}|${c.toLowerCase()}`;
+        if (seen.has(k)) return;
+        seen.add(k);
+        added.push({ id: uid(), creator: c, type, start, months, note: "Auto — import contrat" });
+      };
+      // 1) Contrats de représentation (config structurée : dateDebut/dateSignature + dureeMois)
+      const repr = (st["contractHistory"] as { creator?: string | null; config?: Record<string, string> }[]) ?? [];
+      for (const c of repr) {
+        const cfg = c.config ?? {};
+        push((c.creator ?? cfg.talentNom ?? "").trim(), "représentation", toISOloose(cfg.dateDebut) || toISOloose(cfg.dateSignature), monthsOf(cfg.dureeMois));
+      }
+      // 2) Contrats Marque/UGC (durée lue dans le HTML archivé : « Durée … 12 mois »)
+      const brand = (st["brandContractHistory"] as { ctType?: string; ctName?: string; ts?: number; html?: string }[]) ?? [];
+      for (const b of brand) {
+        const type = b.ctType === "ugc" ? "ugc" : "marque";
+        const m = /Dur[ée]e[^0-9]{0,20}?([0-9]+)\s*mois/i.exec(b.html ?? "");
+        const start = b.ts ? new Date(b.ts).toISOString().slice(0, 10) : todayISO();
+        push((b.ctName ?? "").trim(), type, start, m ? parseInt(m[1], 10) : 0);
+      }
+      if (!added.length) {
+        toast("Rien à importer — les échéances sont déjà à jour ✓");
+        return;
+      }
+      const next = [...added, ...existing];
+      setLocal(next);
+      const ok = await saveAppStateKey("contractDeadlines", next);
+      toast(ok ? `${added.length} échéance${added.length > 1 ? "s" : ""} importée${added.length > 1 ? "s" : ""} ✓` : "Erreur — réessaie");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const badgeFor = (left: number | null) => {
     if (left == null) return { cls: "bg-rowhover text-muted-foreground", label: "Date invalide" };
     if (left < 0) return { cls: "bg-rose-500/15 text-rose-500", label: `Expiré depuis ${-left} j` };
@@ -129,7 +190,19 @@ export function Echeances() {
           <span className="font-semibold text-foreground">{list.length}</span>
           <span>{list.length > 1 ? "contrats suivis" : "contrat suivi"}</span>
         </div>
-        <AddButton label="Ajouter un contrat" onClick={openAdd} />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={syncFromContracts}
+            disabled={syncing}
+            title="Créer les échéances manquantes depuis les contrats déjà enregistrés"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+          >
+            <RefreshCw className={"h-3.5 w-3.5" + (syncing ? " animate-spin" : "")} />
+            <span className="hidden sm:inline">{syncing ? "Synchro…" : "Synchroniser"}</span>
+          </button>
+          <AddButton label="Ajouter un contrat" onClick={openAdd} />
+        </div>
       </div>
 
       <InlineForm
