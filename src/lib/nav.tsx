@@ -116,7 +116,7 @@ export const NAV: NavFamily[] = [
       { id: "debrief", label: "Debrief", icon: FileChartColumn },
       { id: "gifting", label: "Gifting", icon: Gift },
       { id: "ideas", label: "Idées", icon: Lightbulb },
-      { id: "todo", label: "À faire", icon: ListChecks },
+      { id: "todo", label: "To-do", icon: ListChecks },
       { id: "planning", label: "Planning", icon: CalendarDays },
     ],
   },

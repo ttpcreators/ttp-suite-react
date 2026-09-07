@@ -481,7 +481,7 @@ export function Todo() {
         <StatsBento
           className="mb-5"
           primary={{
-            eyebrow: "À faire · en cours",
+            eyebrow: "To-do · en cours",
             value: String(openTasks.length),
             caption: `sur ${allRows.length} tâche${allRows.length > 1 ? "s" : ""} au total.`,
           }}
