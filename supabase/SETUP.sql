@@ -70,6 +70,8 @@ create table if not exists public.contacts (
 alter table public.contacts add column if not exists first_name text;
 alter table public.contacts add column if not exists last_name text;
 alter table public.contacts add column if not exists creator text;       -- sql/12 : contact ajouté par un créateur (NULL = agence)
+alter table public.contacts add column if not exists instagram text;     -- @ de la marque (sql/2026-09-08-contacts-instagram-city)
+alter table public.contacts add column if not exists city text;          -- ville de la marque
 
 create table if not exists public.prospects (
   id uuid primary key default gen_random_uuid(),

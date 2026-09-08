@@ -33,6 +33,8 @@ type Row = {
   tag: string;
   email: string;
   phone: string;
+  instagram?: string | null;
+  city?: string | null;
   sort_order: number;
   creator?: string | null; // renseigné = contact ajouté par ce créateur
   last_contacted?: string | null; // dernier email SORTANT vers ce contact (ISO)
@@ -250,6 +252,8 @@ export function Contacts() {
   const [tag, setTag] = useState("Marque");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [insta, setInsta] = useState("");
+  const [city, setCity] = useState("");
 
   const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS);
   const [contactFilter, setContactFilter] = useState<"all" | "contacted" | "never">("all"); // déjà échangé ?
@@ -417,6 +421,8 @@ export function Contacts() {
     setTag("Marque");
     setEmail("");
     setPhone("");
+    setInsta("");
+    setCity("");
   };
   const openAdd = () => {
     resetForm();
@@ -433,6 +439,8 @@ export function Contacts() {
     setTag(r.tag || "Marque");
     setEmail(r.email ?? "");
     setPhone(r.phone ?? "");
+    setInsta(r.instagram ?? "");
+    setCity(r.city ?? "");
     setFormOpen(true);
   };
 
@@ -567,6 +575,8 @@ export function Contacts() {
       tag,
       email: email.trim(),
       phone: phone.trim(),
+      instagram: insta.trim() || null,
+      city: city.trim() || null,
     };
     if (editId) {
       const ok = await dbUpdate("contacts", editId, payload);
@@ -805,6 +815,8 @@ export function Contacts() {
         />
         <TextField label="Email" value={email} onChange={setEmail} type="email" />
         <TextField label="Téléphone" value={phone} onChange={setPhone} />
+        <TextField label="Instagram" value={insta} onChange={setInsta} placeholder="@lamarque" className="sm:min-w-[150px]" />
+        <TextField label="Ville" value={city} onChange={setCity} placeholder="Paris" className="sm:min-w-[130px]" />
       </InlineForm>
 
       {currentRows.length === 0 ? (
@@ -954,6 +966,8 @@ export function Contacts() {
               <CopyField label="Rôle" value={selected.role} />
               <CopyField label="Email" value={selected.email} />
               <CopyField label="Téléphone" value={selected.phone} />
+              {selected.instagram && <CopyField label="Instagram" value={selected.instagram} />}
+              {selected.city && <CopyField label="Ville" value={selected.city} />}
             </div>
 
             {selected.email && (() => {
