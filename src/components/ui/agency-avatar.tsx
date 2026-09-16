@@ -7,12 +7,15 @@ import { toast } from "@/components/ui/toast";
 const BASE = import.meta.env.BASE_URL;
 
 /**
- * Photo de profil de la direction (agence). Upload dans le bucket `avatars`
- * (public) puis URL enregistrée dans le blob app_state `agencyPhoto` — donc
- * synchronisée sur tous les appareils (mobile + ordinateur). Fallback : logo TTP.
+ * Photo de profil PAR UTILISATEUR (chaque accès personnalise la sienne). Upload
+ * dans le bucket `avatars` (public), URL enregistrée dans le blob app_state sous
+ * la clé `avatar:<userId>` (atomique → pas de conflit entre membres). Repli : la
+ * photo agence historique (`agencyPhoto`), puis le logo TTP. Sans `userId`, on
+ * retombe sur l'ancien comportement partagé (`agencyPhoto`).
  */
-export function AgencyAvatar({ className = "h-8 w-8", rounded = "rounded-lg" }: { className?: string; rounded?: string }) {
-  const { data: saved } = useAppState<string | null>((s: AppState) => (s["agencyPhoto"] as string) ?? null);
+export function AgencyAvatar({ userId, className = "h-8 w-8", rounded = "rounded-lg" }: { userId?: string; className?: string; rounded?: string }) {
+  const key = userId ? `avatar:${userId}` : "agencyPhoto";
+  const { data: saved } = useAppState<string | null>((s: AppState) => (s[key] as string) ?? (s["agencyPhoto"] as string) ?? null);
   const [localUrl, setLocalUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [broken, setBroken] = useState(false);
@@ -33,7 +36,7 @@ export function AgencyAvatar({ className = "h-8 w-8", rounded = "rounded-lg" }: 
     }
     setBusy(true);
     const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-    const path = `agency/${Date.now()}.${ext}`;
+    const path = `${userId ? `user/${userId}` : "agency"}/${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: true, cacheControl: "3600", contentType: file.type });
     if (error) {
       setBusy(false);
@@ -43,7 +46,7 @@ export function AgencyAvatar({ className = "h-8 w-8", rounded = "rounded-lg" }: 
     const { data } = supabase.storage.from("avatars").getPublicUrl(path);
     setBroken(false);
     setLocalUrl(data.publicUrl);
-    const ok = await saveAppStateKey("agencyPhoto", data.publicUrl);
+    const ok = await saveAppStateKey(key, data.publicUrl);
     setBusy(false);
     toast(ok ? "Photo de profil mise à jour ✓" : "Photo envoyée mais non enregistrée");
   };

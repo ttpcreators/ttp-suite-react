@@ -638,7 +638,7 @@ export default function App() {
       {/* right cluster */}
       <div className="ml-auto flex shrink-0 items-center gap-2.5">
         <div className="hidden items-center gap-2.5 rounded-lg bg-surface py-1.5 pl-2 pr-3.5 shadow-sm sm:flex">
-          <AgencyAvatar />
+          <AgencyAvatar userId={session.user.id} />
           <div className="leading-tight">
             <div className="whitespace-nowrap text-xs font-medium text-foreground">Marc &amp; Gianni</div>
             <div className="whitespace-nowrap text-[10px] text-faint">Direction · TTP</div>
