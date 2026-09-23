@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, Clock, AlertTriangle } from "lucide-react";
+import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, Clock, AlertTriangle, MapPin } from "lucide-react";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
@@ -257,6 +257,7 @@ export function Contacts() {
 
   const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS);
   const [contactFilter, setContactFilter] = useState<"all" | "contacted" | "never">("all"); // déjà échangé ?
+  const [cityFilter, setCityFilter] = useState<string>(""); // "" = toutes les villes
   const [importing, setImporting] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
@@ -388,6 +389,16 @@ export function Contacts() {
     // contacts ajoutés par les créateurs (cf. CreatorSpace) ; ils restent visibles via
     // « Tous » et le filtre « ↳ Créateurs ». (demande utilisateur)
     return ordered.filter((t) => t.toLowerCase() !== "perso");
+  }, [rows]);
+
+  // Villes présentes (pour le filtre par ville) — dédupliquées (insensible à la casse), triées.
+  const cityList = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of rows ?? []) {
+      const c = (r.city ?? "").trim();
+      if (c) map.set(c.toLowerCase(), c);
+    }
+    return [...map.values()].sort((a, b) => a.localeCompare(b, "fr"));
   }, [rows]);
 
   if (error) {
@@ -684,6 +695,8 @@ export function Contacts() {
       if (contactFilter === "contacted" && !contacted) return false;
       if (contactFilter === "never" && contacted) return false;
     }
+    // Filtre par ville.
+    if (cityFilter && (row.city ?? "").trim().toLowerCase() !== cityFilter.toLowerCase()) return false;
     return matchQuery(query, row.brand, row.person, row.role, row.email, row.tag);
   });
 
@@ -769,24 +782,42 @@ export function Contacts() {
         ]}
       />
 
-      {/* Filtre « déjà échangé » (orthogonal au tag) — basé sur le suivi de contact */}
-      <div className="mb-4 flex items-center gap-1.5">
-        <Clock className="h-3.5 w-3.5 shrink-0 text-faint" />
-        <div className="flex gap-1 rounded-xl bg-panel p-1">
-          {([["all", "Tous"], ["contacted", "Déjà contactés"], ["never", "Jamais contactés"]] as const).map(([v, label]) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setContactFilter(v)}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                contactFilter === v ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          ))}
+      {/* Filtres : « déjà échangé » (suivi de contact) + ville */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-1.5">
+          <Clock className="h-3.5 w-3.5 shrink-0 text-faint" />
+          <div className="flex gap-1 rounded-xl bg-panel p-1">
+            {([["all", "Tous"], ["contacted", "Déjà contactés"], ["never", "Jamais contactés"]] as const).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setContactFilter(v)}
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                  contactFilter === v ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
+        {cityList.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5 shrink-0 text-faint" />
+            <select
+              value={cityFilter}
+              onChange={(e) => setCityFilter(e.target.value)}
+              className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[12px] font-medium text-foreground outline-none focus:border-primary"
+              aria-label="Filtrer par ville"
+            >
+              <option value="">Toutes les villes</option>
+              {cityList.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <InlineForm
