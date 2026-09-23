@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { ErrorBoundary, reloadOnce } from './components/ErrorBoundary.tsx'
+import { initAccent } from './lib/accent'
+
+// Couleur d'accent personnalisée (localStorage) posée AVANT le rendu → pas de flash.
+initAccent()
 
 // Après un déploiement, l'app restée ouverte peut demander un ancien chunk (hash
 // remplacé) → Vite émet `vite:preloadError`. On recharge automatiquement (1×)

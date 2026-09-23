@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw } from "lucide-react";
+import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
+import { ACCENT_PRESETS, getAccent, setAccent, isHex } from "@/lib/accent";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
@@ -105,6 +106,13 @@ export function Parametres() {
 
   const { dark, toggle: toggleTheme } = useTheme();
 
+  // Couleur d'accent (propre à cet appareil, comme le thème).
+  const [accent, setAccentState] = useState<string>(() => getAccent());
+  const chooseAccent = (color: string) => {
+    setAccent(color);
+    setAccentState(color);
+  };
+
   // Notifications push de CET appareil
   const { state, busy, enable, disable, sendTest } = usePush();
   const [testing, setTesting] = useState(false);
@@ -136,6 +144,46 @@ export function Parametres() {
           checked={dark}
           onChange={() => toggleTheme()}
         />
+      </Section>
+
+      {/* Couleur d'accent (token --primary) — s'applique aussi en thème sombre */}
+      <Section
+        icon={<Palette className="h-4 w-4" />}
+        title="Couleur d'accent"
+        hint="La couleur des boutons, liens et surbrillances (propre à cet appareil). Fonctionne aussi en mode sombre."
+      >
+        <div className="flex flex-wrap items-center gap-2.5">
+          {ACCENT_PRESETS.map((p) => {
+            const active = (accent || "") === p.value;
+            return (
+              <button
+                key={p.name}
+                type="button"
+                onClick={() => chooseAccent(p.value)}
+                title={p.name}
+                aria-label={p.name}
+                aria-pressed={active}
+                className={cn(
+                  "grid h-8 w-8 place-items-center rounded-full ring-offset-2 ring-offset-surface transition",
+                  active ? "ring-2 ring-foreground" : "ring-1 ring-border hover:ring-foreground/40",
+                )}
+                style={{ backgroundColor: p.value || "#0069fe" }}
+              >
+                {active && <Check className="h-4 w-4 text-white drop-shadow" />}
+              </button>
+            );
+          })}
+          {/* Couleur personnalisée (sélecteur natif) */}
+          <label
+            className="flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            title="Couleur personnalisée"
+          >
+            <span className="h-4 w-4 rounded-full border border-border" style={{ background: "conic-gradient(from 0deg,#ef4444,#f59e0b,#10b981,#3b82f6,#8b5cf6,#ef4444)" }} />
+            Perso
+            <input type="color" value={isHex(accent) ? accent : "#0069fe"} onChange={(e) => chooseAccent(e.target.value)} className="sr-only" />
+          </label>
+        </div>
+        <p className="mt-3 text-[11px] text-faint">« Bleu TTP » remet la couleur d'origine. Le texte des boutons s'ajuste (blanc/noir) pour rester lisible.</p>
       </Section>
 
       {/* Cet appareil */}
