@@ -3,6 +3,7 @@ import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bu
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
 import { ACCENT_PRESETS, getAccent, setAccent, isHex } from "@/lib/accent";
+import { NOTIF_TEXTS_CREATOR, NOTIF_TEXTS_AGENCY, type NotifTextField } from "@/lib/notifTexts";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
@@ -86,6 +87,22 @@ function Section({ icon, title, hint, children }: { icon: ReactNode; title: stri
   );
 }
 
+function NotifTextRow({ field, value, onChange, onSave }: { field: NotifTextField; value: string; onChange: (v: string) => void; onSave: () => void }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[11px] font-semibold text-foreground">{field.label}</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onSave}
+        placeholder={field.def}
+        className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+      />
+      {field.hint && <span className="text-[10px] leading-snug text-faint">{field.hint}</span>}
+    </div>
+  );
+}
+
 export function Parametres() {
   const { data: stored } = useAppState<NotifPrefs>((s: AppState) => (s["notifPrefs"] as NotifPrefs) ?? {});
   const [prefs, setPrefs] = useState<NotifPrefs>({});
@@ -111,6 +128,23 @@ export function Parametres() {
   const chooseAccent = (color: string) => {
     setAccent(color);
     setAccentState(color);
+  };
+
+  // Textes personnalisables des notifications (blob agence `notifTexts`).
+  const { data: storedTexts } = useAppState<Record<string, string>>((s: AppState) => (s["notifTexts"] as Record<string, string>) ?? {});
+  const [texts, setTexts] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (storedTexts) setTexts(storedTexts);
+  }, [storedTexts]);
+  const saveText = async (key: string, value: string) => {
+    invalidateAppState();
+    const fresh = ((await getAppState())["notifTexts"] as Record<string, string>) ?? {};
+    const next = { ...fresh };
+    if (value.trim()) next[key] = value.trim();
+    else delete next[key]; // vide = revient au texte par défaut
+    setTexts(next);
+    const ok = await saveAppStateKey("notifTexts", next);
+    if (!ok) toast("Erreur d'enregistrement — réessaie");
   };
 
   // Notifications push de CET appareil
@@ -184,6 +218,32 @@ export function Parametres() {
           </label>
         </div>
         <p className="mt-3 text-[11px] text-faint">« Bleu TTP » remet la couleur d'origine. Le texte des boutons s'ajuste (blanc/noir) pour rester lisible.</p>
+      </Section>
+
+      {/* Textes des notifications (titres personnalisables — blob notifTexts) */}
+      <Section
+        icon={<BellRing className="h-4 w-4" />}
+        title="Textes des notifications"
+        hint="Personnalise le titre de chaque notification push. Laisse vide = texte par défaut. Les modifs s'appliquent aux prochains envois."
+      >
+        <div className="flex flex-col gap-5">
+          <div>
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-faint">Ce que reçoit un créateur (quand tu agis)</div>
+            <div className="flex flex-col gap-3">
+              {NOTIF_TEXTS_CREATOR.map((f) => (
+                <NotifTextRow key={f.key} field={f} value={texts[f.key] ?? ""} onChange={(v) => setTexts((t) => ({ ...t, [f.key]: v }))} onSave={() => saveText(f.key, texts[f.key] ?? "")} />
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-faint">Ce que TU reçois (quand un créateur agit)</div>
+            <div className="flex flex-col gap-3">
+              {NOTIF_TEXTS_AGENCY.map((f) => (
+                <NotifTextRow key={f.key} field={f} value={texts[f.key] ?? ""} onChange={(v) => setTexts((t) => ({ ...t, [f.key]: v }))} onSave={() => saveText(f.key, texts[f.key] ?? "")} />
+              ))}
+            </div>
+          </div>
+        </div>
       </Section>
 
       {/* Cet appareil */}

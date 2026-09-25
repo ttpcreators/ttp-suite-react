@@ -152,6 +152,21 @@ async function loadPrefs(sb: ReturnType<typeof getServiceClient>): Promise<Notif
 }
 const prefOn = (prefs: NotifPrefs, key: string) => prefs[key] !== false;
 
+// Textes de notif personnalisés (blob `notifTexts`) — clé → titre. Vide = défaut.
+async function loadNotifTexts(sb: ReturnType<typeof getServiceClient>): Promise<Record<string, string>> {
+  try {
+    const { data } = await sb
+      .from("module_rows").select("a").eq("module", "__app_state__")
+      .order("created_at", { ascending: false }).limit(1);
+    const raw = (data?.[0] as { a?: unknown } | undefined)?.a;
+    const obj = typeof raw === "string" ? JSON.parse(raw) : (raw ?? {});
+    return (obj?.notifTexts as Record<string, string>) ?? {};
+  } catch {
+    return {};
+  }
+}
+const customText = (t: Record<string, string>, key: string, def: string) => (t[key] || "").trim() || def;
+
 /** Envoie un payload aux abonnements AGENCE ; purge les morts (404/410).
  *  Les appareils liés à un compte créateur sont EXCLUS : le digest contient des
  *  infos internes (factures en retard, contrats…) réservées à l'agence. */
@@ -250,11 +265,15 @@ Deno.serve(async (req: Request) => {
     const rawWho = caller.role === "creator" ? (caller.creatorName || "Un créateur") : String(body.creator ?? "Un créateur");
     const who = rawWho.slice(0, 60).replace(/\p{L}[\p{L}'’-]*/gu, (w) => w.charAt(0).toUpperCase() + w.slice(1));
     const what = String(body.text ?? "").slice(0, 140);
+    // Titre personnalisable (blob) : template avec {createur} et {action}.
+    const texts = await loadNotifTexts(sb);
+    const tpl = customText(texts, "a_activity", "{createur} a ajouté {action}");
+    const activityTitle = tpl.replace(/\{createur\}/g, who).replace(/\{action\}/g, `${article} ${kindLabel}`).slice(0, 120);
     // Tag STABLE par créateur (pas Date.now()) : deux notifs d'activité du même
     // créateur se REMPLACENT au lieu de s'empiler → borne le spam de notifications
     // qu'un compte créateur pourrait générer en boucle. (audit 2026-07-13)
     const payload = JSON.stringify({
-      title: `${who} a ajouté ${article} ${kindLabel}`,
+      title: activityTitle,
       body: what,
       url: "/",
       tag: `ttp-creator-${who}`.slice(0, 120),
@@ -307,18 +326,26 @@ Deno.serve(async (req: Request) => {
     const creator = String(body.creator ?? "").trim();
     if (!creator) return jsonRes({ error: "creator_manquant" }, 400);
     const what = String(body.text ?? "").slice(0, 140);
-    const title =
-      body.kind === "document" ? "📄 Nouveau document de ton agence"
-      : body.kind === "brief" ? "📋 Nouveau brief de ton agence"
-      : body.kind === "debrief" ? "📊 Nouveau débrief de ton agence"
-      : body.kind === "event" ? "📅 Nouvel évènement de ton agence"
-      : body.kind === "mediakit" ? "🖼️ Nouveau media kit de ton agence"
-      : body.kind === "task-done" ? "✅ Ta demande est faite"
-      : body.kind === "idea" ? "💡 Une idée de ton agence"
-      : body.kind === "gift" ? "🎁 Nouveau cadeau / dotation"
-      : body.kind === "invoice" ? "💸 Mise à jour de ta facture"
-      : body.kind === "roadmap" ? "🎯 Ta feuille de route a été mise à jour"
-      : "✓ Nouvelle tâche de ton agence";
+    const texts = await loadNotifTexts(sb);
+    const DEF: Record<string, string> = {
+      document: "📄 Nouveau document de ton agence",
+      brief: "📋 Nouveau brief de ton agence",
+      debrief: "📊 Nouveau débrief de ton agence",
+      event: "📅 Nouvel évènement de ton agence",
+      mediakit: "🖼️ Nouveau media kit de ton agence",
+      "task-done": "✅ Ta demande est faite",
+      idea: "💡 Une idée de ton agence",
+      gift: "🎁 Nouveau cadeau / dotation",
+      invoice: "💸 Mise à jour de ta facture",
+      roadmap: "🎯 Ta feuille de route a été mise à jour",
+    };
+    const KEY: Record<string, string> = {
+      document: "c_document", brief: "c_brief", debrief: "c_debrief", event: "c_event",
+      mediakit: "c_mediakit", "task-done": "c_taskdone", idea: "c_idea", gift: "c_gift",
+      invoice: "c_invoice", roadmap: "c_roadmap",
+    };
+    const kind = String(body.kind ?? "");
+    const title = customText(texts, KEY[kind] ?? "c_task", DEF[kind] ?? "✓ Nouvelle tâche de ton agence");
     const payload = JSON.stringify({
       title,
       body: what || "Ouvre ton espace pour voir le détail.",
