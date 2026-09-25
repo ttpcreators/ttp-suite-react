@@ -118,8 +118,12 @@ export function AddMenuButton({ label, items }: { label: string; items: AddMenuI
 }
 
 export function Field({ label, children, className = "" }: { label: string; children: ReactNode; className?: string }) {
+  // `min-w-full` = le champ occupe TOUTE la largeur (sa propre ligne). Sinon,
+  // la contrainte `sm:min-w-[150px]` l'écrasait sur desktop → il restait en ligne
+  // avec les autres et cassait l'alignement (ex. Description multi-lignes).
+  const full = /(?:^|\s)min-w-full(?:\s|$)/.test(className);
   return (
-    <label className={"flex min-w-0 flex-1 flex-col gap-1.5 sm:min-w-[150px] " + className}>
+    <label className={cn("flex flex-col gap-1.5", full ? "w-full basis-full" : "min-w-0 flex-1 sm:min-w-[150px]", className)}>
       <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</span>
       {children}
     </label>
