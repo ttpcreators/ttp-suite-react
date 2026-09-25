@@ -373,7 +373,7 @@ export function RepresentationContract() {
           <SelectTrigger className="h-9 w-auto min-w-[190px] rounded-full bg-surface" placeholder="Choisir un créateur" />
           <SelectContent>
             {creators.map((c, i) => (
-              <SelectItem key={c.id} index={i} value={c.name}>{titleCase(c.name)}</SelectItem>
+              <SelectItem key={c.id} index={i} value={c.name} img={c.photo_url}>{titleCase(c.name)}</SelectItem>
             ))}
             <SelectItem index={creators.length} value={EXT}>✎ Externe (hors roster)</SelectItem>
           </SelectContent>

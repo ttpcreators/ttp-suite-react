@@ -299,7 +299,7 @@ export function Briefs() {
     toast("PDF retiré");
   };
 
-  const creatorOptions = [{ value: "", label: "—" }, ...creators.map((c) => ({ value: c.name, label: c.name }))];
+  const creatorOptions = [{ value: "", label: "—" }, ...creators.map((c) => ({ value: c.name, label: c.name, img: c.photo_url }))];
 
   const ALL = "__all__";
   const filtered = (rows ?? []).filter((row) => {

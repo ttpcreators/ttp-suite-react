@@ -65,7 +65,7 @@ export function Echeances() {
   const [draft, setDraft] = useState<Blank>(blank());
   const [pendingDel, setPendingDel] = useState<null | { message: string; run: () => void }>(null);
 
-  const creatorOptions = creators.map((c) => ({ value: c.name, label: titleCase(c.name) }));
+  const creatorOptions = creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url }));
 
   const rows = useMemo(() => {
     return list

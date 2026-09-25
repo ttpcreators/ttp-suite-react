@@ -251,7 +251,8 @@ export function SelectField({
   label: string;
   value: string;
   onChange: (v: string) => void;
-  options: { value: string; label: string }[];
+  /** `img` (optionnel) = photo affichée devant le libellé (ex. créateur). */
+  options: { value: string; label: string; img?: string | null }[];
   className?: string;
 }) {
   return (
@@ -260,7 +261,7 @@ export function SelectField({
         <SelectTrigger className="h-[42px] w-full rounded-lg bg-surface" placeholder="Sélectionner…" />
         <SelectContent>
           {options.map((o, i) => (
-            <SelectItem key={o.value} index={i} value={o.value}>
+            <SelectItem key={o.value} index={i} value={o.value} img={o.img}>
               {o.label}
             </SelectItem>
           ))}

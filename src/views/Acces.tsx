@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Eye, EyeOff, Trash2, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { initials, titleCase, cn } from "@/lib/utils";
+import { titleCase, cn } from "@/lib/utils";
+import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useNavSub } from "@/lib/navSub";
 import { CredentialVault } from "@/views/CredentialVault";
 import { useSearch, matchQuery } from "@/lib/search";
@@ -37,7 +38,7 @@ function genPwd(): string {
   return `${pick(a, 2)}${pick(b, 4)}${pick(n, 3)}!`;
 }
 
-function AccountRow({ a, onDelete }: { a: AccessAccount; onDelete: (a: AccessAccount) => void }) {
+function AccountRow({ a, onDelete, photoUrl }: { a: AccessAccount; onDelete: (a: AccessAccount) => void; photoUrl?: string | null }) {
   const [shown, setShown] = useState(false);
   const avatarSource = a.role === "creator" && a.creator ? titleCase(a.creator) : a.email;
   const subtitle =
@@ -52,9 +53,7 @@ function AccountRow({ a, onDelete }: { a: AccessAccount; onDelete: (a: AccessAcc
 
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm transition-colors hover:bg-rowhover">
-      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface text-xs font-semibold text-muted-foreground">
-        {initials(avatarSource)}
-      </div>
+      <CreatorAvatar name={avatarSource} photoUrl={photoUrl ?? null} className="h-10 w-10 shrink-0 rounded-xl" />
 
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold text-foreground">{a.email}</div>
@@ -254,7 +253,7 @@ export function Acces() {
           onChange={setCreatorName}
           options={[
             { value: "", label: "— Choisir —" },
-            ...creators.map((c) => ({ value: c.name, label: titleCase(c.name) })),
+            ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url })),
           ]}
         />
       )}
@@ -311,7 +310,12 @@ export function Acces() {
       ) : (
         <div className="flex flex-col gap-2.5">
           {filtered.map((a, i) => (
-            <AccountRow key={`${a.email}-${i}`} a={a} onDelete={removeAccount} />
+            <AccountRow
+              key={`${a.email}-${i}`}
+              a={a}
+              onDelete={removeAccount}
+              photoUrl={a.role === "creator" && a.creator ? creators.find((c) => c.name.trim().toLowerCase() === a.creator!.trim().toLowerCase())?.photo_url ?? null : null}
+            />
           ))}
         </div>
       )}

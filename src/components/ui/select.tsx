@@ -18,6 +18,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { LucideIcon } from "lucide-react";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { CreatorAvatar } from "@/components/ui/creator-avatar";
 
 function cn(...inputs: (string | undefined | null | false | Record<string, boolean>)[]) {
   return twMerge(clsx(inputs));
@@ -385,10 +386,13 @@ interface SelectItemProps extends HTMLAttributes<HTMLDivElement> {
   index: number;
   value: string;
   disabled?: boolean;
+  /** Photo à afficher devant le libellé (ex. créateur). `undefined` = aucune ;
+   *  `null` = avatar avec initiales (pas de photo). `children` doit être le nom. */
+  img?: string | null;
 }
 
 const SelectItem = forwardRef<HTMLDivElement, SelectItemProps>(
-  ({ className, children, icon: Icon, value, index, disabled = false, ...props }, ref) => {
+  ({ className, children, icon: Icon, value, index, disabled = false, img, ...props }, ref) => {
     const selectCtx = useSelectContext();
     const contentCtx = useContext(SelectContentContext);
     const internalRef = useRef<HTMLDivElement>(null);
@@ -418,6 +422,7 @@ const SelectItem = forwardRef<HTMLDivElement, SelectItemProps>(
         {...props}
       >
         {Icon && <Icon size={16} strokeWidth={isActive || isChecked ? 2 : 1.5} className="shrink-0 transition-[color,stroke-width] duration-80" />}
+        {img !== undefined && <CreatorAvatar name={typeof children === "string" ? children : ""} photoUrl={img} className="h-5 w-5 shrink-0 rounded-full" />}
         <span className="flex-1 min-w-0 truncate">{children}</span>
         <AnimatePresence>
           {isChecked && (

@@ -59,7 +59,7 @@ export function Idees() {
   const live = useLiveKey();
 
   const creators = useCreators();
-  const creatorOptions = creators.map((c) => ({ value: c.name, label: titleCase(c.name) }));
+  const creatorOptions = creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url }));
 
   const [formOpen, setFormOpen] = useState(false);
   const [text, setText] = useState("");

@@ -652,7 +652,7 @@ export function Facturation() {
   }
 
   const draftTotals = draft ? totalsOf(draft.items, draft.franchise, draft.vatRate, draft.commissionRate) : null;
-  const creatorOptions = [{ value: "", label: "— Aucun —" }, ...creators.map((c) => ({ value: c.name, label: titleCase(c.name) }))];
+  const creatorOptions = [{ value: "", label: "— Aucun —" }, ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url }))];
   const bankOptions = [
     { value: "", label: banks.length ? "— Aucun compte —" : "— Ajoute un compte —" },
     ...banks.map((b) => ({ value: b.id, label: b.label || b.iban || "Compte" })),

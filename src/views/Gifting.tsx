@@ -83,7 +83,7 @@ export function Gifting() {
 
   const creatorOptions = [
     { value: "", label: "— Choisir —" },
-    ...creators.map((c) => ({ value: c.name, label: titleCase(c.name) })),
+    ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url })),
   ];
 
   function resetForm() {

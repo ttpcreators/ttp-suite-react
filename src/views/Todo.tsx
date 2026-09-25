@@ -529,7 +529,7 @@ export function Todo() {
             onChange={setCreator}
             options={[
               { value: "", label: "Agence (tous)" },
-              ...creators.map((c) => ({ value: c.name, label: titleCase(c.name) })),
+              ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url })),
             ]}
           />
         )}
@@ -612,7 +612,7 @@ export function Todo() {
                       <SelectItem index={0} value={ALL}>Tous</SelectItem>
                       <SelectItem index={1} value="__agency__">Agence</SelectItem>
                       {creators.map((c, i) => (
-                        <SelectItem key={c.id} index={i + 2} value={c.name}>
+                        <SelectItem key={c.id} index={i + 2} value={c.name} img={c.photo_url}>
                           {titleCase(c.name)}
                         </SelectItem>
                       ))}
