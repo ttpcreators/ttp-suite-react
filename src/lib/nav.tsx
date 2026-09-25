@@ -28,6 +28,7 @@ import {
   CalendarClock,
   Settings,
   Activity,
+  BarChart3,
   Mail,
   CreditCard,
   FolderOpen,
@@ -43,6 +44,7 @@ export type ViewId =
   | "relances"
   | "echeances"
   | "roster"
+  | "engagement"
   | "vivier"
   | "mediakit"
   | "briefs"
@@ -93,6 +95,7 @@ export const NAV: NavFamily[] = [
     icon: Users,
     items: [
       { id: "roster", label: "Roster", icon: Users },
+      { id: "engagement", label: "Engagement", icon: BarChart3 },
       { id: "suivi", label: "Suivi engagement", icon: Activity },
       {
         id: "mediakit",
