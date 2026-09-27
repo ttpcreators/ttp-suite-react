@@ -9,6 +9,11 @@
 -- de l'agent, et y reste comme trace du test).
 -- ============================================================================
 
+-- Supabase : `postgres` n'est pas superuser — il faut lui donner le droit de
+-- basculer en ttp_agent (SET ROLE) pour exécuter les tests. Sans effet sur les
+-- droits de ttp_agent lui-même. Idempotent.
+grant ttp_agent to postgres;
+
 do $$
 declare n int;
 begin
