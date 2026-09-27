@@ -25,12 +25,14 @@ export const NOTIF_TEXTS_CREATOR: NotifTextField[] = [
   { key: "c_roadmap", label: "Feuille de route", def: "🎯 Ta feuille de route a été mise à jour" },
 ];
 
-/** Notifs reçues par l'AGENCE (quand un créateur agit). Template avec variables. */
+/** Notifs reçues par l'AGENCE (quand un créateur agit), PAR type d'action.
+ *  Variable disponible : {createur} = le prénom du créateur. */
 export const NOTIF_TEXTS_AGENCY: NotifTextField[] = [
-  {
-    key: "a_activity",
-    label: "Un créateur ajoute quelque chose",
-    def: "{createur} a ajouté {action}",
-    hint: "Variables : {createur} = le prénom · {action} = « une tâche », « une idée », « un contact »…",
-  },
+  { key: "a_task", label: "Créateur ajoute une tâche", def: "{createur} a ajouté une tâche", hint: "Variable : {createur} = le prénom du créateur." },
+  { key: "a_idea", label: "Créateur propose une idée", def: "💡 {createur} a proposé une idée" },
+  { key: "a_contact", label: "Créateur ajoute un contact", def: "{createur} a ajouté un contact" },
+  { key: "a_event", label: "Créateur ajoute un évènement", def: "📅 {createur} a ajouté un évènement" },
+  { key: "a_gift", label: "Créateur — cadeau / dotation", def: "🎁 {createur} — cadeau reçu" },
+  { key: "a_facture", label: "Créateur dépose une facture", def: "💸 {createur} a déposé une facture" },
+  { key: "a_stats", label: "Créateur envoie ses stats", def: "📊 {createur} a envoyé ses stats" },
 ];

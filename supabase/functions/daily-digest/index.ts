@@ -259,16 +259,29 @@ Deno.serve(async (req: Request) => {
   if (body?.event === "creator_activity") {
     const prefs = await loadPrefs(sb);
     if (!prefOn(prefs, "pushCreatorActivity")) return jsonRes({ ok: true, skipped: "pref_off" });
-    const kindLabel = body.kind === "idee" ? "idée" : body.kind === "evenement" ? "évènement" : body.kind === "contact" ? "contact" : "tâche";
-    const article = body.kind === "evenement" || body.kind === "contact" ? "un" : "une";
     // Anti-usurpation : pour un JWT créateur, le nom vient de SON profil (pas du corps de requête).
     const rawWho = caller.role === "creator" ? (caller.creatorName || "Un créateur") : String(body.creator ?? "Un créateur");
     const who = rawWho.slice(0, 60).replace(/\p{L}[\p{L}'’-]*/gu, (w) => w.charAt(0).toUpperCase() + w.slice(1));
     const what = String(body.text ?? "").slice(0, 140);
-    // Titre personnalisable (blob) : template avec {createur} et {action}.
+    // Titre personnalisable PAR TYPE d'action du créateur (blob `notifTexts`).
     const texts = await loadNotifTexts(sb);
-    const tpl = customText(texts, "a_activity", "{createur} a ajouté {action}");
-    const activityTitle = tpl.replace(/\{createur\}/g, who).replace(/\{action\}/g, `${article} ${kindLabel}`).slice(0, 120);
+    const DEFA: Record<string, string> = {
+      tache: "{createur} a ajouté une tâche",
+      idee: "💡 {createur} a proposé une idée",
+      contact: "{createur} a ajouté un contact",
+      evenement: "📅 {createur} a ajouté un évènement",
+      gift: "🎁 {createur} — cadeau reçu",
+      facture: "💸 {createur} a déposé une facture",
+      stats: "📊 {createur} a envoyé ses stats",
+    };
+    const KEYA: Record<string, string> = {
+      tache: "a_task", idee: "a_idea", contact: "a_contact", evenement: "a_event",
+      gift: "a_gift", facture: "a_facture", stats: "a_stats",
+    };
+    const aKind = String(body.kind ?? "tache");
+    const activityTitle = customText(texts, KEYA[aKind] ?? "a_task", DEFA[aKind] ?? "{createur} a ajouté quelque chose")
+      .replace(/\{createur\}/g, who)
+      .slice(0, 120);
     // Tag STABLE par créateur (pas Date.now()) : deux notifs d'activité du même
     // créateur se REMPLACENT au lieu de s'empiler → borne le spam de notifications
     // qu'un compte créateur pourrait générer en boucle. (audit 2026-07-13)
