@@ -30,6 +30,7 @@ import {
   Activity,
   BarChart3,
   HeartPulse,
+  Milestone,
   Mail,
   CreditCard,
   FolderOpen,
@@ -47,6 +48,7 @@ export type ViewId =
   | "roster"
   | "engagement"
   | "vivier"
+  | "collabs"
   | "mediakit"
   | "briefs"
   | "gifting"
@@ -117,6 +119,7 @@ export const NAV: NavFamily[] = [
     label: "Collaborations",
     icon: Briefcase,
     items: [
+      { id: "collabs", label: "Collabs", icon: Milestone },
       { id: "briefs", label: "Briefs", icon: FileText },
       { id: "debrief", label: "Debrief", icon: FileChartColumn },
       { id: "gifting", label: "Gifting", icon: Gift },

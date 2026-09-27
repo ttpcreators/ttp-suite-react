@@ -97,6 +97,29 @@ create table if not exists public.briefs (
   note text, sort_order int default 0, created_at timestamptz default now()
 );
 
+-- Collabs : cycle de vie complet d'une collaboration (11 étapes datées) —
+-- étape courante sur `collabs.step`, historique daté dans `collab_steps`.
+-- (cf. sql/2026-09-27-collabs.sql) — sert de socle à l'agent (détection de ce qui stagne).
+create table if not exists public.collabs (
+  id uuid primary key default gen_random_uuid(),
+  brand text not null, creator text, contact text, title text,
+  deliverables text, cachet text,
+  step int not null default 1 check (step between 1 and 11),
+  status text not null default 'active', brief_id uuid, note text,
+  sort_order int default 0,
+  created_at timestamptz default now(), updated_at timestamptz default now()
+);
+create index if not exists collabs_sort_idx    on public.collabs (sort_order);
+create index if not exists collabs_creator_idx on public.collabs (creator);
+create index if not exists collabs_step_idx     on public.collabs (step);
+create table if not exists public.collab_steps (
+  id uuid primary key default gen_random_uuid(),
+  collab_id uuid not null references public.collabs(id) on delete cascade,
+  step int not null check (step between 1 and 11),
+  reached_at timestamptz default now(), note text
+);
+create index if not exists collab_steps_collab_idx on public.collab_steps (collab_id);
+
 -- Gifting : cadeaux/dotations produits reçus par les créateurs (cf. sql/gifting.sql).
 create table if not exists public.gifting (
   id uuid primary key default gen_random_uuid(),
@@ -248,7 +271,8 @@ do $$
 declare r record; t text;
 declare tbls text[] := array[
   'creators','contacts','invoices','prospects','module_rows',
-  'todos','briefs','gifting','ideas','events','messages','profiles','documents'
+  'todos','briefs','gifting','ideas','events','messages','profiles','documents',
+  'collabs','collab_steps'
 ];
 begin
   for r in select policyname, tablename from pg_policies
@@ -329,6 +353,40 @@ create policy gifting_scoped on public.gifting for all to authenticated
   using (public.is_agency() or creator = public.my_creator()) with check (public.is_agency() or creator = public.my_creator());
 create policy ideas_scoped  on public.ideas  for all to authenticated
   using (public.is_agency() or creator = public.my_creator()) with check (public.is_agency() or creator = public.my_creator());
+
+-- COLLABS : agence = tout ; créatrice = ses collabs. `collab_steps` = historique
+-- daté (lecture agence + créatrice liée ; écrit surtout par le trigger DEFINER).
+create policy collabs_scoped on public.collabs for all to authenticated
+  using (public.is_agency() or creator = public.my_creator())
+  with check (public.is_agency() or creator = public.my_creator());
+create policy collab_steps_read on public.collab_steps for select to authenticated
+  using (public.is_agency() or exists (
+    select 1 from public.collabs c where c.id = collab_steps.collab_id and c.creator = public.my_creator()));
+create policy collab_steps_agency on public.collab_steps for all to authenticated
+  using (public.is_agency()) with check (public.is_agency());
+-- updated_at auto + journalisation datée de chaque changement d'étape.
+create or replace function public.collabs_touch() returns trigger
+  language plpgsql as $$ begin new.updated_at := now(); return new; end $$;
+drop trigger if exists collabs_touch_upd on public.collabs;
+create trigger collabs_touch_upd before update on public.collabs
+  for each row execute function public.collabs_touch();
+create or replace function public.collabs_log_step() returns trigger
+  language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if (tg_op = 'INSERT') then
+    insert into public.collab_steps(collab_id, step, reached_at)
+      values (new.id, new.step, coalesce(new.created_at, now()));
+  elsif (tg_op = 'UPDATE' and new.step is distinct from old.step) then
+    insert into public.collab_steps(collab_id, step, reached_at) values (new.id, new.step, now());
+  end if;
+  return new;
+end $$;
+drop trigger if exists collabs_log_step_ins on public.collabs;
+create trigger collabs_log_step_ins after insert on public.collabs
+  for each row execute function public.collabs_log_step();
+drop trigger if exists collabs_log_step_upd on public.collabs;
+create trigger collabs_log_step_upd after update on public.collabs
+  for each row execute function public.collabs_log_step();
 -- events : un événement peut concerner plusieurs créateurs (who = "Nom A, Nom B").
 -- Le créateur le voit si son nom figure dans la liste.
 -- LECTURE : le créateur voit tout évènement où son nom figure (liste "Nom A, Nom B").

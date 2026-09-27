@@ -22,6 +22,7 @@ export const TRASH_TTL_DAYS = 30;
 /** Libellé lisible par table (pour l'affichage de la corbeille). */
 export const TABLE_LABELS: Record<string, string> = {
   briefs: "Brief",
+  collabs: "Collab",
   gifting: "Gifting",
   contacts: "Contact",
   ideas: "Idée",
