@@ -6,7 +6,8 @@ import { useAppState, saveAppStateKey, getAppState, invalidateAppState, parseAmo
 import { useCreators } from "@/lib/useCreators";
 import { commissionMap } from "@/lib/commission";
 import { totalsOf, type LineItem } from "@/lib/invoice";
-import { titleCase, initials } from "@/lib/utils";
+import { titleCase } from "@/lib/utils";
+import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -213,9 +214,11 @@ export function Reversements() {
             <div key={r.creator} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-muted text-[11px] font-semibold text-muted-foreground">
-                    {initials(r.creator)}
-                  </span>
+                  <CreatorAvatar
+                    name={titleCase(r.creator)}
+                    photoUrl={creators.find((c) => c.name.trim().toLowerCase() === r.creator.trim().toLowerCase())?.photo_url ?? null}
+                    className="h-10 w-10 shrink-0 rounded-xl"
+                  />
                   <div>
                     <div className="text-sm font-semibold text-foreground">{titleCase(r.creator)}</div>
                     <div className="text-[11px] text-faint">Commission agence {r.rate}%</div>
