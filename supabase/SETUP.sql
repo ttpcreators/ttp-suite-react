@@ -899,6 +899,91 @@ drop policy if exists creator_pool_agency on public.creator_pool;
 create policy creator_pool_agency on public.creator_pool for all to authenticated
   using (public.is_agency()) with check (public.is_agency());
 
+-- ----------------------------------------------------------------------------
+-- AGENT · schéma agent_lecture : vues en lecture seule pour l'agent IA
+-- (cf. sql/2026-09-27-agent-lecture.sql — colonnes sensibles exclues, aucun
+--  droit accordé ici : le rôle ttp_agent reçoit ses GRANT en Phase 5).
+-- ----------------------------------------------------------------------------
+create schema if not exists agent_lecture;
+revoke all   on schema agent_lecture from public;
+revoke usage on schema agent_lecture from anon, authenticated;
+
+create or replace view agent_lecture.creatrices as
+select id, name as nom, handle, platform as plateforme, instagram, tiktok,
+       niche as univers, followers, reach, er, status as statut, ville,
+       email_pro, stats, followers_history, stats_month as stats_maj,
+       created_at as arrivee_le
+  from public.creators;
+
+create or replace view agent_lecture.collabs as
+select id, brand as marque, creator as creatrice, contact, title as libelle,
+       deliverables as livrables, cachet, step as etape, status as statut,
+       note, created_at as creee_le, updated_at as maj_le
+  from public.collabs;
+
+create or replace view agent_lecture.collab_etapes as
+select collab_id, step as etape, reached_at as franchie_le, note
+  from public.collab_steps;
+
+create or replace view agent_lecture.briefs as
+select id, brand as marque, creator as creatrice, deliverables as livrables,
+       due as echeance, status as statut, budget, objectif, created_at
+  from public.briefs;
+
+create or replace view agent_lecture.planning as
+select id, date, time as heure, title as titre, type, who as qui, source, created_at
+  from public.events where deleted = false;
+
+create or replace view agent_lecture.echeances as
+select d->>'id' as id, d->>'creator' as creatrice, d->>'type' as type,
+       case when (d->>'start') ~ '^\d{4}-\d{2}-\d{2}'
+            then left(d->>'start', 10)::date else null end as debut,
+       case when (d->>'months') ~ '^\d+(\.\d+)?$'
+            then (d->>'months')::numeric else null end as duree_mois,
+       case when (d->>'start') ~ '^\d{4}-\d{2}-\d{2}' and (d->>'months') ~ '^\d+$'
+            then (left(d->>'start', 10)::date
+                  + make_interval(months => (d->>'months')::int))::date
+            else null end as fin,
+       d->>'note' as note
+  from (select a from public.module_rows
+         where module = '__app_state__' order by created_at desc limit 1) m,
+       jsonb_array_elements(
+         coalesce(nullif(m.a, '')::jsonb -> 'contractDeadlines', '[]'::jsonb)) as d;
+
+create or replace view agent_lecture.factures as
+select id, ref, party as marque, creator as creatrice, date, status as statut, created_at
+  from public.invoices;
+
+create or replace view agent_lecture.reversements as
+select e.key as creatrice, p->>'id' as id,
+       case when (p->>'date') ~ '^\d{4}-\d{2}-\d{2}'
+            then left(p->>'date', 10)::date else null end as paye_le
+  from (select a from public.module_rows
+         where module = '__app_state__' order by created_at desc limit 1) m,
+       jsonb_each(coalesce(nullif(m.a, '')::jsonb -> 'creatorPayouts', '{}'::jsonb)) as e(key, value),
+       jsonb_array_elements(
+         case when jsonb_typeof(e.value) = 'array' then e.value else '[]'::jsonb end) as p;
+
+create or replace view agent_lecture.contacts_marques as
+select id, brand as marque,
+       coalesce(nullif(trim(concat(coalesce(first_name, ''), ' ', coalesce(last_name, ''))), ''), person) as personne,
+       role, tag, email, phone as telephone, instagram, city as ville,
+       last_contacted as dernier_contact, created_at
+  from public.contacts where creator is null;
+
+create or replace view agent_lecture.prospection as
+select id, brand as marque, contact, value as valeur, stage as etape, created_at
+  from public.prospects;
+
+create or replace view agent_lecture.scouting as
+select id, name as nom, handle, email, tag, note,
+       last_contacted as dernier_contact, created_at
+  from public.creator_pool;
+
+revoke all on all tables in schema agent_lecture from public, anon, authenticated;
+alter default privileges in schema agent_lecture
+  revoke all on tables from public, anon, authenticated;
+
 -- ============================================================================
 -- FIN. Vérif rapide (en étant DÉCONNECTÉ, ces requêtes doivent renvoyer 0 ligne) :
 --   select * from public.creators;
