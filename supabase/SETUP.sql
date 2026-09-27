@@ -984,6 +984,92 @@ revoke all on all tables in schema agent_lecture from public, anon, authenticate
 alter default privileges in schema agent_lecture
   revoke all on tables from public, anon, authenticated;
 
+-- ----------------------------------------------------------------------------
+-- AGENT · schéma agent : les 7 tables où l'agent écrit (cf. sql/2026-09-27-
+-- agent-schema.sql). App = RLS agence ; rôle ttp_agent = Phase 5. ⚠️ Nécessite
+-- d'ajouter `agent` aux « Exposed schemas » du dashboard (jamais agent_lecture).
+-- ----------------------------------------------------------------------------
+create schema if not exists agent;
+revoke all on schema agent from public, anon;
+grant usage on schema agent to authenticated;
+
+create table if not exists agent.cockpits (
+  id uuid primary key default gen_random_uuid(),
+  jour date not null unique, contenu text not null, cree_le timestamptz default now()
+);
+create table if not exists agent.actions (
+  id uuid primary key default gen_random_uuid(),
+  type text not null check (type in ('brouillon_mail','whatsapp','linkedin','instagram','alerte')),
+  cible text, contexte text, contenu text, lien_spark text,
+  statut text not null default 'a_valider'
+    check (statut in ('a_valider','envoye','modifie_envoye','ecarte')),
+  cree_le timestamptz default now(), traite_le timestamptz
+);
+create index if not exists agent_actions_statut_idx on agent.actions (statut);
+create table if not exists agent.prospects (
+  id uuid primary key default gen_random_uuid(),
+  marque text not null, signal text, signal_date date, contact text, contact_role text,
+  canal text, creatrice text, angle text, premier_message text,
+  statut text not null default 'propose'
+    check (statut in ('propose','valide','ecarte','contacte','relance_1','relance_2','relance_3','repondu','converti','abandonne')),
+  prochaine_relance date, notes text,
+  cree_le timestamptz default now(), maj_le timestamptz default now()
+);
+create index if not exists agent_prospects_statut_idx  on agent.prospects (statut);
+create index if not exists agent_prospects_relance_idx on agent.prospects (prochaine_relance);
+create table if not exists agent.cercle (
+  id uuid primary key default gen_random_uuid(),
+  contact text not null, entreprise text,
+  type text check (type in ('marque_cliente','agence_partenaire','prospect_chaud')),
+  frequence text, dernier_contact date, prochain_pretexte text,
+  statut text not null default 'propose' check (statut in ('propose','valide')),
+  cree_le timestamptz default now(), maj_le timestamptz default now()
+);
+create table if not exists agent.memoire_createurs (
+  id uuid primary key default gen_random_uuid(),
+  creatrice text not null,
+  categorie text not null check (categorie in
+    ('anniversaire','projet','voyage','examen','objectif','preference_tournage','disponibilite')),
+  info text not null, date date, source text, cree_le timestamptz default now()
+);
+create index if not exists agent_memoire_creatrice_idx on agent.memoire_createurs (creatrice);
+create table if not exists agent.lecons (
+  id uuid primary key default gen_random_uuid(),
+  module text, lecon text not null, cree_le timestamptz default now()
+);
+create table if not exists agent.journal (
+  id uuid primary key default gen_random_uuid(),
+  action text not null, detail text, cree_le timestamptz default now()
+);
+create index if not exists agent_journal_date_idx on agent.journal (cree_le);
+
+create or replace function agent.touch_maj() returns trigger
+  language plpgsql as $$ begin new.maj_le := now(); return new; end $$;
+drop trigger if exists agent_prospects_touch on agent.prospects;
+create trigger agent_prospects_touch before update on agent.prospects
+  for each row execute function agent.touch_maj();
+drop trigger if exists agent_cercle_touch on agent.cercle;
+create trigger agent_cercle_touch before update on agent.cercle
+  for each row execute function agent.touch_maj();
+
+do $$
+declare t text;
+begin
+  foreach t in array array['cockpits','actions','prospects','cercle','memoire_createurs','lecons','journal']
+  loop
+    execute format('alter table agent.%I enable row level security;', t);
+    execute format('drop policy if exists %I_agence on agent.%I;', t, t);
+    execute format(
+      'create policy %I_agence on agent.%I for all to authenticated using (public.is_agency()) with check (public.is_agency());',
+      t, t);
+  end loop;
+end $$;
+
+grant select, insert, update, delete on all tables in schema agent to authenticated;
+alter default privileges in schema agent
+  grant select, insert, update, delete on tables to authenticated;
+revoke all on all tables in schema agent from anon;
+
 -- ============================================================================
 -- FIN. Vérif rapide (en étant DÉCONNECTÉ, ces requêtes doivent renvoyer 0 ligne) :
 --   select * from public.creators;
