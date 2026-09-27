@@ -28,6 +28,7 @@ const Stats = lazy(() => import("@/views/Stats").then((m) => ({ default: m.Stats
 const Facturation = lazy(() => import("@/views/Facturation").then((m) => ({ default: m.Facturation })));
 const Briefs = lazy(() => import("@/views/Briefs").then((m) => ({ default: m.Briefs })));
 const Collabs = lazy(() => import("@/views/Collabs").then((m) => ({ default: m.Collabs })));
+const AgentView = lazy(() => import("@/views/Agent").then((m) => ({ default: m.AgentView })));
 const Gifting = lazy(() => import("@/views/Gifting").then((m) => ({ default: m.Gifting })));
 const Idees = lazy(() => import("@/views/Idees").then((m) => ({ default: m.Idees })));
 const Todo = lazy(() => import("@/views/Todo").then((m) => ({ default: m.Todo })));
@@ -59,6 +60,7 @@ const BASE = import.meta.env.BASE_URL;
 
 const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   apercu: Apercu,
+  agent: AgentView,
   stats: Stats,
   facturation: Facturation,
   reversements: Reversements,
@@ -525,7 +527,7 @@ export default function App() {
 
   // Rôle agence : fondateur = accès total ; membre = tout SAUF Finance & Accès.
   const isFounder = agencyRole === "founder";
-  const FOUNDER_ONLY: ViewId[] = ["facturation", "reversements", "relances", "echeances", "acces", "diagnostique"];
+  const FOUNDER_ONLY: ViewId[] = ["facturation", "reversements", "relances", "echeances", "acces", "diagnostique", "agent"];
   const hiddenIds = isFounder ? [] : FOUNDER_ONLY;
   const canSee = (id: ViewId) => !hiddenIds.includes(id);
 

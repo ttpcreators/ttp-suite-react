@@ -31,6 +31,7 @@ import {
   BarChart3,
   HeartPulse,
   Milestone,
+  Bot,
   Mail,
   CreditCard,
   FolderOpen,
@@ -39,6 +40,7 @@ import {
 
 export type ViewId =
   | "apercu"
+  | "agent"
   | "stats"
   | "objectifs"
   | "facturation"
@@ -89,6 +91,7 @@ export const NAV: NavFamily[] = [
     icon: Gauge,
     items: [
       { id: "apercu", label: "Aperçu", icon: LayoutDashboard },
+      { id: "agent", label: "Agent", icon: Bot },
       { id: "stats", label: "Stats", icon: TrendingUp },
       { id: "objectifs", label: "Objectifs", icon: Target },
     ],
