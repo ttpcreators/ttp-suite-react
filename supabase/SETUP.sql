@@ -1070,6 +1070,38 @@ alter default privileges in schema agent
   grant select, insert, update, delete on tables to authenticated;
 revoke all on all tables in schema agent from anon;
 
+-- ----------------------------------------------------------------------------
+-- AGENT · droits du rôle ttp_agent (cf. sql/2026-09-27-agent-role.sql).
+-- Le rôle LUI-MÊME (login + mot de passe) se crée via ce fichier daté — jamais
+-- de mot de passe ici. Ce bloc ne fait que (re)poser grants + policies SI le
+-- rôle existe (re-run de SETUP.sql sans le rôle = no-op propre).
+-- ----------------------------------------------------------------------------
+do $$
+declare t text;
+begin
+  if not exists (select 1 from pg_roles where rolname = 'ttp_agent') then
+    raise notice 'ttp_agent absent — lancer sql/2026-09-27-agent-role.sql (mot de passe hors dépôt)';
+    return;
+  end if;
+  execute 'grant usage on schema agent_lecture to ttp_agent';
+  execute 'grant select on all tables in schema agent_lecture to ttp_agent';
+  execute 'alter default privileges in schema agent_lecture grant select on tables to ttp_agent';
+  execute 'grant usage on schema agent to ttp_agent';
+  execute 'grant select, insert, update on all tables in schema agent to ttp_agent';
+  execute 'alter default privileges in schema agent grant select, insert, update on tables to ttp_agent';
+  execute 'revoke all on all tables in schema public from ttp_agent';
+  execute 'revoke create on schema public from ttp_agent';
+  foreach t in array array['cockpits','actions','prospects','cercle','memoire_createurs','lecons','journal']
+  loop
+    execute format('drop policy if exists %I_ttp_agent_sel on agent.%I;', t, t);
+    execute format('drop policy if exists %I_ttp_agent_ins on agent.%I;', t, t);
+    execute format('drop policy if exists %I_ttp_agent_upd on agent.%I;', t, t);
+    execute format('create policy %I_ttp_agent_sel on agent.%I for select to ttp_agent using (true);', t, t);
+    execute format('create policy %I_ttp_agent_ins on agent.%I for insert to ttp_agent with check (true);', t, t);
+    execute format('create policy %I_ttp_agent_upd on agent.%I for update to ttp_agent using (true) with check (true);', t, t);
+  end loop;
+end $$;
+
 -- ============================================================================
 -- FIN. Vérif rapide (en étant DÉCONNECTÉ, ces requêtes doivent renvoyer 0 ligne) :
 --   select * from public.creators;
