@@ -29,6 +29,7 @@ import {
   Settings,
   Activity,
   BarChart3,
+  HeartPulse,
   Mail,
   CreditCard,
   FolderOpen,
@@ -62,6 +63,7 @@ export type ViewId =
   | "checklist"
   | "acces"
   | "parametres"
+  | "diagnostique"
   | "suivi"
   | "corbeille";
 
@@ -180,6 +182,7 @@ export const NAV: NavFamily[] = [
         ],
       },
       { id: "parametres", label: "Paramètres", icon: Settings },
+      { id: "diagnostique", label: "Diagnostique", icon: HeartPulse },
     ],
   },
 ];

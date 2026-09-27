@@ -10,6 +10,7 @@ import { Notifications } from "@/components/ui/notifications";
 import { useNotifications } from "@/lib/useNotifications";
 import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { maybeAutoRun } from "@/lib/diagnostics";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Login } from "@/components/Login";
@@ -49,6 +50,7 @@ const Reversements = lazy(() => import("@/views/Reversements").then((m) => ({ de
 const Relances = lazy(() => import("@/views/Relances").then((m) => ({ default: m.Relances })));
 const Echeances = lazy(() => import("@/views/Echeances").then((m) => ({ default: m.Echeances })));
 const Parametres = lazy(() => import("@/views/Parametres").then((m) => ({ default: m.Parametres })));
+const Diagnostique = lazy(() => import("@/views/Diagnostique").then((m) => ({ default: m.Diagnostique })));
 const EngagementSuivi = lazy(() => import("@/views/EngagementSuivi").then((m) => ({ default: m.EngagementSuivi })));
 const Engagement = lazy(() => import("@/views/Engagement").then((m) => ({ default: m.Engagement })));
 
@@ -79,6 +81,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   mediakit: Mediakit,
   templates: Templates,
   parametres: Parametres,
+  diagnostique: Diagnostique,
   suivi: EngagementSuivi,
   engagement: Engagement,
   corbeille: Corbeille,
@@ -451,6 +454,12 @@ export default function App() {
     };
   }, [session, profileReload]);
 
+  // Audit de santé auto (matin/soir) : au chargement, si le dernier date de +8 h.
+  // Réservé au fondateur (les checks lisent des données finance/RLS).
+  useEffect(() => {
+    if (profile?.role === "agency" && agencyRole === "founder") void maybeAutoRun();
+  }, [profile, agencyRole]);
+
   const select = (id: ViewId, subId?: string) => {
     navigateCurrentTab(id);
     setSub(subId ?? null); // sous-page ciblée (ou reset si nav normale)
@@ -514,7 +523,7 @@ export default function App() {
 
   // Rôle agence : fondateur = accès total ; membre = tout SAUF Finance & Accès.
   const isFounder = agencyRole === "founder";
-  const FOUNDER_ONLY: ViewId[] = ["facturation", "reversements", "relances", "echeances", "acces"];
+  const FOUNDER_ONLY: ViewId[] = ["facturation", "reversements", "relances", "echeances", "acces", "diagnostique"];
   const hiddenIds = isFounder ? [] : FOUNDER_ONLY;
   const canSee = (id: ViewId) => !hiddenIds.includes(id);
 
