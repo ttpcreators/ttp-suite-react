@@ -2,6 +2,10 @@ node_modules/
 dist/
 *.log
 
+# Secrets : jamais dans Git (spec agent — la chaîne ttp_agent vit en variable d'environnement)
+.env
+.env.*
+
 scratch-*.png
 
 # Fichiers de travail temporaires
