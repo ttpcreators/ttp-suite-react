@@ -66,7 +66,7 @@ begin
   -- 7) Lire le blob brut module_rows (attendu : REFUS)
   begin
     select count(*) into n from public.module_rows;
-    raise notice '7. lire public.module_rows (blob) : ❌ PROBLÈME — la lecture a réussi', n;
+    raise notice '7. lire public.module_rows (blob) : ❌ PROBLÈME — la lecture a réussi (% lignes)', n;
   exception when others then
     raise notice '7. lire public.module_rows (blob) : ✅ refusé comme prévu (%)', sqlstate;
   end;
@@ -74,7 +74,7 @@ begin
   -- 8) Lire auth.users (attendu : REFUS)
   begin
     select count(*) into n from auth.users;
-    raise notice '8. lire auth.users : ❌ PROBLÈME — la lecture a réussi', n;
+    raise notice '8. lire auth.users : ❌ PROBLÈME — la lecture a réussi (% lignes)', n;
   exception when others then
     raise notice '8. lire auth.users : ✅ refusé comme prévu (%)', sqlstate;
   end;
