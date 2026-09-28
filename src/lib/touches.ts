@@ -95,6 +95,34 @@ export function nextKind(list: Touch[], lastContacted?: string | null): TouchKin
   return list.length === 0 && !lastContacted ? "contact" : "relance";
 }
 
+/**
+ * Patch base à écrire après une modification du journal : les touches, plus
+ * `last_contacted` synchronisé si la nouvelle activité est plus récente.
+ * Partagé entre la page Contacts et la page WhatsApp (une seule logique).
+ */
+export function buildTouchesPatch(next: Touch[], currentLastContacted?: string | null): Record<string, unknown> {
+  const acts = next.map((t) => new Date(t.date).getTime()).filter((n) => Number.isFinite(n));
+  const lastIso = acts.length ? new Date(Math.max(...acts)).toISOString() : null;
+  const patch: Record<string, unknown> = { touches: next };
+  if (lastIso && (!currentLastContacted || new Date(lastIso).getTime() > new Date(currentLastContacted).getTime()))
+    patch.last_contacted = lastIso;
+  return patch;
+}
+
+/**
+ * Statut de prospection DÉRIVÉ du journal — se met à jour tout seul, aucune
+ * saisie : Jamais contacté → Contacté → Relancé ×N → A répondu.
+ */
+export type DerivedTone = "never" | "contacted" | "relanced" | "replied";
+export function derivedStatus(list: Touch[], lastContacted?: string | null): { label: string; tone: DerivedTone } {
+  const lt = lastTouch(list);
+  if (lt?.kind === "reponse") return { label: "A répondu", tone: "replied" };
+  const n = list.filter((t) => t.kind === "relance").length;
+  if (n > 0) return { label: `Relancé ×${n}`, tone: "relanced" };
+  if (list.length > 0 || lastContacted) return { label: "Contacté", tone: "contacted" };
+  return { label: "Jamais contacté", tone: "never" };
+}
+
 /** Numéro international nettoyé (0 français initial → 33), ou null si illisible. */
 function waDigits(phone?: string | null): string | null {
   const raw = (phone ?? "").trim();

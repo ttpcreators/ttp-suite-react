@@ -29,6 +29,7 @@ const Facturation = lazy(() => import("@/views/Facturation").then((m) => ({ defa
 const Briefs = lazy(() => import("@/views/Briefs").then((m) => ({ default: m.Briefs })));
 const Collabs = lazy(() => import("@/views/Collabs").then((m) => ({ default: m.Collabs })));
 const AgentView = lazy(() => import("@/views/Agent").then((m) => ({ default: m.AgentView })));
+const WhatsappView = lazy(() => import("@/views/Whatsapp").then((m) => ({ default: m.WhatsappView })));
 const Gifting = lazy(() => import("@/views/Gifting").then((m) => ({ default: m.Gifting })));
 const Idees = lazy(() => import("@/views/Idees").then((m) => ({ default: m.Idees })));
 const Todo = lazy(() => import("@/views/Todo").then((m) => ({ default: m.Todo })));
@@ -74,6 +75,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   planning: Planning,
   documents: Documents,
   contacts: Contacts,
+  whatsapp: WhatsappView,
   mails: Mails,
   contrats: Contrats,
   prospection: Prospection,

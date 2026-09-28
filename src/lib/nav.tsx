@@ -32,6 +32,7 @@ import {
   HeartPulse,
   Milestone,
   Bot,
+  MessageCircle,
   Mail,
   CreditCard,
   FolderOpen,
@@ -59,6 +60,7 @@ export type ViewId =
   | "planning"
   | "documents"
   | "contacts"
+  | "whatsapp"
   | "mails"
   | "prospection"
   | "contrats"
@@ -148,6 +150,7 @@ export const NAV: NavFamily[] = [
     icon: Handshake,
     items: [
       { id: "contacts", label: "Contacts", icon: Contact },
+      { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
       { id: "mails", label: "Mails", icon: Mail },
       { id: "prospection", label: "Prospection", icon: Search },
       { id: "vivier", label: "Scouting", icon: UserPlus },
