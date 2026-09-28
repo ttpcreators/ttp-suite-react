@@ -150,9 +150,13 @@ export const NAV: NavFamily[] = [
     icon: Handshake,
     items: [
       { id: "contacts", label: "Contacts", icon: Contact },
-      { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
-      { id: "mails", label: "Mails", icon: Mail },
-      { id: "prospection", label: "Prospection", icon: Search },
+      {
+        id: "whatsapp",
+        label: "Prospection",
+        icon: MessageCircle,
+        children: [{ id: "mails", label: "Mails" }],
+      },
+      { id: "prospection", label: "Pipeline", icon: Search },
       { id: "vivier", label: "Scouting", icon: UserPlus },
       {
         id: "contrats",
