@@ -12,6 +12,7 @@ import { useSearch, matchQuery } from "@/lib/search";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useAppState, type AppState } from "@/lib/appState";
+import { MailComposer, type ComposerContact } from "@/components/mail-composer";
 import {
   parseTouches, sortTouches, lastTouch, needsRelance, nextKind, lastActivityMs,
   buildTouchesPatch, derivedStatus, waLink, waHref, touchId,
@@ -62,6 +63,8 @@ export function WhatsappView() {
   const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("contacts"));
   const [error, setError] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [composeFor, setComposeFor] = useState<Row | null>(null);
   const { query } = useSearch();
   const live = useLiveKey();
 
@@ -106,8 +109,12 @@ export function WhatsappView() {
       if (!url) return toast("Pas de numéro exploitable");
       window.open(url, "_blank", "noopener");
     } else if (canal === "email") {
+      // Composeur avec modèles (prospection/relance) — la touche est notée
+      // seulement après un envoi réussi.
       if (!row.email) return toast("Pas d'email");
-      window.open(`mailto:${row.email}`, "_self");
+      setComposeFor(row);
+      setComposerOpen(true);
+      return;
     } else if (canal === "instagram" && row.instagram) {
       window.open(`https://instagram.com/${row.instagram.replace(/^@/, "")}`, "_blank", "noopener");
     } else if (canal === "tel" && row.phone) {
@@ -170,7 +177,7 @@ export function WhatsappView() {
         </button>
       )}
       {x.r.email && (
-        <button type="button" onClick={() => act(x.r, "email")} title="Écrire un mail et noter la prise de contact"
+        <button type="button" onClick={() => act(x.r, "email")} title="Écrire un mail depuis un modèle (prospection / relance)"
           className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
           <Mail className="h-4 w-4" />
         </button>
@@ -227,10 +234,35 @@ export function WhatsappView() {
     );
   };
 
+  const composerContact: ComposerContact | null = composeFor
+    ? {
+        email: composeFor.email,
+        label:
+          [composeFor.brand, composeFor.person !== "—" ? composeFor.person : ""].filter(Boolean).join(" · ") ||
+          composeFor.email,
+        brand: composeFor.brand,
+        person: composeFor.person,
+        first_name: composeFor.first_name,
+        hasBeenContacted: parseTouches(composeFor.touches).length > 0 || Boolean(composeFor.last_contacted),
+      }
+    : null;
+
   return (
     <div>
-      <div className="mb-4 text-sm text-muted-foreground">
-        {pool.length} contact{pool.length > 1 ? "s" : ""} · statut mis à jour tout seul depuis ton journal
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="text-sm text-muted-foreground">
+          {pool.length} contact{pool.length > 1 ? "s" : ""} · statut mis à jour tout seul depuis ton journal
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setComposeFor(null);
+            setComposerOpen(true);
+          }}
+          className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+        >
+          Modèles de mails
+        </button>
       </div>
 
       {pool.length > 0 && (
@@ -312,6 +344,15 @@ export function WhatsappView() {
           </div>
         )}
       </section>
+
+      <MailComposer
+        open={composerOpen}
+        contact={composerContact}
+        onClose={() => setComposerOpen(false)}
+        onSent={() => {
+          if (composeFor) logTouch(composeFor, "email");
+        }}
+      />
     </div>
   );
 }

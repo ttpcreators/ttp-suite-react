@@ -1,16 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
-import { Mail, ArrowDownLeft, ArrowUpRight, X, Search, Loader2, Send } from "lucide-react";
+import { Mail, ArrowDownLeft, ArrowUpRight, X, Search, Loader2, Send, PenLine } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
+import { dbUpdate } from "@/lib/db";
+import { parseTouches, buildTouchesPatch, nextKind, touchId, type Touch } from "@/lib/touches";
+import { MailComposer, type ComposerContact } from "@/components/mail-composer";
 
 /**
  * Page « Mails » : historique des échanges Gmail par contact + lecture d'un fil
  * complet. Lecture seule (scope gmail.readonly via les fonctions gmail-history /
  * gmail-thread). Réservé à l'agence (les fonctions vérifient le rôle).
  */
-type Contact = { email: string; label: string; tag?: string; lastContacted?: string | null };
+type Contact = {
+  id: string;
+  email: string;
+  label: string;
+  tag?: string;
+  lastContacted?: string | null;
+  brand?: string | null;
+  person?: string | null;
+  first_name?: string | null;
+  touches?: unknown;
+};
 type MailMsg = { id: string; threadId: string; from: string; to?: string; subject: string; date: string; snippet: string; direction: "in" | "out"; source?: string };
 type ThreadMsg = { id: string; from: string; to?: string; subject: string; date: string; html: string; text: string; direction: "in" | "out"; ts: number };
 
@@ -70,6 +83,7 @@ export function Mails() {
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyErr, setHistoryErr] = useState("");
 
+  const [composerOpen, setComposerOpen] = useState(false);
   const [thread, setThread] = useState<{ contact: string; subject: string; threadId: string } | null>(null);
   const [threadMsgs, setThreadMsgs] = useState<ThreadMsg[] | null>(null);
   const [threadBusy, setThreadBusy] = useState(false);
@@ -89,7 +103,17 @@ export function Mails() {
             .map((r) => {
               const person = [r.first_name, r.last_name].filter(Boolean).join(" ") || String(r.person ?? "");
               const label = [String(r.brand ?? ""), person].filter((x) => x && x !== "—").join(" · ") || String(r.email ?? "");
-              return { email: String(r.email ?? "").trim(), label, tag: String(r.tag ?? "").trim(), lastContacted: r.last_contacted ? String(r.last_contacted) : null };
+              return {
+                id: String(r.id ?? ""),
+                email: String(r.email ?? "").trim(),
+                label,
+                tag: String(r.tag ?? "").trim(),
+                lastContacted: r.last_contacted ? String(r.last_contacted) : null,
+                brand: r.brand ? String(r.brand) : null,
+                person: person || null,
+                first_name: r.first_name ? String(r.first_name) : null,
+                touches: r.touches,
+              };
             })
             .filter((c) => EMAIL_RE.test(c.email)),
         );
@@ -304,6 +328,13 @@ export function Mails() {
                   <div className="truncate text-sm font-semibold text-foreground">{selected.label}</div>
                   <div className="truncate text-[11px] text-faint">{selected.email}</div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setComposerOpen(true)}
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                >
+                  <PenLine className="h-3.5 w-3.5" /> Nouveau mail
+                </button>
               </div>
 
               {historyBusy ? (
@@ -354,6 +385,34 @@ export function Mails() {
           )}
         </div>
       </div>
+
+      {/* Composeur : nouveau mail depuis un modèle (prospection / relance) */}
+      <MailComposer
+        open={composerOpen}
+        contact={
+          selected
+            ? ({
+                email: selected.email,
+                label: selected.label,
+                brand: selected.brand,
+                person: selected.person,
+                first_name: selected.first_name,
+                hasBeenContacted: parseTouches(selected.touches).length > 0 || Boolean(selected.lastContacted),
+              } satisfies ComposerContact)
+            : null
+        }
+        onClose={() => setComposerOpen(false)}
+        onSent={() => {
+          // Journalise la touche (même logique que le poste de prospection)
+          // puis recharge l'historique du contact.
+          if (!selected?.id) return;
+          const list = parseTouches(selected.touches);
+          const t: Touch = { id: touchId(), date: new Date().toISOString(), canal: "email", kind: nextKind(list, selected.lastContacted ?? null) };
+          const patch = buildTouchesPatch([t, ...list], selected.lastContacted ?? null);
+          void dbUpdate("contacts", selected.id, patch);
+          setSelected({ ...selected, touches: [t, ...list], lastContacted: new Date().toISOString() });
+        }}
+      />
 
       {/* Fil complet */}
       {thread && (
