@@ -312,7 +312,10 @@ export function Mails() {
           {!selected ? (
             <div className="flex h-full min-h-[300px] flex-col items-center justify-center gap-2 text-center text-sm text-faint">
               <Mail className="h-8 w-8 opacity-40" />
-              Choisis un contact pour voir vos échanges.
+              <span>Choisis un contact pour voir vos échanges.</span>
+              <span className="flex items-center gap-1.5 rounded-full bg-panel px-3 py-1.5 text-[11px] text-muted-foreground">
+                <PenLine className="h-3 w-3" /> Le bouton « Nouveau mail » (modèles + variables) apparaît sur sa fiche.
+              </span>
             </div>
           ) : (
             <>
