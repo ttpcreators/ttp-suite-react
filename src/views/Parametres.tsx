@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check } from "lucide-react";
+import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check, MessageCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
 import { ACCENT_PRESETS, getAccent, setAccent, isHex } from "@/lib/accent";
 import { NOTIF_TEXTS_CREATOR, NOTIF_TEXTS_AGENCY, type NotifTextField } from "@/lib/notifTexts";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { RELANCE_DAYS, type ProspectSettings, type WaMode } from "@/lib/touches";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -147,6 +148,37 @@ export function Parametres() {
     if (!ok) toast("Erreur d'enregistrement — réessaie");
   };
 
+  // Prospection (blob agence `prospectSettings`) : rythme de relance + mode WhatsApp.
+  const { data: storedProspect } = useAppState<ProspectSettings>((s: AppState) => (s["prospectSettings"] as ProspectSettings) ?? {});
+  const [prospect, setProspect] = useState<ProspectSettings>({});
+  const [relanceInput, setRelanceInput] = useState<string>("");
+  useEffect(() => {
+    if (storedProspect) {
+      setProspect(storedProspect);
+      setRelanceInput(storedProspect.relanceDays ? String(storedProspect.relanceDays) : "");
+    }
+  }, [storedProspect]);
+  const saveProspect = async (patch: Partial<ProspectSettings>) => {
+    invalidateAppState();
+    const fresh = ((await getAppState())["prospectSettings"] as ProspectSettings) ?? {};
+    const next = { ...fresh, ...patch };
+    setProspect(next);
+    const ok = await saveAppStateKey("prospectSettings", next);
+    if (!ok) toast("Erreur d'enregistrement — réessaie");
+  };
+  const saveRelanceDays = () => {
+    const n = Math.round(Number(relanceInput));
+    if (!relanceInput.trim() || !Number.isFinite(n) || n < 1) {
+      setRelanceInput("");
+      void saveProspect({ relanceDays: undefined });
+      return;
+    }
+    const clamped = Math.min(365, Math.max(1, n));
+    setRelanceInput(String(clamped));
+    void saveProspect({ relanceDays: clamped });
+  };
+  const waMode: WaMode = prospect.waMode === "web" ? "web" : "app";
+
   // Notifications push de CET appareil
   const { state, busy, enable, disable, sendTest } = usePush();
   const [testing, setTesting] = useState(false);
@@ -218,6 +250,61 @@ export function Parametres() {
           </label>
         </div>
         <p className="mt-3 text-[11px] text-faint">« Bleu TTP » remet la couleur d'origine. Le texte des boutons s'ajuste (blanc/noir) pour rester lisible.</p>
+      </Section>
+
+      {/* Prospection : rythme de recontact + ouverture WhatsApp (blob prospectSettings) */}
+      <Section
+        icon={<MessageCircle className="h-4 w-4" />}
+        title="Prospection"
+        hint="Le suivi des contacts marques (page Contacts) : rythme de recontact et ouverture de WhatsApp."
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[13px] font-medium text-foreground">Rythme de recontact</div>
+              <div className="text-[11px] leading-snug text-faint">
+                Un contact repasse « à relancer » quand le dernier échange (prise de contact ou réponse) date de ce nombre de jours.
+              </div>
+            </div>
+            <label className="flex shrink-0 items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                max={365}
+                value={relanceInput}
+                onChange={(e) => setRelanceInput(e.target.value)}
+                onBlur={saveRelanceDays}
+                placeholder={String(RELANCE_DAYS)}
+                className="w-20 rounded-lg border border-border bg-surface px-3 py-2 text-center text-[13px] tabular-nums text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              />
+              <span className="text-[12px] text-muted-foreground">jours</span>
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[13px] font-medium text-foreground">Ouverture WhatsApp</div>
+              <div className="text-[11px] leading-snug text-faint">
+                C'est le compte connecté qui envoie, pas un réglage : choisis WhatsApp Web si ton numéro PRO y est connecté (web.whatsapp.com), l'application sinon.
+              </div>
+            </div>
+            <div className="flex shrink-0 gap-1 rounded-xl bg-panel p-1">
+              {([["app", "Application"], ["web", "WhatsApp Web"]] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => void saveProspect({ waMode: v })}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                    waMode === v ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </Section>
 
       {/* Textes des notifications (titres personnalisables — blob notifTexts) */}

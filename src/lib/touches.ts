@@ -34,8 +34,17 @@ export const KIND_LABELS: Record<TouchKind, string> = {
   reponse: "Réponse reçue",
 };
 
-/** Sans réponse depuis ce nombre de jours, le contact passe « à relancer ». */
-export const RELANCE_DAYS = 7;
+/** Rythme de recontact PAR DÉFAUT (jours) : réglable dans Paramètres → Prospection. */
+export const RELANCE_DAYS = 45;
+
+/** Réglages prospection (blob agence `prospectSettings`). */
+export type WaMode = "app" | "web";
+export type ProspectSettings = {
+  /** Rythme de recontact en jours (défaut RELANCE_DAYS). */
+  relanceDays?: number;
+  /** Ouverture WhatsApp : app native (wa.me) ou WhatsApp Web (compte pro connecté). */
+  waMode?: WaMode;
+};
 
 let _uid = 0;
 export function touchId(): string {
@@ -70,15 +79,15 @@ export function lastActivityMs(list: Touch[], lastContacted?: string | null): nu
 }
 
 /**
- * « À relancer » : au moins une prise de contact, la dernière activité date de
- * RELANCE_DAYS ou plus, et la dernière touche n'est pas une réponse reçue.
+ * « À relancer » : cycle de recontact. Au moins une prise de contact, et la
+ * dernière activité (touche, RÉPONSE COMPRISE, ou mail sortant) date de `days`
+ * jours ou plus. Une réponse reçue remet donc le compteur à zéro, elle
+ * n'exempte plus définitivement : on entretient la relation tous les N jours.
  */
-export function needsRelance(list: Touch[], lastContacted?: string | null): boolean {
+export function needsRelance(list: Touch[], lastContacted?: string | null, days: number = RELANCE_DAYS): boolean {
   const last = lastActivityMs(list, lastContacted);
   if (!last) return false;
-  const lt = lastTouch(list);
-  if (lt && lt.kind === "reponse") return false;
-  return Date.now() - last >= RELANCE_DAYS * 86400000;
+  return Date.now() - last >= Math.max(1, days) * 86400000;
 }
 
 /** Type auto de la prochaine touche : premier contact si vierge, sinon relance. */
@@ -86,16 +95,31 @@ export function nextKind(list: Touch[], lastContacted?: string | null): TouchKin
   return list.length === 0 && !lastContacted ? "contact" : "relance";
 }
 
-/**
- * Lien WhatsApp « wa.me » depuis un numéro libre. Un 0 français initial devient
- * +33 ; un numéro déjà international (+ ou 00) est nettoyé tel quel.
- */
-export function waLink(phone?: string | null): string | null {
+/** Numéro international nettoyé (0 français initial → 33), ou null si illisible. */
+function waDigits(phone?: string | null): string | null {
   const raw = (phone ?? "").trim();
   if (!raw) return null;
   let digits = raw.replace(/[^\d+]/g, "");
   if (digits.startsWith("00")) digits = digits.slice(2);
   else if (digits.startsWith("+")) digits = digits.slice(1);
   else if (digits.startsWith("0")) digits = "33" + digits.slice(1);
-  return digits.length >= 8 ? `https://wa.me/${digits}` : null;
+  return digits.length >= 8 ? digits : null;
+}
+
+/** Lien WhatsApp « wa.me » (app native). Sert aussi de test « numéro joignable ». */
+export function waLink(phone?: string | null): string | null {
+  const d = waDigits(phone);
+  return d ? `https://wa.me/${d}` : null;
+}
+
+/**
+ * Lien WhatsApp selon le mode choisi. « web » ouvre WhatsApp Web : c'est le
+ * COMPTE CONNECTÉ dans le navigateur qui envoie (le numéro pro de Marc s'il y
+ * est connecté) — un lien ne peut pas choisir le numéro émetteur, seul le
+ * compte connecté de l'app ou du navigateur le détermine.
+ */
+export function waHref(phone: string | null | undefined, mode: WaMode): string | null {
+  const d = waDigits(phone);
+  if (!d) return null;
+  return mode === "web" ? `https://web.whatsapp.com/send?phone=${d}` : `https://wa.me/${d}`;
 }

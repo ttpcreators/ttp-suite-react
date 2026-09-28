@@ -1,9 +1,10 @@
 import { supabase } from "@/lib/supabase";
 import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, Clock, AlertTriangle, MapPin, MessageCircle, AtSign, Phone, BriefcaseBusiness, Check, type LucideIcon } from "lucide-react";
 import {
-  parseTouches, sortTouches, lastTouch, needsRelance, nextKind, waLink, touchId,
-  CANAL_LABELS, KIND_LABELS, RELANCE_DAYS, type Touch, type TouchCanal, type TouchKind,
+  parseTouches, sortTouches, lastTouch, needsRelance, nextKind, waLink, waHref, touchId,
+  CANAL_LABELS, KIND_LABELS, RELANCE_DAYS, type Touch, type TouchCanal, type TouchKind, type WaMode, type ProspectSettings,
 } from "@/lib/touches";
+import { useAppState, type AppState } from "@/lib/appState";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
@@ -247,6 +248,11 @@ export function Contacts() {
   const { query } = useSearch();
   const live = useLiveKey();
 
+  // Réglages prospection (Paramètres → Prospection) : rythme + mode WhatsApp.
+  const { data: prospectCfg } = useAppState<ProspectSettings>((s: AppState) => (s["prospectSettings"] as ProspectSettings) ?? {});
+  const relanceDays = Math.max(1, Number(prospectCfg?.relanceDays) || RELANCE_DAYS);
+  const waMode: WaMode = prospectCfg?.waMode === "web" ? "web" : "app";
+
   const [selected, setSelected] = useState<Row | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -336,7 +342,7 @@ export function Contacts() {
     toast(`${KIND_LABELS[t.kind]} · ${CANAL_LABELS[canal]} noté ✓`);
   };
   const openWhatsApp = (row: Row) => {
-    const url = waLink(row.phone);
+    const url = waHref(row.phone, waMode);
     if (!url) {
       toast("Numéro illisible pour WhatsApp");
       return;
@@ -731,7 +737,7 @@ export function Contacts() {
       const contacted = !!row.last_contacted || list.length > 0;
       if (contactFilter === "contacted" && !contacted) return false;
       if (contactFilter === "never" && contacted) return false;
-      if (contactFilter === "relancer" && !needsRelance(list, row.last_contacted)) return false;
+      if (contactFilter === "relancer" && !needsRelance(list, row.last_contacted, relanceDays)) return false;
     }
     // Filtre par ville.
     if (cityFilter && (row.city ?? "").trim().toLowerCase() !== cityFilter.toLowerCase()) return false;
@@ -795,7 +801,7 @@ export function Contacts() {
       {currentRows.length > 0 && (() => {
         const total = currentRows.length;
         const contacted = currentRows.filter((r) => r.last_contacted || parseTouches(r.touches).length > 0).length;
-        const relancer = currentRows.filter((r) => needsRelance(parseTouches(r.touches), r.last_contacted)).length;
+        const relancer = currentRows.filter((r) => needsRelance(parseTouches(r.touches), r.last_contacted, relanceDays)).length;
         const withEmail = currentRows.filter((r) => (r.email ?? "").trim()).length;
         const tagCounts = tagList.map((t) => currentRows.filter((r) => (r.tag ?? "").trim() === t).length);
         return (
@@ -803,7 +809,7 @@ export function Contacts() {
             className="mb-5"
             primary={{ eyebrow: "Répertoire", value: String(total), caption: `${withEmail} avec email · ${contacted} déjà contacté${contacted > 1 ? "s" : ""}.` }}
             bars={{ label: "Par catégorie", value: `${tagList.length} catégorie${tagList.length > 1 ? "s" : ""}`, series: tagCounts.length ? tagCounts : [0] }}
-            small={{ value: String(relancer), label: `À relancer (${RELANCE_DAYS} j+)` }}
+            small={{ value: String(relancer), label: `À relancer (${relanceDays} j+)` }}
             accent={{ value: String(total - contacted), label: "Jamais contactés", icon: Mail }}
           />
         );
@@ -956,10 +962,10 @@ export function Contacts() {
                 );
               })()}
 
-              {/* À relancer : dernière prise de contact trop ancienne, sans réponse */}
-              {needsRelance(parseTouches(row.touches), row.last_contacted) && (
+              {/* À relancer : le cycle de recontact est écoulé */}
+              {needsRelance(parseTouches(row.touches), row.last_contacted, relanceDays) && (
                 <span
-                  title={`Dernière prise de contact il y a ${RELANCE_DAYS} jours ou plus, sans réponse notée`}
+                  title={`Dernier échange il y a ${relanceDays} jours ou plus : le cycle de recontact est écoulé`}
                   className="hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-primary/10 px-2 py-1 text-[8px] font-semibold uppercase tracking-wide text-primary sm:inline-flex"
                 >
                   <Send className="h-2.5 w-2.5" /> Relancer
