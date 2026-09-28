@@ -6,7 +6,7 @@ import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
  * (recharts hors du 1er écran). Aire dégradée bleu primary — lisible en clair
  * comme en sombre (couleurs via CSS vars pour la grille/surface). Y borné 0–100.
  */
-const BLUE = "#2b7fff";
+const BLUE = "var(--primary)";
 
 export default function ObjectivesTrend({
   points,

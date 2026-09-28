@@ -15,7 +15,7 @@ type MetricKey = "vues" | "abonnes" | "engagement" | "interactions";
 
 const METRICS: { key: MetricKey; label: string; color: string; pct?: boolean }[] = [
   { key: "vues", label: "Vues (30 j)", color: "#8b5cf6" },
-  { key: "abonnes", label: "Abonnés", color: "#2b7fff" },
+  { key: "abonnes", label: "Abonnés", color: "var(--primary)" },
   { key: "engagement", label: "Engagement", color: "#16a34a", pct: true },
   { key: "interactions", label: "Interactions", color: "#f59e0b" },
 ];

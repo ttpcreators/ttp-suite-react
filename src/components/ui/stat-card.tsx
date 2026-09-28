@@ -4,7 +4,8 @@ import { cn } from "@/lib/utils";
 
 /** Sparkline (aire) en SVG inline — léger, sans dépendance. */
 function Sparkline({ values, color }: { values: number[]; color: string }) {
-  if (values.length < 2) return null;
+  // Une seule valeur non finie (NaN/Infinity) casserait le path SVG en silence.
+  if (values.length < 2 || values.some((v) => !Number.isFinite(v))) return null;
   const w = 120;
   const h = 34;
   const pad = 3;
@@ -45,7 +46,7 @@ export function StatCard({
   delta,
   deltaLabel,
   spark,
-  sparkColor = "#2b7fff",
+  sparkColor = "var(--primary)",
   hint,
   lastValue,
   compareLabel = "Vs mois dernier",

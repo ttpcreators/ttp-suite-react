@@ -43,7 +43,7 @@ type StatsData = {
 };
 
 const COLORS = {
-  primary: "#2b7fff",
+  primary: "var(--primary)",
   green: "#16a34a",
   amber: "#f59e0b",
   rose: "#f43f5e",

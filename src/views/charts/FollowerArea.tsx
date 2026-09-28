@@ -10,7 +10,7 @@ const PLAT_META: Record<string, { label: string; color: string }> = {
   x: { label: "X", color: "#64748b" },
   snapchat: { label: "Snapchat", color: "#f59e0b" },
 };
-const metaOf = (p: string) => PLAT_META[p] ?? { label: p, color: "#2b7fff" };
+const metaOf = (p: string) => PLAT_META[p] ?? { label: p, color: "var(--primary)" };
 
 /**
  * Évolution des abonnés (même DA que l'Aperçu agence). LAZY-chargé (recharts hors
@@ -53,7 +53,7 @@ export default function FollowerArea({
           <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.6} vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickMargin={8} interval="preserveStartEnd" minTickGap={14} />
           <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(Number(v))} width={40} />
-          <Tooltip content={<ChartTooltip unit="" />} cursor={{ stroke: "#2b7fff", strokeWidth: 1, strokeOpacity: 0.4 }} />
+          <Tooltip content={<ChartTooltip unit="" />} cursor={{ stroke: "var(--primary)", strokeWidth: 1, strokeOpacity: 0.4 }} />
           {plats.map((p) => (
             <Area
               key={p}

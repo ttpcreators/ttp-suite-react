@@ -252,8 +252,8 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
               <AreaChart data={points} margin={{ top: 6, right: 8, left: -12, bottom: 0 }}>
                 <defs>
                   <linearGradient id="suiviEr" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#2b7fff" stopOpacity={0.25} />
-                    <stop offset="100%" stopColor="#2b7fff" stopOpacity={0} />
+                    <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -264,7 +264,7 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
                   labelFormatter={(_, pl) => (pl?.[0]?.payload?.full ? `Le ${pl[0].payload.full}` : "")}
                   formatter={(value) => [`${String(value ?? "").replace(".", ",")} %`, "Taux"]}
                 />
-                <Area type="monotone" dataKey="er" stroke="#2b7fff" strokeWidth={2.5} fill="url(#suiviEr)" dot={{ r: 3, fill: "#2b7fff" }} />
+                <Area type="monotone" dataKey="er" stroke="var(--primary)" strokeWidth={2.5} fill="url(#suiviEr)" dot={{ r: 3, fill: "var(--primary)" }} />
               </AreaChart>
             </ResponsiveContainer>
           </div>

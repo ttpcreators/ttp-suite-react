@@ -29,7 +29,7 @@ export default function GlassStatChart({
   points,
   format = (n) => n.toLocaleString("fr-FR"),
   yFormat = compactAxis,
-  color = "#2b7fff",
+  color = "var(--primary)",
   defaultType = "area",
   height = 220,
   compareLabel = "vs préc.",

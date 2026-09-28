@@ -1020,7 +1020,7 @@ export function CreatorSpace({
   const followerGlassGrid = (
     <div className={cn("grid gap-4", followerSeries.platforms.length > 1 ? "sm:grid-cols-2" : "grid-cols-1")}>
       {followerSeries.platforms.map((p) => {
-        const meta = FOLLOWER_PLAT[p] ?? { label: titleCase(p), color: "#2b7fff" };
+        const meta = FOLLOWER_PLAT[p] ?? { label: titleCase(p), color: "var(--primary)" };
         const pts = followerSeries.points
           .map((pt) => ({ label: pt.label, value: Number((pt as Record<string, unknown>)[p] ?? 0) }))
           .filter((x) => x.value > 0);

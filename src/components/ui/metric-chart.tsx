@@ -78,15 +78,23 @@ export function MetricChart({
 
   if (!primary || n < 2) return <div ref={ref} className="h-full w-full" />;
 
+  // Index de survol RE-CLAMPÉ à chaque rendu : si la série raccourcit (bascule
+  // 90 j → 7 j alors qu'on survolait le dernier point), `active` pouvait dépasser
+  // n-1 → primary.data[active] undefined → crash de la carte.
+  const ai = Math.max(0, Math.min(active, n - 1));
+
   const pts = primary.data.map((d, i) => ({ x: x(i), y: y(d.value) }));
   const linePath = smoothPath(pts);
   const areaPath = `${linePath} L ${W} ${H} L 0 ${H} Z`;
+  // Dégradé par instance (id dérivé du nom de série) : un id fixe « mc-area »
+  // faisait hériter au 2e graphe de la page la couleur du 1er (ids SVG globaux).
+  const gid = `mc-area-${(primary.name || "s").replace(/\W/g, "")}`;
   // Positionnement du tooltip : au-dessus du point si le point est assez bas,
   // sinon EN DESSOUS (évite d'être coupé par le haut de la carte / de chevaucher
   // les contrôles du header). Clamp horizontal pour ne pas déborder à droite.
-  const tipY = y(primary.data[active].value);
+  const tipY = y(primary.data[ai].value);
   const tipAbove = tipY > 32;
-  const tipLeft = Math.min(82, Math.max(18, x(active)));
+  const tipLeft = Math.min(82, Math.max(18, x(ai)));
   const tipTop = tipAbove ? Math.max(4, tipY - 6) : Math.min(92, tipY + 8);
   const tipTransform = tipAbove ? "translate(-50%, -100%)" : "translate(-50%, 0)";
 
@@ -94,14 +102,14 @@ export function MetricChart({
     <div ref={ref} className="relative h-full w-full" onMouseMove={onMove}>
       <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
         <defs>
-          <linearGradient id="mc-area" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={primary.color} stopOpacity="0.22" />
             <stop offset="100%" stopColor={primary.color} stopOpacity="0" />
           </linearGradient>
         </defs>
         {view === "curve" ? (
           <>
-            <path d={areaPath} fill="url(#mc-area)" />
+            <path d={areaPath} fill={`url(#${gid})`} />
             {series.map((s) => {
               const sp = s.data.map((d, i) => ({ x: x(i), y: y(d.value) }));
               return (
@@ -130,14 +138,14 @@ export function MetricChart({
                 height={H - y(d.value)}
                 rx={0.8}
                 fill={primary.color}
-                opacity={i === active ? 1 : 0.45}
+                opacity={i === ai ? 1 : 0.45}
               />
             );
           })
         )}
         <line
-          x1={x(active)}
-          x2={x(active)}
+          x1={x(ai)}
+          x2={x(ai)}
           y1="0"
           y2="100"
           stroke={primary.color}
@@ -150,17 +158,17 @@ export function MetricChart({
 
       <div
         className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card"
-        style={{ left: `${x(active)}%`, top: `${y(primary.data[active].value)}%`, background: primary.color }}
+        style={{ left: `${x(ai)}%`, top: `${y(primary.data[ai].value)}%`, background: primary.color }}
       />
       <div
         className="pointer-events-none absolute z-20 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs shadow-lg"
         style={{ left: `${tipLeft}%`, top: `${tipTop}%`, transform: tipTransform }}
       >
         <div className="whitespace-nowrap font-semibold text-foreground">
-          {valueFormatter(primary.data[active].value)}
+          {valueFormatter(primary.data[ai].value)}
         </div>
         <div className="whitespace-nowrap text-[10px] text-muted-foreground">
-          {dateFormatter(primary.data[active].date)}
+          {dateFormatter(primary.data[ai].date)}
         </div>
       </div>
     </div>
