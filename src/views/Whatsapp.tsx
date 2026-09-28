@@ -65,6 +65,8 @@ export function WhatsappView() {
   const [journalOpen, setJournalOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [composeFor, setComposeFor] = useState<Row | null>(null);
+  const [view, setView] = useState<"all" | "relance" | "jamais" | "encours">("all");
+  const [tagFilter, setTagFilter] = useState("__all__");
   const { query } = useSearch();
   const live = useLiveKey();
 
@@ -135,7 +137,12 @@ export function WhatsappView() {
   }
 
   // Périmètre : le carnet AGENCE (les contacts perso des créatrices restent à elles).
-  const pool = rows.filter((r) => !(r.creator ?? "").trim() && matchQuery(query, r.brand, r.person, r.role, r.tag));
+  const agencyPool = rows.filter((r) => !(r.creator ?? "").trim() && matchQuery(query, r.brand, r.person, r.role, r.tag));
+
+  // Types de contact présents (pour le filtre par tag, hors « perso »).
+  const tagList = [...new Set(agencyPool.map((r) => (r.tag ?? "").trim()).filter((t) => t && t.toLowerCase() !== "perso"))];
+
+  const pool = agencyPool.filter((r) => tagFilter === "__all__" || (r.tag ?? "").trim() === tagFilter);
 
   const enrich = (r: Row) => {
     const list = parseTouches(r.touches);
@@ -265,7 +272,7 @@ export function WhatsappView() {
         </button>
       </div>
 
-      {pool.length > 0 && (
+      {pool.length > 0 && view === "all" && (
         <StatsBento
           className="mb-5"
           primary={{ eyebrow: "À relancer", value: String(aRelancer.length), caption: `Dernier échange il y a ${relanceDays} j ou plus. Réglable dans Paramètres.` }}
@@ -275,36 +282,87 @@ export function WhatsappView() {
         />
       )}
 
-      {/* 1) À relancer aujourd'hui */}
-      <section className="mb-5">
-        <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
-          <Send className="h-3 w-3" /> À relancer ({aRelancer.length})
+      {/* Filtres : quelle file afficher + quel type de contact */}
+      <div className="mb-4 space-y-2">
+        <div className="flex flex-wrap gap-1.5">
+          {(
+            [
+              ["all", `Tous (${pool.length})`],
+              ["relance", `À relancer (${aRelancer.length})`],
+              ["jamais", `Jamais contactés (${jamais.length})`],
+              ["encours", `En cours (${enCours.length})`],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className={cn(
+                "rounded-full px-3.5 py-1.5 text-[11px] font-semibold transition-colors",
+                view === v
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-        {aRelancer.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-[12px] text-faint">
-            Personne à relancer. Tout ton carnet a été touché il y a moins de {relanceDays} jours 🎯
+        {tagList.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {[{ value: "__all__", label: "Tous les types" }, ...tagList.map((t) => ({ value: t, label: t }))].map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => setTagFilter(o.value)}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors",
+                  tagFilter === o.value
+                    ? "bg-foreground text-background"
+                    : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground",
+                )}
+              >
+                {o.label}
+              </button>
+            ))}
           </div>
-        ) : (
-          <div className="flex flex-col gap-2">{aRelancer.map((x) => <ContactRow key={x.r.id} x={x} showAgo />)}</div>
         )}
-      </section>
+      </div>
+
+      {/* 1) À relancer aujourd'hui */}
+      {(view === "all" || view === "relance") && (
+        <section className="mb-5">
+          <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+            <Send className="h-3 w-3" /> À relancer ({aRelancer.length})
+          </div>
+          {aRelancer.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-[12px] text-faint">
+              Personne à relancer. Tout ton carnet a été touché il y a moins de {relanceDays} jours 🎯
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">{aRelancer.map((x) => <ContactRow key={x.r.id} x={x} showAgo />)}</div>
+          )}
+        </section>
+      )}
 
       {/* 2) Jamais contactés */}
-      <section className="mb-5">
-        <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
-          <UserRound className="h-3 w-3" /> Jamais contactés ({jamais.length})
-        </div>
-        {jamais.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-[12px] text-faint">
-            Tout le carnet a déjà été approché au moins une fois.
+      {(view === "all" || view === "jamais") && (
+        <section className="mb-5">
+          <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+            <UserRound className="h-3 w-3" /> Jamais contactés ({jamais.length})
           </div>
-        ) : (
-          <div className="flex flex-col gap-2">{jamais.map((x) => <ContactRow key={x.r.id} x={x} />)}</div>
-        )}
-      </section>
+          {jamais.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-[12px] text-faint">
+              Tout le carnet a déjà été approché au moins une fois.
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">{jamais.map((x) => <ContactRow key={x.r.id} x={x} />)}</div>
+          )}
+        </section>
+      )}
 
       {/* 3) En cours (cycle pas encore écoulé) */}
-      {enCours.length > 0 && (
+      {(view === "all" || view === "encours") && enCours.length > 0 && (
         <section className="mb-5">
           <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
             <Clock className="h-3 w-3" /> En cours ({enCours.length})
