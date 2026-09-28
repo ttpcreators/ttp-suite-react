@@ -72,6 +72,7 @@ alter table public.contacts add column if not exists last_name text;
 alter table public.contacts add column if not exists creator text;       -- sql/12 : contact ajouté par un créateur (NULL = agence)
 alter table public.contacts add column if not exists instagram text;     -- @ de la marque (sql/2026-09-08-contacts-instagram-city)
 alter table public.contacts add column if not exists city text;          -- ville de la marque
+alter table public.contacts add column if not exists touches jsonb;      -- journal de contact multi-canal (sql/2026-09-28-contacts-touches)
 
 create table if not exists public.prospects (
   id uuid primary key default gen_random_uuid(),
@@ -965,11 +966,27 @@ select e.key as creatrice, p->>'id' as id,
          case when jsonb_typeof(e.value) = 'array' then e.value else '[]'::jsonb end) as p;
 
 create or replace view agent_lecture.contacts_marques as
-select id, brand as marque,
-       coalesce(nullif(trim(concat(coalesce(first_name, ''), ' ', coalesce(last_name, ''))), ''), person) as personne,
-       role, tag, email, phone as telephone, instagram, city as ville,
-       last_contacted as dernier_contact, created_at
-  from public.contacts where creator is null;
+select c.id, c.brand as marque,
+       coalesce(nullif(trim(concat(coalesce(c.first_name, ''), ' ', coalesce(c.last_name, ''))), ''), c.person) as personne,
+       c.role, c.tag, c.email, c.phone as telephone, c.instagram, c.city as ville,
+       c.last_contacted as dernier_contact, c.created_at,
+       t.derniere_touche, t.canal_touche, t.nb_relances, t.derniere_reponse
+  from public.contacts c
+  left join lateral (
+    select max(x.d) as derniere_touche,
+           (array_agg(x.canal order by x.d desc))[1] as canal_touche,
+           count(*) filter (where x.kind = 'relance') as nb_relances,
+           max(x.d) filter (where x.kind = 'reponse') as derniere_reponse
+      from (
+        select case when (e->>'date') ~ '^\d{4}-\d{2}-\d{2}'
+                    then left(e->>'date', 10)::date end as d,
+               e->>'canal' as canal, e->>'kind' as kind
+          from jsonb_array_elements(
+                 case when jsonb_typeof(c.touches) = 'array' then c.touches else '[]'::jsonb end) e
+      ) x
+     where x.d is not null
+  ) t on true
+ where c.creator is null;
 
 create or replace view agent_lecture.prospection as
 select id, brand as marque, contact, value as valeur, stage as etape, created_at

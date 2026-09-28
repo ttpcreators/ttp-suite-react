@@ -1,5 +1,9 @@
 import { supabase } from "@/lib/supabase";
-import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, Clock, AlertTriangle, MapPin } from "lucide-react";
+import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, Clock, AlertTriangle, MapPin, MessageCircle, AtSign, Phone, BriefcaseBusiness, Check, type LucideIcon } from "lucide-react";
+import {
+  parseTouches, sortTouches, lastTouch, needsRelance, nextKind, waLink, touchId,
+  CANAL_LABELS, KIND_LABELS, RELANCE_DAYS, type Touch, type TouchCanal, type TouchKind,
+} from "@/lib/touches";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
@@ -38,6 +42,7 @@ type Row = {
   sort_order: number;
   creator?: string | null; // renseigné = contact ajouté par ce créateur
   last_contacted?: string | null; // dernier email SORTANT vers ce contact (ISO)
+  touches?: unknown; // journal de contact multi-canal (jsonb, cf. src/lib/touches.ts)
 };
 
 // Suivi du sur-contact : en-deçà de ce seuil (jours), on alerte de ne pas relancer.
@@ -256,8 +261,9 @@ export function Contacts() {
   const [city, setCity] = useState("");
 
   const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS);
-  const [contactFilter, setContactFilter] = useState<"all" | "contacted" | "never">("all"); // déjà échangé ?
+  const [contactFilter, setContactFilter] = useState<"all" | "contacted" | "never" | "relancer">("all"); // déjà échangé ?
   const [cityFilter, setCityFilter] = useState<string>(""); // "" = toutes les villes
+  const [touchDel, setTouchDel] = useState<string | null>(null); // suppression d'une touche en 2 temps
   const [importing, setImporting] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
@@ -307,6 +313,36 @@ export function Contacts() {
     setSelected((prev) => (prev && prev.email && set.has(prev.email.trim().toLowerCase()) ? { ...prev, last_contacted: when } : prev));
     const targets = (rows ?? []).filter((r) => r.email && set.has(r.email.trim().toLowerCase()));
     await Promise.all(targets.map((r) => dbUpdate("contacts", r.id, { last_contacted: when }).catch(() => false)));
+  };
+
+  // ── Journal de contact multi-canal (« touches ») : WhatsApp, insta, tél… ──
+  // Chaque prise de contact manuelle est datée dans contacts.touches (jsonb) ;
+  // last_contacted est synchronisé pour tout l'existant (bento, alerte, Megan).
+  const saveTouches = async (row: Row, next: Touch[]) => {
+    const acts = next.map((t) => new Date(t.date).getTime()).filter((n) => Number.isFinite(n));
+    const lastIso = acts.length ? new Date(Math.max(...acts)).toISOString() : null;
+    const patch: Record<string, unknown> = { touches: next };
+    if (lastIso && (!row.last_contacted || new Date(lastIso).getTime() > new Date(row.last_contacted).getTime()))
+      patch.last_contacted = lastIso;
+    const apply = (r: Row): Row => (r.id === row.id ? ({ ...r, ...patch } as Row) : r);
+    setRows((prev) => (prev ? prev.map(apply) : prev));
+    setSelected((prev) => (prev && prev.id === row.id ? apply(prev) : prev));
+    if (!(await dbUpdate("contacts", row.id, patch))) toast("Erreur, la migration « touches » est-elle lancée ?");
+  };
+  const logTouch = (row: Row, canal: TouchCanal, kind?: TouchKind) => {
+    const list = parseTouches(row.touches);
+    const t: Touch = { id: touchId(), date: new Date().toISOString(), canal, kind: kind ?? nextKind(list, row.last_contacted) };
+    void saveTouches(row, [t, ...list]);
+    toast(`${KIND_LABELS[t.kind]} · ${CANAL_LABELS[canal]} noté ✓`);
+  };
+  const openWhatsApp = (row: Row) => {
+    const url = waLink(row.phone);
+    if (!url) {
+      toast("Numéro illisible pour WhatsApp");
+      return;
+    }
+    window.open(url, "_blank", "noopener");
+    logTouch(row, "whatsapp");
   };
 
   const [history, setHistory] = useState<MailMsg[] | null>(null);
@@ -689,11 +725,13 @@ export function Contacts() {
       const tagOk = tagFilter === ALL_TAGS || (row.tag ?? "").trim() === tagFilter;
       if (!tagOk) return false;
     }
-    // Filtre « déjà échangé » (basé sur le dernier contact suivi).
+    // Filtre « déjà échangé » (dernier mail suivi OU touche manuelle).
     if (contactFilter !== "all") {
-      const contacted = !!row.last_contacted;
+      const list = parseTouches(row.touches);
+      const contacted = !!row.last_contacted || list.length > 0;
       if (contactFilter === "contacted" && !contacted) return false;
       if (contactFilter === "never" && contacted) return false;
+      if (contactFilter === "relancer" && !needsRelance(list, row.last_contacted)) return false;
     }
     // Filtre par ville.
     if (cityFilter && (row.city ?? "").trim().toLowerCase() !== cityFilter.toLowerCase()) return false;
@@ -756,15 +794,16 @@ export function Contacts() {
       {/* Synthèse (bento) */}
       {currentRows.length > 0 && (() => {
         const total = currentRows.length;
-        const contacted = currentRows.filter((r) => r.last_contacted).length;
+        const contacted = currentRows.filter((r) => r.last_contacted || parseTouches(r.touches).length > 0).length;
+        const relancer = currentRows.filter((r) => needsRelance(parseTouches(r.touches), r.last_contacted)).length;
         const withEmail = currentRows.filter((r) => (r.email ?? "").trim()).length;
         const tagCounts = tagList.map((t) => currentRows.filter((r) => (r.tag ?? "").trim() === t).length);
         return (
           <StatsBento
             className="mb-5"
-            primary={{ eyebrow: "Répertoire", value: String(total), caption: `${withEmail} avec email · ${tagList.length} catégorie${tagList.length > 1 ? "s" : ""}.` }}
+            primary={{ eyebrow: "Répertoire", value: String(total), caption: `${withEmail} avec email · ${contacted} déjà contacté${contacted > 1 ? "s" : ""}.` }}
             bars={{ label: "Par catégorie", value: `${tagList.length} catégorie${tagList.length > 1 ? "s" : ""}`, series: tagCounts.length ? tagCounts : [0] }}
-            small={{ value: String(contacted), label: "Contactés" }}
+            small={{ value: String(relancer), label: `À relancer (${RELANCE_DAYS} j+)` }}
             accent={{ value: String(total - contacted), label: "Jamais contactés", icon: Mail }}
           />
         );
@@ -787,7 +826,7 @@ export function Contacts() {
         <div className="flex items-center gap-1.5">
           <Clock className="h-3.5 w-3.5 shrink-0 text-faint" />
           <div className="flex gap-1 rounded-xl bg-panel p-1">
-            {([["all", "Tous"], ["contacted", "Déjà contactés"], ["never", "Jamais contactés"]] as const).map(([v, label]) => (
+            {([["all", "Tous"], ["contacted", "Déjà contactés"], ["never", "Jamais contactés"], ["relancer", "À relancer"]] as const).map(([v, label]) => (
               <button
                 key={v}
                 type="button"
@@ -917,6 +956,16 @@ export function Contacts() {
                 );
               })()}
 
+              {/* À relancer : dernière prise de contact trop ancienne, sans réponse */}
+              {needsRelance(parseTouches(row.touches), row.last_contacted) && (
+                <span
+                  title={`Dernière prise de contact il y a ${RELANCE_DAYS} jours ou plus, sans réponse notée`}
+                  className="hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-primary/10 px-2 py-1 text-[8px] font-semibold uppercase tracking-wide text-primary sm:inline-flex"
+                >
+                  <Send className="h-2.5 w-2.5" /> Relancer
+                </span>
+              )}
+
               {/* Pastille tag */}
               <span className="shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {row.tag}
@@ -925,6 +974,9 @@ export function Contacts() {
               {/* Actions */}
               <ActionMenu
                 items={[
+                  ...(waLink(row.phone)
+                    ? [{ key: "wa", label: "WhatsApp (note le contact)", icon: MessageCircle, onClick: () => openWhatsApp(row) }]
+                    : []),
                   ...(row.email
                     ? [
                         { key: "email", label: "Envoyer un email", icon: Mail, onClick: () => openMail(row) },
@@ -1017,6 +1069,77 @@ export function Contacts() {
               );
             })()}
 
+            {/* Suivi prospection : journal multi-canal (WhatsApp, insta, tél, LinkedIn) */}
+            {(() => {
+              const list = sortTouches(parseTouches(selected.touches));
+              const kindNext = nextKind(list, selected.last_contacted);
+              const last = lastTouch(list);
+              const CANAL_BTNS: { canal: TouchCanal; icon: LucideIcon }[] = [
+                { canal: "whatsapp", icon: MessageCircle },
+                { canal: "instagram", icon: AtSign },
+                { canal: "tel", icon: Phone },
+                { canal: "linkedin", icon: BriefcaseBusiness },
+              ];
+              return (
+                <div className="mt-4">
+                  <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+                    <MessageCircle className="h-3 w-3" /> Suivi prospection
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {CANAL_BTNS.map(({ canal, icon: CI }) => (
+                      <button
+                        key={canal}
+                        type="button"
+                        onClick={() => (canal === "whatsapp" && waLink(selected.phone) ? openWhatsApp(selected) : logTouch(selected, canal))}
+                        title={`Noter : ${kindNext === "contact" ? "premier contact" : "relance"} via ${CANAL_LABELS[canal]}`}
+                        className="flex items-center gap-1.5 rounded-lg border border-border bg-panel px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                      >
+                        <CI className="h-3.5 w-3.5" /> {CANAL_LABELS[canal]}
+                      </button>
+                    ))}
+                    {list.length > 0 && last?.kind !== "reponse" && (
+                      <button
+                        type="button"
+                        onClick={() => logTouch(selected, last?.canal ?? "autre", "reponse")}
+                        className="flex items-center gap-1.5 rounded-lg border border-signal/30 bg-signal/[0.08] px-2.5 py-1.5 text-[11px] font-semibold text-signal transition-colors hover:bg-signal/15"
+                      >
+                        <Check className="h-3.5 w-3.5" /> Réponse reçue
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-1.5 text-[10px] text-faint">
+                    Un clic note {kindNext === "contact" ? "le premier contact" : "une relance"} à aujourd'hui. WhatsApp ouvre aussi la conversation.
+                  </p>
+                  {list.length > 0 && (
+                    <div className="mt-2 max-h-40 space-y-1 overflow-y-auto pr-1">
+                      {list.map((t) => (
+                        <div key={t.id} className="flex items-center gap-2 rounded-lg bg-panel px-3 py-1.5 text-[11px]">
+                          <span className={cn("shrink-0 font-semibold", t.kind === "reponse" ? "text-signaltext" : t.kind === "contact" ? "text-primary" : "text-foreground")}>
+                            {KIND_LABELS[t.kind]}
+                          </span>
+                          <span className="truncate text-muted-foreground">{CANAL_LABELS[t.canal]}</span>
+                          <span className="ml-auto shrink-0 tabular-nums text-faint">{fmtMailDate(t.date)}</span>
+                          {touchDel === t.id ? (
+                            <button
+                              type="button"
+                              onClick={() => { setTouchDel(null); void saveTouches(selected, parseTouches(selected.touches).filter((x) => x.id !== t.id)); }}
+                              className="shrink-0 rounded bg-red-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-red-500"
+                            >
+                              Suppr ?
+                            </button>
+                          ) : (
+                            <button type="button" onClick={() => setTouchDel(t.id)} className="shrink-0 text-faint transition-colors hover:text-red-500" title="Supprimer cette entrée">
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {selected.email && (
               <div className="mt-4">
                 <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
@@ -1051,14 +1174,23 @@ export function Contacts() {
               </div>
             )}
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
+              {waLink(selected.phone) && (
+                <button
+                  type="button"
+                  onClick={() => openWhatsApp(selected)}
+                  className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-signal py-2.5 text-[11px] font-semibold uppercase tracking-wide text-white transition-opacity hover:opacity-90"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                </button>
+              )}
               {selected.email && (
                 <button
                   type="button"
                   onClick={() => openMail(selected)}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                  className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
                 >
-                  <Mail className="h-3.5 w-3.5" /> Envoyer un email
+                  <Mail className="h-3.5 w-3.5" /> Email
                 </button>
               )}
               <button
