@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Send, Loader2, Settings2, Plus, Trash2, ArrowLeft } from "lucide-react";
+import { X, Send, Loader2, Settings2, Plus, Trash2, ArrowLeft, ExternalLink } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -121,6 +121,17 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
       return;
     }
     toast("Mail envoyé ✓");
+    onSent?.();
+    onClose();
+  };
+
+  // Ouvre le mail pré-rempli dans l'app mail par défaut (Spark) via mailto:
+  // — même journalisation de la prise de contact que l'ancien bouton mail.
+  const openInMailApp = () => {
+    if (!contact) return;
+    const url = `mailto:${contact.email}?subject=${encodeURIComponent(subject.trim())}&body=${encodeURIComponent(body.trim())}`;
+    window.open(url, "_self");
+    toast("Ouvert dans ton app mail ✓");
     onSent?.();
     onClose();
   };
@@ -282,17 +293,27 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
               />
             </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-3">
-              <p className="text-[10px] text-faint">Part depuis ta boîte Gmail · la prise de contact est notée toute seule.</p>
-              <button
-                type="button"
-                onClick={send}
-                disabled={sending || !subject.trim() || !body.trim()}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
-                {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                {sending ? "Envoi…" : "Envoyer"}
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
+              <p className="min-w-0 text-[10px] text-faint">La prise de contact est notée toute seule, quel que soit le chemin.</p>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={openInMailApp}
+                  title="Ouvre le mail pré-rempli dans ton app mail par défaut"
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> Ouvrir dans Spark
+                </button>
+                <button
+                  type="button"
+                  onClick={send}
+                  disabled={sending || !subject.trim() || !body.trim()}
+                  className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  {sending ? "Envoi…" : "Envoyer via Gmail"}
+                </button>
+              </div>
             </div>
           </>
         ) : (
