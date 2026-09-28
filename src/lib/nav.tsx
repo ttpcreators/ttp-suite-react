@@ -33,7 +33,6 @@ import {
   Milestone,
   Bot,
   MessageCircle,
-  Mail,
   CreditCard,
   FolderOpen,
   type LucideIcon,
