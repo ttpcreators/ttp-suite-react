@@ -83,6 +83,28 @@ export function setAccent(color: string): void {
 export function initAccent(): void {
   applyAccent(getAccent() || null);
   applyDarkStyle(getDarkStyle());
+  // Thème clair/sombre mémorisé : posé AVANT le premier rendu (pas de flash blanc).
+  document.documentElement.classList.toggle("dark", getThemePref());
+}
+
+// ── Thème clair/sombre mémorisé par appareil ──
+const THEME_KEY = "ttp:theme";
+
+export function getThemePref(): boolean {
+  try {
+    return localStorage.getItem(THEME_KEY) === "dark";
+  } catch {
+    return false;
+  }
+}
+
+export function setThemePref(dark: boolean): void {
+  try {
+    if (dark) localStorage.setItem(THEME_KEY, "dark");
+    else localStorage.removeItem(THEME_KEY);
+  } catch {
+    /* stockage indispo : le thème reste valable pour la session */
+  }
 }
 
 // ── Style du thème sombre : « minuit » (défaut, façon Efferd) ou « classic » ──

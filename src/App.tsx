@@ -11,11 +11,12 @@ import { useNotifications } from "@/lib/useNotifications";
 import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { maybeAutoRun } from "@/lib/diagnostics";
+import { getThemePref, setThemePref } from "@/lib/accent";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PageFrame } from "@/components/ui/page-header";
 import { Login } from "@/components/Login";
-import { NAV, findItem, type NavItem, type ViewId } from "@/lib/nav";
+import { NAV, findItem, viewTitle, type NavItem, type ViewId } from "@/lib/nav";
 import { NavSubContext } from "@/lib/navSub";
 import { supabase } from "@/lib/supabase";
 import { SearchContext } from "@/lib/search";
@@ -278,7 +279,9 @@ export default function App() {
     return null;
   });
   const [ctxMenu, setCtxMenu] = useState<{ id: ViewId; x: number; y: number } | null>(null);
-  const [dark, setDark] = useState(false);
+  // Thème mémorisé PAR APPAREIL (avant : jamais sauvegardé → l'app repartait
+  // toujours en clair au rechargement). Classe déjà posée par initAccent().
+  const [dark, setDark] = useState(() => getThemePref());
   const [mobileTab, setMobileTab] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [detailCreator, setDetailCreator] = useState<string | null>(null);
@@ -323,6 +326,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
+    setThemePref(dark);
   }, [dark]);
 
   // Mémorise la page courante pour la rouvrir au prochain refresh.
@@ -552,7 +556,7 @@ export default function App() {
   }));
 
   const { items: notifs, dismiss: dismissNotifs } = useNotifications();
-  const title = findItem(active)?.label ?? (active === "corbeille" ? "Corbeille" : "Aperçu");
+  const title = viewTitle(active);
 
   if (session === undefined) {
     return (
@@ -794,7 +798,7 @@ export default function App() {
                   <div className="flex-1 overflow-y-auto pb-24 md:pb-7">
                     <main className="px-4 pt-5 md:px-6">
                       {aliveIds.map((id) => {
-                        const tabTitle = findItem(id)?.label ?? (id === "corbeille" ? "Corbeille" : "Aperçu");
+                        const tabTitle = viewTitle(id);
                         return (
                           <div key={id} hidden={overlayActive || id !== active}>
                             <ErrorBoundary variant="inline" label="Cette page" resetKey={`tab:${id}`}>

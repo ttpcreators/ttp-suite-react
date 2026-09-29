@@ -423,7 +423,7 @@ export function Stats() {
   return (
     <div className="space-y-4">
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border lg:grid-cols-4">
         <StatCard
           icon={Receipt}
           label="CA facturé"

@@ -204,3 +204,13 @@ export const ALL_ITEMS: NavItem[] = NAV.flatMap((f) => f.items);
 export function findItem(id: ViewId): NavItem | undefined {
   return ALL_ITEMS.find((i) => i.id === id);
 }
+
+/** Titre affiché d'une vue : entrée de nav, sinon SOUS-PAGE portant le même id
+ *  (ex. Mails, sous-page de Prospection), sinon libellés fixes. Sans ce repli, une
+ *  vue devenue sous-page s'affichait avec le titre « Aperçu ». */
+export function viewTitle(id: string): string {
+  const it = ALL_ITEMS.find((i) => i.id === id);
+  if (it) return it.label;
+  for (const i of ALL_ITEMS) for (const c of i.children ?? []) if (c.id === id) return c.label;
+  return id === "corbeille" ? "Corbeille" : "Aperçu";
+}

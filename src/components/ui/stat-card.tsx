@@ -38,7 +38,8 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
 /**
  * Carte statistique premium : libellé + grande valeur, variation % colorée
  * (optionnelle — uniquement quand une vraie évolution existe) et sparkline
- * (optionnelle). Style aligné sur la DA.
+ * (optionnelle). Style : CELLULE de bandeau façon Aperçu (pas de cadre propre) —
+ * à poser dans une grille `gap-px bg-border` bordée, qui dessine les filets.
  */
 export function StatCard({
   label,
@@ -75,16 +76,16 @@ export function StatCard({
   ) : null;
   const footer = compareFooter ?? (spark && spark.length >= 2 ? deltaLabel : deltaLabel ?? hint);
   return (
-    <div className="flex flex-col rounded-xl border border-border bg-surface p-5 shadow-sm">
+    <div className="flex min-w-0 flex-col bg-surface px-4 py-4 sm:px-5 sm:py-5">
       {/* Titre (+ action optionnelle à droite) */}
       <div className="flex items-start justify-between gap-2">
-        <div className="text-sm font-medium text-muted-foreground">{label}</div>
+        <div className="line-clamp-2 text-[12px] leading-snug text-muted-foreground sm:text-[13px]">{label}</div>
         {action && <div className="-me-1 -mt-0.5 shrink-0">{action}</div>}
       </div>
 
       {/* Valeur + variation (badge pilule coloré) */}
-      <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
-        <span className="whitespace-nowrap text-2xl font-semibold tracking-tight text-foreground">{value}</span>
+      <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <span className="whitespace-nowrap text-[22px] font-semibold leading-none tracking-tight tabular-nums text-foreground sm:text-[26px]">{value}</span>
         {hasDelta && (
           <span
             className={cn(
@@ -109,7 +110,7 @@ export function StatCard({
 
       {/* Pied : évolution ou contexte, séparé par un filet */}
       {footer && (
-        <div className="mt-3 border-t border-border pt-2.5 text-xs text-muted-foreground">{footer}</div>
+        <div className="mt-3 text-[12px] leading-snug text-muted-foreground">{footer}</div>
       )}
     </div>
   );

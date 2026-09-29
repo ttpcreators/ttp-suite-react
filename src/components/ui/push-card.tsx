@@ -113,15 +113,15 @@ export function PushCard() {
       >
         <ol className="flex flex-col gap-3">
           <li className="flex gap-3">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Smartphone className="h-4 w-4" /></span>
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><Smartphone className="h-4 w-4" /></span>
             <div><span className="font-semibold text-foreground">iPhone d'abord :</span> Partager → « Ajouter à l'écran d'accueil », puis ouvre l'app <span className="font-medium text-foreground">depuis son icône</span> (obligatoire pour les notifs iOS).</div>
           </li>
           <li className="flex gap-3">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Bell className="h-4 w-4" /></span>
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><Bell className="h-4 w-4" /></span>
             <div>Reviens ici → <span className="font-semibold text-foreground">Activer</span> → <span className="font-medium text-foreground">Autoriser</span> quand le téléphone le demande.</div>
           </li>
           <li className="flex gap-3">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Shield className="h-4 w-4" /></span>
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><Shield className="h-4 w-4" /></span>
             <div>Si tu avais refusé : <span className="font-medium text-foreground">Réglages → Notifications → TTP Suite</span> → autorise. (Sur Android / ordinateur : clique « Activer » et autorise.)</div>
           </li>
         </ol>

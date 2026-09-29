@@ -47,7 +47,7 @@ export function CredentialVault() {
     <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><KeyRound className="h-4 w-4" /></span>
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><KeyRound className="h-4 w-4" /></span>
           <div>
             <div className="text-sm font-semibold text-foreground">Coffre identifiants créateurs</div>
             <div className="text-[11px] text-faint">Boîtes e-mail que tu gères. Agence uniquement — ⚠️ stocké en clair, n'ajoute que ce que tu acceptes.</div>

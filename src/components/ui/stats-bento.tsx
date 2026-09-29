@@ -24,9 +24,9 @@ export type StatsBentoProps = {
   className?: string;
 };
 
-const cell = "flex min-w-0 flex-col px-5 py-5";
-const label = "truncate text-[13px] text-muted-foreground";
-const big = "mt-2 truncate text-[26px] font-semibold leading-none tracking-tight tabular-nums text-foreground";
+const cell = "flex min-w-0 flex-col px-4 py-4 sm:px-5 sm:py-5";
+const label = "line-clamp-2 text-[12px] leading-snug text-muted-foreground sm:text-[13px]";
+const big = "mt-2 truncate text-[22px] font-semibold leading-none tracking-tight tabular-nums text-foreground sm:text-[26px]";
 
 export function StatsBento({ primary, bars, small, accent, className }: StatsBentoProps) {
   const max = Math.max(1, ...bars.series.filter((n) => Number.isFinite(n)));
@@ -44,9 +44,10 @@ export function StatsBento({ primary, bars, small, accent, className }: StatsBen
       {/* Répartition (mini-barres) */}
       <div className={cn(cell, "border-l border-border")}>
         <span className={label}>{bars.label}</span>
-        <div className="mt-2 flex items-end justify-between gap-3">
-          <span className="truncate text-[26px] font-semibold leading-none tracking-tight tabular-nums text-foreground">{bars.value}</span>
-          <div className="flex h-8 shrink-0 items-end gap-[3px]" aria-hidden>
+        {/* Mobile : barres SOUS le chiffre (sinon il est tronqué dans une case étroite). */}
+        <div className="mt-2 flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
+          <span className="max-w-full truncate text-[22px] font-semibold leading-none tracking-tight tabular-nums text-foreground sm:text-[26px]">{bars.value}</span>
+          <div className="flex h-6 shrink-0 items-end gap-[3px] sm:h-8" aria-hidden>
             {bars.series.map((h, i) => (
               <span
                 key={i}
@@ -66,9 +67,9 @@ export function StatsBento({ primary, bars, small, accent, className }: StatsBen
 
       {/* Chiffre avec icône */}
       <div className={cn(cell, "border-l border-t border-border lg:border-t-0")}>
-        <span className={cn(label, "flex items-center gap-1.5")}>
-          {AccentIcon && <AccentIcon className="h-3.5 w-3.5 shrink-0" />}
-          <span className="truncate">{accent.label}</span>
+        <span className={cn(label, "flex items-start gap-1.5")}>
+          {AccentIcon && <AccentIcon className="mt-px h-3.5 w-3.5 shrink-0" />}
+          <span className="line-clamp-2">{accent.label}</span>
         </span>
         <span className={big}>{accent.value}</span>
       </div>

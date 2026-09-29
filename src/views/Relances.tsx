@@ -164,14 +164,14 @@ export function Relances() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-          <div className="text-[11px] font-medium text-muted-foreground">Total impayé</div>
-          <div className="mt-1.5 text-xl font-bold tracking-tight text-rose-500">{formatEuro(totalDue)}</div>
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border">
+        <div className="min-w-0 bg-surface px-5 py-5">
+          <div className="text-[13px] text-muted-foreground">Total impayé</div>
+          <div className="mt-2 truncate text-[26px] font-semibold leading-none tracking-tight tabular-nums text-rose-500">{formatEuro(totalDue)}</div>
         </div>
-        <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-          <div className="text-[11px] font-medium text-muted-foreground">Factures à relancer</div>
-          <div className="mt-1.5 text-xl font-bold tracking-tight text-foreground">{overdue.length}</div>
+        <div className="min-w-0 bg-surface px-5 py-5">
+          <div className="text-[13px] text-muted-foreground">Factures à relancer</div>
+          <div className="mt-2 text-[26px] font-semibold leading-none tracking-tight tabular-nums text-foreground">{overdue.length}</div>
         </div>
       </div>
 

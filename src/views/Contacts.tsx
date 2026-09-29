@@ -830,16 +830,17 @@ export function Contacts() {
 
       {/* Filtres : « déjà échangé » (suivi de contact) + ville */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 max-w-full items-center gap-1.5">
           <Clock className="h-3.5 w-3.5 shrink-0 text-faint" />
-          <div className="flex gap-1 rounded-xl bg-panel p-1">
+          {/* Mobile : défile à l’horizontale au lieu de tasser les libellés sur 2 lignes */}
+          <div className="flex min-w-0 gap-1 overflow-x-auto rounded-xl bg-panel p-1 [scrollbar-width:none]">
             {([["all", "Tous"], ["contacted", "Déjà contactés"], ["never", "Jamais contactés"], ["relancer", "À relancer"]] as const).map(([v, label]) => (
               <button
                 key={v}
                 type="button"
                 onClick={() => setContactFilter(v)}
                 className={cn(
-                  "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                  "shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors",
                   contactFilter === v ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
                 )}
               >

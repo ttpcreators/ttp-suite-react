@@ -50,6 +50,8 @@ export function GlobalSearch({
   onGoto: (id: ViewId) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Texte d'aide court sur mobile (le long était tronqué au milieu d'un mot).
+  const [narrow] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
   const { hits, loading } = useGlobalSearch(query);
   const show = open && query.trim().length >= 2;
 
@@ -78,9 +80,9 @@ export function GlobalSearch({
 
   return (
     <div className="relative w-full max-w-[220px] sm:max-w-md md:max-w-xl">
-      {/* Champ contrôlé — pilule sombre en clair, GRISE en dark (pas blanche) */}
-      <div className="flex h-11 items-center gap-2.5 rounded-full bg-foreground px-4 text-background shadow-sm ring-1 ring-border/50 dark:bg-secondary dark:text-foreground dark:ring-border">
-        <SearchIcon className="h-4 w-4 shrink-0 opacity-80" />
+      {/* Champ contrôlé — langage de l’Aperçu : champ clair bordé, halo discret au focus */}
+      <div className="flex h-10 items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 text-foreground transition-shadow focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-foreground/10">
+        <SearchIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
         <input
           type="text"
           value={query}
@@ -97,8 +99,8 @@ export function GlobalSearch({
               setOpen(false);
             }
           }}
-          placeholder="Rechercher une page, un créateur, une facture…"
-          className="h-full min-w-0 flex-1 bg-transparent text-sm text-background outline-none placeholder:text-background/50 dark:text-foreground dark:placeholder:text-muted-foreground"
+          placeholder={narrow ? "Rechercher…" : "Rechercher une page, un créateur, une facture…"}
+          className="h-full min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-faint"
         />
         {query && (
           <button
@@ -107,7 +109,7 @@ export function GlobalSearch({
               setQuery("");
               setOpen(false);
             }}
-            className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-background/60 transition-colors hover:text-background dark:text-muted-foreground dark:hover:text-foreground"
+            className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
             aria-label="Effacer la recherche"
           >
             <X className="h-3.5 w-3.5" />

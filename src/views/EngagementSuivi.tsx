@@ -445,15 +445,15 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-border bg-border">
         {[
           { l: "Créateurs suivis", v: String(rows.length), icon: Users },
           { l: "Taux moyen", v: `${String(avgEr).replace(".", ",")} %`, icon: Activity },
           { l: "Meilleur taux", v: rows.length ? `${String(bestGlobal).replace(".", ",")} %` : "—", icon: TrendingUp },
         ].map((c) => (
-          <div key={c.l} className="rounded-2xl border border-border bg-surface p-3.5 shadow-sm sm:p-4">
-            <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground"><c.icon className="h-3 w-3 shrink-0" /> <span className="truncate">{c.l}</span></div>
-            <div className="mt-1 text-xl font-bold tracking-tight tabular-nums sm:text-2xl">{c.v}</div>
+          <div key={c.l} className="min-w-0 bg-surface px-4 py-4 sm:px-5 sm:py-5">
+            <div className="flex items-start gap-1.5 text-[12px] text-muted-foreground sm:text-[13px]"><c.icon className="h-3.5 w-3.5 shrink-0" /> <span className="line-clamp-2 leading-snug">{c.l}</span></div>
+            <div className="mt-2 text-[20px] font-semibold leading-none tracking-tight tabular-nums sm:text-[26px]">{c.v}</div>
           </div>
         ))}
       </div>

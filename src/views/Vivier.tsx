@@ -304,7 +304,7 @@ export function Vivier() {
                 <span className={cn("h-1.5 w-1.5 rounded-full", statusMeta(statusOf(r.id)).dot)} />{statusMeta(statusOf(r.id)).label}
               </span>
               {r.email && (
-                <button type="button" onClick={(e) => { e.stopPropagation(); openMail(r); }} title="Solliciter par email" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary transition-colors hover:bg-primary/20">
+                <button type="button" onClick={(e) => { e.stopPropagation(); openMail(r); }} title="Solliciter par email" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground transition-colors hover:bg-primary/20">
                   <Mail className="h-4 w-4" />
                 </button>
               )}
