@@ -5,6 +5,18 @@
    endroits où le primaire (blanc en Minuit) remplit une GRANDE surface. */
 @custom-variant minuit (&:is(.dark:not(.dark-classic) *));
 
+/* Deux bouts de l'accent : égaux à la couleur d'accent, sauf accent EN DÉGRADÉ
+   (Paramètres → Couleur d'accent → Dégradés), où accent.ts les pose en ligne. */
+:root {
+  --accent-a: var(--primary);
+  --accent-b: var(--primary);
+}
+/* Accent en dégradé : chaque aplat primaire (boutons pleins, pastilles) devient
+   un dégradé ; les teintes légères (bg-primary/10…) restent unies. */
+.accent-grad .bg-primary {
+  background-image: linear-gradient(135deg, var(--accent-a), var(--accent-b));
+}
+
 :root {
   /* Fait suivre le thème aux contrôles NATIFs (pickers date/mois, spinners
      number, menus <select>, cases à cocher, scrollbars) — sinon ils restent

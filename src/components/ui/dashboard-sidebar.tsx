@@ -33,6 +33,20 @@ export const sbRailCls = (active: boolean) =>
     "grid h-10 w-10 shrink-0 place-items-center rounded-[10px] transition-colors",
     active ? cn(ACTIVE_BG, "text-foreground") : cn("text-foreground/50 hover:text-foreground", HOVER_BG),
   );
+/** Dégradé SVG de l'accent (deux bouts `--accent-a/-b`, égaux hors accent en dégradé). */
+const ACCENT_GRAD_ID = "ttp-accent-grad";
+function AccentGradientDef() {
+  return (
+    <svg width="0" height="0" aria-hidden className="absolute">
+      <defs>
+        <linearGradient id={ACCENT_GRAD_ID} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" style={{ stopColor: "var(--accent-a)" }} />
+          <stop offset="1" style={{ stopColor: "var(--accent-b)" }} />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
 /** Petit bouton d'action révélé dans une ligne (chevron, vue partagée, étoile). */
 const ghostBtn = "grid h-6 w-6 place-items-center rounded-md text-foreground/40 transition-colors hover:bg-foreground/[0.06] hover:text-foreground";
 
@@ -122,10 +136,11 @@ function Row({
           className={cn(
             "absolute right-8 focus-visible:opacity-100",
             ghostBtn,
-            pinned ? "text-foreground/70 opacity-100" : "opacity-0 group-hover:opacity-100",
+            pinned ? "opacity-100" : "opacity-0 group-hover:opacity-100",
           )}
         >
-          <Star className={cn("h-3.5 w-3.5", pinned && "fill-current")} />
+          {/* Épinglée : étoile à la couleur d'accent (dégradé compris, cf. ACCENT_GRAD_ID) */}
+          <Star className="h-3.5 w-3.5" style={pinned ? { stroke: `url(#${ACCENT_GRAD_ID})`, fill: `url(#${ACCENT_GRAD_ID})` } : undefined} />
         </button>
       )}
     </div>
@@ -496,6 +511,7 @@ export function SidebarNav({
 
   return (
     <aside className="flex h-full w-[240px] shrink-0 flex-col p-3">
+      <AccentGradientDef />
       {header}
       <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {groups.map((g) => (

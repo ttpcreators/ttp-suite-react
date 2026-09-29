@@ -116,7 +116,7 @@ export function Ugc() {
   });
 
   const pillBase = "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors";
-  const pillActive = "bg-primary text-primary-foreground";
+  const pillActive = "bg-foreground text-background";
   const pillInactive = "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground";
 
   return (
@@ -165,46 +165,45 @@ export function Ugc() {
       </InlineForm>
 
       {filtered.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
-          {list.length === 0 ? "Aucun créateur UGC pour l'instant. Ajoute le premier 🎬" : "Aucun résultat pour ces filtres."}
+        <div className="rounded-2xl border border-border bg-surface p-6 text-[13px] text-muted-foreground">
+          {list.length === 0 ? "Aucun créateur UGC pour l'instant. Ajoute le premier avec le bouton « UGC »." : "Aucun résultat pour ces filtres."}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        /* Liste dans UN panneau, lignes séparées par des filets (langage Aperçu) */
+        <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
           {filtered.map((u) => {
             const b = statusMeta(u.status);
             const contact = [u.email, u.phone].filter(Boolean).join(" · ");
             return (
-              <div key={u.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <CreatorAvatar name={u.name} photoUrl={null} className="h-11 w-11 shrink-0 rounded-xl text-xs" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="truncate text-sm font-semibold">{titleCase(u.name)}</div>
-                      <AnimatedBadge status={b.status} size="sm">{b.label}</AnimatedBadge>
-                    </div>
-                    <div className="mt-0.5 truncate text-xs text-faint">
-                      {[u.handle, u.platform, u.niche].filter(Boolean).join(" · ") || "—"}
-                    </div>
-                    {(u.rate || u.city) && (
-                      <div className="mt-1 truncate text-xs text-muted-foreground">
-                        {[u.rate, u.city].filter(Boolean).join(" · ")}
-                      </div>
-                    )}
-                    {u.notes && <div className="mt-1 line-clamp-2 text-[11px] text-faint">{u.notes}</div>}
+              <div key={u.id} className="flex items-start gap-3 px-4 py-3.5 transition-colors hover:bg-rowhover sm:items-center sm:px-5">
+                <CreatorAvatar name={u.name} photoUrl={null} className="h-10 w-10 shrink-0 rounded-full text-xs" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="truncate text-[13px] font-semibold text-foreground">{titleCase(u.name)}</div>
+                    <AnimatedBadge status={b.status} size="sm">{b.label}</AnimatedBadge>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <ActionMenu
-                      items={[
-                        ...(contact ? [{ key: "copy", label: "Copier le contact", icon: Copy, onClick: () => { navigator.clipboard?.writeText(contact); toast("Contact copié ✓"); } }] : []),
-                        { key: "edit", label: "Modifier", icon: Pencil, onClick: () => openEdit(u) },
-                        { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => del(u.id), confirm: { title: "Supprimer le créateur UGC", message: `Supprimer « ${u.name} » ? Cette action est irréversible.` } },
-                      ]}
-                    />
+                  <div className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                    {[u.handle, u.platform, u.niche].filter(Boolean).join(" · ") || "—"}
                   </div>
+                  {u.notes && <div className="mt-1 line-clamp-1 text-[12px] text-faint">{u.notes}</div>}
+                  {contact && <div className="mt-1 truncate text-[12px] text-muted-foreground md:hidden">{contact}</div>}
                 </div>
-                {contact && (
-                  <div className="mt-3 truncate rounded-lg bg-panel px-3 py-2 text-xs text-foreground">{contact}</div>
+                {(u.rate || u.city) && (
+                  <div className="hidden w-40 shrink-0 text-right text-[13px] lg:block">
+                    {u.rate && <div className="truncate font-medium tabular-nums text-foreground">{u.rate}</div>}
+                    {u.city && <div className="truncate text-[12px] text-muted-foreground">{u.city}</div>}
+                  </div>
                 )}
+                {contact && <div className="hidden w-56 shrink-0 truncate text-right text-[13px] text-muted-foreground md:block">{contact}</div>}
+                <div className="flex shrink-0 items-center">
+                  <ActionMenu
+                    items={[
+                      ...(contact ? [{ key: "copy", label: "Copier le contact", icon: Copy, onClick: () => { navigator.clipboard?.writeText(contact); toast("Contact copié ✓"); } }] : []),
+                      { key: "edit", label: "Modifier", icon: Pencil, onClick: () => openEdit(u) },
+                      { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => del(u.id), confirm: { title: "Supprimer le créateur UGC", message: `Supprimer « ${u.name} » ? Cette action est irréversible.` } },
+                    ]}
+                  />
+                </div>
               </div>
             );
           })}

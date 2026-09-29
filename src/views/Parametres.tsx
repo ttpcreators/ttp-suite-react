@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check, MessageCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
-import { ACCENT_PRESETS, getAccent, setAccent, isHex, getDarkStyle, setDarkStyle, type DarkStyle } from "@/lib/accent";
+import { ACCENT_PRESETS, ACCENT_GRADIENTS, getAccent, setAccent, isHex, parseGradient, getDarkStyle, setDarkStyle, type DarkStyle } from "@/lib/accent";
 import { NOTIF_TEXTS_CREATOR, NOTIF_TEXTS_AGENCY, type NotifTextField } from "@/lib/notifTexts";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { RELANCE_DAYS, type ProspectSettings, type WaMode } from "@/lib/touches";
@@ -248,6 +248,7 @@ export function Parametres() {
         title="Couleur d'accent"
         hint="La couleur des boutons, liens et surbrillances (propre à cet appareil). Fonctionne aussi en mode sombre."
       >
+        <div className="mb-2 text-[12px] font-medium text-muted-foreground">Couleurs unies</div>
         <div className="flex flex-wrap items-center gap-2.5">
           {ACCENT_PRESETS.map((p) => {
             const active = (accent || "") === p.value;
@@ -279,7 +280,32 @@ export function Parametres() {
             <input type="color" value={isHex(accent) ? accent : "#0069fe"} onChange={(e) => chooseAccent(e.target.value)} className="sr-only" />
           </label>
         </div>
-        <p className="mt-3 text-[11px] text-faint">« Par défaut » : bleu en clair, blanc en sombre Minuit. « Bleu TTP » force le bleu partout. Le texte des boutons s'ajuste (blanc/noir) pour rester lisible.</p>
+        {/* Dégradés : boutons pleins en deux couleurs */}
+        <div className="mb-2 mt-5 text-[12px] font-medium text-muted-foreground">Dégradés</div>
+        <div className="flex flex-wrap items-center gap-2">
+          {ACCENT_GRADIENTS.map((g) => {
+            const active = accent === g.value;
+            const [a, b] = parseGradient(g.value) ?? ["#000", "#000"];
+            return (
+              <button
+                key={g.name}
+                type="button"
+                onClick={() => chooseAccent(g.value)}
+                aria-pressed={active}
+                className={cn(
+                  "flex h-8 items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-[12px] font-medium transition-colors",
+                  active ? "border-foreground text-foreground" : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
+                )}
+              >
+                <span className="grid h-6 w-6 place-items-center rounded-full" style={{ background: `linear-gradient(135deg, ${a}, ${b})` }}>
+                  {active && <Check className="h-3.5 w-3.5 text-white" />}
+                </span>
+                {g.name}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-3 text-[11px] text-faint">« Par défaut » : bleu en clair, blanc en sombre Minuit. « Bleu TTP » force le bleu partout. Un dégradé colore les boutons en deux teintes. Le texte des boutons s'ajuste (blanc/noir) pour rester lisible.</p>
       </Section>
 
       {/* Prospection : rythme de recontact + ouverture WhatsApp (blob prospectSettings) */}

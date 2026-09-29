@@ -27,6 +27,7 @@ import { StatsBento } from "@/components/ui/stats-bento";
 import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { DEFAULT_TEMPLATES, mailtoHref, suggestedMail, type MailTemplate } from "@/lib/mailTemplates";
 
 type Row = {
   id: string;
@@ -251,6 +252,7 @@ export function Contacts() {
 
   // Réglages prospection (Paramètres → Prospection) : rythme + mode WhatsApp.
   const { data: prospectCfg } = useAppState<ProspectSettings>((s: AppState) => (s["prospectSettings"] as ProspectSettings) ?? {});
+  const { data: storedTemplates } = useAppState<MailTemplate[] | undefined>((s: AppState) => s["mailTemplates"] as MailTemplate[] | undefined);
   const relanceDays = Math.max(1, Number(prospectCfg?.relanceDays) || RELANCE_DAYS);
   const waMode: WaMode = prospectCfg?.waMode === "web" ? "web" : "app";
 
@@ -341,6 +343,20 @@ export function Contacts() {
     const t: Touch = { id: touchId(), date: new Date().toISOString(), canal, kind: kind ?? nextKind(list, row.last_contacted) };
     void saveTouches(row, [t, ...list]);
     toast(`${KIND_LABELS[t.kind]} · ${CANAL_LABELS[canal]} noté ✓`);
+  };
+  // Mail pré-rempli (modèle premier contact ou relance) ouvert dans Spark,
+  // qu'on peut retoucher avant d'envoyer. La prise de contact est notée.
+  const openSpark = (row: Row) => {
+    const email = row.email?.trim();
+    if (!email) {
+      toast("Pas d'email pour ce contact");
+      return;
+    }
+    const contacted = parseTouches(row.touches).length > 0 || Boolean(row.last_contacted);
+    const tpls = Array.isArray(storedTemplates) && storedTemplates.length > 0 ? storedTemplates : DEFAULT_TEMPLATES;
+    const { subject, body } = suggestedMail(tpls, { brand: row.brand === "—" ? "" : row.brand, person: row.person, first_name: row.first_name }, contacted);
+    window.open(mailtoHref(email, subject, body), "_self");
+    logTouch(row, "email");
   };
   const openWhatsApp = (row: Row) => {
     const url = waHref(row.phone, waMode);
@@ -510,6 +526,16 @@ export function Contacts() {
     setMailSeed((n) => n + 1);
     setMailOpen(true);
     setSelected(null);
+  };
+
+  // Bascule le mail rédigé vers Spark (destinataires, objet, texte ; les pièces
+  // jointes et la signature se remettent dans Spark). Chaque contact connu est noté.
+  const sendViaSpark = () => {
+    const recipients = [...new Set(mailRecipients.map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))];
+    if (recipients.length === 0) return toast("Ajoute au moins un destinataire");
+    window.open(mailtoHref(recipients.join(","), mailSubject.trim(), mailBody.trim()), "_self");
+    for (const r of rows ?? []) if (r.email && recipients.includes(r.email.trim().toLowerCase())) logTouch(r, "email");
+    setMailOpen(false);
   };
 
   // Valide les champs puis ouvre la confirmation (anti-envoi par mégarde).
@@ -1094,6 +1120,16 @@ export function Contacts() {
                     <MessageCircle className="h-3 w-3" /> Suivi prospection
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
+                    {selected.email && (
+                      <button
+                        type="button"
+                        onClick={() => openSpark(selected)}
+                        title={`Ouvre un mail pré-rempli (${kindNext === "contact" ? "premier contact" : "relance"}) dans Spark et le note`}
+                        className="flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                      >
+                        <Mail className="h-3.5 w-3.5" /> Spark
+                      </button>
+                    )}
                     {CANAL_BTNS.map(({ canal, icon: CI }) => (
                       <button
                         key={canal}
@@ -1116,7 +1152,7 @@ export function Contacts() {
                     )}
                   </div>
                   <p className="mt-1.5 text-[10px] text-faint">
-                    Un clic note {kindNext === "contact" ? "le premier contact" : "une relance"} à aujourd'hui. WhatsApp ouvre aussi la conversation.
+                    Un clic note {kindNext === "contact" ? "le premier contact" : "une relance"} à aujourd'hui. Spark ouvre un mail pré-rempli, WhatsApp la conversation.
                   </p>
                   {list.length > 0 && (
                     <div className="mt-2 max-h-40 space-y-1 overflow-y-auto pr-1">
@@ -1357,6 +1393,15 @@ export function Contacts() {
                   className="rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground hover:bg-rowhover disabled:opacity-50"
                 >
                   Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={sendViaSpark}
+                  disabled={sending}
+                  title="Ouvre ce mail dans Spark pour l'envoyer de là (pièces jointes à remettre dans Spark)"
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+                >
+                  <Mail className="h-3.5 w-3.5" /> Spark
                 </button>
                 <button
                   type="button"

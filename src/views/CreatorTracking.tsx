@@ -770,56 +770,64 @@ export function RosterTracking({ onOpen }: { onOpen?: (name: string) => void }) 
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
+      {/* Chiffres clés (bandeau à filets, comme l'Aperçu) */}
+      <div className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-border bg-border">
         {(["bonne", "surveiller", "difficulte"] as const).map((tr) => (
-          <div key={tr} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-            <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-              <span className={cn("size-2 rounded-full", TRAJECTORY_META[tr].dot)} /> {TRAJECTORY_META[tr].label}
+          <div key={tr} className="flex min-w-0 flex-col bg-surface px-4 py-4 sm:px-5 sm:py-5">
+            <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground sm:text-[13px]">
+              <span className={cn("size-2 shrink-0 rounded-full", TRAJECTORY_META[tr].dot)} />
+              <span className="truncate">{TRAJECTORY_META[tr].label}</span>
             </div>
-            <div className="mt-1 text-2xl font-semibold tabular-nums tabular-nums text-foreground">{counts[tr]}</div>
+            <div className="mt-2 text-[22px] font-semibold leading-none tracking-tight tabular-nums text-foreground sm:text-[26px]">{counts[tr]}</div>
+            <div className="mt-3 text-[12px] text-muted-foreground">
+              {rows.length ? `${Math.round((counts[tr] / rows.length) * 100)} % du roster` : "—"}
+            </div>
           </div>
         ))}
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-separate [border-spacing:0_10px] text-left">
-          <thead>
-            <tr className="text-[12px] font-medium text-muted-foreground">
-              <th className="px-4 pb-1">Créateur</th>
-              <th className="px-4 pb-1">Trajectoire</th>
-              <th className="px-4 pb-1">Dernier contact</th>
-              <th className="px-4 pb-1">Prochain point</th>
-              <th className="px-4 pb-1">Alertes actives</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.name} onClick={() => onOpen?.(r.name)} className={cn("bg-surface shadow-sm transition-colors hover:bg-rowhover [&>td]:border-y [&>td]:border-border [&>td:first-child]:rounded-l-2xl [&>td:first-child]:border-l [&>td:last-child]:rounded-r-2xl [&>td:last-child]:border-r", onOpen && "cursor-pointer")}>
-                <td className="px-4 py-3 text-[13px] font-semibold text-foreground">{titleCase(r.name)}</td>
-                <td className="px-4 py-3">
-                  <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
-                    <span className={cn("size-2 rounded-full", TRAJECTORY_META[r.traj].dot)} /> {TRAJECTORY_META[r.traj].label}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-[12px] text-muted-foreground">{frShort(r.last)}</td>
-                <td className="px-4 py-3 text-[12px] text-muted-foreground">{frShort(r.next)}</td>
-                <td className="px-4 py-3">
-                  {r.alerts.length === 0 ? (
-                    <span className="text-[11px] text-faint">—</span>
-                  ) : (
-                    <div className="flex flex-wrap gap-1">
-                      {r.alerts.map((a, i) => (
-                        <span key={i} className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", a.level === "danger" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-foreground/[0.06] text-amber")}>
-                          {a.label}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </td>
+      {/* Tableau dans UN panneau, lignes séparées par des filets */}
+      <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left">
+            <thead>
+              <tr className="border-b border-border text-[12px] text-muted-foreground">
+                <th className="px-5 py-3 font-normal">Créateur</th>
+                <th className="px-5 py-3 font-normal">Trajectoire</th>
+                <th className="px-5 py-3 font-normal">Dernier contact</th>
+                <th className="px-5 py-3 font-normal">Prochain point</th>
+                <th className="px-5 py-3 font-normal">Alertes actives</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.map((r) => (
+                <tr key={r.name} onClick={() => onOpen?.(r.name)} className={cn("transition-colors hover:bg-rowhover", onOpen && "cursor-pointer")}>
+                  <td className="px-5 py-3.5 text-[13px] font-semibold text-foreground">{titleCase(r.name)}</td>
+                  <td className="px-5 py-3.5">
+                    <span className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                      <span className={cn("size-2 rounded-full", TRAJECTORY_META[r.traj].dot)} /> {TRAJECTORY_META[r.traj].label}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 text-[13px] tabular-nums text-muted-foreground">{frShort(r.last)}</td>
+                  <td className="px-5 py-3.5 text-[13px] tabular-nums text-muted-foreground">{frShort(r.next)}</td>
+                  <td className="px-5 py-3.5">
+                    {r.alerts.length === 0 ? (
+                      <span className="text-[13px] text-faint">—</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {r.alerts.map((a, i) => (
+                          <span key={i} className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", a.level === "danger" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-muted text-muted-foreground")}>
+                            {a.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

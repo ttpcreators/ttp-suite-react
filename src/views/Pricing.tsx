@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Info, Plus, Trash2, Copy, Users, Sparkles } from "lucide-react";
+import { Info, Plus, Trash2, Copy, Users, Sparkles, Calculator, Tag, Lightbulb } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useCreators } from "@/lib/useCreators";
 import { formatEuro } from "@/lib/appState";
@@ -18,7 +18,7 @@ const rid = () => `p${Date.now().toString(36)}${(_rid += 1)}`;
 
 const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15";
 const SEL = IN;
-const LBL = "text-[11px] font-medium text-muted-foreground";
+const LBL = "text-[12px] font-medium text-muted-foreground";
 
 type Mode = "influence" | "ugc";
 type InfRow = { id: string; platform: PlatKey; format: string; qty: number; followers: string; er: string };
@@ -108,16 +108,16 @@ export function Pricing() {
     const who = creatorId !== EXTERNAL && selName ? titleCase(selName) : "Créateur";
     let txt = "";
     if (mode === "influence") {
-      txt = `Proposition tarifaire — ${who}\n\n`;
+      txt = `Proposition tarifaire : ${who}\n\n`;
       inf.itemsPriced.forEach(({ item, min, max }) => {
         const fmt = infFormat(item.platform, item.format);
-        txt += `• ${INF_PLATFORMS.find((p) => p.key === item.platform)?.label} — ${fmt?.label} ×${item.qty} : ${formatEuro(min)}–${formatEuro(max)}\n`;
+        txt += `• ${INF_PLATFORMS.find((p) => p.key === item.platform)?.label}, ${fmt?.label} ×${item.qty} : ${formatEuro(min)}–${formatEuro(max)}\n`;
       });
       if (infOpts.exclusivite) txt += "• Exclusivité incluse\n";
       if (infOpts.droitsUsage) txt += "• Droits d'usage / ads inclus\n";
       txt += `\nTotal : ${formatEuro(inf.min)} – ${formatEuro(inf.max)} HT (cible ${formatEuro(inf.mid)}).`;
     } else {
-      txt = `Proposition UGC — ${who}\n\n`;
+      txt = `Proposition UGC : ${who}\n\n`;
       ugc.itemsPriced.forEach(({ item, min, max }) => {
         txt += `• ${UGC_TYPES.find((t) => t.key === item.type)?.label} ×${item.qty} : ${formatEuro(min)}–${formatEuro(max)}\n`;
       });
@@ -129,11 +129,14 @@ export function Pricing() {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
-      {/* ============ ENTRÉES ============ */}
-      <div className="flex flex-col gap-4">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+      {/* ============ ENTRÉES (un panneau façon Aperçu) ============ */}
+      <section className="min-w-0 rounded-2xl border border-border bg-surface p-5 lg:col-span-7">
+        <div className="mb-4 flex items-center gap-2 text-[14px] font-semibold text-foreground">
+          <Calculator className="h-4 w-4 text-muted-foreground" /> Composer le package
+        </div>
         {/* Mode + créateur */}
-        <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+        <div>
           <div className="flex w-fit items-center gap-1 rounded-full border border-border bg-panel p-1">
             {([["influence", "Influence", Users], ["ugc", "UGC", Sparkles]] as const).map(([m, label, Icon]) => (
               <button
@@ -149,16 +152,16 @@ export function Pricing() {
               </button>
             ))}
           </div>
-          <p className="mt-2 text-[11px] leading-snug text-faint">
+          <p className="mt-2 text-[12px] leading-snug text-muted-foreground">
             {mode === "influence"
-              ? "Le créateur publie sur SON compte — prix basé sur l'audience de chaque plateforme."
-              : "Le créateur livre du contenu que la MARQUE exploite — forfait par livrable, selon les droits."}
+              ? "Le créateur publie sur son propre compte : prix basé sur l'audience de chaque plateforme."
+              : "Le créateur livre du contenu que la marque exploite : forfait par livrable, selon les droits."}
           </p>
 
           <div className="mt-4 flex flex-col gap-1.5">
             <span className={LBL}>Créateur</span>
             <select value={creatorId} onChange={(e) => setCreatorId(e.target.value)} className={SEL}>
-              <option value={EXTERNAL}>— Externe / manuel</option>
+              <option value={EXTERNAL}>Externe (saisie manuelle)</option>
               {creators.map((c) => (
                 <option key={c.id} value={c.id}>{titleCase(c.name)} (auto)</option>
               ))}
@@ -168,7 +171,7 @@ export function Pricing() {
 
         {/* ---- INFLUENCE ---- */}
         {mode === "influence" ? (
-          <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+          <div className="mt-4 border-t border-border pt-4">
             <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
               <label className="flex flex-1 flex-col gap-1.5" style={{ minWidth: 160 }}>
                 <span className={LBL}>Niche (du créateur)</span>
@@ -214,15 +217,15 @@ export function Pricing() {
             </button>
 
             <div className="mt-4 flex flex-wrap items-center gap-4">
-              <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-foreground">
+              <label className="flex cursor-pointer items-center gap-2 text-[13px] text-foreground">
                 <input type="checkbox" checked={infOpts.exclusivite} onChange={(e) => setInfOpts((o) => ({ ...o, exclusivite: e.target.checked }))} className="h-4 w-4 accent-[var(--primary)]" />
                 Exclusivité <span className="text-faint">+25 %</span>
               </label>
-              <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-foreground">
+              <label className="flex cursor-pointer items-center gap-2 text-[13px] text-foreground">
                 <input type="checkbox" checked={infOpts.droitsUsage} onChange={(e) => setInfOpts((o) => ({ ...o, droitsUsage: e.target.checked }))} className="h-4 w-4 accent-[var(--primary)]" />
                 Droits d'usage / ads <span className="text-faint">+30 %</span>
               </label>
-              <label className="flex items-center gap-2 text-[12px] font-medium text-foreground">
+              <label className="flex items-center gap-2 text-[13px] text-foreground">
                 Remise pack
                 <input type="number" min={0} max={50} value={infOpts.remisePct} onChange={(e) => setInfOpts((o) => ({ ...o, remisePct: Math.min(50, Math.max(0, parseInt(e.target.value, 10) || 0)) }))} className="w-16 rounded-md border border-border bg-surface px-2 py-1 text-center text-[13px] tabular-nums outline-none focus:border-primary" />
                 <span className="text-faint">%</span>
@@ -231,7 +234,7 @@ export function Pricing() {
           </div>
         ) : (
           /* ---- UGC ---- */
-          <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+          <div className="mt-4 border-t border-border pt-4">
             <div className="mb-3 flex flex-wrap items-end gap-3">
               <label className="flex flex-1 flex-col gap-1.5" style={{ minWidth: 160 }}>
                 <span className={LBL}>Niveau du créateur UGC</span>
@@ -269,7 +272,7 @@ export function Pricing() {
 
             <div className="mt-4 flex flex-wrap items-center gap-4">
               {([["exclusivite", "Exclusivité", "+25 %"], ["rushes", "Rushes / fichiers bruts", "+15 %"], ["montage", "Montage avancé", "+20 %"], ["express", "Livraison express", "+20 %"]] as const).map(([k, label, pct]) => (
-                <label key={k} className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-foreground">
+                <label key={k} className="flex cursor-pointer items-center gap-2 text-[13px] text-foreground">
                   <input type="checkbox" checked={ugcOpts[k]} onChange={(e) => setUgcOpts((o) => ({ ...o, [k]: e.target.checked }))} className="h-4 w-4 accent-[var(--primary)]" />
                   {label} <span className="text-faint">{pct}</span>
                 </label>
@@ -278,45 +281,48 @@ export function Pricing() {
           </div>
         )}
 
-        <div className="flex items-start gap-2 rounded-2xl border border-border bg-surface p-4 text-[11px] leading-snug text-muted-foreground shadow-sm">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-faint" />
+        <div className="mt-4 flex items-start gap-2 border-t border-border pt-4 text-[12px] leading-snug text-muted-foreground">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" />
           <span>
             {mode === "influence"
-              ? "Somme des livrables, chacun à (abonnés/1000) × CPM × niche × engagement, puis options et remise. Fourchette HT indicative — barèmes marché 2026."
-              : "Le prix UGC ne dépend PAS de l'audience : forfait de production × niveau, dont les DROITS d'exploitation sont le vrai levier. Fourchette HT indicative — barèmes marché 2026."}
+              ? "Somme des livrables, chacun à (abonnés/1000) × CPM × niche × engagement, puis options et remise. Fourchette HT indicative, barèmes marché 2026."
+              : "Le prix UGC ne dépend PAS de l'audience : forfait de production × niveau, dont les DROITS d'exploitation sont le vrai levier. Fourchette HT indicative, barèmes marché 2026."}
           </span>
         </div>
-      </div>
+      </section>
 
       {/* ============ RÉSULTAT ============ */}
-      <div className="flex flex-col rounded-2xl bg-foreground p-6 text-background lg:sticky lg:top-4 lg:self-start">
+      <section className="flex min-w-0 flex-col rounded-2xl border border-border bg-surface p-5 lg:sticky lg:top-4 lg:col-span-5 lg:self-start">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-xs font-medium text-signal">
-            {mode === "influence" ? "Package influence" : "Package UGC"}
+          <div className="flex items-center gap-2 text-[14px] font-semibold text-foreground">
+            <Tag className="h-4 w-4 text-muted-foreground" /> Résultat
           </div>
           {hasResult && (
-            <button type="button" onClick={copyQuote} className="flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[12px] font-medium text-background transition-colors hover:bg-white/20">
+            <button type="button" onClick={copyQuote} className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
               <Copy className="h-3.5 w-3.5" /> Copier
             </button>
           )}
         </div>
-        {creatorId !== EXTERNAL && selName && <div className="mt-1 text-[11px] text-faint">{titleCase(selName)}</div>}
+        <div className="mt-3 text-[13px] text-muted-foreground">
+          {mode === "influence" ? "Package influence" : "Package UGC"}
+          {creatorId !== EXTERNAL && selName ? ` · ${titleCase(selName)}` : ""}
+        </div>
 
         {hasResult ? (
           <>
             <div className="mt-4">
-              <div className={LBL}>Fourchette conseillée (HT)</div>
-              <div className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-background sm:text-3xl">
+              <div className="text-[12px] text-muted-foreground">Fourchette conseillée (HT)</div>
+              <div className="mt-2 text-[28px] font-semibold leading-tight tracking-tight tabular-nums text-foreground xl:text-[34px]">
                 {formatEuro(result.min)} <span className="text-faint">–</span> {formatEuro(result.max)}
               </div>
-              <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-[11px] text-faint">Prix cible</span>
-                <span className="text-lg font-bold text-signal">{formatEuro(result.mid)}</span>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-[13px] text-muted-foreground">Prix cible</span>
+                <span className="text-[18px] font-semibold tabular-nums text-foreground">{formatEuro(result.mid)}</span>
               </div>
             </div>
 
             {/* Détail par livrable */}
-            <div className="mt-4 flex flex-col gap-1.5 border-t border-white/10 pt-3 text-[11px]">
+            <div className="mt-5 divide-y divide-border border-t border-border text-[13px]">
               {(mode === "influence" ? inf.itemsPriced : ugc.itemsPriced).map((r, i) => {
                 const label =
                   mode === "influence"
@@ -330,29 +336,32 @@ export function Pricing() {
               )}
             </div>
 
-            <div className="mt-4 rounded-xl bg-white/[0.06] p-3 text-[11px] leading-snug text-faint">
-              💡 {mode === "influence"
-                ? <>Ne descends pas sous <span className="font-semibold text-background">{formatEuro(result.min)}</span> sans contrepartie. Le juste prix se défend avec l'engagement et le palier de chaque plateforme.</>
-                : <>Le prix monte surtout avec les <span className="font-semibold text-background">droits d'exploitation</span> : un contenu diffusé en ads pendant 6 mois vaut bien plus qu'un post organique.</>}
+            <div className="mt-4 flex items-start gap-2 rounded-xl bg-muted p-3 text-[12px] leading-snug text-muted-foreground">
+              <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                {mode === "influence"
+                  ? <>Ne descends pas sous <span className="font-semibold text-foreground">{formatEuro(result.min)}</span> sans contrepartie. Le juste prix se défend avec l'engagement et le palier de chaque plateforme.</>
+                  : <>Le prix monte surtout avec les <span className="font-semibold text-foreground">droits d'exploitation</span> : un contenu diffusé en ads pendant 6 mois vaut bien plus qu'un post organique.</>}
+              </span>
             </div>
           </>
         ) : (
-          <div className="mt-6 text-sm text-faint">
+          <div className="mt-6 text-[13px] text-muted-foreground">
             {mode === "influence"
               ? "Ajoute des livrables et renseigne les abonnés de chaque plateforme pour obtenir une fourchette."
               : "Ajoute des livrables UGC pour obtenir une fourchette."}
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }
 
 function Line({ l, v }: { l: string; v: string }) {
   return (
-    <div className="flex justify-between gap-3">
-      <span className="min-w-0 truncate text-faint">{l}</span>
-      <span className="shrink-0 font-medium text-background tabular-nums">{v}</span>
+    <div className="flex justify-between gap-3 py-2">
+      <span className="min-w-0 truncate text-muted-foreground">{l}</span>
+      <span className="shrink-0 font-medium tabular-nums text-foreground">{v}</span>
     </div>
   );
 }

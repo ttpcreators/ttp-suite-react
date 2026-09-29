@@ -479,7 +479,7 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
             subtitle="Moyenne de tous les créateurs, par mois"
             points={erTrend}
             format={(n) => `${n.toFixed(2).replace(".", ",")} %`}
-            color="#16a34a"
+            color="var(--primary)"
             height={190}
             compareLabel="vs mois préc."
           />

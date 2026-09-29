@@ -27,9 +27,47 @@ export const ACCENT_PRESETS: AccentPreset[] = [
   { name: "Bordeaux", value: "#7a2e2e" },
 ];
 
+/**
+ * Accents EN DÉGRADÉ (valeur « #a,#b ») : les boutons pleins passent en dégradé
+ * de deux couleurs (classe `accent-grad` sur la racine, voir index.css) ; le
+ * texte et les liens prennent la couleur médiane. Toutes assez soutenues pour
+ * un texte blanc lisible.
+ */
+export const ACCENT_GRADIENTS: AccentPreset[] = [
+  { name: "Aurore", value: "#ec4899,#8b5cf6" },
+  { name: "Océan", value: "#2b7fff,#06b6d4" },
+  { name: "Crépuscule", value: "#f97316,#db2777" },
+  { name: "Lagon", value: "#10b981,#2b7fff" },
+  { name: "Nuit", value: "#6366f1,#a855f7" },
+];
+
 /** #rrggbb ou #rgb valide ? */
 export function isHex(c: string): boolean {
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c.trim());
+}
+
+/** Accent en dégradé (« #a,#b ») → les deux couleurs, sinon null. */
+export function parseGradient(v: string | null | undefined): [string, string] | null {
+  const parts = (v ?? "").split(",").map((x) => x.trim());
+  return parts.length === 2 && isHex(parts[0]) && isHex(parts[1]) ? [parts[0], parts[1]] : null;
+}
+
+/** Valeur d'accent valide (couleur unie ou dégradé) ? */
+export function isAccent(v: string): boolean {
+  return isHex(v) || parseGradient(v) !== null;
+}
+
+function toRgb(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  const n = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  return [parseInt(n.slice(0, 2), 16), parseInt(n.slice(2, 4), 16), parseInt(n.slice(4, 6), 16)];
+}
+
+/** Couleur à mi-chemin entre deux couleurs (texte, liens, anneaux d'un dégradé). */
+function mixHex(a: string, b: string): string {
+  const [r1, g1, b1] = toRgb(a);
+  const [r2, g2, b2] = toRgb(b);
+  return "#" + [(r1 + r2) / 2, (g1 + g2) / 2, (b1 + b2) / 2].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
 }
 
 /** Luminance relative (0 = noir, 1 = blanc) — pour choisir un texte lisible dessus. */
@@ -49,16 +87,27 @@ function luminance(hex: string): number {
 /** Applique (ou retire si null/"") la couleur d'accent sur la racine. */
 export function applyAccent(color: string | null): void {
   const el = document.documentElement;
-  if (!color || !isHex(color)) {
+  const grad = parseGradient(color);
+  el.classList.toggle("accent-grad", grad !== null);
+  if (grad) {
+    el.style.setProperty("--accent-a", grad[0]);
+    el.style.setProperty("--accent-b", grad[1]);
+  } else {
+    el.style.removeProperty("--accent-a");
+    el.style.removeProperty("--accent-b");
+  }
+  const solid = grad ? mixHex(grad[0], grad[1]) : color;
+  if (!solid || !isHex(solid)) {
     el.style.removeProperty("--primary");
     el.style.removeProperty("--primary-foreground");
     el.style.removeProperty("--ring");
     return;
   }
-  const fg = luminance(color) > 0.55 ? "#18181b" : "#ffffff";
-  el.style.setProperty("--primary", color);
-  el.style.setProperty("--primary-foreground", fg);
-  el.style.setProperty("--ring", color);
+  // Dégradé : texte sombre seulement si les DEUX bouts sont clairs.
+  const light = grad ? Math.min(luminance(grad[0]), luminance(grad[1])) > 0.55 : luminance(solid) > 0.55;
+  el.style.setProperty("--primary", solid);
+  el.style.setProperty("--primary-foreground", light ? "#18181b" : "#ffffff");
+  el.style.setProperty("--ring", solid);
 }
 
 export function getAccent(): string {
@@ -71,7 +120,7 @@ export function getAccent(): string {
 
 export function setAccent(color: string): void {
   try {
-    if (color && isHex(color)) localStorage.setItem(KEY, color);
+    if (color && isAccent(color)) localStorage.setItem(KEY, color);
     else localStorage.removeItem(KEY);
   } catch {
     /* stockage indispo : on applique quand même en mémoire pour la session */

@@ -151,12 +151,12 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
         {...tabs.tabListProps}
         ref={rowRef}
         aria-label={label}
-        className="relative flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-panel p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="relative flex w-fit max-w-full gap-0.5 overflow-x-auto rounded-xl border border-border bg-surface p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {/* Indicateur glissant (fond de l'onglet actif) */}
         <motion.span
           aria-hidden
-          className="pointer-events-none absolute bottom-1 top-1 rounded-lg bg-surface shadow-sm"
+          className="pointer-events-none absolute bottom-1 top-1 rounded-lg bg-muted"
           style={{ left: ind.x, width: ind.width, opacity: ind.ready ? 1 : 0 }}
           transition={reduced ? { duration: 0 } : INDICATOR}
         />
@@ -168,7 +168,7 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
               {...tabs.getTabProps(item, index)}
               ref={(node) => { tabRefs.current[index] = node; }}
               className={cn(
-                "relative z-10 flex h-8 shrink-0 items-center gap-2 rounded-lg px-3.5 text-xs font-semibold outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-primary/40",
+                "relative z-10 flex h-8 shrink-0 items-center gap-2 rounded-lg px-3 text-[13px] font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-foreground/20 [&_svg]:text-current",
                 item.disabled ? "cursor-default text-faint" : selected ? "text-foreground" : "text-muted-foreground hover:text-foreground",
               )}
             >

@@ -10,6 +10,7 @@ import {
   TEMPLATE_VARS,
   renderTemplate,
   suggestedKind,
+  mailtoHref,
   type MailTemplate,
   type MailTemplateKind,
   type TemplateContact,
@@ -129,7 +130,7 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
   // — même journalisation de la prise de contact que l'ancien bouton mail.
   const openInMailApp = () => {
     if (!contact) return;
-    const url = `mailto:${contact.email}?subject=${encodeURIComponent(subject.trim())}&body=${encodeURIComponent(body.trim())}`;
+    const url = mailtoHref(contact.email, subject.trim(), body.trim());
     window.open(url, "_self");
     toast("Ouvert dans ton app mail ✓");
     onSent?.();

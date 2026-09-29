@@ -129,3 +129,23 @@ ttpcreators.pro`,
 export function suggestedKind(hasBeenContacted: boolean): MailTemplateKind {
   return hasBeenContacted ? "relance" : "prospection";
 }
+
+/**
+ * Lien `mailto:` pré-rempli. Il ouvre l'app mail par défaut du Mac (Spark chez
+ * nous : c'est lui qui gère `mailto:`, Chrome n'a pas de Gmail branché dessus).
+ */
+export function mailtoHref(email: string, subject: string, body: string): string {
+  const q = [subject && `subject=${encodeURIComponent(subject)}`, body && `body=${encodeURIComponent(body)}`].filter(Boolean).join("&");
+  return `mailto:${email.trim()}${q ? `?${q}` : ""}`;
+}
+
+/** Objet + texte du modèle suggéré pour ce contact, variables résolues. */
+export function suggestedMail(
+  templates: MailTemplate[],
+  c: TemplateContact,
+  hasBeenContacted: boolean,
+): { subject: string; body: string } {
+  const kind = suggestedKind(hasBeenContacted);
+  const tpl = templates.find((t) => t.kind === kind) ?? templates[0];
+  return tpl ? { subject: renderTemplate(tpl.subject, c), body: renderTemplate(tpl.body, c) } : { subject: "", body: "" };
+}
