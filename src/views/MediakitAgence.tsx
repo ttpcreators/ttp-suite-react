@@ -3,6 +3,7 @@ import { Plus, Trash2, Save, ExternalLink, Building2, CalendarHeart, FileText, B
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import { ImageField } from "@/components/ui/image-field";
+import { MediakitThemePicker } from "@/components/ui/mediakit-theme-picker";
 
 /**
  * Éditeur du MEDIA KIT AGENCE (deck global ttpcreators.pro/mediakit/agence/).
@@ -39,6 +40,7 @@ type FullAgencyKit = {
   kpis: Kpis;
   contact: { instagram: string; phone: string; email: string };
   photo: string | null;
+  theme: string; // thème de couleurs du deck (lib/mediakitThemes), « minuit » par défaut
   concepts: Concept[];
 };
 // Forme partielle telle que stockée en base (tous les champs optionnels).
@@ -48,6 +50,7 @@ type AgencyKit = {
   kpis?: Partial<Kpis>;
   contact?: Partial<FullAgencyKit["contact"]>;
   photo?: string | null;
+  theme?: string;
   concepts?: Concept[];
 };
 
@@ -77,6 +80,7 @@ function withDefaults(blob: AgencyKit): FullAgencyKit {
     kpis: { ...DEF.kpis, creatorsOverride: "", followersOverride: "", ...(blob.kpis ?? {}) },
     contact: { ...DEF.contact, ...(blob.contact ?? {}) },
     photo: blob.photo ?? null,
+    theme: blob.theme ?? "minuit",
     concepts: blob.concepts ?? [],
   };
 }
@@ -206,6 +210,11 @@ export function AgencyTab() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {/* Couleurs du deck agence (web + PDF) */}
+          <section className={`${CARD} xl:col-span-2`}>
+            <MediakitThemePicker value={kit.theme} onChange={(theme) => setKit((k) => ({ ...k, theme }))} previewBase="https://ttpcreators.pro/mediakit/agence/" />
+          </section>
+
           {/* ---------------- INTRO ---------------- */}
           <section className={CARD}>
             <h3 className={`${H3} mb-4`}><FileText className="h-4 w-4 text-muted-foreground" /> Présentation de l'agence</h3>

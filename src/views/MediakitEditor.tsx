@@ -9,6 +9,7 @@ import { toast } from "@/components/ui/toast";
 import { titleCase, cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { PlatformIcon } from "@/components/ui/platform-icon";
+import { MediakitThemePicker } from "@/components/ui/mediakit-theme-picker";
 
 /**
  * Éditeur du MEDIA KIT EN LIGNE (par créatrice). Tout est écrit dans la colonne
@@ -61,6 +62,8 @@ type MediaKit = {
   ratesNote?: string;
   /** Masque les tarifs sur le media kit public (ils restent saisis ici). */
   hideRates?: boolean;
+  /** Thème de couleurs du media kit public (ids : lib/mediakitThemes). Absent = « minuit ». */
+  theme?: string;
   /** Profil casting (tableau comparatif du deck agence) : clé critère → "oui" ou une précision. Absent = non. */
   casting?: Record<string, string>;
   /** Media kit UGC — format à part (personnalité, quotidien, matériel, portfolio),
@@ -406,6 +409,11 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
         <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
           {mode === "standard" && (
           <>
+          {/* Couleurs du media kit (web + PDF, aussi la page UGC) */}
+          <section className={`${CARD} xl:col-span-2`}>
+            <MediakitThemePicker value={mk.theme} onChange={(theme) => patch({ theme })} previewBase={publicUrl} />
+          </section>
+
           {/* Colonne gauche : profil + photos (colonnes équilibrées, plus de vide sous « Profil ») */}
           <div className="flex min-w-0 flex-col gap-4">
           {/* ---------------- PROFIL ---------------- */}
