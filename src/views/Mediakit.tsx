@@ -639,7 +639,7 @@ function MediakitFiles() {
   );
 }
 
-type MkTab = "creatrices" | "ugc" | "agence" | "files";
+type MkTab = "creatrices" | "agence" | "files";
 
 /**
  * Page « Media kit » UNIFIÉE = 3 onglets (fusion de l'ancienne « Media kit » et de
@@ -655,7 +655,7 @@ export function Mediakit() {
   const sub = useNavSub();
   const setNavSub = useSetNavSub();
   useEffect(() => {
-    if (sub === "creatrices" || sub === "ugc" || sub === "agence" || sub === "files") setTab(sub);
+    if (sub === "creatrices" || sub === "agence" || sub === "files") setTab(sub);
   }, [sub]);
   // Onglets façon sélecteur de l'Aperçu ; le choix est remonté à la sidebar.
   const tabBtn = (id: MkTab, label: string) => (
@@ -678,7 +678,6 @@ export function Mediakit() {
     <div className="space-y-4">
       <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-[12px] font-medium">
         {tabBtn("creatrices", "Créatrices")}
-        {tabBtn("ugc", "UGC")}
         {tabBtn("agence", "Agence")}
         {tabBtn("files", "Fichiers")}
       </div>
@@ -688,14 +687,6 @@ export function Mediakit() {
             Chaque modification met à jour <span className="text-foreground">sa page perso</span> (ttpcreators.pro/mediakit/&lt;lien&gt;) et le deck agence.
           </p>
           <MediakitEditor />
-        </div>
-      ) : tab === "ugc" ? (
-        <div>
-          <p className="mb-4 text-[13px] text-muted-foreground">
-            Media kit <span className="text-foreground">UGC</span> : format orienté personne (personnalité, quotidien, matériel, portfolio),
-            sur une page séparée (/mediakit/&lt;lien&gt;/ugc/). Choisis une créatrice puis active-le.
-          </p>
-          <MediakitEditor mode="ugc" />
         </div>
       ) : tab === "agence" ? (
         <AgencyTab />

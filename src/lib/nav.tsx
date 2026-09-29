@@ -111,7 +111,6 @@ export const NAV: NavFamily[] = [
         icon: ImageIcon,
         children: [
           { id: "creatrices", label: "Créatrices" },
-          { id: "ugc", label: "UGC" },
           { id: "agence", label: "Agence" },
           { id: "files", label: "Fichiers" },
         ],
