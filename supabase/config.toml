@@ -82,3 +82,8 @@ verify_jwt = true
 # auth applicative dans le code (CRON_SECRET OU rôle agence).
 [functions.gmail-poll]
 verify_jwt = false
+
+# gmail-reconcile : scan invisible des mails SORTANTS (touches prospection),
+# appelé par pg_cron (CRON_SECRET) → verify_jwt=false, auth dans le code.
+[functions.gmail-reconcile]
+verify_jwt = false
