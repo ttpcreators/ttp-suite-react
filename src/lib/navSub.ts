@@ -8,3 +8,7 @@ import { createContext, useContext } from "react";
  */
 export const NavSubContext = createContext<string | null>(null);
 export const useNavSub = () => useContext(NavSubContext);
+
+/** La vue active signale le sous-onglet choisi DANS la page → la sidebar le surligne. */
+export const NavSubSetContext = createContext<(s: string | null) => void>(() => {});
+export const useSetNavSub = () => useContext(NavSubSetContext);

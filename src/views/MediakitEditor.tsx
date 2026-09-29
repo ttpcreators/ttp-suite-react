@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon, Check, Sparkles, Euro } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon, Check, Sparkles, Euro, UserRound, Users, BarChart3, Share2, ListChecks, Store, type LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { ImageField } from "@/components/ui/image-field";
 import { dbUpdate } from "@/lib/db";
@@ -126,9 +126,39 @@ const PLATFORM_OPTIONS = [
 ];
 const platLabel = (k: string) => PLATFORM_OPTIONS.find((p) => p.key === k)?.label ?? titleCase(k);
 
-const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15";
+const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none placeholder:text-faint focus:border-primary focus:ring-2 focus:ring-primary/15";
 const LBL = "mb-1 block text-[12px] font-medium text-muted-foreground";
-const CARD = "rounded-2xl border border-border bg-surface p-4 shadow-sm";
+const CARD = "rounded-2xl border border-border bg-surface p-5";
+// Listes éditables : UN cadre, lignes séparées par des filets, champs sans bordure.
+const LIST = "overflow-hidden rounded-xl border border-border divide-y divide-border";
+const BARE = "min-w-0 flex-1 bg-transparent px-3 py-2 text-[13px] text-foreground outline-none transition-colors placeholder:text-faint hover:bg-rowhover/50 focus:bg-rowhover/70";
+const DEL = "grid h-8 w-8 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]";
+const ADD = "mt-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground";
+
+/** Titre de section façon Aperçu : icône grise + intitulé, aide et action optionnelles. */
+function SectionHead({ icon: Icon, title, hint, right }: { icon: LucideIcon; title: ReactNode; hint?: ReactNode; right?: ReactNode }) {
+  return (
+    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <h3 className="flex items-center gap-2 text-[14px] font-semibold text-foreground">
+          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" /> {title}
+        </h3>
+        {hint && <p className="mt-1 max-w-xl text-[12px] leading-relaxed text-muted-foreground">{hint}</p>}
+      </div>
+      {right && <div className="shrink-0">{right}</div>}
+    </div>
+  );
+}
+
+/** Cellule « nombre + % » d'une ligne de liste. */
+function PctCell({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <div className="flex shrink-0 items-center border-l border-border">
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} inputMode="decimal" className="w-14 bg-transparent py-2 pl-2 text-right text-[13px] tabular-nums outline-none transition-colors placeholder:text-faint hover:bg-rowhover/50 focus:bg-rowhover/70" />
+      <span className="pl-1 pr-3 text-[12px] text-muted-foreground">%</span>
+    </div>
+  );
+}
 
 function slugify(s: string): string {
   return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -303,7 +333,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
       {/* En-tête : créatrice + voir + enregistrer */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Select value={selId} onValueChange={setSelId}>
-          <SelectTrigger className="h-10 w-auto min-w-[220px] rounded-xl bg-surface" placeholder="Choisir une créatrice" />
+          <SelectTrigger className="h-9 w-auto min-w-[220px] rounded-lg bg-surface" placeholder="Choisir une créatrice" />
           <SelectContent>
             {creators.map((c, i) => (
               <SelectItem key={c.id} index={i} value={c.id}>
@@ -320,7 +350,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 href={publicUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
               >
                 <ExternalLink className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Voir le media kit</span>
               </a>
@@ -330,7 +360,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 href={`${publicUrl}ugc/`}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
               >
                 <Sparkles className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Voir le kit UGC</span>
               </a>
@@ -339,7 +369,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
               type="button"
               onClick={save}
               disabled={saving || loading || loadError || loadedId !== selId}
-              className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               <Save className="h-3.5 w-3.5" /> {saving ? "Enregistrement…" : "Enregistrer"}
             </button>
@@ -348,7 +378,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
       </div>
 
       {!selId ? (
-        <div className="rounded-2xl border border-dashed border-border bg-surface p-10 text-center shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface p-10 text-center">
           <ImageIcon className="mx-auto h-8 w-8 text-faint" />
           <div className="mt-3 text-sm font-medium text-foreground">Choisis une créatrice</div>
           <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
@@ -367,28 +397,31 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
           <button
             type="button"
             onClick={() => setReloadKey((k) => k + 1)}
-            className="mt-3 rounded-xl bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            className="mt-3 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             Réessayer
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
           {mode === "standard" && (
           <>
+          {/* Colonne gauche : profil + photos (colonnes équilibrées, plus de vide sous « Profil ») */}
+          <div className="flex min-w-0 flex-col gap-4">
           {/* ---------------- PROFIL ---------------- */}
           <section className={CARD}>
-            <h3 className="mb-3 text-sm font-semibold text-foreground">Profil</h3>
-            <div className="space-y-3">
+            <SectionHead icon={UserRound} title="Profil" />
+            <div className="space-y-4">
               <div>
                 <label className={LBL}>Lien (adresse de la page)</label>
-                <div className="flex items-center gap-1 text-sm">
-                  <span className="shrink-0 text-faint">ttpcreators.pro/mediakit/</span>
+                {/* Préfixe accolé au champ (un seul bloc bordé) */}
+                <div className="flex overflow-hidden rounded-lg border border-border bg-surface text-[13px] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
+                  <span className="flex shrink-0 items-center border-r border-border bg-muted px-3 text-muted-foreground">ttpcreators.pro/mediakit/</span>
                   <input
                     value={mk.slug ?? ""}
                     onChange={(e) => patch({ slug: slugify(e.target.value) })}
                     placeholder="candice"
-                    className={IN}
+                    className={BARE}
                   />
                 </div>
               </div>
@@ -397,19 +430,51 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 <textarea
                   value={mk.bio ?? ""}
                   onChange={(e) => patch({ bio: e.target.value })}
-                  rows={4}
+                  rows={6}
                   placeholder="Candice est une créatrice lifestyle & blogging basée à Paris…"
-                  className={`${IN} resize-y`}
+                  className={`${IN} min-h-[140px] resize-y leading-relaxed`}
                 />
               </div>
               <TagEditor tags={mk.tags ?? []} onChange={setTags} />
             </div>
           </section>
 
+          {/* ---------------- PHOTOS ---------------- */}
+          <section className={CARD}>
+            <SectionHead icon={ImageIcon} title="Photos" />
+            <div className="flex flex-wrap gap-6">
+              <ImageField
+                label="Portrait principal (page d'accueil)"
+                slug={mk.slug ?? ""}
+                field="hero"
+                url={mk.photos?.hero}
+                onChange={(u) => setPhoto("hero", u)}
+                boxClass="h-44 w-36"
+              />
+              <ImageField
+                label="Portrait secondaire (page contact)"
+                slug={mk.slug ?? ""}
+                field="contact"
+                url={mk.photos?.contact}
+                onChange={(u) => setPhoto("contact", u)}
+                boxClass="h-44 w-36"
+              />
+            </div>
+            <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
+              Portraits verticaux conseillés (ils remplissent toute la hauteur). Les captures de profil s'ajoutent dans
+              chaque bloc « Plateforme » ci-dessous. Les images sont optimisées automatiquement — après un upload, clique
+              « Enregistrer » en haut.
+            </p>
+          </section>
+
+          </div>
+
+          {/* Colonne droite : audience + captures de stats */}
+          <div className="flex min-w-0 flex-col gap-4">
           {/* ---------------- AUDIENCE ---------------- */}
           <section className={CARD}>
-            <h3 className="mb-3 text-sm font-semibold text-foreground">Audience</h3>
-            <div className="space-y-4">
+            <SectionHead icon={Users} title="Audience" />
+            <div className="space-y-5">
               <PctList
                 title="Tranches d'âge"
                 rows={mk.audience?.age ?? []}
@@ -417,26 +482,20 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 placeholderLabel="18–24 ans"
               />
               <div>
-                <label className={LBL}>Genre (%)</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-16 text-xs text-muted-foreground">Femmes</span>
-                    <input
-                      value={mk.audience?.gender?.femmes ?? ""}
-                      onChange={(e) => patchAudience({ gender: { ...mk.audience?.gender, femmes: e.target.value } })}
-                      placeholder="29"
-                      className={IN}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-16 text-xs text-muted-foreground">Hommes</span>
-                    <input
-                      value={mk.audience?.gender?.hommes ?? ""}
-                      onChange={(e) => patchAudience({ gender: { ...mk.audience?.gender, hommes: e.target.value } })}
-                      placeholder="71"
-                      className={IN}
-                    />
-                  </div>
+                <label className={LBL}>Genre</label>
+                {/* Même cadre que les autres listes : libellé fixe + % aligné */}
+                <div className={LIST}>
+                  {(["femmes", "hommes"] as const).map((g) => (
+                    <div key={g} className="flex items-center pr-1">
+                      <span className="flex-1 px-3 py-2 text-[13px] text-muted-foreground">{g === "femmes" ? "Femmes" : "Hommes"}</span>
+                      <PctCell
+                        value={mk.audience?.gender?.[g] ?? ""}
+                        onChange={(v) => patchAudience({ gender: { ...mk.audience?.gender, [g]: v } })}
+                        placeholder={g === "femmes" ? "29" : "71"}
+                      />
+                      <span className="w-8 shrink-0" />
+                    </div>
+                  ))}
                 </div>
               </div>
               <CountryList
@@ -460,42 +519,13 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
             </div>
           </section>
 
-          {/* ---------------- PHOTOS ---------------- */}
-          <section className={`${CARD} xl:col-span-2`}>
-            <h3 className="mb-3 text-sm font-semibold text-foreground">Photos</h3>
-            <div className="flex flex-wrap gap-6">
-              <ImageField
-                label="Portrait principal (page d'accueil)"
-                slug={mk.slug ?? ""}
-                field="hero"
-                url={mk.photos?.hero}
-                onChange={(u) => setPhoto("hero", u)}
-                boxClass="h-44 w-36"
-              />
-              <ImageField
-                label="Portrait secondaire (page contact)"
-                slug={mk.slug ?? ""}
-                field="contact"
-                url={mk.photos?.contact}
-                onChange={(u) => setPhoto("contact", u)}
-                boxClass="h-44 w-36"
-              />
-            </div>
-            <p className="mt-2 text-[11px] text-faint">
-              Portraits verticaux conseillés (ils remplissent toute la hauteur). Les captures de profil s'ajoutent dans
-              chaque bloc « Plateforme » ci-dessous. Les images sont optimisées automatiquement — après un upload, clique
-              « Enregistrer » en haut.
-            </p>
-          </section>
-
           {/* ---------------- CAPTURES DE STATS ---------------- */}
-          <section className={`${CARD} xl:col-span-2`}>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-foreground">Captures de stats</h3>
-              <span className="text-[11px] font-medium text-faint">
-                {(mk.statsShots ?? []).length}/{MAX_STATS_SHOTS}
-              </span>
-            </div>
+          <section className={CARD}>
+            <SectionHead
+              icon={BarChart3}
+              title="Captures de stats"
+              right={<span className="text-[12px] tabular-nums text-muted-foreground">{(mk.statsShots ?? []).length}/{MAX_STATS_SHOTS}</span>}
+            />
             <div className="flex flex-wrap gap-4">
               {(mk.statsShots ?? []).map((u, i) => (
                 <ImageField
@@ -527,24 +557,29 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 />
               )}
             </div>
-            <p className="mt-2 text-[11px] text-faint">
+            <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
               Jusqu'à {MAX_STATS_SHOTS} captures d'insights (portée, audience, vues…). Elles s'affichent sur le media kit
               public et dans le PDF. Après un upload, clique « Enregistrer » en haut.
             </p>
           </section>
 
+          </div>
+
           {/* ---------------- PLATEFORMES ---------------- */}
           <section className={`${CARD} xl:col-span-2`}>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-foreground">Plateformes</h3>
-              <button
-                type="button"
-                onClick={importFromCalculator}
-                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-              >
-                <Wand2 className="h-3.5 w-3.5" /> Importer followers + ER (calculateur)
-              </button>
-            </div>
+            <SectionHead
+              icon={Share2}
+              title="Plateformes"
+              right={
+                <button
+                  type="button"
+                  onClick={importFromCalculator}
+                  className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+                >
+                  <Wand2 className="h-3.5 w-3.5" /> Importer followers + ER (calculateur)
+                </button>
+              }
+            />
             <div className="space-y-3">
               {(mk.platforms ?? []).map((p, i) => (
                 <PlatformEditor
@@ -560,7 +595,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
               <button
                 type="button"
                 onClick={() => setPlatforms([...(mk.platforms ?? []), { key: "instagram" }])}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border px-3 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                className={ADD}
               >
                 <Plus className="h-3.5 w-3.5" /> Ajouter une plateforme
               </button>
@@ -569,29 +604,32 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
 
           {/* ---------------- TARIFS ---------------- */}
           <section className={`${CARD} xl:col-span-2`}>
-            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-foreground">Tarifs</h3>
-                <p className="mt-1 max-w-xl text-[11px] leading-relaxed text-faint">
+            <SectionHead
+              icon={Euro}
+              title="Tarifs"
+              hint={
+                <>
                   Prix HT par prestation. Ils s'affichent sur une page « Tarifs » du media kit (web + PDF) et le deck agence
                   indique « à partir de ». Le media kit est une page publique : masque les prix si tu préfères les donner
                   au cas par cas.
-                </p>
-              </div>
+                </>
+              }
+              right={
               <button
                 type="button"
                 onClick={() => patch({ hideRates: !mk.hideRates })}
                 className={cn(
                   "flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-[12px] font-medium transition-colors",
-                  !mk.hideRates ? "bg-signalsoft text-signaltext" : "border border-border text-muted-foreground hover:bg-rowhover",
+                  !mk.hideRates ? "border border-border bg-muted text-foreground" : "border border-border text-muted-foreground hover:bg-rowhover",
                 )}
               >
-                <span className={cn("grid h-4 w-4 shrink-0 place-items-center rounded", !mk.hideRates ? "bg-primary text-primary-foreground" : "border border-border")}>
+                <span className={cn("grid h-4 w-4 shrink-0 place-items-center rounded", !mk.hideRates ? "bg-foreground text-background" : "border border-border")}>
                   {!mk.hideRates && <Check className="h-3 w-3" />}
                 </span>
                 {mk.hideRates ? "Prix masqués" : "Prix affichés"}
               </button>
-            </div>
+              }
+            />
             <RatesEditor rates={mk.rates ?? []} onChange={setRates} />
             <div className="mt-3">
               <label className={LBL}>Mention sous la grille</label>
@@ -606,19 +644,21 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
 
           {/* ---------------- PROFIL CASTING ---------------- */}
           <section className={`${CARD} xl:col-span-2`}>
-            <h3 className="text-sm font-semibold text-foreground">Profil casting</h3>
-            <p className="mb-3 mt-1 max-w-xl text-[11px] leading-relaxed text-faint">
-              Alimente le tableau comparatif du deck agence (« qui fait quoi »). Coche ce que la créatrice traite, et
-              précise si utile (ex : Quotidien, Peau sèche, 1 chien).
-            </p>
+            <SectionHead
+              icon={ListChecks}
+              title="Profil casting"
+              hint="Alimente le tableau comparatif du deck agence (« qui fait quoi »). Coche ce que la créatrice traite, et précise si utile (ex : Quotidien, Peau sèche, 1 chien)."
+            />
             <CastingEditor value={mk.casting ?? {}} onChange={setCasting} />
           </section>
 
           {/* ---------------- MARQUES ---------------- */}
           <section className={`${CARD} xl:col-span-2`}>
-            <h3 className="mb-3 text-sm font-semibold text-foreground">
-              Marques ({(mk.brands ?? []).length} collaboration{(mk.brands ?? []).length > 1 ? "s" : ""})
-            </h3>
+            <SectionHead
+              icon={Store}
+              title="Marques"
+              right={<span className="text-[12px] tabular-nums text-muted-foreground">{(mk.brands ?? []).length} collaboration{(mk.brands ?? []).length > 1 ? "s" : ""}</span>}
+            />
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {(mk.brands ?? []).map((b, i) => (
                 <div key={i} className="flex items-center gap-2">
@@ -650,11 +690,11 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
             <button
               type="button"
               onClick={() => setBrands([...(mk.brands ?? []), { name: "" }])}
-              className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className={ADD}
             >
               <Plus className="h-3.5 w-3.5" /> Ajouter une marque
             </button>
-            <p className="mt-2 text-[11px] text-faint">
+            <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
               Ajoute le logo de chaque marque (PNG à fond transparent idéal) — il s'affiche dans le mur de logos du media
               kit ; sans logo, le nom s'affiche en toutes lettres.
             </p>
@@ -665,31 +705,34 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
           {/* ---------------- MEDIA KIT UGC (format à part) ---------------- */}
           {mode === "ugc" && (
           <section className={`${CARD} xl:col-span-2`}>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-foreground">Media kit UGC</h3>
-                <p className="mt-1 max-w-xl text-[11px] leading-relaxed text-faint">
-                  Un format à part, orienté <strong>personne</strong> (personnalité, quotidien, matériel, portfolio) plutôt
-                  que chiffres. Page publique séparée : <span className="text-muted-foreground">/mediakit/{mk.slug || "…"}/ugc/</span>.
-                </p>
-              </div>
+            <SectionHead
+              icon={Sparkles}
+              title="Media kit UGC"
+              hint={
+                <>
+                  Un format à part, orienté <span className="text-foreground">personne</span> (personnalité, quotidien, matériel, portfolio) plutôt
+                  que chiffres. Page publique séparée : /mediakit/{mk.slug || "…"}/ugc/.
+                </>
+              }
+              right={
               <button
                 type="button"
                 onClick={() => patchUgc({ enabled: !ugc.enabled })}
                 className={cn(
                   "flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-[12px] font-medium transition-colors",
-                  ugc.enabled ? "bg-signalsoft text-signaltext" : "border border-border text-muted-foreground hover:bg-rowhover",
+                  ugc.enabled ? "border border-border bg-muted text-foreground" : "border border-border text-muted-foreground hover:bg-rowhover",
                 )}
               >
-                <span className={cn("grid h-4 w-4 shrink-0 place-items-center rounded", ugc.enabled ? "bg-primary text-primary-foreground" : "border border-border")}>
+                <span className={cn("grid h-4 w-4 shrink-0 place-items-center rounded", ugc.enabled ? "bg-foreground text-background" : "border border-border")}>
                   {ugc.enabled && <Check className="h-3 w-3" />}
                 </span>
                 {ugc.enabled ? "Activé" : "Activer pour ce créateur"}
               </button>
-            </div>
+              }
+            />
 
             {ugc.enabled && (
-              <div className="mt-4 flex flex-col gap-4">
+              <div className="flex flex-col gap-4">
                 <div>
                   <label className={LBL}>Présentation (qui il est, sa personnalité, son univers)</label>
                   <textarea
@@ -793,7 +836,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                       />
                     )}
                   </div>
-                  <p className="mt-2 text-[11px] text-faint">
+                  <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
                     Jusqu'à {MAX_UGC_PORTFOLIO} visuels d'anciens contenus. Après un upload, clique « Enregistrer » en haut.
                   </p>
                 </div>
@@ -869,53 +912,45 @@ function RatesEditor({ rates, onChange }: { rates: RateRow[]; onChange: (r: Rate
   const set = (i: number, p: Partial<RateRow>) => onChange(rates.map((x, j) => (j === i ? { ...x, ...p } : x)));
   const used = new Set(rates.map((r) => r.label.trim().toLowerCase()));
   const presets = RATE_PRESETS.filter((p) => !used.has(p.toLowerCase()));
+  const chip = "inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground";
   return (
-    <div className="space-y-2">
-      {rates.map((r, i) => (
-        <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.1fr)_150px_minmax(0,1.3fr)_auto] sm:items-center">
-          <input value={r.label} onChange={(e) => set(i, { label: e.target.value })} placeholder="Réel Instagram" className={IN} />
-          <div className="flex items-center gap-1.5">
-            <input
-              value={r.price}
-              onChange={(e) => set(i, { price: e.target.value })}
-              placeholder="1500"
-              inputMode="numeric"
-              className={`${IN} text-right tabular-nums`}
-            />
-            <span className="shrink-0 text-xs text-faint">€ HT</span>
-          </div>
-          <input
-            value={r.detail ?? ""}
-            onChange={(e) => set(i, { detail: e.target.value })}
-            placeholder="Précision (optionnel) — ex : + 2 repartages en story"
-            className={IN}
-          />
-          <button
-            type="button"
-            onClick={() => onChange(rates.filter((_, j) => j !== i))}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+    <div>
+      {rates.length > 0 && (
+        <div className={LIST}>
+          {rates.map((r, i) => (
+            <div key={i} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center sm:grid-cols-[minmax(0,1.1fr)_150px_minmax(0,1.3fr)_auto]">
+              <input value={r.label} onChange={(e) => set(i, { label: e.target.value })} placeholder="Réel Instagram" className={BARE} />
+              <div className="flex items-center border-l border-border">
+                <input
+                  value={r.price}
+                  onChange={(e) => set(i, { price: e.target.value })}
+                  placeholder="1500"
+                  inputMode="numeric"
+                  className="w-full min-w-0 bg-transparent py-2 pl-3 text-right text-[13px] tabular-nums outline-none placeholder:text-faint focus:bg-rowhover/60"
+                />
+                <span className="shrink-0 pl-1 pr-3 text-[12px] text-muted-foreground">€ HT</span>
+              </div>
+              <input
+                value={r.detail ?? ""}
+                onChange={(e) => set(i, { detail: e.target.value })}
+                placeholder="Précision (optionnel), ex : + 2 repartages en story"
+                className={cn(BARE, "order-last col-span-3 border-t border-border sm:order-none sm:col-span-1 sm:border-l sm:border-t-0")}
+              />
+              <button type="button" onClick={() => onChange(rates.filter((_, j) => j !== i))} className={cn(DEL, "mr-1")} aria-label="Supprimer la prestation">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
         </div>
-      ))}
-      <div className="flex flex-wrap items-center gap-2 pt-1">
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         {presets.map((p) => (
-          <button
-            key={p}
-            type="button"
-            onClick={() => onChange([...rates, { label: p, price: "" }])}
-            className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-          >
-            <Plus className="h-3.5 w-3.5" /> {p}
+          <button key={p} type="button" onClick={() => onChange([...rates, { label: p, price: "" }])} className={chip}>
+            <Plus className="h-3 w-3" /> {p}
           </button>
         ))}
-        <button
-          type="button"
-          onClick={() => onChange([...rates, { label: "", price: "" }])}
-          className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-        >
-          <Euro className="h-3.5 w-3.5" /> Autre prestation
+        <button type="button" onClick={() => onChange([...rates, { label: "", price: "" }])} className={chip}>
+          <Euro className="h-3 w-3" /> Autre prestation
         </button>
       </div>
     </div>
@@ -926,32 +961,26 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (t: string[])
   return (
     <div>
       <label className={LBL}>Étiquettes (niche, ville, cible…)</label>
-      <div className="space-y-2">
-        {tags.map((t, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input
-              value={t}
-              onChange={(e) => onChange(tags.map((x, j) => (j === i ? e.target.value : x)))}
-              placeholder="Lifestyle & Blogging"
-              className={IN}
-            />
-            <button
-              type="button"
-              onClick={() => onChange(tags.filter((_, j) => j !== i))}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => onChange([...tags, ""])}
-          className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-        >
-          <Plus className="h-3.5 w-3.5" /> Ajouter une étiquette
-        </button>
-      </div>
+      {tags.length > 0 && (
+        <div className={LIST}>
+          {tags.map((t, i) => (
+            <div key={i} className="flex items-center pr-1">
+              <input
+                value={t}
+                onChange={(e) => onChange(tags.map((x, j) => (j === i ? e.target.value : x)))}
+                placeholder="Lifestyle & Blogging"
+                className={BARE}
+              />
+              <button type="button" onClick={() => onChange(tags.filter((_, j) => j !== i))} className={DEL} aria-label="Supprimer l'étiquette">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button type="button" onClick={() => onChange([...tags, ""])} className={ADD}>
+        <Plus className="h-3.5 w-3.5" /> Ajouter une étiquette
+      </button>
     </div>
   );
 }
@@ -970,41 +999,27 @@ function PctList({
   return (
     <div>
       <label className={LBL}>{title}</label>
-      <div className="space-y-2">
-        {rows.map((r, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input
-              value={r.label}
-              onChange={(e) => onChange(rows.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
-              placeholder={placeholderLabel}
-              className={IN}
-            />
-            <div className="flex w-24 shrink-0 items-center gap-1">
+      {rows.length > 0 && (
+        <div className={LIST}>
+          {rows.map((r, i) => (
+            <div key={i} className="flex items-center pr-1">
               <input
-                value={r.pct}
-                onChange={(e) => onChange(rows.map((x, j) => (j === i ? { ...x, pct: e.target.value } : x)))}
-                placeholder="49"
-                className={`${IN} text-right`}
+                value={r.label}
+                onChange={(e) => onChange(rows.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
+                placeholder={placeholderLabel}
+                className={BARE}
               />
-              <span className="text-xs text-faint">%</span>
+              <PctCell value={r.pct} onChange={(v) => onChange(rows.map((x, j) => (j === i ? { ...x, pct: v } : x)))} placeholder="49" />
+              <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))} className={DEL} aria-label="Supprimer la ligne">
+                <Trash2 className="h-4 w-4" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => onChange(rows.filter((_, j) => j !== i))}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => onChange([...rows, { label: "", pct: "" }])}
-          className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-        >
-          <Plus className="h-3.5 w-3.5" /> Ajouter une ligne
-        </button>
-      </div>
+          ))}
+        </div>
+      )}
+      <button type="button" onClick={() => onChange([...rows, { label: "", pct: "" }])} className={ADD}>
+        <Plus className="h-3.5 w-3.5" /> Ajouter une ligne
+      </button>
     </div>
   );
 }
@@ -1013,41 +1028,27 @@ function CountryList({ rows, onChange, title = "Localisation (pays)", placeholde
   return (
     <div>
       <label className={LBL}>{title}</label>
-      <div className="space-y-2">
-        {rows.map((r, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input
-              value={r.name}
-              onChange={(e) => onChange(rows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
-              placeholder={placeholder}
-              className={IN}
-            />
-            <div className="flex w-24 shrink-0 items-center gap-1">
+      {rows.length > 0 && (
+        <div className={LIST}>
+          {rows.map((r, i) => (
+            <div key={i} className="flex items-center pr-1">
               <input
-                value={r.pct}
-                onChange={(e) => onChange(rows.map((x, j) => (j === i ? { ...x, pct: e.target.value } : x)))}
-                placeholder="77"
-                className={`${IN} text-right`}
+                value={r.name}
+                onChange={(e) => onChange(rows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                placeholder={placeholder}
+                className={BARE}
               />
-              <span className="text-xs text-faint">%</span>
+              <PctCell value={r.pct} onChange={(v) => onChange(rows.map((x, j) => (j === i ? { ...x, pct: v } : x)))} placeholder="77" />
+              <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))} className={DEL} aria-label="Supprimer la ligne">
+                <Trash2 className="h-4 w-4" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => onChange(rows.filter((_, j) => j !== i))}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => onChange([...rows, { name: "", pct: "" }])}
-          className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-        >
-          <Plus className="h-3.5 w-3.5" /> Ajouter une ligne
-        </button>
-      </div>
+          ))}
+        </div>
+      )}
+      <button type="button" onClick={() => onChange([...rows, { name: "", pct: "" }])} className={ADD}>
+        <Plus className="h-3.5 w-3.5" /> Ajouter une ligne
+      </button>
     </div>
   );
 }
@@ -1070,7 +1071,7 @@ function PlatformEditor({
   const extras = PLATFORM_FIELDS[block.key] ?? [];
   const set = (k: keyof PlatformBlock, v: string) => onChange({ ...block, [k]: v });
   return (
-    <div className="rounded-xl border border-border bg-card p-3">
+    <div className="rounded-xl border border-border bg-surface p-4">
       <div className="mb-3 flex items-center gap-2">
         <span className="text-foreground">
           <PlatformIcon platform={block.key} className="h-4 w-4" />
@@ -1122,7 +1123,7 @@ function PlatformEditor({
       <div className="mt-3">
         <ImageField label="Capture du profil" slug={slug} field={block.key} url={photo} onChange={onPhotoChange} boxClass="h-40 w-24" />
       </div>
-      <p className="mt-2 text-[10px] text-faint">Bloc « {platLabel(block.key)} » — page « Plateforme » du media kit.</p>
+      <p className="mt-3 text-[12px] text-muted-foreground">Bloc « {platLabel(block.key)} », page « Plateforme » du media kit.</p>
     </div>
   );
 }

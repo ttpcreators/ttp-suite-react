@@ -17,7 +17,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PageFrame } from "@/components/ui/page-header";
 import { Login } from "@/components/Login";
 import { NAV, findItem, viewTitle, type NavItem, type ViewId } from "@/lib/nav";
-import { NavSubContext } from "@/lib/navSub";
+import { NavSubContext, NavSubSetContext } from "@/lib/navSub";
 import { supabase } from "@/lib/supabase";
 import { SearchContext } from "@/lib/search";
 import { ThemeContext } from "@/lib/theme";
@@ -717,6 +717,7 @@ export default function App() {
   return (
     <ThemeContext.Provider value={{ dark, toggle: toggleTheme }}>
     <SearchContext.Provider value={{ query, setQuery }}>
+    <NavSubSetContext.Provider value={setSub}>
       <div className="h-[100dvh] bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]">
         <div className="flex h-full overflow-hidden rounded-[22px]">
           {/* Desktop sidebar */}
@@ -910,6 +911,7 @@ export default function App() {
         )}
       </div>
       <Toaster />
+    </NavSubSetContext.Provider>
     </SearchContext.Provider>
     </ThemeContext.Provider>
   );

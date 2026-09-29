@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Save, ExternalLink, Building2, CalendarHeart } from "lucide-react";
+import { Plus, Trash2, Save, ExternalLink, Building2, CalendarHeart, FileText, BarChart3, Columns3 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import { ImageField } from "@/components/ui/image-field";
@@ -81,9 +81,13 @@ function withDefaults(blob: AgencyKit): FullAgencyKit {
   };
 }
 
-const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15";
+const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none placeholder:text-faint focus:border-primary focus:ring-2 focus:ring-primary/15";
 const LBL = "mb-1 block text-[12px] font-medium text-muted-foreground";
-const CARD = "rounded-2xl border border-border bg-surface p-4 shadow-sm";
+const CARD = "rounded-2xl border border-border bg-surface p-5";
+// Titres de section façon Aperçu (icône grise + 14 px) et bouton d'ajout discret.
+const H3 = "flex items-center gap-2 text-[14px] font-semibold text-foreground";
+const HINT = "mt-1 max-w-xl text-[12px] leading-relaxed text-muted-foreground";
+const ADD = "mt-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground";
 const PUBLIC_URL = "https://ttpcreators.pro/mediakit/agence/";
 
 /** Éditeur du deck agence (onglet « Agence » de la page Media kit unifiée). */
@@ -176,7 +180,7 @@ export function AgencyTab() {
             type="button"
             onClick={save}
             disabled={saving || loading || loadError || !loaded}
-            className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <Save className="h-3.5 w-3.5" /> {saving ? "Enregistrement…" : "Enregistrer"}
           </button>
@@ -195,7 +199,7 @@ export function AgencyTab() {
           <button
             type="button"
             onClick={() => setReloadKey((k) => k + 1)}
-            className="mt-3 rounded-xl bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            className="mt-3 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             Réessayer
           </button>
@@ -204,7 +208,7 @@ export function AgencyTab() {
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {/* ---------------- INTRO ---------------- */}
           <section className={CARD}>
-            <h3 className="mb-3 text-sm font-semibold text-foreground">Présentation de l'agence</h3>
+            <h3 className={`${H3} mb-4`}><FileText className="h-4 w-4 text-muted-foreground" /> Présentation de l'agence</h3>
             <div className="space-y-3">
               <div>
                 <label className={LBL}>Titre (une ligne par saut de ligne)</label>
@@ -231,8 +235,8 @@ export function AgencyTab() {
 
           {/* ---------------- KPIs ---------------- */}
           <section className={CARD}>
-            <h3 className="mb-1 text-sm font-semibold text-foreground">Chiffres clés</h3>
-            <p className="mb-3 text-[11px] text-faint">
+            <h3 className={H3}><BarChart3 className="h-4 w-4 text-muted-foreground" /> Chiffres clés</h3>
+            <p className={`${HINT} mb-4`}>
               Nombre de créatrices et followers cumulés = calculés automatiquement (laisse vide), ou force une valeur.
             </p>
             <div className="space-y-3">
@@ -289,7 +293,7 @@ export function AgencyTab() {
 
           {/* ---------------- PILIERS ---------------- */}
           <section className={`${CARD} xl:col-span-2`}>
-            <h3 className="mb-3 text-sm font-semibold text-foreground">Piliers ({kit.pillars.length})</h3>
+            <h3 className={`${H3} mb-4`}><Columns3 className="h-4 w-4 text-muted-foreground" /> Piliers <span className="font-normal text-muted-foreground">({kit.pillars.length})</span></h3>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {kit.pillars.map((p, i) => (
                 <div key={i} className="rounded-xl border border-border bg-card p-3">
@@ -322,19 +326,19 @@ export function AgencyTab() {
             <button
               type="button"
               onClick={() => setPillars([...kit.pillars, { title: "", text: "" }])}
-              className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className={ADD}
             >
               <Plus className="h-3.5 w-3.5" /> Ajouter un pilier
             </button>
-            <p className="mt-2 text-[11px] text-faint">3 piliers conseillés (ils s'affichent sur une ligne dans le deck).</p>
+            <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">3 piliers conseillés (ils s'affichent sur une ligne dans le deck).</p>
           </section>
 
           {/* ---------------- ÉVÉNEMENTS & CONCEPTS ---------------- */}
           <section className={`${CARD} xl:col-span-2`}>
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <CalendarHeart className="h-4 w-4 text-muted-foreground" /> Événements &amp; concepts ({kit.concepts.length})
+            <h3 className={H3}>
+              <CalendarHeart className="h-4 w-4 text-muted-foreground" /> Événements &amp; concepts <span className="font-normal text-muted-foreground">({kit.concepts.length})</span>
             </h3>
-            <p className="mb-3 mt-1 max-w-xl text-[11px] leading-relaxed text-faint">
+            <p className={`${HINT} mb-4`}>
               Les formats portés par vos créatrices (club running, soirées, ateliers…). Une diapo par concept dans le deck,
               pour montrer aux marques qu'elles peuvent aller au-delà du placement de produit.
             </p>
@@ -409,14 +413,14 @@ export function AgencyTab() {
                       />
                     )}
                   </div>
-                  <p className="mt-2 text-[11px] text-faint">Jusqu'à {MAX_CONCEPT_PHOTOS} photos de l'événement.</p>
+                  <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">Jusqu'à {MAX_CONCEPT_PHOTOS} photos de l'événement.</p>
                 </div>
               ))}
             </div>
             <button
               type="button"
               onClick={() => setConcepts([...kit.concepts, { title: "", by: "", text: "", highlights: [], brands: "", photos: [] }])}
-              className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className={ADD}
             >
               <Plus className="h-3.5 w-3.5" /> Ajouter un concept
             </button>
@@ -424,7 +428,7 @@ export function AgencyTab() {
 
           {/* ---------------- CONTACT + PHOTO ---------------- */}
           <section className={`${CARD} xl:col-span-2`}>
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+            <h3 className={`${H3} mb-4`}>
               <Building2 className="h-4 w-4 text-muted-foreground" /> Contact &amp; photo
             </h3>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -465,7 +469,7 @@ export function AgencyTab() {
                 onChange={setPhoto}
                 boxClass="h-32 w-48"
               />
-              <p className="mt-2 text-[11px] text-faint">
+              <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
                 Photo d'équipe / studio conseillée (paysage). Sans photo, le deck garde le monogramme TTP. Après un
                 upload, clique « Enregistrer ».
               </p>

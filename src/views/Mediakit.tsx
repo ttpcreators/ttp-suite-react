@@ -14,7 +14,7 @@ import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
 import { MediakitEditor } from "@/views/MediakitEditor";
 import { AgencyTab } from "@/views/MediakitAgence";
-import { useNavSub } from "@/lib/navSub";
+import { useNavSub, useSetNavSub } from "@/lib/navSub";
 
 /**
  * Media kit = bibliothèque de fichiers. L'agence dépose les media kits qu'elle a
@@ -342,7 +342,7 @@ function MediakitFiles() {
             type="button"
             onClick={() => (selected ? fileRef.current?.click() : toast("Choisis d'abord un créateur"))}
             disabled={uploading}
-            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <Upload className="h-3.5 w-3.5" /> {uploading ? "Ajout…" : "Ajouter"}
           </button>
@@ -357,9 +357,9 @@ function MediakitFiles() {
 
       {/* Liste */}
       {archives === null ? (
-        <div className="rounded-2xl border border-border bg-surface px-4 py-6 text-sm text-muted-foreground shadow-sm">Chargement…</div>
+        <div className="rounded-2xl border border-border bg-surface px-5 py-6 text-[13px] text-muted-foreground">Chargement…</div>
       ) : shown.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-surface p-10 text-center shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface p-10 text-center">
           <ImageIcon className="mx-auto h-8 w-8 text-faint" />
           <div className="mt-3 text-sm font-medium text-foreground">Aucun media kit{selected ? ` pour ${titleCase(selected)}` : ""}</div>
           <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
@@ -369,7 +369,7 @@ function MediakitFiles() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {shown.map((row) => (
-            <div key={row.id} className="flex flex-col rounded-2xl border border-border bg-surface p-4 shadow-sm">
+            <div key={row.id} className="flex flex-col rounded-2xl border border-border bg-surface p-5">
               <div className="flex items-start gap-3">
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-indigo/15 text-indigo">
                   {isLink(row.path) ? <Link2 className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
@@ -612,7 +612,7 @@ function MediakitFiles() {
                 <button
                   type="button"
                   onClick={() => setTplDraft({ id: uid(), name: "", subject: "Media kit — {{creator}}", body: "Bonjour,\n\n{{message}}\n\n— TTP Creators" })}
-                  className="mt-1 flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-border px-3 py-2.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                  className="mt-1 inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                 >
                   <Plus className="h-3.5 w-3.5" /> Nouveau template
                 </button>
@@ -653,16 +653,22 @@ export function Mediakit() {
   const [tab, setTab] = useState<MkTab>("creatrices");
   // Sous-page demandée depuis la sidebar (Media kit → Créatrices / Agence / Fichiers).
   const sub = useNavSub();
+  const setNavSub = useSetNavSub();
   useEffect(() => {
     if (sub === "creatrices" || sub === "ugc" || sub === "agence" || sub === "files") setTab(sub);
   }, [sub]);
+  // Onglets façon sélecteur de l'Aperçu ; le choix est remonté à la sidebar.
   const tabBtn = (id: MkTab, label: string) => (
     <button
       type="button"
-      onClick={() => setTab(id)}
+      onClick={() => {
+        setTab(id);
+        setNavSub(id);
+      }}
+      aria-pressed={tab === id}
       className={cn(
-        "rounded-lg px-4 py-2 transition-colors",
-        tab === id ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
+        "rounded-md px-3 py-1.5 transition-colors",
+        tab === id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
     >
       {label}
@@ -670,7 +676,7 @@ export function Mediakit() {
   );
   return (
     <div className="space-y-4">
-      <div className="inline-flex rounded-xl border border-border bg-surface p-1 text-[12px] font-medium">
+      <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-[12px] font-medium">
         {tabBtn("creatrices", "Créatrices")}
         {tabBtn("ugc", "UGC")}
         {tabBtn("agence", "Agence")}
@@ -678,17 +684,16 @@ export function Mediakit() {
       </div>
       {tab === "creatrices" ? (
         <div>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Édite le media kit de chaque créatrice ici — ça met à jour <strong>à la fois</strong> sa page perso
-            <span className="text-faint"> (ttpcreators.pro/mediakit/&lt;lien&gt;)</span> et le deck agence.
+          <p className="mb-4 text-[13px] text-muted-foreground">
+            Chaque modification met à jour <span className="text-foreground">sa page perso</span> (ttpcreators.pro/mediakit/&lt;lien&gt;) et le deck agence.
           </p>
           <MediakitEditor />
         </div>
       ) : tab === "ugc" ? (
         <div>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Media kit <strong>UGC</strong> — format orienté personne (personnalité, quotidien, matériel, portfolio),
-            page séparée <span className="text-faint">(/mediakit/&lt;lien&gt;/ugc/)</span>. Choisis une créatrice puis active-le.
+          <p className="mb-4 text-[13px] text-muted-foreground">
+            Media kit <span className="text-foreground">UGC</span> : format orienté personne (personnalité, quotidien, matériel, portfolio),
+            sur une page séparée (/mediakit/&lt;lien&gt;/ugc/). Choisis une créatrice puis active-le.
           </p>
           <MediakitEditor mode="ugc" />
         </div>
