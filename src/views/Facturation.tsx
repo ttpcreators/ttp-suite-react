@@ -713,8 +713,9 @@ export function Facturation() {
       </div>
 
       {/* Liste */}
-      <div className="space-y-2.5">
-        <div className="hidden grid-cols-[0.8fr_2fr_1.1fr_1fr_1fr_1.4fr] gap-3 px-4 pb-1 text-[11px] font-medium text-muted-foreground md:grid">
+      {/* Tableau dans UN panneau à filets (langage Aperçu) */}
+      <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+        <div className="hidden grid-cols-[0.8fr_2fr_1.1fr_1fr_1fr_1.4fr] gap-3 border-b border-border px-4 py-3 text-[12px] text-muted-foreground md:grid">
           <span>Réf.</span>
           <span>Marque × Créateur</span>
           <span className="text-right">Montant TTC</span>
@@ -724,12 +725,12 @@ export function Facturation() {
         </div>
 
         {rows.length === 0 ? (
-          <div className="rounded-2xl border border-border bg-surface px-4 py-8 text-center shadow-sm">
+          <div className="px-4 py-8 text-center">
             <div className="text-sm font-medium text-foreground">Aucune facture</div>
             <div className="mt-1.5 text-xs text-faint">Crée ta première facture avec « + Facture ».</div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="rounded-2xl border border-border bg-surface px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
             {query.trim() ? `Aucun résultat pour « ${query} »` : "Aucune facture pour ce statut."}
           </div>
         ) : (
@@ -753,20 +754,20 @@ export function Facturation() {
               { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: del, confirm: { title: "Supprimer la facture", message: `Supprimer la facture ${r.ref} (${r.party}) ? Cette action est irréversible.` } },
             ];
             const margeChip = (
-              <span className="inline-block whitespace-nowrap rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+              <span className="inline-block whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                 Marge {fmtRate(rate)} %
               </span>
             );
             return (
-              <div key={r.id} className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+              <div key={r.id} className="border-b border-border last:border-0">
                 {/* Desktop : ligne type tableau */}
                 <div
                   onClick={openPreview}
-                  className="hidden cursor-pointer items-center gap-3 rounded-xl px-4 py-3 transition-colors hover:bg-rowhover md:grid md:grid-cols-[0.8fr_2fr_1.1fr_1fr_1fr_1.4fr]"
+                  className="hidden cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-rowhover md:grid md:grid-cols-[0.8fr_2fr_1.1fr_1fr_1fr_1.4fr]"
                 >
                   <span className="text-[11px] font-medium text-faint">#{r.ref}</span>
                   <span className="truncate text-sm font-medium text-foreground">{r.party}</span>
-                  <span className="text-right text-sm font-semibold text-foreground">{formatEuro(parseAmount(r.amount))}</span>
+                  <span className="text-right text-[13px] font-medium tabular-nums text-foreground">{formatEuro(parseAmount(r.amount))}</span>
                   <span className="text-center">{margeChip}</span>
                   <span className="text-center text-[11px] font-medium text-muted-foreground">{frDate(r.date)}</span>
                   <span className="flex items-center justify-end gap-2">

@@ -237,6 +237,27 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
     (c) => c.status !== "inactif" && c.statsMonth !== NOW_MONTH,
   ).length;
 
+  // Chiffres clés du roster (bandeau façon Aperçu).
+  const numOf = (v: string | null | undefined): number => {
+    const t = String(v ?? "").trim().replace(/\s/g, "").replace(",", ".").toUpperCase();
+    const m = /^([0-9.]+)([KM]?)/.exec(t);
+    if (!m) return 0;
+    const n = parseFloat(m[1]) || 0;
+    return m[2] === "K" ? n * 1e3 : m[2] === "M" ? n * 1e6 : n;
+  };
+  const actives = rows.filter((c) => c.status !== "inactif");
+  const followersOf = (c: Creator) => cumFollowers[c.name.trim().toLowerCase()] || numOf(c.followers);
+  const totalFollowers = actives.reduce((a, c) => a + followersOf(c), 0);
+  const ers = actives.map((c) => numOf(c.er)).filter((n) => n > 0);
+  const avgEr = ers.length ? ers.reduce((a, n) => a + n, 0) / ers.length : 0;
+  const totalCa = Object.values(caByCreator).reduce((a, n) => a + n, 0);
+  const kpis = [
+    { label: "Créatrices actives", value: String(actives.length), foot: `sur ${rows.length} au roster` },
+    { label: "Abonnés cumulés", value: totalFollowers ? fmtCompact(totalFollowers) : "—", foot: "tous réseaux, créatrices actives" },
+    { label: "Engagement moyen", value: avgEr ? `${avgEr.toFixed(2).replace(".", ",")} %` : "—", foot: `sur ${ers.length} mesure${ers.length > 1 ? "s" : ""}` },
+    { label: "CA encaissé", value: formatEuro(totalCa), foot: "factures payées" },
+  ];
+
   // Dernière piste FIXE (72px) et non `auto` : sinon l'en-tête (col vide) et les
   // lignes (flèches + menu ≈ 64px) répartissent différemment l'espace fr → décalage.
   const cols =
@@ -252,11 +273,24 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
         <AddButton label="Créateur" onClick={() => setFormOpen(true)} />
       </PageHeaderRow>
 
+      {/* Chiffres clés (bandeau à filets, comme l'Aperçu) */}
+      {rows.length > 0 && (
+        <div className="mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border lg:grid-cols-4">
+          {kpis.map((k) => (
+            <div key={k.label} className="flex min-w-0 flex-col bg-surface px-4 py-4 sm:px-5 sm:py-5">
+              <span className="text-[12px] text-muted-foreground sm:text-[13px]">{k.label}</span>
+              <span className="mt-2 truncate text-[22px] font-semibold leading-none tracking-tight tabular-nums sm:text-[26px]">{k.value}</span>
+              <span className="mt-3 line-clamp-2 text-[12px] leading-snug text-muted-foreground">{k.foot}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {staleCount > 0 && (
-        <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-border bg-foreground/[0.06] px-4 py-3 text-[13px] text-amber">
+        <div className="mb-4 flex items-center gap-2.5 rounded-2xl border border-border bg-surface px-5 py-3.5 text-[13px] text-muted-foreground">
           <RefreshCw className="h-4 w-4 shrink-0" />
           <span>
-            <span className="font-semibold">{staleCount} créateur{staleCount > 1 ? "s" : ""}</span> à mettre à jour pour <span className="font-semibold capitalize">{MONTH_LABEL}</span> — coche « à jour » sur chaque ligne une fois les données saisies.
+            <span className="font-semibold text-foreground">{staleCount} créateur{staleCount > 1 ? "s" : ""}</span> à mettre à jour pour <span className="font-semibold capitalize">{MONTH_LABEL}</span> — coche « à jour » sur chaque ligne une fois les données saisies.
           </span>
         </div>
       )}
@@ -284,11 +318,11 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
           </div>
         </div>
       ) : (
-        <div>
+        <div className="overflow-hidden rounded-2xl border border-border bg-surface">
           {/* En-tête de tableau (desktop) */}
           <div
             className={cn(
-              "mb-1 hidden items-center px-4 pb-2 text-[12px] font-mediumr text-faint md:grid",
+              "hidden items-center border-b border-border px-5 py-3 text-[12px] text-muted-foreground md:grid",
               cols,
             )}
           >
@@ -301,7 +335,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
             <span />
           </div>
 
-          <div className="flex flex-col gap-2.5">
+          <div className="divide-y divide-border">
           {filtered.map((c) => {
             const label = STATUS_LABEL[c.status] ?? "ACTIF";
             const dot = statusDot(c.status);
@@ -310,7 +344,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                 key={c.id}
                 onClick={() => onOpen?.(c.name)}
                 className={cn(
-                  "cursor-pointer rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm transition-colors hover:bg-rowhover",
+                  "cursor-pointer px-4 py-3 transition-colors hover:bg-rowhover sm:px-5",
                   "flex items-center gap-3 md:grid",
                   cols,
                 )}
@@ -323,7 +357,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                     className="h-10 w-10 shrink-0 rounded-xl"
                   />
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-foreground">
+                    <div className="truncate text-[13px] font-semibold text-foreground">
                       {titleCase(c.name)}
                     </div>
                     <div className="truncate text-xs text-faint">
@@ -334,18 +368,18 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                 </div>
 
                 {/* Niche : texte sur desktop (sur mobile, affichée sous le nom) */}
-                <span className="hidden truncate text-xs text-muted-foreground md:inline">
+                <span className="hidden truncate text-[13px] text-muted-foreground md:inline">
                   {c.niche}
                 </span>
 
                 {/* Abonnés (cumul tous réseaux depuis les mesures ; repli = valeur fiche) / ER / CA — masqués sur mobile */}
-                <span className="hidden text-right text-xs font-semibold text-foreground md:inline">
+                <span className="hidden text-right text-[13px] font-medium tabular-nums text-foreground md:inline">
                   {cumFollowers[c.name.trim().toLowerCase()] ? fmtCompact(cumFollowers[c.name.trim().toLowerCase()]) : c.followers}
                 </span>
-                <span className="hidden text-right text-xs font-semibold text-foreground md:inline">
+                <span className="hidden text-right text-[13px] font-medium tabular-nums text-foreground md:inline">
                   {c.er}
                 </span>
-                <span className="hidden text-right text-xs font-semibold text-foreground md:inline">
+                <span className="hidden text-right text-[13px] font-medium tabular-nums text-foreground md:inline">
                   {caByCreator[c.name] ? formatEuro(caByCreator[c.name]) : "—"}
                 </span>
 

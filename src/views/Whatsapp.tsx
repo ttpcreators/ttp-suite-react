@@ -224,7 +224,7 @@ export function WhatsappView() {
   const ContactRow = ({ x, showAgo }: { x: ReturnType<typeof enrich>; showAgo?: boolean }) => {
     const lt = lastTouch(x.list);
     return (
-      <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3 shadow-sm transition-colors hover:bg-rowhover">
+      <div className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-rowhover">
         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] bg-panel text-[11px] font-bold text-foreground">
           {initials(x.r.person !== "—" ? x.r.person : x.r.brand)}
         </div>
@@ -347,7 +347,7 @@ export function WhatsappView() {
               Personne à relancer. Tout ton carnet a été touché il y a moins de {relanceDays} jours 🎯
             </div>
           ) : (
-            <div className="flex flex-col gap-2">{aRelancer.map((x) => <ContactRow key={x.r.id} x={x} showAgo />)}</div>
+            <div className="overflow-hidden rounded-2xl border border-border bg-surface divide-y divide-border">{aRelancer.map((x) => <ContactRow key={x.r.id} x={x} showAgo />)}</div>
           )}
         </section>
       )}
@@ -363,7 +363,7 @@ export function WhatsappView() {
               Tout le carnet a déjà été approché au moins une fois.
             </div>
           ) : (
-            <div className="flex flex-col gap-2">{jamais.map((x) => <ContactRow key={x.r.id} x={x} />)}</div>
+            <div className="overflow-hidden rounded-2xl border border-border bg-surface divide-y divide-border">{jamais.map((x) => <ContactRow key={x.r.id} x={x} />)}</div>
           )}
         </section>
       )}
@@ -374,7 +374,7 @@ export function WhatsappView() {
           <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
             <Clock className="h-3 w-3" /> En cours ({enCours.length})
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="overflow-hidden rounded-2xl border border-border bg-surface divide-y divide-border">
             {enCours
               .sort((a, b) => b.lastMs - a.lastMs)
               .map((x) => <ContactRow key={x.r.id} x={x} showAgo />)}

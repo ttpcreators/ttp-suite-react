@@ -269,9 +269,9 @@ export function Vivier() {
           {rows.length === 0 ? "Ton scouting est vide. Ajoute des créateurs à repérer / solliciter le jour où tu en as besoin ✨" : "Aucun créateur pour ces filtres."}
         </div>
       ) : (
-        <div className="flex flex-col gap-2.5">
+        <div className="overflow-hidden rounded-2xl border border-border bg-surface divide-y divide-border">
           {filtered.map((r) => (
-            <div key={r.id} onClick={() => setSelected(r)} className="flex cursor-pointer items-center gap-3.5 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-colors hover:bg-rowhover">
+            <div key={r.id} onClick={() => setSelected(r)} className="flex cursor-pointer items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-rowhover">
               <div className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[9px] bg-panel text-[11px] font-bold text-foreground">{initials(r.name)}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
-import { Activity, Check, Save, Pencil, X, ArrowUpRight } from "lucide-react";
+import { Activity, Check, Save, Pencil, X, ArrowUpRight, Calculator, Gauge, History } from "lucide-react";
+import { TickMeter } from "@/components/ui/dash";
 import { supabase } from "@/lib/supabase";
 
 const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
@@ -361,7 +362,12 @@ export function Engagement() {
 
   return (
     <div className="space-y-4">
-      {/* Plateforme + formule */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+      {/* Saisie (panneau façon Aperçu) */}
+      <section className="rounded-2xl border border-border bg-surface p-5 xl:col-span-7">
+      <div className="mb-4 flex items-center gap-2 text-[14px] font-semibold text-foreground">
+        <Calculator className="h-4 w-4 text-muted-foreground" /> Calculer un taux
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           {PLATFORMS.map((pl) => {
@@ -375,7 +381,7 @@ export function Engagement() {
                   setSavedOk(false);
                 }}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[11px] font-semibold transition-colors",
+                  "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
                   active ? "bg-foreground text-background" : "border border-border text-muted-foreground hover:bg-rowhover",
                 )}
               >
@@ -385,11 +391,11 @@ export function Engagement() {
             );
           })}
         </div>
-        <span className="rounded-full bg-signalsoft px-3 py-1.5 text-[10px] font-medium text-signaltext">{p.formula}</span>
+        <span className="rounded-lg bg-muted px-3 py-1.5 text-[11px] text-muted-foreground">{p.formula}</span>
       </div>
 
       {/* Créateur + champs */}
-      <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+      <div className="mt-4 border-t border-border pt-4">
         <div className="md:max-w-xs">
           <SelectField
             label="Créateur (optionnel)"
@@ -435,16 +441,20 @@ export function Engagement() {
           </p>
         </div>
       </div>
+      </section>
 
-      {/* Résultat */}
-      <div className="rounded-2xl border border-border bg-panel p-6 shadow-sm">
+      {/* Résultat (panneau façon Aperçu) */}
+      <section className="flex flex-col rounded-2xl border border-border bg-surface p-5 xl:col-span-5">
+        <div className="mb-4 flex items-center gap-2 text-[14px] font-semibold text-foreground">
+          <Gauge className="h-4 w-4 text-muted-foreground" /> Résultat
+        </div>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="text-[11px] font-medium text-muted-foreground">Taux d'engagement · {p.label} · 30 jours</div>
+            <div className="text-[13px] text-muted-foreground">Taux d'engagement · {p.label} · 30 jours</div>
             {hasInputs ? (
               <>
-                <div className="mt-1 text-5xl font-bold tracking-tight text-foreground">{erLabel}</div>
-                <div className="mt-2 text-[11px] text-muted-foreground">{detail}</div>
+                <div className="mt-2 text-[44px] font-semibold leading-none tracking-tight tabular-nums text-foreground">{erLabel}</div>
+                <div className="mt-3 text-[12px] text-muted-foreground">{detail}</div>
               </>
             ) : (
               <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
@@ -458,8 +468,8 @@ export function Engagement() {
             <div className="flex flex-col items-start gap-2 md:items-end">
               <span
                 className={cn(
-                  "rounded-full px-3 py-1 text-[10px] font-semibold",
-                  v.tone === "signal" ? "bg-signalsoft text-signaltext" : "bg-amber/15 text-amber",
+                  "rounded-full px-3 py-1 text-[12px] font-medium",
+                  v.tone === "signal" ? "bg-signalsoft text-signaltext" : "bg-muted text-muted-foreground",
                 )}
               >
                 {v.label}
@@ -469,23 +479,27 @@ export function Engagement() {
           )}
         </div>
 
+        {/* Jauge : où se situe le taux sur le barème de la plateforme */}
+        <div className="mt-5 border-t border-border pt-4">
+          <TickMeter pct={hasInputs ? er / (p.excellent * 1.5) : 0} bars={48} label={`Taux ${erLabel} sur le barème ${p.label}`} />
+        </div>
         {/* Barème propre à la plateforme */}
-        <div className="mt-5 grid grid-cols-1 gap-2 border-t border-border pt-4 min-[380px]:grid-cols-3">
+        <div className="mt-4 grid grid-cols-3 gap-2">
           {[
             { k: "Moyen", r: `< ${p.bon} %`, tone: "amber" as const },
             { k: "Bon", r: `${p.bon} – ${p.excellent} %`, tone: "signal" as const },
             { k: "Excellent", r: `> ${p.excellent} %`, tone: "signal" as const },
           ].map((b) => (
             <div key={b.k} className="text-center">
-              <div className={cn("text-[11px] font-semibold", b.tone === "signal" ? "text-signaltext" : "text-amber")}>{b.k}</div>
-              <div className="text-[10px] text-faint">{b.r}</div>
+              <div className={cn("text-[12px] font-medium", b.tone === "signal" ? "text-signaltext" : "text-muted-foreground")}>{b.k}</div>
+              <div className="text-[11px] tabular-nums text-faint">{b.r}</div>
             </div>
           ))}
         </div>
 
         {/* Enregistrer — bouton TOUJOURS visible (désactivé tant que le calcul n'est pas complet). */}
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-          <div className="text-[11px] text-muted-foreground">
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+          <div className="text-[12px] leading-snug text-muted-foreground">
             {editingId ? (
               <><span className="font-semibold text-primary">Modification en cours</span> — ajuste les valeurs puis « Mettre à jour ». </>
             ) : !hasInputs ? (
@@ -521,6 +535,7 @@ export function Engagement() {
             </button>
           </div>
         </div>
+      </section>
       </div>
 
       {/* Tendance du taux d'engagement moyen (glass) */}
@@ -531,7 +546,7 @@ export function Engagement() {
             subtitle="Moyenne de tes calculs, par mois"
             points={erTrend}
             format={(n) => `${n.toFixed(2).replace(".", ",")} %`}
-            color="#16a34a"
+            color="var(--primary)"
             height={180}
             compareLabel="vs mois préc."
           />
@@ -540,23 +555,24 @@ export function Engagement() {
 
       {/* Historique des calculs */}
       {history.length > 0 && (
-        <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <div className="mb-2 flex items-center justify-between">
             {/* → page Suivi engagement (courbes d'évolution taux / abonnés / interactions) */}
             <button
               type="button"
               onClick={() => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "suivi" }))}
               title="Voir l'évolution (graphiques)"
-              className="group flex items-center gap-1.5 text-sm font-semibold text-foreground transition-colors hover:text-primary"
+              className="group flex items-center gap-2 text-[14px] font-semibold text-foreground transition-colors hover:text-muted-foreground"
             >
+              <History className="h-4 w-4 text-muted-foreground" />
               Historique des calculs
-              <ArrowUpRight className="h-4 w-4 text-faint transition-colors group-hover:text-primary" />
+              <ArrowUpRight className="h-4 w-4 text-faint" />
             </button>
-            <span className="text-[11px] text-faint">{history.length} calcul{history.length > 1 ? "s" : ""}</span>
+            <span className="text-[12px] text-muted-foreground">{history.length} calcul{history.length > 1 ? "s" : ""}</span>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="divide-y divide-border">
             {history.map((h) => (
-              <div key={h.id} className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
+              <div key={h.id} className="flex items-center gap-2 py-2.5">
                 <button
                   type="button"
                   onClick={() => setViewEntry(h)}
@@ -566,14 +582,14 @@ export function Engagement() {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
                       <span className="truncate text-[13px] font-semibold text-foreground">{h.creator}</span>
-                      <span className="shrink-0 rounded-md bg-rowhover px-1.5 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">{h.platformLabel}</span>
+                      <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{h.platformLabel}</span>
                     </span>
                     <span className="mt-0.5 block truncate text-[10px] text-faint">
                       <span className="font-semibold text-muted-foreground">Calculé le {h.date}</span> · {h.detail}
                     </span>
                   </span>
-                  <span className="shrink-0 text-sm font-bold text-foreground">{h.er}</span>
-                  <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold", h.verdict === "Moyen" ? "bg-amber/15 text-amber" : "bg-signalsoft text-signaltext")}>
+                  <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{h.er}</span>
+                  <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold", h.verdict === "Moyen" ? "bg-muted text-muted-foreground" : "bg-signalsoft text-signaltext")}>
                     {h.verdict}
                   </span>
                 </button>

@@ -908,12 +908,12 @@ export function Contacts() {
             : "Aucun contact pour ce filtre"}
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="overflow-hidden rounded-2xl border border-border bg-surface divide-y divide-border">
           {filtered.map((row) => (
             <div
               key={row.id}
               onClick={() => setSelected(row)}
-              className="flex cursor-pointer items-center gap-3.5 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-colors hover:bg-rowhover"
+              className="flex cursor-pointer items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-rowhover"
             >
               {/* Avatar */}
               <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[9px] bg-panel text-[11px] font-bold text-foreground">
