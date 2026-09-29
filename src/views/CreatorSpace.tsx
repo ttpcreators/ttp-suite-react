@@ -9,6 +9,7 @@ import {
   FileText,
   Gift,
   Sparkles,
+  Globe2,
   CalendarDays,
   Files,
   Image as ImageIcon,
@@ -71,6 +72,8 @@ import { SubtaskChecklist } from "@/components/ui/subtask-checklist";
 import { AgentPlan, type PlanTask } from "@/components/ui/agent-plan";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, type Gift as GiftRow } from "@/lib/gifting";
+import { PageFrame, PageHeaderRow } from "@/components/ui/page-header";
+import { Delta, DashPanel, DashSectionTitle, DashWideLink } from "@/components/ui/dash";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -250,6 +253,21 @@ const FOLLOWER_PLAT: Record<string, { label: string; color: string }> = {
 };
 const CreatorStatsCard = lazy(() => import("./charts/CreatorStatsCard"));
 const GlobeStickers = lazy(() => import("@/components/ui/cobe-globe-stickers"));
+const DashArea = lazy(() => import("./charts/DashArea"));
+
+/** Salutation selon l'heure (comme l'Aperçu agence). */
+function greetingWord(): string {
+  const h = new Date().getHours();
+  if (h < 5) return "Bonne nuit";
+  if (h < 12) return "Bonjour";
+  if (h < 18) return "Bon après-midi";
+  return "Bonsoir";
+}
+
+/** Titre de page des onglets (hors accueil) : même en-tête que côté agence. */
+function TabFrame({ title, children }: { title: string | null; children: ReactNode }) {
+  return title ? <PageFrame title={title}>{children}</PageFrame> : <>{children}</>;
+}
 
 /** Sous-menu déployé d'une famille (liste ses pages). */
 function CreatorMobileMenu({ ids, onSelect }: { ids: Tab[]; onSelect: (id: Tab) => void }) {
@@ -342,7 +360,25 @@ export function CreatorSpace({
   // En preview, les boutons « déconnexion » du menu deviennent « revenir à l'agence ».
   const exitAction = preview ? preview.onExit : onLogout;
   const exitTitle = preview ? "Revenir à l'espace agence" : "Se déconnecter";
-  const [tab, setTab] = useState<Tab>("accueil");
+  // Onglet mémorisé (comme la dernière page côté agence) : un rechargement ne
+  // renvoie plus systématiquement la créatrice sur l'accueil.
+  const [tab, setTabState] = useState<Tab>(() => {
+    try {
+      const saved = localStorage.getItem("ttp:cs-tab");
+      if (saved && TABS.some((t) => t.id === saved)) return saved as Tab;
+    } catch {
+      /* stockage indisponible */
+    }
+    return "accueil";
+  });
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    try {
+      localStorage.setItem("ttp:cs-tab", t);
+    } catch {
+      /* stockage indisponible */
+    }
+  };
   const [mobileTab, setMobileTab] = useState<string | null>(null); // famille déployée (nav mobile)
   const [confirmDoneTodo, setConfirmDoneTodo] = useState<Todo | null>(null); // anti-missclick « fait »
   const [taskView, setTaskView] = useState<Todo | null>(null); // fiche tâche (texte complet)
@@ -1260,7 +1296,7 @@ export function CreatorSpace({
                   title={t.label}
                   className={
                     "grid h-10 w-10 shrink-0 place-items-center rounded-[10px] transition-colors " +
-                    (tab === t.id ? "bg-primary/10 text-primary" : "text-faint hover:bg-rowhover hover:text-foreground")
+                    (tab === t.id ? "bg-rowhover text-foreground" : "text-faint hover:bg-rowhover hover:text-foreground")
                   }
                 >
                   <t.icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
@@ -1329,7 +1365,7 @@ export function CreatorSpace({
         )}
 
         {/* Panneau principal — pb-28 sur mobile pour dégager la barre flottante du bas */}
-        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto rounded-[22px] bg-panel px-4 pb-28 pt-4 md:px-6 md:pb-8 md:pt-6">
+        <main className="shell-panel flex min-w-0 flex-1 flex-col overflow-y-auto rounded-[22px] bg-panel px-4 pb-28 pt-4 md:px-6 md:pb-8 md:pt-6">
           {/* Barre du haut (mobile) */}
           <div className="mb-5 flex items-center justify-between gap-3 md:hidden">
             <div className="flex items-center gap-2.5">
@@ -1351,63 +1387,248 @@ export function CreatorSpace({
             </div>
           </div>
 
-          {/* Header (façon Aperçu agence : petit bonjour + gros titre, avatar à droite) */}
-          <div className="mb-5 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="mb-1.5 text-sm text-foreground">Ton espace ✌️</div>
-              <div className="text-[26px] font-semibold tracking-tight md:text-[30px]">Hello {firstName}</div>
+          {/* En-tête de l'accueil (langage Aperçu) : salutation selon l'heure + photo.
+              Les autres onglets affichent leur propre titre (TabFrame ci-dessous). */}
+          {tab === "accueil" && (
+            <div className="mb-6 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h1 className="text-[24px] font-semibold tracking-tight md:text-[28px]">{greetingWord()} {firstName}</h1>
+                <div className="mt-1 text-[13px] text-muted-foreground">Ton espace TTP Creators</div>
+              </div>
+              <AvatarUpload
+                creatorId={creator?.id}
+                name={name}
+                photoUrl={creator?.photo_url ?? null}
+                size={52}
+                onUploaded={(url) => setCreator((c) => (c ? { ...c, photo_url: url } : c))}
+              />
             </div>
-            <AvatarUpload
-              creatorId={creator?.id}
-              name={name}
-              photoUrl={creator?.photo_url ?? null}
-              size={52}
-              onUploaded={(url) => setCreator((c) => (c ? { ...c, photo_url: url } : c))}
-            />
-          </div>
+          )}
 
           {/* (Nav mobile déplacée en barre flottante fixe en bas — voir plus bas.) */}
 
           {/* Contenu des onglets — barrière d'erreur : un onglet qui plante
               n'emporte pas la navigation (la sidebar reste cliquable). */}
           <ErrorBoundary variant="inline" label="Cette page" resetKey={tab}>
+          <TabFrame title={tab === "accueil" ? null : TABS.find((t) => t.id === tab)?.label ?? null}>
           {/* Guide — comment utiliser l'app (mobile + ordi) + réflexe À faire */}
           {tab === "guide" && (
             <CreatorGuide firstName={firstName} onGoto={(t) => setTab(t as Tab)} onSendStats={() => setStatsModalOpen(true)} />
           )}
 
           {/* Accueil */}
-          {tab === "accueil" && (
+          {tab === "accueil" && (() => {
+            // Abonnés CUMULÉS dans le temps : les réseaux ne sont pas relevés le même
+            // jour → à chaque date on reprend la DERNIÈRE valeur connue de chaque réseau
+            // avant d'additionner (sinon la courbe fait des zigzags, un réseau sur deux).
+            const lastSeen = new Map<string, number>();
+            const totalPts: { label: string; full: string; value: number }[] = [];
+            // La courbe ne démarre qu’une fois CHAQUE réseau relevé au moins une fois
+            // (sinon faux « saut » au début quand le 2e réseau apparaît).
+            const allPlats = new Set((suivi ?? []).filter((e) => (toNum(e.followers) ?? 0) > 0).map((e) => (e.platform || "").toLowerCase()));
+            for (const e of [...(suivi ?? [])].sort((x, y) => frTime(x.date) - frTime(y.date))) {
+              const t = frTime(e.date);
+              const fo = toNum(e.followers) ?? 0;
+              if (!t || fo <= 0) continue;
+              lastSeen.set((e.platform || "").toLowerCase(), fo);
+              if (lastSeen.size < allPlats.size) continue;
+              const value = [...lastSeen.values()].reduce((a, n) => a + n, 0);
+              const d = new Date(t);
+              const label = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(d);
+              const full = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" }).format(d);
+              if (totalPts.length && totalPts[totalPts.length - 1].full === full) totalPts[totalPts.length - 1].value = value;
+              else totalPts.push({ label, full, value });
+            }
+            const prevTotal = totalPts.length >= 2 ? totalPts[totalPts.length - 2].value : 0;
+            const lastTotal = totalPts.length ? totalPts[totalPts.length - 1].value : 0;
+            const followersDelta = totalPts.length >= 2 && prevTotal > 0 ? ((lastTotal - prevTotal) / prevTotal) * 100 : null;
+            const lastMeasure = Math.max(0, ...(suivi ?? []).map((e) => frTime(e.date) || 0));
+            const statsStale = suivi !== null && (!lastMeasure || Date.now() - lastMeasure > 35 * 86400000);
+            const now = new Date();
+            const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+            const evIso = (e: Ev) => e.date || (e.day ? `${todayIso.slice(0, 8)}${String(e.day).padStart(2, "0")}` : "9999-12-31");
+            const upcoming = events.filter((e) => evIso(e) >= todayIso).sort((a, b) => evIso(a).localeCompare(evIso(b))).slice(0, 3);
+            const nextBrief = briefs
+              .filter((b) => (toISODate(b.due) || "") >= todayIso)
+              .sort((a, b) => (toISODate(a.due) || "").localeCompare(toISODate(b.due) || ""))[0];
+            const lastInv = invoices[0];
+            const topEr = platformLatest[0]?.er ?? creator?.er ?? null;
+            // Même total que « Mes infos » (dernière mesure de CHAQUE réseau).
+            const followersNow = totalFollowers || toNum(creator?.followers) || 0;
+            const hi = (s: string) => <span className="text-foreground">{s}</span>;
+            const insight: ReactNode = statsStale ? (
+              <>Pense à {hi("envoyer tes stats du mois")} : ton agence s'en sert pour te proposer aux marques.</>
+            ) : openTodos.length > 0 ? (
+              <>Il te reste {hi(`${openTodos.length} tâche${openTodos.length > 1 ? "s" : ""}`)} à faire. Commence par la plus ancienne.</>
+            ) : nextBrief ? (
+              <>Prochain brief : {hi(nextBrief.brand)} pour le {hi(frDate(nextBrief.due))}.</>
+            ) : (
+              <>Tout est à jour. {hi("Belle journée !")}</>
+            );
+            const kpis: { label: string; value: string; foot: ReactNode }[] = [
+              { label: "Abonnés", value: followersNow ? fmtCompact(followersNow) : "—", foot: <Delta value={followersDelta} suffix="vs relevé préc." /> },
+              { label: "Engagement", value: topEr ? String(topEr) : "—", foot: platformLatest[0]?.platformLabel ?? "Dernière mesure de ton agence" },
+              { label: "CA encaissé", value: formatEuro(caEncaisse), foot: `sur ${formatEuro(totalFacture)} facturés` },
+              { label: "À faire", value: String(openTodos.length), foot: `${briefs.length} brief${briefs.length > 1 ? "s" : ""} · ${ideas.length} idée${ideas.length > 1 ? "s" : ""}` },
+            ];
+            return (
             <div className="flex flex-col gap-4">
               <PushCard />
 
-              {/* Globe interactif — touche déco (glisse pour le faire tourner) */}
-              <Card className="overflow-hidden">
-                <div className="flex flex-col items-center gap-0.5 text-center">
-                  <div className="text-sm font-semibold text-foreground">Le monde de TTP 🌍</div>
-                  <div className="text-[11px] text-faint">Glisse pour le faire tourner</div>
-                </div>
-                <div className="mx-auto mt-3 w-full max-w-[280px]">
-                  <Suspense fallback={<div className="mx-auto aspect-square w-full max-w-[280px] animate-pulse rounded-full bg-panel/50" />}>
-                    <GlobeStickers dark={dark} />
-                  </Suspense>
-                </div>
-              </Card>
-
-              {/* Envoyer mes stats — barre compacte + modale (guide + upload) */}
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-3.5 shadow-sm">
-                <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
-                  <BarChart3 className="h-4 w-4 text-primary" /> Envoyer mes stats
-                </div>
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => setStatsModalOpen(true)} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/5">
-                    <HelpCircle className="h-3.5 w-3.5" /> Comment faire&nbsp;?
+              {/* Raccourcis (mobile uniquement, comme l'Aperçu agence) */}
+              <div className="grid grid-cols-3 gap-2 md:hidden">
+                {([
+                  { id: "todo", label: "À faire", Icon: ListChecks },
+                  { id: "ideas", label: "Idées", Icon: Lightbulb },
+                  { id: "planning", label: "Planning", Icon: CalendarDays },
+                ] as const).map(({ id, label, Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setTab(id as Tab)}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-3 py-3 text-xs font-semibold text-foreground transition-colors hover:bg-rowhover"
+                  >
+                    <Icon className="h-4 w-4 text-muted-foreground" /> {label}
                   </button>
-                  <button type="button" onClick={() => setStatsModalOpen(true)} className="rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
-                    Envoyer
-                  </button>
-                </div>
+                ))}
               </div>
+
+              {/* Chiffres clés (bandeau à filets) */}
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border lg:grid-cols-4">
+                {kpis.map((c) => (
+                  <div key={c.label} className="flex min-w-0 flex-col bg-surface px-4 py-4 sm:px-5 sm:py-5">
+                    <span className="text-[12px] text-muted-foreground sm:text-[13px]">{c.label}</span>
+                    <span className="mt-2 truncate text-[22px] font-semibold leading-none tracking-tight tabular-nums sm:text-[26px]">{c.value}</span>
+                    <div className="mt-3 line-clamp-2 text-[12px] leading-snug text-muted-foreground">{c.foot}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+                {/* Colonne principale : courbe + à retenir + stats du mois */}
+                <DashPanel className="flex flex-col xl:col-span-8">
+                  <div className="px-5 pb-3 pt-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-[30px] font-semibold leading-none tracking-tight tabular-nums">{followersNow ? fmtCompact(followersNow) : "—"}</div>
+                        <div className="mt-2 text-[13px] text-muted-foreground">
+                          Abonnés cumulés{followerSeries.platforms.length > 1 ? ` · ${followerSeries.platforms.length} réseaux` : ""}
+                        </div>
+                      </div>
+                      <Delta value={followersDelta} suffix="vs relevé préc." />
+                    </div>
+                    <div className="mt-4">
+                      {totalPts.length >= 2 ? (
+                        <Suspense fallback={<div className="h-[240px] animate-pulse rounded-xl bg-panel/60" />}>
+                          <DashArea points={totalPts} name="Abonnés" format={(n) => fmtCompact(n)} height={240} />
+                        </Suspense>
+                      ) : (
+                        <div className="grid h-[180px] place-items-center rounded-xl border border-dashed border-border px-4 text-center text-[12px] text-faint">
+                          {suivi === null ? "Chargement…" : "La courbe apparaîtra dès que ton agence aura enregistré 2 relevés d'abonnés."}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid flex-1 grid-cols-1 divide-y divide-border border-t border-border md:grid-cols-2 md:divide-x md:divide-y-0">
+                    <div className="px-5 py-5">
+                      <DashSectionTitle icon={Sparkles}>À retenir</DashSectionTitle>
+                      <p className="line-clamp-4 text-[19px] leading-snug text-muted-foreground md:text-[21px]">{insight}</p>
+                    </div>
+                    <div className="flex flex-col px-5 py-5">
+                      <DashSectionTitle icon={BarChart3}>Mes stats du mois</DashSectionTitle>
+                      <p className="text-[13px] leading-relaxed text-muted-foreground">
+                        Envoie les captures de tes 30 derniers jours en début de mois : c'est ce qui prouve ton audience aux marques.
+                      </p>
+                      <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
+                        <button type="button" onClick={() => setStatsModalOpen(true)} className="rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+                          Envoyer mes stats
+                        </button>
+                        <button type="button" onClick={() => setStatsModalOpen(true)} className="inline-flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
+                          <HelpCircle className="h-3.5 w-3.5" /> Comment faire&nbsp;?
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </DashPanel>
+
+                {/* Colonne de synthèse : rendez-vous, dernière facture, media kit */}
+                <DashPanel className="flex flex-col xl:col-span-4">
+                  <div className="px-5 py-5">
+                    <DashSectionTitle icon={CalendarDays}>Prochains rendez-vous</DashSectionTitle>
+                    {upcoming.length === 0 ? (
+                      <div className="text-[12px] text-faint">Aucun rendez-vous à venir.</div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {upcoming.map((e) => (
+                          <div key={e.id} className="flex items-center gap-3 rounded-xl bg-panel px-3 py-2.5">
+                            <span className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">
+                              {evIso(e).slice(8, 10)}/{evIso(e).slice(5, 7)}
+                              {e.time && e.time !== "—" ? ` · ${e.time}` : ""}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{e.title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="border-t border-border px-5 py-5">
+                    <div className="mb-3 text-[13px] text-muted-foreground">Dernière facture</div>
+                    {lastInv ? (
+                      <dl className="flex flex-col gap-2.5 text-[13px]">
+                        <div className="flex items-center justify-between gap-3">
+                          <dt className="text-muted-foreground">Marque</dt>
+                          <dd className="truncate font-medium text-foreground">{lastInv.party || "—"}</dd>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <dt className="text-muted-foreground">Montant</dt>
+                          <dd className="font-medium tabular-nums text-foreground">{parseAmount(lastInv.amount) > 0 ? formatEuro(parseAmount(lastInv.amount)) : lastInv.amount || "—"}</dd>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <dt className="text-muted-foreground">Statut</dt>
+                          <dd>
+                            <AnimatedBadge status={invStatus(lastInv.status).status} size="sm">{invStatus(lastInv.status).label}</AnimatedBadge>
+                          </dd>
+                        </div>
+                      </dl>
+                    ) : (
+                      <div className="text-[12px] text-faint">Aucune facture pour le moment.</div>
+                    )}
+                    <div className="mt-4">
+                      <DashWideLink label="Voir mes factures" onClick={() => setTab("facturation")} />
+                    </div>
+                  </div>
+                  <div className="border-t border-border px-5 py-5">
+                    <div className="text-[13px] text-muted-foreground">Mon media kit</div>
+                    <div className="mt-1 text-[12px] text-faint">
+                      {mkLive === true ? "Ta page publique, à partager aux marques." : mkLive === null ? "Vérification de ta page…" : "En préparation avec ton agence."}
+                    </div>
+                    {mkLive === true && mkUrl && (
+                      <div className="mt-3 flex items-center gap-2">
+                        <a
+                          href={mkUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-muted px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" /> Voir mon media kit
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(mkUrl);
+                            toast("Lien copié ✓");
+                          }}
+                          className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                          title="Copier le lien"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </DashPanel>
+              </div>
+
               <input ref={statsFileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => sendStatsFiles(e.target.files)} />
               <WelcomeModal
                 open={statsModalOpen}
@@ -1465,45 +1686,64 @@ export function CreatorSpace({
                 <div className="mt-2 text-center text-[10px] text-faint">Jusqu'à 6 images · elles arrivent directement chez ton agence, qui est notifiée.</div>
               </WelcomeModal>
 
-              {/* Raccourcis rapides vers les pages clés */}
-              <div className="grid grid-cols-3 gap-3">
-                {([
-                  { id: "todo", label: "À faire", Icon: ListChecks },
-                  { id: "ideas", label: "Idées", Icon: Lightbulb },
-                  { id: "planning", label: "Planning", Icon: CalendarDays },
-                ] as const).map(({ id, label, Icon }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setTab(id as Tab)}
-                    className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface px-3 py-3.5 text-xs font-semibold text-foreground shadow-sm transition-colors hover:bg-rowhover"
-                  >
-                    <Icon className="h-4 w-4 text-primary" /> <span>{label}</span>
-                  </button>
-                ))}
+              {/* Tâches, briefs et le globe (touche déco) */}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <DashPanel>
+                  <div className="px-5 py-5">
+                    <DashSectionTitle
+                      icon={ListChecks}
+                      right={openTodos.length > 0 ? <button type="button" onClick={() => setTab("todo")} className="text-[12px] text-muted-foreground transition-colors hover:text-foreground">Voir tout</button> : undefined}
+                    >
+                      Mes tâches
+                    </DashSectionTitle>
+                    {openTodos.length === 0 ? (
+                      <div className="text-[12px] text-faint">Rien à faire pour le moment.</div>
+                    ) : (
+                      openTodos.slice(0, 5).map((t) => (
+                        <div key={t.id} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
+                          <span className="h-4 w-4 shrink-0 rounded-[5px] border border-faint" />
+                          <span className="min-w-0 flex-1 truncate text-[13px]">{t.text}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </DashPanel>
+                <DashPanel>
+                  <div className="px-5 py-5">
+                    <DashSectionTitle
+                      icon={FileText}
+                      right={briefs.length > 0 ? <button type="button" onClick={() => setTab("briefs")} className="text-[12px] text-muted-foreground transition-colors hover:text-foreground">Voir tout</button> : undefined}
+                    >
+                      Mes briefs
+                    </DashSectionTitle>
+                    {briefs.length === 0 ? (
+                      <div className="text-[12px] text-faint">Aucun brief pour le moment.</div>
+                    ) : (
+                      briefs.slice(0, 5).map((b) => (
+                        <div key={b.id} className="flex items-center gap-3 border-b border-border py-2.5 last:border-0">
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[13px] font-medium">{b.brand}</div>
+                            <div className="truncate text-[11px] text-muted-foreground">{b.deliverables || "Livrables à préciser"}</div>
+                          </div>
+                          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{frDate(b.due)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </DashPanel>
+                <DashPanel className="md:col-span-2 xl:col-span-1">
+                  <div className="px-5 py-5">
+                    <DashSectionTitle icon={Globe2}>Le monde de TTP</DashSectionTitle>
+                    <div className="mx-auto w-full max-w-[240px]">
+                      <Suspense fallback={<div className="mx-auto aspect-square w-full max-w-[240px] animate-pulse rounded-full bg-panel/50" />}>
+                        <GlobeStickers dark={dark} />
+                      </Suspense>
+                    </div>
+                    <div className="mt-1 text-center text-[11px] text-faint">Glisse pour le faire tourner</div>
+                  </div>
+                </DashPanel>
               </div>
 
-              {/* Évolution des abonnés — un glass chart par réseau */}
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between gap-3 px-1">
-                  <div>
-                    <div className="text-sm font-semibold text-foreground">Évolution des abonnés</div>
-                    <div className="mt-0.5 text-[11px] text-faint">D'après les mesures de ton agence</div>
-                  </div>
-                  {followerSeries.points.length > 0 && (
-                    <div className="text-2xl font-bold tracking-tight text-foreground">{fmtCompact(followerSeries.lastTotal)}</div>
-                  )}
-                </div>
-                {followerSeries.points.length >= 2 ? (
-                  followerGlassGrid
-                ) : (
-                  <div className="grid h-[120px] place-items-center rounded-2xl border border-border bg-surface px-4 text-center text-xs leading-relaxed text-muted-foreground shadow-sm">
-                    {suivi === null
-                      ? "Chargement…"
-                      : "Pas encore assez de mesures pour tracer la courbe. Ton agence doit enregistrer au moins 2 relevés d'abonnés à des dates différentes."}
-                  </div>
-                )}
-              </div>
 
               {/* Mes infos — carte premium : toggle Statistiques / Coordonnées + chiffres animés */}
               <Card index={0}>
@@ -1635,121 +1875,9 @@ export function CreatorSpace({
                   </>
                 )}
               </Card>
-
-              {/* Cartes en bas — mêmes listes que le dashboard agence, côté créateur */}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <Card>
-                  <div className="mb-3.5 flex items-center justify-between">
-                    <div className="text-sm font-semibold">Mes tâches</div>
-                    {openTodos.length > 0 && (
-                      <button type="button" onClick={() => setTab("todo")} className="text-[12px] font-medium text-primary transition-opacity hover:opacity-80">Voir tout</button>
-                    )}
-                  </div>
-                  {openTodos.length === 0 ? (
-                    <div className="py-2 text-xs text-muted-foreground">Rien à faire</div>
-                  ) : (
-                    openTodos.slice(0, 5).map((t) => (
-                      <div key={t.id} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
-                        <span className="h-4 w-4 shrink-0 rounded-[5px] border border-faint" />
-                        <span className="min-w-0 flex-1 truncate text-xs">{t.text}</span>
-                      </div>
-                    ))
-                  )}
-                </Card>
-
-                <Card>
-                  <div className="mb-3.5 flex items-center justify-between">
-                    <div className="text-sm font-semibold">Mes briefs</div>
-                    {briefs.length > 0 && (
-                      <button type="button" onClick={() => setTab("briefs")} className="text-[12px] font-medium text-primary transition-opacity hover:opacity-80">Voir tout</button>
-                    )}
-                  </div>
-                  {briefs.length === 0 ? (
-                    <div className="py-2 text-xs text-muted-foreground">Aucun brief.</div>
-                  ) : (
-                    briefs.slice(0, 5).map((b) => (
-                      <div key={b.id} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-signal" />
-                        <div className="min-w-0 flex-1 truncate text-xs font-medium">{b.brand}</div>
-                        <span className="shrink-0 text-[9px] font-semibold text-muted-foreground">{frDate(b.due)}</span>
-                      </div>
-                    ))
-                  )}
-                </Card>
-
-                <Card className="md:col-span-2">
-                  <div className="mb-3.5 flex items-center justify-between">
-                    <div className="text-sm font-semibold">Mes factures récentes</div>
-                    {invoices.length > 0 && (
-                      <button type="button" onClick={() => setTab("facturation")} className="text-[12px] font-medium text-primary transition-opacity hover:opacity-80">Voir tout</button>
-                    )}
-                  </div>
-                  {invoices.length === 0 ? (
-                    <div className="py-2 text-xs text-muted-foreground">Aucune facture.</div>
-                  ) : (
-                    invoices.slice(0, 5).map((iv) => {
-                      const st = invStatus(iv.status);
-                      return (
-                        <div key={iv.ref} className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-0">
-                          <div className="min-w-0">
-                            <div className="truncate text-xs font-medium text-foreground">{iv.party}</div>
-                            <div className="text-[10px] text-faint">#{iv.ref}</div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2.5">
-                            <span className="text-xs font-semibold text-foreground">{iv.amount || "—"}</span>
-                            <AnimatedBadge status={st.status} size="sm">{st.label}</AnimatedBadge>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </Card>
-
-                {/* Mon media kit — page publique à partager aux marques (remplie par l'agence) */}
-                <Card className="md:col-span-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold">Mon media kit</div>
-                      <div className="mt-0.5 text-[11px] text-faint">
-                        {mkLive === true
-                          ? "Ta page publique — à partager aux marques"
-                          : mkLive === null
-                            ? "Vérification de ta page…"
-                            : "En préparation avec ton agence"}
-                      </div>
-                    </div>
-                    {mkLive === true && mkUrl ? (
-                      <div className="flex shrink-0 items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard?.writeText(mkUrl);
-                            toast("Lien copié ✓");
-                          }}
-                          className="grid h-9 w-9 place-items-center rounded-lg bg-panel text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                          title="Copier le lien"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </button>
-                        <a
-                          href={mkUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" /> Voir mon media kit
-                        </a>
-                      </div>
-                    ) : (
-                      <span className="shrink-0 text-[11px] text-muted-foreground">
-                        {mkLive === null ? "…" : "Bientôt disponible"}
-                      </span>
-                    )}
-                  </div>
-                </Card>
-              </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* Évolution (suivi engagement, mesures de l'agence — lecture seule) */}
           {tab === "evolution" &&
@@ -1876,7 +2004,7 @@ export function CreatorSpace({
                   accent={{ value: String(todos.filter((t) => t.done).length), label: "Terminées", icon: Check }}
                 />
               )}
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <PageHeaderRow>
                 <div className="flex flex-wrap items-center gap-2">
                   {todoView === "liste" && (
                     <div className="flex gap-1 rounded-xl bg-surface p-1">
@@ -1915,7 +2043,7 @@ export function CreatorSpace({
                   </div>
                 </div>
                 <AddButton label="Tâche" onClick={() => setTdOpen(true)} />
-              </div>
+              </PageHeaderRow>
               <InlineForm open={tdOpen} title="Nouvelle tâche" onClose={() => setTdOpen(false)} onSubmit={addTodo}>
                 <TextField label="Tâche" value={tdText} onChange={setTdText} />
                 <AutoGrowTextField label="Description" value={tdDesc} onChange={setTdDesc} placeholder="Détaille — le champ s'agrandit tout seul…" className="min-w-full" />
@@ -2057,7 +2185,7 @@ export function CreatorSpace({
                   />
                 );
               })()}
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <PageHeaderRow>
                 <div className="text-sm text-muted-foreground">
                   {ideas.length} idée{ideas.length > 1 ? "s" : ""}
                 </div>
@@ -2082,7 +2210,7 @@ export function CreatorSpace({
                   )}
                   <AddButton label="Idée" onClick={() => setIdOpen(true)} />
                 </div>
-              </div>
+              </PageHeaderRow>
               <InlineForm open={idOpen} title="Nouvelle idée" onClose={() => setIdOpen(false)} onSubmit={addIdea}>
                 <AutoGrowTextField label="Idée de contenu" value={idText} onChange={setIdText} placeholder="Décris ton idée — le champ s'agrandit tout seul…" className="min-w-full" />
               </InlineForm>
@@ -2120,12 +2248,12 @@ export function CreatorSpace({
           {/* Contacts du créateur — visibles par l'agence (table partagée, RLS cloisonnée) */}
           {tab === "contacts" && (
             <>
-              <div className="mb-4 flex items-center justify-between gap-3">
+              <PageHeaderRow>
                 <div className="text-sm text-muted-foreground">
                   {contacts.length} contact{contacts.length > 1 ? "s" : ""} · visibles par ton agence
                 </div>
                 <AddButton label="Contact" onClick={() => setCtOpen(true)} />
-              </div>
+              </PageHeaderRow>
               <InlineForm open={ctOpen} title="Nouveau contact" onClose={() => setCtOpen(false)} onSubmit={addContact}>
                 <TextField label="Marque / société" value={ctBrand} onChange={setCtBrand} placeholder="ex Sephora" />
                 <TextField label="Nom du contact" value={ctPerson} onChange={setCtPerson} placeholder="ex Julie Martin" />
@@ -2318,12 +2446,12 @@ export function CreatorSpace({
                 </span>
               </div>
 
-              <div className="flex items-center justify-between gap-3">
+              <PageHeaderRow>
                 <div className="text-xs text-muted-foreground">
                   <span className="font-semibold text-foreground">{gifts.length}</span> {gifts.length > 1 ? "cadeaux" : "cadeau"}
                 </div>
                 <AddButton label="Signaler un cadeau" onClick={() => setGiOpen(true)} />
-              </div>
+              </PageHeaderRow>
 
               <InlineForm
                 open={giOpen}
@@ -2637,14 +2765,14 @@ export function CreatorSpace({
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                  <div className="text-[11px] font-medium text-muted-foreground">Encaissé</div>
-                  <div className="mt-1.5 whitespace-nowrap text-xl font-bold tracking-tight text-signaltext">{formatEuro(encaisse)}</div>
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border">
+                <div className="min-w-0 bg-surface px-4 py-4 sm:px-5 sm:py-5">
+                  <div className="text-[12px] text-muted-foreground sm:text-[13px]">Encaissé</div>
+                  <div className="mt-2 truncate text-[22px] font-semibold leading-none tracking-tight tabular-nums text-signaltext sm:text-[26px]">{formatEuro(encaisse)}</div>
                 </div>
-                <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                  <div className="text-[11px] font-medium text-muted-foreground">Total facturé</div>
-                  <div className="mt-1.5 whitespace-nowrap text-xl font-bold tracking-tight">{formatEuro(totalFacture)}</div>
+                <div className="min-w-0 bg-surface px-4 py-4 sm:px-5 sm:py-5">
+                  <div className="text-[12px] text-muted-foreground sm:text-[13px]">Total facturé</div>
+                  <div className="mt-2 truncate text-[22px] font-semibold leading-none tracking-tight tabular-nums sm:text-[26px]">{formatEuro(totalFacture)}</div>
                 </div>
               </div>
               <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
@@ -2676,6 +2804,7 @@ export function CreatorSpace({
               </div>
             </div>
           )}
+          </TabFrame>
           </ErrorBoundary>
         </main>
       </div>

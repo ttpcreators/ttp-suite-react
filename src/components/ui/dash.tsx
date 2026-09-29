@@ -1,6 +1,35 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/** Panneau bordé de l'Aperçu (plat ; en Minuit il se fond dans le fond). */
+export function DashPanel({ children, className }: { children: ReactNode; className?: string }) {
+  return <section className={cn("overflow-hidden rounded-2xl border border-border bg-surface", className)}>{children}</section>;
+}
+
+/** Titre de section de l'Aperçu : icône grise + intitulé, action optionnelle à droite. */
+export function DashSectionTitle({ icon: Icon, children, right }: { icon: LucideIcon; children: ReactNode; right?: ReactNode }) {
+  return (
+    <div className="mb-4 flex items-center gap-2">
+      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <h2 className="text-[14px] font-semibold text-foreground">{children}</h2>
+      {right && <div className="ml-auto">{right}</div>}
+    </div>
+  );
+}
+
+/** Bouton plein largeur « Voir … → » de l'Aperçu. */
+export function DashWideLink({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-muted px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+    >
+      {label} <ArrowRight className="h-3.5 w-3.5" />
+    </button>
+  );
+}
 
 /**
  * Briques du tableau de bord « Minuit » (inspirées du dashboard Efferd, refaites
