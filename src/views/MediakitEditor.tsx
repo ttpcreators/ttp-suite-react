@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon, Check, Sparkles } from "lucide-react";
+import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon, Check, Sparkles, Euro } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { ImageField } from "@/components/ui/image-field";
 import { dbUpdate } from "@/lib/db";
@@ -32,7 +32,12 @@ type PlatformBlock = {
   newViewers30j?: string;
   watchHours?: string;
   reach?: string;
+  avgViews?: string;
+  avgStoryViews?: string;
+  avgLikes?: string;
 };
+/** Une prestation tarifée (ex. « Story Instagram » — 1500 € HT). */
+type RateRow = { label: string; price: string; detail?: string };
 type BrandRow = { name: string; logo?: string | null };
 type MediaKit = {
   slug?: string;
@@ -50,6 +55,12 @@ type MediaKit = {
   photos?: Record<string, string | null>; // hero, contact, + une capture par plateforme (clé = instagram/tiktok/…)
   /** Captures d'insights affichées sur le media kit public (6 max). URLs publiques. */
   statsShots?: string[];
+  /** Grille tarifaire (€ HT) affichée sur le media kit et dans le deck agence. */
+  rates?: RateRow[];
+  /** Mention sous la grille (packages, dispositifs…). */
+  ratesNote?: string;
+  /** Masque les tarifs sur le media kit public (ils restent saisis ici). */
+  hideRates?: boolean;
   /** Media kit UGC — format à part (personnalité, quotidien, matériel, portfolio),
    *  page publique séparée `/mediakit/<slug>/ugc/`. Ne remplace PAS le kit chiffré. */
   ugc?: UgcKit;
@@ -81,14 +92,19 @@ const PLATFORM_FIELDS: Record<string, { key: keyof PlatformBlock; label: string 
   instagram: [
     { key: "impressions30j", label: "Comptes touchés / spectateurs (30 j)" },
     { key: "views30j", label: "Vues de reels (30 j)" },
+    { key: "avgViews", label: "Moyenne vues par réel" },
+    { key: "avgStoryViews", label: "Moyenne vues par story" },
   ],
   tiktok: [
     { key: "likesTotal", label: "J'aime cumulés" },
     { key: "views30j", label: "Vues (30 j)" },
     { key: "newViewers30j", label: "Nouveaux spectateurs (30 j)" },
+    { key: "avgViews", label: "Moyenne vues par vidéo" },
+    { key: "avgLikes", label: "Moyenne likes par vidéo" },
   ],
   youtube: [
     { key: "views30j", label: "Vues (30 j)" },
+    { key: "avgViews", label: "Moyenne vues par vidéo" },
     { key: "watchHours", label: "Heures de visionnage" },
     { key: "newViewers30j", label: "Abonnés gagnés (30 j)" },
   ],
@@ -275,6 +291,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
   const setUgcLines = (key: "gear" | "collabs", raw: string) =>
     patchUgc({ [key]: raw.split("\n").map((s) => s.trim()).filter(Boolean) } as Partial<UgcKit>);
   const setPlatforms = (platforms: PlatformBlock[]) => patch({ platforms });
+  const setRates = (rates: RateRow[]) => patch({ rates });
 
   const publicUrl = mk.slug ? `https://ttpcreators.pro/mediakit/${mk.slug}/` : null;
 
@@ -547,6 +564,43 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
             </div>
           </section>
 
+          {/* ---------------- TARIFS ---------------- */}
+          <section className={`${CARD} xl:col-span-2`}>
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-foreground">Tarifs</h3>
+                <p className="mt-1 max-w-xl text-[11px] leading-relaxed text-faint">
+                  Prix HT par prestation. Ils s'affichent sur une page « Tarifs » du media kit (web + PDF) et le deck agence
+                  indique « à partir de ». Le media kit est une page publique : masque les prix si tu préfères les donner
+                  au cas par cas.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => patch({ hideRates: !mk.hideRates })}
+                className={cn(
+                  "flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-[12px] font-medium transition-colors",
+                  !mk.hideRates ? "bg-signalsoft text-signaltext" : "border border-border text-muted-foreground hover:bg-rowhover",
+                )}
+              >
+                <span className={cn("grid h-4 w-4 shrink-0 place-items-center rounded", !mk.hideRates ? "bg-primary text-primary-foreground" : "border border-border")}>
+                  {!mk.hideRates && <Check className="h-3 w-3" />}
+                </span>
+                {mk.hideRates ? "Prix masqués" : "Prix affichés"}
+              </button>
+            </div>
+            <RatesEditor rates={mk.rates ?? []} onChange={setRates} />
+            <div className="mt-3">
+              <label className={LBL}>Mention sous la grille</label>
+              <input
+                value={mk.ratesNote ?? ""}
+                onChange={(e) => patch({ ratesNote: e.target.value })}
+                placeholder={DEFAULT_RATES_NOTE}
+                className={IN}
+              />
+            </div>
+          </section>
+
           {/* ---------------- MARQUES ---------------- */}
           <section className={`${CARD} xl:col-span-2`}>
             <h3 className="mb-3 text-sm font-semibold text-foreground">
@@ -741,6 +795,66 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
 }
 
 // ---------------------------------------------------------------- sous-éditeurs
+
+const DEFAULT_RATES_NOTE = "Tarifs indicatifs HT — des packages sont proposés selon le dispositif.";
+const RATE_PRESETS = ["Story Instagram", "Post Instagram", "Réel Instagram", "Vidéo TikTok", "Contenu UGC", "Pack sur mesure"];
+
+function RatesEditor({ rates, onChange }: { rates: RateRow[]; onChange: (r: RateRow[]) => void }) {
+  const set = (i: number, p: Partial<RateRow>) => onChange(rates.map((x, j) => (j === i ? { ...x, ...p } : x)));
+  const used = new Set(rates.map((r) => r.label.trim().toLowerCase()));
+  const presets = RATE_PRESETS.filter((p) => !used.has(p.toLowerCase()));
+  return (
+    <div className="space-y-2">
+      {rates.map((r, i) => (
+        <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.1fr)_150px_minmax(0,1.3fr)_auto] sm:items-center">
+          <input value={r.label} onChange={(e) => set(i, { label: e.target.value })} placeholder="Réel Instagram" className={IN} />
+          <div className="flex items-center gap-1.5">
+            <input
+              value={r.price}
+              onChange={(e) => set(i, { price: e.target.value })}
+              placeholder="1500"
+              inputMode="numeric"
+              className={`${IN} text-right tabular-nums`}
+            />
+            <span className="shrink-0 text-xs text-faint">€ HT</span>
+          </div>
+          <input
+            value={r.detail ?? ""}
+            onChange={(e) => set(i, { detail: e.target.value })}
+            placeholder="Précision (optionnel) — ex : + 2 repartages en story"
+            className={IN}
+          />
+          <button
+            type="button"
+            onClick={() => onChange(rates.filter((_, j) => j !== i))}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        {presets.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onChange([...rates, { label: p, price: "" }])}
+            className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+          >
+            <Plus className="h-3.5 w-3.5" /> {p}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => onChange([...rates, { label: "", price: "" }])}
+          className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+        >
+          <Euro className="h-3.5 w-3.5" /> Autre prestation
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function TagEditor({ tags, onChange }: { tags: string[]; onChange: (t: string[]) => void }) {
   return (
