@@ -242,7 +242,7 @@ export function Login() {
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden lg:flex-row">
       {/* Mobile hero (branded, auto-blink mascotte) */}
-      <div className="relative flex flex-col items-center gap-3 overflow-hidden bg-gradient-to-br from-primary/90 via-primary to-primary/80 px-6 pb-8 pt-11 text-primary-foreground lg:hidden">
+      <div className="relative flex flex-col items-center gap-3 overflow-hidden bg-gradient-to-br from-primary/90 via-primary to-primary/80 px-6 pb-8 pt-11 text-primary-foreground lg:hidden minuit:from-neutral-900 minuit:via-[#0a0a0a] minuit:to-black minuit:text-foreground">
         <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-10 -left-8 h-40 w-40 rounded-full bg-white/5 blur-2xl" />
         <div className="relative z-10 flex items-center gap-2 text-base font-semibold">
@@ -265,11 +265,11 @@ export function Login() {
             <Pupil size={8} pupilColor="#2D2D2D" forceLookX={0} forceLookY={0} />
           </div>
         </div>
-        <div className="relative z-10 text-xs font-medium text-primary-foreground/70">Trust the Process</div>
+        <div className="relative z-10 text-xs font-medium text-primary-foreground/70 minuit:text-muted-foreground">Trust the Process</div>
       </div>
 
       {/* Left : characters */}
-      <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-primary/90 via-primary to-primary/80 p-12 text-primary-foreground lg:flex lg:w-1/2">
+      <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-primary/90 via-primary to-primary/80 p-12 text-primary-foreground lg:flex lg:w-1/2 minuit:from-neutral-900 minuit:via-[#0a0a0a] minuit:to-black minuit:text-foreground minuit:border-r minuit:border-border">
         <div className="relative z-20 flex items-center gap-2 text-lg font-semibold">
           <div className="h-8 w-8 overflow-hidden rounded-lg bg-white/10">
             <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
@@ -343,7 +343,7 @@ export function Login() {
           </div>
         </div>
 
-        <div className="relative z-20 text-sm text-primary-foreground/60">© TTP Agency 2026 — Trust the Process</div>
+        <div className="relative z-20 text-sm text-primary-foreground/60 minuit:text-muted-foreground">© TTP Agency 2026 — Trust the Process</div>
         <div className="absolute right-1/4 top-1/4 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
         <div className="absolute bottom-1/4 left-1/4 h-96 w-96 rounded-full bg-white/5 blur-3xl" />
       </div>

@@ -617,7 +617,7 @@ export function CreatorDetail({
                 className={"relative h-5 w-9 shrink-0 rounded-full transition-colors " + (exclusive ? "bg-primary" : "bg-faint/40")}
                 title="Basculer l'exclusivité"
               >
-                <span className={"absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all " + (exclusive ? "left-[18px]" : "left-0.5")} />
+                <span className={"absolute top-0.5 h-4 w-4 rounded-full transition-all " + (exclusive ? "left-[18px] bg-primary-foreground" : "left-0.5 bg-white")} />
               </button>
               <span className="text-sm font-medium text-foreground">Créateur en exclusivité</span>
             </div>

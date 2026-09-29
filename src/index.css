@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
+/* `minuit:` = uniquement le sombre Minuit (pas le Classique). Sert aux rares
+   endroits où le primaire (blanc en Minuit) remplit une GRANDE surface. */
+@custom-variant minuit (&:is(.dark:not(.dark-classic) *));
 
 :root {
   /* Fait suivre le thème aux contrôles NATIFs (pickers date/mois, spinners

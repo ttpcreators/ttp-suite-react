@@ -74,6 +74,11 @@ function chipBg(e: Ev) {
   if (e.kind === "facture") return "bg-emerald-500";
   return typeBg(e.type);
 }
+/** Texte d'une puce pleine : sur le primaire (blanc en sombre Minuit) il faut
+ *  son texte dédié, sinon blanc sur blanc (puces « Appel » illisibles). */
+function chipFg(e: Ev) {
+  return chipBg(e) === "bg-primary" ? "text-primary-foreground" : "text-onsignal";
+}
 function chipText(e: Ev) {
   if (e.kind === "brief") return "text-amber";
   if (e.kind === "todo") return "text-indigo";
@@ -479,8 +484,9 @@ function MonthView({
                       }
                     }}
                     className={cn(
-                      "flex items-center gap-1 truncate rounded-md px-1.5 py-0.5 text-[10px] font-medium text-onsignal transition-opacity hover:opacity-90",
+                      "flex items-center gap-1 truncate rounded-md px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-90",
                       chipBg(e),
+                      chipFg(e),
                     )}
                     title={`${e.time ? e.time + " · " : ""}${e.title}`}
                   >

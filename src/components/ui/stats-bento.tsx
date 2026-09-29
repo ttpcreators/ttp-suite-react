@@ -25,15 +25,17 @@ export function StatsBento({ primary, bars, small, accent, className }: StatsBen
   return (
     <div className={cn("grid grid-cols-1 gap-3 md:grid-cols-6 md:grid-rows-[auto_auto]", className)}>
       {/* Tuile principale */}
-      <div className="relative flex min-h-[180px] flex-col justify-between overflow-hidden rounded-3xl bg-primary p-7 md:col-span-3 md:row-span-2">
-        <div className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(45deg,rgba(255,255,255,0.6)_0px_1px,transparent_1px_11px)] opacity-20 [mask-image:radial-gradient(ellipse_80%_60%_at_100%_0%,#000_55%,transparent_110%)]" />
+      {/* En Minuit (primaire = blanc), la tuile devient un panneau sombre bordé :
+          pas de grand bloc blanc, la texture diagonale reste en filigrane. */}
+      <div className="relative flex min-h-[180px] flex-col justify-between overflow-hidden rounded-3xl bg-primary p-7 md:col-span-3 md:row-span-2 minuit:border minuit:border-border minuit:bg-panel">
+        <div className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(45deg,rgba(255,255,255,0.6)_0px_1px,transparent_1px_11px)] opacity-20 [mask-image:radial-gradient(ellipse_80%_60%_at_100%_0%,#000_55%,transparent_110%)] minuit:opacity-[0.07]" />
         <div className="relative">
-          <span className="inline-block rounded-full bg-primary-foreground/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-primary-foreground/70">
+          <span className="inline-block rounded-full bg-primary-foreground/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-primary-foreground/70 minuit:bg-foreground/[0.07] minuit:text-muted-foreground">
             {primary.eyebrow}
           </span>
-          <h3 className="mt-5 text-4xl font-bold tracking-tight text-primary-foreground sm:text-5xl">{primary.value}</h3>
+          <h3 className="mt-5 text-4xl font-bold tracking-tight text-primary-foreground sm:text-5xl minuit:text-foreground">{primary.value}</h3>
         </div>
-        {primary.caption && <p className="relative mt-4 max-w-xs text-sm text-primary-foreground/70">{primary.caption}</p>}
+        {primary.caption && <p className="relative mt-4 max-w-xs text-sm text-primary-foreground/70 minuit:text-muted-foreground">{primary.caption}</p>}
       </div>
 
       {/* Tuile à barres */}
@@ -46,7 +48,7 @@ export function StatsBento({ primary, bars, small, accent, className }: StatsBen
           {bars.series.map((h, i) => (
             <div
               key={i}
-              className="w-1.5 rounded-full bg-primary"
+              className="w-1.5 rounded-full bg-primary minuit:bg-foreground/60"
               style={{ height: `${Math.max(6, (h / max) * 100)}%` }}
             />
           ))}

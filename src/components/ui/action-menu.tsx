@@ -47,7 +47,7 @@ export function ConfirmDialog({
           <button type="button" onClick={onCancel} className="rounded-lg border border-border bg-surface px-4 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             {cancelLabel}
           </button>
-          <button type="button" onClick={onConfirm} className={cn("rounded-lg px-4 py-2 text-[12px] font-semibold text-white transition-opacity hover:opacity-90", danger ? "bg-rose-500" : "bg-primary")}>
+          <button type="button" onClick={onConfirm} className={cn("rounded-lg px-4 py-2 text-[12px] font-semibold transition-opacity hover:opacity-90", danger ? "bg-rose-500 text-white" : "bg-primary text-primary-foreground")}>
             {confirmLabel}
           </button>
         </div>
