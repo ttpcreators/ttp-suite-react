@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Save, ExternalLink, Building2 } from "lucide-react";
+import { Plus, Trash2, Save, ExternalLink, Building2, CalendarHeart } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import { ImageField } from "@/components/ui/image-field";
@@ -24,12 +24,22 @@ type Kpis = {
   creatorsOverride: string; // vide = nombre de créatrices calculé automatiquement
   followersOverride: string; // vide = followers cumulés calculés automatiquement
 };
+/** Un événement / concept porté par une créatrice (ex. club running, soirées, ateliers). */
+type Concept = {
+  title: string;
+  by: string; // @ de la créatrice qui porte le concept
+  text: string;
+  highlights: string[]; // chiffres / points forts, un par ligne
+  brands: string; // « Déjà accompagné par … »
+  photos: string[];
+};
 type FullAgencyKit = {
   intro: { title: string; lead: string };
   pillars: Pillar[];
   kpis: Kpis;
   contact: { instagram: string; phone: string; email: string };
   photo: string | null;
+  concepts: Concept[];
 };
 // Forme partielle telle que stockée en base (tous les champs optionnels).
 type AgencyKit = {
@@ -38,7 +48,10 @@ type AgencyKit = {
   kpis?: Partial<Kpis>;
   contact?: Partial<FullAgencyKit["contact"]>;
   photo?: string | null;
+  concepts?: Concept[];
 };
+
+const MAX_CONCEPT_PHOTOS = 4;
 
 // Valeurs par défaut = contenu ACTUEL du deck (miroir de AG_DEFAULTS côté site,
 // mediakit-agence.js) → l'éditeur pré-remplit ce qui est en ligne, on ajuste, on enregistre.
@@ -64,6 +77,7 @@ function withDefaults(blob: AgencyKit): FullAgencyKit {
     kpis: { ...DEF.kpis, creatorsOverride: "", followersOverride: "", ...(blob.kpis ?? {}) },
     contact: { ...DEF.contact, ...(blob.contact ?? {}) },
     photo: blob.photo ?? null,
+    concepts: blob.concepts ?? [],
   };
 }
 
@@ -116,6 +130,9 @@ export function AgencyTab() {
   const patchContact = (p: Partial<FullAgencyKit["contact"]>) => setKit((k) => ({ ...k, contact: { ...k.contact, ...p } }));
   const setPillars = (pillars: Pillar[]) => setKit((k) => ({ ...k, pillars }));
   const setPhoto = (photo: string | null) => setKit((k) => ({ ...k, photo }));
+  const setConcepts = (concepts: Concept[]) => setKit((k) => ({ ...k, concepts }));
+  const patchConcept = (i: number, p: Partial<Concept>) =>
+    setKit((k) => ({ ...k, concepts: k.concepts.map((c, j) => (j === i ? { ...c, ...p } : c)) }));
 
   const save = async () => {
     if (saving || loading || loadError || !loaded) return;
@@ -123,7 +140,11 @@ export function AgencyTab() {
     try {
       const { data, error } = await supabase
         .from("agency_mediakit")
-        .upsert({ id: 1, data: kit, updated_at: new Date().toISOString() })
+        .upsert({
+          id: 1,
+          data: { ...kit, concepts: kit.concepts.map((c) => ({ ...c, highlights: c.highlights.map((h) => h.trim()).filter(Boolean) })) },
+          updated_at: new Date().toISOString(),
+        })
         .select("id");
       if (error || !(data && data.length)) {
         toast("Enregistrement échoué — réessaie");
@@ -306,6 +327,99 @@ export function AgencyTab() {
               <Plus className="h-3.5 w-3.5" /> Ajouter un pilier
             </button>
             <p className="mt-2 text-[11px] text-faint">3 piliers conseillés (ils s'affichent sur une ligne dans le deck).</p>
+          </section>
+
+          {/* ---------------- ÉVÉNEMENTS & CONCEPTS ---------------- */}
+          <section className={`${CARD} xl:col-span-2`}>
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <CalendarHeart className="h-4 w-4 text-muted-foreground" /> Événements &amp; concepts ({kit.concepts.length})
+            </h3>
+            <p className="mb-3 mt-1 max-w-xl text-[11px] leading-relaxed text-faint">
+              Les formats portés par vos créatrices (club running, soirées, ateliers…). Une diapo par concept dans le deck,
+              pour montrer aux marques qu'elles peuvent aller au-delà du placement de produit.
+            </p>
+            <div className="space-y-3">
+              {kit.concepts.map((c, i) => (
+                <div key={i} className="rounded-xl border border-border bg-card p-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-end">
+                    <div>
+                      <label className={LBL}>Nom du concept</label>
+                      <input value={c.title} onChange={(e) => patchConcept(i, { title: e.target.value })} placeholder="Run Club by…" className={`${IN} font-semibold`} />
+                    </div>
+                    <div>
+                      <label className={LBL}>Porté par (@)</label>
+                      <input value={c.by} onChange={(e) => patchConcept(i, { by: e.target.value.replace(/^@/, "") })} placeholder="pseudo" className={IN} />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setConcepts(kit.concepts.filter((_, j) => j !== i))}
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+                      aria-label="Supprimer le concept"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div>
+                      <label className={LBL}>Présentation</label>
+                      <textarea value={c.text} onChange={(e) => patchConcept(i, { text: e.target.value })} rows={5} placeholder="L'idée, le déroulé, pourquoi ça marche…" className={`${IN} resize-y`} />
+                    </div>
+                    <div>
+                      <label className={LBL}>Chiffres & points forts (un par ligne)</label>
+                      <textarea
+                        value={c.highlights.join("\n")}
+                        onChange={(e) => patchConcept(i, { highlights: e.target.value.split("\n") })}
+                        rows={5}
+                        placeholder={"800K comptes touchés\n90 % femmes, 25–35 ans\nParis, Lyon, Genève"}
+                        className={`${IN} resize-y`}
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <label className={LBL}>Déjà accompagné par</label>
+                    <input value={c.brands} onChange={(e) => patchConcept(i, { brands: e.target.value })} placeholder="Marque A, Marque B…" className={IN} />
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    {c.photos.map((u, j) => (
+                      <ImageField
+                        key={`${j}-${u}`}
+                        label=""
+                        slug="agence"
+                        field={`concept-${i}-${j}`}
+                        url={u}
+                        onChange={(nu) => {
+                          const next = [...c.photos];
+                          if (nu) next[j] = nu;
+                          else next.splice(j, 1);
+                          patchConcept(i, { photos: next });
+                        }}
+                        boxClass="h-28 w-28"
+                      />
+                    ))}
+                    {c.photos.length < MAX_CONCEPT_PHOTOS && (
+                      <ImageField
+                        label=""
+                        slug="agence"
+                        field={`concept-${i}-${c.photos.length}`}
+                        url={null}
+                        onChange={(nu) => {
+                          if (nu) patchConcept(i, { photos: [...c.photos, nu].slice(0, MAX_CONCEPT_PHOTOS) });
+                        }}
+                        boxClass="h-28 w-28"
+                      />
+                    )}
+                  </div>
+                  <p className="mt-2 text-[11px] text-faint">Jusqu'à {MAX_CONCEPT_PHOTOS} photos de l'événement.</p>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setConcepts([...kit.concepts, { title: "", by: "", text: "", highlights: [], brands: "", photos: [] }])}
+              className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" /> Ajouter un concept
+            </button>
           </section>
 
           {/* ---------------- CONTACT + PHOTO ---------------- */}

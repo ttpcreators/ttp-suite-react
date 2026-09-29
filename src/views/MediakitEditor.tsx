@@ -61,6 +61,8 @@ type MediaKit = {
   ratesNote?: string;
   /** Masque les tarifs sur le media kit public (ils restent saisis ici). */
   hideRates?: boolean;
+  /** Profil casting (tableau comparatif du deck agence) : clé critère → "oui" ou une précision. Absent = non. */
+  casting?: Record<string, string>;
   /** Media kit UGC — format à part (personnalité, quotidien, matériel, portfolio),
    *  page publique séparée `/mediakit/<slug>/ugc/`. Ne remplace PAS le kit chiffré. */
   ugc?: UgcKit;
@@ -292,6 +294,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
     patchUgc({ [key]: raw.split("\n").map((s) => s.trim()).filter(Boolean) } as Partial<UgcKit>);
   const setPlatforms = (platforms: PlatformBlock[]) => patch({ platforms });
   const setRates = (rates: RateRow[]) => patch({ rates });
+  const setCasting = (casting: Record<string, string>) => patch({ casting });
 
   const publicUrl = mk.slug ? `https://ttpcreators.pro/mediakit/${mk.slug}/` : null;
 
@@ -601,6 +604,16 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
             </div>
           </section>
 
+          {/* ---------------- PROFIL CASTING ---------------- */}
+          <section className={`${CARD} xl:col-span-2`}>
+            <h3 className="text-sm font-semibold text-foreground">Profil casting</h3>
+            <p className="mb-3 mt-1 max-w-xl text-[11px] leading-relaxed text-faint">
+              Alimente le tableau comparatif du deck agence (« qui fait quoi »). Coche ce que la créatrice traite, et
+              précise si utile (ex : Quotidien, Peau sèche, 1 chien).
+            </p>
+            <CastingEditor value={mk.casting ?? {}} onChange={setCasting} />
+          </section>
+
           {/* ---------------- MARQUES ---------------- */}
           <section className={`${CARD} xl:col-span-2`}>
             <h3 className="mb-3 text-sm font-semibold text-foreground">
@@ -795,6 +808,59 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
 }
 
 // ---------------------------------------------------------------- sous-éditeurs
+
+/** Critères du tableau comparatif — MÊME liste (clés + ordre) que CASTING dans mediakit-agence.js (site). */
+const CASTING_CRITERIA: { key: string; label: string; hint: string }[] = [
+  { key: "sport", label: "Sport", hint: "Quotidien, running, Hyrox…" },
+  { key: "mode", label: "Mode", hint: "Streetwear, chic…" },
+  { key: "beaute", label: "Beauté / skincare", hint: "Peau sèche, experte…" },
+  { key: "food", label: "Food", hint: "Healthy, recettes…" },
+  { key: "wellness", label: "Bien-être", hint: "Yoga, santé mentale…" },
+  { key: "voyage", label: "Voyage", hint: "Europe, long-courrier…" },
+  { key: "deco", label: "Déco / maison", hint: "Appartement, maison…" },
+  { key: "famille", label: "Famille", hint: "Maman, en couple…" },
+  { key: "animaux", label: "Animaux", hint: "1 chien, 2 chats…" },
+  { key: "pedago", label: "Contenu pédagogique", hint: "Tutos, conseils…" },
+];
+
+function CastingEditor({ value, onChange }: { value: Record<string, string>; onChange: (v: Record<string, string>) => void }) {
+  const setKey = (k: string, v: string | null) => {
+    const next = { ...value };
+    if (v === null) delete next[k];
+    else next[k] = v;
+    onChange(next);
+  };
+  return (
+    <div className="overflow-hidden rounded-xl border border-border divide-y divide-border">
+      {CASTING_CRITERIA.map((c) => {
+        const v = value[c.key] ?? "";
+        const on = v !== "";
+        return (
+          <div key={c.key} className="grid grid-cols-[minmax(0,9rem)_auto_minmax(0,1fr)] items-center gap-3 px-3 py-2">
+            <span className="truncate text-[13px] font-medium text-foreground">{c.label}</span>
+            <button
+              type="button"
+              onClick={() => setKey(c.key, on ? null : "oui")}
+              aria-pressed={on}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors",
+                on ? "bg-foreground text-background" : "border border-border text-muted-foreground hover:bg-rowhover",
+              )}
+            >
+              <Check className={cn("h-3 w-3", !on && "opacity-30")} /> {on ? "Oui" : "Non"}
+            </button>
+            <input
+              value={v === "oui" ? "" : v}
+              onChange={(e) => setKey(c.key, e.target.value.trim() ? e.target.value : on ? "oui" : null)}
+              placeholder={`Précision (optionnel) — ${c.hint}`}
+              className={IN}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 const DEFAULT_RATES_NOTE = "Tarifs indicatifs HT — des packages sont proposés selon le dispositif.";
 const RATE_PRESETS = ["Story Instagram", "Post Instagram", "Réel Instagram", "Vidéo TikTok", "Contenu UGC", "Pack sur mesure"];
