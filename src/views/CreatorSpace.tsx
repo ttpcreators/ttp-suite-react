@@ -104,8 +104,8 @@ type Todo = { id: string; text: string; descr: string | null; due: string | null
 let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
 // Priorité : barre d'accent (bord gauche de la carte) + pilule.
-const PRIO_ACCENT: Record<string, string> = { haute: "bg-rose-500", moyenne: "bg-amber-500", basse: "bg-slate-300 dark:bg-slate-600" };
-const PRIO_PILL: Record<string, string> = { haute: "bg-rose-500/10 text-rose-600 dark:text-rose-400", moyenne: "bg-amber-500/10 text-amber-600 dark:text-amber-400", basse: "bg-panel text-faint" };
+const PRIO_ACCENT: Record<string, string> = { haute: "bg-rose-500", moyenne: "bg-amber", basse: "bg-neutral-300 dark:bg-neutral-600" };
+const PRIO_PILL: Record<string, string> = { haute: "bg-rose-500/10 text-rose-600 dark:text-rose-400", moyenne: "bg-foreground/[0.06] text-amber", basse: "bg-panel text-faint" };
 const prioAccent = (p: string | null) => PRIO_ACCENT[p ?? "moyenne"] ?? PRIO_ACCENT.moyenne;
 const prioPill = (p: string | null) => PRIO_PILL[p ?? "moyenne"] ?? PRIO_PILL.moyenne;
 type Idea = { id: string; text: string; status: string | null; sort_order?: number; subtasks?: Subtask[] | null };
@@ -2310,7 +2310,7 @@ export function CreatorSpace({
           {tab === "gifting" && (
             <div className="space-y-4">
               {/* Rappel mentions — visible en haut, c'est le point clé pour le créateur */}
-              <div className="flex items-start gap-2.5 rounded-2xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3 text-[12px] leading-relaxed text-amber-700 dark:text-amber-300">
+              <div className="flex items-start gap-2.5 rounded-2xl border border-border bg-foreground/[0.06] px-4 py-3 text-[12px] leading-relaxed text-amber">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
                   Un cadeau reçu d'une marque est un partenariat : dès que tu le montres, indique-le clairement
@@ -2364,12 +2364,12 @@ export function CreatorSpace({
                       </div>
 
                       {g.content_expected && (
-                        <div className="mt-2.5 rounded-lg bg-amber-500/10 px-3 py-2 text-[12px] font-medium text-amber-700 dark:text-amber-300">
+                        <div className="mt-2.5 rounded-lg bg-foreground/[0.06] px-3 py-2 text-[12px] font-medium text-amber">
                           Contenu attendu par la marque{g.deliverables ? ` : ${g.deliverables}` : ""}
                         </div>
                       )}
 
-                      <div className="mt-2.5 flex items-start gap-1.5 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] leading-snug text-amber-700 dark:text-amber-300">
+                      <div className="mt-2.5 flex items-start gap-1.5 rounded-lg border border-border bg-foreground/[0.06] px-3 py-2 text-[11px] leading-snug text-amber">
                         <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                         <span>{g.mentions || DEFAULT_MENTIONS}</span>
                       </div>

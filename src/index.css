@@ -39,8 +39,11 @@
   --signal: #16a34a;
   --signaltext: #15803d;
   --signalsoft: #f0fdf4;
-  --indigo: #6366f1;
-  --amber: #f59e0b;
+  /* Code couleur de l’Aperçu : encre + gris, vert = bon, rouge = retard, bleu =
+     action. Les anciens jetons décoratifs deviennent des niveaux d’encre :
+     indigo = encre forte, cyan et amber = gris neutre (plus d’orange). */
+  --indigo: #27272a;
+  --amber: #71717a;
   --cyan: #71717a;
   --onsignal: #ffffff;
 }
@@ -77,8 +80,8 @@
   --signal: #16a34a;
   --signaltext: #4ade80;
   --signalsoft: #052e16;
-  --indigo: #818cf8;
-  --amber: #fbbf24;
+  --indigo: #e5e5e5;
+  --amber: #a3a3a3;
   --cyan: #a3a3a3;
   --onsignal: #ffffff;
 }

@@ -36,8 +36,8 @@ const TYPE_BG: Record<string, string> = {
   call: "bg-primary",
   reunion: "bg-cyan",
   collab: "bg-signal",
-  shoot: "bg-violet-500",
-  event: "bg-pink-500",
+  shoot: "bg-indigo",
+  event: "bg-cyan",
   voyage: "bg-amber",
   deadline: "bg-rose-500",
 };
@@ -46,8 +46,8 @@ const TYPE_TEXT: Record<string, string> = {
   call: "text-primary",
   reunion: "text-cyan",
   collab: "text-signal",
-  shoot: "text-violet-500",
-  event: "text-pink-500",
+  shoot: "text-indigo",
+  event: "text-cyan",
   voyage: "text-amber",
   deadline: "text-rose-500",
 };
@@ -77,7 +77,12 @@ function chipBg(e: Ev) {
 /** Texte d'une puce pleine : sur le primaire (blanc en sombre Minuit) il faut
  *  son texte dédié, sinon blanc sur blanc (puces « Appel » illisibles). */
 function chipFg(e: Ev) {
-  return chipBg(e) === "bg-primary" ? "text-primary-foreground" : "text-onsignal";
+  const bg = chipBg(e);
+  if (bg === "bg-primary") return "text-primary-foreground";
+  // Niveaux d’encre (indigo = encre forte, amber/cyan = gris) : presque blancs en
+  // sombre → texte de la couleur du FOND pour rester lisible dans les deux thèmes.
+  if (bg === "bg-indigo" || bg === "bg-amber" || bg === "bg-cyan") return "text-background";
+  return "text-onsignal";
 }
 function chipText(e: Ev) {
   if (e.kind === "brief") return "text-amber";

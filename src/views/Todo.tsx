@@ -85,7 +85,7 @@ function prioOf(p: string): { status: "danger" | "warning" | "neutral"; label: s
 
 /** Point de priorité scintillant (remplace le badge texte dans la liste). */
 function PriorityDot({ priority }: { priority: Priority }) {
-  const color = priority === "haute" ? "bg-rose-500" : priority === "moyenne" ? "bg-amber-500" : "bg-slate-400";
+  const color = priority === "haute" ? "bg-rose-500" : priority === "moyenne" ? "bg-amber" : "bg-neutral-400";
   const label = priority === "haute" ? "Priorité haute" : priority === "moyenne" ? "Priorité moyenne" : "Priorité basse";
   const animate = priority !== "basse";
   return (
@@ -99,12 +99,12 @@ function PriorityDot({ priority }: { priority: Priority }) {
 // Couleurs de priorité : barre d'accent (à gauche de la carte) + pilule.
 const PRIO_ACCENT: Record<Priority, string> = {
   haute: "bg-rose-500",
-  moyenne: "bg-amber-500",
-  basse: "bg-slate-300 dark:bg-slate-600",
+  moyenne: "bg-amber",
+  basse: "bg-neutral-300 dark:bg-neutral-600",
 };
 const PRIO_PILL: Record<Priority, string> = {
   haute: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  moyenne: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  moyenne: "bg-foreground/[0.06] text-amber",
   basse: "bg-panel text-faint",
 };
 

@@ -642,8 +642,8 @@ export function Debrief() {
 
       {/* Rappel : campagnes (briefs) terminées sans débrief → à débriefer */}
       {needsDebrief.length > 0 && (
-        <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] p-4">
-          <div className="mb-2.5 flex items-center gap-2 text-[13px] font-semibold text-amber-700 dark:text-amber-300">
+        <div className="mb-4 rounded-2xl border border-border bg-foreground/[0.06] p-4">
+          <div className="mb-2.5 flex items-center gap-2 text-[13px] font-semibold text-amber">
             <FileText className="h-4 w-4 shrink-0" /> {needsDebrief.length} campagne{needsDebrief.length > 1 ? "s" : ""} à débriefer
           </div>
           <div className="flex flex-col gap-2">

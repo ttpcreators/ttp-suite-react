@@ -33,11 +33,11 @@ export const DEFAULT_MENTIONS =
   "À publier avec une mention claire et lisible : « Produit offert » ou « Cadeau » (partenariat non rémunéré), conformément à la loi n° 2023-451.";
 
 export const GIFT_STATUS: StatusOption[] = [
-  { value: "recu", label: "Reçu", dot: "bg-sky-500" },
-  { value: "attente", label: "Contenu en attente", dot: "bg-amber-500" },
+  { value: "recu", label: "Reçu", dot: "bg-cyan" },
+  { value: "attente", label: "Contenu en attente", dot: "bg-amber" },
   { value: "publie", label: "Contenu publié", dot: "bg-emerald-500" },
   { value: "refuse", label: "Refusé", dot: "bg-rose-500" },
-  { value: "clos", label: "Clôturé", dot: "bg-zinc-400" },
+  { value: "clos", label: "Clôturé", dot: "bg-faint" },
 ];
 
 export const giftStatusMeta = (v: string | null | undefined): StatusOption =>

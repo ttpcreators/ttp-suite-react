@@ -90,12 +90,12 @@ export function PushCard() {
           </div>
         )}
         {state === "needs-install" && (
-          <p className="mt-4 rounded-lg bg-amber-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-amber-700 dark:text-amber-300">
+          <p className="mt-4 rounded-lg bg-foreground/[0.06] px-3 py-2.5 text-[12px] leading-relaxed text-amber">
             📲 Sur iPhone : <span className="font-semibold">Partager → Ajouter à l'écran d'accueil</span>, puis ouvre l'app depuis son icône et reviens ici pour activer.
           </p>
         )}
         {state === "denied" && (
-          <p className="mt-4 rounded-lg bg-amber-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-amber-700 dark:text-amber-300">
+          <p className="mt-4 rounded-lg bg-foreground/[0.06] px-3 py-2.5 text-[12px] leading-relaxed text-amber">
             🔕 Notifications bloquées. Autorise-les dans <span className="font-semibold">Réglages → Notifications → TTP Suite</span>, puis reviens.
           </p>
         )}

@@ -956,7 +956,7 @@ export function Contacts() {
                     title={lastContactLabel(d)}
                     className={cn(
                       "hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-medium sm:inline-flex",
-                      recent ? "bg-amber-500/15 text-amber-700 dark:text-amber-300" : "bg-rowhover text-faint",
+                      recent ? "bg-foreground/[0.06] text-amber" : "bg-rowhover text-faint",
                     )}
                   >
                     <Clock className="h-2.5 w-2.5" /> {short}
@@ -1067,7 +1067,7 @@ export function Contacts() {
               const lastDays = lastMs ? Math.floor((Date.now() - lastMs) / 86400000) : null;
               const recent = lastDays != null && lastDays < RECENT_DAYS;
               return (
-                <div className={cn("mt-4 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[12px]", recent ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300" : "border-border bg-panel text-muted-foreground")}>
+                <div className={cn("mt-4 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[12px]", recent ? "border-border bg-foreground/[0.06] text-amber" : "border-border bg-panel text-muted-foreground")}>
                   {recent ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <Clock className="h-4 w-4 shrink-0 text-faint" />}
                   <span>
                     <span className="font-semibold">{lastContactLabel(lastDays)}</span>

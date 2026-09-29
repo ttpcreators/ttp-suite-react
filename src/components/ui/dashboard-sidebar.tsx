@@ -110,7 +110,7 @@ function Row({
           aria-pressed={pinned}
           className={cn(
             "absolute right-8 grid h-6 w-6 place-items-center rounded-md transition-opacity hover:bg-surface focus-visible:opacity-100",
-            pinned ? "text-amber-500 opacity-100" : "text-faint opacity-0 hover:text-amber-500 group-hover:opacity-100",
+            pinned ? "text-amber opacity-100" : "text-faint opacity-0 hover:text-amber group-hover:opacity-100",
           )}
         >
           <Star className={cn("h-3.5 w-3.5", pinned && "fill-current")} />

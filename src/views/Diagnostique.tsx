@@ -13,10 +13,10 @@ import { toast } from "@/components/ui/toast";
 
 const META: Record<DiagStatus, { label: string; cls: string; dot: string; Icon: typeof CheckCircle2 }> = {
   ok: { label: "Opérationnel", cls: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500", Icon: CheckCircle2 },
-  warn: { label: "À surveiller", cls: "text-amber-600 dark:text-amber-400", dot: "bg-amber-500", Icon: AlertTriangle },
+  warn: { label: "À surveiller", cls: "text-amber", dot: "bg-amber", Icon: AlertTriangle },
   down: { label: "Hors service", cls: "text-rose-600 dark:text-rose-400", dot: "bg-rose-500", Icon: XCircle },
 };
-const barCls: Record<DiagStatus, string> = { ok: "bg-emerald-500", warn: "bg-amber-500", down: "bg-rose-500" };
+const barCls: Record<DiagStatus, string> = { ok: "bg-emerald-500", warn: "bg-amber", down: "bg-rose-500" };
 
 const fmtWhen = (ts: number) => new Date(ts).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
@@ -76,7 +76,7 @@ export function Diagnostique() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       {/* Bandeau global */}
-      <div className={cn("rounded-2xl border p-5 shadow-sm", overall === "ok" ? "border-emerald-500/25 bg-emerald-500/[0.06]" : overall === "warn" ? "border-amber-500/25 bg-amber-500/[0.06]" : "border-rose-500/25 bg-rose-500/[0.06]")}>
+      <div className={cn("rounded-2xl border p-5 shadow-sm", overall === "ok" ? "border-emerald-500/25 bg-emerald-500/[0.06]" : overall === "warn" ? "border-border bg-foreground/[0.06]" : "border-rose-500/25 bg-rose-500/[0.06]")}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface", META[overall].cls)}>

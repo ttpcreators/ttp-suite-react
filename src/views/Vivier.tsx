@@ -51,10 +51,10 @@ const igUrl = (handle?: string | null) => {
 type ScoutStatus = "observation" | "contacter" | "discussion" | "signe" | "ecarte";
 const STATUSES: { v: ScoutStatus; label: string; dot: string; pill: string }[] = [
   { v: "observation", label: "En observation", dot: "bg-indigo", pill: "bg-indigo/10 text-indigo" },
-  { v: "contacter", label: "À contacter", dot: "bg-amber-500", pill: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+  { v: "contacter", label: "À contacter", dot: "bg-amber", pill: "bg-foreground/[0.06] text-amber" },
   { v: "discussion", label: "En discussion", dot: "bg-primary", pill: "bg-primary/10 text-primary" },
   { v: "signe", label: "Signé", dot: "bg-emerald-500", pill: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
-  { v: "ecarte", label: "Écarté", dot: "bg-slate-400", pill: "bg-panel text-faint" },
+  { v: "ecarte", label: "Écarté", dot: "bg-neutral-400", pill: "bg-panel text-faint" },
 ];
 const statusMeta = (v: ScoutStatus) => STATUSES.find((s) => s.v === v) ?? STATUSES[0];
 

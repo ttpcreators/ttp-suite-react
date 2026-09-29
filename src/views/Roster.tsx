@@ -76,7 +76,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 /** Point de couleur du statut (remplace le badge « Actif » : vert = actif). */
 const statusDot = (status: string): string =>
-  status === "inactif" ? "bg-slate-400" : status === "pause" ? "bg-amber-500" : status === "live" ? "bg-rose-500" : "bg-emerald-500";
+  status === "inactif" ? "bg-neutral-400" : status === "pause" ? "bg-amber" : status === "live" ? "bg-rose-500" : "bg-emerald-500";
 
 export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
   const [rows, setRows] = useState<Creator[] | null>(() => getCache<Creator[]>("roster"));
@@ -253,7 +253,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
       </PageHeaderRow>
 
       {staleCount > 0 && (
-        <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[13px] text-amber-700 dark:text-amber-300">
+        <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-border bg-foreground/[0.06] px-4 py-3 text-[13px] text-amber">
           <RefreshCw className="h-4 w-4 shrink-0" />
           <span>
             <span className="font-semibold">{staleCount} créateur{staleCount > 1 ? "s" : ""}</span> à mettre à jour pour <span className="font-semibold capitalize">{MONTH_LABEL}</span> — coche « à jour » sur chaque ligne une fois les données saisies.
@@ -367,7 +367,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                           type="button"
                           title={`Marquer les données à jour · ${MONTH_LABEL}`}
                           onClick={(e) => { e.stopPropagation(); markUpToDate(c, true); }}
-                          className="flex shrink-0 items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-700 transition-colors hover:bg-amber-500/20 dark:text-amber-300"
+                          className="flex shrink-0 items-center gap-1 rounded-full border border-border bg-foreground/[0.06] px-2 py-1 text-[10px] font-semibold text-amber transition-colors hover:bg-foreground/[0.06] dark:text-amber"
                         >
                           <RefreshCw className="h-3 w-3" /> à jour ?
                         </button>

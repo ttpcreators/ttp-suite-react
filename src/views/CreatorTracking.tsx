@@ -56,8 +56,8 @@ function CadenceTiles({ cadence, reco }: { cadence: Cadence; reco?: Cadence }) {
         const r = reco?.[f.key] ?? 0;
         const below = r > 0 && cadence[f.key] < r;
         return (
-          <div key={f.key} className={cn("rounded-xl border bg-panel/50 px-2.5 py-2.5 text-center", below ? "border-amber-400/50" : "border-border")}>
-            <div className={cn("text-lg font-bold tabular-nums", below ? "text-amber-600 dark:text-amber-400" : "text-foreground")}>
+          <div key={f.key} className={cn("rounded-xl border bg-panel/50 px-2.5 py-2.5 text-center", below ? "border-border" : "border-border")}>
+            <div className={cn("text-lg font-bold tabular-nums", below ? "text-amber" : "text-foreground")}>
               {cadence[f.key]}{r > 0 && <span className="text-[11px] font-medium text-faint"> / {r}</span>}
             </div>
             <div className="mt-0.5 text-[11px] font-medium text-muted-foreground">{f.short}</div>
@@ -194,7 +194,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
               {cur.conformite && (
                 <ReadBlock label="Conformité (loi 2023-451)">
                   {(() => { const ok = ["ok", "conforme", "à jour", "a jour"].includes(norm(cur.conformite)); return (
-                    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold", ok ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400")}>
+                    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold", ok ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-foreground/[0.06] text-amber")}>
                       {ok ? "✓ " : <AlertTriangle className="h-3 w-3" />} {cur.conformite}
                     </span>
                   ); })()}
@@ -439,13 +439,13 @@ export function MonthlyTracking({ name }: { name: string }) {
             {sorted.map((m) => {
               const realTotal = cadenceTotal(m.cadence);
               const ratio = recoTotal > 0 ? realTotal / recoTotal : 1;
-              const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : ratio >= 0.7 ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-rose-500/10 text-rose-600 dark:text-rose-400";
+              const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : ratio >= 0.7 ? "bg-foreground/[0.06] text-amber" : "bg-rose-500/10 text-rose-600 dark:text-rose-400";
               return (
                 <div key={m.month} className="rounded-xl border border-border bg-panel/40 p-4">
                   <div className="mb-3 flex flex-wrap items-center gap-2">
                     <span className="text-[13px] font-semibold text-foreground">{monthLabel(m.month)}</span>
                     <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums", badge)}>{realTotal}{recoTotal > 0 ? ` / ${recoTotal}` : ""} contenus</span>
-                    {m.derive && <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400"><AlertTriangle className="h-3 w-3" /> Dérive</span>}
+                    {m.derive && <span className="inline-flex items-center gap-1 rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[10px] font-semibold text-amber"><AlertTriangle className="h-3 w-3" /> Dérive</span>}
                   </div>
                   <CadenceTiles cadence={m.cadence} reco={reco} />
                   {selfCad[m.month] && (
@@ -466,7 +466,7 @@ export function MonthlyTracking({ name }: { name: string }) {
                   )}
                   {m.faits && <p className="mt-3 whitespace-pre-wrap rounded-xl bg-panel/50 px-3.5 py-3 text-[13px] leading-relaxed text-foreground">{m.faits}</p>}
                   {m.derive && m.deriveNote && (
-                    <div className="mt-2 flex items-start gap-2 rounded-xl bg-amber-500/5 px-3.5 py-3 text-[13px] leading-relaxed text-amber-700 dark:text-amber-300">
+                    <div className="mt-2 flex items-start gap-2 rounded-xl bg-foreground/[0.06] px-3.5 py-3 text-[13px] leading-relaxed text-amber">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{m.deriveNote}</span>
                     </div>
                   )}
@@ -487,7 +487,7 @@ export function MonthlyTracking({ name }: { name: string }) {
           {sorted.map((m) => {
             const realTotal = cadenceTotal(m.cadence);
             const ratio = recoTotal > 0 ? realTotal / recoTotal : 1;
-            const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : ratio >= 0.7 ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-rose-500/10 text-rose-600 dark:text-rose-400";
+            const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : ratio >= 0.7 ? "bg-foreground/[0.06] text-amber" : "bg-rose-500/10 text-rose-600 dark:text-rose-400";
             return (
               <div key={m.month} className="rounded-xl border border-border bg-panel/40 p-3.5">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -497,7 +497,7 @@ export function MonthlyTracking({ name }: { name: string }) {
                       {realTotal}{recoTotal > 0 ? ` / ${recoTotal}` : ""} contenus
                     </span>
                     {m.derive && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[10px] font-semibold text-amber">
                         <AlertTriangle className="h-3 w-3" /> Dérive
                       </span>
                     )}
@@ -514,7 +514,7 @@ export function MonthlyTracking({ name }: { name: string }) {
                       <span className="text-[11px] font-medium text-muted-foreground">
                         {f.short} <span className="text-faint/70">/ {reco[f.key]}</span>
                       </span>
-                      <input type="number" min={0} value={m.cadence[f.key]} onChange={(e) => editCad(m.month, f.key, parseInt(e.target.value, 10) || 0)} className={cn("w-full rounded-lg border bg-surface px-2 py-1.5 text-center text-sm tabular-nums outline-none focus:border-primary", reco[f.key] > 0 && m.cadence[f.key] < reco[f.key] ? "border-amber-400/50" : "border-border")} />
+                      <input type="number" min={0} value={m.cadence[f.key]} onChange={(e) => editCad(m.month, f.key, parseInt(e.target.value, 10) || 0)} className={cn("w-full rounded-lg border bg-surface px-2 py-1.5 text-center text-sm tabular-nums outline-none focus:border-primary", reco[f.key] > 0 && m.cadence[f.key] < reco[f.key] ? "border-border" : "border-border")} />
                     </label>
                   ))}
                 </div>
@@ -550,8 +550,8 @@ export function MonthlyTracking({ name }: { name: string }) {
 
                 {/* Dérive éditoriale */}
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start">
-                  <button type="button" onClick={() => editMonth(m.month, { derive: !m.derive })} className={cn("flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-semibold transition-colors", m.derive ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border border-border text-muted-foreground hover:bg-rowhover")}>
-                    <span className={cn("grid h-4 w-4 place-items-center rounded", m.derive ? "bg-amber-500 text-white" : "border border-border")}>{m.derive && "!"}</span>
+                  <button type="button" onClick={() => editMonth(m.month, { derive: !m.derive })} className={cn("flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-semibold transition-colors", m.derive ? "bg-foreground/[0.06] text-amber" : "border border-border text-muted-foreground hover:bg-rowhover")}>
+                    <span className={cn("grid h-4 w-4 place-items-center rounded", m.derive ? "bg-foreground text-background" : "border border-border")}>{m.derive && "!"}</span>
                     Dérive éditoriale
                   </button>
                   {m.derive && (
@@ -746,7 +746,7 @@ export function CreatorAlerts({ name }: { name: string }) {
       </span>
       {alerts.length > 0 && <span className="text-faint">·</span>}
       {alerts.map((a, i) => (
-        <span key={i} className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold", a.level === "danger" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400")}>
+        <span key={i} className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold", a.level === "danger" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-foreground/[0.06] text-amber")}>
           <AlertTriangle className="h-3 w-3" /> {a.label}
         </span>
       ))}
@@ -809,7 +809,7 @@ export function RosterTracking({ onOpen }: { onOpen?: (name: string) => void }) 
                   ) : (
                     <div className="flex flex-wrap gap-1">
                       {r.alerts.map((a, i) => (
-                        <span key={i} className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", a.level === "danger" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400")}>
+                        <span key={i} className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", a.level === "danger" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-foreground/[0.06] text-amber")}>
                           {a.label}
                         </span>
                       ))}

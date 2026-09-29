@@ -23,7 +23,7 @@ type GView = "cards" | "list";
 /** Chip « contenu attendu / spontané ». */
 function ContentChip({ expected }: { expected: boolean | null }) {
   return expected ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-[12px] font-medium text-amber-600 dark:text-amber-400">
+    <span className="inline-flex items-center gap-1 rounded-full bg-foreground/[0.06] px-2.5 py-1 text-[12px] font-medium text-amber">
       Contenu attendu
     </span>
   ) : (
@@ -220,7 +220,7 @@ export function Gifting() {
               <span className="font-semibold text-foreground">{shown.length}</span>
               <span>{shown.length > 1 ? "cadeaux suivis" : "cadeau suivi"}</span>
               {attente > 0 && (
-                <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[10px] font-semibold text-amber">
                   {attente} contenu{attente > 1 ? "s" : ""} en attente
                 </span>
               )}
@@ -277,10 +277,10 @@ export function Gifting() {
           onClick={() => setContentExpected((v) => !v)}
           className={cn(
             "flex min-w-full items-center gap-2 rounded-lg px-3.5 py-2.5 text-[12px] font-semibold transition-colors",
-            contentExpected ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border border-border text-muted-foreground hover:bg-rowhover",
+            contentExpected ? "bg-foreground/[0.06] text-amber" : "border border-border text-muted-foreground hover:bg-rowhover",
           )}
         >
-          <span className={cn("grid h-4 w-4 shrink-0 place-items-center rounded", contentExpected ? "bg-amber-500 text-white" : "border border-border")}>
+          <span className={cn("grid h-4 w-4 shrink-0 place-items-center rounded", contentExpected ? "bg-foreground text-background" : "border border-border")}>
             {contentExpected && "✓"}
           </span>
           La marque attend du contenu en retour
@@ -362,7 +362,7 @@ export function Gifting() {
               )}
 
               {g.mentions && (
-                <div className="mt-2.5 flex items-start gap-1.5 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] leading-snug text-amber-700 dark:text-amber-300">
+                <div className="mt-2.5 flex items-start gap-1.5 rounded-lg border border-border bg-foreground/[0.06] px-3 py-2 text-[11px] leading-snug text-amber">
                   <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" /> <span>{g.mentions}</span>
                 </div>
               )}
@@ -390,7 +390,7 @@ export function Gifting() {
                   {g.product && g.brand && <span className="truncate">{g.product}</span>}
                   {g.value && <span>{g.value}</span>}
                   {g.received_on && <span>{frDate(g.received_on)}</span>}
-                  {g.content_expected && <span className="text-amber-600 dark:text-amber-400">contenu attendu</span>}
+                  {g.content_expected && <span className="text-amber">contenu attendu</span>}
                   {g.contact_email && (
                     <a href={`mailto:${g.contact_email}`} onClick={(e) => e.stopPropagation()} className="text-primary hover:underline">{g.contact_email}</a>
                   )}
@@ -480,7 +480,7 @@ function GiftDetail({ g, onClose, onEdit }: { g: GiftRow; onClose: () => void; o
           </dl>
 
           {g.mentions && (
-            <div className="mb-3 mt-1 flex items-start gap-1.5 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] leading-snug text-amber-700 dark:text-amber-300">
+            <div className="mb-3 mt-1 flex items-start gap-1.5 rounded-lg border border-border bg-foreground/[0.06] px-3 py-2 text-[11px] leading-snug text-amber">
               <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" /> <span>{g.mentions}</span>
             </div>
           )}
