@@ -659,7 +659,8 @@ export default function App() {
       <GlobalSearch query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} />
       {/* right cluster */}
       <div className="ml-auto flex shrink-0 items-center gap-2.5">
-        <div className="hidden items-center gap-2.5 rounded-lg bg-surface py-1.5 pl-2 pr-3.5 shadow-sm sm:flex">
+        {/* Carte profil : tablette seulement (sur ordinateur, elle est en bas de la sidebar) */}
+        <div className="hidden items-center gap-2.5 rounded-lg bg-surface py-1.5 pl-2 pr-3.5 sm:flex md:hidden">
           <AgencyAvatar userId={session.user.id} />
           <div className="leading-tight">
             <div className="whitespace-nowrap text-xs font-medium text-foreground">Marc &amp; Gianni</div>
@@ -675,16 +676,6 @@ export default function App() {
           aria-label="Basculer le thème"
         >
           {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
-        {/* Déconnexion — desktop uniquement (sur mobile, se déconnecter via Paramètres) */}
-        <button
-          type="button"
-          onClick={logout}
-          className="hidden h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover md:grid"
-          aria-label="Se déconnecter"
-          title="Se déconnecter"
-        >
-          <LogOut className="h-4 w-4" />
         </button>
       </div>
     </header>
@@ -741,6 +732,7 @@ export default function App() {
               pinned={pinned.filter(canSee)}
               onTogglePin={togglePin}
               hidden={hiddenIds}
+              userId={session.user.id}
               onItemSplit={(id) => {
                 if (id !== active) setSplitView(id);
               }}

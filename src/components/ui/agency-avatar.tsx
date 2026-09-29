@@ -13,7 +13,18 @@ const BASE = import.meta.env.BASE_URL;
  * photo agence historique (`agencyPhoto`), puis le logo TTP. Sans `userId`, on
  * retombe sur l'ancien comportement partagé (`agencyPhoto`).
  */
-export function AgencyAvatar({ userId, className = "h-8 w-8", rounded = "rounded-lg" }: { userId?: string; className?: string; rounded?: string }) {
+export function AgencyAvatar({
+  userId,
+  className = "h-8 w-8",
+  rounded = "rounded-lg",
+  readOnly = false,
+}: {
+  userId?: string;
+  className?: string;
+  rounded?: string;
+  /** Affichage seul (pas d'upload au clic) : pour un avatar posé DANS un bouton. */
+  readOnly?: boolean;
+}) {
   const key = userId ? `avatar:${userId}` : "agencyPhoto";
   const { data: saved } = useAppState<string | null>((s: AppState) => (s[key] as string) ?? (s["agencyPhoto"] as string) ?? null);
   const [localUrl, setLocalUrl] = useState<string | null>(null);
@@ -21,6 +32,19 @@ export function AgencyAvatar({ userId, className = "h-8 w-8", rounded = "rounded
   const [broken, setBroken] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const url = localUrl ?? saved ?? null;
+
+  if (readOnly) {
+    return (
+      <div className={`shrink-0 overflow-hidden bg-[#14181E] ${className} ${rounded}`}>
+        <img
+          src={url && !broken ? url : `${BASE}cover.png`}
+          alt={url && !broken ? "Profil" : "TTP"}
+          onError={() => setBroken(true)}
+          className="h-full w-full object-cover"
+        />
+      </div>
+    );
+  }
 
   const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

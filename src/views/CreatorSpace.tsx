@@ -32,7 +32,6 @@ import {
   Copy,
   List,
   Columns3,
-  PanelLeftClose,
   PanelLeftOpen,
   Target,
   Share2,
@@ -57,7 +56,7 @@ import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
-import { SidebarNav } from "@/components/ui/dashboard-sidebar";
+import { SidebarBrand, SidebarLogo, SidebarNav, SidebarUser, sbRailCls } from "@/components/ui/dashboard-sidebar";
 import { EventCalendar, type Ev as CalEv } from "@/components/ui/event-calendar";
 import { parseAmount, formatEuro } from "@/lib/appState";
 import { useLiveKey } from "@/lib/useLive";
@@ -1275,17 +1274,15 @@ export function CreatorSpace({
         {/* Sidebar desktop repliable */}
         {sbCollapsed ? (
           <aside className="hidden w-[68px] shrink-0 flex-col items-center p-2 md:flex">
-            <div className="mt-1 h-9 w-9 shrink-0 overflow-hidden rounded-[8px] bg-[#14181E]">
-              <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
-            </div>
+            <SidebarLogo className="mt-1 h-9 w-9" />
             <button
               type="button"
               onClick={() => setSbCollapsed(false)}
-              className="mt-2 grid h-8 w-8 place-items-center rounded-full border border-border bg-surface text-faint shadow-sm transition-colors hover:text-foreground"
+              className={cn(sbRailCls(false), "mt-2 h-8 w-8")}
               title="Déplier le menu"
               aria-label="Déplier le menu"
             >
-              <PanelLeftOpen className="h-4 w-4" />
+              <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
             </button>
             <nav className="mt-3 flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {TABS.map((t) => (
@@ -1294,20 +1291,17 @@ export function CreatorSpace({
                   type="button"
                   onClick={() => setTab(t.id)}
                   title={t.label}
-                  className={
-                    "grid h-10 w-10 shrink-0 place-items-center rounded-[10px] transition-colors " +
-                    (tab === t.id ? "bg-rowhover text-foreground" : "text-faint hover:bg-rowhover hover:text-foreground")
-                  }
+                  className={sbRailCls(tab === t.id)}
                 >
                   <t.icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
                 </button>
               ))}
             </nav>
-            <div className="mt-auto flex w-full flex-col items-center gap-1 border-t border-border pt-2">
-              <button type="button" onClick={onToggleTheme} title={dark ? "Mode clair" : "Mode sombre"} className="grid h-10 w-10 place-items-center rounded-[10px] text-faint transition-colors hover:bg-rowhover hover:text-foreground">
-                {dark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+            <div className="mt-auto flex w-full flex-col items-center gap-1 pt-2">
+              <button type="button" onClick={onToggleTheme} title={dark ? "Mode clair" : "Mode sombre"} className={sbRailCls(false)}>
+                {dark ? <Sun className="h-[18px] w-[18px]" strokeWidth={1.75} /> : <Moon className="h-[18px] w-[18px]" strokeWidth={1.75} />}
               </button>
-              <button type="button" onClick={exitAction} title={exitTitle} className="grid h-10 w-10 place-items-center rounded-[10px] text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+              <button type="button" onClick={exitAction} title={exitTitle} className={sbRailCls(false)}>
                 {preview ? <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.75} /> : <LogOut className="h-[18px] w-[18px]" strokeWidth={1.75} />}
               </button>
             </div>
@@ -1320,45 +1314,25 @@ export function CreatorSpace({
               groups={CREATOR_GROUPS}
               activeId={tab}
               onSelect={(id) => setTab(id as Tab)}
-              header={
-                <div className="flex items-center gap-3 px-1.5 py-2.5">
-                  <div className="h-8 w-8 shrink-0 overflow-hidden rounded-lg bg-[#14181E]">
-                    <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-semibold leading-tight">Espace créateur</div>
-                    <div className="text-[11px] text-faint">TTP Creators</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSbCollapsed(true)}
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                    title="Replier le menu"
-                    aria-label="Replier le menu"
-                  >
-                    <PanelLeftClose className="h-4 w-4" />
-                  </button>
-                </div>
-              }
+              header={<SidebarBrand title="Espace créateur" sub="TTP Creators" onCollapse={() => setSbCollapsed(true)} />}
               footer={
-                <div className="flex flex-col gap-0.5">
-                  <button
-                    type="button"
-                    onClick={onToggleTheme}
-                    className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-                  >
-                    {dark ? <Sun className="h-4 w-4 text-faint" /> : <Moon className="h-4 w-4 text-faint" />}
-                    <span className="text-[13px]">{dark ? "Mode clair" : "Mode sombre"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={exitAction}
-                    className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-[7px] text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-                  >
-                    {preview ? <ArrowLeft className="h-4 w-4 text-faint" /> : <LogOut className="h-4 w-4 text-faint" />}
-                    <span className="text-[13px]">{exitTitle}</span>
-                  </button>
-                </div>
+                <SidebarUser
+                  avatar={
+                    creator?.photo_url ? (
+                      <img src={creator.photo_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
+                    ) : (
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-foreground/[0.08] text-[12px] font-semibold text-foreground">
+                        {titleCase(name).charAt(0)}
+                      </span>
+                    )
+                  }
+                  name={titleCase(name)}
+                  sub={preview ? "Vue agence" : "Créatrice TTP"}
+                  actions={[
+                    { icon: dark ? Sun : Moon, label: dark ? "Mode clair" : "Mode sombre", onClick: onToggleTheme },
+                    { icon: preview ? ArrowLeft : LogOut, label: exitTitle, onClick: exitAction },
+                  ]}
+                />
               }
             />
           </div>

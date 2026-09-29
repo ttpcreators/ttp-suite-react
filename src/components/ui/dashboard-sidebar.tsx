@@ -1,10 +1,40 @@
 import { useEffect, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronRight, Columns2, Star, type LucideIcon } from "lucide-react";
+import { Check, ChevronRight, ChevronsUpDown, Columns2, PanelLeftClose, Star, type LucideIcon } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+
+const BASE = import.meta.env.BASE_URL;
 
 export type SbChild = { id: string; label: string };
 export type SbItem = { id: string; label: string; icon: LucideIcon; badge?: number | string; children?: SbChild[] };
 export type SbGroup = { id: string; label: string; icon: LucideIcon; items: SbItem[] };
+
+/*
+ * Langage visuel (façon Efferd) : la sidebar est posée à même le fond, sans
+ * cadre. Intitulés de section discrets, icônes et libellés gris, élément actif
+ * sur une pastille claire (blanche en clair, gris profond en sombre), aucun
+ * aplat de couleur. Partagé par l'espace agence et l'espace créatrices.
+ */
+const ACTIVE_BG = "bg-surface dark:bg-rowhover";
+const HOVER_BG = "hover:bg-surface/60 dark:hover:bg-rowhover/70";
+
+/** Ligne de menu (pleine largeur). */
+export const sbItemCls = (active: boolean) =>
+  cn(
+    "flex w-full select-none items-center gap-2.5 rounded-[8px] px-2.5 py-[6px] text-left text-[13px] transition-colors",
+    active ? cn(ACTIVE_BG, "font-medium text-foreground") : cn("text-foreground/70 hover:text-foreground", HOVER_BG),
+  );
+/** Icône d'une ligne de menu. */
+export const sbIconCls = (active: boolean) =>
+  cn("h-4 w-4 shrink-0 transition-colors", active ? "text-foreground" : "text-foreground/45 group-hover:text-foreground/80");
+/** Bouton carré du rail replié (icône seule). */
+export const sbRailCls = (active: boolean) =>
+  cn(
+    "grid h-10 w-10 shrink-0 place-items-center rounded-[10px] transition-colors",
+    active ? cn(ACTIVE_BG, "text-foreground") : cn("text-foreground/50 hover:text-foreground", HOVER_BG),
+  );
+/** Petit bouton d'action révélé dans une ligne (chevron, vue partagée, étoile). */
+const ghostBtn = "grid h-6 w-6 place-items-center rounded-md text-foreground/40 transition-colors hover:bg-foreground/[0.06] hover:text-foreground";
 
 function Row({
   item,
@@ -22,7 +52,7 @@ function Row({
   active: boolean;
   onClick: () => void;
   onContext?: (e: ReactMouseEvent) => void;
-  /** Ouvre cette page « à côté » (vue partagée) — bouton révélé au survol. */
+  /** Ouvre cette page « à côté » (vue partagée) : bouton révélé au survol. */
   onSplit?: () => void;
   hasChildren?: boolean;
   open?: boolean;
@@ -38,36 +68,17 @@ function Row({
     : (hasChildren ? "pr-9" : "pr-2.5");
   return (
     <div className="group relative flex items-center">
-      <button
-        type="button"
-        onClick={onClick}
-        onContextMenu={onContext}
-        className={cn(
-          "flex w-full select-none items-center justify-between rounded-[7px] py-[7px] pl-3 text-left transition-colors",
-          pr,
-          active
-            ? "bg-rowhover font-medium text-foreground"
-            : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
-        )}
-      >
-        <span className="flex min-w-0 items-center gap-2.5">
-          <item.icon
-            className={cn(
-              "h-4 w-4 shrink-0 transition-colors",
-              active ? "text-primary" : "text-faint group-hover:text-foreground/70",
-            )}
-            strokeWidth={1.75}
-          />
-          <span className="truncate text-[13px] tracking-wide">{item.label}</span>
-        </span>
+      <button type="button" onClick={onClick} onContextMenu={onContext} className={cn(sbItemCls(active), pr)}>
+        <item.icon className={sbIconCls(active)} strokeWidth={1.75} />
+        <span className="min-w-0 flex-1 truncate">{item.label}</span>
         {item.badge != null && (
-          <span className={cn("flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary/10 px-1.5 text-[10px] font-semibold text-primary", (hasChildren || onSplit) && "mr-6")}>
+          <span className={cn("flex h-5 min-w-[20px] items-center justify-center rounded-full bg-foreground/[0.08] px-1.5 text-[11px] font-medium tabular-nums text-foreground", (hasChildren || onSplit) && "mr-6")}>
             {item.badge}
           </span>
         )}
       </button>
 
-      {/* Chevron de repli (items à sous-pages) — toggle SANS naviguer */}
+      {/* Chevron de repli (items à sous-pages) : toggle SANS naviguer */}
       {hasChildren ? (
         <button
           type="button"
@@ -77,7 +88,7 @@ function Row({
           }}
           aria-label={open ? "Replier" : "Déplier"}
           aria-expanded={open}
-          className="absolute right-1.5 grid h-6 w-6 place-items-center rounded-md text-faint transition-colors hover:bg-surface hover:text-foreground"
+          className={cn("absolute right-1.5", ghostBtn)}
         >
           <ChevronRight className={cn("h-3.5 w-3.5 transition-transform duration-200", open && "rotate-90")} strokeWidth={2} />
         </button>
@@ -91,7 +102,7 @@ function Row({
             }}
             title="Ouvrir à côté (2 pages côte à côte)"
             aria-label="Ouvrir à côté"
-            className="absolute right-1.5 grid h-6 w-6 place-items-center rounded-md text-faint opacity-0 transition-opacity hover:bg-surface hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+            className={cn("absolute right-1.5 opacity-0 focus-visible:opacity-100 group-hover:opacity-100", ghostBtn)}
           >
             <Columns2 className="h-3.5 w-3.5" />
           </button>
@@ -109,8 +120,9 @@ function Row({
           aria-label={pinned ? "Détacher des raccourcis" : "Épingler aux raccourcis"}
           aria-pressed={pinned}
           className={cn(
-            "absolute right-8 grid h-6 w-6 place-items-center rounded-md transition-opacity hover:bg-surface focus-visible:opacity-100",
-            pinned ? "text-amber opacity-100" : "text-faint opacity-0 hover:text-amber group-hover:opacity-100",
+            "absolute right-8 focus-visible:opacity-100",
+            ghostBtn,
+            pinned ? "text-foreground/70 opacity-100" : "opacity-0 group-hover:opacity-100",
           )}
         >
           <Star className={cn("h-3.5 w-3.5", pinned && "fill-current")} />
@@ -122,8 +134,8 @@ function Row({
 
 /**
  * Un item de nav + ses sous-pages REPLIABLES (chevron, animation, guide
- * d'indentation). Ouvert par défaut (sidebar aérée) ; état mémorisé par item ;
- * se rouvre toujours quand la page/ sous-page active est dedans.
+ * d'indentation). Ouvert par défaut ; état mémorisé par item ; se rouvre
+ * toujours quand la page/ sous-page active est dedans.
  */
 function ItemBlock({
   item,
@@ -192,7 +204,8 @@ function ItemBlock({
           )}
         >
           <div className="min-h-0 overflow-hidden">
-            <div className="ml-[26px] mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
+            {/* Guide vertical aligné sur le centre de l'icône parente */}
+            <div className="my-0.5 ml-[17px] flex flex-col gap-0.5 border-l border-foreground/10 pl-2">
               {item.children!.map((c) => {
                 const on = parentActive && activeSub === c.id;
                 return (
@@ -200,12 +213,9 @@ function ItemBlock({
                     key={c.id}
                     type="button"
                     onClick={() => onSelect(item.id, c.id)}
-                    className={cn(
-                      "select-none rounded-[6px] py-1.5 pl-2.5 pr-2 text-left text-[12px] tracking-wide transition-colors",
-                      on ? "bg-rowhover font-medium text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
-                    )}
+                    className={cn(sbItemCls(on), "py-[5px]")}
                   >
-                    {c.label}
+                    <span className="truncate">{c.label}</span>
                   </button>
                 );
               })}
@@ -218,10 +228,9 @@ function ItemBlock({
 }
 
 /**
- * Un GROUPE = un dossier repliable (icône + label + chevron). Contrôlé par le
- * parent (accordéon : un seul dossier ouvert à la fois → sidebar jamais
- * surchargée). Quand il est replié mais contient la page active, une pastille
- * primary le signale.
+ * Une SECTION : intitulé discret (sans icône) + ses pages. Repliable, contrôlée
+ * par le parent (accordéon : une seule section ouverte à la fois, la sidebar
+ * reste courte). Repliée mais contenant la page active → petit point.
  */
 function Group({
   group,
@@ -254,29 +263,15 @@ function Group({
         onClick={onToggle}
         aria-expanded={open}
         className={cn(
-          "group/h flex select-none items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left transition-colors hover:bg-rowhover",
-          open && "bg-rowhover/50",
+          "group/h flex h-8 select-none items-center gap-1.5 rounded-[8px] px-2.5 text-left text-[12px] font-medium transition-colors hover:text-foreground",
+          open || containsActive ? "text-foreground/60" : "text-foreground/50",
         )}
       >
-        <group.icon
-          className={cn(
-            "h-[18px] w-[18px] shrink-0 transition-colors",
-            containsActive ? "text-primary" : "text-faint group-hover/h:text-foreground/70",
-          )}
-          strokeWidth={1.75}
-        />
-        <span
-          className={cn(
-            "flex-1 truncate text-[12.5px] font-semibold tracking-wide transition-colors",
-            containsActive ? "text-foreground" : "text-foreground/70 group-hover/h:text-foreground",
-          )}
-        >
-          {group.label}
-        </span>
-        {!open && containsActive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+        <span className="min-w-0 flex-1 truncate">{group.label}</span>
+        {!open && containsActive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/60" aria-hidden />}
         <ChevronRight
           className={cn(
-            "h-3.5 w-3.5 shrink-0 text-faint/60 transition-transform duration-200 group-hover/h:text-faint",
+            "h-3.5 w-3.5 shrink-0 text-foreground/30 transition-[transform,color] duration-200 group-hover/h:text-foreground/60",
             open && "rotate-90",
           )}
           strokeWidth={2}
@@ -289,7 +284,7 @@ function Group({
         )}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="mb-0.5 ml-[9px] mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
+          <div className="flex flex-col gap-0.5 pb-2">
             {group.items.map((item) => (
               <ItemBlock
                 key={item.id}
@@ -310,10 +305,163 @@ function Group({
   );
 }
 
+/** Logo carré TTP (fond sombre fixe : le logo est blanc). */
+export function SidebarLogo({ className = "h-8 w-8" }: { className?: string }) {
+  return (
+    <div className={cn("shrink-0 overflow-hidden rounded-[8px] bg-[#14181E]", className)}>
+      <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
+    </div>
+  );
+}
+
+export type SbSpaceOption = { id: string; label: string; hint: string; icon: LucideIcon; active: boolean; onSelect: () => void };
+
 /**
- * Sidebar desktop premium : en-tête (logo / switch d'espace), groupes de nav
- * repliables (et sous-pages repliables par item), et pied de page. Générique —
- * on lui passe les groupes + le contenu header/footer.
+ * En-tête : carte « espace » (logo + nom + sous-titre). Avec `options`, la carte
+ * ouvre un petit menu pour changer d'espace (façon sélecteur d'organisation).
+ */
+export function SidebarBrand({
+  title,
+  sub,
+  options,
+  onCollapse,
+}: {
+  title: string;
+  sub: string;
+  options?: SbSpaceOption[];
+  onCollapse?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const card = "flex min-w-0 flex-1 items-center gap-2.5 rounded-[10px] border border-border bg-surface p-1.5 pr-2 text-left";
+  const inner = (
+    <>
+      <SidebarLogo />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] font-semibold leading-tight text-foreground">{title}</span>
+        <span className="mt-0.5 block truncate text-[12px] leading-tight text-muted-foreground">{sub}</span>
+      </span>
+    </>
+  );
+  return (
+    <div className="mb-3 flex items-center gap-1">
+      {options ? (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button type="button" className={cn(card, "transition-colors hover:border-foreground/15 data-[state=open]:border-foreground/15")} aria-label="Changer d'espace">
+              {inner}
+              <ChevronsUpDown className="h-4 w-4 shrink-0 text-foreground/40" strokeWidth={1.75} />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" sideOffset={6} className="w-[224px] p-1.5" onOpenAutoFocus={(e) => e.preventDefault()}>
+            <div className="px-2 pb-1.5 pt-1 text-[12px] text-muted-foreground">Espaces</div>
+            {options.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => {
+                  o.onSelect();
+                  setOpen(false);
+                }}
+                className="flex w-full items-center gap-2.5 rounded-[8px] px-2 py-1.5 text-left transition-colors hover:bg-rowhover"
+              >
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[7px] border border-border text-foreground/70">
+                  <o.icon className="h-3.5 w-3.5" strokeWidth={1.75} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium text-foreground">{o.label}</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">{o.hint}</span>
+                </span>
+                {o.active && <Check className="h-4 w-4 shrink-0 text-foreground" />}
+              </button>
+            ))}
+          </PopoverContent>
+        </Popover>
+      ) : (
+        <div className={card}>{inner}</div>
+      )}
+      {onCollapse && (
+        <button
+          type="button"
+          onClick={onCollapse}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-[8px] text-foreground/40 transition-colors hover:bg-surface/60 hover:text-foreground dark:hover:bg-rowhover"
+          title="Replier le menu"
+          aria-label="Replier le menu"
+        >
+          <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+export type SbUserAction = { icon: LucideIcon; label: string; onClick: () => void };
+
+/**
+ * Pied de sidebar : carte utilisateur (photo + nom + rôle). Un clic ouvre un
+ * menu (réglages, thème, déconnexion). `menuAvatar` = avatar affiché dans le
+ * menu (peut être éditable, contrairement à celui de la carte).
+ */
+export function SidebarUser({
+  avatar,
+  menuAvatar,
+  name,
+  sub,
+  actions,
+}: {
+  avatar: ReactNode;
+  menuAvatar?: ReactNode;
+  name: string;
+  sub: string;
+  actions: SbUserAction[];
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn("flex w-full items-center gap-2.5 rounded-[10px] p-1.5 pr-2 text-left transition-colors", HOVER_BG, "data-[state=open]:bg-surface dark:data-[state=open]:bg-rowhover")}
+        >
+          {avatar}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-medium leading-tight text-foreground">{name}</span>
+            <span className="mt-0.5 block truncate text-[12px] leading-tight text-muted-foreground">{sub}</span>
+          </span>
+          <ChevronsUpDown className="h-4 w-4 shrink-0 text-foreground/40" strokeWidth={1.75} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="right" align="end" sideOffset={10} className="w-[232px] p-1.5" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <div className="flex items-center gap-2.5 px-2 pb-2.5 pt-1.5">
+          {menuAvatar ?? avatar}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-medium leading-tight text-foreground">{name}</span>
+            <span className="mt-0.5 block truncate text-[12px] leading-tight text-muted-foreground">{sub}</span>
+          </span>
+        </div>
+        <div className="-mx-1.5 mb-1 h-px bg-border" />
+        {actions.map((a) => (
+          <button
+            key={a.label}
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              a.onClick();
+            }}
+            className="flex w-full items-center gap-2.5 rounded-[8px] px-2 py-1.5 text-left text-[13px] text-foreground/80 transition-colors hover:bg-rowhover hover:text-foreground"
+          >
+            <a.icon className="h-4 w-4 shrink-0 text-foreground/50" strokeWidth={1.75} />
+            {a.label}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * Sidebar desktop : en-tête (carte d'espace), sections de nav repliables (et
+ * sous-pages repliables par item), puis pied de page (carte utilisateur).
+ * Générique : on lui passe les groupes + le contenu header/footer.
  */
 export function SidebarNav({
   groups,
@@ -338,8 +486,8 @@ export function SidebarNav({
   header?: ReactNode;
   footer?: ReactNode;
 }) {
-  // Accordéon : un seul dossier ouvert à la fois. Celui de la page active s'ouvre
-  // automatiquement (navigation, recherche) ; un clic sur un autre dossier bascule.
+  // Accordéon : une seule section ouverte à la fois. Celle de la page active s'ouvre
+  // automatiquement (navigation, recherche) ; un clic sur une autre section bascule.
   const activeGroupId = groups.find((g) => g.items.some((i) => i.id === activeId))?.id ?? null;
   const [openGroup, setOpenGroup] = useState<string | null>(activeGroupId ?? groups[0]?.id ?? null);
   useEffect(() => {
@@ -349,7 +497,7 @@ export function SidebarNav({
   return (
     <aside className="flex h-full w-[240px] shrink-0 flex-col p-3">
       {header}
-      <nav className="mt-1 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {groups.map((g) => (
           <Group
             key={g.id}
@@ -366,7 +514,7 @@ export function SidebarNav({
           />
         ))}
       </nav>
-      {footer && <div className="mt-auto border-t border-border pt-3">{footer}</div>}
+      {footer && <div className="mt-auto flex flex-col gap-1 pt-2">{footer}</div>}
     </aside>
   );
 }
