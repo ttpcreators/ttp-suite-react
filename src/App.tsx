@@ -743,7 +743,7 @@ export default function App() {
           </div>
 
           {/* Main panel */}
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] bg-panel">
+          <div className="shell-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] bg-panel">
             {!multi ? (
               /* Une seule page : mise en page d'origine (l'en-tête défile avec le contenu). */
               <div className="flex-1 overflow-y-auto pb-28 md:pb-7">

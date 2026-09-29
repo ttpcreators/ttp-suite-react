@@ -42,40 +42,63 @@
   --onsignal: #ffffff;
 }
 
+/* Sombre « Minuit » (par défaut) : noir profond, gris NEUTRES (pas de teinte
+   bleue), filets très fins, accent monochrome (le blanc joue le rôle du bleu).
+   Hiérarchie : fond #000 < zone de contenu et cartes #0a0a0a < tuiles #141414. */
 .dark {
   color-scheme: dark;
   --background: #000000;
   --foreground: #fafafa;
-  --card: #18181b;
+  --card: #0a0a0a;
   --card-foreground: #fafafa;
-  --popover: #18181b;
+  --popover: #0f0f0f;
   --popover-foreground: #fafafa;
-  --primary: #2b7fff;
-  --primary-foreground: #ffffff;
-  --secondary: #27272a;
+  --primary: #fafafa;
+  --primary-foreground: #0a0a0a;
+  --secondary: #171717;
   --secondary-foreground: #fafafa;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --accent: #27272a;
+  --muted: #171717;
+  --muted-foreground: #a3a3a3;
+  --accent: #171717;
   --accent-foreground: #fafafa;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #27272a;
-  --input: #27272a;
-  --ring: #2b7fff;
-  --burgundy: #2b7fff;
-  /* Tokens fidèles à l'app d'origine (dark) */
-  --panel: #18181b;
-  --surface: #18181b;
-  --faint: #71717a;
-  --rowhover: #27272a;
+  --border: #222222;
+  --input: #262626;
+  --ring: #a3a3a3;
+  --burgundy: #fafafa;
+  --panel: #141414;
+  --surface: #0a0a0a;
+  --faint: #737373;
+  --rowhover: #141414;
   --signal: #16a34a;
   --signaltext: #4ade80;
   --signalsoft: #052e16;
   --indigo: #818cf8;
   --amber: #fbbf24;
-  --cyan: #a1a1aa;
+  --cyan: #a3a3a3;
   --onsignal: #ffffff;
+}
+
+/* Sombre « Classique » (l'ancien) : Paramètres → Apparence → Style sombre. */
+.dark.dark-classic {
+  --card: #18181b;
+  --popover: #18181b;
+  --primary: #2b7fff;
+  --primary-foreground: #ffffff;
+  --secondary: #27272a;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #2b7fff;
+  --burgundy: #2b7fff;
+  --panel: #18181b;
+  --surface: #18181b;
+  --faint: #71717a;
+  --rowhover: #27272a;
+  --cyan: #a1a1aa;
 }
 
 @theme inline {
@@ -131,6 +154,18 @@ body {
   color: var(--foreground);
   font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Minuit : la zone de contenu est un panneau #0a0a0a posé sur le noir, avec un
+   filet (au lieu du gris de tuile). Les cartes s'y fondent, seules leurs
+   bordures les dessinent : l'effet « sections séparées par des filets ». */
+.dark:not(.dark-classic) .shell-panel {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+/* Les ombres portées ne servent à rien sur du noir : on les coupe en Minuit. */
+.dark:not(.dark-classic) .shadow-sm {
+  box-shadow: none;
 }
 
 /* Pastille pulsante des items de nav actifs (comme l'app d'origine) */

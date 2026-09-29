@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check, MessageCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
-import { ACCENT_PRESETS, getAccent, setAccent, isHex } from "@/lib/accent";
+import { ACCENT_PRESETS, getAccent, setAccent, isHex, getDarkStyle, setDarkStyle, type DarkStyle } from "@/lib/accent";
 import { NOTIF_TEXTS_CREATOR, NOTIF_TEXTS_AGENCY, type NotifTextField } from "@/lib/notifTexts";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { RELANCE_DAYS, type ProspectSettings, type WaMode } from "@/lib/touches";
@@ -124,6 +124,13 @@ export function Parametres() {
 
   const { dark, toggle: toggleTheme } = useTheme();
 
+  // Style du thème sombre (propre à cet appareil) : Minuit (défaut) ou Classique.
+  const [darkStyle, setDarkStyleState] = useState<DarkStyle>(() => getDarkStyle());
+  const chooseDarkStyle = (s: DarkStyle) => {
+    setDarkStyle(s);
+    setDarkStyleState(s);
+  };
+
   // Couleur d'accent (propre à cet appareil, comme le thème).
   const [accent, setAccentState] = useState<string>(() => getAccent());
   const chooseAccent = (color: string) => {
@@ -210,6 +217,29 @@ export function Parametres() {
           checked={dark}
           onChange={() => toggleTheme()}
         />
+        <div className="flex flex-wrap items-center justify-between gap-3 py-2">
+          <div className="min-w-0">
+            <div className="text-[13px] font-medium text-foreground">Style sombre</div>
+            <div className="text-[11px] leading-snug text-faint">
+              Minuit : noir profond et monochrome. Classique : l'ancien sombre bleuté.
+            </div>
+          </div>
+          <div className="flex shrink-0 gap-1 rounded-xl bg-panel p-1">
+            {([["minuit", "Minuit"], ["classic", "Classique"]] as const).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => chooseDarkStyle(v)}
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                  darkStyle === v ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </Section>
 
       {/* Couleur d'accent (token --primary) — s'applique aussi en thème sombre */}
@@ -233,7 +263,7 @@ export function Parametres() {
                   "grid h-8 w-8 place-items-center rounded-full ring-offset-2 ring-offset-surface transition",
                   active ? "ring-2 ring-foreground" : "ring-1 ring-border hover:ring-foreground/40",
                 )}
-                style={{ backgroundColor: p.value || "#0069fe" }}
+                style={{ background: p.value || "linear-gradient(135deg, #0069fe 50%, #fafafa 50%)" }}
               >
                 {active && <Check className="h-4 w-4 text-white drop-shadow" />}
               </button>
@@ -249,7 +279,7 @@ export function Parametres() {
             <input type="color" value={isHex(accent) ? accent : "#0069fe"} onChange={(e) => chooseAccent(e.target.value)} className="sr-only" />
           </label>
         </div>
-        <p className="mt-3 text-[11px] text-faint">« Bleu TTP » remet la couleur d'origine. Le texte des boutons s'ajuste (blanc/noir) pour rester lisible.</p>
+        <p className="mt-3 text-[11px] text-faint">« Par défaut » : bleu en clair, blanc en sombre Minuit. « Bleu TTP » force le bleu partout. Le texte des boutons s'ajuste (blanc/noir) pour rester lisible.</p>
       </Section>
 
       {/* Prospection : rythme de recontact + ouverture WhatsApp (blob prospectSettings) */}

@@ -11,9 +11,11 @@
 const KEY = "ttp:accent";
 
 export type AccentPreset = { name: string; value: string };
-/** value === "" ⇒ retour au bleu TTP par défaut (aucun override). */
+/** value === "" ⇒ accent par défaut du thème (aucun override) : bleu en clair,
+ *  blanc monochrome en sombre « Minuit ». « Bleu TTP » force le bleu partout. */
 export const ACCENT_PRESETS: AccentPreset[] = [
-  { name: "Bleu TTP", value: "" },
+  { name: "Par défaut", value: "" },
+  { name: "Bleu TTP", value: "#2b7fff" },
   { name: "Indigo", value: "#6366f1" },
   { name: "Violet", value: "#8b5cf6" },
   { name: "Rose", value: "#ec4899" },
@@ -80,4 +82,33 @@ export function setAccent(color: string): void {
 /** À appeler au démarrage (avant le rendu) pour éviter tout flash de bleu. */
 export function initAccent(): void {
   applyAccent(getAccent() || null);
+  applyDarkStyle(getDarkStyle());
+}
+
+// ── Style du thème sombre : « minuit » (défaut, façon Efferd) ou « classic » ──
+// Classe `dark-classic` sur la racine : elle ne fait effet QU'EN mode sombre
+// (règle `.dark.dark-classic` de index.css). Propre à cet appareil.
+const DARK_KEY = "ttp:darkStyle";
+export type DarkStyle = "minuit" | "classic";
+
+export function getDarkStyle(): DarkStyle {
+  try {
+    return localStorage.getItem(DARK_KEY) === "classic" ? "classic" : "minuit";
+  } catch {
+    return "minuit";
+  }
+}
+
+export function applyDarkStyle(style: DarkStyle): void {
+  document.documentElement.classList.toggle("dark-classic", style === "classic");
+}
+
+export function setDarkStyle(style: DarkStyle): void {
+  try {
+    if (style === "classic") localStorage.setItem(DARK_KEY, "classic");
+    else localStorage.removeItem(DARK_KEY);
+  } catch {
+    /* stockage indispo : appliqué pour la session */
+  }
+  applyDarkStyle(style);
 }
