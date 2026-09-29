@@ -106,8 +106,8 @@ type Todo = { id: string; text: string; descr: string | null; due: string | null
 let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
 // Priorité : barre d'accent (bord gauche de la carte) + pilule.
-const PRIO_ACCENT: Record<string, string> = { haute: "bg-rose-500", moyenne: "bg-amber", basse: "bg-neutral-300 dark:bg-neutral-600" };
-const PRIO_PILL: Record<string, string> = { haute: "bg-rose-500/10 text-rose-600 dark:text-rose-400", moyenne: "bg-foreground/[0.06] text-amber", basse: "bg-panel text-faint" };
+const PRIO_ACCENT: Record<string, string> = { haute: "bg-rose-500", moyenne: "bg-foreground/40", basse: "bg-foreground/15" };
+const PRIO_PILL: Record<string, string> = { haute: "bg-rose-500/10 text-rose-600 dark:text-rose-400", moyenne: "bg-muted text-muted-foreground", basse: "border border-border text-muted-foreground" };
 const prioAccent = (p: string | null) => PRIO_ACCENT[p ?? "moyenne"] ?? PRIO_ACCENT.moyenne;
 const prioPill = (p: string | null) => PRIO_PILL[p ?? "moyenne"] ?? PRIO_PILL.moyenne;
 type Idea = { id: string; text: string; status: string | null; sort_order?: number; subtasks?: Subtask[] | null };
@@ -1981,15 +1981,16 @@ export function CreatorSpace({
               <PageHeaderRow>
                 <div className="flex flex-wrap items-center gap-2">
                   {todoView === "liste" && (
-                    <div className="flex gap-1 rounded-xl bg-surface p-1">
+                    <div className="flex rounded-lg border border-border bg-surface p-0.5">
                       {TODO_FILTERS.map((f) => (
                         <button
                           key={f.id}
                           type="button"
                           onClick={() => setTodoFilter(f.id)}
+                          aria-pressed={todoFilter === f.id}
                           className={
-                            "rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors " +
-                            (todoFilter === f.id ? "bg-panel text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")
+                            "rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors " +
+                            (todoFilter === f.id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")
                           }
                         >
                           {f.label}
@@ -1998,15 +1999,16 @@ export function CreatorSpace({
                     </div>
                   )}
                   {/* Bascule Liste / Colonnes (mémorisée) */}
-                  <div className="flex items-center gap-1 rounded-xl bg-surface p-1">
+                  <div className="flex items-center rounded-lg border border-border bg-surface p-0.5">
                     {([["liste", List], ["colonnes", Columns3]] as const).map(([m, Icon]) => (
                       <button
                         key={m}
                         type="button"
                         onClick={() => setTodoView(m)}
+                        aria-pressed={todoView === m}
                         className={
-                          "grid h-8 w-8 place-items-center rounded-lg transition-colors " +
-                          (todoView === m ? "bg-panel text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")
+                          "grid h-7 w-8 place-items-center rounded-md transition-colors " +
+                          (todoView === m ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")
                         }
                         aria-label={m === "liste" ? "Vue liste" : "Vue colonnes"}
                         title={m === "liste" ? "Liste" : "Colonnes par statut"}
@@ -2041,7 +2043,7 @@ export function CreatorSpace({
                           <div className="px-2 py-6 text-center text-[11px] text-faint">—</div>
                         ) : (
                           colRows.map((t) => (
-                            <div key={t.id} className="rounded-xl border border-border bg-surface p-3 shadow-sm">
+                            <div key={t.id} className="rounded-xl border border-border bg-surface p-3">
                               <button type="button" onClick={() => setTaskView(t)} className="block w-full text-left">
                                 <span className={"block line-clamp-2 break-words text-[12.5px] font-medium leading-snug " + (t.done ? "text-muted-foreground line-through" : "text-foreground")}>{t.text}</span>
                                 {((t.subtasks?.length ?? 0) > 0 || (t.attachments?.length ?? 0) > 0) && (
@@ -2067,7 +2069,7 @@ export function CreatorSpace({
               ) : (
               <div className="flex flex-col gap-3">
                 {filteredTodos.length === 0 ? (
-                  <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">
+                  <div className="rounded-2xl border border-border bg-surface p-6 text-[13px] text-muted-foreground">
                     {todoFilter === "terminees" ? "Aucune tâche terminée." : "Aucune tâche."}
                   </div>
                 ) : (
@@ -2077,7 +2079,7 @@ export function CreatorSpace({
                       title: t.text,
                       status: cStatus(t),
                       done: t.done,
-                      accent: prioAccent(t.priority),
+                      accent: t.done ? undefined : prioAccent(t.priority),
                       subtasks: t.subtasks ?? [],
                       meta: (
                         <>
@@ -2087,13 +2089,13 @@ export function CreatorSpace({
                       ),
                       right: (
                         <>
-                          <span className={cn("hidden rounded-full px-2 py-0.5 text-[11px] font-medium sm:inline", prioPill(t.priority))}>
+                          <span className={cn("hidden w-[70px] rounded-full py-0.5 text-center text-[11px] font-medium sm:inline-block", t.done ? "bg-muted text-faint" : prioPill(t.priority))}>
                             {titleCase(t.priority ?? "moyenne")}
                           </span>
                           <button
                             type="button"
                             onClick={() => (tdEditId === t.id ? setTdEditId(null) : startEditTodo(t))}
-                            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-panel text-muted-foreground shadow-sm transition-colors hover:bg-rowhover hover:text-foreground"
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                             aria-label="Modifier la tâche"
                           >
                             <Pencil className="h-3.5 w-3.5" />

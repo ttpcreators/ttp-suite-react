@@ -21,7 +21,7 @@ const HOVER_BG = "hover:bg-surface/60 dark:hover:bg-rowhover/70";
 /** Ligne de menu (pleine largeur). */
 export const sbItemCls = (active: boolean) =>
   cn(
-    "flex w-full select-none items-center gap-2.5 rounded-[8px] px-2.5 py-[6px] text-left text-[13px] transition-colors",
+    "flex w-full select-none items-center gap-2.5 rounded-[8px] px-2.5 py-[6px] text-left text-[13px] transition-colors focus-visible:outline-offset-[-2px]",
     active ? cn(ACTIVE_BG, "font-medium text-foreground") : cn("text-foreground/70 hover:text-foreground", HOVER_BG),
   );
 /** Icône d'une ligne de menu. */

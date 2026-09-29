@@ -96,16 +96,16 @@ function PriorityDot({ priority }: { priority: Priority }) {
   );
 }
 
-// Couleurs de priorité : barre d'accent (à gauche de la carte) + pilule.
+// Couleurs de priorité : point (mobile) + pilule.
 const PRIO_ACCENT: Record<Priority, string> = {
   haute: "bg-rose-500",
-  moyenne: "bg-amber",
-  basse: "bg-neutral-300 dark:bg-neutral-600",
+  moyenne: "bg-foreground/40",
+  basse: "bg-foreground/15",
 };
 const PRIO_PILL: Record<Priority, string> = {
   haute: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  moyenne: "bg-foreground/[0.06] text-amber",
-  basse: "bg-panel text-faint",
+  moyenne: "bg-muted text-muted-foreground",
+  basse: "border border-border text-muted-foreground",
 };
 
 // Formate created_at en fr-FR ; rien si absent.
@@ -707,7 +707,7 @@ export function Todo() {
             title: row.text,
             status: todoStatus(row),
             done: row.done,
-            accent: PRIO_ACCENT[row.priority],
+            accent: row.done ? undefined : PRIO_ACCENT[row.priority],
             subtasks: row.subtasks ?? [],
             meta: (
               <>
@@ -722,7 +722,7 @@ export function Todo() {
             ),
             right: (
               <>
-                <span className={cn("hidden rounded-full px-2 py-0.5 text-[11px] font-medium sm:inline", PRIO_PILL[row.priority])}>
+                <span className={cn("hidden w-[70px] rounded-full py-0.5 text-center text-[11px] font-medium sm:inline-block", row.done ? "bg-muted text-faint" : PRIO_PILL[row.priority])}>
                   {prioOf(row.priority).label}
                 </span>
                 <ActionMenu
@@ -747,8 +747,8 @@ export function Todo() {
               </>
             ),
             footer: noteEditId === row.id ? (
-              <div className="flex flex-col gap-2 border-t border-border px-4 py-3">
-                <span className="text-[11px] font-medium text-muted-foreground">Avancement / commentaire</span>
+              <div className="flex flex-col gap-2 pb-3 pl-[46px] pr-4 sm:pl-[50px]">
+                <span className="text-[12px] font-medium text-muted-foreground">Avancement / commentaire</span>
                 <textarea
                   value={noteEditText}
                   onChange={(e) => setNoteEditText(e.target.value)}
@@ -771,12 +771,12 @@ export function Todo() {
                 </div>
               </div>
             ) : notes[row.id] ? (
-              <button type="button" onClick={() => startNote(row.id)} className="flex w-full items-start gap-2 border-t border-border px-4 py-2.5 text-left transition-colors hover:bg-rowhover" title="Modifier le commentaire">
+              <button type="button" onClick={() => startNote(row.id)} className="-mt-1 flex w-full items-start gap-2 pb-3 pl-[46px] pr-4 text-left transition-colors hover:text-foreground sm:pl-[50px]" title="Modifier le commentaire">
                 <MessageSquarePlus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" />
                 <span className="whitespace-pre-wrap text-[12px] leading-relaxed text-muted-foreground">{notes[row.id]}</span>
               </button>
             ) : (
-              <button type="button" onClick={() => startNote(row.id)} className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+              <button type="button" onClick={() => startNote(row.id)} className="-mt-1.5 flex w-full items-center gap-1.5 pb-3 pl-[46px] pr-4 text-[12px] text-muted-foreground transition-colors hover:text-foreground sm:pl-[50px]">
                 <MessageSquarePlus className="h-3.5 w-3.5" /> Ajouter un commentaire d'avancement
               </button>
             ),

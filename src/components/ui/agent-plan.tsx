@@ -15,7 +15,7 @@ export type PlanTask = {
   title: string;
   status: string; // "À faire" | "En cours" | "Fait"
   done?: boolean; // barré si vrai (dérivé de "Fait")
-  accent?: string; // classe de couleur de la barre d'accent (priorité)
+  accent?: string; // classe de couleur de la priorité (petit point sur mobile)
   meta?: ReactNode; // ligne méta sous le titre
   right?: ReactNode; // zone droite (pilule priorité + menu)
   footer?: ReactNode; // bloc sous la carte (ex : commentaire d'avancement agence)
@@ -24,7 +24,7 @@ export type PlanTask = {
 
 function StatusIcon({ status, className }: { status: string; className?: string }) {
   if (status === "Fait") return <CheckCircle2 className={cn("text-emerald-500", className)} />;
-  if (status === "En cours") return <CircleDotDashed className={cn("text-primary", className)} />;
+  if (status === "En cours") return <CircleDotDashed className={cn("text-foreground/70", className)} />;
   return <Circle className={cn("text-faint", className)} />;
 }
 
@@ -50,39 +50,41 @@ export function AgentPlan({
   const [input, setInput] = useState<Record<string, string>>({});
 
   return (
-    <ul className="flex flex-col gap-2.5">
+    // Langage Aperçu : UNE liste dans un panneau, lignes séparées par des filets.
+    <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
       {tasks.map((task) => {
         const open = !!expanded[task.id];
         const subs = task.subtasks ?? [];
         const subDone = subs.filter((s) => s.done).length;
+        // Une tâche terminée affiche TOUJOURS la coche (le statut stocké peut être en retard sur « done »).
+        const status = task.done ? "Fait" : task.status;
         return (
-          <li key={task.id} className="relative overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition-shadow hover:shadow-md">
-            {task.accent && <span className={cn("absolute left-0 top-0 h-full w-1", task.accent)} />}
-
+          <li key={task.id} className="transition-colors hover:bg-rowhover/50">
             {/* Ligne tâche */}
-            <div className="flex items-start gap-2.5 py-3 pl-4 pr-3">
+            <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
               {/* Icône de statut (cycle au clic) */}
               <button
                 type="button"
                 onClick={() => onCycleStatus(task.id)}
-                title={`Statut : ${task.status} — cliquer pour changer`}
-                className="mt-0.5 shrink-0 rounded-full transition-transform hover:scale-110 active:scale-95"
+                title={`Statut : ${status}. Cliquer pour changer`}
+                className="shrink-0 rounded-full transition-transform hover:scale-110 active:scale-95"
               >
-                <StatusIcon status={task.status} className="h-[18px] w-[18px]" />
+                <StatusIcon status={status} className="h-[18px] w-[18px]" />
               </button>
 
               {/* Titre + méta (clic titre = fiche ; clic zone = déplier) */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
+                  {task.accent && <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full sm:hidden", task.accent)} aria-hidden />}
                   <button
                     type="button"
                     onClick={() => (onOpenTask ? onOpenTask(task.id) : setExpanded((e) => ({ ...e, [task.id]: !e[task.id] })))}
-                    className={cn("min-w-0 flex-1 truncate text-left text-sm font-semibold text-foreground", task.done && "text-muted-foreground line-through")}
+                    className={cn("min-w-0 flex-1 truncate text-left text-[13px] font-medium text-foreground", task.done && "text-muted-foreground line-through")}
                   >
                     {task.title}
                   </button>
                 </div>
-                {task.meta && <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-faint">{task.meta}</div>}
+                {task.meta && <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-muted-foreground empty:hidden">{task.meta}</div>}
               </div>
 
               {/* Chevron déplier sous-tâches */}
@@ -91,20 +93,20 @@ export function AgentPlan({
                 onClick={() => setExpanded((e) => ({ ...e, [task.id]: !e[task.id] }))}
                 aria-label={open ? "Replier" : "Déplier"}
                 aria-expanded={open}
-                className="mt-0.5 flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                className="flex h-8 shrink-0 items-center gap-1 rounded-md px-1.5 text-faint transition-colors hover:bg-rowhover hover:text-foreground"
               >
-                {subs.length > 0 && <span className="text-[10px] font-semibold tabular-nums">{subDone}/{subs.length}</span>}
+                {subs.length > 0 && <span className="text-[11px] font-medium tabular-nums">{subDone}/{subs.length}</span>}
                 <ChevronRight className={cn("h-4 w-4 transition-transform", open && "rotate-90")} strokeWidth={2} />
               </button>
 
               {/* Zone droite (pilule priorité + menu) */}
-              {task.right && <div className="mt-0.5 flex shrink-0 items-center gap-1.5">{task.right}</div>}
+              {task.right && <div className="flex shrink-0 items-center gap-1">{task.right}</div>}
             </div>
 
             {/* Sous-tâches en ligne (trait de liaison pointillé) */}
             <div className={cn("grid transition-[grid-template-rows,opacity] duration-300 ease-in-out", open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")}>
               <div className="min-h-0 overflow-hidden">
-                <div className="relative ml-[26px] mb-2.5 mr-3 mt-0.5 border-l-2 border-dashed border-border pl-3">
+                <div className="relative mb-3 ml-[26px] mr-4 mt-0.5 border-l border-border pl-3 sm:ml-[30px]">
                   <div className="flex flex-col gap-1">
                     {subs.map((s) => (
                       <div key={s.id} className="group flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-rowhover/60">
@@ -131,9 +133,9 @@ export function AgentPlan({
                         value={input[task.id] ?? ""}
                         onChange={(e) => setInput((v) => ({ ...v, [task.id]: e.target.value }))}
                         placeholder="Ajouter une sous-tâche…"
-                        className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary"
+                        className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-foreground/30"
                       />
-                      <button type="submit" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90" aria-label="Ajouter">
+                      <button type="submit" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-foreground text-background transition-opacity hover:opacity-90" aria-label="Ajouter">
                         <Plus className="h-4 w-4" />
                       </button>
                     </form>
