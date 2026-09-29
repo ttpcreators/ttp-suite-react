@@ -202,7 +202,7 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <Activity className="h-3 w-3" /> Dernier taux
           </div>
-          <div className="mt-2 text-2xl font-bold tracking-tight">{last ? `${String(last.er).replace(".", ",")} %` : "—"}</div>
+          <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{last ? `${String(last.er).replace(".", ",")} %` : "—"}</div>
           {dEr !== null && (
             <div className={cn("mt-1 flex items-center gap-1 text-[11px] font-semibold", dEr >= 0 ? "text-signaltext" : "text-rose-500")}>
               {dEr >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
@@ -214,7 +214,7 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <Users className="h-3 w-3" /> Abonnés
           </div>
-          <div className="mt-2 text-2xl font-bold tracking-tight">{last && last.followers > 0 ? fmtCompact(last.followers) : "—"}</div>
+          <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{last && last.followers > 0 ? fmtCompact(last.followers) : "—"}</div>
           {dFol !== null && dFol !== 0 && (
             <div className={cn("mt-1 flex items-center gap-1 text-[11px] font-semibold", dFol >= 0 ? "text-signaltext" : "text-rose-500")}>
               {dFol >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
@@ -226,14 +226,14 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <Hash className="h-3 w-3" /> Mesures
           </div>
-          <div className="mt-2 text-2xl font-bold tracking-tight">{points.length}</div>
+          <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{points.length}</div>
           <div className="mt-1 text-[11px] text-faint">{PLATFORM_LABELS[platform] ?? platform}</div>
         </div>
         <div className="rounded-2xl border border-border bg-surface p-[18px] shadow-sm">
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <TrendingUp className="h-3 w-3" /> Meilleur taux
           </div>
-          <div className="mt-2 text-2xl font-bold tracking-tight">
+          <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">
             {points.length ? `${String(Math.max(...points.map((x) => x.er))).replace(".", ",")} %` : "—"}
           </div>
         </div>

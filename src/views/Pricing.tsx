@@ -306,7 +306,7 @@ export function Pricing() {
           <>
             <div className="mt-4">
               <div className={LBL}>Fourchette conseillée (HT)</div>
-              <div className="mt-1 text-2xl font-bold tracking-tight text-background sm:text-3xl">
+              <div className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-background sm:text-3xl">
                 {formatEuro(result.min)} <span className="text-faint">–</span> {formatEuro(result.max)}
               </div>
               <div className="mt-2 flex items-baseline gap-2">

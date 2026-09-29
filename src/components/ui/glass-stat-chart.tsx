@@ -97,7 +97,7 @@ export default function GlassStatChart({
 
       {/* Gros chiffre + delta */}
       <div className="relative z-10 mt-3 flex items-end gap-3">
-        <div className="text-3xl font-bold tracking-tight text-foreground tabular-nums">{format(last)}</div>
+        <div className="text-3xl font-semibold tracking-tight tabular-nums text-foreground tabular-nums">{format(last)}</div>
         {clean.length >= 2 && (
           <div className={cn("mb-1 flex items-center gap-1 text-[13px] font-semibold tabular-nums", deltaColor)}>
             <span>{delta === 0 ? "→" : up ? "▲" : "▼"}</span>

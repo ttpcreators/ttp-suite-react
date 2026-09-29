@@ -406,7 +406,7 @@ export function DebriefCalculator({
                 <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
                 {basis === b && <span className="text-[10px] font-medium text-primary">Retenu</span>}
               </div>
-              <div className="mt-0.5 text-xl font-bold leading-none tabular-nums text-foreground">{fmtPct(val)}</div>
+              <div className="mt-0.5 text-xl font-semibold tabular-nums leading-none tabular-nums text-foreground">{fmtPct(val)}</div>
             </button>
           ))}
         </div>

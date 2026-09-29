@@ -74,7 +74,7 @@ export function CreatorGuide({
         <div className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-primary/10 blur-2xl" />
         <div className="relative">
           <div className="text-[12px] font-medium text-primary">Guide</div>
-          <h1 className="mt-1 text-[22px] font-bold leading-tight text-foreground">Bienvenue{firstName ? ` ${firstName}` : ""} — voici comment utiliser ton espace</h1>
+          <h1 className="mt-1 text-[22px] font-semibold tabular-nums leading-tight text-foreground">Bienvenue{firstName ? ` ${firstName}` : ""} — voici comment utiliser ton espace</h1>
           <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
             Tout se fait ici, sur <span className="font-semibold text-foreground">mobile comme sur ordinateur</span>. 2 minutes de lecture et tu es autonome. 💪
           </p>

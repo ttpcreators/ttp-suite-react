@@ -776,7 +776,7 @@ export function RosterTracking({ onOpen }: { onOpen?: (name: string) => void }) 
             <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
               <span className={cn("size-2 rounded-full", TRAJECTORY_META[tr].dot)} /> {TRAJECTORY_META[tr].label}
             </div>
-            <div className="mt-1 text-2xl font-bold tabular-nums text-foreground">{counts[tr]}</div>
+            <div className="mt-1 text-2xl font-semibold tabular-nums tabular-nums text-foreground">{counts[tr]}</div>
           </div>
         ))}
       </div>
@@ -967,7 +967,7 @@ export function CreatorRoadmap({ name }: { name: string }) {
                     return (
                       <div key={f.key} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-panel/50 px-2 py-3">
                         <Icon className="h-4 w-4 text-primary" />
-                        <div className="text-xl font-bold tabular-nums text-foreground">{rm.cadenceReco[f.key]}</div>
+                        <div className="text-xl font-semibold tabular-nums tabular-nums text-foreground">{rm.cadenceReco[f.key]}</div>
                         <div className="text-[11px] font-medium text-muted-foreground">{f.short}</div>
                       </div>
                     );

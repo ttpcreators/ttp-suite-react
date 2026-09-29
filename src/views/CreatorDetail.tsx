@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X, ArrowUpRight } from "lucide-react";
+import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X, ArrowUpRight, Share2, IdCard, ScrollText, Receipt, ListChecks, FileText, Lightbulb, type LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
 import { frDate, toISODate, todayISO } from "@/lib/dates";
@@ -361,11 +361,17 @@ export function CreatorDetail({
     );
   };
 
+  // Cellule de bandeau (langage Aperçu) : posée dans une grille « gap-px bg-border ».
   const stat = (label: string, val: string | null, sub?: string) => (
-    <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
-      <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
-      <div className="mt-2 whitespace-nowrap text-2xl font-bold tracking-tight">{val || "—"}</div>
-      {sub && <div className="mt-1 truncate text-[10px] text-faint">{sub}</div>}
+    <div className="flex min-w-0 flex-col bg-surface px-4 py-4 sm:px-5 sm:py-5">
+      <div className="text-[12px] text-muted-foreground sm:text-[13px]">{label}</div>
+      <div className="mt-2 truncate text-[22px] font-semibold leading-none tracking-tight tabular-nums sm:text-[26px]">{val || "—"}</div>
+      {sub && <div className="mt-3 line-clamp-2 text-[12px] leading-snug text-muted-foreground">{sub}</div>}
+    </div>
+  );
+  const sectionTitle = (Icon: LucideIcon, title: string) => (
+    <div className="flex items-center gap-2 text-[14px] font-semibold text-foreground">
+      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" /> {title}
     </div>
   );
 
@@ -445,30 +451,30 @@ export function CreatorDetail({
           />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-              <div className="text-xl font-semibold tracking-tight sm:text-2xl">{titleCase(name)}</div>
+              <h1 className="text-[24px] font-semibold tracking-tight md:text-[28px]">{titleCase(name)}</h1>
               <AnimatedBadge status={statusBadge(c?.status ?? null)} size="sm">
                 {c?.status ? titleCase(c.status) : "Actif"}
               </AnimatedBadge>
               {exclusive && (
-                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">
+                <span className="rounded-full border border-foreground/20 px-2.5 py-0.5 text-[11px] font-medium text-foreground">
                   Exclusif
                 </span>
               )}
             </div>
-            <div className="mt-1 text-sm text-faint">
+            <div className="mt-1 text-[13px] text-muted-foreground">
               {[c?.handle, c?.niche, c?.platform].filter(Boolean).join(" · ") || "—"}
             </div>
           </div>
         </div>
         <button
           onClick={() => onOpenPortal(name)}
-          className="flex w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2.5 text-xs font-semibold text-background transition-opacity hover:opacity-90 sm:w-auto"
+          className="flex w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 sm:w-auto"
         >
           <ExternalLink className="h-4 w-4" /> Voir le portail
         </button>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-4">
         {stat(
           "Abonnés",
           totalFollowers > 0 ? fmtCompact(totalFollowers) : (c?.followers ?? null),
@@ -487,31 +493,33 @@ export function CreatorDetail({
         {stat("Reach", c?.reach ?? null)}
       </div>
 
-      {/* Suivi éditorial : alertes + fiche de référence + suivi mensuel + journal */}
-      <div className="mb-4 flex flex-col gap-4">
+      {/* Tableau de bord (langage Aperçu) : suivi éditorial à gauche, synthèse à droite */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+      <div className="flex min-w-0 flex-col gap-4 xl:col-span-8">
         <CreatorAlerts name={name} />
         <EditorialProfileCard name={name} />
         <MonthlyTracking name={name} />
         <JournalCard name={name} />
       </div>
+      <div className="flex min-w-0 flex-col gap-4 xl:col-span-4">
 
       {/* Plateformes — logo cliquable (ouvre le profil) + abonnés/taux de la
           dernière mesure d'engagement, datée automatiquement au jour du calcul */}
       {platCards.length > 0 && (
-        <div className="mb-4 rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="text-sm font-semibold">Plateformes</div>
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            {sectionTitle(Share2, "Plateformes")}
             <button
               type="button"
               onClick={() => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "suivi" }))}
-              className="group flex items-center gap-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-primary"
+              className="group flex items-center gap-1 text-[12px] text-muted-foreground transition-colors hover:text-foreground"
               title="Courbes d'évolution"
             >
               Voir l'évolution
-              <ArrowUpRight className="h-3.5 w-3.5 text-faint transition-colors group-hover:text-primary" />
+              <ArrowUpRight className="h-3.5 w-3.5 text-faint transition-colors group-hover:text-foreground" />
             </button>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
             {platCards.map((p) => (
               <div key={p.key} className="flex items-center gap-3 rounded-xl border border-border bg-panel px-4 py-3">
                 {p.url ? (
@@ -539,7 +547,7 @@ export function CreatorDetail({
                       {p.entry && numOf(p.entry.followers) > 0 ? fmtCompact(numOf(p.entry.followers)) : "—"}
                       <span className="ml-1 text-[10px] font-medium text-faint">abonnés</span>
                     </span>
-                    {p.entry && <span className="text-[11px] font-semibold text-signaltext">{p.entry.er}</span>}
+                    {p.entry && <span className="text-[12px] font-medium text-muted-foreground">{p.entry.er}</span>}
                   </div>
                 </div>
               </div>
@@ -548,33 +556,16 @@ export function CreatorDetail({
         </div>
       )}
 
-      <div className="mb-4 rounded-2xl border border-border bg-surface p-5 shadow-sm">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="text-sm font-semibold">Coordonnées &amp; informations</div>
+      <div className="rounded-2xl border border-border bg-surface p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          {sectionTitle(IdCard, "Coordonnées")}
           <div className="flex items-center gap-2">
             {c?.commission && (
-              <div className="hidden rounded-lg bg-signalsoft px-3 py-1.5 text-xs font-semibold text-signaltext sm:block">
+              <div className="hidden rounded-lg bg-muted px-3 py-1.5 text-[12px] font-medium text-foreground sm:block">
                 Commission {c.commission}
               </div>
             )}
-            {contractEnd && (
-              <div
-                className={
-                  "hidden rounded-lg px-3 py-1.5 text-xs font-semibold sm:block " +
-                  (contractLeft != null && contractLeft < 0
-                    ? "bg-rose-500/12 text-rose-500"
-                    : contractLeft != null && contractLeft <= 30
-                      ? "bg-rose-500/12 text-rose-500"
-                      : contractLeft != null && contractLeft <= 60
-                        ? "bg-amber/15 text-amber"
-                        : "bg-rowhover text-muted-foreground")
-                }
-                title={contractType ? `Contrat ${contractType}` : "Contrat"}
-              >
-                Contrat → {frDateShort(contractEnd)}
-                {contractLeft != null && (contractLeft < 0 ? " · expiré" : contractLeft <= 60 ? ` · ${contractLeft} j` : "")}
-              </div>
-            )}
+            {/* (Échéance du contrat : voir la carte « Contrat » juste en dessous.) */}
             {editing ? (
               <>
                 <button
@@ -621,7 +612,7 @@ export function CreatorDetail({
               </button>
               <span className="text-sm font-medium text-foreground">Créateur en exclusivité</span>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {field("Pseudo (@)", "handle")}
               {field("Niche", "niche")}
               {field("Plateforme", "platform")}
@@ -639,7 +630,7 @@ export function CreatorDetail({
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
               {copyRow("Ville", form.ville ?? "")}
               {copyRow("Téléphone", form.phone ?? "")}
               {copyRow("Email perso", form.email ?? "")}
@@ -662,9 +653,9 @@ export function CreatorDetail({
       </div>
 
       {/* Contrat — date de fin, connecté à la page Échéances */}
-      <div className="mb-4 rounded-2xl border border-border bg-surface p-5 shadow-sm">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="text-sm font-semibold">Contrat</div>
+      <div className="rounded-2xl border border-border bg-surface p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          {sectionTitle(ScrollText, "Contrat")}
           {!ctEditing && (
             <button
               type="button"
@@ -678,7 +669,7 @@ export function CreatorDetail({
 
         {ctEditing ? (
           <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
               <div>
                 <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Date de début</div>
                 <input
@@ -730,7 +721,7 @@ export function CreatorDetail({
           <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
             <div>
               <div className="text-[11px] font-medium text-muted-foreground">Se termine le</div>
-              <div className="mt-0.5 text-2xl font-bold tracking-tight">{frDateShort(contractEnd)}</div>
+              <div className="mt-1 text-[22px] font-semibold leading-none tracking-tight tabular-nums">{frDateShort(contractEnd)}</div>
             </div>
             <div>
               <div className="text-[11px] font-medium text-muted-foreground">Échéance</div>
@@ -767,9 +758,8 @@ export function CreatorDetail({
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="mb-3 text-sm font-semibold">Facturation</div>
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <div className="mb-3">{sectionTitle(Receipt, "Facturation")}</div>
           {inv.length === 0 ? (
             <div className="text-xs text-muted-foreground">Aucune facture.</div>
           ) : (
@@ -779,13 +769,17 @@ export function CreatorDetail({
                   <div className="truncate text-xs font-medium">{v.party}</div>
                   <div className="text-[10px] text-faint">#{v.ref} · {v.date}</div>
                 </div>
-                <span className="text-xs font-semibold">{v.amount}</span>
+                <span className="text-[13px] font-medium tabular-nums">{parseAmount(v.amount) > 0 ? formatEuro(parseAmount(v.amount)) : v.amount || "—"}</span>
               </div>
             ))
           )}
         </div>
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="mb-3 text-sm font-semibold">À faire</div>
+      </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <div className="mb-3">{sectionTitle(ListChecks, "À faire")}</div>
           {td.length === 0 ? (
             <div className="text-xs text-muted-foreground">Rien à faire.</div>
           ) : (
@@ -797,14 +791,14 @@ export function CreatorDetail({
             ))
           )}
         </div>
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="mb-3 text-sm font-semibold">Briefs</div>
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <div className="mb-3">{sectionTitle(FileText, "Briefs")}</div>
           {br.length === 0 ? (
             <div className="text-xs text-muted-foreground">Aucun brief.</div>
           ) : (
             br.map((b, i) => (
               <div key={`${b.brand}-${i}`} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-signal" />
+                <span className="h-2 w-2 shrink-0 rounded-full bg-foreground/40" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xs font-medium">{b.brand}</div>
                   <div className="truncate text-[10px] text-faint">{b.deliverables} · {frDate(b.due)}</div>
@@ -813,8 +807,8 @@ export function CreatorDetail({
             ))
           )}
         </div>
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="mb-3 text-sm font-semibold">Idées de contenu</div>
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <div className="mb-3">{sectionTitle(Lightbulb, "Idées de contenu")}</div>
           {ideas.length === 0 ? (
             <div className="text-xs text-muted-foreground">Aucune idée.</div>
           ) : (

@@ -117,7 +117,7 @@ function RevenueChart({ points }: { points: RevenuePoint[] }) {
       </div>
 
       <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <div className="text-3xl font-bold tracking-tight text-foreground">{formatEuro(total)}</div>
+        <div className="text-3xl font-semibold tracking-tight tabular-nums text-foreground">{formatEuro(total)}</div>
         {delta != null && (
           <span
             className={cn(
@@ -201,7 +201,7 @@ function CompareCard({ label, current, previous, delta, curLbl, prevLbl }: { lab
           </span>
         )}
       </div>
-      <div className="mt-2 text-2xl font-bold tracking-tight text-foreground">{current}</div>
+      <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{current}</div>
       <div className="mt-1 text-[11px] text-faint">
         {curLbl} · {prevLbl} : <span className="font-medium text-muted-foreground">{previous}</span>
       </div>

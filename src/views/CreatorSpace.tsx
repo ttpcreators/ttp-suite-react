@@ -214,7 +214,7 @@ function toNum(s?: string | null): number | null {
 function StatTile({ label, value, kind }: { label: string; value: number | null; kind: "int" | "pct" | "eur" }) {
   return (
     <div className="rounded-xl bg-panel p-4">
-      <div className="flex items-baseline text-[22px] font-bold tracking-tight text-foreground">
+      <div className="flex items-baseline text-[22px] font-semibold tracking-tight tabular-nums text-foreground">
         {value == null ? (
           <span>—</span>
         ) : (
@@ -1813,7 +1813,7 @@ export function CreatorSpace({
                           <div className="grid grid-cols-2 gap-3.5">
                             {/* Abonnés cumulés = somme de la dernière mesure de chaque plateforme */}
                             <div className="rounded-xl bg-panel p-4">
-                              <div className="text-[22px] font-bold tracking-tight text-foreground">
+                              <div className="text-[22px] font-semibold tracking-tight tabular-nums text-foreground">
                                 {totalFollowers > 0 ? (
                                   <NumberFlow value={totalFollowers} locales="fr-FR" />
                                 ) : toNum(creator?.followers) != null ? (
@@ -1914,7 +1914,7 @@ export function CreatorSpace({
                         <div className="text-sm font-semibold text-foreground">Évolution des abonnés</div>
                         <div className="mt-0.5 text-[11px] text-faint">D'après les mesures de ton agence</div>
                       </div>
-                      <div className="text-2xl font-bold tracking-tight text-foreground">{fmtCompact(followerSeries.lastTotal)}</div>
+                      <div className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">{fmtCompact(followerSeries.lastTotal)}</div>
                     </div>
                     {followerGlassGrid}
                   </div>
