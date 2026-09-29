@@ -166,11 +166,11 @@ export function Relances() {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-          <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Total impayé</div>
+          <div className="text-[11px] font-medium text-muted-foreground">Total impayé</div>
           <div className="mt-1.5 text-xl font-bold tracking-tight text-rose-500">{formatEuro(totalDue)}</div>
         </div>
         <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-          <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Factures à relancer</div>
+          <div className="text-[11px] font-medium text-muted-foreground">Factures à relancer</div>
           <div className="mt-1.5 text-xl font-bold tracking-tight text-foreground">{overdue.length}</div>
         </div>
       </div>

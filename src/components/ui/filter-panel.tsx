@@ -1,12 +1,12 @@
 import { cn } from "@/lib/utils";
-import { SlidersHorizontal, X } from "lucide-react";
+import { SlidersHorizontal, X, ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 /**
- * Panneau de filtres en carte (façon « task-filters » shadcn, porté natif TTP) :
- * en-tête avec titre + compteur de filtres actifs, groupes de pastilles labellisés
- * (Statut / Priorité / …), zone libre (`extra`) pour un sélecteur, et bouton
- * « Tout effacer ». Repliable sur mobile pour ne pas manger l'écran.
+ * Panneau de filtres dans le langage de l'Aperçu : panneau plat bordé, titre
+ * de section avec icône, groupes de pastilles avec libellé en minuscules, et
+ * pastille active NEUTRE (encre pleine, pas la couleur d'accent) : le bleu reste
+ * réservé aux actions. « Tout effacer » en pied. Repliable.
  *
  * Composant natif (tokens app, lucide-react) — pas de dépendances Radix.
  */
@@ -49,27 +49,14 @@ export function FilterPanel({
       : "Aucun filtre actif";
 
   return (
-    <section className={cn("rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5", className)}>
+    <section className={cn("rounded-2xl border border-border bg-surface px-5 py-4", className)}>
       {/* En-tête */}
-      <div className="flex items-start justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="flex min-w-0 items-center gap-2.5 text-left"
-          aria-expanded={open}
-        >
-          <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl transition-colors", activeCount > 0 ? "bg-primary/10 text-primary" : "bg-panel text-muted-foreground")}>
-            <SlidersHorizontal className="h-4 w-4" />
-          </span>
-          <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="flex items-center gap-1.5 text-[13px] font-bold text-foreground">
-              {title}
-              {activeCount > 0 && (
-                <span className="grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">{activeCount}</span>
-              )}
-            </span>
-            <span className="truncate text-[11px] text-muted-foreground">{activeLabel}</span>
-          </span>
+      <div className="flex items-center justify-between gap-3">
+        <button type="button" onClick={() => setOpen((v) => !v)} className="flex min-w-0 items-center gap-2 text-left" aria-expanded={open}>
+          <SlidersHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="text-[14px] font-semibold text-foreground">{title}</span>
+          <span className={cn("truncate text-[12px]", activeCount > 0 ? "text-foreground" : "text-muted-foreground")}>· {activeLabel}</span>
+          <ChevronDown className={cn("h-4 w-4 shrink-0 text-faint transition-transform", open && "rotate-180")} />
         </button>
         {right && <div className="shrink-0">{right}</div>}
       </div>
@@ -80,7 +67,7 @@ export function FilterPanel({
           <div className={cn("mt-4 grid gap-4", groups.length > 1 && "sm:grid-cols-2")}>
             {groups.map((g) => (
               <div key={g.id} className="flex flex-col gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">{g.label}</span>
+                <span className="text-[12px] font-medium text-muted-foreground">{g.label}</span>
                 <div className="flex flex-wrap gap-1.5">
                   {g.options.map((o) => {
                     const active = g.value === o.value;
@@ -89,16 +76,17 @@ export function FilterPanel({
                         key={o.value}
                         type="button"
                         onClick={() => g.onChange(o.value)}
+                        aria-pressed={active}
                         className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                          "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors",
                           active
-                            ? "bg-primary text-primary-foreground"
-                            : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
                         )}
                       >
                         {o.label}
                         {o.count != null && (
-                          <span className={cn("rounded-full px-1.5 text-[9px] font-bold leading-4", active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-panel text-faint")}>{o.count}</span>
+                          <span className={cn("tabular-nums", active ? "text-background/70" : "text-faint")}>{o.count}</span>
                         )}
                       </button>
                     );
@@ -112,19 +100,15 @@ export function FilterPanel({
 
           {/* Tout effacer */}
           {activeCount > 0 && onClear && (
-            <>
-              <div className="mt-4 h-px w-full bg-border" />
-              <div className="mt-3 flex items-center justify-between gap-2">
-                <span className="text-[11px] text-muted-foreground">{activeLabel}</span>
-                <button
-                  type="button"
-                  onClick={onClear}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" /> Tout effacer
-                </button>
-              </div>
-            </>
+            <div className="mt-4 flex items-center justify-end border-t border-border pt-3">
+              <button
+                type="button"
+                onClick={onClear}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+              >
+                <X className="h-3.5 w-3.5" /> Tout effacer
+              </button>
+            </div>
           )}
         </>
       )}

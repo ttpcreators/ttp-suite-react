@@ -248,7 +248,7 @@ export function Mails() {
                   onClick={() => setTagFilter(o.value)}
                   className={cn(
                     "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors",
-                    tagFilter === o.value ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground",
+                    tagFilter === o.value ? "bg-foreground text-background" : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground",
                   )}
                 >
                   {o.label}
@@ -299,7 +299,7 @@ export function Mails() {
                     <div className="truncate text-[11px] text-faint">{c.email}</div>
                   </div>
                   {c.tag && c.tag.toLowerCase() !== "perso" && (
-                    <span className="ml-1 shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground">{c.tag}</span>
+                    <span className="ml-1 shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{c.tag}</span>
                   )}
                 </button>
               ))
@@ -334,7 +334,7 @@ export function Mails() {
                 <button
                   type="button"
                   onClick={() => setComposerOpen(true)}
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                 >
                   <PenLine className="h-3.5 w-3.5" /> Nouveau mail
                 </button>
@@ -477,7 +477,7 @@ export function Mails() {
                   type="button"
                   onClick={sendReply}
                   disabled={replySending || !replyText.trim()}
-                  className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   <Send className="h-3.5 w-3.5" /> {replySending ? "Envoi…" : "Répondre"}
                 </button>

@@ -232,7 +232,7 @@ export function Parametres() {
                 onClick={() => chooseDarkStyle(v)}
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                  darkStyle === v ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  darkStyle === v ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 {label}
@@ -326,7 +326,7 @@ export function Parametres() {
                   onClick={() => void saveProspect({ waMode: v })}
                   className={cn(
                     "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                    waMode === v ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                    waMode === v ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {label}
@@ -345,7 +345,7 @@ export function Parametres() {
       >
         <div className="flex flex-col gap-5">
           <div>
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-faint">Ce que reçoit un créateur (quand tu agis)</div>
+            <div className="mb-2 text-[12px] font-medium text-muted-foreground">Ce que reçoit un créateur (quand tu agis)</div>
             <div className="flex flex-col gap-3">
               {NOTIF_TEXTS_CREATOR.map((f) => (
                 <NotifTextRow key={f.key} field={f} value={texts[f.key] ?? ""} onChange={(v) => setTexts((t) => ({ ...t, [f.key]: v }))} onSave={() => saveText(f.key, texts[f.key] ?? "")} />
@@ -353,7 +353,7 @@ export function Parametres() {
             </div>
           </div>
           <div>
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-faint">Ce que TU reçois (quand un créateur agit)</div>
+            <div className="mb-2 text-[12px] font-medium text-muted-foreground">Ce que TU reçois (quand un créateur agit)</div>
             <div className="flex flex-col gap-3">
               {NOTIF_TEXTS_AGENCY.map((f) => (
                 <NotifTextRow key={f.key} field={f} value={texts[f.key] ?? ""} onChange={(v) => setTexts((t) => ({ ...t, [f.key]: v }))} onSave={() => saveText(f.key, texts[f.key] ?? "")} />
@@ -379,7 +379,7 @@ export function Parametres() {
                 type="button"
                 onClick={runTest}
                 disabled={testing}
-                className="rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+                className="rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
               >
                 {testing ? "Envoi…" : "Envoyer un test"}
               </button>
@@ -387,7 +387,7 @@ export function Parametres() {
                 type="button"
                 onClick={disable}
                 disabled={busy}
-                className="rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+                className="rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
               >
                 Désactiver
               </button>
@@ -414,7 +414,7 @@ export function Parametres() {
               if (!ok && Notification.permission === "granted") toast("Activation échouée — réessaie");
             }}
             disabled={busy}
-            className="my-1 flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="my-1 flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <BellRing className="h-3.5 w-3.5" /> {busy ? "Activation…" : "Activer sur cet appareil"}
           </button>
@@ -582,7 +582,7 @@ export function Parametres() {
         <button
           type="button"
           onClick={() => supabase.auth.signOut()}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#E5484D] transition-colors hover:bg-rowhover"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-[12px] font-medium text-[#E5484D] transition-colors hover:bg-rowhover"
         >
           <LogOut className="h-3.5 w-3.5" /> Se déconnecter
         </button>

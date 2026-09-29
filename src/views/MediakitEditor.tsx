@@ -109,7 +109,7 @@ const PLATFORM_OPTIONS = [
 const platLabel = (k: string) => PLATFORM_OPTIONS.find((p) => p.key === k)?.label ?? titleCase(k);
 
 const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15";
-const LBL = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-faint";
+const LBL = "mb-1 block text-[12px] font-medium text-muted-foreground";
 const CARD = "rounded-2xl border border-border bg-surface p-4 shadow-sm";
 
 function slugify(s: string): string {
@@ -300,7 +300,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 href={publicUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
               >
                 <ExternalLink className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Voir le media kit</span>
               </a>
@@ -310,7 +310,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 href={`${publicUrl}ugc/`}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
               >
                 <Sparkles className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Voir le kit UGC</span>
               </a>
@@ -319,7 +319,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
               type="button"
               onClick={save}
               disabled={saving || loading || loadError || loadedId !== selId}
-              className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               <Save className="h-3.5 w-3.5" /> {saving ? "Enregistrement…" : "Enregistrer"}
             </button>
@@ -347,7 +347,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
           <button
             type="button"
             onClick={() => setReloadKey((k) => k + 1)}
-            className="mt-3 rounded-xl bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+            className="mt-3 rounded-xl bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             Réessayer
           </button>
@@ -520,7 +520,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
               <button
                 type="button"
                 onClick={importFromCalculator}
-                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
               >
                 <Wand2 className="h-3.5 w-3.5" /> Importer followers + ER (calculateur)
               </button>
@@ -540,7 +540,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
               <button
                 type="button"
                 onClick={() => setPlatforms([...(mk.platforms ?? []), { key: "instagram" }])}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border px-3 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
               >
                 <Plus className="h-3.5 w-3.5" /> Ajouter une plateforme
               </button>
@@ -583,7 +583,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
             <button
               type="button"
               onClick={() => setBrands([...(mk.brands ?? []), { name: "" }])}
-              className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
               <Plus className="h-3.5 w-3.5" /> Ajouter une marque
             </button>
@@ -610,7 +610,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 type="button"
                 onClick={() => patchUgc({ enabled: !ugc.enabled })}
                 className={cn(
-                  "flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                  "flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-[12px] font-medium transition-colors",
                   ugc.enabled ? "bg-signalsoft text-signaltext" : "border border-border text-muted-foreground hover:bg-rowhover",
                 )}
               >
@@ -767,7 +767,7 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (t: string[])
         <button
           type="button"
           onClick={() => onChange([...tags, ""])}
-          className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+          className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
         >
           <Plus className="h-3.5 w-3.5" /> Ajouter une étiquette
         </button>
@@ -820,7 +820,7 @@ function PctList({
         <button
           type="button"
           onClick={() => onChange([...rows, { label: "", pct: "" }])}
-          className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+          className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
         >
           <Plus className="h-3.5 w-3.5" /> Ajouter une ligne
         </button>
@@ -863,7 +863,7 @@ function CountryList({ rows, onChange, title = "Localisation (pays)", placeholde
         <button
           type="button"
           onClick={() => onChange([...rows, { name: "", pct: "" }])}
-          className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+          className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
         >
           <Plus className="h-3.5 w-3.5" /> Ajouter une ligne
         </button>

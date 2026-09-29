@@ -6,6 +6,7 @@ import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn } from "@/lib/utils";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 type Template = { category: string; title: string; body: string };
 
@@ -177,14 +178,12 @@ export function Templates() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Bibliothèque de modèles réutilisables. Variables :{" "}
-          <code className="rounded bg-rowhover px-1 py-0.5 text-xs text-foreground">{"{marque}"}</code>{" "}
-          <code className="rounded bg-rowhover px-1 py-0.5 text-xs text-foreground">{"{créateur}"}</code>
-        </p>
-        {!showForm && <AddButton label="Template" onClick={() => setShowForm(true)} />}
-      </div>
+      <PageHeaderRow>{!showForm && <AddButton label="Template" onClick={() => setShowForm(true)} />}</PageHeaderRow>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Bibliothèque de modèles réutilisables. Variables :{" "}
+        <code className="rounded bg-rowhover px-1 py-0.5 text-xs text-foreground">{"{marque}"}</code>{" "}
+        <code className="rounded bg-rowhover px-1 py-0.5 text-xs text-foreground">{"{créateur}"}</code>
+      </p>
 
       <InlineForm
         open={showForm}
@@ -215,9 +214,9 @@ export function Templates() {
               type="button"
               onClick={() => setActiveCategory("Tous")}
               className={cn(
-                "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors",
                 activeCategory === "Tous"
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-foreground text-background"
                   : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
               )}
             >
@@ -229,9 +228,9 @@ export function Templates() {
                 type="button"
                 onClick={() => setActiveCategory(cat)}
                 className={cn(
-                  "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                  "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors",
                   activeCategory === cat
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-foreground text-background"
                     : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
                 )}
               >
@@ -257,8 +256,8 @@ export function Templates() {
                 onClick={() => setViewT(m)}
                 title={label}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-                  viewT === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
+                  "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors",
+                  viewT === m ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
                 )}
               >
                 <Icon className="h-3.5 w-3.5" />
@@ -307,7 +306,7 @@ export function Templates() {
                         <h3 className="text-sm font-semibold text-foreground">{t.title}</h3>
                         <span
                           className={cn(
-                            "shrink-0 rounded-full bg-rowhover px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide",
+                            "shrink-0 rounded-full bg-rowhover px-2.5 py-1 text-[11px] font-medium",
                             CATEGORY_TONE[t.category] ?? "text-muted-foreground",
                           )}
                         >
@@ -322,14 +321,14 @@ export function Templates() {
                         <button
                           type="button"
                           onClick={() => setPreview(t)}
-                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border py-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                         >
                           <Eye className="h-3.5 w-3.5" /> Voir
                         </button>
                         <button
                           type="button"
                           onClick={() => copy(t.body)}
-                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-foreground py-2.5 text-[10px] font-semibold uppercase tracking-wide text-background transition-opacity hover:opacity-90"
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-foreground py-2.5 text-[12px] font-medium text-background transition-opacity hover:opacity-90"
                         >
                           <Copy className="h-3.5 w-3.5" /> Copier
                         </button>
@@ -354,7 +353,7 @@ export function Templates() {
                       </div>
                       <span
                         className={cn(
-                          "hidden shrink-0 rounded-full bg-rowhover px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide sm:inline",
+                          "hidden shrink-0 rounded-full bg-rowhover px-2.5 py-1 text-[11px] font-medium sm:inline",
                           CATEGORY_TONE[t.category] ?? "text-muted-foreground",
                         )}
                       >
@@ -392,7 +391,7 @@ export function Templates() {
             <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
               <div className="min-w-0">
                 <div className="truncate text-base font-semibold text-foreground">{preview.title}</div>
-                <div className="mt-0.5 text-[11px] uppercase tracking-wide text-faint">{preview.category}</div>
+                <div className="mt-0.5 text-[12px] text-muted-foreground">{preview.category}</div>
               </div>
               <button
                 type="button"
@@ -409,7 +408,7 @@ export function Templates() {
               <button
                 type="button"
                 onClick={() => copy(preview.body)}
-                className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
               >
                 <Copy className="h-3.5 w-3.5" /> Copier le message
               </button>

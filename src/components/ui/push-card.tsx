@@ -57,7 +57,7 @@ export function PushCard() {
           <button type="button" onClick={() => setHelpOpen(true)} className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground">
             <HelpCircle className="h-3.5 w-3.5" /> Comment ça marche ?
           </button>
-          <button type="button" onClick={() => setActOpen(true)} className="rounded-lg bg-primary px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
+          <button type="button" onClick={() => setActOpen(true)} className="rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
             {enabled ? "Gérer" : "Activer"}
           </button>
         </div>
@@ -84,7 +84,7 @@ export function PushCard() {
         {enabled && (
           <div className="mt-4 flex items-center justify-between gap-2 rounded-lg bg-panel/50 px-3 py-2.5">
             <span className="text-[12px] font-medium text-emerald-600 dark:text-emerald-400">✓ Activées sur ce téléphone</span>
-            <button type="button" onClick={disable} disabled={busy} className="text-[10px] font-semibold uppercase tracking-wide text-faint transition-colors hover:text-foreground disabled:opacity-50">
+            <button type="button" onClick={disable} disabled={busy} className="text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50">
               Désactiver
             </button>
           </div>

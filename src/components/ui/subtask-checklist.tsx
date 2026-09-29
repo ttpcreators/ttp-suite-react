@@ -48,7 +48,7 @@ export function SubtaskChecklist({
         className="flex w-full items-center gap-2 px-3 py-2 text-left"
       >
         <ListChecks className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</span>
+        <span className="text-[12px] font-medium text-muted-foreground">{label}</span>
         {subs.length > 0 && (
           <>
             <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">{done}/{subs.length}</span>

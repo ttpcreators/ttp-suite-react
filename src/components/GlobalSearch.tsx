@@ -127,7 +127,7 @@ export function GlobalSearch({
               <>
                 {pageHits.length > 0 && (
                   <>
-                    <div className="px-3 pb-1 pt-1 text-[9px] font-semibold uppercase tracking-wide text-faint">Pages</div>
+                    <div className="px-3 pb-1 pt-1 text-[11px] font-medium text-muted-foreground">Pages</div>
                     {pageHits.map((p) => (
                       <button
                         key={`pg-${p.id}`}

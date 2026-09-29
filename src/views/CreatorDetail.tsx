@@ -325,7 +325,7 @@ export function CreatorDetail({
 
   const field = (label: string, key: keyof Coord, type?: string) => (
     <div>
-      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</div>
+      <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">{label}</div>
       <input
         type={type}
         value={form[key] ?? ""}
@@ -341,7 +341,7 @@ export function CreatorDetail({
     return (
       <div className="flex items-center justify-between gap-3 rounded-lg bg-panel px-3 py-2.5">
         <div className="min-w-0">
-          <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</div>
+          <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
           <div className="truncate text-sm">{v || "—"}</div>
         </div>
         {v && (
@@ -363,7 +363,7 @@ export function CreatorDetail({
 
   const stat = (label: string, val: string | null, sub?: string) => (
     <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
-      <div className="text-[9px] font-semibold uppercase tracking-wider text-faint">{label}</div>
+      <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
       <div className="mt-2 whitespace-nowrap text-2xl font-bold tracking-tight">{val || "—"}</div>
       {sub && <div className="mt-1 truncate text-[10px] text-faint">{sub}</div>}
     </div>
@@ -429,7 +429,7 @@ export function CreatorDetail({
     <div>
       <button
         onClick={onBack}
-        className="mb-4 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint transition-colors hover:text-foreground"
+        className="mb-4 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Roster
       </button>
@@ -531,7 +531,7 @@ export function CreatorDetail({
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">{p.label}</span>
+                    <span className="text-[12px] font-medium text-muted-foreground">{p.label}</span>
                     {p.entry && <span className="shrink-0 text-[9px] text-faint">au {p.entry.date}</span>}
                   </div>
                   <div className="mt-0.5 flex items-baseline gap-3">
@@ -580,7 +580,7 @@ export function CreatorDetail({
                 <button
                   type="button"
                   onClick={save}
-                  className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                  className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                 >
                   <Check className="h-3.5 w-3.5" /> Enregistrer
                 </button>
@@ -597,7 +597,7 @@ export function CreatorDetail({
               <button
                 type="button"
                 onClick={() => setEditing(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
               >
                 <Pencil className="h-3.5 w-3.5" /> Modifier
               </button>
@@ -653,7 +653,7 @@ export function CreatorDetail({
             <button
               type="button"
               onClick={copyAll}
-              className="mt-3 flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className="mt-3 flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
               <Copy className="h-3.5 w-3.5" /> Copier toutes les infos
             </button>
@@ -669,7 +669,7 @@ export function CreatorDetail({
             <button
               type="button"
               onClick={openCtEdit}
-              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
               <Pencil className="h-3.5 w-3.5" /> {contractEnd ? "Modifier" : "Définir"}
             </button>
@@ -680,7 +680,7 @@ export function CreatorDetail({
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div>
-                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Date de début</div>
+                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Date de début</div>
                 <input
                   type="date"
                   value={ctStart}
@@ -689,7 +689,7 @@ export function CreatorDetail({
                 />
               </div>
               <div>
-                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Durée (mois)</div>
+                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Durée (mois)</div>
                 <input
                   type="number"
                   value={ctMonths}
@@ -698,7 +698,7 @@ export function CreatorDetail({
                 />
               </div>
               <div>
-                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Type</div>
+                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Type</div>
                 <input
                   value={ctType}
                   onChange={(e) => setCtType(e.target.value)}
@@ -711,7 +711,7 @@ export function CreatorDetail({
               <button
                 type="button"
                 onClick={saveContract}
-                className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
               >
                 <Check className="h-3.5 w-3.5" /> Enregistrer
               </button>
@@ -729,11 +729,11 @@ export function CreatorDetail({
         ) : contractEnd ? (
           <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
             <div>
-              <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Se termine le</div>
+              <div className="text-[11px] font-medium text-muted-foreground">Se termine le</div>
               <div className="mt-0.5 text-2xl font-bold tracking-tight">{frDateShort(contractEnd)}</div>
             </div>
             <div>
-              <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Échéance</div>
+              <div className="text-[11px] font-medium text-muted-foreground">Échéance</div>
               <div
                 className={
                   "mt-0.5 text-sm font-semibold " +
@@ -755,7 +755,7 @@ export function CreatorDetail({
             </div>
             {contractType && (
               <div>
-                <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Type</div>
+                <div className="text-[11px] font-medium text-muted-foreground">Type</div>
                 <div className="mt-0.5 text-sm font-semibold capitalize">{contractType}</div>
               </div>
             )}

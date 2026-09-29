@@ -13,6 +13,7 @@ import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type App
 import { maybeAutoRun } from "@/lib/diagnostics";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { PageFrame } from "@/components/ui/page-header";
 import { Login } from "@/components/Login";
 import { NAV, findItem, type NavItem, type ViewId } from "@/lib/nav";
 import { NavSubContext } from "@/lib/navSub";
@@ -751,10 +752,7 @@ export default function App() {
                 <main className="px-4 pt-5 md:px-6">
                   <ErrorBoundary variant="inline" label="Cette page" resetKey={`${space}:${detailCreator ?? ""}:${active}`}>
                     <Suspense fallback={PANE_FALLBACK}>
-                      {showPrimaryH1 && (
-                        <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">{title}</h1>
-                      )}
-                      {mainInner}
+                      {showPrimaryH1 ? <PageFrame title={title}>{mainInner}</PageFrame> : mainInner}
                     </Suspense>
                   </ErrorBoundary>
                 </main>
@@ -802,10 +800,13 @@ export default function App() {
                             <ErrorBoundary variant="inline" label="Cette page" resetKey={`tab:${id}`}>
                               <Suspense fallback={PANE_FALLBACK}>
                                 <NavSubContext.Provider value={id === active ? sub : null}>
-                                  {id !== "apercu" && (
-                                    <h1 className="mb-5 text-[26px] font-semibold tracking-tight md:text-[30px]">{tabTitle}</h1>
+                                  {id !== "apercu" ? (
+                                    <PageFrame title={tabTitle}>
+                                      <ViewContent active={id} onOpenCreator={openDetail} />
+                                    </PageFrame>
+                                  ) : (
+                                    <ViewContent active={id} onOpenCreator={openDetail} />
                                   )}
-                                  <ViewContent active={id} onOpenCreator={openDetail} />
                                 </NavSubContext.Provider>
                               </Suspense>
                             </ErrorBoundary>
@@ -851,7 +852,7 @@ export default function App() {
               style={{ top: ctxMenu.y, left: ctxMenu.x }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="truncate px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-faint">
+              <div className="truncate px-3 py-1.5 text-[12px] font-medium text-muted-foreground">
                 {findItem(ctxMenu.id)?.label}
               </div>
               <button

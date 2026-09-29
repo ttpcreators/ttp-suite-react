@@ -13,6 +13,7 @@ import { getCache, setCache } from "@/lib/viewCache";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import GlassStatChart from "@/components/ui/glass-stat-chart";
 import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus } from "lucide-react";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 /**
  * VIVIER créateurs (hors roster) : répertoire de créateurs à SOLLICITER pour des
@@ -219,19 +220,19 @@ export function Vivier() {
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
           {filtered.length} créateur{filtered.length > 1 ? "s" : ""}
           {(tagFilter !== ALL || contactFilter !== "all" || query.trim()) && <span className="text-faint"> / {rows.length}</span>}
         </div>
         <AddButton label="Créateur" onClick={openAdd} />
-      </div>
+      </PageHeaderRow>
 
       {/* Filtre par niche */}
       {tagList.length > 0 && (
         <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {[{ value: ALL, label: "Tous" }, ...tagList.map((t) => ({ value: t, label: t }))].map((o) => (
-            <button key={o.value} type="button" onClick={() => setTagFilter(o.value)} className={cn("shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors", tagFilter === o.value ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+            <button key={o.value} type="button" onClick={() => setTagFilter(o.value)} className={cn("shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors", tagFilter === o.value ? "bg-foreground text-background" : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
               {o.label}
             </button>
           ))}
@@ -299,7 +300,7 @@ export function Vivier() {
                   )}
                 </div>
               )}
-              <span className={cn("hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide sm:inline-flex", statusMeta(statusOf(r.id)).pill)}>
+              <span className={cn("hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-medium sm:inline-flex", statusMeta(statusOf(r.id)).pill)}>
                 <span className={cn("h-1.5 w-1.5 rounded-full", statusMeta(statusOf(r.id)).dot)} />{statusMeta(statusOf(r.id)).label}
               </span>
               {r.email && (
@@ -331,7 +332,7 @@ export function Vivier() {
                   <span className="truncate text-base font-bold text-foreground">{selected.name}</span>
                   {selected.last_contacted && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà contacté" />}
                 </div>
-                {selected.tag && <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{selected.tag}</div>}
+                {selected.tag && <div className="mt-0.5 text-[12px] font-medium text-muted-foreground">{selected.tag}</div>}
               </div>
               <button type="button" onClick={() => setSelected(null)} className="shrink-0 text-faint transition-colors hover:text-foreground"><X className="h-5 w-5" /></button>
             </div>
@@ -358,12 +359,12 @@ export function Vivier() {
 
             {/* Statut de scouting */}
             <div className="mt-4 border-t border-border pt-4">
-              <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-faint">Statut de scouting</div>
+              <div className="mb-2 text-[12px] font-medium text-muted-foreground">Statut de scouting</div>
               <div className="flex flex-wrap gap-1.5">
                 {STATUSES.map((s) => {
                   const active = statusOf(selected.id) === s.v;
                   return (
-                    <button key={s.v} type="button" onClick={() => setStatus(selected.id, s.v)} className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors", active ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:bg-rowhover")}>
+                    <button key={s.v} type="button" onClick={() => setStatus(selected.id, s.v)} className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors", active ? "bg-foreground text-background" : "border border-border text-muted-foreground hover:bg-rowhover")}>
                       <span className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-primary-foreground" : s.dot)} />{s.label}
                     </button>
                   );
@@ -374,7 +375,7 @@ export function Vivier() {
             {/* Suivi des abonnés */}
             <div className="mt-4">
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Évolution des abonnés</span>
+                <span className="text-[12px] font-medium text-muted-foreground">Évolution des abonnés</span>
                 {growthOf(selected.id) !== 0 && (
                   <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-semibold", growthOf(selected.id) >= 0 ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/12 text-rose-500")}>
                     {growthOf(selected.id) >= 0 ? "+" : "−"}{fmtCompact(Math.abs(growthOf(selected.id)))} depuis le relevé précédent

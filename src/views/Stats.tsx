@@ -107,7 +107,7 @@ function RevenueChart({ points }: { points: RevenuePoint[] }) {
               onClick={() => setPeriod(p.k)}
               className={cn(
                 "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
-                period === p.k ? "bg-primary text-primary-foreground" : "text-faint hover:text-foreground",
+                period === p.k ? "bg-foreground text-background" : "text-faint hover:text-foreground",
               )}
             >
               {p.label}
@@ -187,7 +187,7 @@ function CompareCard({ label, current, previous, delta, curLbl, prevLbl }: { lab
   return (
     <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</div>
+        <div className="text-[12px] font-medium text-muted-foreground">{label}</div>
         {delta != null && (
           <span
             className={
@@ -493,7 +493,7 @@ export function Stats() {
                   key={n}
                   type="button"
                   onClick={() => setCmpMonths(n)}
-                  className={cn("rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors", cmpMonths === n ? "bg-primary text-primary-foreground" : "text-faint hover:text-foreground")}
+                  className={cn("rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors", cmpMonths === n ? "bg-foreground text-background" : "text-faint hover:text-foreground")}
                 >
                   {n === 1 ? "1 mois" : `${n} mois`}
                 </button>
@@ -510,7 +510,7 @@ export function Stats() {
                   key={k}
                   type="button"
                   onClick={() => setCmpAgainst(k)}
-                  className={cn("rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors", cmpAgainst === k ? "bg-primary text-primary-foreground" : "text-faint hover:text-foreground")}
+                  className={cn("rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors", cmpAgainst === k ? "bg-foreground text-background" : "text-faint hover:text-foreground")}
                 >
                   {lbl}
                 </button>
@@ -597,7 +597,7 @@ export function Stats() {
                   </PieChart>
                 </ChartContainer>
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                  <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Total</div>
+                  <div className="text-[11px] font-medium text-muted-foreground">Total</div>
                   <div className="text-lg font-bold tracking-tight text-foreground">{formatEuro(totalCA)}</div>
                 </div>
               </div>

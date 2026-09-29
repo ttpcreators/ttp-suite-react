@@ -6,6 +6,7 @@ import { useCreators } from "@/lib/useCreators";
 import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 /**
  * Alertes d'échéance de contrats : on enregistre les contrats actifs (créateur,
@@ -184,7 +185,7 @@ export function Echeances() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <CalendarClock className="h-4 w-4 text-faint" />
           <span className="font-semibold text-foreground">{list.length}</span>
@@ -196,14 +197,14 @@ export function Echeances() {
             onClick={syncFromContracts}
             disabled={syncing}
             title="Créer les échéances manquantes depuis les contrats déjà enregistrés"
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
           >
             <RefreshCw className={"h-3.5 w-3.5" + (syncing ? " animate-spin" : "")} />
             <span className="hidden sm:inline">{syncing ? "Synchro…" : "Synchroniser"}</span>
           </button>
           <AddButton label="Ajouter un contrat" onClick={openAdd} />
         </div>
-      </div>
+      </PageHeaderRow>
 
       <InlineForm
         open={formOpen}
@@ -235,7 +236,7 @@ export function Echeances() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-sm font-semibold text-foreground">{titleCase(d.creator)}</span>
-                    <span className="rounded-md bg-rowhover px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{d.type}</span>
+                    <span className="rounded-md bg-rowhover px-2 py-0.5 text-[12px] font-medium text-muted-foreground">{d.type}</span>
                   </div>
                   <div className="mt-1 text-[11px] text-faint">
                     {frDate(new Date(d.start.replace(/-/g, "/")))} → {end ? frDate(end) : "—"} · {d.months} mois

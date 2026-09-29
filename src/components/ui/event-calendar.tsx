@@ -309,7 +309,7 @@ export function EventCalendar({
           <button
             type="button"
             onClick={goToday}
-            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
           >
             Aujourd'hui
           </button>
@@ -335,9 +335,9 @@ export function EventCalendar({
                 setView(v);
               }}
               className={cn(
-                "rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                "rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors",
                 view === v
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-foreground text-background"
                   : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
               )}
             >
@@ -432,7 +432,7 @@ function MonthView({
     <div className="overflow-x-auto overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
       <div className="grid min-w-[320px] grid-cols-7 border-b border-border bg-panel sm:min-w-0">
         {DAYS_FR.map((d) => (
-          <div key={d} className="px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-faint">
+          <div key={d} className="px-2 py-2 text-center text-[12px] font-medium text-muted-foreground">
             {d}
           </div>
         ))}
@@ -546,7 +546,7 @@ function WeekView({
                 isToday && "bg-primary/10",
               )}
             >
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">{DAYS_FR[i]}</span>
+              <span className="text-[12px] font-medium text-muted-foreground">{DAYS_FR[i]}</span>
               <span className={cn("text-sm font-semibold tabular-nums", isToday ? "text-primary" : "text-foreground")}>
                 {d.getDate()}
               </span>
@@ -635,7 +635,7 @@ function ListView({ events, onEventClick }: { events: Ev[]; onEventClick: (e: Ev
       ) : (
         groups.map(([date, evs]) => (
         <div key={date} className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-          <div className="border-b border-border bg-panel px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-faint">
+          <div className="border-b border-border bg-panel px-4 py-2 text-[12px] font-medium text-muted-foreground">
             {formatListDay(date)}
           </div>
           <div>
@@ -763,7 +763,7 @@ function EventModal({
             <button
               type="button"
               onClick={() => setShowConfirm(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#E5484D] transition-colors hover:bg-rowhover"
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-[#E5484D] transition-colors hover:bg-rowhover"
             >
               <Trash2 className="h-3.5 w-3.5" /> Supprimer
             </button>
@@ -774,14 +774,14 @@ function EventModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-border bg-surface px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className="rounded-lg border border-border bg-surface px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
               Annuler
             </button>
             <button
               type="submit"
               disabled={!canSave}
-              className="rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               Enregistrer
             </button>

@@ -43,9 +43,9 @@ export function FilterBar({
             type="button"
             onClick={() => onChange(o.value)}
             className={cn(
-              "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+              "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors",
               value === o.value
-                ? "bg-primary text-primary-foreground"
+                ? "bg-foreground text-background"
                 : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
             )}
           >

@@ -23,6 +23,7 @@ import { DebriefCalculator, ShotStrip, useShotUrls, resolveShots, type CalcState
 import { printHtml } from "@/lib/printPdf";
 import { pdfShell, pdfHeading, pdfMeta, pdfSection, pdfKpis, pdfTicks, pdfShots } from "@/lib/pdfDoc";
 import { totalsOf as engTotals, parseNum as engParse, fmtCompact, fmtPct } from "@/lib/engagement";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 /** Une petite statistique de campagne (label / valeur). */
 type Kpi = { l: string; v: string };
@@ -497,7 +498,7 @@ export function Debrief() {
   return (
     <div className="space-y-4">
       {/* En-tête : résumé + action */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {loading ? (
             <AnimatedBadge status="loading" size="sm">
@@ -526,9 +527,9 @@ export function Debrief() {
                   onClick={() => setView(v)}
                   title={label}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                    "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors",
                     view === v
-                      ? "bg-primary text-primary-foreground"
+                      ? "bg-foreground text-background"
                       : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
                   )}
                 >
@@ -540,7 +541,7 @@ export function Debrief() {
           )}
           <AddButton label="Debrief" onClick={openCreate} />
         </div>
-      </div>
+      </PageHeaderRow>
 
       {/* Synthèse (bento) */}
       {list.length > 0 && (() => {
@@ -628,7 +629,7 @@ export function Debrief() {
           }}
         />
         <label className="flex min-w-full flex-col gap-1.5">
-          <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Points forts (un par ligne)</span>
+          <span className="text-[11px] font-medium text-muted-foreground">Points forts (un par ligne)</span>
           <textarea
             value={highlightsText}
             onChange={(e) => setHighlightsText(e.target.value)}
@@ -657,7 +658,7 @@ export function Debrief() {
                 <button
                   type="button"
                   onClick={() => createFromBrief(b)}
-                  className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                  className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                 >
                   Créer le débrief
                 </button>
@@ -705,7 +706,7 @@ export function Debrief() {
                     <div className="mt-0.5 text-[11px] text-faint">{d.period}</div>
                   )}
                 </div>
-                <span className="shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-signaltext">
+                <span className="shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext">
                   ROI {d.roi}
                 </span>
               </div>
@@ -739,7 +740,7 @@ export function Debrief() {
                 <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {d.kpis.map((k, i) => (
                     <div key={i} className="rounded-xl bg-panel px-3 py-2.5">
-                      <div className="text-[8px] font-semibold uppercase tracking-wide text-faint">
+                      <div className="text-[10px] font-medium text-muted-foreground">
                         {k.l}
                       </div>
                       <div className="mt-1 text-lg font-bold leading-none tracking-tight text-foreground">
@@ -780,7 +781,7 @@ export function Debrief() {
                   </span>
                 </div>
               </div>
-              <span className="hidden shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-signaltext sm:inline">
+              <span className="hidden shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext sm:inline">
                 ROI {d.roi}
               </span>
               <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>{actions(d, index)}</div>
@@ -791,7 +792,7 @@ export function Debrief() {
         <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
           <table className="w-full min-w-[640px] border-collapse text-left">
             <thead>
-              <tr className="border-b border-border bg-panel text-[10px] font-semibold uppercase tracking-wide text-faint">
+              <tr className="border-b border-border bg-panel text-[12px] font-medium text-muted-foreground">
                 <th className="px-4 py-3">Campagne</th>
                 <th className="px-4 py-3">Créateur</th>
                 <th className="px-4 py-3">Période</th>
@@ -844,29 +845,29 @@ export function Debrief() {
             <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="flex flex-col gap-1">
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Email de la marque</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">Email de la marque</span>
                   <input value={shareTo} onChange={(e) => setShareTo(e.target.value)} type="email" placeholder="contact@marque.com" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Objet</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">Objet</span>
                   <input value={shareSubject} onChange={(e) => setShareSubject(e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" />
                 </label>
               </div>
               <div>
-                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Aperçu (ce que reçoit la marque)</div>
+                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Aperçu (ce que reçoit la marque)</div>
                 <iframe title="Aperçu debrief" srcDoc={debriefHTML(shareD, shareShotUrls)} sandbox="" className="h-[44vh] w-full rounded-lg border border-border bg-white" />
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3.5">
               <div className="inline-flex overflow-hidden rounded-lg border border-border">
-                <button type="button" onClick={() => setShareVia("gmail")} className={cn("px-3 py-1.5 text-[11px] font-semibold transition-colors", shareVia === "gmail" ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-rowhover")}>Gmail</button>
-                <button type="button" onClick={() => setShareVia("resend")} className={cn("border-l border-border px-3 py-1.5 text-[11px] font-semibold transition-colors", shareVia === "resend" ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-rowhover")}>Resend</button>
+                <button type="button" onClick={() => setShareVia("gmail")} className={cn("px-3 py-1.5 text-[11px] font-semibold transition-colors", shareVia === "gmail" ? "bg-foreground text-background" : "bg-surface text-muted-foreground hover:bg-rowhover")}>Gmail</button>
+                <button type="button" onClick={() => setShareVia("resend")} className={cn("border-l border-border px-3 py-1.5 text-[11px] font-semibold transition-colors", shareVia === "resend" ? "bg-foreground text-background" : "bg-surface text-muted-foreground hover:bg-rowhover")}>Resend</button>
               </div>
               <div className="flex gap-2">
-                <button type="button" onClick={() => printDebrief(shareD)} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover">
+                <button type="button" onClick={() => printDebrief(shareD)} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
                   <FileText className="h-3.5 w-3.5" /> PDF
                 </button>
-                <button type="button" onClick={sendDebriefEmail} disabled={shareSending} className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+                <button type="button" onClick={sendDebriefEmail} disabled={shareSending} className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
                   <Send className="h-3.5 w-3.5" /> {shareSending ? "Envoi…" : "Envoyer"}
                 </button>
               </div>
@@ -934,7 +935,7 @@ function DebriefDetail({
           </div>
           <div className="flex items-center gap-2">
             {d.roi && d.roi !== "—" && (
-              <span className="shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-signaltext">
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext">
                 ROI {d.roi}
               </span>
             )}
@@ -960,7 +961,7 @@ function DebriefDetail({
           {/* Taux d'engagement calculé */}
           {t && (
             <div className="rounded-xl border border-border bg-panel p-3.5">
-              <div className="mb-2.5 flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-faint">
+              <div className="mb-2.5 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
                 <Activity className="h-3.5 w-3.5" /> Engagement calculé
                 <span className="ml-auto text-faint">{t.posts} publication{t.posts > 1 ? "s" : ""}</span>
               </div>
@@ -972,7 +973,7 @@ function DebriefDetail({
                   ["Vues", fmtCompact(t.views)],
                 ].map(([l, v]) => (
                   <div key={l} className="rounded-lg bg-surface px-2.5 py-2">
-                    <div className="text-[8px] font-semibold uppercase tracking-wide text-faint">{l}</div>
+                    <div className="text-[10px] font-medium text-muted-foreground">{l}</div>
                     <div className="mt-0.5 text-[15px] font-bold leading-none tabular-nums text-foreground">{v}</div>
                   </div>
                 ))}
@@ -983,11 +984,11 @@ function DebriefDetail({
           {/* KPIs saisis */}
           {kpis.length > 0 && (
             <div>
-              <div className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-faint">Indicateurs</div>
+              <div className="mb-2 text-[11px] font-medium text-muted-foreground">Indicateurs</div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {kpis.map((k, i) => (
                   <div key={i} className="rounded-xl bg-panel px-3 py-2.5">
-                    <div className="text-[8px] font-semibold uppercase tracking-wide text-faint">{k.l}</div>
+                    <div className="text-[10px] font-medium text-muted-foreground">{k.l}</div>
                     <div className="mt-1 text-lg font-bold leading-none tracking-tight text-foreground">{k.v}</div>
                   </div>
                 ))}
@@ -998,7 +999,7 @@ function DebriefDetail({
           {/* Points forts */}
           {d.highlights.length > 0 && (
             <div>
-              <div className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-faint">Points forts</div>
+              <div className="mb-2 text-[11px] font-medium text-muted-foreground">Points forts</div>
               <ul className="space-y-1.5">
                 {d.highlights.map((h, i) => (
                   <li key={i} className="flex items-start gap-2 text-[13px] text-foreground">
@@ -1013,7 +1014,7 @@ function DebriefDetail({
           {/* Captures */}
           {d.calc?.shots && d.calc.shots.length > 0 && (
             <div>
-              <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-faint">Captures des stats</div>
+              <div className="mb-1 text-[11px] font-medium text-muted-foreground">Captures des stats</div>
               <ShotStrip shots={d.calc.shots} />
             </div>
           )}
@@ -1021,13 +1022,13 @@ function DebriefDetail({
 
         {/* Actions */}
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-5 py-3.5">
-          <button type="button" onClick={onEdit} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={onEdit} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             <Pencil className="h-3.5 w-3.5" /> Modifier
           </button>
-          <button type="button" onClick={onPdf} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={onPdf} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             <FileText className="h-3.5 w-3.5" /> Aperçu / PDF
           </button>
-          <button type="button" onClick={onShare} className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
+          <button type="button" onClick={onShare} className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
             <Send className="h-3.5 w-3.5" /> Partager à la marque
           </button>
         </div>

@@ -32,6 +32,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3, UserRound, Building2, Plus, Upload, Type, AlignLeft, CalendarClock } from "lucide-react";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
 import { AgentPlan, type PlanTask } from "@/components/ui/agent-plan";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 type Priority = "haute" | "moyenne" | "basse";
 type Source = "agency" | "creator";
@@ -440,7 +441,7 @@ export function Todo() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
           {rows === null
             ? "Chargement…"
@@ -475,7 +476,7 @@ export function Todo() {
             },
           ]}
         />
-      </div>
+      </PageHeaderRow>
 
       {rows !== null && rows.length > 0 && (
         <StatsBento
@@ -579,7 +580,7 @@ export function Todo() {
                     onClick={() => setViewMode(mode)}
                     className={cn(
                       "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                      viewMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                      viewMode === mode ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
                     <Icon className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{label}</span>
@@ -589,7 +590,7 @@ export function Todo() {
             }
             extra={
               <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Périmètre</span>
+                <span className="text-[12px] font-medium text-muted-foreground">Périmètre</span>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
                     {([[null, "Tous"], ["__agency__", "Agence"]] as const).map(([val, label]) => (
@@ -599,7 +600,7 @@ export function Todo() {
                         onClick={() => setCreatorFilter(val)}
                         className={cn(
                           "rounded-full px-3.5 py-1.5 text-[11px] font-semibold transition-colors",
-                          creatorFilter === val ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                          creatorFilter === val ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
                         )}
                       >
                         {label}
@@ -650,7 +651,7 @@ export function Todo() {
                 <div className="flex items-center justify-between px-1.5 pt-1">
                   <div className="flex items-center gap-2">
                     <span className={cn("h-2 w-2 rounded-full", col.dot)} />
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{col.label}</span>
+                    <span className="text-[12px] font-medium text-muted-foreground">{col.label}</span>
                   </div>
                   <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-semibold text-faint">{colRows.length}</span>
                 </div>
@@ -673,7 +674,7 @@ export function Todo() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="truncate rounded-md bg-rowhover px-2 py-[3px] text-[8px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        <span className="truncate rounded-md bg-rowhover px-2 py-[3px] text-[10px] font-mediumr text-muted-foreground">
                           {row.creator ? titleCase(row.creator) : "Agence"}
                         </span>
                         <div onClick={(e) => e.stopPropagation()}>
@@ -721,7 +722,7 @@ export function Todo() {
             ),
             right: (
               <>
-                <span className={cn("hidden rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide sm:inline", PRIO_PILL[row.priority])}>
+                <span className={cn("hidden rounded-full px-2 py-0.5 text-[11px] font-medium sm:inline", PRIO_PILL[row.priority])}>
                   {prioOf(row.priority).label}
                 </span>
                 <ActionMenu
@@ -747,7 +748,7 @@ export function Todo() {
             ),
             footer: noteEditId === row.id ? (
               <div className="flex flex-col gap-2 border-t border-border px-4 py-3">
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Avancement / commentaire</span>
+                <span className="text-[11px] font-medium text-muted-foreground">Avancement / commentaire</span>
                 <textarea
                   value={noteEditText}
                   onChange={(e) => setNoteEditText(e.target.value)}
@@ -760,7 +761,7 @@ export function Todo() {
                   <button
                     type="button"
                     onClick={async () => { await saveNote(row.id, noteEditText); setNoteEditId(null); toast("Commentaire enregistré ✓"); }}
-                    className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                    className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                   >
                     <Check className="h-3.5 w-3.5" /> Enregistrer
                   </button>
@@ -903,13 +904,13 @@ export function Todo() {
                   <button
                     type="button"
                     onClick={() => setEditing(false)}
-                    className="h-[42px] shrink-0 rounded-lg border border-border bg-surface px-5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover"
+                    className="h-[42px] shrink-0 rounded-lg border border-border bg-surface px-5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover"
                   >
                     Annuler
                   </button>
                   <button
                     type="submit"
-                    className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                    className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                   >
                     Enregistrer
                   </button>
@@ -1066,7 +1067,7 @@ function DetailBlock({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">
+      <span className="text-[11px] font-medium text-muted-foreground">
         {label}
       </span>
       {children}

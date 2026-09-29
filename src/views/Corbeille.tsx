@@ -68,7 +68,7 @@ export function Corbeille() {
           <button
             type="button"
             onClick={() => setConfirmEmpty(true)}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-rose-500 transition-colors hover:bg-rose-500/10"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-rose-500 transition-colors hover:bg-rose-500/10"
           >
             <Trash2 className="h-3.5 w-3.5" /> Vider la corbeille
           </button>
@@ -94,7 +94,7 @@ export function Corbeille() {
             const left = daysLeft(e);
             return (
               <div key={e.id} className={cn("flex items-center gap-3 px-4 py-3.5", i > 0 && "border-t border-border")}>
-                <span className="shrink-0 whitespace-nowrap rounded-md bg-rowhover px-2 py-1 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <span className="shrink-0 whitespace-nowrap rounded-md bg-rowhover px-2 py-1 text-[10px] font-medium text-muted-foreground">
                   {TABLE_LABELS[e.table] ?? e.table}
                 </span>
                 <div className="min-w-0 flex-1">

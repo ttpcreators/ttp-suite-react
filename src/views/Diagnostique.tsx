@@ -93,7 +93,7 @@ export function Diagnostique() {
             type="button"
             onClick={run}
             disabled={running}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", running && "animate-spin")} /> {running ? "Audit…" : "Relancer"}
           </button>

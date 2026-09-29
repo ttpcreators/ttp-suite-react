@@ -68,7 +68,7 @@ function withDefaults(blob: AgencyKit): FullAgencyKit {
 }
 
 const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15";
-const LBL = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-faint";
+const LBL = "mb-1 block text-[12px] font-medium text-muted-foreground";
 const CARD = "rounded-2xl border border-border bg-surface p-4 shadow-sm";
 const PUBLIC_URL = "https://ttpcreators.pro/mediakit/agence/";
 
@@ -147,7 +147,7 @@ export function AgencyTab() {
             href={PUBLIC_URL}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
           >
             <ExternalLink className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Voir le deck</span>
           </a>
@@ -155,7 +155,7 @@ export function AgencyTab() {
             type="button"
             onClick={save}
             disabled={saving || loading || loadError || !loaded}
-            className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <Save className="h-3.5 w-3.5" /> {saving ? "Enregistrement…" : "Enregistrer"}
           </button>
@@ -174,7 +174,7 @@ export function AgencyTab() {
           <button
             type="button"
             onClick={() => setReloadKey((k) => k + 1)}
-            className="mt-3 rounded-xl bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+            className="mt-3 rounded-xl bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             Réessayer
           </button>
@@ -301,7 +301,7 @@ export function AgencyTab() {
             <button
               type="button"
               onClick={() => setPillars([...kit.pillars, { title: "", text: "" }])}
-              className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
               <Plus className="h-3.5 w-3.5" /> Ajouter un pilier
             </button>

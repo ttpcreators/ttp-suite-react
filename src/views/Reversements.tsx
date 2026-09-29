@@ -262,15 +262,15 @@ export function Reversements() {
               {openFor === r.creator ? (
                 <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-border bg-panel p-3">
                   <label className="flex min-w-0 flex-1 flex-col gap-1 sm:min-w-[110px]">
-                    <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Montant (€)</span>
+                    <span className="text-[11px] font-medium text-muted-foreground">Montant (€)</span>
                     <input type="number" value={amt} onChange={(e) => setAmt(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary" />
                   </label>
                   <label className="flex min-w-0 flex-1 flex-col gap-1 sm:min-w-[130px]">
-                    <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Date</span>
+                    <span className="text-[11px] font-medium text-muted-foreground">Date</span>
                     <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary" />
                   </label>
                   <label className="flex min-w-0 flex-[2] flex-col gap-1 sm:min-w-[150px]">
-                    <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Note (optionnel)</span>
+                    <span className="text-[11px] font-medium text-muted-foreground">Note (optionnel)</span>
                     <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Virement, espèces…" className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary" />
                   </label>
                   <button type="button" onClick={() => submitPayout(r.creator)} className="h-[38px] shrink-0 rounded-lg bg-primary px-4 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
@@ -314,7 +314,7 @@ export function Reversements() {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-panel p-3">
-      <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</div>
+      <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
       <div className="mt-1 truncate text-sm font-bold tracking-tight text-foreground">{value}</div>
     </div>
   );

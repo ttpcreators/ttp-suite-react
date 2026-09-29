@@ -210,7 +210,7 @@ export function SignaturePicker({
               <SigField label="Email" v={fields.email} set={(v) => setFields((x) => ({ ...x, email: v }))} />
 
               <div>
-                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Aperçu</div>
+                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Aperçu</div>
                 <div className="overflow-x-auto rounded-lg border border-border bg-white p-3">
                   <div dangerouslySetInnerHTML={{ __html: htmlSignatureMarkup(fields) }} />
                 </div>
@@ -218,14 +218,14 @@ export function SignaturePicker({
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setFormOpen(false)} className="rounded-lg border border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:bg-rowhover">
+              <button type="button" onClick={() => setFormOpen(false)} className="rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground hover:bg-rowhover">
                 Annuler
               </button>
               <button
                 type="button"
                 onClick={saveForm}
                 disabled={busy || !fields.name.trim()}
-                className="rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 Enregistrer
               </button>
@@ -240,7 +240,7 @@ export function SignaturePicker({
 function SigField({ label, v, set }: { label: string; v: string; set: (v: string) => void }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</span>
+      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
       <input
         value={v}
         onChange={(e) => set(e.target.value)}

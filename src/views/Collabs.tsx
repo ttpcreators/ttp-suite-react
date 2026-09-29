@@ -20,6 +20,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { frDate } from "@/lib/dates";
 import { getCache, setCache } from "@/lib/viewCache";
 import { STEPS, STEP_COUNT, PHASES, stepDef, phaseOf, isDone, type PhaseKey } from "@/lib/collabs";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 type Row = {
   id: string;
@@ -254,7 +255,7 @@ export function Collabs() {
             <button
               type="button"
               onClick={() => saveEdit(row.id)}
-              className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+              className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
               Enregistrer
             </button>
@@ -319,7 +320,7 @@ export function Collabs() {
         {/* Étape courante */}
         <div className="mt-3 rounded-xl bg-panel px-3 py-2.5">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-wide text-faint">
+            <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
               <span className={cn("size-2 rounded-full", PHASE_DOT[def.phase])} />
               Étape {row.step} / {STEP_COUNT}
             </div>
@@ -354,13 +355,13 @@ export function Collabs() {
         {(row.deliverables || row.cachet) && (
           <div className="mt-2 grid grid-cols-2 gap-2">
             <div className="rounded-xl bg-panel px-3 py-2">
-              <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">
+              <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
                 <Package className="h-3 w-3" /> Livrables
               </div>
               <div className="mt-1 truncate text-[12px] font-medium text-foreground">{row.deliverables || "—"}</div>
             </div>
             <div className="rounded-xl bg-panel px-3 py-2">
-              <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">
+              <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
                 <Wallet className="h-3 w-3" /> Cachet
               </div>
               <div className="mt-1 truncate text-[12px] font-medium text-foreground">{row.cachet || "—"}</div>
@@ -378,7 +379,7 @@ export function Collabs() {
             <button
               type="button"
               onClick={() => setStep(row, row.step + 1)}
-              className="flex h-[38px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+              className="flex h-[38px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
               {stepDef(row.step + 1).short} <ArrowRight className="h-3.5 w-3.5" />
             </button>
@@ -460,12 +461,12 @@ export function Collabs() {
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
           {rows === null ? "Chargement…" : `${rows.length} collab${rows.length > 1 ? "s" : ""}`}
         </div>
         <AddButton label="Collab" onClick={() => setFormOpen(true)} />
-      </div>
+      </PageHeaderRow>
 
       {/* Synthèse (bento) */}
       {rows !== null && rows.length > 0 && (() => {
@@ -517,7 +518,7 @@ export function Collabs() {
             onClear={() => { setPhaseFilter(ALL); setStatusFilter("active"); setCreatorFilter(""); }}
             extra={creators.length > 0 ? (
               <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Créatrice</span>
+                <span className="text-[12px] font-medium text-muted-foreground">Créatrice</span>
                 <div className="flex items-center gap-2">
                   <UserRound className="h-4 w-4 shrink-0 text-faint" />
                   <select

@@ -20,7 +20,7 @@ export function AddButton({ label, onClick }: { label: string; onClick: () => vo
     <button
       type="button"
       onClick={onClick}
-      className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+      className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
     >
       <Plus className="h-3.5 w-3.5" /> {label}
     </button>
@@ -72,7 +72,7 @@ export function AddMenuButton({ label, items }: { label: string; items: AddMenuI
         onClick={toggle}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+        className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
       >
         <Plus className="h-3.5 w-3.5" /> {label}
         <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
@@ -124,7 +124,7 @@ export function Field({ label, children, className = "" }: { label: string; chil
   const full = /(?:^|\s)min-w-full(?:\s|$)/.test(className);
   return (
     <label className={cn("flex flex-col gap-1.5", full ? "w-full basis-full" : "min-w-0 flex-1 sm:min-w-[150px]", className)}>
-      <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</span>
+      <span className="text-[12px] font-medium text-muted-foreground">{label}</span>
       {children}
     </label>
   );
@@ -297,7 +297,7 @@ export function InlineForm({
       className="mb-4 rounded-2xl border border-border bg-surface p-5 shadow-sm"
     >
       <div className="mb-3.5 flex items-center justify-between">
-        <div className="text-sm font-semibold">{title}</div>
+        <div className="text-[14px] font-semibold">{title}</div>
         <button type="button" onClick={onClose} className="text-faint transition-colors hover:text-foreground">
           <X className="h-4 w-4" />
         </button>
@@ -307,7 +307,7 @@ export function InlineForm({
         {children}
         <button
           type="submit"
-          className="h-[42px] w-full shrink-0 rounded-lg bg-primary px-5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 sm:w-auto"
+          className="h-[42px] w-full shrink-0 rounded-lg bg-primary px-5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 sm:w-auto"
         >
           {submitLabel}
         </button>

@@ -16,6 +16,7 @@ import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 type Row = {
   id: string;
@@ -107,14 +108,14 @@ export function Prospection() {
   };
 
   const header = (
-    <div className="mb-4 flex items-center justify-between gap-3">
+    <PageHeaderRow>
       <div className="text-sm text-muted-foreground">
         {rows === null
           ? "Pipeline de prospection"
           : `${rows.length} prospect${rows.length > 1 ? "s" : ""} au pipeline`}
       </div>
       <AddButton label="Prospect" onClick={() => setFormOpen(true)} />
-    </div>
+    </PageHeaderRow>
   );
 
   const form = (
@@ -191,9 +192,9 @@ export function Prospection() {
             type="button"
             onClick={() => setStageFilter(chip)}
             className={cn(
-              "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+              "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors",
               active
-                ? "bg-primary text-primary-foreground"
+                ? "bg-foreground text-background"
                 : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
             )}
           >
@@ -254,7 +255,7 @@ export function Prospection() {
           return (
             <div key={stage}>
               <div className="flex items-center justify-between px-1.5 pb-3">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground">
+                <span className="text-[12px] font-medium text-foreground">
                   {stage}
                 </span>
                 <span className="text-[10px] font-semibold text-muted-foreground">

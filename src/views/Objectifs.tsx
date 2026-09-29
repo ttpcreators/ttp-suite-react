@@ -13,6 +13,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, DeleteButton } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 /** Un objectif du mois : intitulé, CA réalisé, cible, progression (%) et ton. */
 type Objective = {
@@ -168,7 +169,7 @@ export function Objectifs() {
   return (
     <div className="space-y-4">
       {/* En-tête : résumé + sélecteur de mois + action */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {loading ? (
             <AnimatedBadge status="loading" size="sm">
@@ -195,7 +196,7 @@ export function Objectifs() {
           />
           <AddButton label="Objectif" onClick={openAdd} />
         </div>
-      </div>
+      </PageHeaderRow>
 
       <InlineForm
         open={formOpen}
@@ -257,7 +258,7 @@ export function Objectifs() {
         <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div className="text-sm font-semibold text-foreground">Objectifs par créateur</div>
-            <div className="rounded-full bg-panel px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{monthTitle(selectedMonth)}</div>
+            <div className="rounded-full bg-panel px-2.5 py-1 text-[12px] font-medium text-muted-foreground">{monthTitle(selectedMonth)}</div>
           </div>
           <ul className="divide-y divide-border">
             {list.map((o, index) => {

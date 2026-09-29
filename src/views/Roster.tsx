@@ -15,6 +15,7 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { Trash2, Check, RefreshCw, ChevronUp, ChevronDown } from "lucide-react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 type CreatorRow = {
   id: string;
@@ -243,13 +244,13 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
           {rows.length} créateur{rows.length > 1 ? "s" : ""} représenté
           {rows.length > 1 ? "s" : ""}
         </div>
         <AddButton label="Créateur" onClick={() => setFormOpen(true)} />
-      </div>
+      </PageHeaderRow>
 
       {staleCount > 0 && (
         <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[13px] text-amber-700 dark:text-amber-300">
@@ -287,7 +288,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
           {/* En-tête de tableau (desktop) */}
           <div
             className={cn(
-              "mb-1 hidden items-center px-4 pb-2 text-[10px] font-semibold uppercase tracking-wider text-faint md:grid",
+              "mb-1 hidden items-center px-4 pb-2 text-[12px] font-mediumr text-faint md:grid",
               cols,
             )}
           >

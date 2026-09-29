@@ -128,7 +128,7 @@ function NumField({
 }) {
   return (
     <label className={cn("flex min-w-0 flex-col gap-1", wide && "col-span-2")}>
-      <span className="truncate text-[8px] font-semibold uppercase tracking-wide text-faint">{label}</span>
+      <span className="truncate text-[10px] font-medium text-muted-foreground">{label}</span>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -282,8 +282,8 @@ export function DebriefCalculator({
       onClick={() => set({ mode: m })}
       title={hint}
       className={cn(
-        "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition-colors",
-        mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
+        "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors",
+        mode === m ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
       )}
     >
       <Icon className="h-3.5 w-3.5" /> {label}
@@ -294,7 +294,7 @@ export function DebriefCalculator({
     <div className="min-w-full rounded-xl border border-border bg-panel p-3.5">
       {/* En-tête */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-faint">
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
           <Calculator className="h-3.5 w-3.5" /> Calculateur d'engagement
         </div>
         <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-0.5">
@@ -341,7 +341,7 @@ export function DebriefCalculator({
                   )}
                 </>
               ) : (
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">
+                <span className="text-[12px] font-medium text-muted-foreground">
                   Totaux de la campagne — additionne les captures
                 </span>
               )}
@@ -378,7 +378,7 @@ export function DebriefCalculator({
             ["Vues", fmtCompact(t.views)],
           ].map(([l, v]) => (
             <div key={l} className="rounded-lg bg-panel px-2.5 py-2">
-              <div className="text-[8px] font-semibold uppercase tracking-wide text-faint">{l}</div>
+              <div className="text-[10px] font-medium text-muted-foreground">{l}</div>
               <div className="mt-0.5 text-[15px] font-bold leading-none tabular-nums text-foreground">{v}</div>
             </div>
           ))}
@@ -403,8 +403,8 @@ export function DebriefCalculator({
               )}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</span>
-                {basis === b && <span className="text-[8px] font-bold uppercase tracking-wide text-primary">Retenu</span>}
+                <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
+                {basis === b && <span className="text-[10px] font-medium text-primary">Retenu</span>}
               </div>
               <div className="mt-0.5 text-xl font-bold leading-none tabular-nums text-foreground">{fmtPct(val)}</div>
             </button>
@@ -421,7 +421,7 @@ export function DebriefCalculator({
           type="button"
           onClick={apply}
           disabled={!hasData}
-          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ArrowUp className="h-3.5 w-3.5" /> Reprendre dans les indicateurs
         </button>
@@ -430,7 +430,7 @@ export function DebriefCalculator({
       {/* Captures */}
       <div className="mt-3">
         <div className="mb-1.5 flex items-center justify-between gap-2">
-          <span className="text-[9px] font-semibold uppercase tracking-wider text-faint">
+          <span className="text-[11px] font-medium text-muted-foreground">
             Captures des stats {shots.length > 0 && <span className="text-muted-foreground">· {shots.length}</span>}
           </span>
           <button

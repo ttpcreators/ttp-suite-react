@@ -73,7 +73,7 @@ export function CreatorGuide({
       <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/12 via-primary/5 to-transparent p-5 shadow-sm">
         <div className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-primary/10 blur-2xl" />
         <div className="relative">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-primary">Guide</div>
+          <div className="text-[12px] font-medium text-primary">Guide</div>
           <h1 className="mt-1 text-[22px] font-bold leading-tight text-foreground">Bienvenue{firstName ? ` ${firstName}` : ""} — voici comment utiliser ton espace</h1>
           <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
             Tout se fait ici, sur <span className="font-semibold text-foreground">mobile comme sur ordinateur</span>. 2 minutes de lecture et tu es autonome. 💪
@@ -83,7 +83,7 @@ export function CreatorGuide({
 
       {/* ⭐ Le réflexe n°1 : les tâches */}
       <section className="relative overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.06] p-5 shadow-sm">
-        <div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-primary">
+        <div className="mb-2 flex items-center gap-2 text-[12px] font-medium text-primary">
           <Sparkles className="h-4 w-4" /> Le réflexe le plus important
         </div>
         <h2 className="text-[16px] font-bold text-foreground">Note tout dans « À faire »</h2>
@@ -97,7 +97,7 @@ export function CreatorGuide({
             </li>
           ))}
         </ul>
-        <button type="button" onClick={() => onGoto("todo")} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
+        <button type="button" onClick={() => onGoto("todo")} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
           <ListChecks className="h-4 w-4" /> Ouvrir « À faire »
         </button>
       </section>

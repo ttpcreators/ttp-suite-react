@@ -58,7 +58,7 @@ export function PeriodFilter({
 }) {
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-faint">Période</span>
+      <span className="text-[12px] font-medium text-muted-foreground">Période</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}

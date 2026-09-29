@@ -8,6 +8,7 @@ import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
 import { cn, titleCase } from "@/lib/utils";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 /**
  * Roster UGC — indépendant du roster créateurs. Ces profils n'ont PAS d'accès à
@@ -114,19 +115,19 @@ export function Ugc() {
     return matchQuery(query, u.name, u.handle, u.niche, u.city, u.email, u.platform);
   });
 
-  const pillBase = "rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors";
+  const pillBase = "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors";
   const pillActive = "bg-primary text-primary-foreground";
   const pillInactive = "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground";
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
           {filtered.length} créateur{filtered.length > 1 ? "s" : ""} UGC
           {(platFilter !== ALL || query.trim()) && <span className="text-faint"> / {list.length}</span>}
         </div>
         <AddButton label="UGC" onClick={openAdd} />
-      </div>
+      </PageHeaderRow>
 
       {platList.length > 0 && (
         <div className="mb-4 flex flex-wrap gap-2">

@@ -48,7 +48,7 @@ export function MiniChart({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="h-2 w-2 animate-pulse rounded-full bg-signal" />
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</span>
+          <span className="text-[12px] font-mediumr text-muted-foreground">{title}</span>
         </div>
         <div className="flex h-7 items-center">
           <span

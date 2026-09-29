@@ -2,78 +2,77 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Grille « bento » de stats (portée native depuis le composant 21st.dev) : une
- * tuile principale mise en avant (fond primary + texture diagonale), une tuile à
- * mini-barres, une petite tuile chiffre, et une tuile accent avec icône.
+ * Bandeau de chiffres clés, dans le langage de l'Aperçu : UN panneau bordé,
+ * quatre cellules séparées par des filets, libellé gris en minuscules au-dessus
+ * d'un gros chiffre. (Anciennement une grille « bento » avec tuile bleue ; l'API
+ * est restée identique, donc toutes les pages qui l'utilisent ont basculé seules.)
  *
- * Data-driven & réutilisable — tokens app, dark-mode natif, pas de dépendances.
- * Responsive : empilé sur mobile, grille 6×2 dès md.
+ *   primary → chiffre principal + légende
+ *   bars    → chiffre + mini-barres de répartition (monochromes, max en valeur)
+ *   small   → chiffre simple
+ *   accent  → chiffre avec icône
+ *
+ * Responsive : 2 colonnes sur mobile, 4 dès lg. Tokens uniquement (clair/sombre).
  */
 
 export type StatsBentoProps = {
   primary: { eyebrow: string; value: string; caption?: string };
-  /** Tuile à barres : un intitulé, une valeur en avant, et la série à tracer. */
+  /** Cellule à barres : un intitulé, une valeur en avant, et la série à tracer. */
   bars: { label: string; value: string; series: number[] };
   small: { value: string; label: string };
   accent: { value: string; label: string; icon?: LucideIcon };
   className?: string;
 };
 
+const cell = "flex min-w-0 flex-col px-5 py-5";
+const label = "truncate text-[13px] text-muted-foreground";
+const big = "mt-2 truncate text-[26px] font-semibold leading-none tracking-tight tabular-nums text-foreground";
+
 export function StatsBento({ primary, bars, small, accent, className }: StatsBentoProps) {
-  const max = Math.max(1, ...bars.series);
+  const max = Math.max(1, ...bars.series.filter((n) => Number.isFinite(n)));
+  const top = bars.series.indexOf(Math.max(...bars.series));
   const AccentIcon = accent.icon;
   return (
-    <div className={cn("grid grid-cols-1 gap-3 md:grid-cols-6 md:grid-rows-[auto_auto]", className)}>
-      {/* Tuile principale */}
-      {/* En Minuit (primaire = blanc), la tuile devient un panneau sombre bordé :
-          pas de grand bloc blanc, la texture diagonale reste en filigrane. */}
-      <div className="relative flex min-h-[180px] flex-col justify-between overflow-hidden rounded-3xl bg-primary p-7 md:col-span-3 md:row-span-2 minuit:border minuit:border-border minuit:bg-panel">
-        <div className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(45deg,rgba(255,255,255,0.6)_0px_1px,transparent_1px_11px)] opacity-20 [mask-image:radial-gradient(ellipse_80%_60%_at_100%_0%,#000_55%,transparent_110%)] minuit:opacity-[0.07]" />
-        <div className="relative">
-          <span className="inline-block rounded-full bg-primary-foreground/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-primary-foreground/70 minuit:bg-foreground/[0.07] minuit:text-muted-foreground">
-            {primary.eyebrow}
-          </span>
-          <h3 className="mt-5 text-4xl font-bold tracking-tight text-primary-foreground sm:text-5xl minuit:text-foreground">{primary.value}</h3>
-        </div>
-        {primary.caption && <p className="relative mt-4 max-w-xs text-sm text-primary-foreground/70 minuit:text-muted-foreground">{primary.caption}</p>}
+    <section className={cn("grid grid-cols-2 overflow-hidden rounded-2xl border border-border bg-surface lg:grid-cols-4", className)}>
+      {/* Chiffre principal */}
+      <div className={cell}>
+        <span className={label}>{primary.eyebrow}</span>
+        <span className={big}>{primary.value}</span>
+        {primary.caption && <span className="mt-3 line-clamp-2 text-[12px] leading-snug text-muted-foreground">{primary.caption}</span>}
       </div>
 
-      {/* Tuile à barres */}
-      <div className="flex items-center justify-between gap-4 rounded-3xl border border-border bg-panel p-6 md:col-span-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{bars.label}</p>
-          <p className="mt-1 truncate text-2xl font-bold tracking-tight text-foreground">{bars.value}</p>
-        </div>
-        <div className="flex h-10 shrink-0 items-end gap-1">
-          {bars.series.map((h, i) => (
-            <div
-              key={i}
-              className="w-1.5 rounded-full bg-primary minuit:bg-foreground/60"
-              style={{ height: `${Math.max(6, (h / max) * 100)}%` }}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Petite tuile chiffre */}
-      <div className="flex min-h-[88px] flex-col justify-center rounded-3xl border border-border bg-card p-6 text-center md:col-span-1">
-        <p className="text-2xl font-bold text-foreground">{small.value}</p>
-        <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{small.label}</p>
-      </div>
-
-      {/* Tuile accent (icône + texte) */}
-      <div className="flex min-h-[88px] items-center gap-4 rounded-3xl border border-border bg-panel p-6 md:col-span-2">
-        {AccentIcon && (
-          <div className="grid size-10 shrink-0 place-items-center rounded-full bg-surface text-foreground shadow-sm">
-            <AccentIcon className="h-5 w-5" />
+      {/* Répartition (mini-barres) */}
+      <div className={cn(cell, "border-l border-border")}>
+        <span className={label}>{bars.label}</span>
+        <div className="mt-2 flex items-end justify-between gap-3">
+          <span className="truncate text-[26px] font-semibold leading-none tracking-tight tabular-nums text-foreground">{bars.value}</span>
+          <div className="flex h-8 shrink-0 items-end gap-[3px]" aria-hidden>
+            {bars.series.map((h, i) => (
+              <span
+                key={i}
+                className={cn("w-1.5 rounded-full", i === top ? "bg-foreground/70" : "bg-foreground/20")}
+                style={{ height: `${Math.max(12, ((Number.isFinite(h) ? h : 0) / max) * 100)}%` }}
+              />
+            ))}
           </div>
-        )}
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-foreground">{accent.value}</p>
-          <p className="mt-0.5 text-[11px] font-semibold text-muted-foreground">{accent.label}</p>
         </div>
       </div>
-    </div>
+
+      {/* Chiffre simple */}
+      <div className={cn(cell, "border-t border-border lg:border-l lg:border-t-0")}>
+        <span className={label}>{small.label}</span>
+        <span className={big}>{small.value}</span>
+      </div>
+
+      {/* Chiffre avec icône */}
+      <div className={cn(cell, "border-l border-t border-border lg:border-t-0")}>
+        <span className={cn(label, "flex items-center gap-1.5")}>
+          {AccentIcon && <AccentIcon className="h-3.5 w-3.5 shrink-0" />}
+          <span className="truncate">{accent.label}</span>
+        </span>
+        <span className={big}>{accent.value}</span>
+      </div>
+    </section>
   );
 }
 

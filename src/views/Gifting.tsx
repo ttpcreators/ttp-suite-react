@@ -16,17 +16,18 @@ import { toISODate, frDate } from "@/lib/dates";
 import { cn, titleCase } from "@/lib/utils";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, giftStatusMeta, type Gift as GiftRow } from "@/lib/gifting";
 import { PeriodFilter, periodsFrom, inPeriod } from "@/components/ui/period-filter";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 type GView = "cards" | "list";
 
 /** Chip « contenu attendu / spontané ». */
 function ContentChip({ expected }: { expected: boolean | null }) {
   return expected ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-[12px] font-medium text-amber-600 dark:text-amber-400">
       Contenu attendu
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 rounded-full bg-panel px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-faint">
+    <span className="inline-flex items-center gap-1 rounded-full bg-panel px-2.5 py-1 text-[12px] font-medium text-muted-foreground">
       Sans contrepartie
     </span>
   );
@@ -210,7 +211,7 @@ export function Gifting() {
   return (
     <div className="space-y-4">
       {/* En-tête */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {loading ? (
             <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>
@@ -236,8 +237,8 @@ export function Gifting() {
                   onClick={() => setView(v)}
                   title={label}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-                    view === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
+                    "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors",
+                    view === v ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
                   )}
                 >
                   <Icon className="h-3.5 w-3.5" />
@@ -249,7 +250,7 @@ export function Gifting() {
           {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} />}
           <AddButton label="Gifting" onClick={openCreate} />
         </div>
-      </div>
+      </PageHeaderRow>
 
       <InlineForm
         open={formOpen}
@@ -485,14 +486,14 @@ function GiftDetail({ g, onClose, onEdit }: { g: GiftRow; onClose: () => void; o
           )}
           {g.note && (
             <div className="mb-3">
-              <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-faint">Note</div>
+              <div className="mb-1 text-[11px] font-medium text-muted-foreground">Note</div>
               <p className="text-[13px] leading-relaxed text-muted-foreground">{g.note}</p>
             </div>
           )}
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">
-          <button type="button" onClick={onEdit} className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
+          <button type="button" onClick={onEdit} className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
             <Pencil className="h-3.5 w-3.5" /> Modifier
           </button>
         </div>

@@ -12,6 +12,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 type AccessAccount = {
   email: string;
@@ -263,13 +264,13 @@ export function Acces() {
   return (
     <>
       {/* Sous-pages : Comptes app / E-mails créateurs */}
-      <div className="mb-4 inline-flex rounded-xl border border-border bg-surface p-1 text-[11px] font-semibold uppercase tracking-wide">
+      <div className="mb-4 inline-flex rounded-xl border border-border bg-surface p-1 text-[12px] font-medium">
         {([["comptes", "Comptes app"], ["emails", "E-mails créateurs"]] as const).map(([id, label]) => (
           <button
             key={id}
             type="button"
             onClick={() => setSection(id)}
-            className={cn("rounded-lg px-4 py-2 transition-colors", section === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+            className={cn("rounded-lg px-4 py-2 transition-colors", section === id ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")}
           >
             {label}
           </button>
@@ -280,12 +281,12 @@ export function Acces() {
         <CredentialVault />
       ) : (
       <>
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
           {loading ? "Chargement…" : `${rows.length} accès`}
         </div>
         <AddButton label="Accès" onClick={() => setFormOpen(true)} />
-      </div>
+      </PageHeaderRow>
 
       {form}
 

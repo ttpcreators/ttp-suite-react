@@ -346,7 +346,7 @@ h1{font-family:var(--serif);font-weight:600;font-size:23pt;line-height:1.12;lett
 function SelectField({ label, value, onChange, opts }: { label: string; value: string; onChange: (v: string) => void; opts: Opt[] }) {
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
-      <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</span>
+      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="h-9 w-full rounded-lg bg-surface" placeholder={label} />
         <SelectContent>
@@ -620,7 +620,7 @@ export function Contrats() {
 
   const typeToggle = (
     <>
-      <div className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-faint">Type de contrat</div>
+      <div className="mb-2 text-[11px] font-medium text-muted-foreground">Type de contrat</div>
       <div className="flex flex-wrap gap-2">
         {(Object.keys(TYPE_META) as CtType[]).map((k) => (
           <button
@@ -629,7 +629,7 @@ export function Contrats() {
             onClick={() => setCtType(k)}
             className={cn(
               "whitespace-nowrap rounded-xl px-3.5 py-2.5 text-[10px] font-semibold transition-colors",
-              k === ctType ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:bg-rowhover",
+              k === ctType ? "bg-foreground text-background" : "border border-border text-muted-foreground hover:bg-rowhover",
             )}
           >
             {TYPE_META[k].chip}
@@ -655,7 +655,7 @@ export function Contrats() {
         {typeToggle}
 
         {/* Créateur */}
-        <div className="mb-2 mt-5 text-[9px] font-semibold uppercase tracking-wider text-faint">Créateur</div>
+        <div className="mb-2 mt-5 text-[11px] font-medium text-muted-foreground">Créateur</div>
         {creators.length === 0 ? (
           <div className="text-xs text-faint">Aucun créateur dans le roster — le contrat utilisera « [Créateur] ».</div>
         ) : (
@@ -672,7 +672,7 @@ export function Contrats() {
         {/* Cas de configuration */}
         <div className="mt-5 rounded-xl border border-border bg-panel p-3.5">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[9px] font-semibold uppercase tracking-wider text-faint">Cas de configuration · {titleCase(ctName)}</span>
+            <span className="text-[11px] font-medium text-muted-foreground">Cas de configuration · {titleCase(ctName)}</span>
           </div>
           {cases.length > 0 ? (
             <div className="mb-2.5 flex flex-wrap gap-1.5">
@@ -715,7 +715,7 @@ export function Contrats() {
 
         {/* ── Cas de figure : sélecteurs qui adaptent le contrat ── */}
         <div className="mt-5 rounded-xl border border-border bg-panel p-3.5">
-          <div className="mb-2.5 text-[9px] font-semibold uppercase tracking-wider text-faint">Cas de figure — le contrat s'adapte tout seul</div>
+          <div className="mb-2.5 text-[11px] font-medium text-muted-foreground">Cas de figure — le contrat s'adapte tout seul</div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {ctType === "marque" && <SelectField label="Type de collab" value={collab} onChange={setCollab} opts={COLLAB_OPTS} />}
             <SelectField label="Cession de droits" value={rights} onChange={setRights} opts={RIGHTS_OPTS} />
@@ -738,7 +738,7 @@ export function Contrats() {
         {/* Clauses additionnelles */}
         <div className="mt-5">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[9px] font-semibold uppercase tracking-wider text-faint">Clauses additionnelles</span>
+            <span className="text-[11px] font-medium text-muted-foreground">Clauses additionnelles</span>
             <button type="button" onClick={() => setExtra([...extra, { id: uid(), l: `Art. ${nextClauseNo} — Clause`, v: "" }])} className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover">
               <Plus className="h-3.5 w-3.5" /> Ajouter
             </button>
@@ -774,8 +774,8 @@ export function Contrats() {
           <div className="text-[9px] font-semibold text-faint">RÉF. {ref}</div>
         </div>
 
-        <div className="mt-5 text-[10px] font-semibold uppercase tracking-wider text-signaltext">{meta.label}</div>
-        <div className="mt-1 text-[13px] font-semibold uppercase tracking-wider text-foreground">Contrat de collaboration</div>
+        <div className="mt-5 text-[12px] font-mediumr text-signaltext">{meta.label}</div>
+        <div className="mt-1 text-[14px] font-semibold text-foreground">Contrat de collaboration</div>
         <div className="mt-1.5 text-xl font-semibold tracking-tight text-foreground">{meta.title}</div>
 
         <div className="mt-3 text-xs leading-relaxed text-muted-foreground">Parties : TTP Creators &amp; {ctName} × {brand || "[Marque]"}</div>
@@ -812,13 +812,13 @@ export function Contrats() {
 
         {/* Actions */}
         <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <button type="button" onClick={copyContract} className="flex items-center justify-center gap-2 rounded-xl border border-border py-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={copyContract} className="flex items-center justify-center gap-2 rounded-xl border border-border py-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} {copied ? "Copié ✓" : "Copier"}
           </button>
-          <button type="button" onClick={() => setPreview(buildHTML())} className="flex items-center justify-center gap-2 rounded-xl border border-border py-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={() => setPreview(buildHTML())} className="flex items-center justify-center gap-2 rounded-xl border border-border py-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             <Eye className="h-3.5 w-3.5" /> Aperçu
           </button>
-          <button type="button" onClick={downloadPDF} className="flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
+          <button type="button" onClick={downloadPDF} className="flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
             <FileText className="h-3.5 w-3.5" /> PDF
           </button>
         </div>
@@ -838,7 +838,7 @@ export function Contrats() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-[13px] font-semibold text-foreground">{h.title}</span>
-                    <span className="shrink-0 rounded-full bg-panel px-2 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground">{TYPE_META[h.ctType]?.label ?? h.ctType}</span>
+                    <span className="shrink-0 rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{TYPE_META[h.ctType]?.label ?? h.ctType}</span>
                   </div>
                   <div className="mt-0.5 truncate text-[11px] text-faint">
                     {titleCase(h.ctName)}{h.brand ? ` × ${h.brand}` : ""} · {h.ref} · {new Date(h.ts).toLocaleDateString("fr-FR")}

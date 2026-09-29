@@ -18,7 +18,7 @@ const rid = () => `p${Date.now().toString(36)}${(_rid += 1)}`;
 
 const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15";
 const SEL = IN;
-const LBL = "text-[9px] font-semibold uppercase tracking-wide text-faint";
+const LBL = "text-[11px] font-medium text-muted-foreground";
 
 type Mode = "influence" | "ugc";
 type InfRow = { id: string; platform: PlatKey; format: string; qty: number; followers: string; er: string };
@@ -141,8 +141,8 @@ export function Pricing() {
                 type="button"
                 onClick={() => setMode(m)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-                  mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                  "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors",
+                  mode === m ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Icon className="h-3.5 w-3.5" /> {label}
@@ -209,7 +209,7 @@ export function Pricing() {
                 );
               })}
             </div>
-            <button type="button" onClick={addInf} className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <button type="button" onClick={addInf} className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
               <Plus className="h-3.5 w-3.5" /> Ajouter un livrable
             </button>
 
@@ -263,7 +263,7 @@ export function Pricing() {
                 </div>
               ))}
             </div>
-            <button type="button" onClick={() => setUgcRows((rows) => [...rows, { id: rid(), type: "video_court", qty: 1 }])} className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <button type="button" onClick={() => setUgcRows((rows) => [...rows, { id: rid(), type: "video_court", qty: 1 }])} className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
               <Plus className="h-3.5 w-3.5" /> Ajouter un livrable
             </button>
 
@@ -291,11 +291,11 @@ export function Pricing() {
       {/* ============ RÉSULTAT ============ */}
       <div className="flex flex-col rounded-2xl bg-foreground p-6 text-background lg:sticky lg:top-4 lg:self-start">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-signal">
+          <div className="text-xs font-medium text-signal">
             {mode === "influence" ? "Package influence" : "Package UGC"}
           </div>
           {hasResult && (
-            <button type="button" onClick={copyQuote} className="flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-background transition-colors hover:bg-white/20">
+            <button type="button" onClick={copyQuote} className="flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[12px] font-medium text-background transition-colors hover:bg-white/20">
               <Copy className="h-3.5 w-3.5" /> Copier
             </button>
           )}

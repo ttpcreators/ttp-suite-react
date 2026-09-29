@@ -26,6 +26,7 @@ import { FilterBar } from "@/components/ui/filter-bar";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 type Row = {
   id: string;
@@ -222,7 +223,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg bg-panel px-3 py-2.5">
       <div className="min-w-0">
-        <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</div>
+        <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
         <div className="truncate text-sm text-foreground">{v || "—"}</div>
       </div>
       {v && (
@@ -747,7 +748,7 @@ export function Contacts() {
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
           {filtered.length} contact{filtered.length > 1 ? "s" : ""}
           {(tagFilter !== ALL_TAGS || query.trim()) && (
@@ -769,7 +770,7 @@ export function Contacts() {
             type="button"
             onClick={() => csvInputRef.current?.click()}
             disabled={importing}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
             title="Importer un fichier CSV"
           >
             <Upload className="h-3.5 w-3.5" />
@@ -778,7 +779,7 @@ export function Contacts() {
           <button
             type="button"
             onClick={exportCsv}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             title="Exporter en CSV"
           >
             <Download className="h-3.5 w-3.5" />
@@ -787,7 +788,7 @@ export function Contacts() {
           <button
             type="button"
             onClick={() => openMail()}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             title="Écrire un email (choisir les destinataires)"
           >
             <Mail className="h-3.5 w-3.5" />
@@ -795,7 +796,7 @@ export function Contacts() {
           </button>
           <AddButton label="Contact" onClick={openAdd} />
         </div>
-      </div>
+      </PageHeaderRow>
 
       {/* Synthèse (bento) */}
       {currentRows.length > 0 && (() => {
@@ -839,7 +840,7 @@ export function Contacts() {
                 onClick={() => setContactFilter(v)}
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                  contactFilter === v ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  contactFilter === v ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 {label}
@@ -936,7 +937,7 @@ export function Contacts() {
               {/* Attribution : contact ajouté par un créateur */}
               {row.creator && (
                 <span
-                  className="hidden shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide text-signaltext sm:inline"
+                  className="hidden shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[10px] font-medium text-signaltext sm:inline"
                   title={`Ajouté par ${titleCase(row.creator)}`}
                 >
                   ↳ {titleCase(row.creator)}
@@ -953,7 +954,7 @@ export function Contacts() {
                   <span
                     title={lastContactLabel(d)}
                     className={cn(
-                      "hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-[8px] font-semibold uppercase tracking-wide sm:inline-flex",
+                      "hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-medium sm:inline-flex",
                       recent ? "bg-amber-500/15 text-amber-700 dark:text-amber-300" : "bg-rowhover text-faint",
                     )}
                   >
@@ -966,14 +967,14 @@ export function Contacts() {
               {needsRelance(parseTouches(row.touches), row.last_contacted, relanceDays) && (
                 <span
                   title={`Dernier échange il y a ${relanceDays} jours ou plus : le cycle de recontact est écoulé`}
-                  className="hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-primary/10 px-2 py-1 text-[8px] font-semibold uppercase tracking-wide text-primary sm:inline-flex"
+                  className="hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary sm:inline-flex"
                 >
                   <Send className="h-2.5 w-2.5" /> Relancer
                 </span>
               )}
 
               {/* Pastille tag */}
-              <span className="shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
                 {row.tag}
               </span>
 
@@ -1030,7 +1031,7 @@ export function Contacts() {
                   {selected.person} · {selected.role}
                 </div>
               </div>
-              <span className="shrink-0 rounded-full bg-rowhover px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="shrink-0 rounded-full bg-rowhover px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
                 {selected.tag}
               </span>
               <button
@@ -1088,7 +1089,7 @@ export function Contacts() {
               ];
               return (
                 <div className="mt-4">
-                  <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+                  <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
                     <MessageCircle className="h-3 w-3" /> Suivi prospection
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -1148,7 +1149,7 @@ export function Contacts() {
 
             {selected.email && (
               <div className="mt-4">
-                <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+                <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
                   <Mail className="h-3 w-3" /> Historique email
                 </div>
                 {historyBusy ? (
@@ -1185,7 +1186,7 @@ export function Contacts() {
                 <button
                   type="button"
                   onClick={() => openWhatsApp(selected)}
-                  className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-signal py-2.5 text-[11px] font-semibold uppercase tracking-wide text-white transition-opacity hover:opacity-90"
+                  className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-signal py-2.5 text-[12px] font-medium text-white transition-opacity hover:opacity-90"
                 >
                   <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
                 </button>
@@ -1194,7 +1195,7 @@ export function Contacts() {
                 <button
                   type="button"
                   onClick={() => openMail(selected)}
-                  className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                  className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                 >
                   <Mail className="h-3.5 w-3.5" /> Email
                 </button>
@@ -1214,7 +1215,7 @@ export function Contacts() {
                   toast("Fiche copiée ✓");
                 }}
                 className={cn(
-                  "flex flex-1 items-center justify-center rounded-lg py-2.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                  "flex flex-1 items-center justify-center rounded-lg py-2.5 text-[12px] font-medium transition-colors",
                   selected.email
                     ? "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground"
                     : "bg-primary text-primary-foreground hover:opacity-90",
@@ -1247,12 +1248,12 @@ export function Contacts() {
 
             <div className="flex flex-col gap-4">
               <div>
-                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Destinataires</div>
+                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Destinataires</div>
                 <RecipientPicker value={mailRecipients} onChange={setMailRecipients} contacts={pickContacts} />
               </div>
 
               <label className="flex flex-col gap-1.5">
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Objet</span>
+                <span className="text-[11px] font-medium text-muted-foreground">Objet</span>
                 <input
                   value={mailSubject}
                   onChange={(e) => setMailSubject(e.target.value)}
@@ -1262,7 +1263,7 @@ export function Contacts() {
               </label>
 
               <label className="flex flex-col gap-1.5">
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Message</span>
+                <span className="text-[11px] font-medium text-muted-foreground">Message</span>
                 <textarea
                   value={mailBody}
                   onChange={(e) => setMailBody(e.target.value)}
@@ -1272,13 +1273,13 @@ export function Contacts() {
               </label>
 
               <div>
-                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Signature</div>
+                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Signature</div>
                 <SignaturePicker key={mailSeed} value={mailSig} onChange={setMailSig} />
               </div>
 
               {/* Pièces jointes */}
               <div>
-                <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">Pièces jointes</div>
+                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Pièces jointes</div>
                 <div className="flex flex-wrap items-center gap-2">
                   {attachments.map((a, i) => (
                     <span key={`${a.filename}-${i}`} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-panel px-2.5 py-1 text-[11px] text-foreground">
@@ -1324,7 +1325,7 @@ export function Contacts() {
                     onClick={() => setSendVia("gmail")}
                     className={cn(
                       "flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                      sendVia === "gmail" ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-rowhover",
+                      sendVia === "gmail" ? "bg-foreground text-background" : "bg-surface text-muted-foreground hover:bg-rowhover",
                     )}
                   >
                     <GmailLogo className="h-3.5 w-3.5" /> Gmail
@@ -1334,7 +1335,7 @@ export function Contacts() {
                     onClick={() => setSendVia("resend")}
                     className={cn(
                       "flex items-center gap-1.5 border-l border-border px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                      sendVia === "resend" ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-rowhover",
+                      sendVia === "resend" ? "bg-foreground text-background" : "bg-surface text-muted-foreground hover:bg-rowhover",
                     )}
                   >
                     <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
@@ -1352,7 +1353,7 @@ export function Contacts() {
                   type="button"
                   onClick={() => setMailOpen(false)}
                   disabled={sending}
-                  className="rounded-lg border border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:bg-rowhover disabled:opacity-50"
+                  className="rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground hover:bg-rowhover disabled:opacity-50"
                 >
                   Annuler
                 </button>
@@ -1360,7 +1361,7 @@ export function Contacts() {
                   type="button"
                   onClick={requestSend}
                   disabled={sending}
-                  className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   <Send className="h-3.5 w-3.5" /> {sending ? "Envoi…" : "Envoyer"}
                 </button>

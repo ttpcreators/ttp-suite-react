@@ -185,7 +185,7 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
               className={cn(
                 "flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[11px] font-semibold transition-colors",
                 pk === platform
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-foreground text-background"
                   : "border border-border text-muted-foreground hover:bg-rowhover",
               )}
             >
@@ -199,7 +199,7 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
       {/* Cartes de synthèse */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="rounded-2xl border border-border bg-surface p-[18px] shadow-sm">
-          <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-faint">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <Activity className="h-3 w-3" /> Dernier taux
           </div>
           <div className="mt-2 text-2xl font-bold tracking-tight">{last ? `${String(last.er).replace(".", ",")} %` : "—"}</div>
@@ -211,7 +211,7 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
           )}
         </div>
         <div className="rounded-2xl border border-border bg-surface p-[18px] shadow-sm">
-          <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-faint">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <Users className="h-3 w-3" /> Abonnés
           </div>
           <div className="mt-2 text-2xl font-bold tracking-tight">{last && last.followers > 0 ? fmtCompact(last.followers) : "—"}</div>
@@ -223,14 +223,14 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
           )}
         </div>
         <div className="rounded-2xl border border-border bg-surface p-[18px] shadow-sm">
-          <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-faint">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <Hash className="h-3 w-3" /> Mesures
           </div>
           <div className="mt-2 text-2xl font-bold tracking-tight">{points.length}</div>
           <div className="mt-1 text-[11px] text-faint">{PLATFORM_LABELS[platform] ?? platform}</div>
         </div>
         <div className="rounded-2xl border border-border bg-surface p-[18px] shadow-sm">
-          <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-faint">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <TrendingUp className="h-3 w-3" /> Meilleur taux
           </div>
           <div className="mt-2 text-2xl font-bold tracking-tight">
@@ -437,7 +437,7 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
   }, [entries]);
   const th = (k: SortKey, label: string, align = "text-right") => (
     <th className={cn("px-4 pb-1", align)}>
-      <button type="button" onClick={() => setSort(k)} className={cn("inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-foreground", sort === k ? "text-foreground" : "")}>
+      <button type="button" onClick={() => setSort(k)} className={cn("inline-flex items-center gap-1 transition-colors hover:text-foreground", sort === k ? "text-foreground" : "")}>
         {label}{sort === k && <TrendingDown className="h-3 w-3" />}
       </button>
     </th>
@@ -452,7 +452,7 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
           { l: "Meilleur taux", v: rows.length ? `${String(bestGlobal).replace(".", ",")} %` : "—", icon: TrendingUp },
         ].map((c) => (
           <div key={c.l} className="rounded-2xl border border-border bg-surface p-3.5 shadow-sm sm:p-4">
-            <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-faint"><c.icon className="h-3 w-3 shrink-0" /> <span className="truncate">{c.l}</span></div>
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground"><c.icon className="h-3 w-3 shrink-0" /> <span className="truncate">{c.l}</span></div>
             <div className="mt-1 text-xl font-bold tracking-tight tabular-nums sm:text-2xl">{c.v}</div>
           </div>
         ))}
@@ -460,7 +460,7 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
 
       {/* Filtre par période (mois/année) */}
       <div className="flex items-center gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-faint">Période</span>
+        <span className="text-[12px] font-medium text-muted-foreground">Période</span>
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
@@ -520,7 +520,7 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[680px] border-separate [border-spacing:0_10px] text-left">
           <thead>
-            <tr className="text-[10px] font-semibold uppercase tracking-wide text-faint">
+            <tr className="text-[12px] font-medium text-muted-foreground">
               <th className="px-4 pb-1">Créateur</th>
               <th className="px-4 pb-1">Plateforme</th>
               {th("lastEr", "Dernier taux")}
@@ -588,7 +588,7 @@ export function EngagementSuivi() {
             onClick={() => setView(m)}
             className={cn(
               "flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-colors",
-              view === m ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              view === m ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
             )}
           >
             {m === "all" ? <Users className="h-4 w-4" /> : <Activity className="h-4 w-4" />} {label}

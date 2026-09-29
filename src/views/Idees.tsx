@@ -23,6 +23,7 @@ import { useEffect, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 type Row = {
   id: string;
@@ -211,14 +212,14 @@ export function Idees() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
           {rows === null
             ? "Chargement…"
             : `${rows.length} idée${rows.length > 1 ? "s" : ""}`}
         </div>
         <AddButton label="Idée" onClick={() => setFormOpen(true)} />
-      </div>
+      </PageHeaderRow>
 
       {/* Synthèse (bento) */}
       {rows !== null && rows.length > 0 && (() => {
@@ -263,7 +264,7 @@ export function Idees() {
             onClear={() => { setStatusFilter(ALL_STATUS); setCreatorFilter(""); }}
             extra={creators.length > 0 ? (
               <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Créatrice</span>
+                <span className="text-[12px] font-medium text-muted-foreground">Créatrice</span>
                 <div className="flex items-center gap-2">
                   <UserRound className="h-4 w-4 shrink-0 text-faint" />
                   <select
@@ -322,7 +323,7 @@ export function Idees() {
               <span className={cn("absolute left-0 top-0 h-full w-1", ideaAccent(row.status))} />
               {editId === row.id ? (
                 <div className="flex flex-col gap-2">
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Modifier l'idée</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">Modifier l'idée</span>
                   <textarea
                     value={editText}
                     onChange={(e) => setEditText(e.target.value)}
@@ -335,7 +336,7 @@ export function Idees() {
                     <button
                       type="button"
                       onClick={() => saveEdit(row.id)}
-                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                     >
                       <Check className="h-3.5 w-3.5" /> Enregistrer
                     </button>
@@ -400,7 +401,7 @@ export function Idees() {
               {/* Commentaire (agence) */}
               {editNoteId === row.id ? (
                 <div className="mt-3 flex flex-col gap-2 rounded-xl border border-border bg-panel p-3">
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Commentaire</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">Commentaire</span>
                   <textarea
                     value={editNoteText}
                     onChange={(e) => setEditNoteText(e.target.value)}
@@ -417,7 +418,7 @@ export function Idees() {
                         setEditNoteId(null);
                         toast("Commentaire enregistré ✓");
                       }}
-                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                     >
                       <Check className="h-3.5 w-3.5" /> Enregistrer
                     </button>

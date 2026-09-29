@@ -86,7 +86,7 @@ export default function GlassStatChart({
               onClick={() => setType(t)}
               className={cn(
                 "rounded-full px-3 py-1 text-[11px] font-semibold transition-colors",
-                type === t ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                type === t ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
               )}
             >
               {t === "area" ? "Aire" : "Ligne"}

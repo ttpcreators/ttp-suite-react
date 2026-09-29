@@ -7,6 +7,7 @@ import { AddButton, InlineForm, TextField, DeleteButton } from "@/components/ui/
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 /** Une checklist nommée : `done` mappe { stepId: true } pour les étapes cochées. */
 export type Checklist = {
@@ -214,14 +215,9 @@ export function Checklist() {
   if (!selected) {
     return (
       <div>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold text-foreground">
-              Checklists
-            </div>
-            <div className="mt-0.5 text-[11px] text-faint">
-              {lists.length} checklist{lists.length > 1 ? "s" : ""}
-            </div>
+        <PageHeaderRow>
+          <div className="text-sm text-muted-foreground">
+            {lists.length} checklist{lists.length > 1 ? "s" : ""}
           </div>
           <div className="flex items-center gap-2">
             {lists.length > 0 && (
@@ -239,9 +235,9 @@ export function Checklist() {
                     onClick={() => setView(v)}
                     title={label}
                     className={cn(
-                      "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                      "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors",
                       view === v
-                        ? "bg-primary text-primary-foreground"
+                        ? "bg-foreground text-background"
                         : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
                     )}
                   >
@@ -253,7 +249,7 @@ export function Checklist() {
             )}
             <AddButton label="Nouvelle checklist" onClick={() => setFormOpen(true)} />
           </div>
-        </div>
+        </PageHeaderRow>
 
         <InlineForm
           open={formOpen}
@@ -341,7 +337,7 @@ export function Checklist() {
           <div className="overflow-x-auto rounded-2xl border border-border bg-panel shadow-sm">
             <table className="w-full min-w-[480px] border-collapse text-left">
               <thead>
-                <tr className="border-b border-border text-[10px] font-semibold uppercase tracking-wide text-faint">
+                <tr className="border-b border-border text-[12px] font-medium text-muted-foreground">
                   <th className="px-4 py-3">Checklist</th>
                   <th className="px-4 py-3 text-right">Étapes</th>
                   <th className="px-4 py-3 text-right">Avancement</th>
@@ -507,7 +503,7 @@ export function Checklist() {
                         {/* Côté responsable */}
                         <span
                           className={cn(
-                            "hidden shrink-0 rounded-full px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wider sm:inline",
+                            "hidden shrink-0 rounded-full px-2.5 py-1 text-[10px] font-mediumr sm:inline",
                             step.who === "Créateur"
                               ? "bg-indigo/10 text-indigo"
                               : "bg-signalsoft text-signaltext"

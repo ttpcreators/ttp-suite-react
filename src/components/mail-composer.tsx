@@ -254,7 +254,7 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
                   className={cn(
                     "rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
                     tplId === t.id
-                      ? "bg-primary text-primary-foreground"
+                      ? "bg-foreground text-background"
                       : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground",
                   )}
                   title={KIND_LABEL[t.kind]}
@@ -268,7 +268,7 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
                 className={cn(
                   "rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
                   tplId === null
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-foreground text-background"
                     : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground",
                 )}
               >
@@ -300,7 +300,7 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
                   type="button"
                   onClick={openInMailApp}
                   title="Ouvre le mail pré-rempli dans ton app mail par défaut"
-                  className="flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                 >
                   <ExternalLink className="h-3.5 w-3.5" /> Ouvrir dans Spark
                 </button>
@@ -308,7 +308,7 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
                   type="button"
                   onClick={send}
                   disabled={sending || !subject.trim() || !body.trim()}
-                  className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                   {sending ? "Envoi…" : "Envoyer via Gmail"}
@@ -331,7 +331,7 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
                   >
                     <button type="button" onClick={() => setEditId(editId === t.id ? null : t.id)} className="min-w-0 flex-1 text-left">
                       <span className="block truncate text-[12px] font-semibold text-foreground">{t.name}</span>
-                      <span className="text-[10px] uppercase tracking-wide text-faint">{KIND_LABEL[t.kind]}</span>
+                      <span className="text-[12px] text-muted-foreground">{KIND_LABEL[t.kind]}</span>
                     </button>
                     <button
                       type="button"
@@ -385,7 +385,7 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
                     className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2.5 text-[13px] leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                   />
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Insérer :</span>
+                    <span className="text-[12px] font-medium text-muted-foreground">Insérer :</span>
                     {TEMPLATE_VARS.map((v) => (
                       <button
                         key={v.token}
@@ -410,7 +410,7 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
                 type="button"
                 onClick={saveTemplates}
                 disabled={saving}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 {saving ? "Enregistrement…" : "Enregistrer les modèles"}

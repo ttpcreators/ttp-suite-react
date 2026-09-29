@@ -376,7 +376,7 @@ export function Engagement() {
                 }}
                 className={cn(
                   "flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[11px] font-semibold transition-colors",
-                  active ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:bg-rowhover",
+                  active ? "bg-foreground text-background" : "border border-border text-muted-foreground hover:bg-rowhover",
                 )}
               >
                 <PlatformIcon platform={pl.key} className="h-3.5 w-3.5" />
@@ -440,7 +440,7 @@ export function Engagement() {
       <div className="rounded-2xl border border-border bg-panel p-6 shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Taux d'engagement · {p.label} · 30 jours</div>
+            <div className="text-[11px] font-medium text-muted-foreground">Taux d'engagement · {p.label} · 30 jours</div>
             {hasInputs ? (
               <>
                 <div className="mt-1 text-5xl font-bold tracking-tight text-foreground">{erLabel}</div>
@@ -505,7 +505,7 @@ export function Engagement() {
               <button
                 type="button"
                 onClick={cancelEdit}
-                className="rounded-lg border border-border px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                className="rounded-lg border border-border px-3 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
               >
                 Annuler
               </button>
@@ -514,7 +514,7 @@ export function Engagement() {
               type="button"
               onClick={save}
               disabled={saving || !hasInputs}
-              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {savedOk ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
               {savedOk ? "Enregistré" : saving ? "Enregistrement…" : editingId ? "Mettre à jour" : "Enregistrer"}
@@ -682,7 +682,7 @@ function DetailModal({
         <div className="mt-4 grid grid-cols-2 gap-2">
           {cells.map((c) => (
             <div key={c.label} className="rounded-lg border border-border bg-card px-3 py-2">
-              <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{c.label}</div>
+              <div className="text-[11px] font-medium text-muted-foreground">{c.label}</div>
               <div className="text-sm font-semibold text-foreground">{c.value}</div>
             </div>
           ))}
@@ -692,14 +692,14 @@ function DetailModal({
           <button
             type="button"
             onClick={onDelete}
-            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#E5484D] transition-colors hover:bg-rowhover"
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-[#E5484D] transition-colors hover:bg-rowhover"
           >
             <X className="h-3.5 w-3.5" /> Supprimer
           </button>
           <button
             type="button"
             onClick={onEdit}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             <Pencil className="h-3.5 w-3.5" /> Modifier
           </button>
@@ -722,7 +722,7 @@ function NumField({
 }) {
   return (
     <label className={cn("flex flex-col gap-1.5", className)}>
-      <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</span>
+      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
       <input
         type="number"
         inputMode="numeric"

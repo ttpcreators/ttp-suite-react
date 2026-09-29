@@ -93,7 +93,7 @@ export default function CreatorStatsCard({ entries }: { entries: Entry[] }) {
                 active === m.key ? "bg-panel/60" : "hover:bg-rowhover",
               )}
             >
-              <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+              <span className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
                 <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: m.color }} /> {m.label}
               </span>
               <span className="text-lg font-bold tabular-nums tracking-tight text-foreground">{fmtVal(totals[m.key], m.pct)}</span>

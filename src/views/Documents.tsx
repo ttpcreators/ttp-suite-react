@@ -15,6 +15,7 @@ import { notifyCreator } from "@/lib/push";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useEffect, useRef, useState } from "react";
 import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, Trash2, BarChart3, ChevronLeft, type LucideIcon } from "lucide-react";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 type Row = {
   id: string;
@@ -333,11 +334,11 @@ export function Documents() {
           <div className="mt-0.5 truncate text-[10px] text-faint">{details}</div>
         </button>
         {row.creator ? (
-          <span className="hidden shrink-0 whitespace-nowrap rounded-md bg-rowhover px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground sm:inline">
+          <span className="hidden shrink-0 whitespace-nowrap rounded-md bg-rowhover px-2.5 py-1 text-[10px] font-medium text-muted-foreground sm:inline">
             {row.creator}
           </span>
         ) : null}
-        <span className={cn("shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide", meta.tagClassName)}>{meta.label}</span>
+        <span className={cn("shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-medium", meta.tagClassName)}>{meta.label}</span>
         <ActionMenu
           items={[
             ...(row.path
@@ -356,16 +357,16 @@ export function Documents() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
           {rows === null ? "Chargement…" : `${rows.length} document${rows.length > 1 ? "s" : ""}`}
         </div>
         <AddButton label="Document" onClick={() => setFormOpen(true)} />
-      </div>
+      </PageHeaderRow>
 
       <InlineForm open={formOpen} title="Ajouter un document" onClose={() => setFormOpen(false)} onSubmit={submit} submitLabel={busy ? "Envoi…" : "Téléverser"}>
         <label className="flex min-w-[220px] flex-1 flex-col gap-1.5">
-          <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Fichier</span>
+          <span className="text-[11px] font-medium text-muted-foreground">Fichier</span>
           <input
             ref={fileRef}
             type="file"
@@ -424,7 +425,7 @@ export function Documents() {
             <button
               type="button"
               onClick={() => setOpenType(null)}
-              className="mb-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className="mb-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
               <ChevronLeft className="h-3.5 w-3.5" /> Tous les dossiers
             </button>

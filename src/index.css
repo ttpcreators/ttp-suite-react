@@ -166,8 +166,10 @@ body {
   background: var(--surface);
   box-shadow: inset 0 0 0 1px var(--border);
 }
-/* Les ombres portées ne servent à rien sur du noir : on les coupe en Minuit. */
-.dark:not(.dark-classic) .shadow-sm {
+/* Langage de l'Aperçu : panneaux PLATS, dessinés par leur seule bordure. Les
+   petites ombres des cartes sont coupées partout (les menus et fenêtres gardent
+   leurs ombres fortes, shadow-lg/xl, pour flotter au-dessus du contenu). */
+.shadow-sm {
   box-shadow: none;
 }
 

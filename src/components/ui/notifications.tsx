@@ -57,7 +57,7 @@ function PushRow() {
               type="button"
               onClick={disable}
               disabled={busy}
-              className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-faint transition-colors hover:text-foreground disabled:opacity-50"
+              className="shrink-0 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
             >
               Désactiver
             </button>
@@ -88,7 +88,7 @@ function PushRow() {
             if (!ok && Notification.permission === "granted") toast("Activation échouée — réessaie");
           }}
           disabled={busy}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           <BellRing className="h-3.5 w-3.5" /> {busy ? "Activation…" : "Activer sur ce téléphone"}
         </button>
@@ -158,7 +158,7 @@ export function Notifications({
                   onDismiss?.(notifications.map((n) => n.id));
                   setNotifications([]);
                 }}
-                className="text-[10px] font-semibold uppercase tracking-wide text-faint transition-colors hover:text-foreground"
+                className="text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
                 Tout effacer
               </button>
@@ -178,7 +178,7 @@ export function Notifications({
                     onClick={() => setFilter(t.value)}
                     className={cn(
                       "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold transition-colors",
-                      on ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground",
+                      on ? "bg-foreground text-background" : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground",
                     )}
                   >
                     {t.label}

@@ -19,6 +19,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { toISODate, frDate } from "@/lib/dates";
 import { getCache, setCache } from "@/lib/viewCache";
 import { notifyCreator } from "@/lib/push";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 type Row = {
   id: string;
@@ -335,7 +336,7 @@ export function Briefs() {
             <button
               type="button"
               onClick={() => saveEdit(row.id)}
-              className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+              className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
               Enregistrer
             </button>
@@ -375,7 +376,7 @@ export function Briefs() {
         </div>
 
         <div className="mt-3 rounded-xl bg-panel px-3 py-2">
-          <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <Package className="h-3 w-3" /> Livrables
           </div>
           <div className="mt-1 text-[12px] font-medium leading-snug text-foreground">{row.deliverables || "—"}</div>
@@ -383,13 +384,13 @@ export function Briefs() {
 
         <div className="mt-2 grid grid-cols-2 gap-2">
           <div className="rounded-xl bg-panel px-3 py-2">
-            <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
               <Wallet className="h-3 w-3" /> Budget
             </div>
             <div className="mt-1 truncate text-[12px] font-medium text-foreground">{row.budget || "—"}</div>
           </div>
           <div className="rounded-xl bg-panel px-3 py-2">
-            <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide text-faint">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
               <Target className="h-3 w-3" /> Objectif
             </div>
             <div className="mt-1 truncate text-[12px] font-medium text-foreground">{row.objectif || "—"}</div>
@@ -465,10 +466,10 @@ export function Briefs() {
     <div>
       {/* Input caché pour joindre un PDF à un brief (cible = attachTargetRef) */}
       <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => onPdfPicked(e.target.files)} />
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="text-sm text-muted-foreground">{rows === null ? "Chargement…" : `${rows.length} brief${rows.length > 1 ? "s" : ""}`}</div>
         <AddButton label="Brief" onClick={() => setFormOpen(true)} />
-      </div>
+      </PageHeaderRow>
 
       {/* Synthèse (bento) */}
       {rows !== null && rows.length > 0 && (() => {
@@ -522,7 +523,7 @@ export function Briefs() {
                     onClick={() => setView(v.id)}
                     className={cn(
                       "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                      view === v.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                      view === v.id ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
                     <v.icon className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{v.label}</span>
@@ -532,7 +533,7 @@ export function Briefs() {
             }
             extra={creators.length > 0 ? (
               <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Créateur</span>
+                <span className="text-[12px] font-medium text-muted-foreground">Créateur</span>
                 <div className="flex items-center gap-2">
                   <UserRound className="h-4 w-4 shrink-0 text-faint" />
                   <select

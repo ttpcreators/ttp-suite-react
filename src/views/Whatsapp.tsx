@@ -240,7 +240,7 @@ export function WhatsappView() {
             )}
           </div>
         </div>
-        <span className={cn("hidden shrink-0 rounded-full px-2.5 py-1 text-[8px] font-semibold uppercase tracking-wide sm:inline", TONE_CLS[x.status.tone])}>
+        <span className={cn("hidden shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium sm:inline", TONE_CLS[x.status.tone])}>
           {x.status.label}
         </span>
         <Actions x={x} />
@@ -307,7 +307,7 @@ export function WhatsappView() {
               className={cn(
                 "rounded-full px-3.5 py-1.5 text-[11px] font-semibold transition-colors",
                 view === v
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-foreground text-background"
                   : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
               )}
             >
@@ -323,7 +323,7 @@ export function WhatsappView() {
                 type="button"
                 onClick={() => setTagFilter(o.value)}
                 className={cn(
-                  "rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors",
+                  "rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors",
                   tagFilter === o.value
                     ? "bg-foreground text-background"
                     : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground",
@@ -339,7 +339,7 @@ export function WhatsappView() {
       {/* 1) À relancer aujourd'hui */}
       {(view === "all" || view === "relance") && (
         <section className="mb-5">
-          <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+          <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
             <Send className="h-3 w-3" /> À relancer ({aRelancer.length})
           </div>
           {aRelancer.length === 0 ? (
@@ -355,7 +355,7 @@ export function WhatsappView() {
       {/* 2) Jamais contactés */}
       {(view === "all" || view === "jamais") && (
         <section className="mb-5">
-          <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+          <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
             <UserRound className="h-3 w-3" /> Jamais contactés ({jamais.length})
           </div>
           {jamais.length === 0 ? (
@@ -371,7 +371,7 @@ export function WhatsappView() {
       {/* 3) En cours (cycle pas encore écoulé) */}
       {(view === "all" || view === "encours") && enCours.length > 0 && (
         <section className="mb-5">
-          <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+          <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
             <Clock className="h-3 w-3" /> En cours ({enCours.length})
           </div>
           <div className="flex flex-col gap-2">

@@ -10,7 +10,7 @@ import { toast } from "@/components/ui/toast";
  * l'écran appelant. `kind="logo"` → PNG (transparence conservée) ; sinon JPEG.
  */
 
-const LBL = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-faint";
+const LBL = "mb-1 block text-[12px] font-medium text-muted-foreground";
 
 /** Charge un fichier image dans un <img> (respecte l'orientation EXIF sur les
  *  navigateurs modernes, y compris Safari iOS). */

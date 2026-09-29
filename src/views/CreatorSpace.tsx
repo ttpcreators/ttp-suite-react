@@ -802,7 +802,7 @@ export function CreatorSpace({
   const ideaCard = (x: Idea) =>
     ideaEditId === x.id ? (
       <div key={x.id} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm">
-        <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Modifier l'idée</span>
+        <span className="text-[11px] font-medium text-muted-foreground">Modifier l'idée</span>
         <textarea
           value={ideaEditText}
           onChange={(e) => setIdeaEditText(e.target.value)}
@@ -815,7 +815,7 @@ export function CreatorSpace({
           <button
             type="button"
             onClick={() => saveIdeaEdit(x.id)}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             <Check className="h-3.5 w-3.5" /> Enregistrer
           </button>
@@ -1145,7 +1145,7 @@ export function CreatorSpace({
     val ? (
       <div className="flex items-center justify-between gap-3 rounded-lg bg-panel px-3 py-2.5">
         <div className="min-w-0">
-          <div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{label}</div>
+          <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
           <div className="truncate text-sm text-foreground">{val}</div>
         </div>
         <button
@@ -1170,7 +1170,7 @@ export function CreatorSpace({
     if (!val || !val.trim() || val === "—") return null;
     return (
       <div className={cn("rounded-xl border border-border bg-panel/40 p-3 transition-colors hover:bg-rowhover", wide && "sm:col-span-2")}>
-        <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+        <div className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
           {platform ? <PlatformIcon platform={platform} className="h-3.5 w-3.5 text-foreground" /> : null}
           {label}
         </div>
@@ -1196,7 +1196,7 @@ export function CreatorSpace({
 
   const editInput = (label: string, k: keyof Creator, placeholder?: string, type?: string) => (
     <label className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-faint">{label}</span>
+      <span className="text-[12px] font-medium text-muted-foreground">{label}</span>
       <input
         type={type}
         value={(form[k] as string) ?? ""}
@@ -1403,7 +1403,7 @@ export function CreatorSpace({
                   <button type="button" onClick={() => setStatsModalOpen(true)} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/5">
                     <HelpCircle className="h-3.5 w-3.5" /> Comment faire&nbsp;?
                   </button>
-                  <button type="button" onClick={() => setStatsModalOpen(true)} className="rounded-lg bg-primary px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
+                  <button type="button" onClick={() => setStatsModalOpen(true)} className="rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
                     Envoyer
                   </button>
                 </div>
@@ -1426,7 +1426,7 @@ export function CreatorSpace({
 
                 {/* La méthode la plus simple : l'app Edits d'Instagram */}
                 <div className="mb-3 rounded-xl border border-primary/25 bg-primary/[0.04] p-3.5">
-                  <div className="mb-2.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                  <div className="mb-2.5 flex items-center gap-1.5 text-[12px] font-medium text-primary">
                     <Share2 className="h-3.5 w-3.5" /> La méthode la plus simple
                   </div>
                   <ol className="flex flex-col gap-2.5">
@@ -1443,9 +1443,9 @@ export function CreatorSpace({
                   </ol>
                 </div>
 
-                <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wide text-faint">Ou capture toi-même — ce qu'on regarde</div>
+                <div className="mb-2 text-center text-[12px] font-medium text-muted-foreground">Ou capture toi-même — ce qu'on regarde</div>
                 <div className="rounded-xl bg-panel/50 p-3.5 text-[12px] leading-relaxed text-muted-foreground">
-                  <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+                  <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
                     <PlatformIcon platform="instagram" className="h-3.5 w-3.5 text-foreground" /> Instagram · Statistiques (Insights) · 30 j
                   </div>
                   <ul className="flex flex-col gap-1 pl-0.5">
@@ -1454,7 +1454,7 @@ export function CreatorSpace({
                     <li>• Comptes touchés, taux d'engagement, abonnés</li>
                     <li>• <span className="font-medium text-foreground">Démographie</span> : pays, âge, genre</li>
                   </ul>
-                  <div className="mb-2 mt-3 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+                  <div className="mb-2 mt-3 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
                     <PlatformIcon platform="tiktok" className="h-3.5 w-3.5 text-foreground" /> TikTok · Analytics · 30 j
                   </div>
                   <ul className="flex flex-col gap-1 pl-0.5">
@@ -1542,7 +1542,7 @@ export function CreatorSpace({
                       {editInput("SIREN", "siren")}
                       {editInput("Naissance", "birth", undefined, "date")}
                     </div>
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">Statistiques</div>
+                    <div className="text-[12px] font-medium text-muted-foreground">Statistiques</div>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                       {editInput("Abonnés", "followers")}
                       {editInput("Engagement", "er")}
@@ -1590,7 +1590,7 @@ export function CreatorSpace({
                           </div>
                           {/* Engagement par plateforme (on sait de quel réseau il s'agit) */}
                           <div className="rounded-xl bg-panel p-4">
-                            <div className="mb-2.5 text-[10px] font-semibold uppercase tracking-wide text-faint">Engagement par plateforme</div>
+                            <div className="mb-2.5 text-[12px] font-medium text-muted-foreground">Engagement par plateforme</div>
                             {platformLatest.length === 0 ? (
                               <div className="text-xs text-muted-foreground">
                                 {toNum(creator?.er) != null ? `ER global · ${creator?.er}` : "Pas encore de mesure d'engagement de ton agence."}
@@ -1642,7 +1642,7 @@ export function CreatorSpace({
                   <div className="mb-3.5 flex items-center justify-between">
                     <div className="text-sm font-semibold">Mes tâches</div>
                     {openTodos.length > 0 && (
-                      <button type="button" onClick={() => setTab("todo")} className="text-[10px] font-semibold uppercase tracking-wide text-primary transition-opacity hover:opacity-80">Voir tout</button>
+                      <button type="button" onClick={() => setTab("todo")} className="text-[12px] font-medium text-primary transition-opacity hover:opacity-80">Voir tout</button>
                     )}
                   </div>
                   {openTodos.length === 0 ? (
@@ -1661,7 +1661,7 @@ export function CreatorSpace({
                   <div className="mb-3.5 flex items-center justify-between">
                     <div className="text-sm font-semibold">Mes briefs</div>
                     {briefs.length > 0 && (
-                      <button type="button" onClick={() => setTab("briefs")} className="text-[10px] font-semibold uppercase tracking-wide text-primary transition-opacity hover:opacity-80">Voir tout</button>
+                      <button type="button" onClick={() => setTab("briefs")} className="text-[12px] font-medium text-primary transition-opacity hover:opacity-80">Voir tout</button>
                     )}
                   </div>
                   {briefs.length === 0 ? (
@@ -1681,7 +1681,7 @@ export function CreatorSpace({
                   <div className="mb-3.5 flex items-center justify-between">
                     <div className="text-sm font-semibold">Mes factures récentes</div>
                     {invoices.length > 0 && (
-                      <button type="button" onClick={() => setTab("facturation")} className="text-[10px] font-semibold uppercase tracking-wide text-primary transition-opacity hover:opacity-80">Voir tout</button>
+                      <button type="button" onClick={() => setTab("facturation")} className="text-[12px] font-medium text-primary transition-opacity hover:opacity-80">Voir tout</button>
                     )}
                   </div>
                   {invoices.length === 0 ? (
@@ -1763,7 +1763,7 @@ export function CreatorSpace({
                     setSuiviErr(false);
                     setSuivi(null);
                   }}
-                  className="mt-3 rounded-lg border border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                  className="mt-3 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                 >
                   Réessayer
                 </button>
@@ -1807,7 +1807,7 @@ export function CreatorSpace({
                     setDebriefErr(false);
                     setDebriefs(null);
                   }}
-                  className="mt-3 rounded-lg border border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                  className="mt-3 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                 >
                   Réessayer
                 </button>
@@ -1853,7 +1853,7 @@ export function CreatorSpace({
                       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
                         {d.kpis.map((k, j) => (
                           <div key={j} className="rounded-xl bg-panel px-3 py-2.5">
-                            <div className="text-[8px] font-semibold uppercase tracking-wide text-faint">{k.l}</div>
+                            <div className="text-[10px] font-medium text-muted-foreground">{k.l}</div>
                             <div className="mt-1 text-lg font-bold leading-none tracking-tight text-foreground">{k.v}</div>
                           </div>
                         ))}
@@ -1931,7 +1931,7 @@ export function CreatorSpace({
                         <div className="flex items-center justify-between px-1.5 pt-1">
                           <div className="flex items-center gap-2">
                             <span className={"h-2 w-2 rounded-full " + col.dot} />
-                            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{col.label}</span>
+                            <span className="text-[12px] font-medium text-muted-foreground">{col.label}</span>
                           </div>
                           <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-semibold text-faint">{colRows.length}</span>
                         </div>
@@ -1985,7 +1985,7 @@ export function CreatorSpace({
                       ),
                       right: (
                         <>
-                          <span className={cn("hidden rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide sm:inline", prioPill(t.priority))}>
+                          <span className={cn("hidden rounded-full px-2 py-0.5 text-[11px] font-medium sm:inline", prioPill(t.priority))}>
                             {titleCase(t.priority ?? "moyenne")}
                           </span>
                           <button
@@ -2070,8 +2070,8 @@ export function CreatorSpace({
                           type="button"
                           onClick={() => setIdeaView(m)}
                           className={
-                            "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-colors " +
-                            (ideaView === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")
+                            "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors " +
+                            (ideaView === m ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")
                           }
                         >
                           <Icon className="h-3.5 w-3.5" />
@@ -2102,7 +2102,7 @@ export function CreatorSpace({
                       >
                         <div className="flex items-center gap-2 px-1">
                           <span className={"size-2 shrink-0 rounded-full " + s.dot} />
-                          <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{s.label}</span>
+                          <span className="truncate text-[12px] font-medium text-muted-foreground">{s.label}</span>
                           <span className="ml-auto text-[11px] tabular-nums text-faint">{col.length}</span>
                         </div>
                         {col.length === 0 ? (
@@ -2255,7 +2255,7 @@ export function CreatorSpace({
                     {/* Script écrit par le créateur — visible et exportable par l'agence */}
                     {briefScriptId === b.id ? (
                       <div className="mt-3 flex flex-col gap-2 rounded-xl border border-border bg-panel p-3">
-                        <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Mon script</span>
+                        <span className="text-[11px] font-medium text-muted-foreground">Mon script</span>
                         <textarea
                           value={briefScriptText}
                           onChange={(e) => setBriefScriptText(e.target.value)}
@@ -2268,7 +2268,7 @@ export function CreatorSpace({
                           <button
                             type="button"
                             onClick={() => saveBriefScript(b.id)}
-                            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
+                            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                           >
                             <Check className="h-3.5 w-3.5" /> Enregistrer
                           </button>
@@ -2517,7 +2517,7 @@ export function CreatorSpace({
               {/* Fichiers media kit déposés par l'agence (PDF / liens) */}
               {docs.filter((d) => d.type === "mediakit").length > 0 && (
                 <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-                  <div className="border-b border-border px-4 py-2.5 text-[9px] font-semibold uppercase tracking-wider text-faint">
+                  <div className="border-b border-border px-4 py-2.5 text-[11px] font-medium text-muted-foreground">
                     Fichiers déposés par l'agence
                   </div>
                   {docs
@@ -2611,7 +2611,7 @@ export function CreatorSpace({
 
                 {docs.filter((d) => d.type === "facture").length > 0 && (
                   <div className="mt-3 border-t border-border pt-3">
-                    <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-faint">
+                    <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
                       Déposées par toi
                     </div>
                     <div className="flex flex-col gap-1.5">
@@ -2639,11 +2639,11 @@ export function CreatorSpace({
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                  <div className="text-[9px] font-semibold uppercase tracking-wider text-faint">Encaissé</div>
+                  <div className="text-[11px] font-medium text-muted-foreground">Encaissé</div>
                   <div className="mt-1.5 whitespace-nowrap text-xl font-bold tracking-tight text-signaltext">{formatEuro(encaisse)}</div>
                 </div>
                 <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                  <div className="text-[9px] font-semibold uppercase tracking-wider text-faint">Total facturé</div>
+                  <div className="text-[11px] font-medium text-muted-foreground">Total facturé</div>
                   <div className="mt-1.5 whitespace-nowrap text-xl font-bold tracking-tight">{formatEuro(totalFacture)}</div>
                 </div>
               </div>
@@ -2751,7 +2751,7 @@ export function CreatorSpace({
               const done = subs.filter((s) => s.done).length;
               return (
                 <div className="mt-5 flex flex-col gap-1.5 border-t border-border pt-4">
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">
+                  <span className="text-[11px] font-medium text-muted-foreground">
                     Sous-tâches{subs.length ? ` · ${done}/${subs.length}` : ""}
                   </span>
                   {subs.length > 0 && (
@@ -2780,7 +2780,7 @@ export function CreatorSpace({
 
             {/* Pièces jointes */}
             <div className="mt-4 flex flex-col gap-1.5 border-t border-border pt-4">
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">
+              <span className="text-[11px] font-medium text-muted-foreground">
                 Pièces jointes{(taskView.attachments ?? []).length ? ` · ${(taskView.attachments ?? []).length}` : ""}
               </span>
               <div className="flex flex-col gap-2">

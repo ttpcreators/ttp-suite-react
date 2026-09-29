@@ -57,7 +57,7 @@ export function RecipientPicker({
   const canAddTyped = EMAIL_RE.test(typed) && !has(typed);
   const showList = focused && (matches.length > 0 || canAddTyped);
 
-  const pill = "rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors";
+  const pill = "rounded-full px-3 py-1 text-[12px] font-medium transition-colors";
   const pillOn = "bg-primary text-primary-foreground";
   const pillOff = "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground";
 
@@ -153,7 +153,7 @@ export function RecipientPicker({
         <button
           type="button"
           onClick={() => onChange([...value, ...addable])}
-          className="inline-flex items-center gap-1.5 self-start rounded-full border border-border bg-surface px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+          className="inline-flex items-center gap-1.5 self-start rounded-full border border-border bg-surface px-3 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
         >
           <Users className="h-3 w-3" /> {tag ? `Ajouter tous les « ${tag} »` : "Tout le monde"} ({addable.length})
         </button>

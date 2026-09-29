@@ -155,21 +155,21 @@ export function Sidebar({
           type="button"
           onClick={() => onSpaceChange("agency")}
           className={cn(
-            "flex-1 rounded-[7px] py-1.5 text-center text-[10px] font-semibold tracking-[.5px] transition-colors",
-            space === "agency" ? "bg-surface text-foreground shadow-sm" : "text-faint hover:text-foreground",
+            "flex-1 rounded-[7px] py-1.5 text-center text-[12px] font-medium transition-colors",
+            space === "agency" ? "bg-surface text-foreground ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
           )}
         >
-          AGENCE
+          Agence
         </button>
         <button
           type="button"
           onClick={() => onSpaceChange("portal")}
           className={cn(
-            "flex-1 rounded-[7px] py-1.5 text-center text-[10px] font-semibold tracking-[.5px] transition-colors",
-            space === "portal" ? "bg-surface text-foreground shadow-sm" : "text-faint hover:text-foreground",
+            "flex-1 rounded-[7px] py-1.5 text-center text-[12px] font-medium transition-colors",
+            space === "portal" ? "bg-surface text-foreground ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
           )}
         >
-          CRÉATEURS
+          Créateurs
         </button>
       </div>
     </>

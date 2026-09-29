@@ -35,6 +35,7 @@ import { totalsOf, type LineItem, type Totals } from "@/lib/invoice";
 import { printHtml } from "@/lib/printPdf";
 import { ttpLogoImg } from "@/lib/pdfDoc";
 import { notifyCreator } from "@/lib/push";
+import { PageHeaderRow } from "@/components/ui/page-header";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -661,7 +662,7 @@ export function Facturation() {
   return (
     <>
       {/* En-tête */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
           {rows.length} facture{rows.length > 1 ? "s" : ""}
         </div>
@@ -676,7 +677,7 @@ export function Facturation() {
           </button>
           <AddButton label="Facture" onClick={openCreate} />
         </div>
-      </div>
+      </PageHeaderRow>
 
       {/* Synthèse (bento) */}
       {rows.length > 0 && (
@@ -713,7 +714,7 @@ export function Facturation() {
 
       {/* Liste */}
       <div className="space-y-2.5">
-        <div className="hidden grid-cols-[0.8fr_2fr_1.1fr_1fr_1fr_1.4fr] gap-3 px-4 pb-1 text-[9px] font-semibold uppercase tracking-wider text-faint md:grid">
+        <div className="hidden grid-cols-[0.8fr_2fr_1.1fr_1fr_1fr_1.4fr] gap-3 px-4 pb-1 text-[11px] font-medium text-muted-foreground md:grid">
           <span>Réf.</span>
           <span>Marque × Créateur</span>
           <span className="text-right">Montant TTC</span>
@@ -836,7 +837,7 @@ export function Facturation() {
 
             {/* Client */}
             <div>
-              <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-faint">Client (facturé à)</div>
+              <div className="mb-2 text-[12px] font-medium text-muted-foreground">Client (facturé à)</div>
               <div className="flex flex-wrap items-end gap-3">
                 <TextField label="Nom / société" value={draft.clientName} onChange={(v) => setDraft({ ...draft, clientName: v })} className="min-w-[180px] flex-[2]" />
                 <TextField label="Email" type="email" value={draft.clientEmail} onChange={(v) => setDraft({ ...draft, clientEmail: v })} className="min-w-[180px] flex-1" />
@@ -859,7 +860,7 @@ export function Facturation() {
             {/* Lignes / options */}
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">Lignes / options</div>
+                <div className="text-[12px] font-medium text-muted-foreground">Lignes / options</div>
                 <button
                   type="button"
                   onClick={() => setDraft({ ...draft, items: [...draft.items, { id: uid(), label: "", qty: 1, unit: 0 }] })}
@@ -917,7 +918,7 @@ export function Facturation() {
               </div>
               <div className="min-w-[170px] flex-1">
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Commission agence (%)</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">Commission agence (%)</span>
                   <input
                     value={String(draft.commissionRate)}
                     onChange={(e) => setDraft({ ...draft, commissionRate: num(e.target.value) })}
@@ -930,7 +931,7 @@ export function Facturation() {
 
             {/* Notes */}
             <label className="flex flex-col gap-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-faint">Notes (facultatif)</span>
+              <span className="text-[11px] font-medium text-muted-foreground">Notes (facultatif)</span>
               <textarea
                 value={draft.notes}
                 onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
@@ -942,10 +943,10 @@ export function Facturation() {
             {/* Récap */}
             <div className="rounded-xl border border-border bg-panel p-4">
               <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-4">
-                <div><div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Total HT</div><div className="mt-0.5 font-semibold text-foreground">{euro2(draftTotals.ht)}</div></div>
-                <div><div className="text-[9px] font-semibold uppercase tracking-wide text-faint">{draft.franchise ? "TVA" : `TVA ${fmtRate(draft.vatRate)}%`}</div><div className="mt-0.5 font-semibold text-foreground">{draft.franchise ? "—" : euro2(draftTotals.tva)}</div></div>
-                <div><div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Total TTC</div><div className="mt-0.5 font-bold text-primary">{euro2(draftTotals.ttc)}</div></div>
-                <div><div className="text-[9px] font-semibold uppercase tracking-wide text-faint">Marge agence · {fmtRate(draft.commissionRate)}%</div><div className="mt-0.5 font-semibold text-signaltext">{euro2(draftTotals.commission)}</div></div>
+                <div><div className="text-[11px] font-medium text-muted-foreground">Total HT</div><div className="mt-0.5 font-semibold text-foreground">{euro2(draftTotals.ht)}</div></div>
+                <div><div className="text-[11px] font-medium text-muted-foreground">{draft.franchise ? "TVA" : `TVA ${fmtRate(draft.vatRate)}%`}</div><div className="mt-0.5 font-semibold text-foreground">{draft.franchise ? "—" : euro2(draftTotals.tva)}</div></div>
+                <div><div className="text-[11px] font-medium text-muted-foreground">Total TTC</div><div className="mt-0.5 font-bold text-primary">{euro2(draftTotals.ttc)}</div></div>
+                <div><div className="text-[11px] font-medium text-muted-foreground">Marge agence · {fmtRate(draft.commissionRate)}%</div><div className="mt-0.5 font-semibold text-signaltext">{euro2(draftTotals.commission)}</div></div>
               </div>
               {draft.creator && (
                 <div className="mt-2 border-t border-border pt-2 text-[11px] text-muted-foreground">
