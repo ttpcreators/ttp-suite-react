@@ -10,6 +10,8 @@ import { invMonthKey, monthsBetween, monthLabel, momDelta } from "@/lib/timeSeri
 import { Users, ListChecks, CalendarDays, Wallet, ArrowRight, Sparkles, FileText, Trophy, CalendarClock } from "lucide-react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { presetRange, previousRange, rangeBounds, rangeDays, sameRange, standardPresets, type DateRange } from "@/lib/dateRange";
 
 // Graphique recharts lazy-chargé : sort la lib (~101 Ko gzip) du premier écran.
 const DashArea = lazy(() => import("@/views/charts/DashArea"));
@@ -36,7 +38,6 @@ export type ApercuData = {
 
 export type Cockpit = { jour: string; contenu: string } | null;
 
-const DAY = 86400000;
 const MONTHS_LONG = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 
 function localISO(d: Date): string {
@@ -127,24 +128,24 @@ export function ApercuView({
   obj: Record<string, unknown> | null;
   cockpit: Cockpit;
 }) {
-  // Fenêtre des KPI (7 / 30 / 90 jours) et base du graphe (émission vs échéance).
-  const [period, setPeriod] = useState<7 | 30 | 90>(30);
+  // Fenêtre des KPI : raccourci 7 / 30 / 90 jours ou dates libres (calendrier).
+  const [range, setRange] = useState<DateRange>(() => presetRange("30j")!);
+  const quick = (["7j", "30j", "90j"] as const).find((id) => sameRange(presetRange(id), range)) ?? null;
   const [caBasis, setCaBasis] = useState<"emission" | "echeance">("emission");
 
-  const now = Date.now();
   const issued = d.invoices.filter((i) => i.status !== "brouillon");
   const issueMs = (iv: Invoice) => toMs(invDetails[iv.id]?.issueDate || iv.date);
 
   // ── KPI : période courante vs précédente (par date d'émission) ──
-  const inWin = (ms: number, from: number, to: number) => Number.isFinite(ms) && ms > from && ms <= to;
-  const cur = issued.filter((iv) => inWin(issueMs(iv), now - period * DAY, now));
-  const prev = issued.filter((iv) => inWin(issueMs(iv), now - 2 * period * DAY, now - period * DAY));
+  const inWin = (ms: number, [from, to]: [number, number]) => Number.isFinite(ms) && ms >= from && ms < to;
+  const cur = issued.filter((iv) => inWin(issueMs(iv), rangeBounds(range)));
+  const prev = issued.filter((iv) => inWin(issueMs(iv), rangeBounds(previousRange(range))));
   const sum = (xs: Invoice[]) => xs.reduce((a, i) => a + parseAmount(i.amount), 0);
   const factCur = sum(cur);
   const factPrev = sum(prev);
   const avgCur = cur.length ? factCur / cur.length : 0;
   const avgPrev = prev.length ? factPrev / prev.length : 0;
-  const periodSuffix = `vs ${period} j préc.`;
+  const periodSuffix = quick ? `vs ${rangeDays(range)} j préc.` : "vs période préc.";
 
   // ── Série mensuelle (timeline continue, 12 derniers mois) ──
   const caMonthAgg = new Map<string, number>();
@@ -245,9 +246,6 @@ export function ApercuView({
     .sort((a, b) => b.ca - a.ca)
     .slice(0, 5);
 
-  const fmtShort = (ms: number, withYear = false) =>
-    new Date(ms).toLocaleDateString("fr-FR", { day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}) });
-
   const kpis = [
     { label: "Facturé", value: formatEuro(factCur), delta: pctChange(factCur, factPrev) },
     { label: "Factures émises", value: String(cur.length), delta: pctChange(cur.length, prev.length) },
@@ -261,25 +259,27 @@ export function ApercuView({
         <h1 className="text-[24px] font-semibold tracking-tight md:text-[28px]">{greeting()}</h1>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border border-border bg-surface p-0.5">
-            {([7, 30, 90] as const).map((p) => (
+            {(["7j", "30j", "90j"] as const).map((id) => (
               <button
-                key={p}
+                key={id}
                 type="button"
-                onClick={() => setPeriod(p)}
-                aria-pressed={period === p}
+                onClick={() => setRange(presetRange(id)!)}
+                aria-pressed={quick === id}
                 className={cn(
                   "rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors",
-                  period === p ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+                  quick === id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                {p} jours
+                {parseInt(id, 10)} jours
               </button>
             ))}
           </div>
-          <span className="hidden items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium tabular-nums text-foreground sm:inline-flex">
-            <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
-            {fmtShort(now - period * DAY)} – {fmtShort(now, true)}
-          </span>
+          {/* Dates libres : raccourcis + calendrier « du … au … » */}
+          <DateRangePicker
+            value={range}
+            onChange={(r) => r && setRange(r)}
+            presets={standardPresets(["7j", "30j", "90j", "mois", "mois-1", "annee", "12m"])}
+          />
         </div>
       </div>
 

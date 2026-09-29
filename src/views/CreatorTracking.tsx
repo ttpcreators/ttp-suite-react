@@ -16,6 +16,7 @@ import {
   ROADMAP_TABLE, roadmapFrom, normRoadmap, normSelfCadence,
   type EditorialProfile, type PlatPrio, type Cadence, type MonthEntry, type JournalEntry, type ExchangeType, type SelfCadence,
 } from "@/lib/creatorTracking";
+import { DateInput, MonthPicker } from "@/components/ui/date-range-picker";
 
 const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15";
 const LBL = "mb-1 block text-[12px] font-medium text-muted-foreground";
@@ -312,7 +313,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
                 <div className="flex flex-col gap-4">
                   <div>
                     <label className={LBL}>Date d'entrée dans l'agence</label>
-                    <input type="date" value={cur.dateEntree} onChange={(e) => set({ dateEntree: e.target.value })} className={IN} />
+                    <DateInput value={cur.dateEntree} onChange={(v) => set({ dateEntree: v })} className={IN} />
                   </div>
                   <div>
                     <label className={LBL}>Conformité (loi 2023-451)</label>
@@ -688,7 +689,7 @@ export function JournalCard({ name }: { name: string }) {
             <div key={e.id} className="relative rounded-xl border border-border bg-panel/40 p-3.5 pl-4">
               <span className="absolute left-0 top-3.5 h-[calc(100%-1.75rem)] w-[3px] rounded-full bg-primary/40" />
               <div className="mb-2 flex flex-wrap items-center gap-2">
-                <input type="date" value={e.date} onChange={(ev) => edit(e.id, { date: ev.target.value })} className="rounded-md border border-border bg-surface px-2 py-1 text-[12px] outline-none focus:border-primary" />
+                <DateInput value={e.date} onChange={(v) => edit(e.id, { date: v })} clearable={false} className="rounded-md border border-border bg-surface px-2 py-1 text-[12px] outline-none focus:border-primary" />
                 <select value={e.type} onChange={(ev) => edit(e.id, { type: ev.target.value as ExchangeType })} className="rounded-md border border-border bg-surface px-2 py-1 text-[12px] font-semibold outline-none focus:border-primary">
                   {(Object.keys(EXCHANGE_META) as ExchangeType[]).map((t) => <option key={t} value={t}>{EXCHANGE_META[t].label}</option>)}
                 </select>
@@ -701,7 +702,7 @@ export function JournalCard({ name }: { name: string }) {
                 <Field label="Résumé de l'échange"><textarea value={e.resume} onChange={(ev) => edit(e.id, { resume: ev.target.value })} rows={2} placeholder="Ce qui s'est dit…" className={IN + " resize-y"} /></Field>
                 <Field label="Décisions prises"><textarea value={e.decisions} onChange={(ev) => edit(e.id, { decisions: ev.target.value })} rows={2} placeholder="Ce qui a été décidé…" className={IN + " resize-y"} /></Field>
                 <Field label="Actions à suivre"><textarea value={e.actions} onChange={(ev) => edit(e.id, { actions: ev.target.value })} rows={2} placeholder="Qui fait quoi…" className={IN + " resize-y"} /></Field>
-                <Field label="Prochain point prévu"><input type="date" value={e.prochainPoint} onChange={(ev) => edit(e.id, { prochainPoint: ev.target.value })} className={IN} /></Field>
+                <Field label="Prochain point prévu"><DateInput value={e.prochainPoint} onChange={(v) => edit(e.id, { prochainPoint: v })} className={IN} /></Field>
               </div>
             </div>
           ))}
@@ -984,13 +985,7 @@ export function CreatorRoadmap({ name }: { name: string }) {
         <DashSectionTitle
           icon={CalendarRange}
           right={
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value || currentMonth())}
-              aria-label="Mois"
-              className="rounded-lg border border-border bg-surface px-2.5 py-1 text-[12px] font-medium text-foreground outline-none focus:border-foreground/30"
-            />
+            <MonthPicker value={month} onChange={setMonth} max={currentMonth()} />
           }
         >
           Reporter ma cadence

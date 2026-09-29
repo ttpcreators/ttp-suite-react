@@ -14,6 +14,7 @@ import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, DeleteButton } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { MonthPicker } from "@/components/ui/date-range-picker";
 
 /** Un objectif du mois : intitulé, CA réalisé, cible, progression (%) et ton. */
 type Objective = {
@@ -186,14 +187,7 @@ export function Objectifs() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <input
-            type="month"
-            value={selectedMonth}
-            max={CURRENT_KEY}
-            onChange={(e) => setSelectedMonth(e.target.value || CURRENT_KEY)}
-            className="rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground outline-none focus:border-primary"
-            title="Choisir le mois"
-          />
+          <MonthPicker value={selectedMonth} onChange={setSelectedMonth} max={CURRENT_KEY} />
           <AddButton label="Objectif" onClick={openAdd} />
         </div>
       </PageHeaderRow>

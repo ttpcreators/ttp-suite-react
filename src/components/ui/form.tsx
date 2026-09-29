@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Plus, X, ChevronDown, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "./select";
+import { DateInput } from "./date-range-picker";
 
 // Enveloppe « input group » : la BORDURE + le halo de focus sont portés par le
 // conteneur (pas par l'input), et une icône optionnelle vit à l'intérieur du champ
@@ -147,6 +148,16 @@ export function TextField({
   className?: string;
   icon?: LucideIcon;
 }) {
+  // Dates : même calendrier que le sélecteur de période (pas le calendrier natif).
+  if (type === "date") {
+    return (
+      <Field label={label} className={className}>
+        <div className={shellCls}>
+          <DateInput value={value} onChange={onChange} placeholder={placeholder} ariaLabel={label} alignOffset={-13} className={cn(bareCtrl, "w-full py-2.5")} />
+        </div>
+      </Field>
+    );
+  }
   return (
     <Field label={label} className={className}>
       <div className={shellCls}>

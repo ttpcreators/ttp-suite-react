@@ -54,6 +54,7 @@ function fmtCompact(n: number): string {
 }
 import { AvatarUpload } from "@/components/ui/avatar-upload";
 import { EditorialProfileCard, MonthlyTracking, JournalCard, CreatorAlerts } from "@/views/CreatorTracking";
+import { DateInput } from "@/components/ui/date-range-picker";
 
 type Creator = {
   id: string;
@@ -672,10 +673,9 @@ export function CreatorDetail({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
               <div>
                 <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Date de début</div>
-                <input
-                  type="date"
+                <DateInput
                   value={ctStart}
-                  onChange={(e) => setCtStart(e.target.value)}
+                  onChange={setCtStart}
                   className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                 />
               </div>

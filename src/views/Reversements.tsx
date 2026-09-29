@@ -13,6 +13,7 @@ import { getCache, setCache } from "@/lib/viewCache";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
+import { DateInput } from "@/components/ui/date-range-picker";
 
 /**
  * Suivi des reversements créateurs : combien l'agence doit à chaque créateur
@@ -267,7 +268,7 @@ export function Reversements() {
                   </label>
                   <label className="flex min-w-0 flex-1 flex-col gap-1 sm:min-w-[130px]">
                     <span className="text-[11px] font-medium text-muted-foreground">Date</span>
-                    <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary" />
+                    <DateInput value={date} onChange={setDate} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary" />
                   </label>
                   <label className="flex min-w-0 flex-[2] flex-col gap-1 sm:min-w-[150px]">
                     <span className="text-[11px] font-medium text-muted-foreground">Note (optionnel)</span>
