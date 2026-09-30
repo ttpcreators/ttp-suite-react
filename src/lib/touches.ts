@@ -127,10 +127,13 @@ export function derivedStatus(list: Touch[], lastContacted?: string | null): { l
 function waDigits(phone?: string | null): string | null {
   const raw = (phone ?? "").trim();
   if (!raw) return null;
-  let digits = raw.replace(/[^\d+]/g, "");
+  // « +33 (0)6 … » : le (0) optionnel ne doit pas rester dans le numéro.
+  let digits = raw.replace(/\(\s*0\s*\)/g, "").replace(/[^\d+]/g, "");
   if (digits.startsWith("00")) digits = digits.slice(2);
   else if (digits.startsWith("+")) digits = digits.slice(1);
   else if (digits.startsWith("0")) digits = "33" + digits.slice(1);
+  // Numéro FR saisi sans le 0 (« 6 12 34 56 78 ») → indicatif 33.
+  else if (digits.length === 9) digits = "33" + digits;
   return digits.length >= 8 ? digits : null;
 }
 
@@ -150,4 +153,9 @@ export function waHref(phone: string | null | undefined, mode: WaMode): string |
   const d = waDigits(phone);
   if (!d) return null;
   return mode === "web" ? `https://web.whatsapp.com/send?phone=${d}` : `https://wa.me/${d}`;
+}
+
+/** Pseudo Instagram nettoyé (accepte « @pseudo » ou une URL de profil complète). */
+export function igHandle(raw?: string | null): string {
+  return (raw ?? "").trim().replace(/^@/, "").replace(/^(https?:\/\/)?(www\.)?instagram\.com\//i, "").replace(/[/?].*$/, "").replace(/\s/g, "");
 }

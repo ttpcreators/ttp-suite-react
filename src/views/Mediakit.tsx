@@ -13,6 +13,7 @@ import { RecipientPicker } from "@/components/ui/recipient-picker";
 import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
 import { MediakitEditor } from "@/views/MediakitEditor";
+import { readMediakitTemplates, MEDIAKIT_TEMPLATES_KEY } from "@/lib/mailTemplates";
 import { AgencyTab } from "@/views/MediakitAgence";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
 
@@ -84,6 +85,7 @@ function MediakitFiles() {
   const creators = useCreators();
   const [selected, setSelected] = useState<string>("");
   const [archives, setArchives] = useState<ArchiveRow[] | null>(null);
+  const [archivesError, setArchivesError] = useState(false);
   const [filterMonth, setFilterMonth] = useState("all");
   const [uploading, setUploading] = useState(false);
   const [del, setDel] = useState<ArchiveRow | null>(null);
@@ -92,6 +94,7 @@ function MediakitFiles() {
   // Modales : ajout par lien + envoi par mail
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
+  const [linking, setLinking] = useState(false);
   const [sendRow, setSendRow] = useState<ArchiveRow | null>(null);
   const [sendRecipients, setSendRecipients] = useState<string[]>([]);
   const [sendSubject, setSendSubject] = useState("");
@@ -99,9 +102,15 @@ function MediakitFiles() {
   const [sendSig, setSendSig] = useState<MailSignature | null>(null);
   const [sending, setSending] = useState(false);
 
-  // Templates de mail (blob agence `mailTemplates`)
-  const { data: tplData } = useAppState<MailTemplate[]>((s: AppState) => (s["mailTemplates"] as MailTemplate[]) ?? []);
-  const templates = tplData && tplData.length > 0 ? tplData : DEFAULT_TEMPLATES;
+  // Templates de mail (blob agence `mediakitMailTemplates`, migrés depuis
+  // l'ancienne clé partagée `mailTemplates` : entrées sans `kind`).
+  const { data: tplData } = useAppState<MailTemplate[]>((s: AppState) => readMediakitTemplates<MailTemplate>(s) ?? []);
+  // Après enregistrement/suppression, la liste sauvée s'affiche tout de suite ;
+  // elle cède dès que la donnée live change (tick suivant, qui l'inclut).
+  const [tplOverride, setTplOverride] = useState<{ from: unknown; list: MailTemplate[] } | null>(null);
+  const liveTemplates = tplOverride && tplOverride.from === tplData ? tplOverride.list : tplData;
+  const templates = liveTemplates && liveTemplates.length > 0 ? liveTemplates : DEFAULT_TEMPLATES;
+  const [tplDelete, setTplDelete] = useState<MailTemplate | null>(null);
   const [tplId, setTplId] = useState<string>("");
   const activeTpl = templates.find((t) => t.id === tplId) ?? templates[0];
   const [tplMgr, setTplMgr] = useState(false);
@@ -109,11 +118,18 @@ function MediakitFiles() {
 
   // Contacts (pour ajouter des destinataires groupés)
   const [contacts, setContacts] = useState<{ email: string; label: string; tag?: string }[]>([]);
+  const [contactsError, setContactsError] = useState(false);
   useEffect(() => {
     supabase
       .from("contacts")
       .select("*")
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn("[mediakit] contacts", error.message);
+          setContactsError(true);
+          return;
+        }
+        setContactsError(false);
         const rows = (data as Record<string, unknown>[]) ?? [];
         setContacts(
           rows
@@ -129,23 +145,40 @@ function MediakitFiles() {
 
   // Upsert/suppression d'un template sur l'état FRAIS (préserve les templates
   // créés/modifiés depuis un autre poste — pas de merge jeté).
-  const upsertTemplate = async (tpl: MailTemplate): Promise<boolean> => {
+  const readFreshTemplates = async (): Promise<MailTemplate[]> => {
     invalidateAppState();
-    const fresh = ((await getAppState())["mailTemplates"] as MailTemplate[]) ?? [];
-    const base = fresh.length ? fresh : DEFAULT_TEMPLATES;
-    const next = base.some((t) => t.id === tpl.id) ? base.map((t) => (t.id === tpl.id ? tpl : t)) : [...base, tpl];
-    const ok = await saveAppStateKey("mailTemplates", next);
-    if (!ok) toast("Template non enregistré — réessaie");
+    const fresh = readMediakitTemplates<MailTemplate>(await getAppState()) ?? [];
+    return fresh.length ? fresh : DEFAULT_TEMPLATES;
+  };
+  const saveTemplates = async (next: MailTemplate[]): Promise<boolean> => {
+    const ok = await saveAppStateKey(MEDIAKIT_TEMPLATES_KEY, next);
+    if (!ok) toast("Template non enregistré, réessaie");
+    else setTplOverride({ from: tplData, list: next });
     return ok;
   };
+  const upsertTemplate = async (tpl: MailTemplate): Promise<boolean> => {
+    try {
+      const base = await readFreshTemplates();
+      const next = base.some((t) => t.id === tpl.id) ? base.map((t) => (t.id === tpl.id ? tpl : t)) : [...base, tpl];
+      return await saveTemplates(next);
+    } catch (e) {
+      console.warn("[mediakit] templates", e);
+      toast("Template non enregistré, réessaie");
+      return false;
+    }
+  };
   const removeTemplate = async (id: string): Promise<boolean> => {
-    invalidateAppState();
-    const fresh = ((await getAppState())["mailTemplates"] as MailTemplate[]) ?? [];
-    const base = fresh.length ? fresh : DEFAULT_TEMPLATES;
-    const next = base.filter((t) => t.id !== id);
-    const ok = await saveAppStateKey("mailTemplates", next.length ? next : DEFAULT_TEMPLATES);
-    if (!ok) toast("Template non enregistré — réessaie");
-    return ok;
+    try {
+      const base = await readFreshTemplates();
+      const next = base.filter((t) => t.id !== id);
+      const ok = await saveTemplates(next.length ? next : DEFAULT_TEMPLATES);
+      if (ok && tplId === id) setTplId("");
+      return ok;
+    } catch (e) {
+      console.warn("[mediakit] templates", e);
+      toast("Template non supprimé, réessaie");
+      return false;
+    }
   };
 
   useEffect(() => {
@@ -157,7 +190,14 @@ function MediakitFiles() {
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         if (!alive) return;
-        setArchives(error ? [] : ((data as ArchiveRow[]) ?? []));
+        if (error) {
+          console.warn("[mediakit] documents", error.message);
+          setArchivesError(true);
+          setArchives([]);
+          return;
+        }
+        setArchivesError(false);
+        setArchives((data as ArchiveRow[]) ?? []);
       });
     return () => {
       alive = false;
@@ -176,22 +216,33 @@ function MediakitFiles() {
       const path = `mediakits/${slug}-${Date.now()}.${ext}`;
       const up = await supabase.storage.from("documents").upload(path, file, { upsert: false, contentType: file.type || undefined });
       if (up.error) return toast("Échec de l'upload — réessaie");
-      await addRow(path, `${Math.max(1, Math.round(file.size / 1024))} Ko`);
+      const added = await addRow(path, `${Math.max(1, Math.round(file.size / 1024))} Ko`);
+      if (!added) {
+        // Ligne non créée : on retire le fichier pour ne pas laisser d'orphelin.
+        const { error: rmErr } = await supabase.storage.from("documents").remove([path]);
+        if (rmErr) console.warn("[mediakit] nettoyage fichier orphelin", path, rmErr.message);
+      }
     } finally {
       setUploading(false);
     }
   };
 
   const addLink = async () => {
+    if (linking) return;
     if (!selected) return toast("Choisis d'abord un créateur");
     const url = linkUrl.trim();
     if (!isLink(url)) return toast("Lien invalide (doit commencer par https://)");
-    await addRow(url, "Lien");
-    setLinkOpen(false);
-    setLinkUrl("");
+    setLinking(true);
+    try {
+      if (!(await addRow(url, "Lien"))) return;
+      setLinkOpen(false);
+      setLinkUrl("");
+    } finally {
+      setLinking(false);
+    }
   };
 
-  const addRow = async (path: string, size: string) => {
+  const addRow = async (path: string, size: string): Promise<boolean> => {
     const row = {
       creator: selected,
       name: `Media kit — ${titleCase(selected)} — ${monthName()}`,
@@ -201,10 +252,14 @@ function MediakitFiles() {
       sort_order: 0,
     };
     const created = await dbInsert("documents", row);
-    if (!created) return toast("Erreur — réessaie");
+    if (!created) {
+      toast("Erreur — réessaie");
+      return false;
+    }
     setArchives((prev) => [created as unknown as ArchiveRow, ...(prev ?? [])]);
     if (selected) notifyCreator("mediakit", selected, row.name); // push au créateur
     toast("Media kit ajouté ✓ — visible par le créateur");
+    return true;
   };
 
   /** URL ouvrable : lien direct, ou URL signée pour un fichier stocké (durée en secondes). */
@@ -222,7 +277,14 @@ function MediakitFiles() {
 
   const remove = async (row: ArchiveRow) => {
     if (!(await dbDelete("documents", row.id))) return toast("Erreur — réessaie");
-    if (!isLink(row.path)) await supabase.storage.from("documents").remove([row.path]).catch(() => {});
+    if (!isLink(row.path)) {
+      try {
+        const { error: rmErr } = await supabase.storage.from("documents").remove([row.path]);
+        if (rmErr) console.warn("[mediakit] suppression fichier", row.path, rmErr.message);
+      } catch (e) {
+        console.warn("[mediakit] suppression fichier", row.path, e);
+      }
+    }
     setArchives((prev) => (prev ?? []).filter((x) => x.id !== row.id));
     toast("Media kit supprimé");
   };
@@ -356,7 +418,11 @@ function MediakitFiles() {
       </p>
 
       {/* Liste */}
-      {archives === null ? (
+      {archivesError ? (
+        <div className="rounded-2xl border border-border bg-surface px-5 py-6 text-[13px] text-[#E5484D]">
+          Impossible de charger les media kits. Vérifie ta connexion puis recharge la page.
+        </div>
+      ) : archives === null ? (
         <div className="rounded-2xl border border-border bg-surface px-5 py-6 text-[13px] text-muted-foreground">Chargement…</div>
       ) : shown.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-10 text-center">
@@ -436,8 +502,13 @@ function MediakitFiles() {
               <button type="button" onClick={() => setLinkOpen(false)} className="rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground hover:bg-rowhover">
                 Annuler
               </button>
-              <button type="button" onClick={addLink} className="rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90">
-                Ajouter
+              <button
+                type="button"
+                onClick={addLink}
+                disabled={linking}
+                className="rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+              >
+                {linking ? "Ajout…" : "Ajouter"}
               </button>
             </div>
           </div>
@@ -459,6 +530,9 @@ function MediakitFiles() {
               <div>
                 <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Destinataires</div>
                 <RecipientPicker value={sendRecipients} onChange={setSendRecipients} contacts={contacts} />
+                {contactsError && (
+                  <p className="mt-1.5 text-[11px] text-[#E5484D]">Contacts indisponibles (erreur de chargement). Tu peux saisir les adresses à la main.</p>
+                )}
               </div>
 
               {/* Template */}
@@ -577,6 +651,7 @@ function MediakitFiles() {
                       if (!tplDraft.name.trim() || !tplDraft.subject.trim()) return toast("Nom et objet requis");
                       if (!(await upsertTemplate(tplDraft))) return;
                       setTplId(tplDraft.id);
+                      if (sendRow) setSendSubject(subjectFor(sendRow, tplDraft));
                       setTplDraft(null);
                       toast("Template enregistré ✓");
                     }}
@@ -599,9 +674,7 @@ function MediakitFiles() {
                     </button>
                     <button
                       type="button"
-                      onClick={async () => {
-                        if (await removeTemplate(t.id)) toast("Template supprimé");
-                      }}
+                      onClick={() => setTplDelete(t)}
                       title="Supprimer"
                       className="grid h-8 w-8 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-[#E5484D]"
                     >
@@ -620,6 +693,21 @@ function MediakitFiles() {
             )}
           </div>
         </div>
+      )}
+
+      {tplDelete && (
+        <ConfirmDialog
+          title="Supprimer le template"
+          message={`Supprimer le template « ${tplDelete.name} » ? Cette action est irréversible.`}
+          confirmLabel="Supprimer"
+          danger
+          onCancel={() => setTplDelete(null)}
+          onConfirm={async () => {
+            const t = tplDelete;
+            setTplDelete(null);
+            if (await removeTemplate(t.id)) toast("Template supprimé");
+          }}
+        />
       )}
 
       {del && (

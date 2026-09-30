@@ -2,7 +2,7 @@ import { titleCase } from "@/lib/utils";
 
 /**
  * Modèles de mails de prospection — stockés dans l'app state (clé
- * `mailTemplates`), éditables depuis le composeur. Variables résolues au
+ * `prospectMailTemplates`, migrée depuis l'ancienne clé partagée `mailTemplates`), éditables depuis le composeur. Variables résolues au
  * moment de la sélection du modèle :
  *  - {{destinataire}} : prénom du contact s'il existe, sinon nom de la marque
  *  - {{prenom}}       : prénom seul (vide si inconnu)
@@ -10,6 +10,68 @@ import { titleCase } from "@/lib/utils";
  */
 
 export type MailTemplateKind = "prospection" | "relance";
+
+/**
+ * Clés app state. L'ancienne clé `mailTemplates` était partagée par DEUX
+ * formats (prospection avec `kind`, media kit sans `kind`) qui s'écrasaient.
+ * Désormais chaque usage a sa clé ; l'ancienne n'est plus écrite ni supprimée,
+ * elle sert seulement de source de migration tant que la nouvelle est absente.
+ */
+export const PROSPECT_TEMPLATES_KEY = "prospectMailTemplates";
+export const MEDIAKIT_TEMPLATES_KEY = "mediakitMailTemplates";
+export const LEGACY_TEMPLATES_KEY = "mailTemplates";
+
+function legacyEntries(s: Record<string, unknown>): Record<string, unknown>[] {
+  const legacy = s[LEGACY_TEMPLATES_KEY];
+  return Array.isArray(legacy) ? legacy.filter((t): t is Record<string, unknown> => !!t && typeof t === "object") : [];
+}
+
+/** Modèles de prospection : nouvelle clé, sinon entrées AVEC `kind` de l'ancienne. */
+export function readProspectTemplates(s: Record<string, unknown>): MailTemplate[] | undefined {
+  const cur = s[PROSPECT_TEMPLATES_KEY];
+  if (Array.isArray(cur)) return cur as MailTemplate[];
+  const migrated = legacyEntries(s).filter((t) => typeof t.kind === "string");
+  return migrated.length ? (migrated as unknown as MailTemplate[]) : undefined;
+}
+
+/** Modèles media kit : nouvelle clé, sinon entrées SANS `kind` de l'ancienne. */
+export function readMediakitTemplates<T>(s: Record<string, unknown>): T[] | undefined {
+  const cur = s[MEDIAKIT_TEMPLATES_KEY];
+  if (Array.isArray(cur)) return cur as T[];
+  const migrated = legacyEntries(s).filter((t) => !("kind" in t));
+  return migrated.length ? (migrated as unknown as T[]) : undefined;
+}
+
+/**
+ * Fusionne les modifs locales d'un gestionnaire de modèles sur l'état FRAIS
+ * (relu juste avant la sauvegarde) :
+ *  - supprimés localement (dans `base`, plus dans `draft`) → retirés ;
+ *  - modifiés localement (différents de `base`) ou nouveaux → version locale ;
+ *  - non touchés localement → version fraîche (modifs d'un autre poste gardées) ;
+ *  - supprimés à distance et non touchés localement → restent supprimés.
+ */
+export function mergeTemplateEdits<T extends { id: string }>(fresh: T[], base: T[], draft: T[]): T[] {
+  const baseById = new Map(base.map((t) => [t.id, t]));
+  const draftById = new Map(draft.map((t) => [t.id, t]));
+  const same = (a: T, b: T) => JSON.stringify(a) === JSON.stringify(b);
+  const touched = (t: T) => {
+    const b = baseById.get(t.id);
+    return !b || !same(b, t);
+  };
+  const deleted = new Set(base.filter((t) => !draftById.has(t.id)).map((t) => t.id));
+  const out: T[] = [];
+  const seen = new Set<string>();
+  for (const f of fresh) {
+    if (deleted.has(f.id)) continue;
+    const d = draftById.get(f.id);
+    out.push(d && touched(d) ? d : f);
+    seen.add(f.id);
+  }
+  for (const d of draft) {
+    if (!seen.has(d.id) && touched(d)) out.push(d);
+  }
+  return out;
+}
 
 export type MailTemplate = {
   id: string;

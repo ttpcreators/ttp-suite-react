@@ -197,10 +197,13 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
   const markUpToDate = async (c: Creator, done: boolean) => {
     const next = done ? NOW_MONTH : "";
     setRows(rows.map((r) => (r.id === c.id ? { ...r, statsMonth: next } : r)));
-    const ok = await dbUpdate("creators", c.id, { stats_month: next || null });
-    if (!ok) {
+    // Requête directe (pas dbUpdate) pour lire le message d'erreur : on ne parle du SQL
+    // manquant QUE si l'erreur concerne vraiment la colonne.
+    const { data, error } = await supabase.from("creators").update({ stats_month: next || null }).eq("id", c.id).select("id");
+    if (error || !data?.length) {
       setRows(rows); // rollback optimiste
-      toast("Enregistrement impossible — la colonne « stats_month » manque (lance le SQL 11)");
+      const missingCol = !!error && (error.code === "42703" || error.code === "PGRST204" || /stats_month/i.test(error.message));
+      toast(missingCol ? "Enregistrement impossible : la colonne « stats_month » manque (lance le SQL 11)" : "Enregistrement impossible, réessaie");
       return;
     }
     toast(done ? `${titleCase(c.name)} · données à jour ✓` : "Marqué à mettre à jour");

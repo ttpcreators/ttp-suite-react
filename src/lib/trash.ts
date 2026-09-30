@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { getAppState, saveAppStateKey } from "./appState";
+import { getAppState, invalidateAppState, saveAppStateKey } from "./appState";
 
 /**
  * Corbeille GLOBALE de l'app. Toute suppression « douce » (via dbTrash) copie la
@@ -40,6 +40,8 @@ function uid(): string {
 }
 
 async function readBin(): Promise<TrashEntry[]> {
+  // Lecture FRAÎCHE (le cache peut être périmé vs un autre poste).
+  invalidateAppState();
   const state = await getAppState();
   return (state.trashBin as TrashEntry[]) ?? [];
 }
@@ -102,8 +104,12 @@ export async function dbTrash(table: string, id: string, label: string, sub?: st
   return true;
 }
 
+/** Résultat d'une restauration : "partial" = ligne ré-insérée mais entrée
+ *  toujours présente dans la corbeille (retrait du blob échoué). */
+export type RestoreResult = "ok" | "partial" | "failed";
+
 /** Restaure une entrée : ré-insère la ligne dans sa table + retire de la corbeille. */
-export async function restoreEntry(entry: TrashEntry): Promise<boolean> {
+export async function restoreEntry(entry: TrashEntry): Promise<RestoreResult> {
   const data: Record<string, unknown> = { ...entry.data };
   // On CONSERVE l'id d'origine (la ligne a été supprimée → aucun conflit) : sinon la
   // ligne restaurée reçoit un nouvel uuid et les données indexées par id (commentaires
@@ -113,20 +119,20 @@ export async function restoreEntry(entry: TrashEntry): Promise<boolean> {
   const { error } = await supabase.from(entry.table).insert(data);
   if (error) {
     console.warn(`[trash] restore ${entry.table}:`, error.message);
-    return false;
+    return "failed";
   }
-  await mutateBin((bin) => bin.filter((e) => e.id !== entry.id));
-  return true;
+  const removed = await mutateBin((bin) => bin.filter((e) => e.id !== entry.id)).catch(() => false);
+  return removed ? "ok" : "partial";
 }
 
-/** Supprime définitivement une entrée de la corbeille. */
-export async function purgeEntry(id: string): Promise<void> {
-  await mutateBin((bin) => bin.filter((e) => e.id !== id));
+/** Supprime définitivement une entrée de la corbeille. Renvoie true si OK. */
+export async function purgeEntry(id: string): Promise<boolean> {
+  return mutateBin((bin) => bin.filter((e) => e.id !== id)).catch(() => false);
 }
 
-/** Vide toute la corbeille. */
-export async function emptyTrash(): Promise<void> {
-  await mutateBin(() => []);
+/** Vide toute la corbeille. Renvoie true si OK. */
+export async function emptyTrash(): Promise<boolean> {
+  return mutateBin(() => []).catch(() => false);
 }
 
 /** Jours restants avant purge automatique (0 = à purger). */

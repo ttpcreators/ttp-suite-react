@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check, MessageCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
@@ -141,28 +141,44 @@ export function Parametres() {
   // Textes personnalisables des notifications (blob agence `notifTexts`).
   const { data: storedTexts } = useAppState<Record<string, string>>((s: AppState) => (s["notifTexts"] as Record<string, string>) ?? {});
   const [texts, setTexts] = useState<Record<string, string>>({});
+  // Champs en cours de saisie : le tick live ne doit pas écraser ce qui est tapé.
+  const dirtyTexts = useRef<Set<string>>(new Set());
+  const mergeTexts = (stored: Record<string, string>, prev: Record<string, string>) => {
+    const next = { ...stored };
+    for (const k of dirtyTexts.current) next[k] = prev[k] ?? "";
+    return next;
+  };
   useEffect(() => {
-    if (storedTexts) setTexts(storedTexts);
+    if (storedTexts) setTexts((prev) => mergeTexts(storedTexts, prev));
   }, [storedTexts]);
+  const editText = (key: string, v: string) => {
+    dirtyTexts.current.add(key);
+    setTexts((t) => ({ ...t, [key]: v }));
+  };
   const saveText = async (key: string, value: string) => {
     invalidateAppState();
     const fresh = ((await getAppState())["notifTexts"] as Record<string, string>) ?? {};
     const next = { ...fresh };
     if (value.trim()) next[key] = value.trim();
     else delete next[key]; // vide = revient au texte par défaut
-    setTexts(next);
     const ok = await saveAppStateKey("notifTexts", next);
-    if (!ok) toast("Erreur d'enregistrement — réessaie");
+    if (!ok) {
+      toast("Erreur d'enregistrement, réessaie"); // saisie conservée (toujours « dirty »)
+      return;
+    }
+    dirtyTexts.current.delete(key);
+    setTexts((prev) => mergeTexts(next, prev));
   };
 
   // Prospection (blob agence `prospectSettings`) : rythme de relance + mode WhatsApp.
   const { data: storedProspect } = useAppState<ProspectSettings>((s: AppState) => (s["prospectSettings"] as ProspectSettings) ?? {});
   const [prospect, setProspect] = useState<ProspectSettings>({});
   const [relanceInput, setRelanceInput] = useState<string>("");
+  const relanceDirty = useRef(false); // saisie en cours → pas de resync live
   useEffect(() => {
     if (storedProspect) {
       setProspect(storedProspect);
-      setRelanceInput(storedProspect.relanceDays ? String(storedProspect.relanceDays) : "");
+      if (!relanceDirty.current) setRelanceInput(storedProspect.relanceDays ? String(storedProspect.relanceDays) : "");
     }
   }, [storedProspect]);
   const saveProspect = async (patch: Partial<ProspectSettings>) => {
@@ -174,6 +190,7 @@ export function Parametres() {
     if (!ok) toast("Erreur d'enregistrement — réessaie");
   };
   const saveRelanceDays = () => {
+    relanceDirty.current = false;
     const n = Math.round(Number(relanceInput));
     if (!relanceInput.trim() || !Number.isFinite(n) || n < 1) {
       setRelanceInput("");
@@ -328,7 +345,10 @@ export function Parametres() {
                 min={1}
                 max={365}
                 value={relanceInput}
-                onChange={(e) => setRelanceInput(e.target.value)}
+                onChange={(e) => {
+                  relanceDirty.current = true;
+                  setRelanceInput(e.target.value);
+                }}
                 onBlur={saveRelanceDays}
                 placeholder={String(RELANCE_DAYS)}
                 className="w-20 rounded-lg border border-border bg-surface px-3 py-2 text-center text-[13px] tabular-nums text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
@@ -374,7 +394,7 @@ export function Parametres() {
             <div className="mb-2 text-[12px] font-medium text-muted-foreground">Ce que reçoit un créateur (quand tu agis)</div>
             <div className="flex flex-col gap-3">
               {NOTIF_TEXTS_CREATOR.map((f) => (
-                <NotifTextRow key={f.key} field={f} value={texts[f.key] ?? ""} onChange={(v) => setTexts((t) => ({ ...t, [f.key]: v }))} onSave={() => saveText(f.key, texts[f.key] ?? "")} />
+                <NotifTextRow key={f.key} field={f} value={texts[f.key] ?? ""} onChange={(v) => editText(f.key, v)} onSave={() => saveText(f.key, texts[f.key] ?? "")} />
               ))}
             </div>
           </div>
@@ -382,7 +402,7 @@ export function Parametres() {
             <div className="mb-2 text-[12px] font-medium text-muted-foreground">Ce que TU reçois (quand un créateur agit)</div>
             <div className="flex flex-col gap-3">
               {NOTIF_TEXTS_AGENCY.map((f) => (
-                <NotifTextRow key={f.key} field={f} value={texts[f.key] ?? ""} onChange={(v) => setTexts((t) => ({ ...t, [f.key]: v }))} onSave={() => saveText(f.key, texts[f.key] ?? "")} />
+                <NotifTextRow key={f.key} field={f} value={texts[f.key] ?? ""} onChange={(v) => editText(f.key, v)} onSave={() => saveText(f.key, texts[f.key] ?? "")} />
               ))}
             </div>
           </div>
@@ -491,7 +511,7 @@ export function Parametres() {
         />
         <PrefRow
           label="Anniversaires créateurs"
-          hint="Un petit rappel le jour de l'anniversaire d'un créateur du roster."
+          hint="Une notification le jour J et un rappel la veille. Il faut que la date de naissance soit renseignée dans la fiche du créateur."
           checked={on(prefs.digestBirthdays)}
           onChange={(v) => setPref("digestBirthdays", v)}
         />

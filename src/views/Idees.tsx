@@ -82,17 +82,25 @@ export function Idees() {
   }, [notesData]);
   const [editNoteId, setEditNoteId] = useState<string | null>(null);
   const [editNoteText, setEditNoteText] = useState("");
-  const saveNote = async (id: string, value: string) => {
+  // Renvoie true si enregistré ; ne lève jamais (échec de lecture compris).
+  const saveNote = async (id: string, value: string): Promise<boolean> => {
     // Relit la map FRAÎCHE avant d'écrire (jamais depuis l'état local : on
     // écraserait les commentaires posés depuis un autre poste / pas encore chargés).
-    invalidateAppState();
-    const fresh = ((await getAppState())["itemNotes"] as Record<string, string>) ?? {};
-    const next = { ...fresh };
-    if (value.trim()) next[id] = value.trim();
-    else delete next[id];
-    setNotes(next);
-    const ok = await saveAppStateKey("itemNotes", next);
-    if (!ok) toast("Commentaire non enregistré — réessaie");
+    const before = notes;
+    try {
+      invalidateAppState();
+      const fresh = ((await getAppState())["itemNotes"] as Record<string, string>) ?? {};
+      const next = { ...fresh };
+      if (value.trim()) next[id] = value.trim();
+      else delete next[id];
+      setNotes(next);
+      if (await saveAppStateKey("itemNotes", next)) return true;
+    } catch {
+      /* traité ci-dessous */
+    }
+    setNotes(before);
+    toast("Commentaire non enregistré — réessaie");
+    return false;
   };
 
   useEffect(() => {
@@ -157,12 +165,19 @@ export function Idees() {
       toast("L'idée ne peut pas être vide");
       return;
     }
+    const prev = rows;
     const next = (rows ?? []).map((r) => (r.id === id ? { ...r, text: t } : r));
     setRows(next);
     setCache("ideas", next);
     setEditId(null);
-    if (!(await dbUpdate("ideas", id, { text: t }))) toast("Erreur — réessaie");
-    else toast("Idée modifiée ✓");
+    if (await dbUpdate("ideas", id, { text: t })) toast("Idée modifiée ✓");
+    else {
+      // Échec : retour à l'ancien texte, et le champ d'édition se rouvre.
+      setRows(prev);
+      if (prev) setCache("ideas", prev);
+      setEditId(id);
+      toast("Erreur — réessaie");
+    }
   };
 
   const updateStatus = async (id: string, status: string) => {
@@ -180,10 +195,15 @@ export function Idees() {
 
   // Sous-tâches (checklist interne à l'idée) — persiste base + cache.
   const saveSubtasks = async (id: string, subtasks: Subtask[]) => {
+    const prev = rows;
     const next = (rows ?? []).map((r) => (r.id === id ? { ...r, subtasks } : r));
     setRows(next);
     setCache("ideas", next);
-    if (!(await dbUpdate("ideas", id, { subtasks }))) toast("Erreur — lance le SQL sous-tâches ?");
+    if (!(await dbUpdate("ideas", id, { subtasks }))) {
+      setRows(prev);
+      if (prev) setCache("ideas", prev);
+      toast("Erreur — lance le SQL sous-tâches ?");
+    }
   };
 
   const removeRow = async (id: string) => {
@@ -193,7 +213,7 @@ export function Idees() {
       setRows(next);
       setCache("ideas", next);
       toast("Déplacée dans la corbeille");
-    }
+    } else toast("Erreur, réessaie");
   };
 
   // Base : filtre créatrice seul → sert aussi aux compteurs des pastilles de statut.
@@ -392,7 +412,7 @@ export function Idees() {
                           icon: Trash2,
                           danger: true,
                           onClick: () => removeRow(row.id),
-                          confirm: { title: "Supprimer l'idée", message: `Supprimer « ${row.text} » ? Cette action est irréversible.` },
+                          confirm: { title: "Supprimer l'idée", message: `Supprimer « ${row.text} » ? Elle ira dans la Corbeille, d'où tu pourras la restaurer.` },
                         },
                       ]}
                     />
@@ -416,7 +436,7 @@ export function Idees() {
                     <button
                       type="button"
                       onClick={async () => {
-                        await saveNote(row.id, editNoteText);
+                        if (!(await saveNote(row.id, editNoteText))) return;
                         setEditNoteId(null);
                         toast("Commentaire enregistré ✓");
                       }}

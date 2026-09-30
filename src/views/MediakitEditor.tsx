@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon, Check, Sparkles, Euro, UserRound, Users, BarChart3, Share2, ListChecks, Store, type LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { ImageField } from "@/components/ui/image-field";
@@ -197,12 +197,54 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
   // media kit en base. Garde-fou anti perte de données silencieuse.
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Instantané (JSON) du kit tel que chargé / dernièrement enregistré : sert à
+  // détecter les modifications non enregistrées.
+  const [savedSnap, setSavedSnap] = useState<string | null>(null);
+  const dirty = useMemo(
+    () => !!selId && loadedId === selId && savedSnap !== null && JSON.stringify(mk) !== savedSnap,
+    [mk, savedSnap, selId, loadedId],
+  );
+  // Créatrice courante, lue par les callbacks d'upload asynchrones : si elle a
+  // changé pendant l'upload, le résultat est ignoré (sinon il atterrirait dans
+  // le kit d'une autre créatrice).
+  const selIdRef = useRef(selId);
+  useEffect(() => {
+    selIdRef.current = selId;
+  }, [selId]);
+  const forSel = <A extends unknown[]>(fn: (...args: A) => void) => {
+    const at = selId;
+    return (...args: A) => {
+      if (selIdRef.current !== at) {
+        toast("Image ignorée : la créatrice a changé pendant l'envoi");
+        return;
+      }
+      fn(...args);
+    };
+  };
+
+  // Garde-fou onglet : prévient avant de quitter la page avec des modifs en cours.
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
+  const changeCreator = (id: string) => {
+    if (id === selId) return;
+    if (dirty && !window.confirm("Des modifications ne sont pas enregistrées. Changer de créatrice et les perdre ?")) return;
+    setSelId(id);
+  };
 
   // Charge le blob mediakit de la créatrice choisie.
   useEffect(() => {
     if (!selId) {
       setMk({});
       setLoadedId(null);
+      setSavedSnap(null);
       setLoadError(false);
       return;
     }
@@ -210,6 +252,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
     setLoading(true);
     setLoadError(false);
     setLoadedId(null);
+    setSavedSnap(null);
     supabase
       .from("creators")
       .select("mediakit")
@@ -227,6 +270,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
         // slug par défaut = prénom de la créatrice
         if (!blob.slug && selected) blob.slug = slugify((selected.name || "").split(/\s+/)[0]);
         setMk(blob);
+        setSavedSnap(JSON.stringify(blob));
         setLoadedId(selId);
         setLoading(false);
       });
@@ -267,10 +311,24 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
       } catch {
         /* si la vérif d'unicité échoue, on garde le slug désiré (le site dédupliquera au pire) */
       }
-      const clean: MediaKit = { ...mk, slug };
+      // Retire les lignes vides laissées dans les listes (étiquette vide, marque
+      // sans nom, prestation sans intitulé ni prix, plateforme sans clé).
+      const mkAtSave = mk;
+      const clean: MediaKit = {
+        ...mk,
+        slug,
+        ...(mk.tags ? { tags: mk.tags.map((t) => t.trim()).filter(Boolean) } : {}),
+        ...(mk.brands ? { brands: mk.brands.filter((b) => (b.name ?? "").trim()) } : {}),
+        ...(mk.rates ? { rates: mk.rates.filter((r) => (r.label ?? "").trim() || (r.price ?? "").trim()) } : {}),
+        ...(mk.platforms ? { platforms: mk.platforms.filter((p) => (p.key ?? "").trim()) } : {}),
+      };
       const ok = await dbUpdate("creators", selId, { mediakit: clean });
       if (!ok) return toast("Enregistrement échoué — réessaie");
-      setMk(clean);
+      // Si rien n'a bougé pendant l'enregistrement → on affiche la version nettoyée ;
+      // sinon on garde les nouvelles saisies (elles restent « non enregistrées »).
+      if (selIdRef.current !== selId) return;
+      setMk((m) => (m === mkAtSave ? clean : { ...m, slug }));
+      setSavedSnap(JSON.stringify(clean));
       toast("Media kit enregistré ✓");
     } finally {
       setSaving(false);
@@ -336,7 +394,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
     <div className="space-y-4">
       {/* En-tête : créatrice + voir + enregistrer */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Select value={selId} onValueChange={setSelId}>
+        <Select value={selId} onValueChange={changeCreator}>
           <SelectTrigger className="h-9 w-auto min-w-[220px] rounded-lg bg-surface" placeholder="Choisir une créatrice" />
           <SelectContent>
             {creators.map((c, i) => (
@@ -457,7 +515,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 slug={mk.slug ?? ""}
                 field="hero"
                 url={mk.photos?.hero}
-                onChange={(u) => setPhoto("hero", u)}
+                onChange={forSel((u: string | null) => setPhoto("hero", u))}
                 boxClass="h-44 w-36"
               />
               <ImageField
@@ -465,7 +523,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 slug={mk.slug ?? ""}
                 field="contact"
                 url={mk.photos?.contact}
-                onChange={(u) => setPhoto("contact", u)}
+                onChange={forSel((u: string | null) => setPhoto("contact", u))}
                 boxClass="h-44 w-36"
               />
             </div>
@@ -544,12 +602,14 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                   field={`stat-${i}`}
                   url={u}
                   // La corbeille de l'ImageField renvoie null → on retire la capture de la liste.
-                  onChange={(nu) => {
-                    const next = [...(mk.statsShots ?? [])];
-                    if (nu) next[i] = nu;
-                    else next.splice(i, 1);
-                    patch({ statsShots: next });
-                  }}
+                  onChange={forSel((nu: string | null) =>
+                    setMk((m) => {
+                      const next = [...(m.statsShots ?? [])];
+                      if (nu) next[i] = nu;
+                      else next.splice(i, 1);
+                      return { ...m, statsShots: next };
+                    }),
+                  )}
                   boxClass="h-40 w-[104px]"
                 />
               ))}
@@ -559,9 +619,9 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                   slug={mk.slug ?? ""}
                   field={`stat-${(mk.statsShots ?? []).length}`}
                   url={null}
-                  onChange={(nu) => {
-                    if (nu) patch({ statsShots: [...(mk.statsShots ?? []), nu].slice(0, MAX_STATS_SHOTS) });
-                  }}
+                  onChange={forSel((nu: string | null) => {
+                    if (nu) setMk((m) => ({ ...m, statsShots: [...(m.statsShots ?? []), nu].slice(0, MAX_STATS_SHOTS) }));
+                  })}
                   boxClass="h-40 w-[104px]"
                 />
               )}
@@ -596,7 +656,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                   block={p}
                   slug={mk.slug ?? ""}
                   photo={mk.photos?.[p.key]}
-                  onPhotoChange={(u) => setPhoto(p.key, u)}
+                  onPhotoChange={forSel((u: string | null) => setPhoto(p.key, u))}
                   onChange={(next) => setPlatforms((mk.platforms ?? []).map((x, j) => (j === i ? next : x)))}
                   onRemove={() => setPlatforms((mk.platforms ?? []).filter((_, j) => j !== i))}
                 />
@@ -677,7 +737,9 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                     field={`logo-${i}`}
                     url={b.logo}
                     kind="logo"
-                    onChange={(u) => setBrands((mk.brands ?? []).map((x, j) => (j === i ? { ...x, logo: u } : x)))}
+                    onChange={forSel((u: string | null) =>
+                      setMk((m) => ({ ...m, brands: (m.brands ?? []).map((x, j) => (j === i ? { ...x, logo: u } : x)) })),
+                    )}
                     boxClass="h-10 w-10 shrink-0"
                   />
                   <input
@@ -823,12 +885,14 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                         slug={mk.slug ?? ""}
                         field={`ugc-${i}`}
                         url={u}
-                        onChange={(nu) => {
-                          const next = [...(ugc.portfolio ?? [])];
-                          if (nu) next[i] = nu;
-                          else next.splice(i, 1);
-                          patchUgc({ portfolio: next });
-                        }}
+                        onChange={forSel((nu: string | null) =>
+                          setMk((m) => {
+                            const next = [...(m.ugc?.portfolio ?? [])];
+                            if (nu) next[i] = nu;
+                            else next.splice(i, 1);
+                            return { ...m, ugc: { ...(m.ugc ?? {}), portfolio: next } };
+                          }),
+                        )}
                         boxClass="h-40 w-[104px]"
                       />
                     ))}
@@ -838,9 +902,13 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                         slug={mk.slug ?? ""}
                         field={`ugc-${(ugc.portfolio ?? []).length}`}
                         url={null}
-                        onChange={(nu) => {
-                          if (nu) patchUgc({ portfolio: [...(ugc.portfolio ?? []), nu].slice(0, MAX_UGC_PORTFOLIO) });
-                        }}
+                        onChange={forSel((nu: string | null) => {
+                          if (nu)
+                            setMk((m) => ({
+                              ...m,
+                              ugc: { ...(m.ugc ?? {}), portfolio: [...(m.ugc?.portfolio ?? []), nu].slice(0, MAX_UGC_PORTFOLIO) },
+                            }));
+                        })}
                         boxClass="h-40 w-[104px]"
                       />
                     )}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, Pencil, LayoutGrid, List, Table2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
@@ -100,31 +100,42 @@ export function Checklist() {
     if (data) setLists(data);
   }, [data]);
 
-  const persist = async (next: Checklist[]) => {
-    setLists(next);
-    const ok = await saveAppStateKey("checklists", next);
-    if (!ok) toast("Erreur — réessaie");
-  };
-
-  // Écriture STRUCTURELLE (ajout/suppression/renommage d'une checklist) : on relit l'état
-  // frais du blob juste avant de fusionner, pour ne pas écraser une checklist créée en
-  // parallèle par l'autre compte agence. (Le toggle d'une étape reste optimiste : sans
-  // enjeu, il se resynchronise au tick suivant.)
-  const persistFresh = async (mutate: (fresh: Checklist[]) => Checklist[]): Promise<boolean> => {
-    invalidateAppState();
-    const fresh = ((await getAppState())["checklists"] as Checklist[]) ?? DEFAULT_CHECKLISTS;
-    const next = mutate(fresh);
-    setLists(next);
-    const ok = await saveAppStateKey("checklists", next);
-    if (!ok) toast("Erreur — réessaie");
-    return ok;
+  // Écritures relues sur l'état FRAIS du blob juste avant de fusionner, pour ne pas
+  // écraser une checklist (ou une coche) faite en parallèle par l'autre compte agence.
+  // Sérialisées : deux clics rapides ne lisent pas le même état.
+  const chainRef = useRef<Promise<unknown>>(Promise.resolve());
+  const persistFresh = (mutate: (fresh: Checklist[]) => Checklist[]): Promise<boolean> => {
+    const run = chainRef.current.then(async () => {
+      let fresh: Checklist[];
+      try {
+        invalidateAppState();
+        fresh = ((await getAppState())["checklists"] as Checklist[]) ?? DEFAULT_CHECKLISTS;
+      } catch {
+        toast("Erreur de lecture, réessaie");
+        return false;
+      }
+      const next = mutate(fresh);
+      setLists(next);
+      const ok = await saveAppStateKey("checklists", next);
+      if (!ok) {
+        setLists(fresh); // rollback sur l'état serveur
+        toast("Erreur, réessaie");
+      }
+      return ok;
+    });
+    chainRef.current = run.catch(() => {});
+    return run;
   };
 
   const addChecklist = async () => {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      toast("Donne un nom à la checklist");
+      return;
+    }
     const ck: Checklist = { id: "ck" + Date.now(), name: trimmed, done: {} };
-    await persistFresh((fresh) => [...fresh, ck]);
+    const ok = await persistFresh((fresh) => [...fresh, ck]);
+    if (!ok) return; // formulaire conservé
     setName("");
     setFormOpen(false);
     toast("Checklist créée");
@@ -155,31 +166,46 @@ export function Checklist() {
     setEditName("");
   };
 
-  const saveEdit = async (id: string) => {
+  // Garde anti double envoi (Entrée puis blur déclenchent tous deux saveEdit).
+  const savingEditRef = useRef(false);
+  const saveEdit = async (id: string, fromBlur = false) => {
+    if (savingEditRef.current) return;
     const trimmed = editName.trim();
-    if (!trimmed) return;
-    await persistFresh((fresh) => fresh.map((c) => (c.id === id ? { ...c, name: trimmed } : c)));
+    if (!trimmed) {
+      if (fromBlur) cancelEdit();
+      else toast("Le titre ne peut pas être vide");
+      return;
+    }
+    savingEditRef.current = true;
+    const ok = await persistFresh((fresh) => fresh.map((c) => (c.id === id ? { ...c, name: trimmed } : c)));
+    savingEditRef.current = false;
+    if (!ok) return;
     cancelEdit();
     toast("Titre modifié");
   };
 
   const toggleStep = async (id: string) => {
-    const next = lists.map((c) => {
-      if (c.id !== selectedId) return c;
-      const done = { ...c.done };
-      if (done[id]) delete done[id];
-      else done[id] = true;
-      return { ...c, done };
-    });
-    await persist(next);
+    const ckId = selectedId;
+    const cur = lists.find((c) => c.id === ckId);
+    if (!cur) return;
+    // Valeur CIBLE (pas une inversion) : appliquée telle quelle sur l'état frais.
+    const target = !cur.done[id];
+    const apply = (arr: Checklist[]) =>
+      arr.map((c) => {
+        if (c.id !== ckId) return c;
+        const done = { ...c.done };
+        if (target) done[id] = true;
+        else delete done[id];
+        return { ...c, done };
+      });
+    setLists(apply(lists)); // optimiste
+    await persistFresh(apply);
   };
 
   const resetSelected = async () => {
-    const next = lists.map((c) =>
-      c.id === selectedId ? { ...c, done: {} } : c
-    );
-    await persist(next);
-    toast("Checklist réinitialisée");
+    const ckId = selectedId;
+    const ok = await persistFresh((fresh) => fresh.map((c) => (c.id === ckId ? { ...c, done: {} } : c)));
+    if (ok) toast("Checklist réinitialisée");
   };
 
   if (loading) {
@@ -404,7 +430,7 @@ export function Checklist() {
                   if (e.key === "Enter") saveEdit(selected.id);
                   if (e.key === "Escape") cancelEdit();
                 }}
-                onBlur={() => saveEdit(selected.id)}
+                onBlur={() => saveEdit(selected.id, true)}
                 className="w-full rounded-lg border border-border bg-panel px-2 py-1 text-sm font-semibold text-foreground outline-none focus:border-primary"
               />
             ) : (

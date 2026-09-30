@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle, MessageSquare, Pencil, X, Phone, MessageCircle, Users, Compass, Mic, Flag, Film, GalleryHorizontalEnd, CircleDashed, Music2, MonitorPlay, Check, ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import { PlatformIcon } from "@/components/ui/platform-icon";
-import { notifyCreator } from "@/lib/push";
+import { notifyAgency, notifyCreator } from "@/lib/push";
 import { cn, titleCase } from "@/lib/utils";
 import { DashPanel, DashSectionTitle } from "@/components/ui/dash";
 import { useCreators } from "@/lib/useCreators";
@@ -90,9 +90,12 @@ export function EditorialProfileCard({ name }: { name: string }) {
   // Copie locale initialisée UNE fois par créateur (ne pas écraser une édition en cours
   // à chaque tick de rafraîchissement). Se ré-initialise quand on change de créateur.
   // Ouvre en LECTURE si la fiche a du contenu, sinon directement en édition.
+  // Dernière copie enregistrée (le `data` du hook reste périmé jusqu'au tick suivant).
+  const savedP = useRef<EditorialProfile | null>(null);
   useEffect(() => {
     if (!loading && loadedKey !== key) {
       const np = normProfile(data?.[key]);
+      savedP.current = np;
       setP(np);
       setLoadedKey(key);
       setMode(profileIsEmpty(np) ? "edit" : "view");
@@ -117,6 +120,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
     // (upsert ne touche que les colonnes fournies). Une erreur ici (ex : SQL pas encore
     // lancé) ne bloque pas l'agence — le blob reste la source de vérité.
     if (ok) {
+      savedP.current = cur;
       const { error } = await supabase.from(ROADMAP_TABLE).upsert({ creator: name, roadmap: roadmapFrom(cur) }, { onConflict: "creator" });
       setSaving(false);
       setMode("view");
@@ -127,8 +131,8 @@ export function EditorialProfileCard({ name }: { name: string }) {
     setSaving(false);
     toast("Erreur — réessaie");
   };
-  // Annuler l'édition : recharge la copie depuis le blob et repasse en lecture.
-  const cancel = () => { setP(normProfile(data?.[key])); setMode("view"); };
+  // Annuler l'édition : revient à la dernière copie enregistrée et repasse en lecture.
+  const cancel = () => { setP(savedP.current ?? normProfile(data?.[key])); setMode("view"); };
 
   const recoTotal = cadenceTotal(cur.cadenceReco);
 
@@ -362,9 +366,11 @@ export function MonthlyTracking({ name }: { name: string }) {
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("view");
+  const savedList = useRef<MonthEntry[]>([]); // dernière copie enregistrée (pour Annuler)
   useEffect(() => {
     if (!loading && loadedKey !== key) {
       const arr = (monthlyMap?.[key] ?? []).map((m) => ({ ...emptyMonth(m.month), ...m }));
+      savedList.current = arr;
       setLocal(arr);
       setLoadedKey(key);
       setMode(arr.length === 0 ? "edit" : "view");
@@ -398,10 +404,13 @@ export function MonthlyTracking({ name }: { name: string }) {
     const fresh = ((await getAppState())[MONTHLY_KEY] as Record<string, MonthEntry[]>) ?? {};
     const ok = await saveAppStateKey(MONTHLY_KEY, { ...fresh, [key]: list });
     setSaving(false);
-    if (ok) setMode("view");
+    if (ok) {
+      savedList.current = list;
+      setMode("view");
+    }
     toast(ok ? "Suivi mensuel enregistré ✓" : "Erreur — réessaie");
   };
-  const cancel = () => { setLocal((monthlyMap?.[key] ?? []).map((m) => ({ ...emptyMonth(m.month), ...m }))); setMode("view"); };
+  const cancel = () => { setLocal(savedList.current.slice()); setMode("view"); };
 
   const recoTotal = cadenceTotal(reco);
 
@@ -580,7 +589,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 let _jid = 0;
 const jid = () => `j${Date.now().toString(36)}${(_jid += 1)}`;
-const todayISO = () => new Date().toISOString().slice(0, 10);
+// Date LOCALE (toISOString = UTC → la veille entre minuit et 2 h en France).
+const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 
 /**
  * JOURNAL D'ACCOMPAGNEMENT : timeline chronologique des échanges (appel/message/
@@ -593,9 +606,11 @@ export function JournalCard({ name }: { name: string }) {
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("view");
+  const savedJ = useRef<JournalEntry[]>([]); // dernière copie enregistrée (pour Annuler)
   useEffect(() => {
     if (!loading && loadedKey !== key) {
       const arr = (map?.[key] ?? []).slice();
+      savedJ.current = arr;
       setLocal(arr);
       setLoadedKey(key);
       setMode(arr.length === 0 ? "edit" : "view");
@@ -614,10 +629,13 @@ export function JournalCard({ name }: { name: string }) {
     const fresh = ((await getAppState())[JOURNAL_KEY] as Record<string, JournalEntry[]>) ?? {};
     const ok = await saveAppStateKey(JOURNAL_KEY, { ...fresh, [key]: list });
     setSaving(false);
-    if (ok) setMode("view");
+    if (ok) {
+      savedJ.current = list;
+      setMode("view");
+    }
     toast(ok ? "Journal enregistré ✓" : "Erreur — réessaie");
   };
-  const cancel = () => { setLocal((map?.[key] ?? []).slice()); setMode("view"); };
+  const cancel = () => { setLocal(savedJ.current.slice()); setMode("view"); };
 
   return (
     <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
@@ -730,8 +748,14 @@ function useTracking() {
   return { profiles: profiles ?? {}, monthly: monthly ?? {}, journal: journal ?? {}, deadlines: deadlines ?? [] };
 }
 function deadlineDaysFor(name: string, deadlines: CtDeadline[]): number | null {
-  const e = deadlines.find((d) => norm(d.creator) === norm(name));
-  return e ? contractDaysLeft(e.start, e.months) : null;
+  // Contrat dont la fin est la PLUS TARDIVE (pas le premier trouvé).
+  let best: number | null = null;
+  for (const d of deadlines) {
+    if (norm(d.creator) !== norm(name)) continue;
+    const left = contractDaysLeft(d.start, d.months);
+    if (left != null && (best == null || left > best)) best = left;
+  }
+  return best;
 }
 
 /** Bandeau d'alertes d'un créateur (haut de sa fiche). */
@@ -852,7 +876,7 @@ const FMT_ICON: Record<keyof Cadence, LucideIcon> = {
  * réelle du mois. Lit/écrit UNIQUEMENT sa ligne `creator_roadmap` (RLS) ; le
  * journal, les alertes et l'évaluation de l'agence lui restent invisibles.
  */
-export function CreatorRoadmap({ name }: { name: string }) {
+export function CreatorRoadmap({ name, preview = false }: { name: string; /** agence en aperçu → pas de push agence */ preview?: boolean }) {
   const [roadmap, setRoadmap] = useState<Record<string, unknown> | null>(null);
   const [selfCad, setSelfCad] = useState<SelfCadence>({});
   const [loading, setLoading] = useState(true);
@@ -881,11 +905,20 @@ export function CreatorRoadmap({ name }: { name: string }) {
   const saveCadence = async () => {
     if (saving) return;
     setSaving(true);
-    const next = { ...selfCad, [month]: draft };
+    // Relit FRAIS avant l'upsert : si le chargement initial a échoué (selfCad vide),
+    // on n'écrase pas les autres mois déjà déclarés.
+    const { data: cur, error: readErr } = await supabase.from("creator_roadmap").select("self_cadence").eq("creator", name).maybeSingle();
+    if (readErr) {
+      setSaving(false);
+      return toast("Erreur, réessaie");
+    }
+    const fresh = normSelfCadence((cur?.self_cadence as SelfCadence) ?? {});
+    const next = { ...fresh, [month]: draft };
     const { error } = await supabase.from("creator_roadmap").upsert({ creator: name, self_cadence: next }, { onConflict: "creator" });
     setSaving(false);
-    if (error) return toast("Erreur — réessaie");
+    if (error) return toast("Erreur, réessaie");
     setSelfCad(next);
+    if (!preview) notifyAgency("stats", name, `Cadence ${monthLabel(month)} : ${cadenceTotal(draft)} contenus`);
     toast("Cadence du mois envoyée à l'agence ✓");
   };
 

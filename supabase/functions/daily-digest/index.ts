@@ -519,10 +519,34 @@ Deno.serve(async (req: Request) => {
   const { data: crRows } = await sb.from("creators").select("name,birth,commission,status");
   const creators = (crRows ?? []) as { name: string; birth: string | null; commission: string | null; status: string | null }[];
   const md = today.slice(5); // "MM-DD"
-  const birthdays = creators
-    .filter((c) => String(c.status ?? "actif").toLowerCase() !== "inactif")
-    .filter((c) => { const iso = toISO(c.birth); return iso !== "" && iso.slice(5) === md; })
+  const mdTomorrow = addDaysISO(today, 1).slice(5);
+  const activeCreators = creators.filter((c) => String(c.status ?? "actif").toLowerCase() !== "inactif");
+  const bornOn = (mmdd: string) => activeCreators
+    .filter((c) => { const iso = toISO(c.birth); return iso !== "" && iso.slice(5) === mmdd; })
     .map((c) => capName(c.name));
+  const birthdays = bornOn(md);
+  const birthdaysTomorrow = bornOn(mdTomorrow);
+
+  // Anniversaires : notification DÉDIÉE (en plus de la ligne du résumé) le jour J,
+  // et un rappel la veille pour préparer un message ou un cadeau. Pref « digestBirthdays ».
+  if (prefOn(prefs, "digestBirthdays")) {
+    for (const n of birthdays) {
+      await sendToAll(sb, JSON.stringify({
+        title: "🎂 Anniversaire aujourd'hui",
+        body: `C'est l'anniversaire de ${n} aujourd'hui. Pense à lui souhaiter !`,
+        url: "/",
+        tag: `ttp-birthday-${today}-${n}`,
+      }));
+    }
+    for (const n of birthdaysTomorrow) {
+      await sendToAll(sb, JSON.stringify({
+        title: "🎂 Anniversaire demain",
+        body: `Demain, c'est l'anniversaire de ${n}. Un message ou un petit cadeau à prévoir ?`,
+        url: "/",
+        tag: `ttp-birthday-eve-${today}-${n}`,
+      }));
+    }
+  }
 
   // 8) Reversements à faire : (encaissé − commission) − déjà reversé, par créateur.
   const { data: invAll } = await sb.from("invoices").select("amount,status,creator,date");

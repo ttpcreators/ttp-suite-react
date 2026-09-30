@@ -4,8 +4,8 @@ import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
-import { dbUpdate } from "@/lib/db";
-import { parseTouches, buildTouchesPatch, nextKind, touchId, type Touch } from "@/lib/touches";
+import { parseTouches, nextKind, touchId, type Touch } from "@/lib/touches";
+import { updateTouches } from "@/lib/touchesDb";
 import { MailComposer, type ComposerContact } from "@/components/mail-composer";
 
 /**
@@ -284,12 +284,12 @@ export function Mails() {
             ) : (
               filtered.map((c) => (
                 <button
-                  key={c.email}
+                  key={c.id}
                   type="button"
                   onClick={() => setSelected(c)}
                   className={cn(
                     "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
-                    selected?.email === c.email ? "bg-primary/10" : "hover:bg-rowhover",
+                    selected?.id === c.id ? "bg-primary/10" : "hover:bg-rowhover",
                   )}
                 >
                   <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-panel text-[10px] font-bold text-foreground">
@@ -409,15 +409,21 @@ export function Mails() {
             : null
         }
         onClose={() => setComposerOpen(false)}
-        onSent={() => {
+        onSent={(gmailId) => {
           // Journalise la touche (même logique que le poste de prospection)
           // puis recharge l'historique du contact.
           if (!selected?.id) return;
+          const id = selected.id;
           const list = parseTouches(selected.touches);
-          const t: Touch = { id: touchId(), date: new Date().toISOString(), canal: "email", kind: nextKind(list, selected.lastContacted ?? null) };
-          const patch = buildTouchesPatch([t, ...list], selected.lastContacted ?? null);
-          void dbUpdate("contacts", selected.id, patch);
-          setSelected({ ...selected, touches: [t, ...list], lastContacted: new Date().toISOString() });
+          // Id « gm<id> » si envoyé via Gmail : le scan horaire le reconnaît (pas de doublon).
+          const t: Touch = { id: gmailId ? `gm${gmailId}` : touchId(), date: new Date().toISOString(), canal: "email", kind: nextKind(list, selected.lastContacted ?? null) };
+          // Relit la ligne avant d'écrire : pas d'écrasement des touches concurrentes.
+          void updateTouches(id, { add: t }).then((res) => {
+            if (!res) return toast("Mail envoyé, mais la touche n'a pas été notée");
+            const upd = (c: Contact): Contact => (c.id === id ? { ...c, touches: res.touches, lastContacted: res.last_contacted } : c);
+            setContacts((prev) => prev.map(upd));
+            setSelected((prev) => (prev ? upd(prev) : prev));
+          });
         }}
       />
 

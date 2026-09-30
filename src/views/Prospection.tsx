@@ -2,7 +2,7 @@ import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { dbInsert, nextOrder } from "@/lib/db";
+import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import {
@@ -12,7 +12,7 @@ import {
   SelectField,
 } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { Trash2 } from "lucide-react";
+import { ArrowRight, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -51,6 +51,7 @@ export function Prospection() {
   const live = useLiveKey();
 
   const [formOpen, setFormOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null); // null = création
   const [brand, setBrand] = useState("");
   const [contact, setContact] = useState("");
   const [value, setValue] = useState("");
@@ -79,9 +80,43 @@ export function Prospection() {
     };
   }, [live]);
 
+  const resetForm = () => {
+    setFormOpen(false);
+    setEditId(null);
+    setBrand("");
+    setContact("");
+    setValue("");
+    setStage(STAGE_ORDER[0]);
+  };
+  const startEdit = (r: Row) => {
+    setEditId(r.id);
+    setBrand(r.brand);
+    setContact(r.contact ?? "");
+    setValue(r.value && r.value !== "—" ? r.value : "");
+    setStage(r.stage ?? STAGE_ORDER[0]);
+    setFormOpen(true);
+  };
+  // Modification (marque, contact, valeur, étape) : optimiste avec retour arrière si échec.
+  const saveEdit = async (id: string, patch: Partial<Row>) => {
+    const before = rows ?? [];
+    setRows(before.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    if (await dbUpdate("prospects", id, patch)) return true;
+    setRows(before);
+    toast("Erreur, réessaie");
+    return false;
+  };
+
   const submit = async () => {
     if (!brand.trim()) {
       toast("Renseigne la marque");
+      return;
+    }
+    if (editId) {
+      const ok = await saveEdit(editId, { brand: brand.trim(), contact: contact.trim() || null, value: value.trim() || "—", stage });
+      if (ok) {
+        toast("Prospect modifié ✓");
+        resetForm();
+      }
       return;
     }
     const row = {
@@ -100,11 +135,7 @@ export function Prospection() {
     setRows([created as unknown as Row, ...(rows ?? [])]);
     setError(false);
     toast("Prospect ajouté ✓");
-    setFormOpen(false);
-    setBrand("");
-    setContact("");
-    setValue("");
-    setStage(STAGE_ORDER[0]);
+    resetForm();
   };
 
   const header = (
@@ -114,16 +145,17 @@ export function Prospection() {
           ? "Pipeline de prospection"
           : `${rows.length} prospect${rows.length > 1 ? "s" : ""} au pipeline`}
       </div>
-      <AddButton label="Prospect" onClick={() => setFormOpen(true)} />
+      <AddButton label="Prospect" onClick={() => { resetForm(); setFormOpen(true); }} />
     </PageHeaderRow>
   );
 
   const form = (
     <InlineForm
       open={formOpen}
-      title="Nouveau prospect"
-      onClose={() => setFormOpen(false)}
+      title={editId ? "Modifier le prospect" : "Nouveau prospect"}
+      onClose={resetForm}
       onSubmit={submit}
+      submitLabel={editId ? "Enregistrer" : "Ajouter"}
     >
       <TextField label="Marque" value={brand} onChange={setBrand} />
       <TextField label="Contact" value={contact} onChange={setContact} />
@@ -241,7 +273,7 @@ export function Prospection() {
     if (await dbTrash("prospects", id, r?.brand ?? "Prospect", r?.contact ?? undefined)) {
       setRows(rows.filter((x) => x.id !== id));
       toast("Déplacé dans la corbeille");
-    }
+    } else toast("Erreur, réessaie");
   };
 
   return (
@@ -285,12 +317,27 @@ export function Prospection() {
                       <ActionMenu
                         items={[
                           {
+                            key: "edit",
+                            label: "Modifier",
+                            icon: Pencil,
+                            onClick: () => startEdit(card),
+                          },
+                          // Changement d'étape direct depuis le menu de la carte.
+                          ...STAGE_ORDER.filter((s) => s !== card.stage).map((s) => ({
+                            key: `stage-${s}`,
+                            label: `Passer en ${s}`,
+                            icon: ArrowRight,
+                            onClick: () => {
+                              void saveEdit(card.id, { stage: s }).then((ok) => ok && toast(`Passé en ${s} ✓`));
+                            },
+                          })),
+                          {
                             key: "delete",
                             label: "Supprimer",
                             icon: Trash2,
                             danger: true,
                             onClick: () => removeCard(card.id),
-                            confirm: { title: "Supprimer le prospect", message: `Supprimer « ${card.brand} » ? Cette action est irréversible.` },
+                            confirm: { title: "Supprimer le prospect", message: `Supprimer « ${card.brand} » ? Il ira dans la Corbeille, d'où tu pourras le restaurer.` },
                           },
                         ]}
                       />

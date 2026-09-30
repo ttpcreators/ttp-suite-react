@@ -408,7 +408,8 @@ export function Contrats() {
   const [defraiement, setDefraiement] = useState(SCENARIO_DEFAULT.defraiement);
   const scenario: Scenario = { collab, rights, rightsDuration, territory, payment, tva, exclScope, defraiement };
   const [copied, setCopied] = useState(false);
-  const [preview, setPreview] = useState<string | null>(null);
+  // `hist` : aperçu d'un contrat de l'historique (ne doit rien ré-archiver)
+  const [preview, setPreview] = useState<{ html: string; hist: boolean } | null>(null);
   const [caseName, setCaseName] = useState("Standard");
   const [pendingDel, setPendingDel] = useState<null | { title?: string; message: string; run: () => void }>(null);
 
@@ -418,6 +419,7 @@ export function Contrats() {
   // Charge un cas dans le formulaire.
   const applyCase = (cs: ContractCase) => {
     setCtType(cs.ctType);
+    if (navSub) setNavSub(cs.ctType); // garde la sidebar alignée sur le type chargé
     setBrand(cs.brand);
     setValue(cs.value);
     setCommission(cs.commission);
@@ -445,7 +447,10 @@ export function Contrats() {
     lastCt.current = ctName;
     if (switched) appliedFor.current = null;
     if (appliedFor.current === ctName) return;
-    const cs = (configs[ctName] ?? [])[0];
+    // Sous-page choisie dans la sidebar : on ne charge qu'un cas du MÊME type,
+    // sinon le type repasserait sur celui du 1er cas (rebond vers « marque »).
+    const list = configs[ctName] ?? [];
+    const cs = navSub ? list.find((c) => c.ctType === ctType) : list[0];
     if (cs) {
       applyCase(cs);
       appliedFor.current = ctName;
@@ -560,7 +565,7 @@ export function Contrats() {
   const downloadPDF = () => {
     // Ouvre la boîte d'impression → « Enregistrer au format PDF » (vrai PDF, texte net).
     const html = buildHTML();
-    archiveContract(html);
+    void archiveContract(html);
     printHtml(html);
     toast("Contrat archivé · choisis « Enregistrer au format PDF »");
   };
@@ -611,25 +616,40 @@ export function Contrats() {
   };
   /** Archive le contrat courant. Dédoublonne (même HTML que le dernier archivé) et
    *  plafonne à 100 entrées pour borner la taille du blob. */
-  const archiveContract = (html: string) => {
-    mutateHistory((fresh) => {
+  const archiveContract = async (html: string) => {
+    let entry: ContractHistoryEntry | null = null;
+    const ok = await mutateHistory((fresh) => {
       if (fresh.some((h) => h.html === html)) return fresh; // déjà archivé à l'identique
-      const entry: ContractHistoryEntry = { id: uid(), ts: Date.now(), ctType, ctName, brand, ref, title: meta.title, html };
+      entry = { id: uid(), ts: Date.now(), ctType, ctName, brand, ref, title: meta.title, html };
       return [entry, ...fresh].slice(0, 100);
     });
+    const added = entry as ContractHistoryEntry | null;
+    // Réimpression d'un contrat déjà archivé : on ne touche pas à son échéance.
+    if (!ok || !added) return;
     // Auto-échéance de FIN de contrat : renseigne la page Échéances sans saisie manuelle.
-    // Début = aujourd'hui (date de génération), durée = champ « Durée » du contrat.
+    // Début = date de génération (locale), durée = champ « Durée » du contrat.
     const months = parseInt(String(duration).replace(/[^0-9]/g, ""), 10);
     if (ctName && ctName !== "[Créateur]" && months > 0) {
-      (async () => {
-        type Dl = { id: string; creator: string; type: string; start: string; months: number; note?: string };
+      type Dl = { id: string; creator: string; type: string; start: string; months: number; note?: string; brand?: string; contractId?: string };
+      const dlBrand = ctType === "repr" ? "" : brand.trim();
+      const sameContract = (d: Dl) =>
+        d.contractId === added.id ||
+        (d.type === ctType &&
+          d.creator.trim().toLowerCase() === ctName.trim().toLowerCase() &&
+          // Même marque ; les échéances auto anciennes (sans marque) sont remplacées aussi
+          (d.brand != null ? d.brand.trim().toLowerCase() === dlBrand.toLowerCase() : !!d.note?.startsWith("Auto")));
+      try {
         invalidateAppState();
         const fresh = ((await getAppState())["contractDeadlines"] as Dl[]) ?? [];
-        // Remplace l'échéance existante du même créateur ET même type (pas de doublon).
-        const kept = fresh.filter((d) => !(d.type === ctType && d.creator.trim().toLowerCase() === ctName.trim().toLowerCase()));
-        const dl: Dl = { id: uid(), creator: ctName, type: ctType, start: new Date().toISOString().slice(0, 10), months, note: `Auto — ${meta.label.toLowerCase()}` };
-        await saveAppStateKey("contractDeadlines", [dl, ...kept]);
-      })();
+        const kept = fresh.filter((d) => !sameContract(d));
+        const now = new Date();
+        const p = (n: number) => String(n).padStart(2, "0");
+        const start = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+        const dl: Dl = { id: uid(), creator: ctName, type: ctType, start, months, note: `Auto · ${meta.label.toLowerCase()}${dlBrand ? ` · ${dlBrand}` : ""}`, brand: dlBrand, contractId: added.id };
+        if (!(await saveAppStateKey("contractDeadlines", [dl, ...kept]))) toast("Contrat archivé, mais échéance non enregistrée. Réessaie");
+      } catch {
+        toast("Contrat archivé, mais échéance non enregistrée. Réessaie");
+      }
     }
   };
   const deleteHistory = (id: string) => mutateHistory((fresh) => fresh.filter((h) => h.id !== id));
@@ -831,7 +851,7 @@ export function Contrats() {
           <button type="button" onClick={copyContract} className="flex items-center justify-center gap-2 rounded-xl border border-border py-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} {copied ? "Copié ✓" : "Copier"}
           </button>
-          <button type="button" onClick={() => setPreview(buildHTML())} className="flex items-center justify-center gap-2 rounded-xl border border-border py-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={() => setPreview({ html: buildHTML(), hist: false })} className="flex items-center justify-center gap-2 rounded-xl border border-border py-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             <Eye className="h-3.5 w-3.5" /> Aperçu
           </button>
           <button type="button" onClick={downloadPDF} className="flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
@@ -860,7 +880,7 @@ export function Contrats() {
                     {titleCase(h.ctName)}{h.brand ? ` × ${h.brand}` : ""} · {h.ref} · {new Date(h.ts).toLocaleDateString("fr-FR")}
                   </div>
                 </div>
-                <button type="button" onClick={() => setPreview(h.html)} title="Aperçu" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-surface hover:text-foreground">
+                <button type="button" onClick={() => setPreview({ html: h.html, hist: true })} title="Aperçu" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-surface hover:text-foreground">
                   <Eye className="h-4 w-4" />
                 </button>
                 <button type="button" onClick={() => printHtml(h.html)} title="Enregistrer en PDF" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-surface hover:text-primary">
@@ -886,14 +906,18 @@ export function Contrats() {
               <button
                 type="button"
                 className={cn(ghostBtn, "flex items-center gap-1.5")}
-                onClick={() => { archiveContract(preview); printHtml(preview); }}
+                onClick={() => {
+                  // Contrat de l'historique : simple réimpression, sans ré-archiver ni toucher aux Échéances
+                  if (!preview.hist) void archiveContract(preview.html);
+                  printHtml(preview.html);
+                }}
               >
                 <FileText className="h-3.5 w-3.5" /> Enregistrer en PDF
               </button>
             </>
           }
         >
-          <iframe title={`Contrat ${ref}`} srcDoc={preview} sandbox="" className="h-[64vh] w-full rounded-lg border border-border bg-white" />
+          <iframe title={`Contrat ${ref}`} srcDoc={preview.html} sandbox="" className="h-[64vh] w-full rounded-lg border border-border bg-white" />
         </Modal>
       )}
       {pendingDel && (

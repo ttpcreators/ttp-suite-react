@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Copy, Check, FileText, Eye, X, Save, ChevronDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
@@ -97,7 +97,9 @@ export function RepresentationContract() {
   const [creatorName, setCreatorName] = useState("");
   const [config, setConfig] = useState<Cfg>(() => defaultConfig("exclusif"));
   const [caseName, setCaseName] = useState("Standard");
-  const [pendingDel, setPendingDel] = useState<null | { message: string; run: () => void }>(null);
+  const [pendingDel, setPendingDel] = useState<null | { title?: string; message: string; run: () => void }>(null);
+  // « Modifier » depuis l'historique : le préremplissage créateur ne doit pas écraser le contrat chargé
+  const skipPrefillRef = useRef(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Général: true, Talent: true, Durée: true, Commission: true });
@@ -119,6 +121,10 @@ export function RepresentationContract() {
   // Au changement de créateur : préremplit les infos Talent + charge le 1er cas enregistré.
   useEffect(() => {
     if (!ctName) return;
+    if (skipPrefillRef.current) {
+      skipPrefillRef.current = false;
+      return;
+    }
     if (ctName === EXT) {
       // Externe : aucun préremplissage roster (tout se saisit dans « Talent »).
       const saved = (configs[EXT] ?? [])[0];
@@ -305,6 +311,8 @@ export function RepresentationContract() {
 
   const loadContract = (e: ContractHist) => {
     setConfig({ ...defaultConfig(e.variante || "exclusif"), ...e.config });
+    // Le changement de créateur déclenche le préremplissage : on le saute une fois
+    if ((e.creator ?? EXT) !== ctName) skipPrefillRef.current = true;
     setCreatorName(e.creator ?? EXT);
     setCaseName("Modifié");
     setShowHist(false);
@@ -316,8 +324,23 @@ export function RepresentationContract() {
       toast("Lien indisponible — réessaie");
       return;
     }
-    await navigator.clipboard?.writeText(data.signedUrl).catch(() => {});
-    toast("Lien du contrat copié ✓ (valable 7 jours)");
+    const url = data.signedUrl;
+    // Après un await, iOS refuse souvent le presse-papiers : repli partage natif puis affichage du lien
+    try {
+      if (!navigator.clipboard) throw new Error("no clipboard");
+      await navigator.clipboard.writeText(url);
+      toast("Lien du contrat copié ✓ (valable 7 jours)");
+      return;
+    } catch { /* repli ci-dessous */ }
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: e.title, url });
+        return;
+      } catch (err) {
+        if ((err as Error)?.name === "AbortError") return; // partage annulé par l'utilisateur
+      }
+    }
+    window.prompt("Copie le lien du contrat (valable 7 jours) :", url);
   };
   const deleteContract = async (e: ContractHist) => {
     invalidateAppState();
@@ -328,9 +351,9 @@ export function RepresentationContract() {
       return;
     }
     setLocalHist(hist.filter((x) => x.id !== e.id));
-    await supabase.from("documents").delete().eq("id", e.id);
+    const { error: docErr } = await supabase.from("documents").delete().eq("id", e.id);
     await supabase.storage.from("documents").remove([e.path]).catch(() => {});
-    toast("Contrat supprimé");
+    toast(docErr ? "Contrat retiré de l'historique, mais toujours visible dans Documents. Supprime-le là-bas" : "Contrat supprimé");
   };
 
   const renderField = (key: string) => {
@@ -534,7 +557,7 @@ export function RepresentationContract() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPendingDel({ message: `Supprimer « ${e.title} » ?${e.creator ? " (retiré aussi du portail du créateur)" : ""}`, run: () => deleteContract(e) })}
+                    onClick={() => setPendingDel({ title: "Supprimer le contrat", message: `Supprimer « ${e.title} » ?${e.creator ? " (retiré aussi du portail du créateur)" : ""}`, run: () => deleteContract(e) })}
                     className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-rose-500"
                     title="Supprimer"
                   >
@@ -548,7 +571,7 @@ export function RepresentationContract() {
       )}
       {pendingDel && (
         <ConfirmDialog
-          title="Supprimer le cas"
+          title={pendingDel.title ?? "Supprimer le cas"}
           message={pendingDel.message}
           confirmLabel="Supprimer"
           danger

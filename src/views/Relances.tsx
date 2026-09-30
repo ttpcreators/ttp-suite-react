@@ -18,7 +18,11 @@ type Inv = { id: string; ref: string; party: string; amount: string; date: strin
 type Reminder = { last: string; count: number };
 type Reminders = Record<string, Reminder>;
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
+// Date LOCALE (toISOString = UTC → la veille entre minuit et 2 h en France)
+const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 
 function parseDate(s: string | null): Date | null {
   if (!s) return null;
@@ -116,10 +120,15 @@ export function Relances() {
 
   const totalDue = overdue.reduce((s, o) => s + parseAmount(o.iv.amount), 0);
 
-  const saveReminders = async (next: Reminders) => {
+  const saveReminders = async (next: Reminders): Promise<boolean> => {
+    const before = localRem;
     setLocalRem(next);
     const ok = await saveAppStateKey("invoiceReminders", next);
-    if (!ok) toast("Erreur — réessaie");
+    if (!ok) {
+      setLocalRem(before); // rollback : pas de relance affichée si non enregistrée
+      toast("Erreur, relance non enregistrée. Réessaie");
+    }
+    return ok;
   };
 
   const markReminded = async (id: string) => {
@@ -128,8 +137,7 @@ export function Relances() {
     const fresh = ((await getAppState())["invoiceReminders"] as Reminders) ?? {};
     const cur = fresh[id];
     const next: Reminders = { ...fresh, [id]: { last: todayISO(), count: (cur?.count ?? 0) + 1 } };
-    await saveReminders(next);
-    toast("Relance enregistrée ✓");
+    if (await saveReminders(next)) toast("Relance enregistrée ✓");
   };
 
   const copyEmail = async (inv: Inv) => {
@@ -144,7 +152,10 @@ export function Relances() {
 
   const openMail = (inv: Inv) => {
     const { subject, body } = relanceEmail(inv, reminders[inv.id]?.count ?? 0);
-    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    // Destinataire = email client saisi sur la facture (blob invoiceDetails), si connu
+    const details = (app?.invoiceDetails as Record<string, { clientEmail?: string }> | undefined) ?? {};
+    const to = encodeURIComponent((details[inv.id]?.clientEmail ?? "").trim());
+    window.location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
   if (error)

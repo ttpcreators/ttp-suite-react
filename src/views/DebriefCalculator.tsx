@@ -198,6 +198,12 @@ export function DebriefCalculator({
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const shotUrls = useShotUrls(state.shots);
+  // Dernier état connu : l'upload est long, on ne repart pas d'une fermeture périmée
+  // (sinon la saisie faite pendant l'envoi serait écrasée).
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const { mode, followers, postsCount, basis, shots } = state;
   const set = (patch: Partial<CalcState>) => onChange({ ...state, ...patch });
@@ -261,7 +267,8 @@ export function DebriefCalculator({
     }
     setBusy(false);
     if (added.length) {
-      set({ shots: [...shots, ...added] });
+      const cur = stateRef.current;
+      onChange({ ...cur, shots: [...cur.shots, ...added] });
       toast(`${added.length} capture${added.length > 1 ? "s" : ""} jointe${added.length > 1 ? "s" : ""} ✓ — pense à enregistrer`);
     }
   };

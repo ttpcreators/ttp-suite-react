@@ -92,6 +92,9 @@ type Draft = Details & {
   brand: string;
   creator: string;
   status: InvoiceStatus;
+  /** Saisie brute des champs numériques (clé « id:qty », « id:unit », « commission ») :
+   *  garde « 1250, » tel quel pendant la frappe, sinon la virgule disparaît. */
+  raw?: Record<string, string>;
 };
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
@@ -150,6 +153,11 @@ function uid(): string {
 function num(s: unknown): number {
   const n = parseFloat(String(s ?? "").replace(/\s/g, "").replace(",", ".").replace(/[^0-9.\-]/g, ""));
   return Number.isFinite(n) ? n : 0;
+}
+/** Prochain numéro de facture à partir des réfs existantes (« AAAA-NNN »). */
+function nextRefFrom(refs: string[]): string {
+  const max = refs.reduce((m, ref) => Math.max(m, Number(String(ref).split("-").pop()) || 0), 180);
+  return `${new Date().getFullYear()}-${String(max + 1).padStart(3, "0")}`;
 }
 function euro2(n: number): string {
   return n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
@@ -396,6 +404,10 @@ export function Facturation() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [issuerDraft, setIssuerDraft] = useState<Issuer | null>(null);
   const [banksOpen, setBanksOpen] = useState(false);
+  // Brouillon local des comptes : enregistré à la fermeture, pas à chaque frappe
+  const [banksDraft, setBanksDraft] = useState<BankAccount[]>([]);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false); // garde synchrone contre le double clic
   const [preview, setPreview] = useState<{ html: string; ref: string; email: string; brand: string } | null>(null);
 
   useEffect(() => {
@@ -503,9 +515,7 @@ export function Facturation() {
   function openCreate() {
     setDraft({
       id: null,
-      ref: `${new Date().getFullYear()}-${String(
-        invoices.reduce((m, r) => Math.max(m, Number(String(r.ref).split("-").pop()) || 0), 180) + 1,
-      ).padStart(3, "0")}`,
+      ref: nextRefFrom(invoices.map((r) => r.ref)),
       brand: "",
       creator: "",
       status: "brouillon",
@@ -534,11 +544,22 @@ export function Facturation() {
   }
 
   async function saveDraft() {
-    if (!draft) return;
+    if (!draft || savingRef.current) return;
     if (!draft.brand.trim()) {
       toast("Renseigne la marque / campagne");
       return;
     }
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      await doSaveDraft(draft);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  async function doSaveDraft(draft: Draft) {
     const t = totalsOf(draft.items, draft.franchise, draft.vatRate, draft.commissionRate);
     const party = draft.creator ? `${draft.brand.trim()} × ${firstName(draft.creator)}` : draft.brand.trim();
     const summary = {
@@ -551,6 +572,16 @@ export function Facturation() {
     };
 
     let id = draft.id;
+    if (!id) {
+      // Numéro recalculé depuis la base juste avant l'insertion (évite les doublons)
+      const { data: refRows, error: refErr } = await supabase.from("invoices").select("ref");
+      if (refErr) {
+        toast("Erreur, réessaie");
+        return;
+      }
+      summary.ref = nextRefFrom(((refRows as { ref: string }[]) ?? []).map((x) => x.ref));
+      draft = { ...draft, ref: summary.ref };
+    }
     const wasPaid = id ? invoices.find((x) => x.id === id)?.status === "payee" : false;
     if (id) {
       if (!(await dbUpdate("invoices", id, summary))) {
@@ -657,10 +688,27 @@ export function Facturation() {
     toast(ok ? "Émetteur enregistré ✓" : "Erreur — réessaie");
   }
 
-  async function persistBanks(next: BankAccount[]) {
-    setBanks(next);
-    const ok = await saveAppStateKey("invoiceBankAccounts", next);
-    if (!ok) toast("Erreur — réessaie");
+  function openBanks() {
+    setBanksDraft(banks);
+    setBanksOpen(true);
+  }
+
+  // Enregistre les comptes à la fermeture : relecture FRAÎCHE puis fusion par id
+  // (sinon un instantané périmé écrase les comptes saisis sur un autre poste).
+  async function commitBanks() {
+    setBanksOpen(false);
+    const draftIds = new Set(banksDraft.map((b) => b.id));
+    const removed = new Set(banks.filter((b) => !draftIds.has(b.id)).map((b) => b.id));
+    const changed = banksDraft.filter((b) => JSON.stringify(b) !== JSON.stringify(banks.find((x) => x.id === b.id)));
+    if (!removed.size && !changed.length) return;
+    invalidateAppState();
+    const fresh = ((await getAppState())["invoiceBankAccounts"] as BankAccount[]) ?? [];
+    const byId = new Map(changed.map((b) => [b.id, b]));
+    const merged = fresh.filter((b) => !removed.has(b.id)).map((b) => byId.get(b.id) ?? b);
+    for (const b of changed) if (!fresh.some((x) => x.id === b.id)) merged.push(b);
+    const ok = await saveAppStateKey("invoiceBankAccounts", merged);
+    if (ok) setBanks(merged);
+    toast(ok ? "Comptes enregistrés ✓" : "Erreur, comptes non enregistrés. Réessaie");
   }
 
   const draftTotals = draft ? totalsOf(draft.items, draft.franchise, draft.vatRate, draft.commissionRate) : null;
@@ -678,7 +726,7 @@ export function Facturation() {
           {rows.length} facture{rows.length > 1 ? "s" : ""}
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setBanksOpen(true)} className={cn(ghostBtn, "flex items-center gap-1.5")} title="Comptes bancaires">
+          <button type="button" onClick={openBanks} className={cn(ghostBtn, "flex items-center gap-1.5")} title="Comptes bancaires">
             <Landmark className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Comptes</span>
           </button>
@@ -754,6 +802,8 @@ export function Facturation() {
               if (await dbTrash("invoices", r.id, r.party, formatEuro(parseAmount(r.amount)))) {
                 setRows(invoices.filter((x) => x.id !== r.id));
                 toast("Déplacé dans la corbeille");
+              } else {
+                toast("Suppression impossible, réessaie");
               }
             };
             const openPreview = () => setPreview({ html: buildHTML(r), ref: r.ref, email: detailsFor(r).clientEmail, brand: r.party });
@@ -762,7 +812,7 @@ export function Facturation() {
               { key: "preview", label: "Aperçu", icon: Eye, onClick: openPreview },
               { key: "send", label: "Envoyer au client", icon: Send, onClick: () => sendInvoice(r) },
               { key: "download", label: "Enregistrer en PDF", icon: Download, onClick: () => downloadInvoice(r) },
-              { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: del, confirm: { title: "Supprimer la facture", message: `Supprimer la facture ${r.ref} (${r.party}) ? Cette action est irréversible.` } },
+              { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: del, confirm: { title: "Supprimer la facture", message: `Supprimer la facture ${r.ref} (${r.party}) ? Elle ira dans la corbeille.` } },
             ];
             const margeChip = (
               <span className="inline-block whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
@@ -826,7 +876,9 @@ export function Facturation() {
           footer={
             <>
               <button type="button" className={ghostBtn} onClick={() => setDraft(null)}>Annuler</button>
-              <button type="button" className={primaryBtn} onClick={saveDraft}>Enregistrer</button>
+              <button type="button" className={cn(primaryBtn, saving && "opacity-60")} onClick={saveDraft} disabled={saving}>
+                {saving ? "Enregistrement…" : "Enregistrer"}
+              </button>
             </>
           }
         >
@@ -891,15 +943,15 @@ export function Facturation() {
                       className="min-w-0 basis-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:basis-0 sm:flex-[3]"
                     />
                     <input
-                      value={String(it.qty)}
-                      onChange={(e) => setDraft({ ...draft, items: draft.items.map((x) => (x.id === it.id ? { ...x, qty: num(e.target.value) } : x)) })}
+                      value={draft.raw?.[`${it.id}:qty`] ?? fmtQty(it.qty)}
+                      onChange={(e) => setDraft({ ...draft, raw: { ...draft.raw, [`${it.id}:qty`]: e.target.value }, items: draft.items.map((x) => (x.id === it.id ? { ...x, qty: num(e.target.value) } : x)) })}
                       inputMode="decimal"
                       placeholder="Qté"
                       className="w-14 shrink-0 rounded-lg border border-border bg-surface px-2 py-2 text-center text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:w-16"
                     />
                     <input
-                      value={String(it.unit)}
-                      onChange={(e) => setDraft({ ...draft, items: draft.items.map((x) => (x.id === it.id ? { ...x, unit: num(e.target.value) } : x)) })}
+                      value={draft.raw?.[`${it.id}:unit`] ?? fmtQty(it.unit)}
+                      onChange={(e) => setDraft({ ...draft, raw: { ...draft.raw, [`${it.id}:unit`]: e.target.value }, items: draft.items.map((x) => (x.id === it.id ? { ...x, unit: num(e.target.value) } : x)) })}
                       inputMode="decimal"
                       placeholder="PU HT"
                       className="w-20 shrink-0 rounded-lg border border-border bg-surface px-2 py-2 text-right text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:w-24"
@@ -932,8 +984,8 @@ export function Facturation() {
                 <label className="flex flex-col gap-1.5">
                   <span className="text-[11px] font-medium text-muted-foreground">Commission agence (%)</span>
                   <input
-                    value={String(draft.commissionRate)}
-                    onChange={(e) => setDraft({ ...draft, commissionRate: num(e.target.value) })}
+                    value={draft.raw?.commission ?? fmtRate(draft.commissionRate)}
+                    onChange={(e) => setDraft({ ...draft, raw: { ...draft.raw, commission: e.target.value }, commissionRate: num(e.target.value) })}
                     inputMode="decimal"
                     className="h-[42px] w-full rounded-lg border border-border bg-surface px-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                   />
@@ -1001,22 +1053,22 @@ export function Facturation() {
       {banksOpen && (
         <Modal
           title="Comptes bancaires"
-          onClose={() => setBanksOpen(false)}
-          footer={<button type="button" className={primaryBtn} onClick={() => setBanksOpen(false)}>Terminé</button>}
+          onClose={commitBanks}
+          footer={<button type="button" className={primaryBtn} onClick={commitBanks}>Terminé</button>}
         >
           <div className="flex flex-col gap-3">
-            {banks.length === 0 && <p className="text-sm text-muted-foreground">Aucun compte — ajoute-en un pour pouvoir le sélectionner sur une facture.</p>}
-            {banks.map((b) => (
+            {banksDraft.length === 0 && <p className="text-sm text-muted-foreground">Aucun compte — ajoute-en un pour pouvoir le sélectionner sur une facture.</p>}
+            {banksDraft.map((b) => (
               <div key={b.id} className="rounded-xl border border-border bg-surface p-3">
                 <div className="flex flex-wrap items-end gap-2">
-                  <TextField label="Libellé" value={b.label} onChange={(v) => persistBanks(banks.map((x) => (x.id === b.id ? { ...x, label: v } : x)))} className="min-w-[140px] flex-1" />
-                  <TextField label="Titulaire" value={b.holder} onChange={(v) => persistBanks(banks.map((x) => (x.id === b.id ? { ...x, holder: v } : x)))} className="min-w-[140px] flex-1" />
-                  <TextField label="Banque" value={b.bank} onChange={(v) => persistBanks(banks.map((x) => (x.id === b.id ? { ...x, bank: v } : x)))} className="min-w-[120px] flex-1" />
-                  <TextField label="IBAN" value={b.iban} onChange={(v) => persistBanks(banks.map((x) => (x.id === b.id ? { ...x, iban: v } : x)))} className="min-w-full flex-[2]" />
-                  <TextField label="BIC" value={b.bic} onChange={(v) => persistBanks(banks.map((x) => (x.id === b.id ? { ...x, bic: v } : x)))} className="min-w-[120px] flex-1" />
+                  <TextField label="Libellé" value={b.label} onChange={(v) => setBanksDraft(banksDraft.map((x) => (x.id === b.id ? { ...x, label: v } : x)))} className="min-w-[140px] flex-1" />
+                  <TextField label="Titulaire" value={b.holder} onChange={(v) => setBanksDraft(banksDraft.map((x) => (x.id === b.id ? { ...x, holder: v } : x)))} className="min-w-[140px] flex-1" />
+                  <TextField label="Banque" value={b.bank} onChange={(v) => setBanksDraft(banksDraft.map((x) => (x.id === b.id ? { ...x, bank: v } : x)))} className="min-w-[120px] flex-1" />
+                  <TextField label="IBAN" value={b.iban} onChange={(v) => setBanksDraft(banksDraft.map((x) => (x.id === b.id ? { ...x, iban: v } : x)))} className="min-w-full flex-[2]" />
+                  <TextField label="BIC" value={b.bic} onChange={(v) => setBanksDraft(banksDraft.map((x) => (x.id === b.id ? { ...x, bic: v } : x)))} className="min-w-[120px] flex-1" />
                   <button
                     type="button"
-                    onClick={() => persistBanks(banks.filter((x) => x.id !== b.id))}
+                    onClick={() => setBanksDraft(banksDraft.filter((x) => x.id !== b.id))}
                     className="grid h-[42px] w-10 shrink-0 place-items-center rounded-lg border border-border text-faint transition-colors hover:bg-rowhover hover:text-rose-500"
                     title="Supprimer le compte"
                   >
@@ -1027,7 +1079,7 @@ export function Facturation() {
             ))}
             <button
               type="button"
-              onClick={() => persistBanks([...banks, { id: uid(), label: "", holder: issuer.name, bank: "", iban: "", bic: "" }])}
+              onClick={() => setBanksDraft([...banksDraft, { id: uid(), label: "", holder: issuer.name, bank: "", iban: "", bic: "" }])}
               className="flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2.5 text-[12px] font-semibold text-primary transition-colors hover:bg-rowhover"
             >
               <Plus className="h-4 w-4" /> Ajouter un compte

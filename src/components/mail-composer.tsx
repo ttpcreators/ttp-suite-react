@@ -3,7 +3,7 @@ import { X, Send, Loader2, Settings2, Plus, Trash2, ArrowLeft, ExternalLink } fr
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
-import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import {
   DEFAULT_TEMPLATES,
   KIND_LABEL,
@@ -11,6 +11,9 @@ import {
   renderTemplate,
   suggestedKind,
   mailtoHref,
+  readProspectTemplates,
+  mergeTemplateEdits,
+  PROSPECT_TEMPLATES_KEY,
   type MailTemplate,
   type MailTemplateKind,
   type TemplateContact,
@@ -36,7 +39,9 @@ type Props = {
   contact: ComposerContact | null;
   onClose: () => void;
   /** Appelé après un envoi réussi (pour journaliser la touche côté page). */
-  onSent?: () => void;
+  /** Appelé après envoi. `gmailId` = id du message Gmail (envoi via Gmail) : la touche
+   *  prend l'id « gm<id> », le même que le scan horaire → jamais comptée deux fois. */
+  onSent?: (gmailId?: string) => void;
 };
 
 async function invokeJson<T>(fn: string, body: Record<string, unknown>): Promise<T | null> {
@@ -52,12 +57,15 @@ function escapeHtml(s: string): string {
 
 export function MailComposer({ open, contact, onClose, onSent }: Props) {
   const { data: stored } = useAppState<MailTemplate[] | undefined>(
-    (s: AppState) => s["mailTemplates"] as MailTemplate[] | undefined,
+    (s: AppState) => readProspectTemplates(s),
   );
-  const templates = useMemo<MailTemplate[]>(
-    () => (Array.isArray(stored) && stored.length > 0 ? stored : DEFAULT_TEMPLATES),
-    [stored],
-  );
+  // Après une sauvegarde, la liste enregistrée s'affiche tout de suite (sans
+  // attendre le prochain tick live) ; elle cède dès que la donnée live change.
+  const [saved, setSaved] = useState<{ from: unknown; list: MailTemplate[] } | null>(null);
+  const templates = useMemo<MailTemplate[]>(() => {
+    if (saved && saved.from === stored) return saved.list;
+    return Array.isArray(stored) && stored.length > 0 ? stored : DEFAULT_TEMPLATES;
+  }, [stored, saved]);
 
   const [manage, setManage] = useState(false);
   const [tplId, setTplId] = useState<string | null>(null);
@@ -67,6 +75,9 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
 
   // Gestionnaire : copie de travail éditable.
   const [draftList, setDraftList] = useState<MailTemplate[]>(templates);
+  // Liste de référence à l'ouverture du gestionnaire : sert à distinguer, à la
+  // sauvegarde, ce qui a été modifié/supprimé ICI de ce qui a bougé ailleurs.
+  const baseListRef = useRef<MailTemplate[]>(templates);
   const [editId, setEditId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -76,6 +87,7 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
     if (!open) return;
     setManage(contact === null);
     setDraftList(templates);
+    baseListRef.current = templates;
     setEditId(null);
     if (!contact) return;
     const kind = suggestedKind(contact.hasBeenContacted);
@@ -105,7 +117,7 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
     }
     setSending(true);
     const html = `<div style="font-family:system-ui,Arial,sans-serif;font-size:14px;line-height:1.6;white-space:pre-line">${escapeHtml(body.trim())}</div>`;
-    const res = await invokeJson<{ ok?: boolean; error?: string }>("gmail-send", {
+    const res = await invokeJson<{ ok?: boolean; error?: string; id?: string }>("gmail-send", {
       to: contact.email,
       subject: subject.trim(),
       html,
@@ -122,7 +134,7 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
       return;
     }
     toast("Mail envoyé ✓");
-    onSent?.();
+    onSent?.(res.id);
     onClose();
   };
 
@@ -180,13 +192,32 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
       toast("Garde au moins un modèle");
       return;
     }
+    if (saving) return;
     setSaving(true);
-    const ok = await saveAppStateKey("mailTemplates", cleaned);
+    let ok = false;
+    let merged: MailTemplate[] = cleaned;
+    try {
+      // Relit l'état frais puis fusionne (par id, suppressions explicites) au
+      // lieu d'écraser à l'aveugle avec l'instantané local.
+      invalidateAppState();
+      const freshState = await getAppState();
+      const fresh = readProspectTemplates(freshState);
+      const freshList = Array.isArray(fresh) && fresh.length > 0 ? fresh : DEFAULT_TEMPLATES;
+      merged = mergeTemplateEdits(freshList, baseListRef.current, cleaned);
+      if (merged.length === 0) merged = cleaned;
+      ok = await saveAppStateKey(PROSPECT_TEMPLATES_KEY, merged);
+    } catch (e) {
+      console.warn("[mailTemplates] relecture avant sauvegarde", e);
+      ok = false;
+    }
     setSaving(false);
     if (!ok) {
-      toast("Sauvegarde échouée — réessaie");
+      toast("Sauvegarde échouée, réessaie");
       return;
     }
+    baseListRef.current = merged;
+    setDraftList(merged);
+    setSaved({ from: stored, list: merged });
     toast("Modèles enregistrés ✓");
     if (contact) setManage(false);
     else onClose();

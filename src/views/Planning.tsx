@@ -126,10 +126,11 @@ export function Planning() {
       </AnimatedBadge>
     );
 
-  const onCreate = async (e: Omit<Ev, "id">) => {
+  // Les callbacks renvoient true en cas de succès : le calendrier ne ferme la modale qu'alors.
+  const onCreate = async (e: Omit<Ev, "id">): Promise<boolean> => {
     if (!e.title.trim()) {
       toast("Renseigne le titre");
-      return;
+      return false;
     }
     // date par défaut = aujourd'hui (sinon l'événement n'apparaît nulle part)
     const dateVal = e.date && e.date.trim() ? e.date : todayISO();
@@ -146,30 +147,35 @@ export function Planning() {
     const created = await dbInsert("events", row);
     if (!created) {
       toast("Erreur — réessaie");
-      return;
+      return false;
     }
-    setRows([{ ...e, date: dateVal, id: String((created as { id: string }).id) }, ...rows]);
+    setRows((prev) => [{ ...e, date: dateVal, id: String((created as { id: string }).id) }, ...(prev ?? [])]);
     // Push à chaque créateur concerné (who peut être une liste "Nom A, Nom B").
     (e.who ?? "").split(",").map((c) => c.trim()).filter(Boolean).forEach((c) => notifyCreator("event", c, e.title));
     toast("Événement ajouté ✓");
+    return true;
   };
 
-  const onUpdate = async (id: string, patch: Partial<Ev>) => {
+  const onUpdate = async (id: string, patch: Partial<Ev>): Promise<boolean> => {
     const dbPatch: Record<string, unknown> = { ...patch };
     if (patch.date) dbPatch.day = Number(patch.date.split("-")[2]) || 1;
     if (await dbUpdate("events", id, dbPatch)) {
       setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
       toast("Événement modifié ✓");
-    } else {
-      toast("Erreur");
+      return true;
     }
+    toast("Erreur");
+    return false;
   };
 
-  const onDelete = async (id: string) => {
+  const onDelete = async (id: string): Promise<boolean> => {
     if (await dbDelete("events", id)) {
       setRows((prev) => (prev ?? []).filter((r) => r.id !== id));
       toast("Supprimé");
+      return true;
     }
+    toast("Suppression impossible");
+    return false;
   };
 
   return (

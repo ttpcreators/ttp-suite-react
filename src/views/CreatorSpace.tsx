@@ -44,7 +44,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
 import { frDate, toISODate } from "@/lib/dates";
-import { notifyAgency } from "@/lib/push";
+import { notifyAgency, notifyCreator } from "@/lib/push";
 import { PushCard } from "@/components/ui/push-card";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
@@ -115,7 +115,7 @@ type Idea = { id: string; text: string; status: string | null; sort_order?: numb
 const IDEA_ACCENT: Record<string, string> = { "À explorer": "bg-indigo", "À faire": "bg-primary", "En cours": "bg-cyan", "Publiée": "bg-signal" };
 const ideaAccent = (s: string | null) => IDEA_ACCENT[s ?? "À faire"] ?? "bg-primary";
 type Brief = { id: string; brand: string; deliverables: string | null; due: string | null; status: string | null; consignes: string | null };
-type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string; type: string };
+type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string; type: string; who?: string | null; description?: string | null };
 type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null };
 type Invoice = { ref: string; party: string; amount: string | null; date: string | null; status: string | null };
 type Contact = { id: string; brand: string; person: string | null; role: string | null; email: string | null; phone: string | null; sort_order?: number };
@@ -298,6 +298,31 @@ type DebriefLite = {
   kpis: { l: string; v: string }[]; highlights: string[];
 };
 
+// localStorage protégé : il lève une exception quand le stockage est bloqué.
+function lsGet(k: string): string | null {
+  try {
+    return localStorage.getItem(k);
+  } catch {
+    return null;
+  }
+}
+function lsSet(k: string, v: string) {
+  try {
+    localStorage.setItem(k, v);
+  } catch {
+    /* stockage indisponible */
+  }
+}
+
+// Normalise les anciens statuts de brief comme côté agence (copie de colKey de Briefs.tsx).
+function briefKey(status: string): string {
+  const s = String(status).toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  if (s.includes("termin")) return "terminé";
+  if (s.includes("cours")) return "cours";
+  if (s.includes("valider")) return "valider";
+  return "attente";
+}
+
 const BRIEF_STATUS: StatusOption[] = [
   { value: "attente", label: "En attente", dot: "bg-amber" },
   { value: "valider", label: "À valider", dot: "bg-primary" },
@@ -473,12 +498,12 @@ export function CreatorSpace({
   const [form, setForm] = useState<Partial<Creator>>({});
   const [infoTab, setInfoTab] = useState<"stats" | "coord">("stats"); // carte Mes infos : onglet actif
   const [todoView, setTodoView] = useState<"liste" | "colonnes">(
-    () => (localStorage.getItem("ttp:cs-todo-view") === "colonnes" ? "colonnes" : "liste"),
+    () => (lsGet("ttp:cs-todo-view") === "colonnes" ? "colonnes" : "liste"),
   );
-  useEffect(() => { localStorage.setItem("ttp:cs-todo-view", todoView); }, [todoView]);
+  useEffect(() => { lsSet("ttp:cs-todo-view", todoView); }, [todoView]);
   // Sidebar desktop repliable en rail (mémorisé).
-  const [sbCollapsed, setSbCollapsed] = useState(() => localStorage.getItem("ttp:cs-sidebar-collapsed") === "1");
-  useEffect(() => { localStorage.setItem("ttp:cs-sidebar-collapsed", sbCollapsed ? "1" : "0"); }, [sbCollapsed]);
+  const [sbCollapsed, setSbCollapsed] = useState(() => lsGet("ttp:cs-sidebar-collapsed") === "1");
+  useEffect(() => { lsSet("ttp:cs-sidebar-collapsed", sbCollapsed ? "1" : "0"); }, [sbCollapsed]);
 
   // add-forms
   const [tdOpen, setTdOpen] = useState(false);
@@ -491,10 +516,10 @@ export function CreatorSpace({
   // édition inline d'une idée
   // Vue des idées : liste simple ou colonnes par statut (kanban). Mémorisée.
   const [ideaView, setIdeaView] = useState<"liste" | "colonnes">(
-    () => (localStorage.getItem("ttp:cs-idea-view") === "colonnes" ? "colonnes" : "liste"),
+    () => (lsGet("ttp:cs-idea-view") === "colonnes" ? "colonnes" : "liste"),
   );
   useEffect(() => {
-    localStorage.setItem("ttp:cs-idea-view", ideaView);
+    lsSet("ttp:cs-idea-view", ideaView);
   }, [ideaView]);
   const [ideaEditId, setIdeaEditId] = useState<string | null>(null);
   const [ideaEditText, setIdeaEditText] = useState("");
@@ -520,6 +545,19 @@ export function CreatorSpace({
   const [teDesc, setTeDesc] = useState("");
   const [tePrio, setTePrio] = useState("moyenne");
 
+  // Preview agence : changer de créateur ferme toute édition en cours
+  // (sinon les infos de A pourraient être enregistrées sur la fiche de B).
+  useEffect(() => {
+    setEditing(false);
+    setForm({});
+    setTaskView(null);
+    setTdEditId(null);
+    setBriefScriptId(null);
+    setCtEditId(null);
+    setIdeaEditId(null);
+    setContactView(null);
+  }, [name]);
+
   useEffect(() => {
     let alive = true;
     supabase
@@ -533,15 +571,16 @@ export function CreatorSpace({
       });
     supabase.from("todos").select("id,text,descr,due,priority,done,status,sort_order,subtasks,attachments").eq("creator", name).order("sort_order").then(({ data }) => alive && setTodos((data as Todo[]) ?? []));
     supabase.from("ideas").select("id,text,status,sort_order,subtasks").eq("creator", name).order("sort_order").then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
-    supabase.from("briefs").select("id,brand,deliverables,due,status,consignes").eq("creator", name).then(({ data }) => alive && setBriefs((data as Brief[]) ?? []));
+    supabase.from("briefs").select("id,brand,deliverables,due,status,consignes").eq("creator", name).order("created_at", { ascending: false }).then(({ data }) => alive && setBriefs((data as Brief[]) ?? []));
     supabase.from("gifting").select(GIFT_COLS).eq("creator", name).order("sort_order", { ascending: false }).then(({ data }) => alive && setGifts((data as GiftRow[]) ?? []));
-    supabase.from("events").select("id,date,day,time,title,type,who").or("deleted.is.null,deleted.eq.false").then(({ data }) => {
+    supabase.from("events").select("id,date,day,time,title,type,who,description").or("deleted.is.null,deleted.eq.false").then(({ data }) => {
       if (!alive) return;
-      const rows = (data as (Ev & { who: string | null })[]) ?? [];
+      const rows = (data as Ev[]) ?? [];
       setEvents(rows.filter((e) => (e.who ?? "").split(", ").includes(name)));
     });
-    supabase.from("documents").select("id,name,type,size,path,created_at").eq("creator", name).then(({ data }) => alive && setDocs((data as Doc[]) ?? []));
-    supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).then(({ data }) => alive && setInvoices((data as Invoice[]) ?? []));
+    supabase.from("documents").select("id,name,type,size,path,created_at").eq("creator", name).order("created_at", { ascending: false }).then(({ data }) => alive && setDocs((data as Doc[]) ?? []));
+    // Plus récente d'abord (« Dernière facture » = invoices[0]) ; `date` est un texte, on trie sur created_at.
+    supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).order("created_at", { ascending: false }).then(({ data }) => alive && setInvoices((data as Invoice[]) ?? []));
     // Contacts propres au créateur (RLS : il ne voit QUE ses lignes, jamais celles de l'agence).
     supabase.from("contacts").select("id,brand,person,role,email,phone,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setContacts((data as Contact[]) ?? []));
     return () => {
@@ -573,9 +612,21 @@ export function CreatorSpace({
 
   // Le créateur peut faire évoluer le statut de ses briefs (synchro agence via la table).
   const setBriefStatus = async (id: string, status: string) => {
-    setBriefs((prev) => prev.map((b) => (b.id === id ? { ...b, status } : b)));
-    if (!(await dbUpdate("briefs", id, { status }))) toast("Erreur — réessaie");
+    const prev = briefs.find((b) => b.id === id)?.status ?? null;
+    setBriefs((list) => list.map((b) => (b.id === id ? { ...b, status } : b)));
+    if (!(await dbUpdate("briefs", id, { status }))) {
+      // Échec : on remet l'ancien statut.
+      setBriefs((list) => list.map((b) => (b.id === id ? { ...b, status: prev } : b)));
+      toast("Erreur — réessaie");
+    }
   };
+
+  // Notif agence : jamais en preview (c'est l'agence elle-même qui agit).
+  const pingAgency = (kind: Parameters<typeof notifyAgency>[0], text: string) => {
+    if (!preview) notifyAgency(kind, name, text);
+  };
+  // Source des lignes créées : « agency » quand l'agence agit depuis la preview.
+  const src = preview ? "agency" : "creator";
 
   // ── Script du brief rempli PAR LE CRÉATEUR (colonne `consignes`, la même que
   // l'agence lit et exporte en PDF). RLS `briefs_scoped` autorise déjà l'écriture
@@ -592,7 +643,7 @@ export function CreatorSpace({
       toast("Erreur — réessaie");
       return;
     }
-    notifyAgency("idee", name, `Script — ${briefs.find((b) => b.id === id)?.brand ?? ""}`);
+    pingAgency("idee", `Script — ${briefs.find((b) => b.id === id)?.brand ?? ""}`);
     toast("Script enregistré ✓ — ton agence le voit");
   };
 
@@ -636,7 +687,7 @@ export function CreatorSpace({
       received_on: giReceivedOn || null,
       status: "recu",
       mentions: DEFAULT_MENTIONS,
-      source: "creator",
+      source: src,
       sort_order: nextOrder(gifts),
     };
     const created = await dbInsert("gifting", row);
@@ -645,7 +696,8 @@ export function CreatorSpace({
       return;
     }
     setGifts([created as unknown as GiftRow, ...gifts]);
-    notifyAgency("gift", name, b || p); // push immédiat côté agence
+    if (preview) notifyCreator("gift", name, b || p);
+    else notifyAgency("gift", name, b || p); // push immédiat côté agence
     toast("Cadeau signalé ✓");
     resetGiftForm();
   };
@@ -694,7 +746,7 @@ export function CreatorSpace({
         return;
       }
       setDocs((prev) => [created as unknown as Doc, ...prev]);
-      notifyAgency("facture", name, `Facture déposée — ${titleCase(name)}`);
+      pingAgency("facture", `Facture déposée — ${titleCase(name)}`);
       toast("Facture envoyée à ton agence ✓");
     } finally {
       setInvUploading(false);
@@ -747,7 +799,7 @@ export function CreatorSpace({
         ok += 1;
       }
       if (ok > 0) {
-        notifyAgency("stats", name, `${ok} capture${ok > 1 ? "s" : ""} de stats — ${titleCase(name)}`);
+        pingAgency("stats", `${ok} capture${ok > 1 ? "s" : ""} de stats — ${titleCase(name)}`);
         toast(`${ok} capture${ok > 1 ? "s" : ""} envoyée${ok > 1 ? "s" : ""} à ton agence ✓`);
         setStatsModalOpen(false);
       }
@@ -793,7 +845,7 @@ export function CreatorSpace({
       due: tdDue.trim() || "—",
       creator: name,
       priority: tdPrio,
-      source: "creator",
+      source: src,
       done: false,
       sort_order: nextOrder(todos),
     };
@@ -803,7 +855,8 @@ export function CreatorSpace({
       return;
     }
     setTodos([created as unknown as Todo, ...todos]);
-    notifyAgency("tache", name, row.text); // push immédiat côté agence
+    if (preview) notifyCreator("task", name, row.text);
+    else notifyAgency("tache", name, row.text); // push immédiat côté agence
     toast("Tâche ajoutée ✓");
     setTdOpen(false);
     setTdText("");
@@ -817,27 +870,37 @@ export function CreatorSpace({
       toast("Écris ton idée");
       return;
     }
-    const row = { text: idText.trim(), creator: name, status: "À faire", source: "creator", sort_order: nextOrder(ideas) };
+    const row = { text: idText.trim(), creator: name, status: "À faire", source: src, sort_order: nextOrder(ideas) };
     const created = await dbInsert("ideas", row);
     if (!created) {
       toast("Erreur — réessaie");
       return;
     }
     setIdeas([created as unknown as Idea, ...ideas]);
-    notifyAgency("idee", name, row.text); // push immédiat côté agence
+    if (preview) notifyCreator("idea", name, row.text);
+    else notifyAgency("idee", name, row.text); // push immédiat côté agence
     toast("Idée ajoutée ✓");
     setIdOpen(false);
     setIdText("");
   };
 
   const setIdeaStatus = async (x: Idea, status: string) => {
-    setIdeas((prev) => prev.map((y) => (y.id === x.id ? { ...y, status } : y)));
-    if (!(await dbUpdate("ideas", x.id, { status }))) toast("Erreur — réessaie");
+    const prev = x.status;
+    setIdeas((list) => list.map((y) => (y.id === x.id ? { ...y, status } : y)));
+    if (!(await dbUpdate("ideas", x.id, { status }))) {
+      setIdeas((list) => list.map((y) => (y.id === x.id ? { ...y, status: prev } : y)));
+      toast("Erreur — réessaie");
+    }
   };
 
   const saveIdeaSubtasks = async (id: string, subtasks: Subtask[]) => {
-    setIdeas((prev) => prev.map((y) => (y.id === id ? { ...y, subtasks } : y)));
-    if (!(await dbUpdate("ideas", id, { subtasks }))) toast("Erreur — lance le SQL sous-tâches ?");
+    const prev = ideas.find((y) => y.id === id)?.subtasks ?? null;
+    setIdeas((list) => list.map((y) => (y.id === id ? { ...y, subtasks } : y)));
+    if (!(await dbUpdate("ideas", id, { subtasks }))) {
+      // Retour arrière seulement si rien n'a changé depuis (pas d'écrasement d'un clic plus récent).
+      setIdeas((list) => list.map((y) => (y.id === id && y.subtasks === subtasks ? { ...y, subtasks: prev } : y)));
+      toast("Erreur — réessaie");
+    }
   };
 
   const saveIdeaEdit = async (id: string) => {
@@ -846,10 +909,13 @@ export function CreatorSpace({
       toast("L'idée ne peut pas être vide");
       return;
     }
-    setIdeas((prev) => prev.map((x) => (x.id === id ? { ...x, text: t } : x)));
+    const prev = ideas.find((x) => x.id === id)?.text ?? t;
+    setIdeas((list) => list.map((x) => (x.id === id ? { ...x, text: t } : x)));
     setIdeaEditId(null);
-    if (!(await dbUpdate("ideas", id, { text: t }))) toast("Erreur — réessaie");
-    else toast("Idée modifiée ✓");
+    if (!(await dbUpdate("ideas", id, { text: t }))) {
+      setIdeas((list) => list.map((x) => (x.id === id ? { ...x, text: prev } : x)));
+      toast("Erreur — réessaie");
+    } else toast("Idée modifiée ✓");
   };
 
   /** Carte d'une idée (mode lecture ou édition) — partagée par les vues Liste et Colonnes. */
@@ -911,6 +977,8 @@ export function CreatorSpace({
                   if (await dbDelete("ideas", x.id)) {
                     setIdeas((prev) => prev.filter((y) => y.id !== x.id));
                     toast("Supprimé");
+                  } else {
+                    toast("Erreur — réessaie");
                   }
                 },
                 confirm: { title: "Supprimer l'idée", message: `Supprimer « ${x.text} » ? Cette action est irréversible.` },
@@ -945,7 +1013,7 @@ export function CreatorSpace({
       return;
     }
     setContacts([created as unknown as Contact, ...contacts]);
-    notifyAgency("contact", name, row.brand); // push immédiat côté agence
+    pingAgency("contact", row.brand); // push immédiat côté agence
     toast("Contact ajouté ✓");
     setCtOpen(false);
     setCtBrand("");
@@ -977,10 +1045,13 @@ export function CreatorSpace({
       phone: cePhone.trim() || null,
     };
     const id = ctEditId;
-    setContacts((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    const prev = contacts.find((x) => x.id === id);
+    setContacts((list) => list.map((x) => (x.id === id ? { ...x, ...patch } : x)));
     setCtEditId(null);
-    if (!(await dbUpdate("contacts", id, patch))) toast("Erreur — réessaie");
-    else toast("Contact modifié ✓");
+    if (!(await dbUpdate("contacts", id, patch))) {
+      if (prev) setContacts((list) => list.map((x) => (x.id === id ? prev : x)));
+      toast("Erreur — réessaie");
+    } else toast("Contact modifié ✓");
   };
 
   const startEdit = () => {
@@ -1127,8 +1198,12 @@ export function CreatorSpace({
   // Change le statut d'une tâche depuis la vue colonnes (done dérivé de « Fait »).
   const setTodoStatus = async (t: Todo, status: string) => {
     const done = status === "Fait";
-    setTodos((prev) => prev.map((x) => (x.id === t.id ? { ...x, status, done } : x)));
-    if (!(await dbUpdate("todos", t.id, { status, done }))) toast("Erreur — réessaie");
+    const prev = { status: t.status ?? null, done: t.done };
+    setTodos((list) => list.map((x) => (x.id === t.id ? { ...x, status, done } : x)));
+    if (!(await dbUpdate("todos", t.id, { status, done }))) {
+      setTodos((list) => list.map((x) => (x.id === t.id ? { ...x, ...prev } : x)));
+      toast("Erreur — réessaie");
+    }
   };
 
   const cStatus = (t: Todo): string => t.status ?? (t.done ? "Fait" : "À faire");
@@ -1158,21 +1233,48 @@ export function CreatorSpace({
 
   // Sous-tâches + pièces jointes (même feature que la page « À faire » de l'agence).
   // Persiste un patch → base + liste + fiche ouverte.
-  const patchTodo = async (id: string, patch: Partial<Todo>) => {
-    if (!(await dbUpdate("todos", id, patch))) { toast("Erreur — réessaie"); return; }
+  // Optimiste : le patch est calculé depuis la DERNIÈRE version de la tâche (ref à jour
+  // sans attendre le rendu) et les écritures d'une même tâche sont sérialisées, donc
+  // deux clics rapides ne s'écrasent plus. Échec = retour arrière si rien n'a bougé depuis.
+  const todosRef = useRef<Todo[]>(todos);
+  useEffect(() => {
+    todosRef.current = todos;
+  }, [todos]);
+  const todoQueue = useRef<Record<string, Promise<boolean>>>({});
+  const patchTodo = (id: string, build: (t: Todo) => Partial<Todo>): Promise<boolean> => {
+    const cur = todosRef.current.find((x) => x.id === id);
+    if (!cur) return Promise.resolve(false);
+    const patch = build(cur);
+    const next = { ...cur, ...patch };
+    const keys = Object.keys(patch) as (keyof Todo)[];
+    const back = Object.fromEntries(keys.map((k) => [k, cur[k]])) as Partial<Todo>;
+    todosRef.current = todosRef.current.map((x) => (x.id === id ? next : x));
     setTodos((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
     setTaskView((prev) => (prev?.id === id ? { ...prev, ...patch } : prev));
+    const run = async () => {
+      if (await dbUpdate("todos", id, patch)) return true;
+      const untouched = (x: Todo) => keys.every((k) => x[k] === next[k]);
+      const revert = (x: Todo) => (x.id === id && untouched(x) ? { ...x, ...back } : x);
+      todosRef.current = todosRef.current.map(revert);
+      setTodos((prev) => prev.map(revert));
+      setTaskView((prev) => (prev ? revert(prev) : prev));
+      toast("Erreur — réessaie");
+      return false;
+    };
+    const p = (todoQueue.current[id] ?? Promise.resolve(true)).then(run, run);
+    todoQueue.current[id] = p;
+    return p;
   };
   const addSubtask = (todo: Todo) => {
     const t = subInput.trim();
     if (!t) return;
     setSubInput("");
-    patchTodo(todo.id, { subtasks: [...(todo.subtasks ?? []), { id: stid(), text: t, done: false }] });
+    patchTodo(todo.id, (x) => ({ subtasks: [...(x.subtasks ?? []), { id: stid(), text: t, done: false }] }));
   };
   const toggleSubtask = (todo: Todo, sid: string) =>
-    patchTodo(todo.id, { subtasks: (todo.subtasks ?? []).map((s) => (s.id === sid ? { ...s, done: !s.done } : s)) });
+    patchTodo(todo.id, (x) => ({ subtasks: (x.subtasks ?? []).map((s) => (s.id === sid ? { ...s, done: !s.done } : s)) }));
   const delSubtask = (todo: Todo, sid: string) =>
-    patchTodo(todo.id, { subtasks: (todo.subtasks ?? []).filter((s) => s.id !== sid) });
+    patchTodo(todo.id, (x) => ({ subtasks: (x.subtasks ?? []).filter((s) => s.id !== sid) }));
   // Pièces jointes : upload cloisonné `creator-uploads/<uid>/…` (RLS), bucket documents.
   const uploadAttachments = async (todo: Todo, files: FileList | null) => {
     const list = Array.from(files ?? []);
@@ -1191,7 +1293,7 @@ export function CreatorSpace({
         if (up.error) { toast("Envoi échoué — réessaie"); continue; }
         added.push({ name: file.name, size: `${Math.max(1, Math.round(file.size / 1024))} Ko`, path });
       }
-      if (added.length) await patchTodo(todo.id, { attachments: [...(todo.attachments ?? []), ...added] });
+      if (added.length) await patchTodo(todo.id, (x) => ({ attachments: [...(x.attachments ?? []), ...added] }));
     } finally {
       setAttUploading(false);
       if (attFileRef.current) attFileRef.current.value = "";
@@ -1203,9 +1305,10 @@ export function CreatorSpace({
     if (error || !data?.signedUrl) { toast("Lien indisponible — réessaie"); return; }
     window.open(data.signedUrl, "_blank");
   };
+  // Base d'abord, fichier ensuite : un échec ne laisse pas une pièce jointe pointant vers rien.
   const removeAttachment = async (todo: Todo, path: string) => {
-    await supabase.storage.from("documents").remove([path]).catch(() => {});
-    patchTodo(todo.id, { attachments: (todo.attachments ?? []).filter((a) => a.path !== path) });
+    const ok = await patchTodo(todo.id, (x) => ({ attachments: (x.attachments ?? []).filter((a) => a.path !== path) }));
+    if (ok) await supabase.storage.from("documents").remove([path]).catch(() => {});
   };
 
 
@@ -1637,62 +1740,6 @@ export function CreatorSpace({
                 </DashPanel>
               </div>
 
-              <input ref={statsFileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => sendStatsFiles(e.target.files)} />
-              <WelcomeModal
-                open={statsModalOpen}
-                onClose={() => setStatsModalOpen(false)}
-                icon={<BarChart3 className="h-5 w-5 text-primary" />}
-                title="Envoyer mes stats"
-                description="Les captures des 30 derniers jours — c'est ce qui prouve ton audience aux marques."
-                primaryLabel={statsUploading ? "Envoi en cours…" : "Envoyer mes captures"}
-                onPrimary={() => statsFileRef.current?.click()}
-                primaryDisabled={statsUploading}
-              >
-                <div className="mb-3 flex items-start gap-2 rounded-xl bg-primary/5 px-3.5 py-2.5 text-[12px] leading-relaxed text-foreground">
-                  <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                  <span>À envoyer <span className="font-semibold">en début de chaque mois</span> (statistiques des 30 derniers jours).</span>
-                </div>
-
-                {/* La méthode la plus simple : l'app Edits d'Instagram */}
-                <div className="mb-3 rounded-xl border border-primary/25 bg-primary/[0.04] p-3.5">
-                  <div className="mb-2.5 flex items-center gap-1.5 text-[12px] font-medium text-primary">
-                    <Share2 className="h-3.5 w-3.5" /> La méthode la plus simple
-                  </div>
-                  <ol className="flex flex-col gap-2.5">
-                    {[
-                      <>Ouvre l'app <span className="font-semibold text-foreground">Edits</span> d'Instagram sur ton téléphone.</>,
-                      <>Va sur l'onglet <span className="font-semibold text-foreground">Statistiques</span> (en bas à droite).</>,
-                      <>Appuie sur <span className="font-semibold text-foreground">Partager</span> et envoie-nous la capture ici. 👇</>,
-                    ].map((step, i) => (
-                      <li key={i} className="flex items-start gap-2.5 text-[12px] leading-relaxed text-foreground">
-                        <span className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">{i + 1}</span>
-                        <span>{step}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-
-                <div className="mb-2 text-center text-[12px] font-medium text-muted-foreground">Ou capture toi-même — ce qu'on regarde</div>
-                <div className="rounded-xl bg-panel/50 p-3.5 text-[12px] leading-relaxed text-muted-foreground">
-                  <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
-                    <PlatformIcon platform="instagram" className="h-3.5 w-3.5 text-foreground" /> Instagram · Statistiques (Insights) · 30 j
-                  </div>
-                  <ul className="flex flex-col gap-1 pl-0.5">
-                    <li>• <span className="font-medium text-foreground">Impressions / vues</span> (30 j)</li>
-                    <li>• <span className="font-medium text-foreground">Likes cumulés, commentaires, partages, enregistrements</span> (30 j)</li>
-                    <li>• Comptes touchés, taux d'engagement, abonnés</li>
-                    <li>• <span className="font-medium text-foreground">Démographie</span> : pays, âge, genre</li>
-                  </ul>
-                  <div className="mb-2 mt-3 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
-                    <PlatformIcon platform="tiktok" className="h-3.5 w-3.5 text-foreground" /> TikTok · Analytics · 30 j
-                  </div>
-                  <ul className="flex flex-col gap-1 pl-0.5">
-                    <li>• Vues, abonnés, taux d'engagement</li>
-                  </ul>
-                  <div className="mt-3 text-faint">+ une capture de ton <span className="font-medium text-foreground">nombre d'abonnés</span> par réseau. Astuce : captures nettes, chiffres bien visibles 📸</div>
-                </div>
-                <div className="mt-2 text-center text-[10px] text-faint">Jusqu'à 6 images · elles arrivent directement chez ton agence, qui est notifiée.</div>
-              </WelcomeModal>
 
               {/* Tâches, briefs et le globe (touche déco) */}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -1758,13 +1805,26 @@ export function CreatorSpace({
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div className="text-sm font-semibold">Mes infos</div>
                   {editing ? (
-                    <button
-                      type="button"
-                      onClick={saveInfos}
-                      className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
-                    >
-                      <Check className="h-3.5 w-3.5" /> Enregistrer
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {/* Annuler : on quitte sans enregistrer (le formulaire est rechargé depuis la fiche à la prochaine ouverture) */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditing(false);
+                          setForm({});
+                        }}
+                        className="flex h-8 items-center gap-1.5 rounded-lg bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
+                      >
+                        <X className="h-3.5 w-3.5" /> Annuler
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveInfos}
+                        className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+                      >
+                        <Check className="h-3.5 w-3.5" /> Enregistrer
+                      </button>
+                    </div>
                   ) : (
                     <button
                       type="button"
@@ -2146,6 +2206,8 @@ export function CreatorSpace({
                                   if (await dbDelete("todos", t.id)) {
                                     setTodos((prev) => prev.filter((x) => x.id !== t.id));
                                     toast("Supprimé");
+                                  } else {
+                                    toast("Erreur — réessaie");
                                   }
                                 },
                                 confirm: { title: "Supprimer la tâche", message: `Supprimer « ${t.text} » ? Cette action est irréversible.` },
@@ -2171,7 +2233,7 @@ export function CreatorSpace({
                       setTodoStatus(t, order[(order.indexOf(cStatus(t)) + 1) % order.length]);
                     }}
                     onToggleSubtask={(taskId, subId) => { const t = todos.find((x) => x.id === taskId); if (t) toggleSubtask(t, subId); }}
-                    onAddSubtask={(taskId, text) => { const t = todos.find((x) => x.id === taskId); if (t) patchTodo(taskId, { subtasks: [...(t.subtasks ?? []), { id: stid(), text, done: false }] }); }}
+                    onAddSubtask={(taskId, text) => { patchTodo(taskId, (x) => ({ subtasks: [...(x.subtasks ?? []), { id: stid(), text, done: false }] })); }}
                     onDelSubtask={(taskId, subId) => { const t = todos.find((x) => x.id === taskId); if (t) delSubtask(t, subId); }}
                     onOpenTask={(id) => { const t = todos.find((x) => x.id === id); if (t) setTaskView(t); }}
                   />
@@ -2387,7 +2449,7 @@ export function CreatorSpace({
                         <div className="truncate text-xs text-faint">{b.deliverables} · échéance {frDate(b.due)}</div>
                       </div>
                       <div className="w-full sm:w-[150px] sm:shrink-0">
-                        <StatusSelect value={b.status ?? "attente"} options={BRIEF_STATUS} onChange={(v) => setBriefStatus(b.id, v)} />
+                        <StatusSelect value={briefKey(b.status ?? "attente")} options={BRIEF_STATUS} onChange={(v) => setBriefStatus(b.id, v)} />
                       </div>
                     </div>
 
@@ -2531,15 +2593,20 @@ export function CreatorSpace({
           {/* Planning — même calendrier que l'espace agence */}
           {tab === "planning" && (
             <EventCalendar
-              events={events.map((e) => ({ id: e.id, date: e.date ?? "", time: e.time ?? "—", title: e.title, type: e.type, who: name })) as CalEv[]}
+              events={events.map((e) => ({ id: e.id, date: e.date ?? "", time: e.time ?? "—", title: e.title, type: e.type, who: e.who ?? name, description: e.description ?? null })) as CalEv[]}
               creators={[]}
+              // Évènement partagé (« A, B ») : la RLS refuserait l'écriture → lecture seule.
+              isReadOnly={(e) => (e.who ?? "").includes(",")}
+              // « Avec qui » imposé : la créatrice ne peut pas se retirer de son propre évènement.
+              fixedWho={name}
               onCreate={async (e) => {
                 if (!e.title.trim()) {
                   toast("Renseigne le titre");
-                  return;
+                  return false;
                 }
                 const dateVal = e.date && e.date.trim() ? e.date : new Date().toISOString().slice(0, 10);
                 const day = Number(dateVal.split("-")[2]) || 1;
+                const description = e.description ?? null;
                 const created = await dbInsert("events", {
                   day,
                   date: dateVal,
@@ -2547,40 +2614,51 @@ export function CreatorSpace({
                   title: e.title,
                   type: e.type,
                   who: name,
-                  source: "creator", // → notif cloche « Nouvel évènement d'un créateur »
+                  description,
+                  source: src, // « creator » → notif cloche « Nouvel évènement d'un créateur »
                   sort_order: events.length + 1,
                 });
                 if (!created) {
                   toast("Erreur — réessaie");
-                  return;
+                  return false;
                 }
-                setEvents([{ id: String((created as { id: string }).id), date: dateVal, day, time: e.time || "—", title: e.title, type: e.type }, ...events]);
-                notifyAgency("evenement", name, e.title); // push immédiat côté agence
+                setEvents([{ id: String((created as { id: string }).id), date: dateVal, day, time: e.time || "—", title: e.title, type: e.type, who: name, description }, ...events]);
+                if (preview) notifyCreator("event", name, e.title);
+                else notifyAgency("evenement", name, e.title); // push immédiat côté agence
                 toast("Événement ajouté ✓");
+                return true;
               }}
               onUpdate={async (id, patch) => {
+                const orig = events.find((r) => r.id === id);
+                if (!orig || (orig.who ?? "").includes(",")) return false;
                 const dbPatch: Record<string, unknown> = { ...patch };
+                delete dbPatch.who; // jamais modifié depuis l'espace créateur
+                // Description inchangée → non envoyée (évite d'écraser celle de l'agence / Google).
+                if ((patch.description ?? "") === (orig.description ?? "").trim()) delete dbPatch.description;
                 if (patch.date) dbPatch.day = Number(patch.date.split("-")[2]) || 1;
                 if (await dbUpdate("events", id, dbPatch)) {
-                  setEvents((prev) => prev.map((r) => (r.id === id ? ({ ...r, ...patch } as Ev) : r)));
+                  setEvents((prev) => prev.map((r) => (r.id === id ? ({ ...r, ...dbPatch } as Ev) : r)));
                   toast("Événement modifié ✓");
-                } else {
-                  toast("Erreur — réessaie");
+                  return true;
                 }
+                toast("Erreur — réessaie");
+                return false;
               }}
               onDelete={async (id) => {
+                if ((events.find((r) => r.id === id)?.who ?? "").includes(",")) return false;
                 if (await dbDelete("events", id)) {
                   setEvents((prev) => prev.filter((r) => r.id !== id));
                   toast("Supprimé");
-                } else {
-                  toast("Erreur — réessaie");
+                  return true;
                 }
+                toast("Erreur — réessaie");
+                return false;
               }}
             />
           )}
 
           {/* Ma feuille de route — partagée par l'agence (lecture) + report de cadence */}
-          {tab === "roadmap" && <CreatorRoadmap name={name} />}
+          {tab === "roadmap" && <CreatorRoadmap name={name} preview={!!preview} />}
 
           {/* Media kit — la créatrice consulte SA page publique générée */}
           {tab === "mediakit" && (
@@ -2845,6 +2923,64 @@ export function CreatorSpace({
         </div>
       </div>
 
+      {/* Envoi des stats : hors des onglets pour être ouvrable depuis l'Accueil ET le Guide */}
+      <input ref={statsFileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => sendStatsFiles(e.target.files)} />
+      <WelcomeModal
+        open={statsModalOpen}
+        onClose={() => setStatsModalOpen(false)}
+        icon={<BarChart3 className="h-5 w-5 text-primary" />}
+        title="Envoyer mes stats"
+        description="Les captures des 30 derniers jours — c'est ce qui prouve ton audience aux marques."
+        primaryLabel={statsUploading ? "Envoi en cours…" : "Envoyer mes captures"}
+        onPrimary={() => statsFileRef.current?.click()}
+        primaryDisabled={statsUploading}
+      >
+        <div className="mb-3 flex items-start gap-2 rounded-xl bg-primary/5 px-3.5 py-2.5 text-[12px] leading-relaxed text-foreground">
+          <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <span>À envoyer <span className="font-semibold">en début de chaque mois</span> (statistiques des 30 derniers jours).</span>
+        </div>
+
+        {/* La méthode la plus simple : l'app Edits d'Instagram */}
+        <div className="mb-3 rounded-xl border border-primary/25 bg-primary/[0.04] p-3.5">
+          <div className="mb-2.5 flex items-center gap-1.5 text-[12px] font-medium text-primary">
+            <Share2 className="h-3.5 w-3.5" /> La méthode la plus simple
+          </div>
+          <ol className="flex flex-col gap-2.5">
+            {[
+              <>Ouvre l'app <span className="font-semibold text-foreground">Edits</span> d'Instagram sur ton téléphone.</>,
+              <>Va sur l'onglet <span className="font-semibold text-foreground">Statistiques</span> (en bas à droite).</>,
+              <>Appuie sur <span className="font-semibold text-foreground">Partager</span> et envoie-nous la capture ici. 👇</>,
+            ].map((step, i) => (
+              <li key={i} className="flex items-start gap-2.5 text-[12px] leading-relaxed text-foreground">
+                <span className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">{i + 1}</span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div className="mb-2 text-center text-[12px] font-medium text-muted-foreground">Ou capture toi-même — ce qu'on regarde</div>
+        <div className="rounded-xl bg-panel/50 p-3.5 text-[12px] leading-relaxed text-muted-foreground">
+          <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+            <PlatformIcon platform="instagram" className="h-3.5 w-3.5 text-foreground" /> Instagram · Statistiques (Insights) · 30 j
+          </div>
+          <ul className="flex flex-col gap-1 pl-0.5">
+            <li>• <span className="font-medium text-foreground">Impressions / vues</span> (30 j)</li>
+            <li>• <span className="font-medium text-foreground">Likes cumulés, commentaires, partages, enregistrements</span> (30 j)</li>
+            <li>• Comptes touchés, taux d'engagement, abonnés</li>
+            <li>• <span className="font-medium text-foreground">Démographie</span> : pays, âge, genre</li>
+          </ul>
+          <div className="mb-2 mt-3 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+            <PlatformIcon platform="tiktok" className="h-3.5 w-3.5 text-foreground" /> TikTok · Analytics · 30 j
+          </div>
+          <ul className="flex flex-col gap-1 pl-0.5">
+            <li>• Vues, abonnés, taux d'engagement</li>
+          </ul>
+          <div className="mt-3 text-faint">+ une capture de ton <span className="font-medium text-foreground">nombre d'abonnés</span> par réseau. Astuce : captures nettes, chiffres bien visibles 📸</div>
+        </div>
+        <div className="mt-2 text-center text-[10px] text-faint">Jusqu'à 6 images · elles arrivent directement chez ton agence, qui est notifiée.</div>
+      </WelcomeModal>
+
       {/* Confirmation anti-missclick avant de marquer une tâche « faite » */}
       {confirmDoneTodo && (
         <ConfirmDialog
@@ -2906,7 +3042,7 @@ export function CreatorSpace({
                           {s.done && <Check className="h-3 w-3" />}
                         </button>
                         <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
-                        <button type="button" onClick={() => delSubtask(taskView, s.id)} className="shrink-0 text-faint opacity-0 transition-opacity hover:text-[#E5484D] group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                        <button type="button" onClick={() => delSubtask(taskView, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label="Supprimer la sous-tâche"><Trash2 className="h-3.5 w-3.5" /></button>
                       </div>
                     ))}
                   </div>
@@ -2931,7 +3067,7 @@ export function CreatorSpace({
                       <div className="truncate text-[13px] font-medium text-foreground hover:underline">{a.name}</div>
                       <div className="text-[11px] text-faint">{a.size}</div>
                     </button>
-                    <button type="button" onClick={() => removeAttachment(taskView, a.path)} className="shrink-0 text-faint opacity-0 transition-opacity hover:text-[#E5484D] group-hover:opacity-100" title="Retirer"><Trash2 className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => removeAttachment(taskView, a.path)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title="Retirer"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
                 <input ref={attFileRef} type="file" multiple className="hidden" onChange={(e) => uploadAttachments(taskView, e.target.files)} />

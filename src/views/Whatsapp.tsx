@@ -4,7 +4,6 @@ import {
   MessageCircle, Mail, Phone, AtSign, Check, Clock, Send, ScrollText, ChevronDown, UserRound,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { dbUpdate } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { StatsBento } from "@/components/ui/stats-bento";
@@ -15,9 +14,10 @@ import { useAppState, type AppState } from "@/lib/appState";
 import { MailComposer, type ComposerContact } from "@/components/mail-composer";
 import { useNavSub } from "@/lib/navSub";
 import { Mails } from "./Mails";
+import { updateTouches, applyTouchChange, type TouchChange } from "@/lib/touchesDb";
 import {
   parseTouches, sortTouches, lastTouch, needsRelance, nextKind, lastActivityMs,
-  buildTouchesPatch, derivedStatus, waLink, waHref, touchId,
+  buildTouchesPatch, derivedStatus, waLink, waHref, touchId, igHandle,
   CANAL_LABELS, KIND_LABELS, RELANCE_DAYS,
   type Touch, type TouchCanal, type WaMode, type ProspectSettings, type DerivedTone,
 } from "@/lib/touches";
@@ -101,15 +101,25 @@ export function WhatsappView() {
   if (navSub === "mails") return <Mails />;
 
   // ── journalisation (même logique que la page Contacts, patch partagé) ──
-  const saveTouches = async (row: Row, next: Touch[]) => {
-    const patch = buildTouchesPatch(next, row.last_contacted);
-    setRows((prev) => (prev ? prev.map((r) => (r.id === row.id ? ({ ...r, ...patch } as Row) : r)) : prev));
-    if (!(await dbUpdate("contacts", row.id, patch))) toast("Erreur, réessaie");
+  // Relit la ligne avant d'écrire (updateTouches) : les touches ajoutées
+  // ailleurs (autre appareil, cron Gmail) ne sont pas écrasées.
+  const saveTouches = async (row: Row, change: TouchChange) => {
+    const prevVals = { touches: row.touches, last_contacted: row.last_contacted };
+    const local = applyTouchChange(parseTouches(row.touches), change);
+    const set = (vals: Partial<Row>) =>
+      setRows((prev) => (prev ? prev.map((r) => (r.id === row.id ? ({ ...r, ...vals } as Row) : r)) : prev));
+    set({ touches: local, ...(buildTouchesPatch(local, row.last_contacted) as Partial<Row>) });
+    const res = await updateTouches(row.id, change);
+    if (res) set(res);
+    else {
+      set(prevVals);
+      toast("Erreur, la touche n'a pas été enregistrée");
+    }
   };
-  const logTouch = (row: Row, canal: TouchCanal, kind?: Touch["kind"]) => {
+  const logTouch = (row: Row, canal: TouchCanal, kind?: Touch["kind"], id?: string) => {
     const list = parseTouches(row.touches);
-    const t: Touch = { id: touchId(), date: new Date().toISOString(), canal, kind: kind ?? nextKind(list, row.last_contacted) };
-    void saveTouches(row, [t, ...list]);
+    const t: Touch = { id: id ?? touchId(), date: new Date().toISOString(), canal, kind: kind ?? nextKind(list, row.last_contacted) };
+    void saveTouches(row, { add: t });
     toast(`${KIND_LABELS[t.kind]} · ${CANAL_LABELS[canal]} noté ✓`);
   };
   const act = (row: Row, canal: TouchCanal) => {
@@ -125,7 +135,7 @@ export function WhatsappView() {
       setComposerOpen(true);
       return;
     } else if (canal === "instagram" && row.instagram) {
-      window.open(`https://instagram.com/${row.instagram.replace(/^@/, "")}`, "_blank", "noopener");
+      window.open(`https://instagram.com/${igHandle(row.instagram)}`, "_blank", "noopener");
     } else if (canal === "tel" && row.phone) {
       window.open(`tel:${row.phone.replace(/[^\d+]/g, "")}`, "_self");
     }
@@ -420,8 +430,8 @@ export function WhatsappView() {
         open={composerOpen}
         contact={composerContact}
         onClose={() => setComposerOpen(false)}
-        onSent={() => {
-          if (composeFor) logTouch(composeFor, "email");
+        onSent={(gmailId) => {
+          if (composeFor) logTouch(composeFor, "email", undefined, gmailId ? `gm${gmailId}` : undefined);
         }}
       />
     </div>

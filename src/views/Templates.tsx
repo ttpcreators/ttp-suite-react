@@ -1,14 +1,31 @@
 import { useState, useEffect } from "react";
-import { Copy, Search, Eye, X, LayoutGrid, List as ListIcon } from "lucide-react";
+import { Copy, Search, Eye, X, LayoutGrid, List as ListIcon, Pencil, Trash2 } from "lucide-react";
 import { useSearch, matchQuery } from "@/lib/search";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
-import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
+import { AddButton, InlineForm, TextField, SelectField, AutoGrowTextField } from "@/components/ui/form";
+import { ActionMenu } from "@/components/ui/action-menu";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn } from "@/lib/utils";
 import { PageHeaderRow } from "@/components/ui/page-header";
 
-type Template = { category: string; title: string; body: string };
+/** `id` : présent sur les modèles perso (généré à l'écriture pour les anciens). */
+type Template = { id?: string; category: string; title: string; body: string };
+
+/** Même modèle perso : par id si les deux en ont un, sinon par contenu (anciens sans id). */
+function sameTpl(a: Template, b: Template): boolean {
+  if (a.id && b.id) return a.id === b.id;
+  return a.title === b.title && a.body === b.body && a.category === b.category;
+}
+let _tplSeq = 0;
+function newTplId(): string {
+  _tplSeq += 1;
+  return `tpl${Date.now().toString(36)}${_tplSeq}`;
+}
+/** Donne un id aux anciens modèles perso qui n'en ont pas. */
+function withIds(list: Template[]): Template[] {
+  return list.map((t) => (t.id ? t : { ...t, id: newTplId() }));
+}
 
 /** Ordre d'affichage des catégories (les autres viennent après, par ordre d'apparition). */
 const CATEGORY_ORDER = ["Prospection", "Négociation", "Suivi", "Facturation"];
@@ -105,11 +122,20 @@ export function Templates() {
   const [localQuery, setLocalQuery] = useState("");
   // Vue des modèles (mémorisée) + aperçu plein texte (le corps est tronqué en carte).
   // Défaut = LISTE ; on ne retombe sur « cartes » que si c'est le choix explicite mémorisé.
-  const [viewT, setViewT] = useState<"cards" | "list">(
-    () => (localStorage.getItem("ttp:tpl-view") === "cards" ? "cards" : "list"),
-  );
+  // localStorage protégé : peut lever (navigation privée, stockage bloqué).
+  const [viewT, setViewT] = useState<"cards" | "list">(() => {
+    try {
+      return localStorage.getItem("ttp:tpl-view") === "cards" ? "cards" : "list";
+    } catch {
+      return "list";
+    }
+  });
   useEffect(() => {
-    localStorage.setItem("ttp:tpl-view", viewT);
+    try {
+      localStorage.setItem("ttp:tpl-view", viewT);
+    } catch {
+      /* stockage indisponible : préférence non mémorisée */
+    }
   }, [viewT]);
   const [preview, setPreview] = useState<Template | null>(null);
 
@@ -157,28 +183,106 @@ export function Templates() {
     }
   }
 
-  async function submit() {
-    const t = title.trim();
-    const b = body.trim();
-    if (!t || !b) return;
-    const item: Template = { category: category.trim() || "Divers", title: t, body: b };
-    // Relecture fraîche du blob avant merge : ne jamais repartir d'un `customList` périmé
-    // (écrasement d'un ajout concurrent) ni d'un état non encore chargé (clobber à froid).
-    invalidateAppState();
-    const fresh = ((await getAppState())["customTemplates"] as Template[]) ?? [];
-    const next = [item, ...fresh];
-    setLocal(next);
+  // Modèle perso en cours d'édition (null = création).
+  const [editing, setEditing] = useState<Template | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const closeForm = () => {
     setShowForm(false);
+    setEditing(null);
     setTitle("");
     setBody("");
     setCategory(CATEGORY_ORDER[0]);
-    const ok = await saveAppStateKey("customTemplates", next);
-    toast(ok ? "Template ajouté ✓" : "Erreur — réessaie");
+  };
+
+  const openEdit = (t: Template) => {
+    setEditing(t);
+    setTitle(t.title);
+    setBody(t.body);
+    setCategory(t.category);
+    setShowForm(true);
+  };
+
+  // Relecture fraîche du blob avant merge : ne jamais repartir d'un `customList` périmé
+  // (écrasement d'un ajout concurrent) ni d'un état non encore chargé (clobber à froid).
+  async function writeFresh(mutate: (fresh: Template[]) => Template[]): Promise<boolean> {
+    try {
+      invalidateAppState();
+      const fresh = withIds(((await getAppState())["customTemplates"] as Template[]) ?? []);
+      const next = mutate(fresh);
+      setLocal(next);
+      const ok = await saveAppStateKey("customTemplates", next);
+      if (!ok) setLocal(null); // retour aux données live
+      return ok;
+    } catch {
+      setLocal(null);
+      return false;
+    }
   }
+
+  async function submit() {
+    if (saving) return;
+    const t = title.trim();
+    const b = body.trim();
+    if (!t || !b) {
+      toast("Renseigne un titre et un message");
+      return;
+    }
+    const cat = category.trim() || "Divers";
+    const target = editing;
+    setSaving(true);
+    const ok = await writeFresh((fresh) =>
+      target
+        ? fresh.map((x) => (sameTpl(x, target) ? { ...x, category: cat, title: t, body: b } : x))
+        : [{ id: newTplId(), category: cat, title: t, body: b }, ...fresh],
+    );
+    setSaving(false);
+    if (!ok) {
+      toast("Erreur, réessaie"); // formulaire conservé
+      return;
+    }
+    closeForm();
+    toast(target ? "Template modifié ✓" : "Template ajouté ✓");
+  }
+
+  async function removeTpl(t: Template) {
+    const ok = await writeFresh((fresh) => fresh.filter((x) => !sameTpl(x, t)));
+    toast(ok ? "Template supprimé" : "Erreur, réessaie");
+  }
+
+  // Menu Modifier / Supprimer, uniquement pour les modèles perso.
+  const tplMenu = (t: Template) =>
+    customList.includes(t) ? (
+      <span onClick={(e) => e.stopPropagation()}>
+        <ActionMenu
+          items={[
+            { key: "edit", label: "Modifier", icon: Pencil, onClick: () => openEdit(t) },
+            {
+              key: "del",
+              label: "Supprimer",
+              icon: Trash2,
+              danger: true,
+              onClick: () => removeTpl(t),
+              confirm: { title: "Supprimer le template", message: `Supprimer « ${t.title} » ? Cette action est irréversible.` },
+            },
+          ]}
+        />
+      </span>
+    ) : null;
 
   return (
     <div>
-      <PageHeaderRow>{!showForm && <AddButton label="Template" onClick={() => setShowForm(true)} />}</PageHeaderRow>
+      <PageHeaderRow>
+        {!showForm && (
+          <AddButton
+            label="Template"
+            onClick={() => {
+              setEditing(null);
+              setShowForm(true);
+            }}
+          />
+        )}
+      </PageHeaderRow>
       <p className="mb-4 text-sm text-muted-foreground">
         Bibliothèque de modèles réutilisables. Variables :{" "}
         <code className="rounded bg-rowhover px-1 py-0.5 text-xs text-foreground">{"{marque}"}</code>{" "}
@@ -187,8 +291,9 @@ export function Templates() {
 
       <InlineForm
         open={showForm}
-        title="Nouveau template"
-        onClose={() => setShowForm(false)}
+        title={editing ? "Modifier le template" : "Nouveau template"}
+        submitLabel={editing ? "Enregistrer" : "Ajouter"}
+        onClose={closeForm}
         onSubmit={submit}
       >
         <TextField label="Titre" value={title} onChange={setTitle} placeholder="Ex : Relance après devis" />
@@ -196,13 +301,14 @@ export function Templates() {
           label="Catégorie"
           value={category}
           onChange={setCategory}
-          options={CATEGORY_ORDER.map((c) => ({ value: c, label: c }))}
+          options={Array.from(new Set([...CATEGORY_ORDER, category])).map((c) => ({ value: c, label: c }))}
         />
-        <TextField
+        <AutoGrowTextField
           label="Message"
           value={body}
           onChange={setBody}
           placeholder="Bonjour {marque}, …"
+          minRows={5}
           className="min-w-full"
         />
       </InlineForm>
@@ -304,14 +410,17 @@ export function Templates() {
                     >
                       <div className="flex items-start justify-between gap-2.5">
                         <h3 className="text-sm font-semibold text-foreground">{t.title}</h3>
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-full bg-rowhover px-2.5 py-1 text-[11px] font-medium",
-                            CATEGORY_TONE[t.category] ?? "text-muted-foreground",
-                          )}
-                        >
-                          {t.category}
-                        </span>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full bg-rowhover px-2.5 py-1 text-[11px] font-medium",
+                              CATEGORY_TONE[t.category] ?? "text-muted-foreground",
+                            )}
+                          >
+                            {t.category}
+                          </span>
+                          {tplMenu(t)}
+                        </div>
                       </div>
                       {/* Aperçu tronqué : le texte complet s'ouvre via « Voir ». */}
                       <p className="mt-2.5 flex-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground line-clamp-5">
@@ -370,6 +479,7 @@ export function Templates() {
                       >
                         <Copy className="h-4 w-4" />
                       </button>
+                      {tplMenu(t)}
                     </div>
                   ))}
                 </div>

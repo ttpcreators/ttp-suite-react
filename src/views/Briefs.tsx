@@ -122,6 +122,8 @@ export function Briefs() {
   const [editDue, setEditDue] = useState("");
   const [editObjectif, setEditObjectif] = useState("");
   const [editScript, setEditScript] = useState("");
+  const [editBudget, setEditBudget] = useState("");
+  const [editCreator, setEditCreator] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -189,6 +191,8 @@ export function Briefs() {
     setEditDue(toISODate(row.due));
     setEditObjectif(row.objectif === "—" ? "" : row.objectif);
     setEditScript(row.consignes ?? "");
+    setEditBudget(row.budget === "—" ? "" : row.budget ?? "");
+    setEditCreator(row.creator ?? "");
   };
   const saveEdit = async (id: string) => {
     if (!editBrand.trim()) {
@@ -208,6 +212,9 @@ export function Briefs() {
       due: dueVal,
       objectif: editObjectif.trim() || "—",
       consignes: editScript.trim(),
+      budget: editBudget.trim() || "—",
+      creator: editCreator || "",
+      who: editCreator || "",
     };
     if (!(await dbUpdate("briefs", id, patch))) {
       toast("Erreur — réessaie");
@@ -231,7 +238,7 @@ export function Briefs() {
     if (await dbTrash("briefs", row.id, row.brand, row.creator || undefined)) {
       setRows((rows ?? []).filter((r) => r.id !== row.id));
       toast("Déplacé dans la corbeille");
-    }
+    } else toast("Erreur, réessaie");
   };
 
   // ── PDF joint au brief → aussi inséré comme ligne `documents` (type brief) pour
@@ -262,21 +269,28 @@ export function Briefs() {
     if (file.size > 20 * 1024 * 1024) return toast("PDF trop lourd (max 20 Mo)");
     setPdfBusy(row.id);
     try {
-      // Remplace un PDF existant : on nettoie l'ancien fichier + son doc.
-      if (row.pdf?.path) await supabase.storage.from("documents").remove([row.pdf.path]).catch(() => {});
-      if (row.pdf?.docId) await supabase.from("documents").delete().eq("id", row.pdf.docId).then(() => {}, () => {});
+      // Ordre sûr : nouveau fichier → doc → brief, et l'ancien PDF n'est supprimé qu'à la fin.
+      const old = row.pdf;
       const slug = (row.brand || "brief").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "brief";
       const path = `briefs/${slug}-${Date.now()}.pdf`;
       const up = await supabase.storage.from("documents").upload(path, file, { contentType: "application/pdf", upsert: false });
       if (up.error) return toast("Upload échoué — réessaie");
       const docName = `Brief — ${row.brand}${row.creator ? ` — ${titleCase(row.creator)}` : ""}`;
       const doc = await dbInsert("documents", { creator: row.creator || null, name: docName, type: "brief", size: `${Math.max(1, Math.round(file.size / 1024))} Ko`, path, sort_order: 0 });
-      const pdf = { name: file.name, path, docId: (doc as { id?: string } | null)?.id };
+      if (!doc) {
+        await supabase.storage.from("documents").remove([path]).catch(() => {});
+        return toast("Erreur, le PDF n'a pas été joint");
+      }
+      const pdf = { name: file.name, path, docId: (doc as { id?: string }).id };
       if (!(await dbUpdate("briefs", row.id, { pdf }))) {
         await supabase.storage.from("documents").remove([path]).catch(() => {});
+        if (pdf.docId) await supabase.from("documents").delete().eq("id", pdf.docId).then(() => {}, () => {});
         return toast("Erreur — lance le SQL « briefs.pdf » ?");
       }
       patchRow(row.id, { pdf });
+      // Brief à jour : on peut maintenant nettoyer l'ancien fichier + son doc.
+      if (old?.path) await supabase.storage.from("documents").remove([old.path]).catch(() => {});
+      if (old?.docId) await supabase.from("documents").delete().eq("id", old.docId).then(() => {}, () => {});
       if (row.creator) notifyCreator("brief", row.creator, `PDF joint au brief ${row.brand}`);
       toast("PDF joint ✓ — visible dans Documents et le portail créateur");
     } finally {
@@ -294,7 +308,11 @@ export function Briefs() {
   const removePdf = async (row: Row) => {
     const pdf = row.pdf;
     patchRow(row.id, { pdf: null });
-    await dbUpdate("briefs", row.id, { pdf: null });
+    // Base d'abord : fichier et doc ne sont supprimés que si le brief est bien mis à jour.
+    if (!(await dbUpdate("briefs", row.id, { pdf: null }))) {
+      patchRow(row.id, { pdf });
+      return toast("Erreur, réessaie");
+    }
     if (pdf?.path) await supabase.storage.from("documents").remove([pdf.path]).catch(() => {});
     if (pdf?.docId) await supabase.from("documents").delete().eq("id", pdf.docId).then(() => {}, () => {});
     toast("PDF retiré");
@@ -327,6 +345,8 @@ export function Briefs() {
             <TextField label="Livrables" value={editDeliverables} onChange={setEditDeliverables} placeholder="ex 3 posts · 1 reel" />
             <TextField label="Échéance" type="date" value={editDue} onChange={setEditDue} />
             <TextField label="Objectif" value={editObjectif} onChange={setEditObjectif} />
+            <TextField label="Budget" value={editBudget} onChange={setEditBudget} />
+            <SelectField label="Créatrice" value={editCreator} onChange={setEditCreator} options={creatorOptions} />
             <AutoGrowTextField
               label="Script"
               value={editScript}

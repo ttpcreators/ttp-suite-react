@@ -24,12 +24,18 @@ const TYPE_OPTIONS = [
 
 let _uid = 0;
 const uid = () => `ct${Date.now().toString(36)}${(_uid += 1)}`;
-const todayISO = () => new Date().toISOString().slice(0, 10);
+// Date LOCALE (toISOString = UTC → la veille entre minuit et 2 h en France)
+const isoOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const todayISO = () => isoOf(new Date());
 
 function endDate(start: string, months: number): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(start);
   if (!m) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1 + (months || 0), Number(m[3]));
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1 + (months || 0);
+  // Jour borné à la fin du mois cible (31 janv. + 1 mois = fin février, pas 3 mars)
+  const lastDay = new Date(y, mo + 1, 0).getDate();
+  return new Date(y, mo, Math.min(Number(m[3]), lastDay));
 }
 function daysLeft(d: Date): number {
   const t = new Date();
@@ -83,9 +89,13 @@ export function Echeances() {
     invalidateAppState();
     const fresh = ((await getAppState())["contractDeadlines"] as Deadline[]) ?? [];
     const next = fn(fresh);
+    const before = local;
     setLocal(next);
     const ok = await saveAppStateKey("contractDeadlines", next);
-    if (!ok) toast("Erreur — réessaie");
+    if (!ok) {
+      setLocal(before); // rollback : l'écran reflète la base
+      toast("Erreur, réessaie");
+    }
     return ok;
   };
 
@@ -114,12 +124,19 @@ export function Echeances() {
       note: draft.note.trim() || undefined,
     };
     const wasEdit = !!editId;
+    let missing = false;
+    const ok = await mutate((fresh) => {
+      if (!wasEdit) return [entry, ...fresh];
+      missing = !fresh.some((x) => x.id === entry.id);
+      // Garde les champs annexes (marque, id de contrat) posés par l'auto-échéance
+      return fresh.map((x) => (x.id === entry.id ? { ...x, ...entry } : x));
+    });
+    // Échec : le formulaire reste ouvert pour réessayer
+    if (!ok) return;
     setFormOpen(false);
     setEditId(null);
-    const ok = await mutate((fresh) =>
-      wasEdit ? fresh.map((x) => (x.id === entry.id ? entry : x)) : [entry, ...fresh],
-    );
-    if (ok) toast(wasEdit ? "Contrat mis à jour ✓" : "Contrat ajouté ✓");
+    if (missing) toast("Ce contrat a été supprimé entre-temps, rien n'a été modifié");
+    else toast(wasEdit ? "Contrat mis à jour ✓" : "Contrat ajouté ✓");
   };
   const remove = async (id: string) => {
     const ok = await mutate((fresh) => fresh.filter((x) => x.id !== id));
@@ -159,7 +176,7 @@ export function Echeances() {
       for (const b of brand) {
         const type = b.ctType === "ugc" ? "ugc" : "marque";
         const m = /Dur[ée]e[^0-9]{0,20}?([0-9]+)\s*mois/i.exec(b.html ?? "");
-        const start = b.ts ? new Date(b.ts).toISOString().slice(0, 10) : todayISO();
+        const start = b.ts ? isoOf(new Date(b.ts)) : todayISO();
         push((b.ctName ?? "").trim(), type, start, m ? parseInt(m[1], 10) : 0);
       }
       if (!added.length) {

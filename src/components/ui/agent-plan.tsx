@@ -114,7 +114,7 @@ export function AgentPlan({
                           {s.done ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Circle className="h-4 w-4 text-faint" />}
                         </button>
                         <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
-                        <button type="button" onClick={() => onDelSubtask(task.id, s.id)} className="shrink-0 text-faint opacity-0 transition-opacity hover:text-[#E5484D] group-hover:opacity-100" aria-label="Supprimer">
+                        <button type="button" onClick={() => onDelSubtask(task.id, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label="Supprimer">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>

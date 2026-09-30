@@ -1,9 +1,10 @@
 import { supabase } from "@/lib/supabase";
 import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, Clock, AlertTriangle, MapPin, MessageCircle, AtSign, Phone, BriefcaseBusiness, Check, type LucideIcon } from "lucide-react";
 import {
-  parseTouches, sortTouches, lastTouch, needsRelance, nextKind, waLink, waHref, touchId,
+  parseTouches, sortTouches, lastTouch, needsRelance, nextKind, waLink, waHref, touchId, buildTouchesPatch,
   CANAL_LABELS, KIND_LABELS, RELANCE_DAYS, type Touch, type TouchCanal, type TouchKind, type WaMode, type ProspectSettings,
 } from "@/lib/touches";
+import { updateTouches, applyTouchChange, type TouchChange } from "@/lib/touchesDb";
 import { useAppState, type AppState } from "@/lib/appState";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { cn, initials, titleCase } from "@/lib/utils";
@@ -27,7 +28,7 @@ import { StatsBento } from "@/components/ui/stats-bento";
 import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
 import { PageHeaderRow } from "@/components/ui/page-header";
-import { DEFAULT_TEMPLATES, mailtoHref, suggestedMail, type MailTemplate } from "@/lib/mailTemplates";
+import { DEFAULT_TEMPLATES, mailtoHref, readProspectTemplates, suggestedMail, type MailTemplate } from "@/lib/mailTemplates";
 
 type Row = {
   id: string;
@@ -110,20 +111,25 @@ const CREATOR_FILTER = "__creator__"; // filtre : contacts ajoutés par un créa
 
 // ─── CSV : export + import réels ─────────────────────────────────────────────
 
-const CSV_HEADERS = ["Marque", "Personne", "Rôle", "Tag", "Email", "Téléphone"] as const;
-type CsvField = "brand" | "person" | "role" | "tag" | "email" | "phone";
-const CSV_FIELDS: CsvField[] = ["brand", "person", "role", "tag", "email", "phone"];
+// Colonnes ajoutées en fin (Prénom…Ville) : un CSV positionnel ancien reste lisible.
+const CSV_HEADERS = ["Marque", "Personne", "Rôle", "Tag", "Email", "Téléphone", "Prénom", "Nom", "Instagram", "Ville"] as const;
+type CsvField = "brand" | "person" | "role" | "tag" | "email" | "phone" | "first_name" | "last_name" | "instagram" | "city";
+const CSV_FIELDS: CsvField[] = ["brand", "person", "role", "tag", "email", "phone", "first_name", "last_name", "instagram", "city"];
 
 function normHeader(s: string): string {
   return s.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 const FIELD_ALIASES: Record<CsvField, string[]> = {
   brand: ["marque", "entreprise", "marque / entreprise", "brand", "company", "societe"],
-  person: ["personne", "person", "nom", "contact", "name"],
+  person: ["personne", "person", "nom complet", "contact", "name", "full name"],
   role: ["role", "poste", "fonction", "title", "titre"],
   tag: ["tag", "type", "categorie", "category"],
   email: ["email", "e-mail", "mail", "courriel"],
   phone: ["telephone", "phone", "tel", "mobile", "numero"],
+  first_name: ["prenom", "first name", "firstname", "first_name"],
+  last_name: ["nom", "nom de famille", "last name", "lastname", "last_name"],
+  instagram: ["instagram", "insta", "ig"],
+  city: ["ville", "city", "localite"],
 };
 
 /** Échappe une valeur pour une cellule CSV. */
@@ -136,7 +142,7 @@ function csvCell(v: string): string {
 function buildCsv(rows: Row[]): string {
   const lines = [CSV_HEADERS.join(",")];
   for (const r of rows) {
-    lines.push([r.brand, r.person, r.role, r.tag, r.email, r.phone].map((v) => csvCell(v ?? "")).join(","));
+    lines.push([r.brand, r.person, r.role, r.tag, r.email, r.phone, r.first_name, r.last_name, r.instagram, r.city].map((v) => csvCell(v ?? "")).join(","));
   }
   return "﻿" + lines.join("\r\n");
 }
@@ -252,7 +258,7 @@ export function Contacts() {
 
   // Réglages prospection (Paramètres → Prospection) : rythme + mode WhatsApp.
   const { data: prospectCfg } = useAppState<ProspectSettings>((s: AppState) => (s["prospectSettings"] as ProspectSettings) ?? {});
-  const { data: storedTemplates } = useAppState<MailTemplate[] | undefined>((s: AppState) => s["mailTemplates"] as MailTemplate[] | undefined);
+  const { data: storedTemplates } = useAppState<MailTemplate[] | undefined>((s: AppState) => readProspectTemplates(s));
   const relanceDays = Math.max(1, Number(prospectCfg?.relanceDays) || RELANCE_DAYS);
   const waMode: WaMode = prospectCfg?.waMode === "web" ? "web" : "app";
 
@@ -327,21 +333,28 @@ export function Contacts() {
   // ── Journal de contact multi-canal (« touches ») : WhatsApp, insta, tél… ──
   // Chaque prise de contact manuelle est datée dans contacts.touches (jsonb) ;
   // last_contacted est synchronisé pour tout l'existant (bento, alerte, Megan).
-  const saveTouches = async (row: Row, next: Touch[]) => {
-    const acts = next.map((t) => new Date(t.date).getTime()).filter((n) => Number.isFinite(n));
-    const lastIso = acts.length ? new Date(Math.max(...acts)).toISOString() : null;
-    const patch: Record<string, unknown> = { touches: next };
-    if (lastIso && (!row.last_contacted || new Date(lastIso).getTime() > new Date(row.last_contacted).getTime()))
-      patch.last_contacted = lastIso;
-    const apply = (r: Row): Row => (r.id === row.id ? ({ ...r, ...patch } as Row) : r);
-    setRows((prev) => (prev ? prev.map(apply) : prev));
-    setSelected((prev) => (prev && prev.id === row.id ? apply(prev) : prev));
-    if (!(await dbUpdate("contacts", row.id, patch))) toast("Erreur, la migration « touches » est-elle lancée ?");
+  // Écrit via updateTouches (relit la ligne avant) : pas d'écrasement des touches
+  // ajoutées ailleurs (autre appareil, cron Gmail). Optimiste puis valeurs serveur.
+  const saveTouches = async (row: Row, change: TouchChange) => {
+    const prevVals = { touches: row.touches, last_contacted: row.last_contacted };
+    const local = applyTouchChange(parseTouches(row.touches), change);
+    const set = (vals: Partial<Row>) => {
+      const apply = (r: Row): Row => (r.id === row.id ? ({ ...r, ...vals } as Row) : r);
+      setRows((prev) => (prev ? prev.map(apply) : prev));
+      setSelected((prev) => (prev && prev.id === row.id ? apply(prev) : prev));
+    };
+    set({ touches: local, ...(buildTouchesPatch(local, row.last_contacted) as Partial<Row>) });
+    const res = await updateTouches(row.id, change);
+    if (res) set(res);
+    else {
+      set(prevVals);
+      toast("Erreur, la touche n'a pas été enregistrée");
+    }
   };
   const logTouch = (row: Row, canal: TouchCanal, kind?: TouchKind) => {
     const list = parseTouches(row.touches);
     const t: Touch = { id: touchId(), date: new Date().toISOString(), canal, kind: kind ?? nextKind(list, row.last_contacted) };
-    void saveTouches(row, [t, ...list]);
+    void saveTouches(row, { add: t });
     toast(`${KIND_LABELS[t.kind]} · ${CANAL_LABELS[canal]} noté ✓`);
   };
   // Mail pré-rempli (modèle premier contact ou relance) ouvert dans Spark,
@@ -578,7 +591,8 @@ export function Contacts() {
         // Parallélisé par lots de 4 pour rester rapide sans saturer le quota Gmail.
         const nameOf = (email: string) => pickContacts.find((c) => c.email.toLowerCase() === email)?.label;
         const attach = attachments.map((a) => ({ filename: a.filename, mimeType: a.mimeType, contentBase64: a.contentBase64 }));
-        let sent = 0;
+        const okList: string[] = [];
+        const failed: string[] = [];
         let firstErr = "";
         const BATCH = 4;
         for (let i = 0; i < recipients.length; i += BATCH) {
@@ -591,19 +605,29 @@ export function Contacts() {
               return (await jsonOf(error, data)) as { ok?: boolean; error?: string } | null;
             }),
           );
-          for (const res of results) {
-            if (res?.ok) sent++;
-            else if (!firstErr) firstErr = res?.error ?? "";
-          }
+          results.forEach((res, k) => {
+            if (res?.ok) okList.push(chunk[k]);
+            else {
+              failed.push(chunk[k]);
+              if (!firstErr) firstErr = res?.error ?? "";
+            }
+          });
         }
-        if (sent === 0) {
+        if (okList.length === 0) {
           if (firstErr === "google_non_connecte" || firstErr === "gmail_scope_manquant")
             toast("Reconnecte Google (avec les droits Gmail) dans l'app.");
           else toast("Envoi Gmail échoué — réessaie");
           return;
         }
-        toast(`Envoyé depuis Gmail ✓ (${sent}/${recipients.length} destinataire${recipients.length > 1 ? "s" : ""})`);
-        await markContacted(recipients);
+        // Seuls les envois réussis comptent comme « contactés ».
+        await markContacted(okList);
+        if (failed.length > 0) {
+          // Envoi partiel : le composeur reste ouvert avec les destinataires en échec.
+          setMailRecipients(failed);
+          toast(`${okList.length} envoyé${okList.length > 1 ? "s" : ""}, ${failed.length} en échec`);
+          return;
+        }
+        toast(`Envoyé depuis Gmail ✓ (${okList.length}/${recipients.length} destinataire${recipients.length > 1 ? "s" : ""})`);
       } else {
         const { data, error } = await supabase.functions.invoke("send-email", {
           body: { to: recipients, subject, html, attachments: attachments.map((a) => ({ filename: a.filename, contentBase64: a.contentBase64 })) },
@@ -709,7 +733,7 @@ export function Contacts() {
     setImporting(true);
     try {
       const text = await file.text();
-      const parsed = csvToContacts(text).filter((c) => (c.brand ?? "").trim() || (c.person ?? "").trim());
+      const parsed = csvToContacts(text).filter((c) => (c.brand ?? "").trim() || (c.person ?? "").trim() || (c.first_name ?? "").trim() || (c.last_name ?? "").trim());
       if (parsed.length === 0) {
         toast("Aucune ligne exploitable dans ce CSV");
         return;
@@ -718,9 +742,16 @@ export function Contacts() {
       const validTags = new Set(TAG_OPTIONS.map((t) => t.value));
       const payload = parsed.map((c) => {
         const rawTag = (c.tag ?? "").trim();
+        const first = (c.first_name ?? "").trim();
+        const last = (c.last_name ?? "").trim();
+        const person = (c.person ?? "").trim() || [first, last].filter(Boolean).join(" ");
         return {
-          brand: (c.brand ?? "").trim() || (c.person ?? "").trim() || "—",
-          person: (c.person ?? "").trim() || "—",
+          brand: (c.brand ?? "").trim() || person || "—",
+          person: person || "—",
+          first_name: first || null,
+          last_name: last || null,
+          instagram: (c.instagram ?? "").trim() || null,
+          city: (c.city ?? "").trim() || null,
           role: (c.role ?? "").trim(),
           tag: validTags.has(rawTag) ? rawTag : rawTag || "Autre",
           email: (c.email ?? "").trim(),
@@ -1028,7 +1059,7 @@ export function Contacts() {
                       if (await dbTrash("contacts", row.id, row.brand, row.person)) {
                         setRows(currentRows.filter((r) => r.id !== row.id));
                         toast("Déplacé dans la corbeille");
-                      }
+                      } else toast("Erreur, réessaie");
                     },
                     confirm: { title: "Supprimer le contact", message: `Supprimer « ${row.brand} » ? Tu pourras le restaurer depuis la corbeille.` },
                   },
@@ -1167,7 +1198,7 @@ export function Contacts() {
                           {touchDel === t.id ? (
                             <button
                               type="button"
-                              onClick={() => { setTouchDel(null); void saveTouches(selected, parseTouches(selected.touches).filter((x) => x.id !== t.id)); }}
+                              onClick={() => { setTouchDel(null); void saveTouches(selected, { remove: t.id }); }}
                               className="shrink-0 rounded bg-red-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-red-500"
                             >
                               Suppr ?

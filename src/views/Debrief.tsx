@@ -60,33 +60,6 @@ type Debrief = {
   calc?: CalcState;
 };
 
-/** Valeurs de départ utiles quand le blob 'debriefData' est vide. */
-const SEED: Debrief[] = [
-  {
-    brand: "Sézane × Léna",
-    creator: "Léna Marchand",
-    period: "Mars 2026",
-    deliverables: "3 Reels · 5 Stories · 1 post carrousel",
-    budget: "3 000 €",
-    revenue: "12 000 €",
-    roi: "4,0×",
-    tone: "indigo",
-    summary:
-      "Campagne printemps performante : forte résonance sur les Reels, taux de conversion supérieur aux attentes de la marque.",
-    kpis: [
-      { l: "Reach", v: "480 K" },
-      { l: "Engagement", v: "6,4 %" },
-      { l: "Clics", v: "9 200" },
-      { l: "Ventes attribuées", v: "310" },
-    ],
-    highlights: [
-      "Reel « routine matinale » : 210 K vues, meilleur contenu du trimestre",
-      "Code promo utilisé 310 fois en 10 jours",
-      "La marque a reconduit pour la collection été",
-    ],
-  },
-];
-
 /** Formate un debrief en texte lisible (partage / téléchargement). */
 function debriefToText(d: Debrief): string {
   const lines: string[] = [];
@@ -237,9 +210,13 @@ export function Debrief() {
   );
   const creators = useCreators();
 
-  // Copie locale : le blob n'est chargé qu'une fois, on maintient l'état ici.
+  // Copie locale (après une écriture) ; remise à zéro dès que les données live changent.
   const [local, setLocal] = useState<Debrief[] | null>(null);
-  const list: Debrief[] = local ?? data ?? (data === null && !loading ? SEED : []);
+  useEffect(() => {
+    setLocal(null);
+  }, [data]);
+  // Blob vide : état vide (plus de debrief de démo affiché ni compté comme réel).
+  const list: Debrief[] = local ?? data ?? [];
 
   // Rappel : briefs (campagnes) TERMINÉS ou échus, pas encore débriefés → à débriefer.
   const [briefRows, setBriefRows] = useState<{ id: string; brand: string; creator: string | null; status: string; due: string | null }[]>([]);
@@ -376,33 +353,46 @@ export function Debrief() {
       highlights,
       calc,
     };
-    resetForm();
-    setFormOpen(false);
     // Relecture FRAÎCHE + fusion par signature (le tableau est partagé entre postes).
-    invalidateAppState();
-    const fresh = ((await getAppState())["debriefData"] as Debrief[]) ?? [];
-    let next: Debrief[];
-    if (original) {
-      const os = debriefSig(original);
-      const idx = fresh.findIndex((d) => debriefSig(d) === os);
-      next = idx >= 0 ? fresh.map((d, i) => (i === idx ? built : d)) : [built, ...fresh];
-    } else {
-      next = [built, ...fresh];
+    // Le formulaire ne se ferme qu'une fois l'écriture réussie (sinon la saisie reste).
+    try {
+      invalidateAppState();
+      // Normalisé comme `list` : sinon la signature d'une entrée legacy ne correspond jamais.
+      const fresh = (((await getAppState())["debriefData"] as Debrief[]) ?? []).map(normDebrief);
+      let next: Debrief[];
+      if (original) {
+        const os = debriefSig(original);
+        const idx = fresh.findIndex((d) => debriefSig(d) === os);
+        next = idx >= 0 ? fresh.map((d, i) => (i === idx ? built : d)) : [built, ...fresh];
+      } else {
+        next = [built, ...fresh];
+      }
+      if (!(await saveAppStateKey("debriefData", next))) {
+        toast("Erreur — réessaie");
+        return;
+      }
+      setLocal(next);
+      resetForm();
+      setFormOpen(false);
+      if (!wasEdit && built.creator) notifyCreator("debrief", built.creator, built.brand); // push au créateur à la création
+      toast(wasEdit ? "Debrief modifié ✓" : "Debrief créé ✓");
+    } catch {
+      toast("Erreur — réessaie");
     }
-    setLocal(next);
-    const ok = await saveAppStateKey("debriefData", next);
-    if (ok && !wasEdit && built.creator) notifyCreator("debrief", built.creator, built.brand); // push au créateur à la création
-    toast(ok ? (wasEdit ? "Debrief modifié ✓" : "Debrief créé ✓") : "Erreur — réessaie");
   }
 
   async function remove(d: Debrief) {
-    invalidateAppState();
-    const fresh = ((await getAppState())["debriefData"] as Debrief[]) ?? [];
-    const s = debriefSig(d);
-    const next = fresh.filter((x) => debriefSig(x) !== s);
-    setLocal(next);
-    const ok = await saveAppStateKey("debriefData", next);
-    toast(ok ? "Supprimé" : "Erreur — réessaie");
+    try {
+      invalidateAppState();
+      const fresh = (((await getAppState())["debriefData"] as Debrief[]) ?? []).map(normDebrief);
+      const s = debriefSig(d);
+      const next = fresh.filter((x) => debriefSig(x) !== s);
+      if (!(await saveAppStateKey("debriefData", next))) return toast("Erreur — réessaie");
+      setLocal(next);
+      toast("Supprimé");
+    } catch {
+      toast("Erreur — réessaie");
+    }
   }
 
   async function shareDebrief(d: Debrief) {

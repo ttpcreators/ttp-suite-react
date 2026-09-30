@@ -151,17 +151,22 @@ export function Todo() {
   useEffect(() => {
     if (notesData) setNotes(notesData);
   }, [notesData]);
-  const saveNote = async (id: string, value: string) => {
-    // Relit la map FRAÎCHE avant d'écrire (jamais depuis l'état local : on
-    // écraserait les commentaires posés depuis un autre poste / pas encore chargés).
-    invalidateAppState();
-    const fresh = ((await getAppState())["itemNotes"] as Record<string, string>) ?? {};
-    const next = { ...fresh };
-    if (value.trim()) next[id] = value.trim();
-    else delete next[id];
-    setNotes(next);
-    const ok = await saveAppStateKey("itemNotes", next);
-    if (!ok) toast("Commentaire non enregistré — réessaie");
+  // Renvoie true si le commentaire est bien enregistré (les appelants affichent le toast).
+  const saveNote = async (id: string, value: string): Promise<boolean> => {
+    try {
+      // Relit la map FRAÎCHE avant d'écrire (jamais depuis l'état local : on
+      // écraserait les commentaires posés depuis un autre poste / pas encore chargés).
+      invalidateAppState();
+      const fresh = ((await getAppState())["itemNotes"] as Record<string, string>) ?? {};
+      const next = { ...fresh };
+      if (value.trim()) next[id] = value.trim();
+      else delete next[id];
+      if (!(await saveAppStateKey("itemNotes", next))) return false;
+      setNotes(next);
+      return true;
+    } catch {
+      return false; // lecture du blob impossible (réseau…)
+    }
   };
   // Édition inline du commentaire d'avancement (sous la carte, dans la liste).
   const [noteEditId, setNoteEditId] = useState<string | null>(null);
@@ -175,29 +180,55 @@ export function Todo() {
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>(null);
   const [todoFilter, setTodoFilter] = useState<TodoFilter>("encours");
   const [selectedTodo, setSelectedTodo] = useState<Row | null>(null);
-  const [confirmDone, setConfirmDone] = useState<Row | null>(null); // anti-missclick « fait »
+  const [confirmAtt, setConfirmAtt] = useState<{ todo: Row; att: Attachment } | null>(null); // confirmation retrait pièce jointe
   const [subInput, setSubInput] = useState(""); // saisie nouvelle sous-tâche
   const attFileRef = useRef<HTMLInputElement>(null);
   const [attUploading, setAttUploading] = useState(false);
 
   // Persiste un patch de tâche (sous-tâches / pièces jointes) : base + local + fiche.
-  const patchTodo = async (id: string, patch: Partial<Row>) => {
-    const ok = await dbUpdate("todos", id, patch);
-    if (!ok) { toast("Erreur — lance le SQL sous-tâches/pièces jointes ?"); return; }
+  // Optimiste : le patch est calculé depuis la DERNIÈRE version de la ligne (ref à jour
+  // sans attendre le rendu) et les écritures d'une même tâche sont sérialisées → deux
+  // coches rapides ne s'écrasent plus. Échec = retour arrière si rien n'a bougé depuis.
+  const rowsRef = useRef<Row[] | null>(rows);
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
+  const todoQueue = useRef<Record<string, Promise<boolean>>>({});
+  const patchTodo = (id: string, build: (r: Row) => Partial<Row>): Promise<boolean> => {
+    const cur = (rowsRef.current ?? []).find((r) => r.id === id);
+    if (!cur) return Promise.resolve(false);
+    const patch = build(cur);
+    const next = { ...cur, ...patch };
+    const keys = Object.keys(patch) as (keyof Row)[];
+    const back = Object.fromEntries(keys.map((k) => [k, cur[k]])) as Partial<Row>;
+    rowsRef.current = (rowsRef.current ?? []).map((r) => (r.id === id ? next : r));
     setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
     setSelectedTodo((prev) => (prev?.id === id ? { ...prev, ...patch } : prev));
+    const run = async () => {
+      if (await dbUpdate("todos", id, patch)) return true;
+      const untouched = (r: Row) => keys.every((k) => r[k] === next[k]);
+      const revert = (r: Row) => (r.id === id && untouched(r) ? { ...r, ...back } : r);
+      rowsRef.current = (rowsRef.current ?? []).map(revert);
+      setRows((prev) => (prev ?? []).map(revert));
+      setSelectedTodo((prev) => (prev ? revert(prev) : prev));
+      toast("Erreur — lance le SQL sous-tâches/pièces jointes ?");
+      return false;
+    };
+    const p = (todoQueue.current[id] ?? Promise.resolve(true)).then(run, run);
+    todoQueue.current[id] = p;
+    return p;
   };
   // Sous-tâches (checklist)
   const addSubtask = (todo: Row) => {
     const t = subInput.trim();
     if (!t) return;
     setSubInput("");
-    patchTodo(todo.id, { subtasks: [...(todo.subtasks ?? []), { id: stid(), text: t, done: false }] });
+    patchTodo(todo.id, (r) => ({ subtasks: [...(r.subtasks ?? []), { id: stid(), text: t, done: false }] }));
   };
   const toggleSubtask = (todo: Row, sid: string) =>
-    patchTodo(todo.id, { subtasks: (todo.subtasks ?? []).map((s) => (s.id === sid ? { ...s, done: !s.done } : s)) });
+    patchTodo(todo.id, (r) => ({ subtasks: (r.subtasks ?? []).map((s) => (s.id === sid ? { ...s, done: !s.done } : s)) }));
   const delSubtask = (todo: Row, sid: string) =>
-    patchTodo(todo.id, { subtasks: (todo.subtasks ?? []).filter((s) => s.id !== sid) });
+    patchTodo(todo.id, (r) => ({ subtasks: (r.subtasks ?? []).filter((s) => s.id !== sid) }));
   // Pièces jointes (bucket `documents`, chemin todo-attachments/<id>/…)
   const uploadAttachments = async (todo: Row, files: FileList | null) => {
     const list = Array.from(files ?? []);
@@ -213,7 +244,7 @@ export function Todo() {
         if (up.error) { toast("Envoi échoué — réessaie"); continue; }
         added.push({ name: file.name, size: `${Math.max(1, Math.round(file.size / 1024))} Ko`, path });
       }
-      if (added.length) await patchTodo(todo.id, { attachments: [...(todo.attachments ?? []), ...added] });
+      if (added.length) await patchTodo(todo.id, (r) => ({ attachments: [...(r.attachments ?? []), ...added] }));
     } finally {
       setAttUploading(false);
       if (attFileRef.current) attFileRef.current.value = "";
@@ -225,16 +256,29 @@ export function Todo() {
     if (error || !data?.signedUrl) { toast("Lien indisponible — réessaie"); return; }
     window.open(data.signedUrl, "_blank");
   };
+  // Base d'abord, fichier ensuite : un échec ne laisse pas une pièce jointe pointant vers rien.
   const removeAttachment = async (todo: Row, path: string) => {
-    await supabase.storage.from("documents").remove([path]).catch(() => {});
-    patchTodo(todo.id, { attachments: (todo.attachments ?? []).filter((a) => a.path !== path) });
+    const ok = await patchTodo(todo.id, (r) => ({ attachments: (r.attachments ?? []).filter((a) => a.path !== path) }));
+    if (ok) await supabase.storage.from("documents").remove([path]).catch(() => {});
   };
 
   // Mode de vue : liste classique ↔ colonnes par statut (kanban). Mémorisé.
   const [viewMode, setViewMode] = useState<"liste" | "colonnes">(
-    () => (localStorage.getItem("ttp:todo-view") === "colonnes" ? "colonnes" : "liste"),
+    () => {
+      try {
+        return localStorage.getItem("ttp:todo-view") === "colonnes" ? "colonnes" : "liste";
+      } catch {
+        return "liste"; // stockage indisponible
+      }
+    },
   );
-  useEffect(() => { localStorage.setItem("ttp:todo-view", viewMode); }, [viewMode]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("ttp:todo-view", viewMode);
+    } catch {
+      /* stockage indisponible */
+    }
+  }, [viewMode]);
 
   // Change le statut d'une tâche (utilisé par le kanban ; done dérivé de « Fait »).
   // Prévient le créateur (si notifs activées) quand SA tâche/demande est terminée.
@@ -249,19 +293,6 @@ export function Todo() {
       notifyTaskDone(row, status);
     } else {
       toast("Statut non enregistré — la colonne « status » manque (lance le SQL)");
-    }
-  };
-
-  // Marque une tâche faite / à refaire (remonté au niveau composant pour la confirmation).
-  const markDone = async (row: Row, next: boolean) => {
-    const status = next ? "Fait" : "À faire";
-    if (await dbUpdate("todos", row.id, { done: next, status })) {
-      setRows((prev) => (prev ?? []).map((r) => (r.id === row.id ? { ...r, done: next, status } : r)));
-      setSelectedTodo((prev) => (prev?.id === row.id ? { ...prev, done: next, status } : prev));
-      notifyTaskDone(row, status);
-      toast(next ? "Fait ✓" : "À refaire");
-    } else {
-      toast("Erreur — réessaie");
     }
   };
 
@@ -317,9 +348,9 @@ export function Todo() {
       )
     );
     setSelectedTodo((prev) => (prev ? { ...prev, ...patch } : prev));
-    await saveNote(selectedTodo.id, editNote);
+    const noteOk = await saveNote(selectedTodo.id, editNote);
     setEditing(false);
-    toast("Tâche modifiée ✓");
+    toast(noteOk ? "Tâche modifiée ✓" : "Tâche modifiée, commentaire non enregistré : réessaie");
   };
 
   useEffect(() => {
@@ -367,7 +398,8 @@ export function Todo() {
     }
     const createdRow = created as unknown as Row;
     setRows([createdRow, ...(rows ?? [])]);
-    if (note.trim()) await saveNote(createdRow.id, note);
+    // Le commentaire ne bloque jamais la réinitialisation du formulaire (saveNote ne lève pas).
+    if (note.trim() && !(await saveNote(createdRow.id, note))) toast("Commentaire non enregistré — réessaie");
     // Push au créateur concerné (s'il a activé les notifs sur son téléphone).
     if (creator) notifyCreator("task", creator, text.trim());
     toast("Tâche ajoutée ✓");
@@ -761,7 +793,14 @@ export function Todo() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={async () => { await saveNote(row.id, noteEditText); setNoteEditId(null); toast("Commentaire enregistré ✓"); }}
+                    onClick={async () => {
+                      if (await saveNote(row.id, noteEditText)) {
+                        setNoteEditId(null);
+                        toast("Commentaire enregistré ✓");
+                      } else {
+                        toast("Commentaire non enregistré — réessaie");
+                      }
+                    }}
                     className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                   >
                     <Check className="h-3.5 w-3.5" /> Enregistrer
@@ -796,7 +835,7 @@ export function Todo() {
             }
           }}
           onToggleSubtask={(taskId, subId) => { const row = (rows ?? []).find((r) => r.id === taskId); if (row) toggleSubtask(row, subId); }}
-          onAddSubtask={(taskId, text) => { const row = (rows ?? []).find((r) => r.id === taskId); if (row) patchTodo(taskId, { subtasks: [...(row.subtasks ?? []), { id: stid(), text, done: false }] }); }}
+          onAddSubtask={(taskId, text) => { patchTodo(taskId, (r) => ({ subtasks: [...(r.subtasks ?? []), { id: stid(), text, done: false }] })); }}
           onDelSubtask={(taskId, subId) => { const row = (rows ?? []).find((r) => r.id === taskId); if (row) delSubtask(row, subId); }}
           onOpenTask={(id) => { const row = (rows ?? []).find((r) => r.id === id); if (row) setSelectedTodo(row); }}
         />
@@ -1004,7 +1043,7 @@ export function Todo() {
                             {s.done && <Check className="h-3 w-3" />}
                           </button>
                           <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
-                          <button type="button" onClick={() => delSubtask(selectedTodo, s.id)} className="shrink-0 text-faint opacity-0 transition-opacity hover:text-[#E5484D] group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button type="button" onClick={() => delSubtask(selectedTodo, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
                       ))}
                     </div>
@@ -1026,7 +1065,7 @@ export function Todo() {
                         <div className="truncate text-[13px] font-medium text-foreground hover:underline">{a.name}</div>
                         <div className="text-[11px] text-faint">{a.size}</div>
                       </button>
-                      <button type="button" onClick={() => removeAttachment(selectedTodo, a.path)} className="shrink-0 text-faint opacity-0 transition-opacity hover:text-[#E5484D] group-hover:opacity-100" title="Retirer"><Trash2 className="h-4 w-4" /></button>
+                      <button type="button" onClick={() => setConfirmAtt({ todo: selectedTodo, att: a })} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title="Retirer"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   ))}
                   <input ref={attFileRef} type="file" multiple className="hidden" onChange={(e) => uploadAttachments(selectedTodo, e.target.files)} />
@@ -1041,17 +1080,18 @@ export function Todo() {
         </div>
       )}
 
-      {/* Confirmation anti-missclick avant de marquer une tâche « faite » */}
-      {confirmDone && (
+      {/* Confirmation avant de retirer une pièce jointe (fichier supprimé du stockage) */}
+      {confirmAtt && (
         <ConfirmDialog
-          title="Marquer comme fait ?"
-          message={`« ${confirmDone.text} » sera marquée comme terminée.`}
-          confirmLabel="Oui, c'est fait ✓"
-          onCancel={() => setConfirmDone(null)}
+          title="Retirer la pièce jointe"
+          message={`Retirer « ${confirmAtt.att.name} » ? Le fichier sera supprimé.`}
+          confirmLabel="Retirer"
+          danger
+          onCancel={() => setConfirmAtt(null)}
           onConfirm={() => {
-            const r = confirmDone;
-            setConfirmDone(null);
-            markDone(r, true);
+            const c = confirmAtt;
+            setConfirmAtt(null);
+            removeAttachment(c.todo, c.att.path);
           }}
         />
       )}

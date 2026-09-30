@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { Target, Pencil, TrendingUp } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -18,6 +18,8 @@ import { MonthPicker } from "@/components/ui/date-range-picker";
 
 /** Un objectif du mois : intitulé, CA réalisé, cible, progression (%) et ton. */
 type Objective = {
+  /** Id stable (généré à l'écriture pour les anciens objectifs qui n'en ont pas). */
+  id?: string;
   name: string;
   ca: string;
   target: string;
@@ -64,12 +66,22 @@ function monthlyTrend(obj: ObjByMonth) {
     }));
 }
 
-/** Valeurs de départ utiles quand le blob est vide (mois courant). */
-const SEED: Objective[] = [
-  { name: "CA LÉNA MARCHAND", ca: "38 000 €", target: "50 000 €", pct: 76, tone: "indigo" },
-  { name: "DEALS SIGNÉS", ca: "7", target: "10", pct: 70, tone: "indigo" },
-  { name: "MARGE AGENCE", ca: "9 200 €", target: "12 000 €", pct: 77, tone: "indigo" },
-];
+// Plus de données de démo (SEED) : éditer/supprimer une ligne fictive réécrivait
+// une liste vide. Blob vide → état vide avec une indication.
+
+let _objSeq = 0;
+function newObjId(): string {
+  _objSeq += 1;
+  return `obj${Date.now().toString(36)}${_objSeq}`;
+}
+/** Même objectif : par id si les deux en ont un, sinon par contenu (anciens sans id). */
+function sameObj(a: Objective, b: Objective): boolean {
+  if (a.id && b.id) return a.id === b.id;
+  return a.name === b.name && a.ca === b.ca && a.target === b.target;
+}
+function withIds(list: Objective[]): Objective[] {
+  return list.map((o) => (o.id ? o : { ...o, id: newObjId() }));
+}
 
 export function Objectifs() {
   const { data, loading, error } = useAppState<ObjByMonth>(
@@ -79,21 +91,25 @@ export function Objectifs() {
   // Copie locale : le blob n'est chargé qu'une fois, on maintient l'état ici.
   const [local, setLocal] = useState<ObjByMonth | null>(null);
   const obj: ObjByMonth = local ?? data ?? {};
+  // Nouvelle donnée live (tick suivant l'écriture) → on lâche la copie locale.
+  useEffect(() => {
+    setLocal(null);
+  }, [data]);
 
   // Mois sélectionné (clé absolue "AAAA-MM"). Par défaut : mois courant.
   const [selectedMonth, setSelectedMonth] = useState<string>(CURRENT_KEY);
-  // Liste du mois choisi (repli legacy "0" pour le mois courant ; SEED si blob vide).
-  const monthList: Objective[] | undefined =
-    obj[selectedMonth] ?? (selectedMonth === CURRENT_KEY ? obj["0"] : undefined);
+  // Liste du mois choisi (repli legacy "0" pour le mois courant).
   const list: Objective[] =
-    monthList ?? (Object.keys(obj).length === 0 && selectedMonth === CURRENT_KEY ? SEED : []);
+    obj[selectedMonth] ?? (selectedMonth === CURRENT_KEY ? obj["0"] : undefined) ?? [];
   const trend = monthlyTrend(obj);
 
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [ca, setCa] = useState("");
-  const [editIndex, setEditIndex] = useState<number | null>(null);
+  // Objectif en cours d'édition (repéré par id, pas par index).
+  const [editing, setEditing] = useState<Objective | null>(null);
+  const [saving, setSaving] = useState(false);
   const [pendingDel, setPendingDel] = useState<null | { message: string; run: () => void }>(null);
 
   const avgPct =
@@ -102,15 +118,14 @@ export function Objectifs() {
       : 0;
 
   function openAdd() {
-    setEditIndex(null);
+    setEditing(null);
     setName("");
     setTarget("");
     setCa("");
     setFormOpen(true);
   }
-  function startEdit(index: number) {
-    const o = list[index];
-    setEditIndex(index);
+  function startEdit(o: Objective) {
+    setEditing(o);
     setName(o.name);
     setTarget(o.target);
     setCa(o.ca === "—" ? "" : o.ca);
@@ -136,36 +151,51 @@ export function Objectifs() {
       pct: Number.isFinite(pct) ? pct : 0,
       tone: "indigo",
     };
-    const isEdit = editIndex != null;
-    // Relecture fraîche avant merge (évite d'écraser une écriture concurrente).
-    invalidateAppState();
-    const freshObj = ((await getAppState())["objByMonth"] as ObjByMonth) ?? {};
-    const useLegacy = selectedMonth === CURRENT_KEY && freshObj[selectedMonth] === undefined && Array.isArray(freshObj["0"]);
-    const freshList = freshObj[selectedMonth] ?? (useLegacy ? freshObj["0"] : []) ?? [];
-    const next: Objective[] = isEdit ? freshList.map((o, i) => (i === editIndex ? item : o)) : [item, ...freshList];
-    const nextObj: ObjByMonth = { ...freshObj, [selectedMonth]: next };
-    if (useLegacy) delete nextObj["0"]; // migre l'ancien format vers la clé absolue
-    setLocal(nextObj);
+    const target0 = editing;
+    const isEdit = target0 != null;
+    if (saving) return;
+    setSaving(true);
+    const ok = await writeMonth((freshList) =>
+      target0
+        ? freshList.map((o) => (sameObj(o, target0) ? { ...item, id: o.id } : o))
+        : [{ ...item, id: newObjId() }, ...freshList],
+    );
+    setSaving(false);
+    if (!ok) {
+      toast("Erreur, réessaie"); // formulaire conservé
+      return;
+    }
     setName("");
     setTarget("");
     setCa("");
-    setEditIndex(null);
+    setEditing(null);
     setFormOpen(false);
-    const ok = await saveAppStateKey("objByMonth", nextObj);
-    toast(ok ? (isEdit ? "Objectif mis à jour ✓" : "Objectif ajouté ✓") : "Erreur — réessaie");
+    toast(isEdit ? "Objectif mis à jour ✓" : "Objectif ajouté ✓");
   }
 
-  async function remove(index: number) {
-    invalidateAppState();
-    const freshObj = ((await getAppState())["objByMonth"] as ObjByMonth) ?? {};
-    const useLegacy = selectedMonth === CURRENT_KEY && freshObj[selectedMonth] === undefined && Array.isArray(freshObj["0"]);
-    const freshList = freshObj[selectedMonth] ?? (useLegacy ? freshObj["0"] : []) ?? [];
-    const next = freshList.filter((_, i) => i !== index);
-    const nextObj: ObjByMonth = { ...freshObj, [selectedMonth]: next };
-    if (useLegacy) delete nextObj["0"];
-    setLocal(nextObj);
-    const ok = await saveAppStateKey("objByMonth", nextObj);
-    toast(ok ? "Supprimé" : "Erreur — réessaie");
+  // Relecture fraîche avant merge (évite d'écraser une écriture concurrente), ids
+  // générés pour les anciens objectifs, rollback si l'écriture échoue.
+  async function writeMonth(mutate: (freshList: Objective[]) => Objective[]): Promise<boolean> {
+    try {
+      invalidateAppState();
+      const freshObj = ((await getAppState())["objByMonth"] as ObjByMonth) ?? {};
+      const useLegacy = selectedMonth === CURRENT_KEY && freshObj[selectedMonth] === undefined && Array.isArray(freshObj["0"]);
+      const freshList = withIds(freshObj[selectedMonth] ?? (useLegacy ? freshObj["0"] : []) ?? []);
+      const nextObj: ObjByMonth = { ...freshObj, [selectedMonth]: mutate(freshList) };
+      if (useLegacy) delete nextObj["0"]; // migre l'ancien format vers la clé absolue
+      setLocal(nextObj);
+      const ok = await saveAppStateKey("objByMonth", nextObj);
+      if (!ok) setLocal(null); // rollback sur les données live
+      return ok;
+    } catch {
+      setLocal(null);
+      return false;
+    }
+  }
+
+  async function remove(o: Objective) {
+    const ok = await writeMonth((freshList) => freshList.filter((x) => !sameObj(x, o)));
+    toast(ok ? "Supprimé" : "Erreur, réessaie");
   }
 
   return (
@@ -195,13 +225,13 @@ export function Objectifs() {
 
       <InlineForm
         open={formOpen}
-        title={editIndex != null ? "Modifier l'objectif" : "Nouvel objectif"}
+        title={editing != null ? "Modifier l'objectif" : "Nouvel objectif"}
         onClose={() => {
           setFormOpen(false);
-          setEditIndex(null);
+          setEditing(null);
         }}
         onSubmit={submit}
-        submitLabel={editIndex != null ? "Enregistrer" : "Ajouter"}
+        submitLabel={editing != null ? "Enregistrer" : "Ajouter"}
       >
         <TextField
           label="Intitulé"
@@ -244,9 +274,9 @@ export function Objectifs() {
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-signalsoft text-signaltext">
             <Target className="size-5" />
           </div>
-          <div className="text-sm font-medium text-foreground">Aucun objectif — {monthTitle(selectedMonth)}</div>
+          <div className="text-sm font-medium text-foreground">Aucun objectif pour {monthTitle(selectedMonth)}</div>
           <div className="mt-1.5 text-xs text-faint">
-            Ajoute un objectif avec le bouton « + Objectif ».
+            Ajoute un objectif avec le bouton « + Objectif » (ex : CA d'une créatrice, deals signés, marge agence).
           </div>
         </div>
       ) : (
@@ -267,7 +297,7 @@ export function Objectifs() {
                     : { ind: "bg-rose-500", track: "bg-rose-500/15", text: "text-rose-500" };
               return (
                 <li
-                  key={`${o.name}-${index}`}
+                  key={o.id ?? `${o.name}-${index}`}
                   className="flex flex-col gap-3 py-3.5 md:flex-row md:items-center md:gap-4"
                 >
                   <span className="truncate text-[13px] font-semibold text-foreground md:w-44">
@@ -283,13 +313,13 @@ export function Objectifs() {
                     </span>
                     <button
                       type="button"
-                      onClick={() => startEdit(index)}
+                      onClick={() => startEdit(o)}
                       className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                       title="Modifier l'avancement"
                     >
                       <Pencil className="h-4 w-4" />
                     </button>
-                    <DeleteButton onClick={() => setPendingDel({ message: `Supprimer l'objectif « ${o.name} » ? Cette action est irréversible.`, run: () => remove(index) })} />
+                    <DeleteButton onClick={() => setPendingDel({ message: `Supprimer l'objectif « ${o.name} » ? Cette action est irréversible.`, run: () => remove(o) })} />
                   </div>
                 </li>
               );

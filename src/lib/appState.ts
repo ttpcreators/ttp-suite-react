@@ -39,10 +39,15 @@ let _writeGen = 0;
 export function getAppState(): Promise<AppState> {
   if (_cache) return Promise.resolve(_cache);
   if (!_promise) {
-    _promise = loadAppState().then((s) => {
-      _cache = s;
+    const gen = _writeGen;
+    const p: Promise<AppState> = loadAppState().then((s) => {
+      // Une écriture a eu lieu pendant le chargement : snapshot possiblement
+      // antérieur → on ne le met pas en cache (prochain get = relecture).
+      if (_writeGen === gen) _cache = s;
+      else if (_promise === p) _promise = null;
       return s;
     });
+    _promise = p;
   }
   return _promise;
 }
@@ -60,17 +65,21 @@ export function invalidateAppState() {
 let _refreshing: Promise<AppState> | null = null;
 export function refreshAppState(): Promise<AppState> {
   if (_refreshing) return _refreshing;
-  _cache = null;
-  _refreshing = loadAppState()
+  // On garde l'ancien cache pendant le fetch (le vider laissait une écriture
+  // concurrente créer un cache partiel, puis écrasé par un snapshot pré-écriture).
+  const gen = _writeGen;
+  const p: Promise<AppState> = loadAppState()
     .then((s) => {
-      _cache = s;
+      if (_writeGen === gen) _cache = s;
+      else if (_promise === p) _promise = null; // snapshot périmé : pas de cache
       return s;
     })
     .finally(() => {
       _refreshing = null;
     });
-  _promise = _refreshing;
-  return _refreshing;
+  _refreshing = p;
+  if (!_cache) _promise = p;
+  return p;
 }
 
 /**
@@ -87,13 +96,32 @@ export function refreshAppState(): Promise<AppState> {
 export async function saveAppStateKey(key: string, value: unknown): Promise<boolean> {
   _writeGen++; // marque une écriture en cours (prioritaire sur les refetch)
   const { error } = await supabase.rpc("app_state_set", { p_key: key, p_value: value });
+  // Re-marque à la fin : un refetch lancé PENDANT l'appel RPC est aussi ignoré.
+  _writeGen++;
   if (!error) {
-    // Cache local à jour sans refetch (le prochain tick live resynchronise).
-    _cache = { ...(_cache ?? {}), [key]: value } as AppState;
+    // Cache local à jour sans refetch. Jamais de cache partiel {[key]: value} :
+    // si le cache est vide, le prochain get relira le blob complet.
+    if (_cache) _cache = { ..._cache, [key]: value } as AppState;
     return true;
   }
-  console.warn("[blob] app_state_set → fallback legacy", key, error.message);
-  return await legacySaveAppStateKey(key, value);
+  // Fallback legacy (réécriture de tout le blob) UNIQUEMENT si la fonction SQL
+  // n'existe pas. Sur toute autre erreur (réseau, RLS…) → échec franc.
+  if (!isMissingFunction(error)) {
+    console.warn("[blob] app_state_set", key, error.message);
+    return false;
+  }
+  console.warn("[blob] app_state_set absente → fallback legacy", key, error.message);
+  const ok = await legacySaveAppStateKey(key, value);
+  _writeGen++;
+  return ok;
+}
+
+/** Fonction Postgres absente : 42883 (Postgres) ou PGRST202 (cache PostgREST). */
+export function isMissingFunction(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false;
+  if (err.code === "42883" || err.code === "PGRST202") return true;
+  const m = err.message ?? "";
+  return /function .* does not exist/i.test(m) || /could not find the function/i.test(m);
 }
 
 /** Ancienne écriture read-modify-write de tout le blob. Fallback si la fonction

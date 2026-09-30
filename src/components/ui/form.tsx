@@ -294,16 +294,28 @@ export function InlineForm({
   open: boolean;
   title: string;
   onClose: () => void;
-  onSubmit: () => void;
+  onSubmit: () => void | Promise<unknown>;
   submitLabel?: string;
   children: ReactNode;
 }) {
+  // Anti double-clic : le bouton reste désactivé tant que l'envoi (sync ou async) tourne.
+  // Hooks AVANT le return conditionnel (leçon React #310).
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   if (!open) return null;
   return (
     <form
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        onSubmit();
+        if (busyRef.current) return;
+        busyRef.current = true;
+        setBusy(true);
+        try {
+          await onSubmit();
+        } finally {
+          busyRef.current = false;
+          setBusy(false);
+        }
       }}
       className="mb-4 rounded-2xl border border-border bg-surface p-5 shadow-sm"
     >
@@ -318,7 +330,8 @@ export function InlineForm({
         {children}
         <button
           type="submit"
-          className="h-[42px] w-full shrink-0 rounded-lg bg-primary px-5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 sm:w-auto"
+          disabled={busy}
+          className="h-[42px] w-full shrink-0 rounded-lg bg-primary px-5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50 sm:w-auto"
         >
           {submitLabel}
         </button>

@@ -3,7 +3,7 @@ import { useSearch, matchQuery } from "@/lib/search";
 import { cn, titleCase } from "@/lib/utils";
 import {
   ArrowRight, Pencil, Trash2, X, UserRound, Package, Wallet, Clock, Trophy,
-  XCircle, Archive, CircleDot, Check, ListChecks, ChevronDown,
+  XCircle, Archive, CircleDot, Check, ListChecks, ChevronDown, RotateCcw, StickyNote,
 } from "lucide-react";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { StatsBento } from "@/components/ui/stats-bento";
@@ -94,6 +94,8 @@ export function Collabs() {
   const [eTitle, setETitle] = useState("");
   const [eDeliverables, setEDeliverables] = useState("");
   const [eCachet, setECachet] = useState("");
+  const [eCreator, setECreator] = useState("");
+  const [eNote, setENote] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -172,12 +174,15 @@ export function Collabs() {
     setETitle(row.title ?? "");
     setEDeliverables(row.deliverables ?? "");
     setECachet(row.cachet ?? "");
+    setECreator(row.creator ?? "");
+    setENote(row.note ?? "");
   };
   const saveEdit = async (id: string) => {
     if (!eBrand.trim()) return toast("Renseigne la marque");
     const patch = {
       brand: eBrand.trim(), contact: eContact.trim() || null, title: eTitle.trim() || null,
       deliverables: eDeliverables.trim() || null, cachet: eCachet.trim() || null,
+      creator: eCreator || null, note: eNote.trim() || null,
     };
     if (!(await dbUpdate("collabs", id, patch))) return toast("Erreur — réessaie");
     setRows((rows ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -213,7 +218,7 @@ export function Collabs() {
     if (await dbTrash("collabs", row.id, row.brand, row.creator || undefined)) {
       setRows((rows ?? []).filter((r) => r.id !== row.id));
       toast("Déplacée dans la corbeille");
-    }
+    } else toast("Erreur, réessaie");
   };
 
   const toggleExpand = (id: string) =>
@@ -254,6 +259,8 @@ export function Collabs() {
             <TextField label="Contact marque" value={eContact} onChange={setEContact} />
             <TextField label="Livrables" value={eDeliverables} onChange={setEDeliverables} placeholder="ex 3 posts · 1 reel" />
             <TextField label="Cachet" value={eCachet} onChange={setECachet} />
+            <SelectField label="Créatrice" value={eCreator} onChange={setECreator} options={creatorOptions} />
+            <AutoGrowTextField label="Note" value={eNote} onChange={setENote} placeholder="Contexte, angle, points d'attention…" />
             <button
               type="button"
               onClick={() => saveEdit(row.id)}
@@ -297,6 +304,7 @@ export function Collabs() {
             <ActionMenu
               items={[
                 { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(row) },
+                ...(row.status !== "active" ? [{ key: "reopen", label: "Remettre en cours", icon: RotateCcw, onClick: () => setStatus(row, "active") }] : []),
                 { key: "won", label: "Marquer gagnée", icon: Trophy, onClick: () => setStatus(row, "gagnee") },
                 { key: "lost", label: "Marquer perdue", icon: XCircle, onClick: () => setStatus(row, "perdue") },
                 { key: "archive", label: "Archiver", icon: Archive, onClick: () => setStatus(row, "archivee") },
@@ -352,6 +360,14 @@ export function Collabs() {
             <div className="mt-1.5 text-[10px] text-faint">Depuis le {frDate(reached)}</div>
           )}
         </div>
+
+        {/* Note de création */}
+        {row.note && (
+          <div className="mt-2 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+            <StickyNote className="mt-0.5 h-3 w-3 shrink-0 text-faint" />
+            <span className="line-clamp-2 whitespace-pre-line">{row.note}</span>
+          </div>
+        )}
 
         {/* Livrables + cachet */}
         {(row.deliverables || row.cachet) && (

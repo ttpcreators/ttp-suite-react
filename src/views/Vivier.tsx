@@ -15,6 +15,7 @@ import GlassStatChart from "@/components/ui/glass-stat-chart";
 import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus } from "lucide-react";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { DateInput } from "@/components/ui/date-range-picker";
+import { todayISO } from "@/lib/dates";
 
 /**
  * VIVIER créateurs (hors roster) : répertoire de créateurs à SOLLICITER pour des
@@ -116,23 +117,34 @@ export function Vivier() {
   const [localTrack, setLocalTrack] = useState<Tracking | null>(null);
   const tracking = localTrack ?? trackData ?? {};
   const [statusFilter, setStatusFilter] = useState<ScoutStatus | "__all__">("__all__");
-  const [snapDate, setSnapDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [snapDate, setSnapDate] = useState(() => todayISO()); // date locale (pas UTC)
   const [snapVal, setSnapVal] = useState("");
 
   const statusOf = (id: string): ScoutStatus => tracking[id]?.status ?? "observation";
   const snapsOf = (id: string): Snap[] => [...(tracking[id]?.snaps ?? [])].sort((a, b) => a.date.localeCompare(b.date));
   const latestFollowers = (id: string): number | null => { const s = snapsOf(id); return s.length ? s[s.length - 1].value : null; };
   const growthOf = (id: string): number => { const s = snapsOf(id); return s.length >= 2 ? s[s.length - 1].value - s[s.length - 2].value : 0; };
-  const mutateTracking = async (id: string, fn: (t: Track) => Track) => {
-    invalidateAppState();
-    const fresh = ((await getAppState())["poolTracking"] as Tracking) ?? {};
-    const next = { ...fresh, [id]: fn(fresh[id] ?? {}) };
-    setLocalTrack(next);
-    if (!(await saveAppStateKey("poolTracking", next))) toast("Erreur — réessaie");
+  // Optimiste avec retour arrière si l'écriture échoue ; toast de succès après la sauvegarde.
+  const mutateTracking = async (id: string, fn: (t: Track) => Track, okMsg?: string) => {
+    const prev = localTrack;
+    try {
+      invalidateAppState();
+      const fresh = ((await getAppState())["poolTracking"] as Tracking) ?? {};
+      const next = { ...fresh, [id]: fn(fresh[id] ?? {}) };
+      setLocalTrack(next);
+      if (await saveAppStateKey("poolTracking", next)) {
+        if (okMsg) toast(okMsg);
+        return;
+      }
+    } catch {
+      /* traité ci-dessous */
+    }
+    setLocalTrack(prev);
+    toast("Erreur — réessaie");
   };
   const setStatus = (id: string, status: ScoutStatus) => mutateTracking(id, (t) => ({ ...t, status }));
   const addSnap = (id: string, date: string, value: number) =>
-    mutateTracking(id, (t) => ({ ...t, snaps: [...(t.snaps ?? []).filter((s) => s.date !== date), { date, value }] }));
+    mutateTracking(id, (t) => ({ ...t, snaps: [...(t.snaps ?? []).filter((s) => s.date !== date), { date, value }] }), "Relevé enregistré ✓");
   const delSnap = (id: string, date: string) =>
     mutateTracking(id, (t) => ({ ...t, snaps: (t.snaps ?? []).filter((s) => s.date !== date) }));
 
@@ -160,10 +172,15 @@ export function Vivier() {
     if (!fName.trim()) { toast("Renseigne le nom du créateur"); return; }
     const payload = { name: fName.trim(), handle: fHandle.trim() || null, email: fEmail.trim() || null, tag: fTag.trim() || null, note: fNote.trim() || null };
     if (editId) {
-      const next = (rows ?? []).map((r) => (r.id === editId ? { ...r, ...payload } : r));
-      setRows(next); setCache("vivier", next); setFormOpen(false);
-      if (!(await dbUpdate("creator_pool", editId, payload))) toast("Erreur — réessaie");
-      else toast("Créateur mis à jour ✓");
+      // Écriture d'abord : la fiche ne se ferme et la liste ne change qu'en cas de succès.
+      if (!(await dbUpdate("creator_pool", editId, payload))) { toast("Erreur — réessaie"); return; }
+      setRows((prev) => {
+        const next = (prev ?? []).map((r) => (r.id === editId ? { ...r, ...payload } : r));
+        setCache("vivier", next);
+        return next;
+      });
+      setFormOpen(false);
+      toast("Créateur mis à jour ✓");
       return;
     }
     const created = await dbInsert("creator_pool", { ...payload, sort_order: nextOrder(rows ?? []) });
@@ -178,7 +195,7 @@ export function Vivier() {
       const next = (rows ?? []).filter((x) => x.id !== r.id);
       setRows(next); setCache("vivier", next);
       toast("Déplacé dans la corbeille");
-    }
+    } else toast("Erreur, réessaie");
   };
 
   const openMail = (r: Row) => {
@@ -200,8 +217,8 @@ export function Vivier() {
       const when = new Date().toISOString();
       const next = (rows ?? []).map((r) => (r.id === mailRow.id ? { ...r, last_contacted: when } : r));
       setRows(next); setCache("vivier", next);
-      dbUpdate("creator_pool", mailRow.id, { last_contacted: when }).catch(() => {});
-      toast(`Email envoyé à ${mailRow.name} ✓`);
+      const saved = await dbUpdate("creator_pool", mailRow.id, { last_contacted: when }).catch(() => false);
+      toast(saved ? `Email envoyé à ${mailRow.name} ✓` : `Email envoyé à ${mailRow.name}, mais le suivi n'a pas été enregistré`);
       setMailRow(null);
     } finally {
       setSending(false);
@@ -404,7 +421,7 @@ export function Vivier() {
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <DateInput value={snapDate} onChange={setSnapDate} clearable={false} className="rounded-lg border border-border bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-primary" />
                 <input value={snapVal} onChange={(e) => setSnapVal(e.target.value)} inputMode="numeric" placeholder="Abonnés (ex : 225909 · 226K)" className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] outline-none focus:border-primary" />
-                <button type="button" onClick={() => { const v = parseFol(snapVal); if (!v) { toast("Renseigne un nombre d'abonnés"); return; } addSnap(selected.id, snapDate, v); setSnapVal(""); toast("Relevé enregistré ✓"); }} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90" title="Ajouter le relevé">
+                <button type="button" onClick={() => { const v = parseFol(snapVal); if (!v) { toast("Renseigne un nombre d'abonnés"); return; } void addSnap(selected.id, snapDate, v); setSnapVal(""); }} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90" title="Ajouter le relevé">
                   <Plus className="h-4 w-4" />
                 </button>
               </div>

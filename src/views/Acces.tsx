@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Trash2, RefreshCw } from "lucide-react";
+import { Trash2, RefreshCw, Copy, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
@@ -16,7 +16,8 @@ import { PageHeaderRow } from "@/components/ui/page-header";
 
 type AccessAccount = {
   email: string;
-  pwd: string;
+  /** ANCIEN champ (mot de passe en clair) : n'est plus jamais écrit, retiré à chaque sauvegarde. */
+  pwd?: string;
   role: "creator" | "agency";
   /** Niveau agence : 'founder' (accès total) | 'member' (tout sauf Finance & Accès). */
   level?: "founder" | "member";
@@ -39,8 +40,16 @@ function genPwd(): string {
   return `${pick(a, 2)}${pick(b, 4)}${pick(n, 3)}!`;
 }
 
+/** Retire tout mot de passe en clair avant d'écrire la liste. */
+function stripPwd(list: AccessAccount[]): AccessAccount[] {
+  return list.map((a) => {
+    const copy = { ...a };
+    delete copy.pwd;
+    return copy;
+  });
+}
+
 function AccountRow({ a, onDelete, photoUrl }: { a: AccessAccount; onDelete: (a: AccessAccount) => void; photoUrl?: string | null }) {
-  const [shown, setShown] = useState(false);
   const avatarSource = a.role === "creator" && a.creator ? titleCase(a.creator) : a.email;
   const subtitle =
     a.role === "creator"
@@ -70,28 +79,9 @@ function AccountRow({ a, onDelete, photoUrl }: { a: AccessAccount; onDelete: (a:
       )}
 
       <div className="flex shrink-0 items-center gap-2">
-        <span className="min-w-[7ch] text-right font-mono text-xs tracking-wide text-muted-foreground">
-          {shown ? a.pwd : "••••••"}
-        </span>
-        <button
-          type="button"
-          onClick={() => setShown((s) => !s)}
-          aria-label={shown ? "Masquer le mot de passe" : "Révéler le mot de passe"}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
-        >
-          {shown ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-        </button>
+        {/* Mot de passe plus affiché ni stocké : montré une seule fois à la création. */}
         <ActionMenu
           items={[
-            {
-              key: "copy",
-              label: "Copier le mot de passe",
-              icon: RefreshCw,
-              onClick: () => {
-                navigator.clipboard?.writeText(a.pwd);
-                toast("Mot de passe copié ✓");
-              },
-            },
             {
               key: "del",
               label: "Retirer de la liste",
@@ -133,6 +123,16 @@ export function Acces() {
   const [agencyLevel, setAgencyLevel] = useState<"founder" | "member">("member");
   const [creatorName, setCreatorName] = useState("");
   const [busy, setBusy] = useState(false);
+  // Override local (comme Échéances) : la liste se met à jour tout de suite après
+  // création / retrait, puis le live reprend dès que la donnée du blob change.
+  const [local, setLocal] = useState<AccessAccount[] | null>(null);
+  useEffect(() => {
+    setLocal(null);
+  }, [accounts]);
+  // Identifiants à montrer UNE fois après création (jamais persistés).
+  const [created, setCreated] = useState<{ email: string; pwd: string } | null>(null);
+  // Compte créé mais liste non enregistrée : on peut réessayer sans recréer le compte.
+  const [pendingEntry, setPendingEntry] = useState<AccessAccount | null>(null);
 
   const resetForm = () => {
     setEmail("");
@@ -178,40 +178,70 @@ export function Acces() {
         toast(map[res?.error ?? ""] ?? "Création du compte échouée — réessaie");
         return;
       }
-      // 2) Ajoute la fiche à la liste (blob agence, relu FRAIS avant fusion).
-      invalidateAppState();
-      const fresh = ((await getAppState())["accessAccounts"] as AccessAccount[]) ?? [];
+      // 2) Identifiants montrés une seule fois, puis ajout de la fiche (sans mot de passe).
+      setCreated({ email: mail, pwd });
       const entry: AccessAccount = {
         email: mail,
-        pwd,
         role,
         level: role === "agency" ? agencyLevel : undefined,
         creator: role === "creator" ? creatorName : undefined,
         cloud: "ok",
       };
-      const next = [entry, ...fresh.filter((a) => a.email.toLowerCase() !== mail)];
-      const ok = await saveAppStateKey("accessAccounts", next);
-      if (!ok) {
-        toast("Compte créé, mais liste non enregistrée — réessaie");
-        return;
-      }
-      toast("Accès créé ✓ — le créateur peut se connecter");
       setFormOpen(false);
       resetForm();
+      await saveEntry(entry);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Ajoute la fiche à la liste (blob agence, relu FRAIS avant fusion).
+  const saveEntry = async (entry: AccessAccount): Promise<boolean> => {
+    let ok = false;
+    try {
+      invalidateAppState();
+      const fresh = ((await getAppState())["accessAccounts"] as AccessAccount[]) ?? [];
+      const next = stripPwd([entry, ...fresh.filter((a) => a.email.toLowerCase() !== entry.email)]);
+      ok = await saveAppStateKey("accessAccounts", next);
+      if (ok) setLocal(next);
+    } catch {
+      ok = false;
+    }
+    if (!ok) {
+      setPendingEntry(entry);
+      toast("Compte créé, mais liste non enregistrée. Utilise « Réessayer ».");
+      return false;
+    }
+    setPendingEntry(null);
+    toast("Accès créé ✓ Le créateur peut se connecter");
+    return true;
+  };
+
+  const retryPending = async () => {
+    if (!pendingEntry || busy) return;
+    setBusy(true);
+    try {
+      await saveEntry(pendingEntry);
     } finally {
       setBusy(false);
     }
   };
 
   const removeAccount = async (a: AccessAccount) => {
-    invalidateAppState();
-    const fresh = ((await getAppState())["accessAccounts"] as AccessAccount[]) ?? [];
-    const next = fresh.filter((x) => x.email.toLowerCase() !== a.email.toLowerCase());
-    const ok = await saveAppStateKey("accessAccounts", next);
-    toast(ok ? "Accès retiré de la liste" : "Erreur — réessaie");
+    let ok = false;
+    try {
+      invalidateAppState();
+      const fresh = ((await getAppState())["accessAccounts"] as AccessAccount[]) ?? [];
+      const next = stripPwd(fresh.filter((x) => x.email.toLowerCase() !== a.email.toLowerCase()));
+      ok = await saveAppStateKey("accessAccounts", next);
+      if (ok) setLocal(next);
+    } catch {
+      ok = false;
+    }
+    toast(ok ? "Accès retiré de la liste" : "Erreur, réessaie");
   };
 
-  const rows = accounts ?? [];
+  const rows = local ?? accounts ?? [];
   const filtered = rows.filter((a) => matchQuery(query, a.email, a.creator));
 
   const form = (
@@ -293,6 +323,70 @@ export function Acces() {
       </PageHeaderRow>
 
       {form}
+
+      {/* Identifiants affichés une seule fois (non stockés dans l'app). */}
+      {created && (
+        <div className="mb-4 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[13px] font-semibold text-foreground">Identifiants à transmettre</div>
+              <div className="mt-0.5 text-[11px] text-faint">
+                Le mot de passe n'est pas conservé dans l'app : copie-le maintenant.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCreated(null)}
+              aria-label="Fermer"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="truncate text-sm text-foreground">{created.email}</span>
+            <span className="rounded-md bg-rowhover px-2 py-1 font-mono text-xs tracking-wide text-foreground">{created.pwd}</span>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard
+                  ?.writeText(`${created.email}\n${created.pwd}`)
+                  .then(() => toast("Identifiants copiés ✓"))
+                  .catch(() => toast("Copie impossible"));
+              }}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            >
+              <Copy className="h-3.5 w-3.5" /> Copier
+            </button>
+          </div>
+          {pendingEntry && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-rose-500">
+              Compte créé mais pas encore ajouté à la liste.
+              <button
+                type="button"
+                onClick={retryPending}
+                disabled={busy}
+                className="rounded-lg border border-border px-2.5 py-1.5 font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+              >
+                Réessayer
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {!created && pendingEntry && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-4 text-[12px] text-rose-500 shadow-sm">
+          Compte {pendingEntry.email} créé mais pas encore ajouté à la liste.
+          <button
+            type="button"
+            onClick={retryPending}
+            disabled={busy}
+            className="rounded-lg border border-border px-2.5 py-1.5 font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+          >
+            Réessayer
+          </button>
+        </div>
+      )}
 
       {error ? (
         <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">

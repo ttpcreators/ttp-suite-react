@@ -72,9 +72,20 @@ export function Sidebar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pinned, hidden]);
   // Sidebar repliable en rail d'icônes (mémorisé).
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("ttp:sidebar-collapsed") === "1");
+  // try/catch : localStorage lève une exception quand le stockage est bloqué.
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("ttp:sidebar-collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
   useEffect(() => {
-    localStorage.setItem("ttp:sidebar-collapsed", collapsed ? "1" : "0");
+    try {
+      localStorage.setItem("ttp:sidebar-collapsed", collapsed ? "1" : "0");
+    } catch {
+      /* stockage indisponible */
+    }
   }, [collapsed]);
 
   // ── Rail replié : logo + icônes seules (tooltip au survol) + pied ──

@@ -176,8 +176,11 @@ function ItemBlock({
   const childActive = hasChildren && parentActive && item.children!.some((c) => c.id === activeSub);
   const storageKey = `ttp:sb-item:${item.id}`;
   const [open, setOpen] = useState(() => {
-    if (typeof localStorage === "undefined") return true;
-    return localStorage.getItem(storageKey) !== "0"; // défaut : ouvert
+    try {
+      return localStorage.getItem(storageKey) !== "0"; // défaut : ouvert
+    } catch {
+      return true; // stockage indisponible
+    }
   });
   // La page active rouvre toujours son item (navigation / recherche).
   useEffect(() => {

@@ -30,7 +30,11 @@ type PayoutsMap = Record<string, Payout[]>;
 const DEFAULT_COMMISSION = 20;
 let _uid = 0;
 const uid = () => `pay${Date.now().toString(36)}${(_uid += 1)}`;
-const todayISO = () => new Date().toISOString().slice(0, 10);
+// Date LOCALE (toISOString = UTC → la veille entre minuit et 2 h en France)
+const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 
 type Row = {
   creator: string;
@@ -53,6 +57,11 @@ export function Reversements() {
 
   const commissions = (app?.creatorCommission as Record<string, number>) ?? {};
   const payoutsMap: PayoutsMap = localPayouts ?? ((app?.creatorPayouts as PayoutsMap) ?? {});
+  // Le blob live a changé (autre poste, realtime) : il redevient la source de vérité
+  const livePayouts = app?.creatorPayouts;
+  useEffect(() => {
+    setLocalPayouts(null);
+  }, [livePayouts]);
 
   useEffect(() => {
     let alive = true;
@@ -138,9 +147,10 @@ export function Reversements() {
     invalidateAppState();
     const fresh = ((await getAppState())["creatorPayouts"] as PayoutsMap) ?? {};
     const next: PayoutsMap = { ...fresh, [creator]: fn(fresh[creator] ?? []) };
-    setLocalPayouts(next);
     const ok = await saveAppStateKey("creatorPayouts", next);
-    if (!ok) toast("Erreur — réessaie");
+    // État local appliqué SEULEMENT après écriture réussie (argent : pas d'affichage fantôme)
+    if (ok) setLocalPayouts(next);
+    else toast("Erreur, réessaie");
     return ok;
   };
 
@@ -157,15 +167,18 @@ export function Reversements() {
     setNote("");
   };
   const submitPayout = async (creator: string) => {
-    const n = Number(amt.replace(",", ".")) || 0;
+    const n = parseAmount(amt);
     if (n <= 0) {
       toast("Montant invalide");
       return;
     }
     const entry: Payout = { id: uid(), date: date || todayISO(), amount: n, note: note.trim() || undefined };
-    setOpenFor(null);
     const ok = await mutatePayouts(creator, (arr) => [entry, ...arr]);
-    if (ok) toast("Paiement enregistré ✓");
+    // Échec : le formulaire reste ouvert (saisie conservée)
+    if (ok) {
+      setOpenFor(null);
+      toast("Paiement enregistré ✓");
+    }
   };
   const removePayout = async (creator: string, id: string) => {
     const ok = await mutatePayouts(creator, (arr) => arr.filter((p) => p.id !== id));

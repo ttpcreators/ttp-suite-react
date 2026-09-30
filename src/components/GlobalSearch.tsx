@@ -43,22 +43,27 @@ export function GlobalSearch({
   setQuery,
   onOpenCreator,
   onGoto,
+  hidden = [],
 }: {
   query: string;
   setQuery: (q: string) => void;
   onOpenCreator: (name: string) => void;
   onGoto: (id: ViewId) => void;
+  /** Pages masquées pour ce profil (ex. Finance / Accès pour un membre). */
+  hidden?: ViewId[];
 }) {
   const [open, setOpen] = useState(false);
   // Texte d'aide court sur mobile (le long était tronqué au milieu d'un mot).
   const [narrow] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
-  const { hits, loading } = useGlobalSearch(query);
+  const { hits: rawHits, loading } = useGlobalSearch(query);
+  // Résultats menant à une page masquée : retirés (jamais de page fondateur pour un membre).
+  const hits = rawHits.filter((h) => { const v = KIND_META[h.kind].view; return !v || !hidden.includes(v); });
   const show = open && query.trim().length >= 2;
 
   const q = norm(query.trim());
   const pageHits =
     q.length >= 2
-      ? PAGES.filter((p) => norm(p.label).includes(q) || (PAGE_ALIASES[p.id] ?? []).some((a) => norm(a).includes(q))).slice(0, 5)
+      ? PAGES.filter((p) => !hidden.includes(p.id)).filter((p) => norm(p.label).includes(q) || (PAGE_ALIASES[p.id] ?? []).some((a) => norm(a).includes(q))).slice(0, 5)
       : [];
 
   const gotoPage = (id: ViewId) => {

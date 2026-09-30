@@ -90,7 +90,11 @@ function fmtDT(iso: string): string {
   return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) +
     " " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 }
-const todayISO = () => new Date().toISOString().slice(0, 10);
+// Date LOCALE (toISOString = UTC → la veille entre minuit et 2 h en France).
+const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 
 /** Carte de section : icône, titre, compteur, repliable. */
 function Section({ icon: Icon, title, count, children, collapsible = false, defaultOpen = true }: {
@@ -161,6 +165,7 @@ export function AgentView() {
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [leconOpen, setLeconOpen] = useState(false);
+  const [leconBusy, setLeconBusy] = useState(false);
   const [leconModule, setLeconModule] = useState("");
   const [leconTexte, setLeconTexte] = useState("");
 
@@ -201,13 +206,14 @@ export function AgentView() {
 
   // ── mutations (schéma agent) + trace dans le journal pour l'agent ──
   const upd = async (table: string, id: string, patch: Record<string, unknown>): Promise<boolean> => {
-    const { error } = await supabase.schema("agent").from(table).update(patch).eq("id", id);
-    if (error) { toast("Erreur, réessaie"); return false; }
+    // .select("id") : 0 ligne touchée (RLS / ligne absente) = échec, pas un faux succès.
+    const { data, error } = await supabase.schema("agent").from(table).update(patch).eq("id", id).select("id");
+    if (error || !data?.length) { toast("Erreur, réessaie"); return false; }
     return true;
   };
   const del = async (table: string, id: string): Promise<boolean> => {
-    const { error } = await supabase.schema("agent").from(table).delete().eq("id", id);
-    if (error) { toast("Erreur, réessaie"); return false; }
+    const { data, error } = await supabase.schema("agent").from(table).delete().eq("id", id).select("id");
+    if (error || !data?.length) { toast("Erreur, réessaie"); return false; }
     return true;
   };
   const log = (action: string, detail: string) => {
@@ -311,9 +317,12 @@ export function AgentView() {
     toast("Info supprimée ✓");
   };
   const ajouterLecon = async () => {
+    if (leconBusy) return; // garde anti double envoi (Entrée + clic)
     if (!leconTexte.trim()) return toast("Écris la leçon d'abord");
     const row = { module: leconModule.trim() || null, lecon: leconTexte.trim() };
+    setLeconBusy(true);
     const { data, error } = await supabase.schema("agent").from("lecons").insert(row).select();
+    setLeconBusy(false);
     if (error || !data?.[0]) return toast("Erreur, réessaie");
     setLecons((xs) => [data[0] as Lecon, ...xs]);
     log("marc_lecon", row.lecon.slice(0, 80));
@@ -596,8 +605,8 @@ export function AgentView() {
               <div className="flex items-center gap-2">
                 <button type="button" onClick={() => setLeconOpen(false)}
                   className="h-[36px] rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground hover:bg-rowhover">Annuler</button>
-                <button type="button" onClick={ajouterLecon}
-                  className="h-[36px] rounded-lg bg-primary px-4 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">Ajouter</button>
+                <button type="button" onClick={ajouterLecon} disabled={leconBusy}
+                  className="h-[36px] rounded-lg bg-primary px-4 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">Ajouter</button>
               </div>
             </div>
           ) : (

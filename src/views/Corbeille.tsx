@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RotateCcw, Trash2, Clock } from "lucide-react";
 import { useAppState, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
@@ -21,9 +21,17 @@ export function Corbeille() {
   const bin = local ?? data ?? [];
   const [confirmEmpty, setConfirmEmpty] = useState(false);
 
-  // Purge automatique des entrées de plus de 30 jours, au chargement.
+  // Nouvelles données live → on abandonne l'override local (sinon figé).
   useEffect(() => {
-    if (!data) return;
+    setLocal(null);
+  }, [data]);
+
+  // Purge automatique des entrées de plus de 30 jours, au chargement (une fois :
+  // readBin relit le blob à chaque appel, inutile de le refaire à chaque tick).
+  const purgedRef = useRef(false);
+  useEffect(() => {
+    if (!data || purgedRef.current) return;
+    purgedRef.current = true;
     let alive = true;
     purgeExpired(data).then((cleaned) => {
       if (alive && cleaned) setLocal(cleaned);
@@ -34,22 +42,35 @@ export function Corbeille() {
   }, [data]);
 
   const restore = async (e: TrashEntry) => {
-    if (await restoreEntry(e)) {
-      setLocal(bin.filter((x) => x.id !== e.id));
-      toast(`${TABLE_LABELS[e.table] ?? "Élément"} restauré ✓`);
+    const res = await restoreEntry(e);
+    if (res === "failed") {
+      toast("Restauration impossible, réessaie");
+      return;
+    }
+    setLocal(bin.filter((x) => x.id !== e.id));
+    if (res === "partial") {
+      // Ligne ré-insérée mais toujours listée dans la corbeille : ne pas la restaurer 2 fois.
+      toast("Élément restauré, mais son retrait de la corbeille a échoué. Ne le restaure pas une 2e fois.");
     } else {
-      toast("Restauration impossible — réessaie");
+      toast(`${TABLE_LABELS[e.table] ?? "Élément"} restauré ✓`);
     }
   };
   const purge = async (e: TrashEntry) => {
-    await purgeEntry(e.id);
+    if (!(await purgeEntry(e.id))) {
+      toast("Suppression impossible, réessaie");
+      return;
+    }
     setLocal(bin.filter((x) => x.id !== e.id));
     toast("Supprimé définitivement");
   };
   const clearAll = async () => {
-    await emptyTrash();
-    setLocal([]);
+    const ok = await emptyTrash();
     setConfirmEmpty(false);
+    if (!ok) {
+      toast("Impossible de vider la corbeille, réessaie");
+      return;
+    }
+    setLocal([]);
     toast("Corbeille vidée");
   };
 

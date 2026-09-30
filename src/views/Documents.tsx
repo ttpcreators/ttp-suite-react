@@ -70,6 +70,10 @@ type FileKind = "image" | "pdf" | "html" | "other";
 /** Fichier HTML (ex : contrats générés) — repéré à l'extension du chemin de stockage. */
 const isHtmlPath = (p: string) => /\.html?$/i.test(p);
 
+/** Media kit ajouté PAR LIEN (Drive, Canva…) : le `path` est une URL http(s),
+ *  pas un fichier du bucket → on l'ouvre/partage tel quel, rien à supprimer. */
+const isExternalUrl = (p: string) => /^https?:\/\//i.test(p);
+
 /**
  * Rend du HTML dans un onglet, MAIS dans une iframe `sandbox` (scripts désactivés) :
  * un fichier HTML uploadé (média-kit d'une marque, etc.) ne doit jamais exécuter de
@@ -145,6 +149,7 @@ export function Documents() {
   }, [live]);
 
   const submit = async () => {
+    if (busy) return; // double clic → pas de double upload
     const file = fileRef.current?.files?.[0];
     if (!file) {
       toast("Choisis un fichier");
@@ -173,7 +178,10 @@ export function Documents() {
     const created = await dbInsert("documents", row);
     setBusy(false);
     if (!created) {
-      toast("Fichier envoyé mais fiche non créée");
+      // Fiche non créée : on retire le fichier envoyé pour ne pas laisser d'orphelin.
+      const { error: rmErr } = await supabase.storage.from("documents").remove([path]);
+      if (rmErr) console.warn("[documents] nettoyage fichier orphelin", path, rmErr.message);
+      toast("Échec de l'enregistrement, réessaie");
       return;
     }
     setRows([created as unknown as Row, ...(rows ?? [])]);
@@ -190,6 +198,10 @@ export function Documents() {
   const openDoc = async (row: Row) => {
     if (!row.path) {
       toast("Fichier indisponible");
+      return;
+    }
+    if (isExternalUrl(row.path)) {
+      window.open(row.path, "_blank", "noopener");
       return;
     }
     const html = isHtmlPath(row.path);
@@ -230,6 +242,11 @@ export function Documents() {
       toast("Fichier indisponible");
       return;
     }
+    if (isExternalUrl(row.path)) {
+      // Lien externe (Drive, Canva…) : souvent non intégrable en iframe → carte « Ouvrir ».
+      setPreviewDoc({ name: row.name, url: row.path, kind: "other" });
+      return;
+    }
     const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.path, 3600);
     if (error || !data?.signedUrl) {
       toast("Aperçu indisponible");
@@ -255,13 +272,17 @@ export function Documents() {
       toast("Fichier indisponible");
       return;
     }
-    // Lien signé longue durée (7 j) — partageable
-    const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.path, 60 * 60 * 24 * 7);
-    if (error || !data?.signedUrl) {
-      toast("Lien de partage indisponible");
-      return;
+    const external = isExternalUrl(row.path);
+    let url = row.path;
+    if (!external) {
+      // Lien signé longue durée (7 j) — partageable
+      const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.path, 60 * 60 * 24 * 7);
+      if (error || !data?.signedUrl) {
+        toast("Lien de partage indisponible");
+        return;
+      }
+      url = data.signedUrl;
     }
-    const url = data.signedUrl;
     if (navigator.share) {
       try {
         await navigator.share({ title: row.name, url });
@@ -272,7 +293,7 @@ export function Documents() {
     }
     try {
       await navigator.clipboard.writeText(url);
-      toast("Lien copié (valable 7 j) ✓");
+      toast(external ? "Lien copié ✓" : "Lien copié (valable 7 j) ✓");
     } catch {
       window.prompt("Copie ce lien de partage :", url);
     }
@@ -283,7 +304,7 @@ export function Documents() {
       toast("Erreur — réessaie");
       return;
     }
-    if (row.path) {
+    if (row.path && !isExternalUrl(row.path)) {
       const { error: rmErr } = await supabase.storage.from("documents").remove([row.path]);
       if (rmErr) console.error("Suppression du fichier stocké échouée:", rmErr);
     }

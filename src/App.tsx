@@ -312,10 +312,9 @@ export default function App() {
   const [profileError, setProfileError] = useState(false);
   const [profileReload, setProfileReload] = useState(0);
   // Niveau agence : 'founder' (Marc & Gianni, accès total) | 'member' (tout sauf
-  // Finance & Accès). Défaut 'founder' → jamais de lockout tant que le SQL n'est pas
-  // lancé (aucun membre n'existe avant la migration). Chargé à part = tolérant si la
-  // colonne agency_role n'existe pas encore.
-  const [agencyRole, setAgencyRole] = useState<string>("founder");
+  // Finance & Accès). Défaut 'pending' (non fondateur) : les pages fondateur restent
+  // masquées tant que le rôle n'est pas chargé, et aussi en cas d'erreur.
+  const [agencyRole, setAgencyRole] = useState<string>("pending");
 
   // Navigue l'onglet COURANT vers `id` (comme un lien dans Chrome) : remplace la
   // page de l'onglet actif, ou bascule dessus s'il est déjà ouvert.
@@ -404,20 +403,23 @@ export default function App() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // Rôle de l'utilisateur connecté (agence vs créateur)
+  // Rôle de l'utilisateur connecté (agence vs créateur). Clé = id utilisateur (pas
+  // l'objet session, renouvelé à chaque rafraîchissement du jeton).
+  const uid = session ? session.user.id : session;
   useEffect(() => {
-    if (!session) {
-      setProfile(session === null ? null : undefined);
-      return;
-    }
+    // Nouvelle session : on repart de zéro → le rôle de l'utilisateur précédent ne
+    // fuit jamais et le spinner s'affiche avant la coque.
+    setProfile(uid === null ? null : undefined);
+    setAgencyRole("pending");
+    if (!uid) return;
     let alive = true;
     let attempt = 0;
     setProfileError(false);
     const load = () => {
       supabase
         .from("profiles")
-        .select("role,creator_name")
-        .eq("user_id", session.user.id)
+        .select("role,creator_name,agency_role")
+        .eq("user_id", uid)
         .maybeSingle()
         .then(({ data, error }) => {
           if (!alive) return;
@@ -435,35 +437,17 @@ export default function App() {
             }
             return;
           }
-          // Pas d'erreur : une ligne absente = compte sans profil = espace agence.
-          const row = data as { role: string; creator_name: string | null } | null;
-          setProfile(row ?? { role: "agency", creator_name: null });
+          // Ligne absente = compte non rattaché (écran dédié, jamais la coque agence).
+          const row = data as { role: string; creator_name: string | null; agency_role?: string | null } | null;
+          setAgencyRole(row?.agency_role || "member");
+          setProfile(row ? { role: row.role, creator_name: row.creator_name } : { role: "none", creator_name: null });
         });
     };
     load();
     return () => {
       alive = false;
     };
-  }, [session, profileReload]);
-
-  // Niveau agence (fondateur/membre) — requête séparée & tolérante (colonne récente).
-  useEffect(() => {
-    if (!session) return;
-    let alive = true;
-    supabase
-      .from("profiles")
-      .select("agency_role")
-      .eq("user_id", session.user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!alive || error || !data) return;
-        const r = (data as { agency_role?: string | null }).agency_role;
-        if (r) setAgencyRole(r);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [session, profileReload]);
+  }, [uid, profileReload]);
 
   // Audit de santé auto (matin/soir) : au chargement, si le dernier date de +8 h.
   // Réservé au fondateur (les checks lisent des données finance/RLS).
@@ -619,6 +603,36 @@ export default function App() {
     );
   }
 
+  // Compte sans profil, créateur sans nom rattaché ou rôle inconnu : pas de coque agence.
+  if (!profile || profile.role !== "agency") {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background px-6">
+        <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
+          <p className="text-sm font-semibold text-foreground">Compte non rattaché</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Ton compte n'est pas encore relié à un espace. Contacte ton agence pour qu'elle termine la configuration.
+          </p>
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => setProfileReload((n) => n + 1)}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              Réessayer
+            </button>
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-rowhover"
+            >
+              Se déconnecter
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Portail créateur (mode agence) : on rend le VRAI espace créateur en PLEIN ÉCRAN
   // (mêmes onglets/données via RLS agence) avec une bannière de sortie + un sélecteur.
   // → visualiser l'espace d'un créateur sans se déconnecter.
@@ -659,7 +673,7 @@ export default function App() {
         </div>
       </div>
       {/* recherche globale (filtre + navigation) */}
-      <GlobalSearch query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} />
+      <GlobalSearch query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={hiddenIds} />
       {/* right cluster */}
       <div className="ml-auto flex shrink-0 items-center gap-2.5">
         {/* Carte profil : tablette seulement (sur ordinateur, elle est en bas de la sidebar) */}
@@ -818,6 +832,8 @@ export default function App() {
                           </div>
                         );
                       })}
+                      {/* Onglet réservé aux fondateurs (non monté pour un membre) : message au lieu d'une page vide */}
+                      {!overlayActive && !canSee(active) && accessDenied}
                       {overlayActive && (
                         <ErrorBoundary variant="inline" label="Cette page" resetKey={`${space}:${detailCreator ?? ""}`}>
                           <Suspense fallback={PANE_FALLBACK}>{mainInner}</Suspense>

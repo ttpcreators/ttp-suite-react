@@ -61,7 +61,7 @@ const PAGES: { icon: LucideIcon; label: string; desc: string }[] = [
   { icon: Receipt, label: "Facturation", desc: "Tes factures et leur statut ; dépose une facture si besoin." },
   { icon: Gift, label: "Gifting", desc: "Le suivi des cadeaux et dotations reçus des marques." },
   { icon: CalendarDays, label: "Planning", desc: "Le calendrier partagé : rendez-vous, échéances, tournages." },
-  { icon: ContactIcon, label: "Contacts", desc: "Les contacts utiles partagés par l'agence." },
+  { icon: ContactIcon, label: "Contacts", desc: "Tes contacts de marques : ajoute-les ici, ton agence les voit aussi." },
 ];
 
 export function CreatorGuide({

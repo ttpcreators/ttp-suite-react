@@ -55,6 +55,7 @@ function fmtCompact(n: number): string {
 import { AvatarUpload } from "@/components/ui/avatar-upload";
 import { EditorialProfileCard, MonthlyTracking, JournalCard, CreatorAlerts } from "@/views/CreatorTracking";
 import { DateInput } from "@/components/ui/date-range-picker";
+import { SelectField } from "@/components/ui/form";
 
 type Creator = {
   id: string;
@@ -84,7 +85,15 @@ type Td = { id: string; text: string; done: boolean };
 type Br = { brand: string; deliverables: string | null; due: string | null };
 type Idea = { text: string };
 
-type Coord = Pick<Creator, "ville" | "phone" | "email" | "address" | "siren" | "birth" | "email_pro" | "instagram" | "tiktok" | "commission" | "handle" | "niche" | "platform">;
+type Coord = Pick<Creator, "ville" | "phone" | "email" | "address" | "siren" | "birth" | "email_pro" | "instagram" | "tiktok" | "commission" | "handle" | "niche" | "platform" | "status">;
+
+/** Statuts du roster (mêmes valeurs que Roster.tsx). */
+const STATUS_OPTIONS = [
+  { value: "actif", label: "Actif" },
+  { value: "live", label: "Live" },
+  { value: "pause", label: "Pause" },
+  { value: "inactif", label: "Inactif" },
+];
 
 /** Construit l'objet de formulaire éditable à partir d'une fiche (ou vide). */
 function coordOf(c: Creator | null): Coord {
@@ -101,6 +110,7 @@ function coordOf(c: Creator | null): Coord {
     handle: c?.handle ?? "",
     niche: c?.niche ?? "",
     platform: c?.platform ?? "",
+    status: (c?.status ?? "actif").toLowerCase(),
     birth: toISODate(c?.birth),
   };
 }
@@ -248,8 +258,23 @@ export function CreatorDetail({
     };
   }, [name, live]);
 
+  // Gardes anti double envoi (double clic sur Enregistrer).
+  const [savingInfo, setSavingInfo] = useState(false);
+  const [savingCt, setSavingCt] = useState(false);
   const save = async () => {
-    if (!c) return;
+    if (savingInfo) return;
+    if (!c) {
+      toast("Fiche non chargée, réessaie dans un instant");
+      return;
+    }
+    setSavingInfo(true);
+    try {
+      await doSave(c);
+    } finally {
+      setSavingInfo(false);
+    }
+  };
+  const doSave = async (c: Creator) => {
     const patch: Partial<Creator> = { ...form };
     // Date de naissance legacy en texte libre illisible : le champ date arrive
     // vide (toISODate a renvoyé "") → on la PRÉSERVE au lieu de l'effacer.
@@ -284,7 +309,21 @@ export function CreatorDetail({
     setCtEditing(true);
   };
   const saveContract = async () => {
-    const months = Math.max(1, parseInt(ctMonths, 10) || 0);
+    if (savingCt) return;
+    const months = parseInt(ctMonths, 10);
+    // Durée vide / 0 / négative : refusée (avant, retombait silencieusement sur 1 mois).
+    if (!Number.isFinite(months) || months < 1) {
+      toast("Indique une durée d'au moins 1 mois");
+      return;
+    }
+    setSavingCt(true);
+    try {
+      await doSaveContract(months);
+    } finally {
+      setSavingCt(false);
+    }
+  };
+  const doSaveContract = async (months: number) => {
     const start = ctStart || todayISO();
     // Relit le blob FRAIS : si `deadlines` n'était pas encore chargé, écrire
     // depuis l'état local effacerait toutes les échéances des autres créateurs.
@@ -572,7 +611,8 @@ export function CreatorDetail({
                 <button
                   type="button"
                   onClick={save}
-                  className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                  disabled={savingInfo}
+                  className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   <Check className="h-3.5 w-3.5" /> Enregistrer
                 </button>
@@ -617,6 +657,12 @@ export function CreatorDetail({
               {field("Pseudo (@)", "handle")}
               {field("Niche", "niche")}
               {field("Plateforme", "platform")}
+              <SelectField
+                label="Statut"
+                value={form.status ?? "actif"}
+                onChange={(v) => setForm((f) => ({ ...f, status: v }))}
+                options={STATUS_OPTIONS}
+              />
               {field("Ville", "ville")}
               {field("Téléphone", "phone")}
               {field("Email perso", "email")}
@@ -683,6 +729,7 @@ export function CreatorDetail({
                 <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Durée (mois)</div>
                 <input
                   type="number"
+                  min={1}
                   value={ctMonths}
                   onChange={(e) => setCtMonths(e.target.value)}
                   className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
@@ -702,7 +749,8 @@ export function CreatorDetail({
               <button
                 type="button"
                 onClick={saveContract}
-                className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                disabled={savingCt}
+                className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 <Check className="h-3.5 w-3.5" /> Enregistrer
               </button>

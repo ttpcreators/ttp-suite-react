@@ -168,11 +168,16 @@ type Draft = {
   type: string;
   who: string;
   description: string;
+  /** Lecture seule (ex. évènement partagé que l'utilisateur ne peut pas modifier). */
+  readOnly?: boolean;
 };
 
 function emptyDraft(date: string): Draft {
   return { id: null, date, time: "", title: "", type: "call", who: "", description: "" };
 }
+
+/** Résultat d'un callback : false = échec (la modale reste ouverte), sinon succès. */
+type CbResult = void | boolean | Promise<void | boolean>;
 
 export function EventCalendar({
   events,
@@ -181,11 +186,18 @@ export function EventCalendar({
   onDelete,
   onNavigate,
   creators = [],
+  isReadOnly,
+  fixedWho,
 }: {
   events: Ev[];
-  onCreate: (e: Omit<Ev, "id">) => void;
-  onUpdate: (id: string, patch: Partial<Ev>) => void;
-  onDelete: (id: string) => void;
+  /** Peuvent renvoyer false (ou Promise<false>) en cas d'échec : la modale reste ouverte. */
+  onCreate: (e: Omit<Ev, "id">) => CbResult;
+  onUpdate: (id: string, patch: Partial<Ev>) => CbResult;
+  onDelete: (id: string) => CbResult;
+  /** Évènement ouvert en lecture seule (pas d'enregistrement ni de suppression). */
+  isReadOnly?: (e: Ev) => boolean;
+  /** « Avec qui » imposé (champ masqué, jamais vidé) : ex. espace créateur. */
+  fixedWho?: string;
   /** Clic sur une échéance brief/to-do/facture (lecture seule) → navigation vers sa page. */
   onNavigate?: (kind: "brief" | "todo" | "facture") => void;
   creators?: { name: string }[];
@@ -198,6 +210,7 @@ export function EventCalendar({
   });
   const [view, setView] = useState<View>("month");
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [busy, setBusy] = useState(false); // enregistrement / suppression en cours
   // Filtres de catégorie (événements / briefs / to-do) — actifs par défaut.
   const [kinds, setKinds] = useState<Record<Kind, boolean>>({ event: true, brief: true, todo: true, facture: true });
 
@@ -256,7 +269,7 @@ export function EventCalendar({
     setDraft(emptyDraft(date));
   }
   function openEdit(e: Ev) {
-    setDraft({ id: e.id, date: e.date, time: e.time, title: e.title, type: e.type, who: e.who ?? "", description: e.description ?? "" });
+    setDraft({ id: e.id, date: e.date, time: e.time, title: e.title, type: e.type, who: e.who ?? "", description: e.description ?? "", readOnly: isReadOnly?.(e) ?? false });
   }
   // Un vrai événement s'édite ; une échéance brief/to-do renvoie vers sa page.
   function handleEventClick(e: Ev) {
@@ -269,23 +282,35 @@ export function EventCalendar({
   function closeModal() {
     setDraft(null);
   }
-  function submit() {
-    if (!draft) return;
+  // La modale ne se ferme qu'après succès (undefined = succès, compat anciens appels).
+  async function submit() {
+    if (!draft || draft.readOnly || busy) return;
+    const who = fixedWho ?? (draft.who ? draft.who : null);
     const payload = {
       date: draft.date,
       time: draft.time,
       title: draft.title.trim(),
       type: draft.type,
-      who: draft.who ? draft.who : null,
+      who,
       description: draft.description.trim() ? draft.description.trim() : null,
     };
-    if (draft.id) onUpdate(draft.id, payload);
-    else onCreate(payload);
-    setDraft(null);
+    setBusy(true);
+    try {
+      const ok = draft.id ? await onUpdate(draft.id, payload) : await onCreate(payload);
+      if (ok !== false) setDraft(null);
+    } finally {
+      setBusy(false);
+    }
   }
-  function remove() {
-    if (draft?.id) onDelete(draft.id);
-    setDraft(null);
+  async function remove() {
+    if (!draft?.id || draft.readOnly || busy) return;
+    setBusy(true);
+    try {
+      const ok = await onDelete(draft.id);
+      if (ok !== false) setDraft(null);
+    } finally {
+      setBusy(false);
+    }
   }
 
   const headerTitle = view === "week" ? weekRangeTitle(cursor) : monthTitle(cursor);
@@ -399,6 +424,8 @@ export function EventCalendar({
           draft={draft}
           setDraft={setDraft}
           whoOptions={whoOptions}
+          hideWho={fixedWho !== undefined}
+          busy={busy}
           onSubmit={submit}
           onDelete={remove}
           onClose={closeModal}
@@ -681,6 +708,8 @@ function EventModal({
   draft,
   setDraft,
   whoOptions,
+  hideWho = false,
+  busy = false,
   onSubmit,
   onDelete,
   onClose,
@@ -688,12 +717,15 @@ function EventModal({
   draft: Draft;
   setDraft: (d: Draft) => void;
   whoOptions: { value: string; label: string }[];
+  hideWho?: boolean;
+  busy?: boolean;
   onSubmit: () => void;
   onDelete: () => void;
   onClose: () => void;
 }) {
   const isEdit = draft.id !== null;
-  const canSave = draft.title.trim().length > 0 && draft.date.length > 0;
+  const ro = !!draft.readOnly;
+  const canSave = !ro && !busy && draft.title.trim().length > 0 && draft.date.length > 0;
   const [showConfirm, setShowConfirm] = useState(false);
 
   return (
@@ -711,7 +743,7 @@ function EventModal({
       >
         <div className="mb-4 flex items-center justify-between">
           <div className="text-sm font-semibold text-foreground">
-            {isEdit ? "Modifier l'événement" : "Nouvel événement"}
+            {ro ? "Détail de l'événement" : isEdit ? "Modifier l'événement" : "Nouvel événement"}
           </div>
           <button
             type="button"
@@ -723,7 +755,13 @@ function EventModal({
           </button>
         </div>
 
-        <div className="flex flex-col gap-3">
+        {ro && (
+          <div className="mb-3 rounded-lg bg-panel px-3 py-2 text-[12px] text-muted-foreground">
+            Événement partagé avec plusieurs personnes : seule l'agence peut le modifier.
+          </div>
+        )}
+        {/* fieldset désactivé = champs non modifiables en lecture seule */}
+        <fieldset disabled={ro} className={cn("flex min-w-0 flex-col gap-3", ro && "pointer-events-none")}>
           <TextField
             label="Titre"
             value={draft.title}
@@ -744,19 +782,21 @@ function EventModal({
               onChange={(v) => setDraft({ ...draft, time: v })}
             />
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className={cn("grid grid-cols-1 gap-3", !hideWho && "sm:grid-cols-2")}>
             <SelectField
               label="Type"
               value={draft.type}
               onChange={(v) => setDraft({ ...draft, type: v })}
               options={TYPE_OPTIONS}
             />
-            <SelectField
-              label="Avec qui"
-              value={draft.who}
-              onChange={(v) => setDraft({ ...draft, who: v })}
-              options={whoOptions}
-            />
+            {!hideWho && (
+              <SelectField
+                label="Avec qui"
+                value={draft.who}
+                onChange={(v) => setDraft({ ...draft, who: v })}
+                options={whoOptions}
+              />
+            )}
           </div>
           <TextAreaField
             label="Description / commentaire"
@@ -764,12 +804,13 @@ function EventModal({
             onChange={(v) => setDraft({ ...draft, description: v })}
             placeholder="Notes, ordre du jour, lien visio… (synchronisé avec Google Agenda)"
           />
-        </div>
+        </fieldset>
 
         <div className="mt-5 flex items-center justify-between gap-2">
-          {isEdit ? (
+          {isEdit && !ro ? (
             <button
               type="button"
+              disabled={busy}
               onClick={() => setShowConfirm(true)}
               className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-[#E5484D] transition-colors hover:bg-rowhover"
             >
@@ -784,15 +825,17 @@ function EventModal({
               onClick={onClose}
               className="rounded-lg border border-border bg-surface px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
-              Annuler
+              {ro ? "Fermer" : "Annuler"}
             </button>
-            <button
-              type="submit"
-              disabled={!canSave}
-              className="rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
-            >
-              Enregistrer
-            </button>
+            {!ro && (
+              <button
+                type="submit"
+                disabled={!canSave}
+                className="rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                {busy ? "Enregistrement…" : "Enregistrer"}
+              </button>
+            )}
           </div>
         </div>
         {showConfirm && (

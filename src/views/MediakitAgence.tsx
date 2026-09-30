@@ -105,6 +105,9 @@ export function AgencyTab() {
   // par-dessus le contenu déjà en ligne).
   const [loaded, setLoaded] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // `updated_at` de la ligne au chargement (ou au dernier enregistrement) : avant
+  // d'écrire, on vérifie que personne n'a enregistré entre-temps.
+  const [loadedAt, setLoadedAt] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -113,7 +116,7 @@ export function AgencyTab() {
     setLoaded(false);
     supabase
       .from("agency_mediakit")
-      .select("data")
+      .select("data, updated_at")
       .eq("id", 1)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -125,6 +128,7 @@ export function AgencyTab() {
         }
         const blob = ((data?.data as AgencyKit | null) ?? {}) as AgencyKit;
         setKit(withDefaults(blob));
+        setLoadedAt((data?.updated_at as string | null | undefined) ?? null);
         setLoaded(true);
         setLoading(false);
       });
@@ -146,6 +150,23 @@ export function AgencyTab() {
     if (saving || loading || loadError || !loaded) return;
     setSaving(true);
     try {
+      // Relit la ligne : si elle a changé depuis le chargement (autre poste), on
+      // demande confirmation au lieu d'écraser silencieusement.
+      const cur = await supabase.from("agency_mediakit").select("updated_at").eq("id", 1).maybeSingle();
+      if (cur.error) {
+        toast("Vérification impossible, réessaie");
+        return;
+      }
+      const curAt = (cur.data?.updated_at as string | null | undefined) ?? null;
+      const sameTime = (a: string | null, b: string | null) =>
+        a === b || (!!a && !!b && new Date(a).getTime() === new Date(b).getTime());
+      if (
+        !sameTime(curAt, loadedAt) &&
+        !window.confirm(
+          "Le media kit agence a été modifié ailleurs depuis son ouverture. Enregistrer quand même et écraser ces changements ? (Annuler puis recharger pour voir la version en ligne.)",
+        )
+      )
+        return;
       const { data, error } = await supabase
         .from("agency_mediakit")
         .upsert({
@@ -153,11 +174,12 @@ export function AgencyTab() {
           data: { ...kit, concepts: kit.concepts.map((c) => ({ ...c, highlights: c.highlights.map((h) => h.trim()).filter(Boolean) })) },
           updated_at: new Date().toISOString(),
         })
-        .select("id");
+        .select("id, updated_at");
       if (error || !(data && data.length)) {
         toast("Enregistrement échoué — réessaie");
         return;
       }
+      setLoadedAt(((data[0] as { updated_at?: string | null }).updated_at as string | null | undefined) ?? null);
       toast("Media kit agence enregistré ✓ — le deck se met à jour en ligne");
     } finally {
       setSaving(false);
@@ -400,12 +422,18 @@ export function AgencyTab() {
                         slug="agence"
                         field={`concept-${i}-${j}`}
                         url={u}
-                        onChange={(nu) => {
-                          const next = [...c.photos];
-                          if (nu) next[j] = nu;
-                          else next.splice(j, 1);
-                          patchConcept(i, { photos: next });
-                        }}
+                        onChange={(nu) =>
+                          setKit((k) => ({
+                            ...k,
+                            concepts: k.concepts.map((cc, ci) => {
+                              if (ci !== i) return cc;
+                              const next = [...cc.photos];
+                              if (nu) next[j] = nu;
+                              else next.splice(j, 1);
+                              return { ...cc, photos: next };
+                            }),
+                          }))
+                        }
                         boxClass="h-28 w-28"
                       />
                     ))}
@@ -416,7 +444,13 @@ export function AgencyTab() {
                         field={`concept-${i}-${c.photos.length}`}
                         url={null}
                         onChange={(nu) => {
-                          if (nu) patchConcept(i, { photos: [...c.photos, nu].slice(0, MAX_CONCEPT_PHOTOS) });
+                          if (!nu) return;
+                          setKit((k) => ({
+                            ...k,
+                            concepts: k.concepts.map((cc, ci) =>
+                              ci === i ? { ...cc, photos: [...cc.photos, nu].slice(0, MAX_CONCEPT_PHOTOS) } : cc,
+                            ),
+                          }));
                         }}
                         boxClass="h-28 w-28"
                       />

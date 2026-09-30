@@ -34,6 +34,25 @@ describe("parseAmount", () => {
   });
 });
 
+describe("parseAmount séparateurs mixtes", () => {
+  it("point = milliers, virgule = décimale", () => {
+    expect(parseAmount("1.234,50")).toBe(1234.5);
+    expect(parseAmount("5.000 €")).toBe(5000);
+    expect(parseAmount("1.234.567")).toBe(1234567);
+  });
+
+  it("espace = milliers, virgule = décimale", () => {
+    expect(parseAmount("1 234,50")).toBe(1234.5);
+    expect(parseAmount("12,5")).toBe(12.5);
+  });
+
+  it("point décimal seul (format anglais)", () => {
+    expect(parseAmount("1234.5")).toBe(1234.5);
+    expect(parseAmount("0.500")).toBe(0.5);
+    expect(parseAmount("1,234.50")).toBe(1234.5);
+  });
+});
+
 describe("formatEuro", () => {
   it("se termine par l'euro", () => {
     expect(formatEuro(3000).endsWith("€")).toBe(true);
