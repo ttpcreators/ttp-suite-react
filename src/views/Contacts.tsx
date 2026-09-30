@@ -685,7 +685,8 @@ export function Contacts() {
 
   // Export : télécharge un vrai fichier .csv (respecte le filtre/recherche courants).
   const exportCsv = () => {
-    const toExport = filtered.length ? filtered : currentRows;
+    // Exporte exactement les lignes filtrées (jamais tout l'annuaire par défaut).
+    const toExport = filtered;
     if (toExport.length === 0) {
       toast("Aucun contact à exporter");
       return;
@@ -777,7 +778,7 @@ export function Contacts() {
       <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
           {filtered.length} contact{filtered.length > 1 ? "s" : ""}
-          {(tagFilter !== ALL_TAGS || query.trim()) && (
+          {(tagFilter !== ALL_TAGS || contactFilter !== "all" || cityFilter || query.trim()) && (
             <span className="text-faint"> / {currentRows.length}</span>
           )}
         </div>

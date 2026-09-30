@@ -48,6 +48,8 @@ export function Pricing() {
     if (creatorId === EXTERNAL) {
       setPlatMap({});
       setFallback({ followers: "", er: "" });
+      // Créateur externe : on vide l'audience héritée du créateur précédent.
+      setInfRows((rows) => rows.map((r) => ({ ...r, followers: "", er: "" })));
       return;
     }
     let alive = true;
@@ -66,8 +68,12 @@ export function Pricing() {
         const match = NICHES.find((x) => x.label.toLowerCase().includes(n) || n.includes(x.value));
         if (match) setNiche(match.value);
       }
-      // Re-remplit les lignes influence vides avec l'audience de leur plateforme.
-      setInfRows((rows) => rows.map((r) => audienceFor(r, map, { followers: String(row.followers ?? ""), er: String(row.er ?? "") })));
+      // Changement de créateur : ÉCRASE l'audience de chaque ligne par celle du nouveau créateur.
+      const fb = { followers: String(row.followers ?? ""), er: String(row.er ?? "") };
+      setInfRows((rows) => rows.map((r) => {
+        const a = map[r.platform] || fb;
+        return { ...r, followers: a.followers || "", er: a.er || "" };
+      }));
     });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps

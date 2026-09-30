@@ -537,6 +537,9 @@ export default function App() {
   const FOUNDER_ONLY: ViewId[] = ["facturation", "reversements", "relances", "echeances", "acces", "diagnostique", "agent"];
   const hiddenIds = isFounder ? [] : FOUNDER_ONLY;
   const canSee = (id: ViewId) => !hiddenIds.includes(id);
+  // Volet secondaire affiché SEULEMENT si la vue est autorisée (un volet restauré du
+  // localStorage ne doit jamais montrer une page fondateur à un membre).
+  const splitShown = splitView && canSee(splitView) ? splitView : null;
 
   // Famille « Raccourcis » (pages épinglées) ajoutée en tête de la nav mobile aussi.
   const pinnedNavItems = pinned
@@ -706,7 +709,7 @@ export default function App() {
   const primaryTitle = detailCreator ?? (canSee(active) ? title : "Accès réservé");
   const showPrimaryH1 = !detailCreator && active !== "apercu";
   // Multi-pages actif dès qu'il y a ≥ 2 onglets ou un volet latéral.
-  const multi = tabs.length > 1 || splitView != null;
+  const multi = tabs.length > 1 || splitShown != null;
   // Overlay = fiche créateur (rendue PAR-DESSUS les vues nav, qui restent montées
   // en dessous pour ne pas perdre leur état).
   const overlayActive = !!detailCreator;
@@ -759,7 +762,7 @@ export default function App() {
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="shrink-0">{topBar}</div>
                 <TabBar tabs={tabs} active={active} onSelect={switchTab} onClose={closeTab} onNew={newTab} />
-                {splitView ? (
+                {splitShown ? (
                   /* Deux volets côte à côte, défilement + barrière d'erreur indépendants. */
                   <div className="flex min-h-0 flex-1 flex-col md:flex-row">
                     {/* Volet principal (onglet actif) */}
@@ -773,11 +776,16 @@ export default function App() {
                     </section>
                     {/* Volet secondaire (à côté) */}
                     <section className="flex min-w-0 flex-1 flex-col overflow-hidden border-t border-border md:border-t-0">
-                      <PaneHeader title={findItem(splitView)?.label ?? ""} onClose={() => setSplitView(null)} />
+                      <PaneHeader title={findItem(splitShown)?.label ?? ""} onClose={() => setSplitView(null)} />
                       <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4 md:px-6 md:pb-6">
-                        <ErrorBoundary variant="inline" label="Ce volet" resetKey={`split:${splitView}`}>
+                        <ErrorBoundary variant="inline" label="Ce volet" resetKey={`split:${splitShown}`}>
                           <Suspense fallback={PANE_FALLBACK}>
-                            <ViewContent active={splitView} onOpenCreator={openDetail} />
+                            {/* Volet secondaire : n'écrit pas le sous-onglet global (sidebar = volet principal). */}
+                            <NavSubSetContext.Provider value={() => {}}>
+                              <NavSubContext.Provider value={null}>
+                                <ViewContent active={splitShown} onOpenCreator={openDetail} />
+                              </NavSubContext.Provider>
+                            </NavSubSetContext.Provider>
                           </Suspense>
                         </ErrorBoundary>
                       </div>

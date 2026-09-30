@@ -185,10 +185,10 @@ export function Gifting() {
   }
 
   // « En attente » = contenu attendu, pas encore publié/clos ET pas refusé (un cadeau
-  // refusé n'a plus de contenu en attente).
+  // refusé n'a plus de contenu en attente). Compté sur la période affichée (shown).
   const attente = useMemo(
-    () => list.filter((g) => g.content_expected && g.status !== "publie" && g.status !== "clos" && g.status !== "refuse").length,
-    [list],
+    () => shown.filter((g) => g.content_expected && g.status !== "publie" && g.status !== "clos" && g.status !== "refuse").length,
+    [shown],
   );
 
   const actions = (g: GiftRow) => (

@@ -373,22 +373,31 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
 type Row = { creator: string; platform: string; lastEr: number; dEr: number | null; followers: number; measures: number; bestEr: number; verdict: string };
 type SortKey = "lastEr" | "followers" | "measures" | "bestEr";
 
-function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: (creator: string) => void }) {
+function AllCreatorsPanel({ entries, onOpen, period, setPeriod }: { entries: SuiviEntry[]; onOpen: (creator: string) => void; period: string; setPeriod: (p: string) => void }) {
   const [sort, setSort] = useState<SortKey>("lastEr");
-  const [period, setPeriod] = useState(""); // "" = toutes périodes ; sinon "aaaa-mm"
+  // `period` ("" = toutes périodes ; sinon "aaaa-mm") vit dans le parent : conservé au retour de la vue « Un créateur ».
   // Périodes disponibles (mois présents dans les mesures), récent d'abord.
   const periods = useMemo(() => [...new Set(entries.map((h) => ymOf(h.date)).filter(Boolean))].sort((a, b) => b.localeCompare(a)), [entries]);
   const rows = useMemo<Row[]>(() => {
     const names = [...new Set(entries.map((h) => h.creator))];
     return names.map((name) => {
-      const mine = entries.filter((h) => h.creator.trim().toLowerCase() === name.trim().toLowerCase() && (!period || ymOf(h.date) === period));
+      const allMine = entries.filter((h) => h.creator.trim().toLowerCase() === name.trim().toLowerCase());
+      const mine = allMine.filter((h) => !period || ymOf(h.date) === period);
       if (mine.length === 0) return null; // aucun relevé sur la période → exclu
       // Plus récente = date la plus grande, puis index le plus faible (blob = récent en tête).
       const ordered = mine.map((h, i) => ({ h, i, t: frTime(h.date) })).sort((a, b) => b.t - a.t || a.i - b.i);
       const latest = ordered[0].h;
       // Δ vs mesure précédente SUR LA MÊME plateforme que la dernière.
       const samePlat = ordered.filter((x) => x.h.platform === latest.platform);
-      const prev = samePlat[1]?.h;
+      // Mois choisi : la mesure précédente peut être d'un mois antérieur → on la cherche dans
+      // TOUS les relevés du créateur (même plateforme), à une date strictement antérieure.
+      const latestT = frTime(latest.date);
+      const prev = period
+        ? allMine
+            .map((h, i) => ({ h, i, t: frTime(h.date) }))
+            .filter((x) => x.h.platform === latest.platform && x.t < latestT)
+            .sort((a, b) => b.t - a.t || a.i - b.i)[0]?.h
+        : samePlat[1]?.h;
       const dEr = prev ? Math.round((parseEr(latest.er) - parseEr(prev.er)) * 100) / 100 : null;
       // Abonnés CUMULÉS = somme du dernier relevé de CHAQUE plateforme du créateur.
       const seenPlat = new Set<string>();
@@ -429,12 +438,14 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
     }
     return [...byMonth.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
+      // Mois choisi dans « Période » → la courbe s'arrête à ce mois (gros chiffre + évolution = ce mois).
+      .filter(([key]) => !period || key <= period)
       .map(([key, r]) => {
         const [y, mo] = key.split("-").map(Number);
         const label = new Date(y, mo - 1, 1).toLocaleDateString("fr-FR", { month: "short" }).replace(".", "");
         return { label, value: Math.round((r.sum / r.n) * 100) / 100 };
       });
-  }, [entries]);
+  }, [entries, period]);
   const th = (k: SortKey, label: string, align = "text-right") => (
     <th className={cn("px-4 pb-1", align)}>
       <button type="button" onClick={() => setSort(k)} className={cn("inline-flex items-center gap-1 transition-colors hover:text-foreground", sort === k ? "text-foreground" : "")}>
@@ -448,7 +459,7 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
       <div className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-border bg-border">
         {[
           { l: "Créateurs suivis", v: String(rows.length), icon: Users },
-          { l: "Taux moyen", v: `${String(avgEr).replace(".", ",")} %`, icon: Activity },
+          { l: "Moyenne des derniers relevés", v: `${String(avgEr).replace(".", ",")} %`, icon: Activity },
           { l: "Meilleur taux", v: rows.length ? `${String(bestGlobal).replace(".", ",")} %` : "—", icon: TrendingUp },
         ].map((c) => (
           <div key={c.l} className="min-w-0 bg-surface px-4 py-4 sm:px-5 sm:py-5">
@@ -472,11 +483,11 @@ function AllCreatorsPanel({ entries, onOpen }: { entries: SuiviEntry[]; onOpen: 
       </div>
 
       {/* Tendance du taux d'engagement moyen du roster (glass) */}
-      {erTrend.length >= 2 && (
+      {erTrend.length >= 1 && (
         <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-panel/50" />}>
           <GlassStatChart
             title="Taux d'engagement moyen du roster"
-            subtitle="Moyenne de tous les créateurs, par mois"
+            subtitle={period ? `Moyenne de toutes les mesures du mois, jusqu'à ${ymLabel(period).toLowerCase()}` : "Moyenne de toutes les mesures du mois"}
             points={erTrend}
             format={(n) => `${n.toFixed(2).replace(".", ",")} %`}
             color="var(--primary)"
@@ -569,6 +580,8 @@ export function EngagementSuivi() {
   const entries = useMemo(() => (hist ?? []).filter((h) => h.creator && h.creator !== "Calcul libre"), [hist]);
   const [view, setView] = useState<"all" | "one">("all");
   const [focus, setFocus] = useState<string | undefined>(undefined);
+  // Filtre « Période » remonté ici : survit à l'aller-retour vers la vue « Un créateur ».
+  const [period, setPeriod] = useState("");
 
   if (loading)
     return (
@@ -597,7 +610,7 @@ export function EngagementSuivi() {
       </div>
 
       {view === "all" ? (
-        <AllCreatorsPanel entries={entries} onOpen={(c) => { setFocus(c); setView("one"); }} />
+        <AllCreatorsPanel entries={entries} period={period} setPeriod={setPeriod} onOpen={(c) => { setFocus(c); setView("one"); }} />
       ) : (
         // key = focus → re-monte avec le créateur cliqué pré-sélectionné
         <SuiviPanel key={focus ?? "one"} entries={entries} initialCreator={focus} />

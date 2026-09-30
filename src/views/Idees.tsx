@@ -196,19 +196,21 @@ export function Idees() {
     }
   };
 
-  const filtered =
+  // Base : filtre créatrice seul → sert aussi aux compteurs des pastilles de statut.
+  const creatorBase =
     rows === null
       ? null
-      : rows.filter((r) => {
-          const statusOk = statusFilter === ALL_STATUS || (r.status ?? "À faire") === statusFilter;
-          const creatorOk =
-            creatorFilter === ""
-              ? true
-              : creatorFilter === "__general__"
-                ? !r.creator
-                : (r.creator ?? "").toLowerCase() === creatorFilter.toLowerCase();
-          return statusOk && creatorOk;
-        });
+      : rows.filter((r) =>
+          creatorFilter === ""
+            ? true
+            : creatorFilter === "__general__"
+              ? !r.creator
+              : (r.creator ?? "").toLowerCase() === creatorFilter.toLowerCase(),
+        );
+  const filtered =
+    creatorBase === null
+      ? null
+      : creatorBase.filter((r) => statusFilter === ALL_STATUS || (r.status ?? "À faire") === statusFilter);
 
   return (
     <div>
@@ -247,11 +249,11 @@ export function Idees() {
             value: statusFilter,
             onChange: setStatusFilter,
             options: [
-              { value: ALL_STATUS, label: "Tous", count: rows.length },
+              { value: ALL_STATUS, label: "Tous", count: (creatorBase ?? []).length },
               ...STATUS_FILTERS.map((s) => ({
                 value: s,
                 label: s,
-                count: rows.filter((r) => (r.status ?? "À faire") === s).length,
+                count: (creatorBase ?? []).filter((r) => (r.status ?? "À faire") === s).length,
               })),
             ],
           },

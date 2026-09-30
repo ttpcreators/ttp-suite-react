@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Copy, Check, Plus, Trash2, Save, FileText, Eye, X, History } from "lucide-react";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
@@ -10,7 +10,7 @@ import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/u
 import { toast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { RepresentationContract } from "@/views/RepresentationContract";
-import { useNavSub } from "@/lib/navSub";
+import { useNavSub, useSetNavSub } from "@/lib/navSub";
 import { ttpLogoImg } from "@/lib/pdfDoc";
 
 type CtType = "marque" | "repr" | "ugc";
@@ -386,6 +386,7 @@ export function Contrats() {
   const [ctType, setCtType] = useState<CtType>("marque");
   // Sous-page demandée depuis la sidebar (Contrats → Marque × Créateur / Représentation / UGC).
   const navSub = useNavSub();
+  const setNavSub = useSetNavSub();
   useEffect(() => {
     if (navSub === "marque" || navSub === "repr" || navSub === "ugc") setCtType(navSub);
   }, [navSub]);
@@ -435,12 +436,27 @@ export function Contrats() {
     setDefraiement(cs.defraiement ?? SCENARIO_DEFAULT.defraiement);
   };
 
-  // Au changement de créateur, charge automatiquement son 1er cas s'il en a un.
+  // Au changement de créateur (ou à l'arrivée des configs), charge son 1er cas s'il en a un,
+  // une seule fois par créateur. Sans cas enregistré : on remet les valeurs par défaut.
+  const appliedFor = useRef<string | null>(null);
+  const lastCt = useRef<string | null>(null);
   useEffect(() => {
+    const switched = lastCt.current !== ctName;
+    lastCt.current = ctName;
+    if (switched) appliedFor.current = null;
+    if (appliedFor.current === ctName) return;
     const cs = (configs[ctName] ?? [])[0];
-    if (cs) applyCase(cs);
+    if (cs) {
+      applyCase(cs);
+      appliedFor.current = ctName;
+    } else if (switched) {
+      setBrand("Sephora");
+      setValue("32 000 €");
+      setCommission("20");
+      setCaseName("Standard");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctName]);
+  }, [ctName, configs]);
 
   const meta = TYPE_META[ctType];
   const exclLabel = labelOf(EXCL_OPTS, exclScope);
@@ -626,7 +642,7 @@ export function Contrats() {
           <button
             key={k}
             type="button"
-            onClick={() => setCtType(k)}
+            onClick={() => { setCtType(k); setNavSub(k); }}
             className={cn(
               "whitespace-nowrap rounded-xl px-3.5 py-2.5 text-[10px] font-semibold transition-colors",
               k === ctType ? "bg-foreground text-background" : "border border-border text-muted-foreground hover:bg-rowhover",

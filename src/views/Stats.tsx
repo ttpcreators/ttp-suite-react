@@ -27,7 +27,7 @@ import {
 } from "recharts";
 
 type CreatorRow = { name: string; followers: string | null; er: string | null; reach: string | null; ca: string | null; status: string | null };
-type InvRow = { amount: string; status: string; creator: string | null; date: string | null };
+type InvRow = { id?: string; amount: string; status: string; creator: string | null; date: string | null };
 type CountRow = { id: string };
 
 /** Instantané mensuel des indicateurs « état du moment » (blob `statsSnapshots`). */
@@ -86,6 +86,7 @@ function RevenueChart({ points }: { points: RevenuePoint[] }) {
   const view = period === 0 ? points : points.slice(-period);
   const total = view.reduce((s, p) => s + p.ca, 0);
   const paidTotal = view.reduce((s, p) => s + p.paid, 0);
+  // Badge = dernier mois vs mois précédent (≠ total de la fenêtre affiché à côté).
   const delta = momDelta(view.map((p) => p.ca));
   const periods: { k: number; label: string }[] = [
     { k: 6, label: "6 mois" },
@@ -127,6 +128,7 @@ function RevenueChart({ points }: { points: RevenuePoint[] }) {
           >
             {delta >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
             {Math.abs(delta).toFixed(1).replace(".", ",")} %
+            <span className="font-normal opacity-80">dernier mois vs préc.</span>
           </span>
         )}
         <span className="text-[11px] text-faint">dont {formatEuro(paidTotal)} encaissé</span>
@@ -217,6 +219,10 @@ export function Stats() {
   const live = useLiveKey();
   // Instantanés mensuels (blob agence) → variation MoM des cartes « état du moment ».
   const { data: snaps } = useAppState<Record<string, Snap>>((s: AppState) => (s["statsSnapshots"] as Record<string, Snap>) ?? {});
+  // Détails de facture (blob) : seule source de la DATE D'ÉMISSION (`invoices.date` = échéance), comme Aperçu.
+  const { data: invDetails } = useAppState<Record<string, { issueDate?: string }>>(
+    (s: AppState) => (s["invoiceDetails"] as Record<string, { issueDate?: string }>) ?? {},
+  );
   const snapWrote = useRef(false);
 
   useEffect(() => {
@@ -224,7 +230,7 @@ export function Stats() {
     (async () => {
       const [cr, inv, br, co, td, id] = await Promise.all([
         supabase.from("creators").select("name,followers,er,reach,ca,status"),
-        supabase.from("invoices").select("amount,status,creator,date"),
+        supabase.from("invoices").select("id,amount,status,creator,date"),
         supabase.from("briefs").select("id"),
         supabase.from("contacts").select("id"),
         supabase.from("todos").select("id"),
@@ -307,10 +313,12 @@ export function Stats() {
   // dans le donut de répartition par statut).
   const totalCA = byStatus.payee + byStatus.attente + byStatus.retard;
 
-  // Série mensuelle RÉELLE du CA (depuis les échéances de factures parseables) → sparkline + variation MoM.
+  // Mois d'une facture = mois d'ÉMISSION (invoiceDetails), repli sur l'échéance si inconnue.
+  const invMonth = (iv: InvRow) => invMonthKey((iv.id && invDetails?.[iv.id]?.issueDate) || iv.date);
+  // Série mensuelle RÉELLE du CA (par mois d'émission) → graphiques + comparaison de période.
   const monthAgg = new Map<string, { tot: number; paid: number }>();
   for (const iv of data.invoices) {
-    const k = invMonthKey(iv.date);
+    const k = invMonth(iv);
     if (!k) continue;
     const a = parseAmount(iv.amount);
     const cur = monthAgg.get(k) ?? { tot: 0, paid: 0 };
@@ -320,28 +328,11 @@ export function Stats() {
   }
   const monthKeys = [...monthAgg.keys()].sort();
   const fullMonths = monthKeys.length >= 2 ? monthsBetween(monthKeys[0], monthKeys[monthKeys.length - 1]) : monthKeys;
-  const months = fullMonths.slice(-8);
-  const caSeries = months.map((m) => monthAgg.get(m)?.tot ?? 0);
-  const paidSeries = months.map((m) => monthAgg.get(m)?.paid ?? 0);
-  // Comparaison mois-sur-mois FIABLE : on prend les 2 derniers mois AVEC activité.
-  // (monthsBetween comble les mois vides avec 0 → sans ça, un mois « trou » juste avant
-  //  le dernier annulerait le badge, car on ne divise pas par 0.)
-  const lastTwoWithData = (series: number[]) => {
-    const pts = months.map((m, i) => ({ m, v: series[i] })).filter((x) => x.v > 0);
-    const last = pts[pts.length - 1];
-    const prev = pts[pts.length - 2];
-    return {
-      prevValue: prev ? prev.v : null,
-      prevLabel: prev ? monthLabel(prev.m) : "",
-      delta: last && prev && prev.v > 0 ? ((last.v - prev.v) / prev.v) * 100 : null,
-    };
-  };
-  const caMoM = lastTwoWithData(caSeries);
-  const paidMoM = lastTwoWithData(paidSeries);
-  const prevCa = caMoM.prevValue != null ? formatEuro(caMoM.prevValue) : undefined;
-  const prevPaid = paidMoM.prevValue != null ? formatEuro(paidMoM.prevValue) : undefined;
+  // Pas de variation MoM sur les cartes « CA facturé » / « Encaissé » : elles affichent un
+  // total TOUTES PÉRIODES, le comparer à « dernier mois vs préc. » était incohérent.
+  // Les variations mensuelles restent dans la Comparaison et les graphiques ci-dessous.
 
-  // Série complète (toutes les échéances) pour le graphique vedette avec sélecteur de période.
+  // Série complète (toutes les factures datées) pour le graphique vedette avec sélecteur de période.
   const revenuePoints = fullMonths.map((m) => ({
     label: monthLabel(m),
     ca: monthAgg.get(m)?.tot ?? 0,
@@ -352,7 +343,8 @@ export function Stats() {
   // ── Comparaison de période (fenêtre glissante vs période précédente ou N-1) ──
   const monthCount = new Map<string, number>();
   for (const iv of data.invoices) {
-    const k = invMonthKey(iv.date);
+    if (iv.status === "brouillon") continue; // brouillons non émis → exclus, comme le CA
+    const k = invMonth(iv);
     if (k) monthCount.set(k, (monthCount.get(k) ?? 0) + 1);
   }
   const now = new Date();
@@ -411,6 +403,9 @@ export function Stats() {
     .sort((a, b) => b.followers - a.followers)
     .slice(0, 8);
 
+  // Factures réellement émises (hors brouillons), pour l'indication de la carte CA.
+  const issuedCount = data.invoices.filter((iv) => iv.status !== "brouillon").length;
+
   // Volume par module
   const volumeData = [
     { name: "Factures", value: data.invoices.length, color: COLORS.primary },
@@ -428,19 +423,13 @@ export function Stats() {
           icon={Receipt}
           label="CA facturé"
           value={formatEuro(totalCA)}
-          delta={caMoM.delta}
-          lastValue={prevCa}
-          compareLabel={caMoM.prevLabel ? `Vs ${caMoM.prevLabel}` : undefined}
-          hint={`${data.invoices.length} facture${data.invoices.length > 1 ? "s" : ""}`}
+          hint={`${issuedCount} facture${issuedCount > 1 ? "s" : ""} émise${issuedCount > 1 ? "s" : ""}, toutes périodes`}
         />
         <StatCard
           icon={Wallet}
           label="Encaissé"
           value={formatEuro(byStatus.payee)}
-          delta={paidMoM.delta}
-          lastValue={prevPaid}
-          compareLabel={paidMoM.prevLabel ? `Vs ${paidMoM.prevLabel}` : undefined}
-          hint="payé"
+          hint="payé, toutes périodes"
         />
         <StatCard icon={Clock} label="En attente + retard" value={formatEuro(byStatus.attente + byStatus.retard)} hint="à suivre" />
         <StatCard
@@ -565,7 +554,7 @@ export function Stats() {
         <Suspense fallback={<div className="h-[320px] animate-pulse rounded-2xl bg-panel/50" />}>
           <GlassStatChart
             title="Chiffre d'affaires facturé"
-            subtitle="Par mois — vue d'ensemble"
+            subtitle="Par mois d'émission, vue d'ensemble"
             points={revenuePoints.map((p) => ({ label: p.label, value: p.ca }))}
             format={(n) => formatEuro(n)}
             height={200}

@@ -216,8 +216,10 @@ export function Mails() {
     const q = query.trim().toLowerCase();
     return contacts.filter((c) => {
       if (tagFilter !== "__all__" && (c.tag ?? "").trim() !== tagFilter) return false;
-      if (contactFilter === "contacted" && !c.lastContacted) return false;
-      if (contactFilter === "never" && c.lastContacted) return false;
+      // Même règle qu'ailleurs : échangé = dernier mail suivi OU touche manuelle.
+      const contacted = !!c.lastContacted || parseTouches(c.touches).length > 0;
+      if (contactFilter === "contacted" && !contacted) return false;
+      if (contactFilter === "never" && contacted) return false;
       if (q && !(c.label.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || (c.tag ?? "").toLowerCase().includes(q))) return false;
       return true;
     });
@@ -276,7 +278,9 @@ export function Mails() {
 
           <div className="max-h-[70vh] space-y-0.5 overflow-y-auto pr-1">
             {filtered.length === 0 ? (
-              <div className="px-2 py-6 text-center text-[12px] text-faint">Aucun contact avec email.</div>
+              <div className="px-2 py-6 text-center text-[12px] text-faint">
+                {query.trim() || tagFilter !== "__all__" || contactFilter !== "all" ? "Aucun contact pour ce filtre." : "Aucun contact avec email."}
+              </div>
             ) : (
               filtered.map((c) => (
                 <button
@@ -294,7 +298,7 @@ export function Mails() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <span className="truncate text-[12px] font-semibold text-foreground">{c.label}</span>
-                      {c.lastContacted && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà échangé" />}
+                      {(c.lastContacted || parseTouches(c.touches).length > 0) && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà échangé" />}
                     </div>
                     <div className="truncate text-[11px] text-faint">{c.email}</div>
                   </div>

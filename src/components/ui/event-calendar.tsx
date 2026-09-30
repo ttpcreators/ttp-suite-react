@@ -294,6 +294,8 @@ export function EventCalendar({
     <div className="flex flex-col gap-4">
       {/* En-tête */}
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Vue Liste : pas de navigation par mois (la liste a son propre filtre À venir / Passés / Tous). */}
+        {view !== "list" ? (
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -320,6 +322,7 @@ export function EventCalendar({
           </button>
           <div className="ml-1 text-base font-semibold capitalize text-foreground">{headerTitle}</div>
         </div>
+        ) : <div />}
 
         {/* ViewToggle */}
         <div className="flex items-center gap-1 rounded-xl border border-border bg-panel p-1">

@@ -162,6 +162,10 @@ export function WhatsappView() {
     .sort((a, b) => a.lastMs - b.lastMs); // le plus ancien d'abord
   const jamais = all.filter((x) => x.status.tone === "never" && (waLink(x.r.phone) || x.r.email));
   const enCours = all.filter((x) => x.lastMs > 0 && !needsRelance(x.list, x.r.last_contacted, relanceDays));
+  // « Tous » = contacts réellement affichés dans les sections (dédoublonnés), pour des compteurs cohérents.
+  const shownCount = new Set([...aRelancer, ...jamais, ...enCours].map((x) => x.r.id)).size;
+  // Jamais contactés mais sans téléphone ni email : absents de la section « Jamais contactés ».
+  const jamaisSansCoord = all.filter((x) => x.status.tone === "never" && !(waLink(x.r.phone) || x.r.email)).length;
 
   // Journal global : les 30 dernières touches, tous contacts confondus.
   const journal = all
@@ -294,7 +298,7 @@ export function WhatsappView() {
         <div className="flex flex-wrap gap-1.5">
           {(
             [
-              ["all", `Tous (${pool.length})`],
+              ["all", `Tous (${shownCount})`],
               ["relance", `À relancer (${aRelancer.length})`],
               ["jamais", `Jamais contactés (${jamais.length})`],
               ["encours", `En cours (${enCours.length})`],
@@ -360,7 +364,9 @@ export function WhatsappView() {
           </div>
           {jamais.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-[12px] text-faint">
-              Tout le carnet a déjà été approché au moins une fois.
+              {jamaisSansCoord > 0
+                ? `Aucun contact jamais approché avec téléphone ou email (${jamaisSansCoord} sans coordonnées).`
+                : "Tout le carnet a déjà été approché au moins une fois."}
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-border bg-surface divide-y divide-border">{jamais.map((x) => <ContactRow key={x.r.id} x={x} />)}</div>

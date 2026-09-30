@@ -156,13 +156,19 @@ export function ApercuView({
     caMonthAgg.set(k, (caMonthAgg.get(k) ?? 0) + parseAmount(iv.amount));
   }
   const caKeys = [...caMonthAgg.keys()].sort();
-  const monthly = (caKeys.length ? monthsBetween(caKeys[0], caKeys[caKeys.length - 1]) : []).slice(-12).map((k) => {
+  // La série va au moins jusqu'au mois EN COURS (sinon « ce mois » afficherait un mois passé).
+  const todayKey = localISO(new Date()).slice(0, 7);
+  const endKey = caKeys.length && caKeys[caKeys.length - 1] > todayKey ? caKeys[caKeys.length - 1] : todayKey;
+  const monthKeys = caKeys.length ? monthsBetween(caKeys[0] < todayKey ? caKeys[0] : todayKey, endKey).slice(-12) : [];
+  const monthly = monthKeys.map((k) => {
     const [y, m] = k.split("-").map(Number);
     return { label: monthLabel(k), full: `${MONTHS_LONG[m - 1]} ${y}`, value: caMonthAgg.get(k) ?? 0 };
   });
   const hasChart = monthly.length >= 2 && monthly.some((p) => p.value > 0);
-  const lastMonth = monthly[monthly.length - 1]?.value ?? 0;
-  const mom = momDelta(monthly.map((p) => p.value));
+  // « Ce mois » = le mois civil en cours, comparé au mois précédent (lus par clé).
+  const curIdx = monthKeys.indexOf(todayKey);
+  const lastMonth = caMonthAgg.get(todayKey) ?? 0;
+  const mom = curIdx > 0 ? momDelta([monthly[curIdx - 1].value, monthly[curIdx].value]) : null;
 
   // ── Répartition du facturé (statuts) ──
   const byStatus = (st: string) => sum(issued.filter((i) => i.status === st));
@@ -173,10 +179,11 @@ export function ApercuView({
   const lateCount = issued.filter((i) => i.status === "retard").length;
 
   // ── Jauge : objectif du mois (moyenne des %) sinon taux d'encaissement ──
-  const objCur = obj && (obj["0"] as { pct?: number }[] | undefined);
+  // Objectifs rangés par mois (« aaaa-mm ») ; « 0 » = ancien format, repli seulement.
+  const objCur = obj && ((obj[todayKey] ?? obj["0"]) as { pct?: number }[] | undefined);
   const hasObj = Array.isArray(objCur) && objCur.length > 0;
   const gaugePct = hasObj
-    ? objCur.reduce((a, o) => a + (Number(o.pct) || 0), 0) / objCur.length / 100
+    ? objCur.reduce((a, o) => a + Math.max(0, Math.min(100, Number(o.pct) || 0)), 0) / objCur.length / 100
     : factTotal > 0
       ? paidSum / factTotal
       : 0;
@@ -213,7 +220,7 @@ export function ApercuView({
   else if (mom != null && mom > 0)
     insight = (
       <>
-        Le chiffre d'affaires facturé progresse de {hi(`${mom.toFixed(1).replace(".", ",")} %`)} par rapport au mois précédent.
+        Le chiffre d'affaires {caBasis === "emission" ? "facturé" : "attendu (par échéance)"} progresse de {hi(`${mom.toFixed(1).replace(".", ",")} %`)} ce mois-ci par rapport au mois précédent.
       </>
     );
   else if (briefsWaiting.length > 0)

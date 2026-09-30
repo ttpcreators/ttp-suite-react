@@ -59,7 +59,8 @@ export default function GlassStatChart({
   const clean = points.filter((p) => p && Number.isFinite(p.value));
   const last = num(clean[clean.length - 1]?.value ?? 0);
   const prev = num(clean[clean.length - 2]?.value ?? last);
-  const pct = prev ? ((last - prev) / Math.abs(prev)) * 100 : 0;
+  // Point précédent à 0 ou absent : pas de comparaison possible (évite un faux « 0 % »).
+  const pct = prev > 0 ? ((last - prev) / Math.abs(prev)) * 100 : null;
 
   return (
     <div className="rounded-2xl border border-border bg-surface p-5">
@@ -90,7 +91,7 @@ export default function GlassStatChart({
       {/* Gros chiffre + évolution */}
       <div className="mt-4 flex flex-wrap items-end gap-x-3 gap-y-1">
         <div className="text-[28px] font-semibold leading-none tracking-tight tabular-nums text-foreground">{format(last)}</div>
-        {clean.length >= 2 && <Delta value={pct} suffix={compareLabel} />}
+        {clean.length >= 2 && pct != null && <Delta value={pct} suffix={compareLabel} />}
       </div>
 
       {/* Graphe */}

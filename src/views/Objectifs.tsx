@@ -59,7 +59,8 @@ function monthlyTrend(obj: ObjByMonth) {
     .map(([key, arr]) => ({
       month: key,
       label: monthShort(key),
-      pct: Math.round(arr.reduce((s, o) => s + (Number(o.pct) || 0), 0) / arr.length),
+      // Chaque objectif borné 0..100 comme les lignes (un dépassement ne gonfle pas la moyenne).
+      pct: Math.round(arr.reduce((s, o) => s + Math.max(0, Math.min(100, Number(o.pct) || 0)), 0) / arr.length),
     }));
 }
 
@@ -97,7 +98,7 @@ export function Objectifs() {
 
   const avgPct =
     list.length > 0
-      ? Math.round(list.reduce((a, o) => a + (Number(o.pct) || 0), 0) / list.length)
+      ? Math.round(list.reduce((a, o) => a + Math.max(0, Math.min(100, Number(o.pct) || 0)), 0) / list.length) // borné 0..100 comme les lignes
       : 0;
 
   function openAdd() {

@@ -68,6 +68,7 @@ export function PeriodFilter({
   onChange,
   periods,
   allLabel = "Toutes périodes",
+  forward = false,
   className,
 }: {
   value: string;
@@ -75,11 +76,14 @@ export function PeriodFilter({
   /** Mois présents dans les données (« aaaa-mm », récent d'abord) : proposés en raccourcis. */
   periods: string[];
   allLabel?: string;
+  /** Dates tournées vers l'avenir (échéances) : raccourcis en mois/année ENTIERS, pas « jusqu'à aujourd'hui ». */
+  forward?: boolean;
   className?: string;
 }) {
+  const shortcuts = forward ? ["mois-entier", "mois+1", "mois-1", "annee-entiere"] : ["30j", "mois", "mois-1", "annee"];
   const presets: RangePreset[] = [
     { id: "all", label: allLabel, range: null },
-    ...standardPresets(["30j", "mois", "mois-1", "annee"]).map((p) => ({ ...p, group: "Raccourcis" })),
+    ...standardPresets(shortcuts).map((p) => ({ ...p, group: "Raccourcis" })),
     ...periods.slice(0, 12).map((ym) => ({ id: ym, label: periodLabel(ym), range: monthRange(ym), group: "Mois" })),
   ];
   return (

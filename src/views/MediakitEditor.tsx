@@ -307,8 +307,9 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
         }
         platforms[i] = {
           ...platforms[i],
-          followers: platforms[i].followers || (h.followers ?? ""),
-          er: platforms[i].er || (h.er ?? "").replace(/\s/g, ""),
+          // La dernière mesure du calculateur REMPLACE l'existant (sinon on garde la valeur actuelle).
+          followers: h.followers || platforms[i].followers,
+          er: (h.er ?? "").replace(/\s/g, "") || platforms[i].er,
         };
       }
       return { ...m, platforms };

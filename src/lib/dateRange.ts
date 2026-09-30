@@ -120,6 +120,13 @@ export function presetRange(id: string, today: Date = new Date()): DateRange | n
       return { from: isoDay(new Date(y, m - 1, 1)), to: isoDay(new Date(y, m, 0)) };
     case "annee":
       return { from: `${y}-01-01`, to: t };
+    // Périodes ENTIÈRES (échéances futures incluses) : pour filtrer des dates d'échéance.
+    case "mois-entier":
+      return { from: isoDay(new Date(y, m, 1)), to: isoDay(new Date(y, m + 1, 0)) };
+    case "mois+1":
+      return { from: isoDay(new Date(y, m + 1, 1)), to: isoDay(new Date(y, m + 2, 0)) };
+    case "annee-entiere":
+      return { from: `${y}-01-01`, to: `${y}-12-31` };
     default:
       return null;
   }
@@ -133,6 +140,9 @@ const PRESET_LABELS: Record<string, string> = {
   mois: "Ce mois-ci",
   "mois-1": "Mois dernier",
   annee: "Cette année",
+  "mois-entier": "Ce mois-ci",
+  "mois+1": "Mois prochain",
+  "annee-entiere": "Cette année",
 };
 
 /** Liste de raccourcis prêts à passer au sélecteur. */

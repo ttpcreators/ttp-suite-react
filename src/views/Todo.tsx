@@ -541,7 +541,8 @@ export function Todo() {
         const activeCount =
           (creatorFilter != null ? 1 : 0) +
           (priorityFilter != null ? 1 : 0) +
-          (todoFilter !== "encours" ? 1 : 0);
+          // Le filtre de statut n'existe (et ne s'applique) qu'en vue liste.
+          (viewMode === "liste" && todoFilter !== "encours" ? 1 : 0);
         const groups: FilterGroup[] = [
           ...(viewMode === "liste"
             ? [{

@@ -6,6 +6,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { AddButton, InlineForm, SelectField } from "@/components/ui/form";
 import { FilterBar, type FilterOpt } from "@/components/ui/filter-bar";
 import { PeriodFilter, periodsFrom, inPeriod } from "@/components/ui/period-filter";
+import { isoDay } from "@/lib/dateRange";
 import { FileCard, fileFormatOf, type FormatFileProps } from "@/components/ui/file-card-collections";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
@@ -302,9 +303,14 @@ export function Documents() {
     return Number.isNaN(t) ? 0 : t;
   };
   // `.filter()` renvoie un nouveau tableau → le `.sort()` ne mute jamais `rows`.
-  const periods = periodsFrom((rows ?? []).map((r) => r.created_at));
+  // created_at est un horodatage UTC : on filtre sur le jour LOCAL (celui affiché), pas le jour UTC.
+  const localDay = (r: Row) => {
+    const d = new Date(r.created_at);
+    return Number.isNaN(d.getTime()) ? r.created_at : isoDay(d);
+  };
+  const periods = periodsFrom((rows ?? []).map(localDay));
   const filtered = (rows ?? [])
-    .filter((row) => matchQuery(query, row.name, row.type, row.creator) && inPeriod(row.created_at, period) && (!creatorFilter || (row.creator ?? "") === creatorFilter))
+    .filter((row) => matchQuery(query, row.name, row.type, row.creator) && inPeriod(localDay(row), period) && (!creatorFilter || (row.creator ?? "") === creatorFilter))
     .sort((a, b) => {
       if (sort === "ancien") return timeOf(a) - timeOf(b);
       if (sort === "nom") return (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" });
@@ -416,6 +422,9 @@ export function Documents() {
           <div className="rounded-2xl border border-border bg-surface px-4 py-6 text-sm text-muted-foreground shadow-sm">Aucun document — ajoute le premier 📎</div>
         ) : query.trim() && filtered.length === 0 ? (
           <div className="rounded-2xl border border-border bg-surface px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">Aucun résultat pour « {query} »</div>
+        ) : !query.trim() && filtered.length === 0 ? (
+          /* Période / Créateur ne laissent aucun document */
+          <div className="rounded-2xl border border-border bg-surface px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">Aucun document pour ces filtres.</div>
         ) : query.trim() ? (
           /* Recherche : liste plate transversale */
           <ul className="flex flex-col gap-2.5">{filtered.map(docCard)}</ul>
@@ -431,7 +440,7 @@ export function Documents() {
             </button>
             <div className="mb-3 flex items-center gap-3 text-sm font-semibold text-foreground">
               <FileCard formatFile={TYPE_FMT[openType] ?? "doc"} />
-              <span>{metaFor(openType).label} <span className="font-normal text-faint">· {typeCount[openType]}</span></span>
+              <span>{metaFor(openType).label} <span className="font-normal text-faint">· {typeCount[openType] ?? 0}</span></span>
             </div>
             <ul className="flex flex-col gap-2.5">{filtered.filter((r) => normType(r.type) === openType).map(docCard)}</ul>
           </div>

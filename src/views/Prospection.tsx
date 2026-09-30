@@ -181,11 +181,13 @@ export function Prospection() {
     ...STAGE_ORDER.filter((s) => presentStages.has(s)),
     ...[...presentStages].filter((s) => !STAGE_ORDER.includes(s)),
   ];
+  // Étape filtrée disparue (dernière ligne déplacée/supprimée) → on retombe sur « Tous ».
+  const effStage = stageChips.includes(stageFilter) ? stageFilter : "Tous";
 
   const stageBar = (
     <div className="mb-4 flex flex-wrap gap-2">
       {stageChips.map((chip) => {
-        const active = stageFilter === chip;
+        const active = effStage === chip;
         return (
           <button
             key={chip}
@@ -208,7 +210,7 @@ export function Prospection() {
   const filtered = rows.filter(
     (row) =>
       matchQuery(query, row.brand, row.contact, row.stage) &&
-      (stageFilter === "Tous" || (row.stage ?? "Sans étape") === stageFilter),
+      (effStage === "Tous" || (row.stage ?? "Sans étape") === effStage),
   );
 
   if (query.trim() && filtered.length === 0) {

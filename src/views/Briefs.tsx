@@ -303,12 +303,13 @@ export function Briefs() {
   const creatorOptions = [{ value: "", label: "—" }, ...creators.map((c) => ({ value: c.name, label: c.name, img: c.photo_url }))];
 
   const ALL = "__all__";
-  const filtered = (rows ?? []).filter((row) => {
+  // Base : recherche + créatrice (sans le statut) → sert aussi aux compteurs des pastilles de statut.
+  const filteredBase = (rows ?? []).filter((row) => {
     if (!matchQuery(query, row.brand, row.creator, row.deliverables, row.status)) return false;
-    if (statusFilter !== ALL && colKey(row.status) !== statusFilter) return false;
     if (creatorFilter !== "" && (row.creator ?? "").toLowerCase() !== creatorFilter.toLowerCase()) return false;
     return true;
   });
+  const filtered = filteredBase.filter((row) => statusFilter === ALL || colKey(row.status) === statusFilter);
 
   // ---- rendu d'une carte (compacte pour le board, riche pour la liste) ----
   const renderCard = (row: Row, compact: boolean): ReactElement => {
@@ -496,11 +497,11 @@ export function Briefs() {
             value: statusFilter,
             onChange: setStatusFilter,
             options: [
-              { value: ALL, label: "Tous", count: rows.length },
+              { value: ALL, label: "Tous", count: filteredBase.length },
               ...STATUS_OPTS.map((s) => ({
                 value: s.value,
                 label: s.label,
-                count: rows.filter((r) => colKey(r.status) === s.value).length,
+                count: filteredBase.filter((r) => colKey(r.status) === s.value).length,
               })),
             ],
           },

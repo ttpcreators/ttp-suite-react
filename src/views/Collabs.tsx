@@ -227,13 +227,15 @@ export function Collabs() {
   const creatorOptions = [{ value: "", label: "—" }, ...creators.map((c) => ({ value: c.name, label: c.name, img: c.photo_url }))];
 
   const ALL = "__all__";
-  const filtered = (rows ?? []).filter((row) => {
+  // Tous les filtres, sauf éventuellement une facette (pour compter ses pastilles sur les autres filtres).
+  const matchesExcept = (row: Row, skip: "phase" | "statut" | null): boolean => {
     if (!matchQuery(query, row.brand, row.creator ?? "", row.title ?? "", row.contact ?? "")) return false;
-    if (statusFilter !== ALL && row.status !== statusFilter) return false;
-    if (phaseFilter !== ALL && phaseOf(row.step) !== phaseFilter) return false;
+    if (skip !== "statut" && statusFilter !== ALL && row.status !== statusFilter) return false;
+    if (skip !== "phase" && phaseFilter !== ALL && phaseOf(row.step) !== phaseFilter) return false;
     if (creatorFilter !== "" && (row.creator ?? "").toLowerCase() !== creatorFilter.toLowerCase()) return false;
     return true;
-  });
+  };
+  const filtered = (rows ?? []).filter((row) => matchesExcept(row, null));
 
   // ── carte d'une collab ──
   const renderCard = (row: Row): ReactElement => {
@@ -488,6 +490,9 @@ export function Collabs() {
       {/* Filtres */}
       {rows !== null && rows.length > 0 && (() => {
         const activeCount = (phaseFilter !== ALL ? 1 : 0) + (statusFilter !== "active" ? 1 : 0) + (creatorFilter !== "" ? 1 : 0);
+        // Compteurs à facettes : chaque groupe compte selon les AUTRES filtres (recherche, créatrice…).
+        const phaseBase = (rows ?? []).filter((r) => matchesExcept(r, "phase"));
+        const statusBase = (rows ?? []).filter((r) => matchesExcept(r, "statut"));
         const groups: FilterGroup[] = [
           {
             id: "phase",
@@ -495,8 +500,8 @@ export function Collabs() {
             value: phaseFilter,
             onChange: setPhaseFilter,
             options: [
-              { value: ALL, label: "Toutes", count: (rows ?? []).length },
-              ...PHASES.map((p) => ({ value: p.key, label: p.label, count: (rows ?? []).filter((r) => phaseOf(r.step) === p.key).length })),
+              { value: ALL, label: "Toutes", count: phaseBase.length },
+              ...PHASES.map((p) => ({ value: p.key, label: p.label, count: phaseBase.filter((r) => phaseOf(r.step) === p.key).length })),
             ],
           },
           {
@@ -505,8 +510,8 @@ export function Collabs() {
             value: statusFilter,
             onChange: setStatusFilter,
             options: [
-              { value: ALL, label: "Tous", count: (rows ?? []).length },
-              ...STATUS_OPTS.map((s) => ({ value: s.value, label: s.label, count: (rows ?? []).filter((r) => r.status === s.value).length })),
+              { value: ALL, label: "Tous", count: statusBase.length },
+              ...STATUS_OPTS.map((s) => ({ value: s.value, label: s.label, count: statusBase.filter((r) => r.status === s.value).length })),
             ],
           },
         ];

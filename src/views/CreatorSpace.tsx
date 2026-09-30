@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, lazy, Suspense, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { fmtCompact } from "@/lib/timeSeries";
@@ -389,6 +389,7 @@ export function CreatorSpace({
   // (le blob agence est inaccessible aux créateurs ; le serveur filtre sur SON nom).
   const [suivi, setSuivi] = useState<SuiviEntry[] | null>(null);
   const [suiviErr, setSuiviErr] = useState(false);
+  const [suiviRetry, setSuiviRetry] = useState(0); // « Réessayer » relance le chargement
   useEffect(() => {
     // Chargé pour l'Évolution ET l'accueil ; rafraîchi à chaque `live` (nouvelle
     // mesure d'engagement de l'agence) sans vider l'affichage (pas de flash).
@@ -411,7 +412,7 @@ export function CreatorSpace({
     return () => {
       alive = false;
     };
-  }, [tab, live]);
+  }, [tab, live, name, suiviRetry]);
 
   // Debriefs du créateur — via la fonction serveur debrief-history (blob agence filtré).
   const [debriefs, setDebriefs] = useState<DebriefLite[] | null>(null);
@@ -436,6 +437,24 @@ export function CreatorSpace({
       alive = false;
     };
   }, [tab, debriefs, debriefErr]);
+  // Preview agence : changer de créateur vide les caches (rechargés au bon nom).
+  useEffect(() => {
+    setDebriefs(null);
+    setDebriefErr(false);
+    setSuivi(null);
+    setSuiviErr(false);
+  }, [name]);
+  // Côté agence, les fonctions serveur renvoient TOUS les créateurs : on garde
+  // uniquement ceux du créateur affiché (sans effet pour un vrai créateur, déjà filtré).
+  const nameKey = name.trim().toLowerCase();
+  const mySuivi = useMemo(
+    () => (suivi === null ? null : suivi.filter((e) => String(e.creator ?? "").trim().toLowerCase() === nameKey)),
+    [suivi, nameKey],
+  );
+  const myDebriefs = useMemo(
+    () => (debriefs === null ? null : debriefs.filter((d) => String(d.creator ?? "").trim().toLowerCase() === nameKey)),
+    [debriefs, nameKey],
+  );
   const [creator, setCreator] = useState<Creator | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
@@ -1019,20 +1038,34 @@ export function CreatorSpace({
   // Dernière mesure d'engagement PAR plateforme → abonnés cumulés + ER par réseau.
   const platformLatest = (() => {
     const m = new Map<string, SuiviEntry>();
-    for (const e of suivi ?? []) {
-      const prev = m.get(e.platform);
-      if (!prev || frTime(prev.date) < frTime(e.date)) m.set(e.platform, e);
+    for (const e of mySuivi ?? []) {
+      const k = (e.platform || "").toLowerCase();
+      const prev = m.get(k);
+      if (!prev || frTime(prev.date) < frTime(e.date)) m.set(k, e);
     }
     return [...m.values()].sort((a, b) => (toNum(b.followers) ?? 0) - (toNum(a.followers) ?? 0));
   })();
-  const totalFollowers = platformLatest.reduce((a, e) => a + (toNum(e.followers) ?? 0), 0);
+  // Total abonnés = dernière valeur CONNUE (> 0) de chaque réseau, additionnée
+  // (même règle que la courbe de l'accueil : un relevé à 0 n'efface pas le réseau).
+  const totalFollowers = (() => {
+    const last = new Map<string, { t: number; f: number }>();
+    for (const e of mySuivi ?? []) {
+      const t = frTime(e.date);
+      const f = toNum(e.followers) ?? 0;
+      const k = (e.platform || "").toLowerCase();
+      if (!t || f <= 0 || !k) continue;
+      const prev = last.get(k);
+      if (!prev || prev.t <= t) last.set(k, { t, f });
+    }
+    return [...last.values()].reduce((a, x) => a + x.f, 0);
+  })();
   // Évolution des abonnés (mesures agence) — UNE série par PLATEFORME (IG/TikTok/…),
   // pour distinguer les réseaux ; si le créateur n'en a qu'un, ça reste une courbe.
   const followerSeries = (() => {
     const ORDER = ["instagram", "tiktok", "youtube", "x", "snapchat"];
     const byDate = new Map<number, Record<string, number>>();
     const platsSet = new Set<string>();
-    for (const e of suivi ?? []) {
+    for (const e of mySuivi ?? []) {
       const t = frTime(e.date);
       const f = toNum(e.followers) ?? 0;
       const pf = (e.platform || "").toLowerCase();
@@ -1046,8 +1079,9 @@ export function CreatorSpace({
     const points = [...byDate.entries()]
       .sort((a, b) => a[0] - b[0])
       .map(([t, rec]) => ({ label: new Intl.DateTimeFormat("fr-FR", { month: "short" }).format(new Date(t)).replace(".", ""), ...rec }));
-    const last = points[points.length - 1] as unknown as Record<string, number> | undefined;
-    const lastTotal = last ? platforms.reduce((s, p) => s + (typeof last[p] === "number" ? last[p] : 0), 0) : 0;
+    // Total = dernière valeur connue de chaque réseau (report), pas seulement ceux
+    // relevés à la dernière date (sinon le total chute quand les dates diffèrent).
+    const lastTotal = totalFollowers;
     return { points, platforms, lastTotal };
   })();
 
@@ -1399,11 +1433,11 @@ export function CreatorSpace({
             const totalPts: { label: string; full: string; value: number }[] = [];
             // La courbe ne démarre qu’une fois CHAQUE réseau relevé au moins une fois
             // (sinon faux « saut » au début quand le 2e réseau apparaît).
-            const allPlats = new Set((suivi ?? []).filter((e) => (toNum(e.followers) ?? 0) > 0).map((e) => (e.platform || "").toLowerCase()));
-            for (const e of [...(suivi ?? [])].sort((x, y) => frTime(x.date) - frTime(y.date))) {
+            const allPlats = new Set((mySuivi ?? []).filter((e) => (toNum(e.followers) ?? 0) > 0).map((e) => (e.platform || "").toLowerCase()));
+            for (const e of [...(mySuivi ?? [])].sort((x, y) => frTime(x.date) - frTime(y.date))) {
               const t = frTime(e.date);
               const fo = toNum(e.followers) ?? 0;
-              if (!t || fo <= 0) continue;
+              if (!t || fo <= 0 || !e.platform) continue;
               lastSeen.set((e.platform || "").toLowerCase(), fo);
               if (lastSeen.size < allPlats.size) continue;
               const value = [...lastSeen.values()].reduce((a, n) => a + n, 0);
@@ -1416,8 +1450,8 @@ export function CreatorSpace({
             const prevTotal = totalPts.length >= 2 ? totalPts[totalPts.length - 2].value : 0;
             const lastTotal = totalPts.length ? totalPts[totalPts.length - 1].value : 0;
             const followersDelta = totalPts.length >= 2 && prevTotal > 0 ? ((lastTotal - prevTotal) / prevTotal) * 100 : null;
-            const lastMeasure = Math.max(0, ...(suivi ?? []).map((e) => frTime(e.date) || 0));
-            const statsStale = suivi !== null && (!lastMeasure || Date.now() - lastMeasure > 35 * 86400000);
+            const lastMeasure = Math.max(0, ...(mySuivi ?? []).map((e) => frTime(e.date) || 0));
+            const statsStale = mySuivi !== null && (!lastMeasure || Date.now() - lastMeasure > 35 * 86400000);
             const now = new Date();
             const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
             const evIso = (e: Ev) => e.date || (e.day ? `${todayIso.slice(0, 8)}${String(e.day).padStart(2, "0")}` : "9999-12-31");
@@ -1427,8 +1461,8 @@ export function CreatorSpace({
               .sort((a, b) => (toISODate(a.due) || "").localeCompare(toISODate(b.due) || ""))[0];
             const lastInv = invoices[0];
             const topEr = platformLatest[0]?.er ?? creator?.er ?? null;
-            // Même total que « Mes infos » (dernière mesure de CHAQUE réseau).
-            const followersNow = totalFollowers || toNum(creator?.followers) || 0;
+            // Même total que la courbe et le delta (dernier point cumulé), sinon la fiche.
+            const followersNow = lastTotal || totalFollowers || toNum(creator?.followers) || 0;
             const hi = (s: string) => <span className="text-foreground">{s}</span>;
             const insight: ReactNode = statsStale ? (
               <>Pense à {hi("envoyer tes stats du mois")} : ton agence s'en sert pour te proposer aux marques.</>
@@ -1498,7 +1532,7 @@ export function CreatorSpace({
                         </Suspense>
                       ) : (
                         <div className="grid h-[180px] place-items-center rounded-xl border border-dashed border-border px-4 text-center text-[12px] text-faint">
-                          {suivi === null ? "Chargement…" : "La courbe apparaîtra dès que ton agence aura enregistré 2 relevés d'abonnés."}
+                          {mySuivi === null ? "Chargement…" : "La courbe apparaîtra dès que ton agence aura enregistré 2 relevés d'abonnés."}
                         </div>
                       )}
                     </div>
@@ -1864,21 +1898,22 @@ export function CreatorSpace({
                   onClick={() => {
                     setSuiviErr(false);
                     setSuivi(null);
+                    setSuiviRetry((n) => n + 1);
                   }}
                   className="mt-3 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                 >
                   Réessayer
                 </button>
               </div>
-            ) : suivi === null ? (
+            ) : mySuivi === null ? (
               <AnimatedBadge status="loading" size="sm">
                 Chargement de ton évolution…
               </AnimatedBadge>
             ) : (
               <div className="flex flex-col gap-4">
-                {suivi.length > 0 && (
+                {mySuivi.length > 0 && (
                   <Suspense fallback={<div className="h-[320px] animate-pulse rounded-2xl bg-panel/50" />}>
-                    <CreatorStatsCard entries={suivi} />
+                    <CreatorStatsCard entries={mySuivi} />
                   </Suspense>
                 )}
                 {followerSeries.points.length >= 2 && (
@@ -1893,7 +1928,7 @@ export function CreatorSpace({
                     {followerGlassGrid}
                   </div>
                 )}
-                <SuiviPanel entries={suivi} lockedCreator={name} />
+                <SuiviPanel entries={mySuivi} lockedCreator={name} />
               </div>
             ))}
 
@@ -1914,11 +1949,11 @@ export function CreatorSpace({
                   Réessayer
                 </button>
               </div>
-            ) : debriefs === null ? (
+            ) : myDebriefs === null ? (
               <AnimatedBadge status="loading" size="sm">
                 Chargement de tes debriefs…
               </AnimatedBadge>
-            ) : debriefs.length === 0 ? (
+            ) : myDebriefs.length === 0 ? (
               <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center shadow-sm">
                 <div className="mx-auto w-fit"><FileCard formatFile="doc" /></div>
                 <div className="mt-3 text-sm font-medium text-foreground">Aucun debrief pour l'instant</div>
@@ -1926,7 +1961,7 @@ export function CreatorSpace({
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                {debriefs.map((d, i) => (
+                {myDebriefs.map((d, i) => (
                   <article key={i} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">

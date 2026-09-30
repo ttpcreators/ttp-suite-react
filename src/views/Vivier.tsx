@@ -224,7 +224,7 @@ export function Vivier() {
       <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
           {filtered.length} créateur{filtered.length > 1 ? "s" : ""}
-          {(tagFilter !== ALL || contactFilter !== "all" || query.trim()) && <span className="text-faint"> / {rows.length}</span>}
+          {(tagFilter !== ALL || contactFilter !== "all" || statusFilter !== "__all__" || query.trim()) && <span className="text-faint"> / {rows.length}</span>}
         </div>
         <AddButton label="Créateur" onClick={openAdd} />
       </PageHeaderRow>

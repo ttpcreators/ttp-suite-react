@@ -3,7 +3,7 @@ import { Eye, EyeOff, Trash2, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
-import { useNavSub } from "@/lib/navSub";
+import { useNavSub, useSetNavSub } from "@/lib/navSub";
 import { CredentialVault } from "@/views/CredentialVault";
 import { useSearch, matchQuery } from "@/lib/search";
 import { useCreators } from "@/lib/useCreators";
@@ -120,6 +120,7 @@ export function Acces() {
 
   // Sous-page (nav 3e niveau) : « Comptes app » (défaut) ou « E-mails créateurs » (coffre).
   const navSub = useNavSub();
+  const setNavSub = useSetNavSub(); // remonte le choix à la sidebar
   const [section, setSection] = useState<"comptes" | "emails">("comptes");
   useEffect(() => {
     if (navSub === "comptes" || navSub === "emails") setSection(navSub);
@@ -269,7 +270,10 @@ export function Acces() {
           <button
             key={id}
             type="button"
-            onClick={() => setSection(id)}
+            onClick={() => {
+              setSection(id);
+              setNavSub(id);
+            }}
             className={cn("rounded-lg px-4 py-2 transition-colors", section === id ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")}
           >
             {label}

@@ -239,7 +239,8 @@ export function AgentView() {
     for (const e of memoire) m.set(e.creatrice, (m.get(e.creatrice) ?? 0) + 1);
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [memoire]);
-  const memSel = memCreatrice || creatricesMem[0]?.[0] || "";
+  // Sélection périmée (créatrice disparue de la mémoire) → retombe sur la première.
+  const memSel = creatricesMem.some(([n]) => n === memCreatrice) ? memCreatrice : (creatricesMem[0]?.[0] ?? "");
   const memEntries = memoire.filter((e) => e.creatrice === memSel);
 
   // ── actions de Marc ──

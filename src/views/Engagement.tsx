@@ -259,7 +259,8 @@ export function Engagement() {
     const orig = editingId ? freshHist.find((h) => h.id === editingId) : undefined;
     const entry: HistEntry = {
       id: editingId ?? uid(),
-      date: new Date().toLocaleDateString("fr-FR"),
+      // Modification d'un relevé existant : on garde sa date d'origine.
+      date: orig?.date ?? new Date().toLocaleDateString("fr-FR"),
       creator: selectedCreator ? titleCase(selectedCreator.name) : "Calcul libre",
       creatorId: creatorId || undefined,
       platform: p.key,

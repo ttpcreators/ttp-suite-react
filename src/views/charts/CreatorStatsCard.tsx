@@ -45,24 +45,36 @@ export default function CreatorStatsCard({ entries }: { entries: Entry[] }) {
   const [active, setActive] = useState<MetricKey>("vues");
 
   // Agrégation par date, tous réseaux confondus. Vues (30 j) = base du calculateur
-  // d'engagement : `vals.views` (repli `reach`). Abonnés = somme, engagement =
-  // moyenne, interactions = somme.
+  // d'engagement : `vals.views` (repli `reach`). Engagement = moyenne, interactions = somme.
+  // 1) Dédoublonnage : une seule mesure par (date, réseau), la dernière saisie l'emporte.
+  // 2) Abonnés = somme, par réseau, du DERNIER relevé connu à cette date (report), pour ne
+  //    pas « chuter » quand les réseaux sont mesurés à des jours différents.
+  // 3) Vues / engagement / interactions = mesures du jour seulement, une par réseau.
   const points = useMemo(() => {
-    const byDate = new Map<number, { label: string; vue: number; foll: number; erSum: number; erN: number; inter: number }>();
+    const byDate = new Map<number, { label: string; byPlat: Map<string, Entry> }>();
     for (const e of entries) {
       const t = frTime(e.date);
       if (!t) continue;
-      const rec = byDate.get(t) ?? { label: (e.date || "").slice(0, 5), vue: 0, foll: 0, erSum: 0, erN: 0, inter: 0 };
-      rec.vue += num(e.vals?.views) || num(e.vals?.reach);
-      rec.foll += num(e.followers);
-      const er = parseEr(e.er);
-      if (er > 0) { rec.erSum += er; rec.erN += 1; }
-      rec.inter += interactionsOf(e);
+      const rec = byDate.get(t) ?? { label: (e.date || "").slice(0, 5), byPlat: new Map<string, Entry>() };
+      rec.byPlat.set(e.platform ?? "", e);
       byDate.set(t, rec);
     }
+    const lastFoll = new Map<string, number>(); // dernier nombre d'abonnés connu par réseau
     return [...byDate.entries()]
       .sort((a, b) => a[0] - b[0])
-      .map(([, r]) => ({ label: r.label, vues: r.vue, abonnes: r.foll, engagement: r.erN ? Math.round((r.erSum / r.erN) * 100) / 100 : 0, interactions: r.inter }));
+      .map(([, r]) => {
+        let vue = 0, erSum = 0, erN = 0, inter = 0;
+        for (const [plat, e] of r.byPlat) {
+          vue += num(e.vals?.views) || num(e.vals?.reach);
+          const f = num(e.followers);
+          if (f > 0) lastFoll.set(plat, f);
+          const er = parseEr(e.er);
+          if (er > 0) { erSum += er; erN += 1; }
+          inter += interactionsOf(e);
+        }
+        const foll = [...lastFoll.values()].reduce((a, v) => a + v, 0);
+        return { label: r.label, vues: vue, abonnes: foll, engagement: erN ? Math.round((erSum / erN) * 100) / 100 : 0, interactions: inter };
+      });
   }, [entries]);
 
   const last = points[points.length - 1];

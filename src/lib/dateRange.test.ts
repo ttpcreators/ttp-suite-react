@@ -13,6 +13,14 @@ describe("dateRange", () => {
     expect(presetRange("annee", TODAY)).toEqual({ from: "2026-01-01", to: "2026-09-29" });
   });
 
+  it("raccourcis « période entière » : échéances futures incluses", () => {
+    expect(presetRange("mois-entier", TODAY)).toEqual({ from: "2026-09-01", to: "2026-09-30" });
+    expect(presetRange("mois+1", TODAY)).toEqual({ from: "2026-10-01", to: "2026-10-31" });
+    expect(presetRange("annee-entiere", TODAY)).toEqual({ from: "2026-01-01", to: "2026-12-31" });
+    expect(presetRange("mois+1", new Date(2026, 11, 15))).toEqual({ from: "2027-01-01", to: "2027-01-31" });
+    expect(fullMonthOf(presetRange("mois-entier", TODAY)!)).toBe("2026-09");
+  });
+
   it("période précédente de même durée, collée avant", () => {
     expect(previousRange({ from: "2026-09-01", to: "2026-09-10" })).toEqual({ from: "2026-08-22", to: "2026-08-31" });
   });

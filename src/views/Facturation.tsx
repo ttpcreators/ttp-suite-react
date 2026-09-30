@@ -26,7 +26,8 @@ import { toast } from "@/components/ui/toast";
 import { AddButton, TextField, SelectField } from "@/components/ui/form";
 import { ActionMenu, type ActionItem } from "@/components/ui/action-menu";
 import { FilterBar } from "@/components/ui/filter-bar";
-import { PeriodFilter, periodsFrom, inPeriod } from "@/components/ui/period-filter";
+import { PeriodFilter, periodsFrom, inPeriod, periodToRange, periodLabel } from "@/components/ui/period-filter";
+import { fullMonthOf, rangeLabel } from "@/lib/dateRange";
 import { useCreators } from "@/lib/useCreators";
 import { commissionMap } from "@/lib/commission";
 import { useLiveKey } from "@/lib/useLive";
@@ -476,17 +477,27 @@ export function Facturation() {
   );
   const statusChips: { value: InvoiceStatus | "Tous"; label: string }[] = [{ value: "Tous", label: "Tous" }, ...STATUS_OPTIONS];
 
-  // ── Synthèse (bento) : encaissé de l'année + mensuel + impayés (sur TOUTES les factures) ──
+  // ── Synthèse (bento) : suit le filtre Période (pas le Statut : c'est une ventilation par statut).
+  // Sans période : encaissé de l'année + mois courant, impayés sur TOUTES les factures.
+  const periodRange = periodToRange(period);
+  const focusYm = periodRange ? fullMonthOf(periodRange) : null; // période = un mois entier ?
+  const scope = period ? invoices.filter((r) => inPeriod(r.date, period)) : invoices;
   const nowY = new Date().getFullYear();
   const nowM = new Date().getMonth() + 1;
-  const paidThisYear = invoices.filter((r) => r.status === "payee" && ymOf(r.date)?.y === nowY);
-  const encaisse = paidThisYear.reduce((s, r) => s + parseAmount(r.amount), 0);
+  const bentoY = focusYm ? Number(focusYm.slice(0, 4)) : periodRange ? Number(periodRange.to.slice(0, 4)) : nowY;
+  const bentoM = focusYm ? Number(focusYm.slice(5, 7)) : nowM;
+  const periodName = periodRange ? rangeLabel(periodRange) : "";
+  const paidScope = scope.filter((r) => r.status === "payee" && (period ? true : ymOf(r.date)?.y === nowY));
+  const encaisse = paidScope.reduce((s, r) => s + parseAmount(r.amount), 0);
   const monthly = Array.from({ length: 12 }, (_, i) =>
-    paidThisYear.filter((r) => ymOf(r.date)?.m === i + 1).reduce((s, r) => s + parseAmount(r.amount), 0),
+    paidScope.filter((r) => ymOf(r.date)?.y === bentoY && ymOf(r.date)?.m === i + 1).reduce((s, r) => s + parseAmount(r.amount), 0),
   );
-  const unpaid = invoices.filter((r) => r.status === "attente" || r.status === "retard");
+  // Barre « ce mois » : le mois choisi, sinon le mois courant ; plage libre = total par mois de l'année.
+  const barsLabel = focusYm ? `Encaissé · ${periodLabel(focusYm).toLowerCase()}` : periodRange ? `Encaissé par mois · ${bentoY}` : "Encaissé ce mois";
+  const barsValue = periodRange && !focusYm ? monthly.reduce((s, v) => s + v, 0) : (monthly[bentoM - 1] ?? 0);
+  const unpaid = scope.filter((r) => r.status === "attente" || r.status === "retard");
   const aEncaisser = unpaid.reduce((s, r) => s + parseAmount(r.amount), 0);
-  const nbRetard = invoices.filter((r) => r.status === "retard").length;
+  const nbRetard = scope.filter((r) => r.status === "retard").length;
 
   // ── Éditeur ──
   function openCreate() {
@@ -684,16 +695,16 @@ export function Facturation() {
         <StatsBento
           className="mb-5"
           primary={{
-            eyebrow: `Encaissé · ${nowY}`,
+            eyebrow: `Encaissé · ${period ? periodName : nowY}`,
             value: formatEuro(encaisse),
-            caption: `${paidThisYear.length} facture${paidThisYear.length > 1 ? "s" : ""} réglée${paidThisYear.length > 1 ? "s" : ""} cette année.`,
+            caption: `${paidScope.length} facture${paidScope.length > 1 ? "s" : ""} réglée${paidScope.length > 1 ? "s" : ""} ${period ? "sur la période" : "cette année"}.`,
           }}
           bars={{
-            label: "Encaissé ce mois",
-            value: formatEuro(monthly[nowM - 1] ?? 0),
+            label: barsLabel,
+            value: formatEuro(barsValue),
             series: monthly,
           }}
-          small={{ value: String(unpaid.length), label: "Impayées" }}
+          small={{ value: String(unpaid.length), label: period ? `Impayées · ${periodName}` : "Impayées · toutes périodes" }}
           accent={{
             value: formatEuro(aEncaisser),
             label: nbRetard > 0 ? `dont ${nbRetard} en retard` : "En attente de paiement",
@@ -709,7 +720,7 @@ export function Facturation() {
           onChange={(v) => setStatusFilter(v as InvoiceStatus | "Tous")}
           options={statusChips}
         />
-        {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} allLabel="Toutes échéances" />}
+        {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} allLabel="Toutes échéances" forward />}
       </div>
 
       {/* Liste */}
@@ -731,7 +742,7 @@ export function Facturation() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            {query.trim() ? `Aucun résultat pour « ${query} »` : "Aucune facture pour ce statut."}
+            {query.trim() ? `Aucun résultat pour « ${query} »` : "Aucune facture pour ces filtres."}
           </div>
         ) : (
           filtered.map((r) => {
