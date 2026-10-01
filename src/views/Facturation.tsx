@@ -409,6 +409,8 @@ export function Facturation() {
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false); // garde synchrone contre le double clic
   const [preview, setPreview] = useState<{ html: string; ref: string; email: string; brand: string } | null>(null);
+  // Fiche « marge » ouverte au clic sur une facture (détail HT / TVA / commission).
+  const [finView, setFinView] = useState<Row | null>(null);
 
   useEffect(() => {
     supabase
@@ -507,6 +509,27 @@ export function Facturation() {
   // Barre « ce mois » : le mois choisi, sinon le mois courant ; plage libre = total par mois de l'année.
   const barsLabel = focusYm ? `Encaissé · ${periodLabel(focusYm).toLowerCase()}` : periodRange ? `Encaissé par mois · ${bentoY}` : "Encaissé ce mois";
   const barsValue = periodRange && !focusYm ? monthly.reduce((s, v) => s + v, 0) : (monthly[bentoM - 1] ?? 0);
+  // ── Marge agence : commission calculée sur le HT (jamais sur la TVA), séparée du TTC.
+  // Facture détaillée → lignes + TVA + taux de la facture ; ancienne facture sans
+  // détail → montant enregistré considéré HT (franchise), taux du roster. Seuil 100 € inclus.
+  const finOf = (r: Row): Totals & { rate: number } => {
+    const d = details[r.id];
+    const rate = d?.commissionRate ?? commissionFor(r.creator);
+    const t = d?.items?.length
+      ? totalsOf(d.items, d.franchise, d.vatRate, rate)
+      : totalsOf([{ id: "x", label: "", qty: 1, unit: parseAmount(r.amount) }], true, 0, rate);
+    return { ...t, rate };
+  };
+  // Synthèse sur la période (brouillons exclus : ce n'est pas encore facturé).
+  const billed = scope.filter((r) => r.status !== "brouillon");
+  const sumFin = (list: Row[]) =>
+    list.reduce((a, r) => {
+      const f = finOf(r);
+      return { ht: a.ht + f.ht, tva: a.tva + f.tva, ttc: a.ttc + f.ttc, commission: a.commission + f.commission, reversal: a.reversal + f.reversal };
+    }, { ht: 0, tva: 0, ttc: 0, commission: 0, reversal: 0 });
+  const finBilled = sumFin(billed);
+  const finPaid = sumFin(billed.filter((r) => r.status === "payee"));
+  const margePct = finBilled.ht > 0 ? (finBilled.commission / finBilled.ht) * 100 : 0;
   const unpaid = scope.filter((r) => r.status === "attente" || r.status === "retard");
   const aEncaisser = unpaid.reduce((s, r) => s + parseAmount(r.amount), 0);
   const nbRetard = scope.filter((r) => r.status === "retard").length;
@@ -761,6 +784,27 @@ export function Facturation() {
         />
       )}
 
+      {/* Marge agence (sur le HT), séparée du TTC */}
+      {billed.length > 0 && (
+        <div className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border lg:grid-cols-4">
+          {[
+            { label: "Facturé HT", value: euro2(finBilled.ht), foot: `${euro2(finBilled.ttc)} TTC · TVA ${euro2(finBilled.tva)}` },
+            { label: "Marge TTP (commission HT)", value: euro2(finBilled.commission), foot: `${fmtRate(Math.round(margePct * 10) / 10)} % du HT en moyenne`, strong: true },
+            { label: "Marge déjà encaissée", value: euro2(finPaid.commission), foot: `sur ${euro2(finPaid.ht)} HT payés` },
+            { label: "Part des créatrices", value: euro2(finBilled.reversal), foot: "HT moins la commission" },
+          ].map((k) => (
+            <div key={k.label} className="flex min-w-0 flex-col bg-surface px-4 py-4 sm:px-5">
+              <span className="text-[12px] text-muted-foreground sm:text-[13px]">{k.label}</span>
+              <span className={cn("mt-2 truncate text-[20px] font-semibold leading-none tracking-tight tabular-nums sm:text-[24px]", k.strong && "text-signaltext")}>{k.value}</span>
+              <span className="mt-2.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground">{k.foot}</span>
+            </div>
+          ))}
+          <div className="col-span-2 bg-surface px-4 py-2.5 text-[12px] text-muted-foreground sm:px-5 lg:col-span-4">
+            {period ? `Période : ${periodName}` : "Toutes les factures"} · brouillons exclus · la commission se calcule sur le HT, jamais sur la TVA, et pas de commission sous 100 € HT.
+          </div>
+        </div>
+      )}
+
       {/* Filtres (pastilles desktop · sélecteur mobile) */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <FilterBar
@@ -774,11 +818,12 @@ export function Facturation() {
       {/* Liste */}
       {/* Tableau dans UN panneau à filets (langage Aperçu) */}
       <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-        <div className="hidden grid-cols-[0.8fr_2fr_1.1fr_1fr_1fr_1.4fr] gap-3 border-b border-border px-4 py-3 text-[12px] text-muted-foreground md:grid">
+        <div className="hidden grid-cols-[0.8fr_2fr_1fr_1.1fr_1fr_1fr_1.4fr] gap-3 border-b border-border px-4 py-3 text-[12px] text-muted-foreground md:grid">
           <span>Réf.</span>
           <span>Marque × Créateur</span>
-          <span className="text-right">Montant TTC</span>
-          <span className="text-center">Marge</span>
+          <span className="text-right">Montant HT</span>
+          <span className="text-right">Marge TTP</span>
+          <span className="text-right">TTC</span>
           <span className="text-center">Échéance</span>
           <span className="text-right">Statut</span>
         </div>
@@ -797,7 +842,8 @@ export function Facturation() {
             const meta = metaOf(r.status);
             // Taux de CETTE facture si un taux spécifique a été saisi (invoiceDetails),
             // sinon le taux vivant du roster. Cohérent avec Reversements (paie).
-            const rate = details[r.id]?.commissionRate ?? commissionFor(r.creator);
+            const fin = finOf(r);
+            const rate = fin.rate;
             const del = async () => {
               if (await dbTrash("invoices", r.id, r.party, formatEuro(parseAmount(r.amount)))) {
                 setRows(invoices.filter((x) => x.id !== r.id));
@@ -816,20 +862,24 @@ export function Facturation() {
             ];
             const margeChip = (
               <span className="inline-block whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                Marge {fmtRate(rate)} %
+                Marge {euro2(fin.commission)} · {fmtRate(rate)} %
               </span>
             );
             return (
               <div key={r.id} className="border-b border-border last:border-0">
                 {/* Desktop : ligne type tableau */}
                 <div
-                  onClick={openPreview}
-                  className="hidden cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-rowhover md:grid md:grid-cols-[0.8fr_2fr_1.1fr_1fr_1fr_1.4fr]"
+                  onClick={() => setFinView(r)}
+                  className="hidden cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-rowhover md:grid md:grid-cols-[0.8fr_2fr_1fr_1.1fr_1fr_1fr_1.4fr]"
                 >
                   <span className="text-[11px] font-medium text-faint">#{r.ref}</span>
                   <span className="truncate text-sm font-medium text-foreground">{r.party}</span>
-                  <span className="text-right text-[13px] font-medium tabular-nums text-foreground">{formatEuro(parseAmount(r.amount))}</span>
-                  <span className="text-center">{margeChip}</span>
+                  <span className="text-right text-[13px] font-medium tabular-nums text-foreground">{euro2(fin.ht)}</span>
+                  <span className="text-right tabular-nums">
+                    <span className="block text-[13px] font-medium text-signaltext">{euro2(fin.commission)}</span>
+                    <span className="block text-[11px] text-muted-foreground">{fin.commission === 0 && fin.ht > 0 && fin.ht < 100 ? "sous 100 € HT" : `${fmtRate(rate)} %`}</span>
+                  </span>
+                  <span className="text-right text-[12px] tabular-nums text-muted-foreground">{euro2(fin.ttc)}</span>
                   <span className="text-center text-[11px] font-medium text-muted-foreground">{frDate(r.date)}</span>
                   <span className="flex items-center justify-end gap-2">
                     <AnimatedBadge status={meta.badge} size="sm">{meta.label}</AnimatedBadge>
@@ -840,7 +890,7 @@ export function Facturation() {
                 </div>
 
                 {/* Mobile : carte compacte */}
-                <div onClick={openPreview} className="flex cursor-pointer flex-col gap-2 px-3 py-3 md:hidden">
+                <div onClick={() => setFinView(r)} className="flex cursor-pointer flex-col gap-2 px-3 py-3 md:hidden">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 text-[10px] font-medium text-faint">
@@ -851,7 +901,10 @@ export function Facturation() {
                     <AnimatedBadge status={meta.badge} size="sm">{meta.label}</AnimatedBadge>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-lg font-bold tracking-tight text-foreground">{formatEuro(parseAmount(r.amount))}</span>
+                    <span className="flex flex-col">
+                      <span className="text-lg font-bold tracking-tight text-foreground">{euro2(fin.ht)} <span className="text-[11px] font-medium text-muted-foreground">HT</span></span>
+                      {fin.tva > 0 && <span className="text-[11px] text-muted-foreground">{euro2(fin.ttc)} TTC</span>}
+                    </span>
                     {margeChip}
                   </div>
                   <div className="mt-0.5 flex items-center justify-between border-t border-border pt-2.5">
@@ -1021,6 +1074,55 @@ export function Facturation() {
           </div>
         </Modal>
       )}
+
+      {/* ── Fiche marge d'une facture (au clic) ── */}
+      {finView && (() => {
+        const r = finView;
+        const f = finOf(r);
+        const d = details[r.id];
+        const underFloor = f.commission === 0 && f.ht > 0 && f.ht < 100;
+        const line = (label: string, value: string, opts?: { strong?: boolean; accent?: boolean; muted?: boolean }) => (
+          <div className="flex items-center justify-between gap-3 py-2.5">
+            <span className={cn("text-[13px]", opts?.muted ? "text-muted-foreground" : "text-foreground")}>{label}</span>
+            <span className={cn("tabular-nums", opts?.strong ? "text-[16px] font-semibold" : "text-[13px] font-medium", opts?.accent ? "text-signaltext" : "text-foreground")}>{value}</span>
+          </div>
+        );
+        return (
+          <Modal
+            title={`Facture #${r.ref} · ${r.party}`}
+            onClose={() => setFinView(null)}
+            footer={
+              <>
+                <button type="button" className={ghostBtn} onClick={() => { setFinView(null); openEdit(r); }}>Modifier</button>
+                <button type="button" className={ghostBtn} onClick={() => { setFinView(null); downloadInvoice(r); }}>PDF</button>
+                <button type="button" className={ghostBtn} onClick={() => { setFinView(null); sendInvoice(r); }}>Envoyer</button>
+                <button type="button" className={primaryBtn} onClick={() => { setFinView(null); setPreview({ html: buildHTML(r), ref: r.ref, email: detailsFor(r).clientEmail, brand: r.party }); }}>Aperçu</button>
+              </>
+            }
+          >
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
+              <AnimatedBadge status={metaOf(r.status).badge} size="sm">{metaOf(r.status).label}</AnimatedBadge>
+              <span>Échéance {frDate(r.date)}</span>
+              {r.creator && <span>· {r.creator}</span>}
+            </div>
+            <div className="divide-y divide-border rounded-xl border border-border px-4">
+              {line("Montant HT", euro2(f.ht))}
+              {line(f.tva > 0 ? `TVA ${fmtRate(d?.vatRate ?? 0)} %` : "TVA", f.tva > 0 ? euro2(f.tva) : "Non applicable", { muted: true })}
+              {line("Total TTC (payé par la marque)", euro2(f.ttc), { muted: true })}
+            </div>
+            <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-muted/40 px-4">
+              {line(`Commission TTP · ${fmtRate(f.rate)} % du HT`, euro2(f.commission), { strong: true, accent: true })}
+              {line("Part de la créatrice (HT − commission)", euro2(f.reversal))}
+            </div>
+            <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
+              {underFloor
+                ? "Pas de commission : la facture est sous 100 € HT (seuil du contrat). "
+                : "La commission se calcule sur le HT, jamais sur la TVA (reversée à l'État). "}
+              {d?.items?.length ? "Calcul à partir des lignes de la facture." : "Ancienne facture sans détail : le montant enregistré est traité comme HT, sans TVA. Ouvre « Modifier » pour préciser."}
+            </p>
+          </Modal>
+        );
+      })()}
 
       {/* ── Émetteur ── */}
       {issuerDraft && (
