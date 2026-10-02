@@ -15,7 +15,7 @@ export default function ObjectivesTrend({
 }) {
   return (
     <ChartContainer config={{}} className="mt-1 h-[200px]">
-      <AreaChart data={points} margin={{ top: 8, right: 10, left: -6, bottom: 0 }}>
+      <AreaChart data={points} margin={{ top: 8, right: 10, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="objTrend" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={BLUE} stopOpacity={0.26} />
@@ -31,7 +31,7 @@ export default function ObjectivesTrend({
           axisLine={false}
           tick={{ fontSize: 10, fill: "#94a3b8" }}
           tickFormatter={(v) => `${v}%`}
-          width={38}
+          width={44}
         />
         <ReferenceLine y={100} stroke="var(--color-signal)" strokeDasharray="3 6" strokeOpacity={0.5} />
         <Tooltip content={<ChartTooltip unit=" %" />} cursor={{ stroke: BLUE, strokeWidth: 1, strokeOpacity: 0.4 }} />

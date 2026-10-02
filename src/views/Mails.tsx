@@ -227,7 +227,7 @@ export function Mails() {
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[300px_1fr]">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[300px_1fr] lg:grid-cols-[360px_1fr]">
         {/* Colonne : contacts */}
         <div className={cn("rounded-2xl border border-border bg-surface p-3 shadow-sm", selected && "hidden md:block")}>
           <div className="relative mb-3">
@@ -296,9 +296,9 @@ export function Mails() {
                     {initials(c.label)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-[12px] font-semibold text-foreground">{c.label}</span>
-                      {(c.lastContacted || parseTouches(c.touches).length > 0) && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà échangé" />}
+                    <div className="flex items-start gap-1.5">
+                      <span className="line-clamp-2 break-words text-[12px] font-semibold leading-snug text-foreground" title={c.label}>{c.label}</span>
+                      {(c.lastContacted || parseTouches(c.touches).length > 0) && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà échangé" />}
                     </div>
                     <div className="truncate text-[11px] text-faint">{c.email}</div>
                   </div>
@@ -311,8 +311,8 @@ export function Mails() {
           </div>
         </div>
 
-        {/* Colonne : historique */}
-        <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+        {/* Colonne : historique (mobile : masquée tant qu'aucun contact n'est choisi) */}
+        <div className={cn("rounded-2xl border border-border bg-surface p-4 shadow-sm", !selected && "hidden md:block")}>
           {!selected ? (
             <div className="flex h-full min-h-[300px] flex-col items-center justify-center gap-2 text-center text-sm text-faint">
               <Mail className="h-8 w-8 opacity-40" />

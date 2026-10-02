@@ -676,7 +676,7 @@ export function Debrief() {
           <div className="mx-auto mb-3 w-fit"><FileCard formatFile="doc" /></div>
           <div className="text-sm font-medium text-foreground">Aucun debrief pour le moment</div>
           <div className="mt-1.5 text-xs text-faint">
-            Crée un bilan de campagne avec le bouton « + Debrief ».
+            Crée un bilan de campagne avec le bouton « + Debrief ».
           </div>
         </div>
       ) : view === "cards" ? (

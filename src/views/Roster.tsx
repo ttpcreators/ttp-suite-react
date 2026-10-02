@@ -359,7 +359,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                     photoUrl={c.photo}
                     className="h-10 w-10 shrink-0 rounded-xl"
                   />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="truncate text-[13px] font-semibold text-foreground">
                       {titleCase(c.name)}
                     </div>
@@ -377,7 +377,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
 
                 {/* Abonnés (cumul tous réseaux depuis les mesures ; repli = valeur fiche) / ER / CA — masqués sur mobile */}
                 <span className="hidden text-right text-[13px] font-medium tabular-nums text-foreground md:inline">
-                  {cumFollowers[c.name.trim().toLowerCase()] ? fmtCompact(cumFollowers[c.name.trim().toLowerCase()]) : c.followers}
+                  {followersOf(c) > 0 ? fmtCompact(followersOf(c)) : c.followers}
                 </span>
                 <span className="hidden text-right text-[13px] font-medium tabular-nums text-foreground md:inline">
                   {c.er}
@@ -406,7 +406,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                           onClick={(e) => { e.stopPropagation(); markUpToDate(c, true); }}
                           className="flex shrink-0 items-center gap-1 rounded-full border border-border bg-foreground/[0.06] px-2 py-1 text-[10px] font-semibold text-amber transition-colors hover:bg-foreground/[0.06] dark:text-amber"
                         >
-                          <RefreshCw className="h-3 w-3" /> à jour ?
+                          <RefreshCw className="h-3 w-3" /><span className="hidden sm:inline"> à jour ?</span>
                         </button>
                       ))}
                     <span className="flex items-center gap-1.5" title={titleCase(label.toLowerCase())}>
@@ -421,7 +421,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                   {!query.trim() && (() => {
                     const idx = rows.findIndex((r) => r.id === c.id);
                     return (
-                      <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                      <div className="hidden flex-col sm:flex" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
                           disabled={idx <= 0}

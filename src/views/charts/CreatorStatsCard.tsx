@@ -94,18 +94,18 @@ export default function CreatorStatsCard({ entries }: { entries: Entry[] }) {
           <div className="text-sm font-semibold text-foreground">Mes statistiques</div>
           <div className="text-[11px] text-faint">D'après les mesures de ton agence</div>
         </div>
-        <div className="flex overflow-x-auto border-t border-border sm:border-t-0 sm:border-l">
+        <div className="grid grid-cols-2 gap-px border-t border-border bg-border sm:flex sm:gap-0 sm:overflow-x-auto sm:border-t-0 sm:border-l sm:bg-transparent">
           {METRICS.map((m) => (
             <button
               key={m.key}
               type="button"
               onClick={() => setActive(m.key)}
               className={cn(
-                "flex min-w-[6.5rem] flex-1 flex-col justify-center gap-0.5 border-l border-border px-4 py-3 text-left transition-colors first:border-l-0",
-                active === m.key ? "bg-panel/60" : "hover:bg-rowhover",
+                "flex min-w-0 flex-col justify-center gap-0.5 px-4 py-3 text-left transition-colors sm:min-w-[6.5rem] sm:flex-1 sm:border-l sm:border-border sm:first:border-l-0",
+                active === m.key ? "bg-muted" : "bg-surface hover:bg-rowhover",
               )}
             >
-              <span className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+              <span className="flex items-center gap-1.5 whitespace-nowrap text-[12px] font-medium text-muted-foreground">
                 <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: m.color }} /> {m.label}
               </span>
               <span className="text-lg font-bold tabular-nums tracking-tight text-foreground">{fmtVal(totals[m.key], m.pct)}</span>
@@ -116,9 +116,9 @@ export default function CreatorStatsCard({ entries }: { entries: Entry[] }) {
 
       {/* Graphe de la métrique active */}
       <div className="px-2 py-4 sm:px-4">
-        {points.length === 0 ? (
+        {points.length === 0 || points.every((p) => !Number(p[active as keyof typeof p])) ? (
           <div className="grid h-[180px] place-items-center px-4 text-center text-xs text-muted-foreground">
-            Pas encore de mesures. Elles apparaîtront ici dès que ton agence en enregistre.
+            {points.length === 0 ? "Pas encore de mesures. Elles apparaîtront ici dès que ton agence en enregistre." : "Pas encore de données pour cet indicateur."}
           </div>
         ) : (
           <div className="h-[220px]">

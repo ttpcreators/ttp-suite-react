@@ -7,6 +7,7 @@ import {
   getAppState,
   invalidateAppState,
   parseAmount,
+  formatEuro,
   type AppState,
 } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -25,7 +26,19 @@ type Objective = {
   target: string;
   pct: number;
   tone: string;
+  /** Anciens formats / imports : intitulé stocké sous `label` ou `creator`. */
+  label?: string;
+  creator?: string;
+  /** Anciens formats / démo : réalisé sous un autre nom, unité éventuelle. */
+  current?: string | number;
+  value?: string | number;
+  actual?: string | number;
+  unit?: string;
+  kind?: string;
 };
+
+/** Intitulé affichable, quel que soit le champ qui le porte. */
+const objLabel = (o: Objective) => o.name || o.label || o.creator || "Sans intitulé";
 
 /**
  * Blob 'objByMonth' : indexé par mois ABSOLU ("AAAA-MM"). Ancien format = clé
@@ -38,6 +51,35 @@ const ObjectivesTrend = lazy(() => import("./charts/ObjectivesTrend"));
 const monthKeyOf = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 const CURRENT_KEY = monthKeyOf();
 const isMonthKey = (k: string) => /^\d{4}-\d{2}$/.test(k);
+/** Valeur saisie brute ("20000") → "20 000 €" si monétaire, sinon "20 000" ; texte libre laissé tel quel. */
+const fmtAmount = (v: string, money = true) =>
+  /^\s*\d+(?:[.,]\d+)?\s*$/.test(v ?? "")
+    ? money
+      ? formatEuro(parseAmount(v))
+      : parseAmount(v).toLocaleString("fr-FR").replace(/\u202f/g, "\u00a0")
+    : v;
+/** Objectif monétaire ? (unité explicite, intitulé CA/chiffre/€, ou valeur contenant €). */
+function isMoneyObj(o: Objective): boolean {
+  const unit = `${o.unit ?? ""} ${o.kind ?? ""}`.toLowerCase();
+  if (unit.trim()) return /€|eur|money|ca\b|montant/.test(unit);
+  if (/\bCA\b|€|chiffre|marge|revenu/i.test(objLabel(o))) return true;
+  return [o.ca, o.target, o.current, o.value, o.actual].some((v) => String(v ?? "").includes("€"));
+}
+/** Réalisé brut (champ `ca`, ou anciens noms) ; "" si absent. */
+function achievedOf(o: Objective): string {
+  for (const v of [o.ca, o.current, o.actual, o.value]) {
+    const t = v == null ? "" : String(v).trim();
+    if (t && t !== "—") return t;
+  }
+  return "";
+}
+/** "38 000 € / 50 000 €", ou "Objectif 50 000 €" sans réalisé. */
+function progressLabel(o: Objective): string {
+  const money = isMoneyObj(o);
+  const tg = fmtAmount(String(o.target ?? ""), money);
+  const done = achievedOf(o);
+  return done ? `${fmtAmount(done, money)} / ${tg}` : `Objectif ${tg}`;
+}
 function monthTitle(key: string) {
   const [y, m] = key.split("-").map(Number);
   const s = new Date(y, (m || 1) - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
@@ -126,9 +168,9 @@ export function Objectifs() {
   }
   function startEdit(o: Objective) {
     setEditing(o);
-    setName(o.name);
-    setTarget(o.target);
-    setCa(o.ca === "—" ? "" : o.ca);
+    setName(objLabel(o));
+    setTarget(String(o.target ?? ""));
+    setCa(achievedOf(o));
     setFormOpen(true);
   }
   async function submit() {
@@ -300,16 +342,17 @@ export function Objectifs() {
                   key={o.id ?? `${o.name}-${index}`}
                   className="flex flex-col gap-3 py-3.5 md:flex-row md:items-center md:gap-4"
                 >
-                  <span className="truncate text-[13px] font-semibold text-foreground md:w-44">
-                    {o.name}
+                  <span className="block min-w-0 truncate text-[13px] font-semibold text-foreground md:w-44 md:shrink-0">
+                    {objLabel(o)}
                   </span>
-                  <Progress value={pct} className={"h-2 flex-1 " + tone.track} indicatorClassName={tone.ind} />
-                  <div className="flex items-center justify-between gap-4 md:justify-end">
-                    <span className={"w-12 shrink-0 text-right text-[13px] font-semibold " + tone.text}>
+                  <div className="flex min-w-0 items-center gap-3 md:contents">
+                  <Progress value={pct} className={"h-2 w-auto min-w-0 flex-1 " + tone.track} indicatorClassName={tone.ind} />
+                  <div className="flex shrink-0 items-center justify-end gap-2 md:gap-4">
+                    <span className={"w-10 shrink-0 text-right text-[13px] font-semibold md:w-12 " + tone.text}>
                       {pct}%
                     </span>
-                    <span className="shrink-0 whitespace-nowrap text-right text-[11px] text-faint">
-                      {o.ca} / {o.target}
+                    <span className="max-w-28 shrink-0 truncate whitespace-nowrap text-right text-[11px] tabular-nums text-faint md:w-36 md:max-w-none" title={progressLabel(o)}>
+                      {progressLabel(o)}
                     </span>
                     <button
                       type="button"
@@ -319,7 +362,8 @@ export function Objectifs() {
                     >
                       <Pencil className="h-4 w-4" />
                     </button>
-                    <DeleteButton onClick={() => setPendingDel({ message: `Supprimer l'objectif « ${o.name} » ? Cette action est irréversible.`, run: () => remove(o) })} />
+                    <DeleteButton onClick={() => setPendingDel({ message: `Supprimer l'objectif « ${objLabel(o)} » ? Cette action est irréversible.`, run: () => remove(o) })} />
+                  </div>
                   </div>
                 </li>
               );

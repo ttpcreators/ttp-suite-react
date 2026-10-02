@@ -400,7 +400,7 @@ export function Acces() {
         </div>
       ) : rows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm">
-          Aucun accès pour le moment. Clique sur « + Accès » pour créer le premier compte créateur.
+          Aucun accès pour le moment. Clique sur « + Accès » pour créer le premier compte créateur.
         </div>
       ) : query.trim() && filtered.length === 0 ? (
         <div className="rounded-xl border border-border bg-card shadow-sm">

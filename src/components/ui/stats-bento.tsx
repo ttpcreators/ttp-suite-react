@@ -25,12 +25,17 @@ export type StatsBentoProps = {
 };
 
 const cell = "flex min-w-0 flex-col px-4 py-4 sm:px-5 sm:py-5";
-const label = "line-clamp-2 text-[12px] leading-snug text-muted-foreground sm:text-[13px]";
-const big = "mt-2 truncate text-[22px] font-semibold leading-none tracking-tight tabular-nums text-foreground sm:text-[26px]";
+// Libellé : 2 lignes réservées tant que la grille est sur 2 colonnes → les chiffres
+// d'une même rangée restent alignés même si un seul libellé passe à la ligne.
+const label = "line-clamp-2 min-h-[2lh] text-[12px] leading-snug text-muted-foreground sm:text-[13px] lg:min-h-0";
+const big = "mt-2 line-clamp-2 break-words text-[20px] font-semibold leading-tight tracking-tight sm:truncate sm:leading-none tabular-nums text-foreground sm:text-[26px]";
 
 export function StatsBento({ primary, bars, small, accent, className }: StatsBentoProps) {
-  const max = Math.max(1, ...bars.series.filter((n) => Number.isFinite(n)));
-  const top = bars.series.indexOf(Math.max(...bars.series));
+  const finite = bars.series.filter((n) => Number.isFinite(n));
+  const max = Math.max(1, ...finite);
+  // Série toute à 0 : aucune barre mise en avant (sinon une barre pleine contredit le « 0 »).
+  const empty = !finite.some((n) => n > 0);
+  const top = empty ? -1 : bars.series.indexOf(Math.max(...finite));
   const AccentIcon = accent.icon;
   return (
     <section className={cn("grid grid-cols-2 overflow-hidden rounded-2xl border border-border bg-surface lg:grid-cols-4", className)}>
@@ -46,13 +51,13 @@ export function StatsBento({ primary, bars, small, accent, className }: StatsBen
         <span className={label}>{bars.label}</span>
         {/* Mobile : barres SOUS le chiffre (sinon il est tronqué dans une case étroite). */}
         <div className="mt-2 flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
-          <span className="max-w-full truncate text-[22px] font-semibold leading-none tracking-tight tabular-nums text-foreground sm:text-[26px]">{bars.value}</span>
+          <span className="line-clamp-2 max-w-full break-words text-[20px] font-semibold leading-tight tracking-tight tabular-nums text-foreground sm:truncate sm:text-[26px] sm:leading-none">{bars.value}</span>
           <div className="flex h-6 shrink-0 items-end gap-[3px] sm:h-8" aria-hidden>
             {bars.series.map((h, i) => (
               <span
                 key={i}
-                className={cn("w-1.5 rounded-full", i === top ? "bg-foreground/70" : "bg-foreground/20")}
-                style={{ height: `${Math.max(12, ((Number.isFinite(h) ? h : 0) / max) * 100)}%` }}
+                className={cn("w-1.5 rounded-full", i === top ? "bg-foreground/70" : h > 0 ? "bg-foreground/20" : "bg-foreground/10")}
+                style={{ height: h > 0 && Number.isFinite(h) ? `${Math.max(12, (h / max) * 100)}%` : "3px" }}
               />
             ))}
           </div>

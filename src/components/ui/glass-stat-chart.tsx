@@ -1,3 +1,4 @@
+import { fmtCompact } from "@/lib/timeSeries";
 import { useState } from "react";
 import { Area, AreaChart, Line, LineChart, CartesianGrid, XAxis, YAxis, Tooltip } from "recharts";
 import { ChartContainer } from "@/components/ui/chart";
@@ -14,14 +15,9 @@ export type GlassPoint = { label: string; value: number };
 
 const num = (v: number) => (Number.isFinite(v) ? v : 0);
 
-/** Libellé d'axe COURT (2,8k · 1,2M · 700) — sinon « 2 800 € » déborde et se coupe
+/** Libellé d'axe COURT (2,8 k · 1,2 M · 700) — sinon « 2 800 € » déborde et se coupe
  *  sur 2 lignes. Pas d'unité sur l'axe : le titre + le gros chiffre la portent. */
-const compactAxis = (n: number) => {
-  const a = Math.abs(n);
-  if (a >= 1_000_000) return String(+(n / 1_000_000).toFixed(1)).replace(".", ",") + "M";
-  if (a >= 1_000) return String(+(n / 1_000).toFixed(1)).replace(".", ",") + "k";
-  return String(Math.round(n));
-};
+const compactAxis = (n: number) => fmtCompact(n);
 
 export default function GlassStatChart({
   title,
@@ -38,7 +34,7 @@ export default function GlassStatChart({
   subtitle?: string;
   points: GlassPoint[];
   format?: (n: number) => string;
-  /** Format COURT de l'axe Y (défaut : compact 2,8k). Le gros chiffre/tooltip gardent `format`. */
+  /** Format COURT de l'axe Y (défaut : compact 2,8 k). Le gros chiffre/tooltip gardent `format`. */
   yFormat?: (n: number) => string;
   color?: string;
   defaultType?: "line" | "area";
@@ -113,7 +109,7 @@ export default function GlassStatChart({
                 </defs>
                 <CartesianGrid strokeDasharray="3 6" stroke="var(--color-border)" vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--faint)" }} tickMargin={8} interval="preserveStartEnd" minTickGap={14} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--faint)" }} width={38} tickFormatter={(v) => yFormat(Number(v))} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--faint)" }} width={46} tickFormatter={(v) => yFormat(Number(v))} />
                 <Tooltip content={<TooltipContent />} cursor={{ stroke: color, strokeWidth: 1, strokeOpacity: 0.4 }} />
                 <Area type="monotone" dataKey="value" name={title} stroke={color} strokeWidth={2} fill={`url(#glass-${title.replace(/\W/g, "")})`} dot={false} activeDot={{ r: 4, fill: color, stroke: "var(--color-surface)", strokeWidth: 2 }} />
               </AreaChart>
@@ -121,7 +117,7 @@ export default function GlassStatChart({
               <LineChart data={clean} margin={{ top: 8, right: 8, left: -4, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 6" stroke="var(--color-border)" vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--faint)" }} tickMargin={8} interval="preserveStartEnd" minTickGap={14} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--faint)" }} width={38} tickFormatter={(v) => yFormat(Number(v))} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--faint)" }} width={46} tickFormatter={(v) => yFormat(Number(v))} />
                 <Tooltip content={<TooltipContent />} cursor={{ stroke: color, strokeWidth: 1, strokeOpacity: 0.4 }} />
                 <Line type="monotone" dataKey="value" name={title} stroke={color} strokeWidth={2} dot={false} activeDot={{ r: 4, fill: color, stroke: "var(--color-surface)", strokeWidth: 2 }} />
               </LineChart>

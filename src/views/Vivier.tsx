@@ -1,3 +1,4 @@
+import { fmtCompact } from "@/lib/timeSeries";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials } from "@/lib/utils";
@@ -64,11 +65,6 @@ type Snap = { date: string; value: number }; // date = ISO « AAAA-MM-JJ »
 type Track = { status?: ScoutStatus; snaps?: Snap[] };
 type Tracking = Record<string, Track>;
 
-/** Abrège un nombre d'abonnés : 226K · 1,2M. */
-const fmtCompact = (n: number) =>
-  n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, "").replace(".", ",") + "M"
-  : n >= 1e3 ? (n / 1e3).toFixed(1).replace(/\.0$/, "").replace(".", ",") + "K"
-  : String(Math.round(n));
 /** ISO « 2026-08-12 » → « 12 août ». */
 const frShort = (iso: string) => {
   const d = new Date(iso + "T00:00:00");
@@ -257,7 +253,7 @@ export function Vivier() {
         </div>
       )}
       {/* Filtre par statut de scouting (segmenté, cohérent avec « déjà contactés ») */}
-      <div className="mb-2 flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-panel p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="mb-2 flex w-fit max-w-full flex-wrap gap-1 overflow-x-auto rounded-xl bg-panel p-1 sm:flex-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {[{ v: "__all__" as const, label: "Tous", dot: "" }, ...STATUSES].map((s) => (
           <button key={s.v} type="button" onClick={() => setStatusFilter(s.v)} className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors", statusFilter === s.v ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
             {s.dot && <span className={cn("h-1.5 w-1.5 rounded-full", s.dot)} />}

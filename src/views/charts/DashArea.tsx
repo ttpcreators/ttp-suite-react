@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { ChartContainer } from "@/components/ui/chart";
 import { fmtCompact } from "@/lib/timeSeries";
@@ -27,7 +27,22 @@ export default function DashArea({
 }) {
   const [active, setActive] = useState<number | null>(null);
   const n = points.length;
-  const step = n > 8 ? 2 : 1;
+  // Largeur réelle du graphique : l'espacement des libellés se calcule en pixels
+  // (sinon deux dates se chevauchent sur un écran étroit, ex. « 2 sept29 sept. »).
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [boxW, setBoxW] = useState(0);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((es) => setBoxW(es[0]?.contentRect.width ?? 0));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const labelW = Math.max(28, ...points.map((p) => p.label.length * 6.5));
+  // Axe en points : marges du graphique (gauche 0 + axe Y 42, droite 8).
+  const gap = n > 1 && boxW > 0 ? (boxW - 50) / (n - 1) : 0;
+  const MIN_GAP = 12;
+  const step = gap > 0 ? Math.max(1, Math.ceil((labelW + MIN_GAP) / gap)) : n > 8 ? 2 : 1;
 
   const Tick = (props: TickProps) => {
     const x = Number(props.x ?? 0);
@@ -47,11 +62,17 @@ export default function DashArea({
     }
     // Espacement ancré sur le DERNIER point : le mois en cours est toujours
     // libellé et deux libellés ne se collent jamais en bout d'axe.
-    const show = (n - 1 - i) % step === 0;
+    // Le dernier libellé est aligné à droite (il s'étend sur toute sa largeur vers
+    // la gauche) : son voisin affiché est masqué s'il le toucherait.
+    const lastClash = gap > 0 && i === n - 1 - step && step * gap < labelW * 1.5 + MIN_GAP;
+    const show = (n - 1 - i) % step === 0 && !lastClash;
     const near = active != null && Math.abs(active - i) === 1;
+    // Dernier libellé aligné à droite : centré, il dépassait du bord du graphique
+    // (« 29 se… » coupé sur mobile).
+    const last = i === n - 1;
     return (
       <g transform={`translate(${x},${y})`}>
-        <text x={0} y={20} textAnchor="middle" fontSize={11} fill="var(--faint)" opacity={!show ? 0 : near ? 0.3 : 1}>
+        <text x={last ? 4 : 0} y={20} textAnchor={last ? "end" : "middle"} fontSize={11} fill="var(--faint)" opacity={!show ? 0 : near ? 0.3 : 1}>
           {text}
         </text>
       </g>
@@ -74,7 +95,7 @@ export default function DashArea({
   };
 
   return (
-    <div style={{ height }} className="w-full">
+    <div ref={boxRef} style={{ height }} className="w-full">
       <ChartContainer config={{}} className="h-full">
         <AreaChart
           data={points}

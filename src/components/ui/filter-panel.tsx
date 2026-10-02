@@ -46,7 +46,7 @@ export function FilterPanel({
   const activeLabel =
     activeCount > 0
       ? `${activeCount} filtre${activeCount > 1 ? "s" : ""} actif${activeCount > 1 ? "s" : ""}`
-      : "Aucun filtre actif";
+      : "Aucun filtre";
 
   return (
     <section className={cn("rounded-2xl border border-border bg-surface px-5 py-4", className)}>
@@ -54,8 +54,8 @@ export function FilterPanel({
       <div className="flex items-center justify-between gap-3">
         <button type="button" onClick={() => setOpen((v) => !v)} className="flex min-w-0 items-center gap-2 text-left" aria-expanded={open}>
           <SlidersHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="text-[14px] font-semibold text-foreground">{title}</span>
-          <span className={cn("truncate text-[12px]", activeCount > 0 ? "text-foreground" : "text-muted-foreground")}>· {activeLabel}</span>
+          <span className="shrink-0 text-[14px] font-semibold text-foreground">{title}</span>
+          <span className={cn("min-w-0 truncate text-[12px]", activeCount > 0 ? "text-foreground" : "text-muted-foreground")}>· {activeLabel}</span>
           <ChevronDown className={cn("h-4 w-4 shrink-0 text-faint transition-transform", open && "rotate-180")} />
         </button>
         {right && <div className="shrink-0">{right}</div>}

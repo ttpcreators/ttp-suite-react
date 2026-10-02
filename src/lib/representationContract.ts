@@ -211,8 +211,19 @@ function ph(key: string, c: Record<string, string>): string {
   }
 }
 
+/**
+ * Espaces insécables dans les montants (typo FR) : "5 000 € HT" ne se coupe plus
+ * en fin de ligne — milliers, avant €/%, et entre €/% et HT/TTC.
+ */
+export function nbspFr(text: string): string {
+  return text
+    .replace(/(\d)[ \u202f](?=\d{3}(?!\d))/g, "$1\u00a0")
+    .replace(/(\d) (?=[€%])/g, "$1\u00a0")
+    .replace(/([€%]) (?=(?:HT|TTC)\b)/g, "$1\u00a0");
+}
+
 function resolve(text: string, c: Record<string, string>): string {
-  return text.replace(/\{(\w+)\}/g, (_, k) => ph(k, c));
+  return nbspFr(text.replace(/\{(\w+)\}/g, (_, k) => ph(k, c)));
 }
 
 function includeOk(token: string | undefined, c: Record<string, string>): boolean {

@@ -211,7 +211,8 @@ export function Reversements() {
               value: formatEuro(totalReste),
               caption: `${nbAPayer} créateur${nbAPayer > 1 ? "s" : ""} à payer · ${formatEuro(totalDu)} dû au total.`,
             }}
-            bars={{ label: "Reste par créatrice", value: `${formatEuro(totalReverse)} reversés`, series: rows.map((r) => Math.max(0, r.reste)) }}
+            // Valeur cohérente avec l'intitulé et les barres (reste dû) ; le déjà reversé a sa propre case.
+            bars={{ label: "Reste par créatrice (max)", value: formatEuro(Math.max(0, ...rows.map((r) => r.reste))), series: rows.map((r) => Math.max(0, r.reste)) }}
             small={{ value: String(nbAPayer), label: "À payer" }}
             accent={{ value: formatEuro(totalReverse), label: "Déjà reversé", icon: Wallet }}
           />

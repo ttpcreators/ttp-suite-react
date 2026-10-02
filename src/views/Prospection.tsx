@@ -343,11 +343,11 @@ export function Prospection() {
                       />
                     </div>
                     {card.contact && (
-                      <p className="mt-1.5 truncate text-[10px] text-muted-foreground">
+                      <p className="mt-1.5 truncate pl-[15px] text-[10px] text-muted-foreground">
                         {card.contact}
                       </p>
                     )}
-                    <p className="mt-2 text-[13px] font-semibold text-foreground">
+                    <p className="mt-2 pl-[15px] text-[13px] font-semibold text-foreground">
                       {card.value ?? "—"}
                     </p>
                   </div>

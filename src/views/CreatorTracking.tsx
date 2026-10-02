@@ -53,7 +53,7 @@ function ReadBlock({ label, children }: { label: string; children: React.ReactNo
 /** Tuiles de cadence (réel + éventuel /reco), lecture seule. */
 function CadenceTiles({ cadence, reco }: { cadence: Cadence; reco?: Cadence }) {
   return (
-    <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
       {CADENCE_FIELDS.map((f) => {
         const r = reco?.[f.key] ?? 0;
         const below = r > 0 && cadence[f.key] < r;
@@ -62,7 +62,7 @@ function CadenceTiles({ cadence, reco }: { cadence: Cadence; reco?: Cadence }) {
             <div className={cn("text-lg font-bold tabular-nums", below ? "text-amber" : "text-foreground")}>
               {cadence[f.key]}{r > 0 && <span className="text-[11px] font-medium text-faint"> / {r}</span>}
             </div>
-            <div className="mt-0.5 text-[11px] font-medium text-muted-foreground">{f.short}</div>
+            <div className="mt-0.5 whitespace-nowrap break-normal text-[11px] font-medium text-muted-foreground">{f.short}</div>
           </div>
         );
       })}
@@ -998,9 +998,9 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
                   {CADENCE_FIELDS.map((f) => {
                     const Icon = FMT_ICON[f.key];
                     return (
-                      <div key={f.key} className="flex flex-col bg-surface px-3 py-3">
-                        <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                          <Icon className="h-3.5 w-3.5" /> {FMT_LABEL[f.key]}
+                      <div key={f.key} className="flex min-w-0 flex-col bg-surface px-2.5 py-3 sm:px-3">
+                        <span className="flex min-w-0 items-start gap-1 text-[12px] leading-tight text-muted-foreground sm:gap-1.5">
+                          <Icon className="mt-px hidden h-3.5 w-3.5 shrink-0 min-[400px]:block" /> <span className="min-w-0 whitespace-nowrap">{FMT_LABEL[f.key]}</span>
                         </span>
                         <span className="mt-1.5 text-[20px] font-semibold leading-none tabular-nums text-foreground">{rm.cadenceReco[f.key]}</span>
                       </div>

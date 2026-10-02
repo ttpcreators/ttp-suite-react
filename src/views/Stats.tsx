@@ -26,6 +26,11 @@ import {
   LabelList,
 } from "recharts";
 
+/** Format compact à la française pour axes, étiquettes et KPI : 950 · 4,5 k · 1,2 M. */
+function fmtK(n: number): string {
+  return fmtCompact(Number(n) || 0);
+}
+
 type CreatorRow = { name: string; followers: string | null; er: string | null; reach: string | null; ca: string | null; status: string | null };
 type InvRow = { id?: string; amount: string; status: string; creator: string | null; date: string | null };
 type CountRow = { id: string };
@@ -135,7 +140,7 @@ function RevenueChart({ points }: { points: RevenuePoint[] }) {
       </div>
 
       <ChartContainer config={{}} className="mt-4 h-[280px]">
-        <AreaChart data={view} margin={{ top: 16, right: 12, left: -6, bottom: 0 }}>
+        <AreaChart data={view} margin={{ top: 16, right: 12, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="caGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={COLORS.primary} stopOpacity={0.22} />
@@ -144,7 +149,7 @@ function RevenueChart({ points }: { points: RevenuePoint[] }) {
           </defs>
           <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.7} vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickMargin={10} interval="preserveStartEnd" minTickGap={16} />
-          <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(Number(v))} width={44} />
+          <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtK(Number(v))} width={52} />
           <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ stroke: COLORS.primary, strokeWidth: 1, strokeOpacity: 0.4 }} />
           <Area
             type="monotone"
@@ -444,9 +449,9 @@ export function Stats() {
         <StatCard
           icon={TrendingUp}
           label="Followers cumulés"
-          value={fmtCompact(totalFollowers)}
+          value={fmtK(totalFollowers)}
           delta={snapDelta(totalFollowers, "totalFollowers")}
-          lastValue={prevSnap ? fmtCompact(prevSnap.totalFollowers) : undefined}
+          lastValue={prevSnap ? fmtK(prevSnap.totalFollowers) : undefined}
           compareLabel={prevLbl ? `Vs ${prevLbl}` : undefined}
           hint="tous créateurs"
         />
@@ -530,7 +535,7 @@ export function Stats() {
               <span className="text-faint">· CA facturé</span>
             </div>
             <ChartContainer config={{}} className="h-[240px]">
-              <AreaChart data={cmpChart} margin={{ top: 12, right: 12, left: -6, bottom: 0 }}>
+              <AreaChart data={cmpChart} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="cmpGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={COLORS.primary} stopOpacity={0.2} />
@@ -539,7 +544,7 @@ export function Stats() {
                 </defs>
                 <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.6} vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickMargin={10} interval="preserveStartEnd" minTickGap={16} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(Number(v))} width={44} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtK(Number(v))} width={52} />
                 <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ stroke: COLORS.primary, strokeWidth: 1, strokeOpacity: 0.4 }} />
                 <Area type="monotone" dataKey="compare" name="Comparaison" stroke={COLORS.slate} strokeWidth={2} strokeDasharray="5 4" fill="transparent" dot={false} />
                 <Area type="monotone" dataKey="actuel" name="Période actuelle" stroke={COLORS.primary} strokeWidth={2.5} fill="url(#cmpGrad)" dot={false} activeDot={{ r: 4, fill: COLORS.primary, stroke: "var(--color-surface)", strokeWidth: 2 }} />
@@ -604,7 +609,7 @@ export function Stats() {
         {/* Volume par module */}
         <ChartCard title="Volume d'activité" subtitle="Éléments par module">
           <ChartContainer config={{}} className="h-[240px]">
-            <BarChart data={volumeData} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
+            <BarChart data={volumeData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 {volumeData.map((d, i) => (
                   <linearGradient key={i} id={`vol-${i}`} x1="0" y1="0" x2="0" y2="1">
@@ -615,7 +620,7 @@ export function Stats() {
               </defs>
               <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="4 8" strokeOpacity={0.6} />
               <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickMargin={8} />
-              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} allowDecimals={false} width={28} />
+              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} allowDecimals={false} tickFormatter={(v) => fmtK(Number(v))} width={36} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(148,163,184,0.1)" }} />
               <Bar dataKey="value" radius={[7, 7, 0, 0]} maxBarSize={46}>
                 {volumeData.map((d, i) => (
@@ -632,7 +637,7 @@ export function Stats() {
             <div className="grid h-[260px] place-items-center text-sm text-faint">Aucune donnée</div>
           ) : (
             <ChartContainer config={{}} className="h-[260px]">
-              <BarChart data={topCreators} layout="vertical" margin={{ top: 4, right: 22, left: 8, bottom: 0 }}>
+              <BarChart data={topCreators} layout="vertical" margin={{ top: 4, right: 44, left: 8, bottom: 0 }}>
                 <defs>
                   <linearGradient id="topGrad" x1="0" y1="0" x2="1" y2="0">
                     <stop offset="0%" stopColor={COLORS.primary} stopOpacity={0.55} />
@@ -640,11 +645,11 @@ export function Stats() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid horizontal={false} stroke="var(--color-border)" strokeDasharray="4 8" strokeOpacity={0.6} />
-                <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(v)} />
+                <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtK(Number(v))} />
                 <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => String(v).split(" ")[0]} width={70} />
                 <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ fill: "rgba(148,163,184,0.1)" }} />
                 <Bar dataKey="ca" fill="url(#topGrad)" radius={[0, 7, 7, 0]} maxBarSize={26}>
-                  <LabelList dataKey="ca" position="right" formatter={(v) => fmtCompact(Number(v))} style={{ fontSize: 10, fontWeight: 600, fill: "#94a3b8" }} />
+                  <LabelList dataKey="ca" position="right" formatter={(v) => fmtK(Number(v))} style={{ fontSize: 10, fontWeight: 600, fill: "#94a3b8" }} />
                 </Bar>
               </BarChart>
             </ChartContainer>
@@ -657,7 +662,7 @@ export function Stats() {
             <div className="grid h-[260px] place-items-center text-sm text-faint">Aucune donnée</div>
           ) : (
             <ChartContainer config={{}} className="h-[260px]">
-              <BarChart data={followersData} margin={{ top: 12, right: 8, left: -12, bottom: 0 }}>
+              <BarChart data={followersData} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="folGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={COLORS.indigo} stopOpacity={0.95} />
@@ -665,8 +670,8 @@ export function Stats() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="4 8" strokeOpacity={0.6} />
-                <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => String(v).split(" ")[0]} interval={0} angle={-20} textAnchor="end" height={44} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtCompact(v)} width={38} />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => String(v).split(" ")[0]} interval={0} angle={-35} textAnchor="end" height={52} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtK(Number(v))} width={52} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(148,163,184,0.1)" }} />
                 <Bar dataKey="followers" fill="url(#folGrad)" radius={[7, 7, 0, 0]} maxBarSize={56} />
               </BarChart>

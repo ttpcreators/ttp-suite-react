@@ -501,7 +501,36 @@ function MonthView({
               >
                 {d.getDate()}
               </span>
-              <div className="flex flex-col gap-1">
+              {/* Mobile (< sm) : cellules trop étroites pour du texte → pastilles colorées (max 3 + « +n »), un tap ouvre l'événement. */}
+              {shown.length > 0 && (
+                <div className="flex flex-wrap items-center justify-center sm:hidden">
+                  {shown.map((e) => (
+                    <span
+                      key={e.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${e.time ? e.time + " · " : ""}${e.title}`}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        onEventClick(e);
+                      }}
+                      onKeyDown={(ev) => {
+                        if (ev.key === "Enter" || ev.key === " ") {
+                          ev.preventDefault();
+                          ev.stopPropagation();
+                          onEventClick(e);
+                        }
+                      }}
+                      className="grid place-items-center p-1"
+                      title={`${e.time ? e.time + " · " : ""}${e.title}`}
+                    >
+                      <span className={cn("block h-2 w-2 rounded-full", chipBg(e))} />
+                    </span>
+                  ))}
+                  {extra > 0 && <span className="text-[9px] font-medium leading-none text-muted-foreground">+{extra}</span>}
+                </div>
+              )}
+              <div className="hidden flex-col gap-1 sm:flex">
                 {shown.map((e) => (
                   <span
                     key={e.id}

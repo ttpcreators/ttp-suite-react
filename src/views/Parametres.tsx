@@ -77,8 +77,8 @@ function Section({ icon, title, hint, children }: { icon: ReactNode; title: stri
   return (
     <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="mb-1 flex items-center gap-2">
-        <span className="grid h-8 w-8 place-items-center rounded-lg bg-muted text-muted-foreground">{icon}</span>
-        <div>
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">{icon}</span>
+        <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-foreground">{title}</div>
           {hint && <div className="text-[11px] text-faint">{hint}</div>}
         </div>

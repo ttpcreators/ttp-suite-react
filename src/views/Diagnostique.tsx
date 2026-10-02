@@ -24,11 +24,11 @@ const fmtWhen = (ts: number) => new Date(ts).toLocaleString("fr-FR", { day: "num
 function UptimeBar({ history, checkKey }: { history: DiagSnapshot[]; checkKey: string }) {
   const last = [...history].slice(0, 30).reverse(); // ancien → récent
   return (
-    <div className="mt-1.5 flex items-end gap-[3px]">
+    <div className="mt-1.5 flex w-full min-w-0 flex-wrap items-end gap-[3px]">
       {last.length === 0 && <span className="text-[10px] text-faint">Pas encore d'historique</span>}
       {last.map((snap, i) => {
         const c = snap.checks.find((x) => x.key === checkKey);
-        return <div key={i} className={cn("h-5 w-[5px] rounded-sm", c ? barCls[c.status] : "bg-border")} title={`${fmtWhen(snap.ts)} — ${c ? META[c.status].label : "—"}`} />;
+        return <div key={i} className={cn("h-5 w-[5px] shrink-0 rounded-sm", c ? barCls[c.status] : "bg-border")} title={`${fmtWhen(snap.ts)} — ${c ? META[c.status].label : "—"}`} />;
       })}
     </div>
   );
@@ -103,8 +103,8 @@ export function Diagnostique() {
       {/* Détail par composant */}
       <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <div className="mb-3 flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-muted text-muted-foreground"><HeartPulse className="h-4 w-4" /></span>
-          <div>
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><HeartPulse className="h-4 w-4" /></span>
+          <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold text-foreground">État des composants</div>
             <div className="text-[11px] text-faint">Audit automatique matin & soir (à l'ouverture de l'app) + à la demande.</div>
           </div>
@@ -115,11 +115,11 @@ export function Diagnostique() {
             const m = META[c.status];
             return (
               <div key={c.key} className="rounded-xl border border-border bg-panel/40 p-3.5">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <div className="flex flex-wrap items-center justify-start gap-x-2 gap-y-1 text-left md:gap-x-3">
                   <m.Icon className={cn("h-4 w-4 shrink-0", m.cls)} />
-                  <span className="text-[13px] font-semibold text-foreground">{c.label}</span>
-                  <span className={cn("text-[11px] font-medium", m.cls)}>{m.label}</span>
-                  <span className="ml-auto truncate text-[11px] text-muted-foreground">{c.detail}</span>
+                  <span className="min-w-0 text-left text-[13px] font-semibold text-foreground">{c.label}</span>
+                  <span className={cn("ml-auto text-[11px] font-medium md:ml-0", m.cls)}>{m.label}</span>
+                  <span className="min-w-0 basis-full truncate pl-6 text-left text-[11px] text-muted-foreground md:ml-auto md:basis-auto md:pl-0 md:text-right">{c.detail}</span>
                 </div>
                 <UptimeBar history={history ?? []} checkKey={c.key} />
               </div>

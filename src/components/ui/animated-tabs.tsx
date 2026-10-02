@@ -130,13 +130,15 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
   const reduced = useReducedMotion();
   const rowRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [ind, setInd] = useState({ x: 0, width: 0, ready: false });
+  const [ind, setInd] = useState({ x: 0, y: 0, width: 0, height: 0, ready: false });
   const selectedIndex = items.findIndex((i) => i.value === tabs.value);
 
   useIso(() => {
     const node = tabRefs.current[selectedIndex];
     if (!node) return;
-    const read = () => setInd((prev) => (prev.x === node.offsetLeft && prev.width === node.offsetWidth && prev.ready ? prev : { x: node.offsetLeft, width: node.offsetWidth, ready: true }));
+    // x/y + largeur/hauteur : sur mobile la barre peut passer à la ligne (flex-wrap),
+    // l'indicateur suit donc aussi la position verticale de l'onglet actif.
+    const read = () => setInd((prev) => (prev.x === node.offsetLeft && prev.y === node.offsetTop && prev.width === node.offsetWidth && prev.height === node.offsetHeight && prev.ready ? prev : { x: node.offsetLeft, y: node.offsetTop, width: node.offsetWidth, height: node.offsetHeight, ready: true }));
     read();
     const row = rowRef.current;
     if (!row) return;
@@ -151,13 +153,13 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
         {...tabs.tabListProps}
         ref={rowRef}
         aria-label={label}
-        className="relative flex w-fit max-w-full gap-0.5 overflow-x-auto rounded-xl border border-border bg-surface p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="relative flex w-fit max-w-full flex-wrap gap-0.5 overflow-x-auto rounded-xl sm:flex-nowrap border border-border bg-surface p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {/* Indicateur glissant (fond de l'onglet actif) */}
         <motion.span
           aria-hidden
-          className="pointer-events-none absolute bottom-1 top-1 rounded-lg bg-muted"
-          style={{ left: ind.x, width: ind.width, opacity: ind.ready ? 1 : 0 }}
+          className="pointer-events-none absolute rounded-lg bg-muted"
+          style={{ left: ind.x, top: ind.y, width: ind.width, height: ind.height, opacity: ind.ready ? 1 : 0 }}
           transition={reduced ? { duration: 0 } : INDICATOR}
         />
         {items.map((item, index) => {

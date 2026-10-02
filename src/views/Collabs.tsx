@@ -496,7 +496,7 @@ export function Collabs() {
           <StatsBento
             className="mb-5"
             primary={{ eyebrow: "Collabs en cours", value: String(activeRows.length), caption: `sur ${rows.length} collab${rows.length > 1 ? "s" : ""} au total.` }}
-            bars={{ label: "Par phase", value: `${prod} en production`, series: byPhase }}
+            bars={{ label: "En production", value: String(prod), series: byPhase }}
             small={{ value: String(staleCount), label: `À relancer (> ${STALE_DAYS} j)` }}
             accent={{ value: String(won), label: "Bouclées / gagnées", icon: Trophy }}
           />

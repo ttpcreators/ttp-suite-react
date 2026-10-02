@@ -202,7 +202,7 @@ export function Gifting() {
           icon: Trash2,
           danger: true,
           onClick: () => remove(g),
-          confirm: { title: "Supprimer le gifting", message: `Supprimer « ${g.brand || g.product || "ce gifting"} » ? Il ira dans la corbeille.` },
+          confirm: { title: "Supprimer le gifting", message: `Supprimer « ${g.brand || g.product || "ce gifting"} » ? Il ira dans la corbeille.` },
         },
       ]}
     />
@@ -212,6 +212,8 @@ export function Gifting() {
     <div className="space-y-4">
       {/* En-tête */}
       <PageHeaderRow>
+        {/* Mobile : compteur + « + Gifting » sur la même ligne ; ≥ sm : disposition d'origine. */}
+        <div className="flex w-full items-center justify-between gap-2 sm:contents">
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {loading ? (
             <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>
@@ -226,6 +228,10 @@ export function Gifting() {
               )}
             </>
           )}
+        </div>
+        <span className="sm:hidden">
+          <AddButton label="Gifting" onClick={openCreate} />
+        </span>
         </div>
         <div className="flex items-center gap-2">
           {list.length > 0 && (
@@ -248,7 +254,9 @@ export function Gifting() {
             </div>
           )}
           {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} />}
-          <AddButton label="Gifting" onClick={openCreate} />
+          <span className="hidden sm:contents">
+            <AddButton label="Gifting" onClick={openCreate} />
+          </span>
         </div>
       </PageHeaderRow>
 
@@ -308,7 +316,7 @@ export function Gifting() {
             <Gift className="size-5" />
           </div>
           <div className="text-sm font-medium text-foreground">{period ? "Aucun gifting sur cette période" : "Aucun gifting suivi"}</div>
-          <div className="mt-1.5 text-xs text-faint">{period ? "Change de période ou choisis « Toutes périodes »." : "Ajoute un cadeau reçu pour tracer sa provenance et le contenu attendu."}</div>
+          <div className="mt-1.5 text-xs text-faint">{period ? "Change de période ou choisis « Toutes périodes »." : "Ajoute un cadeau reçu pour tracer sa provenance et le contenu attendu."}</div>
         </div>
       ) : view === "cards" ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -411,7 +419,7 @@ export function Gifting() {
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
             Un cadeau reste une contrepartie : dès qu'il est mis en avant, le créateur doit le signaler comme communication commerciale
-            (« Produit offert » / « Cadeau »), conformément à la loi n° 2023-451 encadrant l'influence commerciale.
+            (« Produit offert » / « Cadeau »), conformément à la loi n° 2023-451 encadrant l'influence commerciale.
           </span>
         </div>
       )}

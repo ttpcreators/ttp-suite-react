@@ -106,7 +106,7 @@ type Todo = { id: string; text: string; descr: string | null; due: string | null
 let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
 // Priorité : barre d'accent (bord gauche de la carte) + pilule.
-const PRIO_ACCENT: Record<string, string> = { haute: "bg-rose-500", moyenne: "bg-foreground/40", basse: "bg-foreground/15" };
+const PRIO_ACCENT: Record<string, string> = { haute: "bg-rose-500", moyenne: "bg-foreground/50", basse: "bg-foreground/30" };
 const PRIO_PILL: Record<string, string> = { haute: "bg-rose-500/10 text-rose-600 dark:text-rose-400", moyenne: "bg-muted text-muted-foreground", basse: "border border-border text-muted-foreground" };
 const prioAccent = (p: string | null) => PRIO_ACCENT[p ?? "moyenne"] ?? PRIO_ACCENT.moyenne;
 const prioPill = (p: string | null) => PRIO_PILL[p ?? "moyenne"] ?? PRIO_PILL.moyenne;
@@ -773,7 +773,7 @@ export function CreatorSpace({
       let ok = 0;
       for (const file of list) {
         if (file.size > 15 * 1024 * 1024) {
-          toast(`« ${file.name} » trop lourd (max 15 Mo)`);
+          toast(`«\u00A0${file.name}\u00A0» trop lourd (max 15 Mo)`);
           continue;
         }
         const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
@@ -981,7 +981,7 @@ export function CreatorSpace({
                     toast("Erreur — réessaie");
                   }
                 },
-                confirm: { title: "Supprimer l'idée", message: `Supprimer « ${x.text} » ? Cette action est irréversible.` },
+                confirm: { title: "Supprimer l'idée", message: `Supprimer «\u00A0${x.text}\u00A0»\u00A0? Cette action est irréversible.` },
               },
             ]}
           />
@@ -1149,7 +1149,7 @@ export function CreatorSpace({
     const platforms = [...ORDER.filter((p) => platsSet.has(p)), ...[...platsSet].filter((p) => !ORDER.includes(p))];
     const points = [...byDate.entries()]
       .sort((a, b) => a[0] - b[0])
-      .map(([t, rec]) => ({ label: new Intl.DateTimeFormat("fr-FR", { month: "short" }).format(new Date(t)).replace(".", ""), ...rec }));
+      .map(([t, rec]) => ({ label: new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit" }).format(new Date(t)), ...rec }));
     // Total = dernière valeur connue de chaque réseau (report), pas seulement ceux
     // relevés à la dernière date (sinon le total chute quand les dates diffèrent).
     const lastTotal = totalFollowers;
@@ -1286,7 +1286,7 @@ export function CreatorSpace({
       if (!uid) { toast("Session expirée — reconnecte-toi"); return; }
       const added: Attachment[] = [];
       for (const file of list) {
-        if (file.size > 15 * 1024 * 1024) { toast(`« ${file.name} » trop lourd (max 15 Mo)`); continue; }
+        if (file.size > 15 * 1024 * 1024) { toast(`«\u00A0${file.name}\u00A0» trop lourd (max 15 Mo)`); continue; }
         const ext = (file.name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
         const path = `creator-uploads/${uid}/todo-attachments/${todo.id}/${Date.now()}-${added.length}${ext ? "." + ext : ""}`;
         const up = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined, upsert: false });
@@ -1475,8 +1475,14 @@ export function CreatorSpace({
           </div>
         )}
 
-        {/* Panneau principal — pb-28 sur mobile pour dégager la barre flottante du bas */}
-        <main className="shell-panel flex min-w-0 flex-1 flex-col overflow-y-auto rounded-[22px] bg-panel px-4 pb-28 pt-4 md:px-6 md:pb-8 md:pt-6">
+        {/* Panneau principal. Mobile : les enfants ne rétrécissent pas (sinon un bloc
+            overflow-hidden, ex. la liste des briefs, est écrasé à la hauteur du panneau
+            et coupe son contenu) + espaceur en bas pour dégager la barre flottante. */}
+        {/* Cadre arrondi FIXE (comme côté agence) qui contient la zone qui défile : un
+            conteneur à la fois arrondi ET défilant laisse Chrome peindre des coins noirs
+            quand la page contient des calques animés (badges). */}
+        <div className="shell-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] bg-panel">
+        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto px-4 pb-4 pt-4 [&>*]:shrink-0 md:px-6 md:pb-8 md:pt-6">
           {/* Barre du haut (mobile) */}
           <div className="mb-5 flex items-center justify-between gap-3 md:hidden">
             <div className="flex items-center gap-2.5">
@@ -1572,9 +1578,9 @@ export function CreatorSpace({
             ) : openTodos.length > 0 ? (
               <>Il te reste {hi(`${openTodos.length} tâche${openTodos.length > 1 ? "s" : ""}`)} à faire. Commence par la plus ancienne.</>
             ) : nextBrief ? (
-              <>Prochain brief : {hi(nextBrief.brand)} pour le {hi(frDate(nextBrief.due))}.</>
+              <>Prochain brief&nbsp;: {hi(nextBrief.brand)} pour le {hi(frDate(nextBrief.due))}.</>
             ) : (
-              <>Tout est à jour. {hi("Belle journée !")}</>
+              <>Tout est à jour. {hi("Belle journée\u00A0!")}</>
             );
             const kpis: { label: string; value: string; foot: ReactNode }[] = [
               { label: "Abonnés", value: followersNow ? fmtCompact(followersNow) : "—", foot: <Delta value={followersDelta} suffix="vs relevé préc." /> },
@@ -1648,7 +1654,7 @@ export function CreatorSpace({
                     <div className="flex flex-col px-5 py-5">
                       <DashSectionTitle icon={BarChart3}>Mes stats du mois</DashSectionTitle>
                       <p className="text-[13px] leading-relaxed text-muted-foreground">
-                        Envoie les captures de tes 30 derniers jours en début de mois : c'est ce qui prouve ton audience aux marques.
+                        Envoie les captures de tes 30 derniers jours en début de mois&nbsp;: c'est ce qui prouve ton audience aux marques.
                       </p>
                       <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
                         <button type="button" onClick={() => setStatsModalOpen(true)} className="rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
@@ -2210,7 +2216,7 @@ export function CreatorSpace({
                                     toast("Erreur — réessaie");
                                   }
                                 },
-                                confirm: { title: "Supprimer la tâche", message: `Supprimer « ${t.text} » ? Cette action est irréversible.` },
+                                confirm: { title: "Supprimer la tâche", message: `Supprimer «\u00A0${t.text}\u00A0»\u00A0? Cette action est irréversible.` },
                               },
                             ]}
                           />
@@ -2364,9 +2370,14 @@ export function CreatorSpace({
                             {[c.person && c.person !== "—" ? c.person : "", c.role].filter(Boolean).join(" · ") || "—"}
                           </div>
                           {(c.email || c.phone) && (
-                            <div className="truncate text-[11px] text-muted-foreground">
-                              {[c.email, c.phone].filter(Boolean).join(" · ")}
-                            </div>
+                            <>
+                              {/* Mobile : email et téléphone sur deux lignes (le téléphone n'est plus coupé) */}
+                              {c.email && <div className="truncate text-[11px] text-muted-foreground sm:hidden">{c.email}</div>}
+                              {c.phone && <div className="text-[11px] text-muted-foreground sm:hidden">{c.phone}</div>}
+                              <div className="hidden truncate text-[11px] text-muted-foreground sm:block">
+                                {[c.email, c.phone].filter(Boolean).join(" · ")}
+                              </div>
+                            </>
                           )}
                         </div>
                         <div onClick={(e) => e.stopPropagation()}>
@@ -2391,7 +2402,7 @@ export function CreatorSpace({
                                   toast("Erreur — réessaie");
                                 }
                               },
-                              confirm: { title: "Supprimer le contact", message: `Supprimer « ${c.brand} » ? Cette action est irréversible.` },
+                              confirm: { title: "Supprimer le contact", message: `Supprimer «\u00A0${c.brand}\u00A0»\u00A0? Cette action est irréversible.` },
                             },
                           ]}
                         />
@@ -2462,7 +2473,7 @@ export function CreatorSpace({
                           onChange={(e) => setBriefScriptText(e.target.value)}
                           rows={6}
                           autoFocus
-                          placeholder={"Écris ton script ici…\n\nHook :\nCorps :\nCall to action :"}
+                          placeholder={"Écris ton script ici…\n\nHook\u00A0:\nCorps\u00A0:\nCall to action\u00A0:"}
                           className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                         />
                         <div className="flex items-center gap-2">
@@ -2514,8 +2525,8 @@ export function CreatorSpace({
               <div className="flex items-start gap-2.5 rounded-2xl border border-border bg-foreground/[0.06] px-4 py-3 text-[12px] leading-relaxed text-amber">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
-                  Un cadeau reçu d'une marque est un partenariat : dès que tu le montres, indique-le clairement
-                  (« <b>Produit offert</b> » ou « <b>Cadeau</b> »). C'est une obligation légale (loi n° 2023-451).
+                  Un cadeau reçu d'une marque est un partenariat&nbsp;: dès que tu le montres, indique-le clairement
+                  («&nbsp;<b>Produit offert</b>&nbsp;» ou «&nbsp;<b>Cadeau</b>&nbsp;»). C'est une obligation légale (loi n°&nbsp;2023-451).
                 </span>
               </div>
 
@@ -2549,7 +2560,7 @@ export function CreatorSpace({
                 <div className="space-y-3">
                   {gifts.map((g) => (
                     <div key={g.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                      <div className="flex items-start gap-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-semibold text-foreground">{g.brand || "—"}</div>
                           {g.product && (
@@ -2559,7 +2570,7 @@ export function CreatorSpace({
                             </div>
                           )}
                         </div>
-                        <div className="w-[168px] shrink-0">
+                        <div className="w-full sm:w-[168px] sm:shrink-0">
                           <StatusSelect value={g.status ?? "recu"} options={GIFT_STATUS} onChange={(v) => setGiftStatus(g.id, v)} />
                         </div>
                       </div>
@@ -2593,7 +2604,22 @@ export function CreatorSpace({
           {/* Planning — même calendrier que l'espace agence */}
           {tab === "planning" && (
             <EventCalendar
-              events={events.map((e) => ({ id: e.id, date: e.date ?? "", time: e.time ?? "—", title: e.title, type: e.type, who: e.who ?? name, description: e.description ?? null })) as CalEv[]}
+              events={[
+                ...(events.map((e) => ({ id: e.id, date: e.date ?? "", time: e.time ?? "—", title: e.title, type: e.type, who: e.who ?? name, description: e.description ?? null })) as CalEv[]),
+                // Échéances superposées en lecture seule, comme le Planning agence :
+                // SES briefs (date = due) et SES factures non payées (date = échéance).
+                ...briefs.flatMap((b): CalEv[] => {
+                  const date = toISODate(b.due);
+                  return date ? [{ id: `brief:${b.id}`, date, time: "", title: (b.brand ?? "").trim() || "Brief", type: "deadline", who: name, kind: "brief" }] : [];
+                }),
+                ...invoices.flatMap((iv, i): CalEv[] => {
+                  const status = String(iv.status ?? "");
+                  const date = toISODate(iv.date);
+                  if (!date || status === "payee" || status === "brouillon") return [];
+                  return [{ id: `facture:${iv.ref}:${i}`, date, time: "", title: `Facture ${String(iv.ref ?? "").trim()}${iv.party ? ` · ${iv.party}` : ""}`.trim(), type: "deadline", who: name, kind: "facture" }];
+                }),
+              ]}
+              onNavigate={(kind) => setTab(kind === "brief" ? "briefs" : kind === "facture" ? "facturation" : "todo")}
               creators={[]}
               // Évènement partagé (« A, B ») : la RLS refuserait l'écriture → lecture seule.
               isReadOnly={(e) => (e.who ?? "").includes(",")}
@@ -2802,7 +2828,7 @@ export function CreatorSpace({
                   <div className="min-w-0">
                     <div className="text-sm font-semibold">Envoyer une facture</div>
                     <div className="mt-0.5 text-[11px] text-faint">
-                      Ta facture n'apparaît pas ci-dessous ? Dépose-la, ton agence la reçoit aussitôt.
+                      Ta facture n'apparaît pas ci-dessous&nbsp;? Dépose-la, ton agence la reçoit aussitôt.
                     </div>
                   </div>
                   <input
@@ -2876,16 +2902,29 @@ export function CreatorSpace({
                           <Receipt className="h-4 w-4" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-semibold">{inv.party}</div>
-                          <div className="truncate text-xs text-faint">
-                            #{inv.ref}
-                            {inv.date ? ` · ${inv.date}` : ""}
+                          <div className="text-sm font-semibold max-sm:line-clamp-2 max-sm:break-words sm:truncate">{inv.party}</div>
+                          {/* Mobile : réf. puis date sur sa propre ligne (structure identique quelle que soit
+                              la largeur du badge) ; ≥ sm : « #réf · date » sur une ligne. */}
+                          <div className="text-xs text-faint sm:truncate">
+                            <span className="block truncate sm:inline">#{inv.ref}</span>
+                            {inv.date ? (
+                              <>
+                                <span className="hidden sm:inline"> · </span>
+                                <span className="block whitespace-nowrap tabular-nums sm:inline">{frDate(inv.date)}</span>
+                              </>
+                            ) : null}
                           </div>
                         </div>
-                        <span className="whitespace-nowrap text-sm font-bold tracking-tight">{formatEuro(parseAmount(inv.amount))}</span>
-                        <AnimatedBadge status={b.status} size="sm">
-                          {b.label}
-                        </AnimatedBadge>
+                        {/* Mobile : statut sous le montant pour laisser la place au titre */}
+                        <div className="flex shrink-0 flex-col items-end gap-1 sm:contents">
+                          <span className="whitespace-nowrap text-sm font-bold tracking-tight tabular-nums">{formatEuro(parseAmount(inv.amount))}</span>
+                          {/* ≥ sm : case de largeur fixe → les montants s'alignent quel que soit le statut */}
+                          <span className="flex justify-end sm:w-[104px] sm:justify-start">
+                            <AnimatedBadge status={b.status} size="sm">
+                              {b.label}
+                            </AnimatedBadge>
+                          </span>
+                        </div>
                       </div>
                     );
                   })
@@ -2895,7 +2934,10 @@ export function CreatorSpace({
           )}
           </TabFrame>
           </ErrorBoundary>
+          {/* Espaceur mobile (plus fiable que le padding bas d'un conteneur flex défilant sur iOS) */}
+          <div aria-hidden className="h-[calc(6rem+env(safe-area-inset-bottom))] md:hidden" />
         </main>
+        </div>
       </div>
 
       {/* Nav mobile animée — MÊME composant que l'espace agence (ExpandableTabs).
@@ -2976,7 +3018,7 @@ export function CreatorSpace({
           <ul className="flex flex-col gap-1 pl-0.5">
             <li>• Vues, abonnés, taux d'engagement</li>
           </ul>
-          <div className="mt-3 text-faint">+ une capture de ton <span className="font-medium text-foreground">nombre d'abonnés</span> par réseau. Astuce : captures nettes, chiffres bien visibles 📸</div>
+          <div className="mt-3 text-faint">+ une capture de ton <span className="font-medium text-foreground">nombre d'abonnés</span> par réseau. Astuce&nbsp;: captures nettes, chiffres bien visibles 📸</div>
         </div>
         <div className="mt-2 text-center text-[10px] text-faint">Jusqu'à 6 images · elles arrivent directement chez ton agence, qui est notifiée.</div>
       </WelcomeModal>
@@ -2984,8 +3026,8 @@ export function CreatorSpace({
       {/* Confirmation anti-missclick avant de marquer une tâche « faite » */}
       {confirmDoneTodo && (
         <ConfirmDialog
-          title="Marquer comme fait ?"
-          message={`« ${confirmDoneTodo.text} » sera marquée comme terminée.`}
+          title={"Marquer comme fait\u00A0?"}
+          message={`«\u00A0${confirmDoneTodo.text}\u00A0» sera marquée comme terminée.`}
           confirmLabel="Oui, c'est fait ✓"
           onCancel={() => setConfirmDoneTodo(null)}
           onConfirm={() => {

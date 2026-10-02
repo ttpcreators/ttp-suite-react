@@ -1,3 +1,4 @@
+import { fmtCompact } from "@/lib/timeSeries";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X, ArrowUpRight, Share2, IdCard, ScrollText, Receipt, ListChecks, FileText, Lightbulb, type LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -46,11 +47,6 @@ function frTime(s: string): number {
 function numOf(v: string | undefined): number {
   const n = Number(String(v ?? "").replace(/\s/g, "").replace(",", "."));
   return Number.isFinite(n) ? n : 0;
-}
-function fmtCompact(n: number): string {
-  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
-  if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
-  return String(Math.round(n));
 }
 import { AvatarUpload } from "@/components/ui/avatar-upload";
 import { EditorialProfileCard, MonthlyTracking, JournalCard, CreatorAlerts } from "@/views/CreatorTracking";

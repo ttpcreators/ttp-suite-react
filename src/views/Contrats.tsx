@@ -25,6 +25,7 @@ import { ConfirmDialog } from "@/components/ui/action-menu";
 import { RepresentationContract } from "@/views/RepresentationContract";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
 import { ttpLogoImg } from "@/lib/pdfDoc";
+import { nbspFr } from "@/lib/representationContract";
 
 type CtType = "marque" | "repr" | "ugc";
 
@@ -33,6 +34,8 @@ const TYPE_META: Record<CtType, { chip: string; label: string; title: string }> 
   repr: { chip: "Représentation", label: "AGENCE × CRÉATEUR", title: "Contrat de représentation" },
   ugc: { chip: "Contrat UGC", label: "CONTRAT UGC", title: "Cession de droits UGC" },
 };
+/** Libellés courts du sélecteur sur téléphone (une seule ligne chacun). */
+const TYPE_SHORT: Record<CtType, string> = { marque: "Marque", repr: "Représentation", ugc: "UGC" };
 
 type Term = { l: string; v: string };
 
@@ -356,9 +359,9 @@ h1{font-family:var(--serif);font-weight:600;font-size:23pt;line-height:1.12;lett
 </body></html>`;
 }
 
-function SelectField({ label, value, onChange, opts }: { label: string; value: string; onChange: (v: string) => void; opts: Opt[] }) {
+function SelectField({ label, value, onChange, opts, className }: { label: string; value: string; onChange: (v: string) => void; opts: Opt[]; className?: string }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
+    <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
       <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="h-9 w-full rounded-lg bg-surface" placeholder={label} />
@@ -427,6 +430,8 @@ export function Contrats() {
   const [pendingDel, setPendingDel] = useState<null | { title?: string; message: string; run: () => void }>(null);
 
   const ctName = creatorName || creators[0]?.name || "[Créateur]";
+  // Affichage seulement (contrat / aperçu) : la clé stockée reste ctName.
+  const ctDisplay = ctName === "[Créateur]" ? ctName : titleCase(ctName);
   const cases: ContractCase[] = configs[ctName] ?? [];
 
   // Charge un cas dans le formulaire.
@@ -490,12 +495,12 @@ export function Contrats() {
     ];
     if (ctType === "marque") {
       return {
-        parties: `ENTRE ${brand || "[Annonceur]"} (l'Annonceur) ET ${ctName}, représenté(e) par TTP Creators (l'Agent).`,
+        parties: `ENTRE ${brand || "[Annonceur]"} (l'Annonceur) ET ${ctDisplay}, représenté(e) par TTP Creators (l'Agent).`,
         terms: [
           { l: "Objet", v: objetOf(collab, brand) },
           { l: "Nature", v: labelOf(COLLAB_OPTS, collab) },
           { l: "Livrables", v: deliverables || "—" },
-          { l: "Montant", v: value || "—" },
+          { l: "Montant", v: nbspFr(value || "—") },
           { l: "Cession de droits", v: rightsValue(scenario) },
           { l: "Territoire", v: territory },
           { l: "Exclusivité", v: exclLabel },
@@ -508,7 +513,7 @@ export function Contrats() {
     }
     if (ctType === "repr") {
       return {
-        parties: `ENTRE ${ctName} (le Créateur) ET TTP Creators (l'Agent), pour la gestion de sa carrière.`,
+        parties: `ENTRE ${ctDisplay} (le Créateur) ET TTP Creators (l'Agent), pour la gestion de sa carrière.`,
         terms: [
           { l: "Objet", v: "Représentation exclusive" },
           { l: "Commission", v: `${commClean}%` },
@@ -520,11 +525,11 @@ export function Contrats() {
       };
     }
     return {
-      parties: `ENTRE ${brand || "[Client]"} (le Client) ET ${ctName} (Créateur UGC), via TTP Creators.`,
+      parties: `ENTRE ${brand || "[Client]"} (le Client) ET ${ctDisplay} (Créateur UGC), via TTP Creators.`,
       terms: [
         { l: "Objet", v: `Contenus UGC pour ${brand || "—"}` },
         { l: "Livrables", v: deliverables || "—" },
-        { l: "Montant", v: value || "—" },
+        { l: "Montant", v: nbspFr(value || "—") },
         { l: "Cession de droits", v: rightsValue(scenario) },
         { l: "Territoire", v: territory },
         { l: "Exclusivité", v: exclLabel },
@@ -534,12 +539,12 @@ export function Contrats() {
       ],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctType, brand, ctName, deliverables, value, exclLabel, duration, commClean, collab, rights, rightsDuration, territory, payLabel, tvaLabel, defraiement]);
+  }, [ctType, brand, ctDisplay, deliverables, value, exclLabel, duration, commClean, collab, rights, rightsDuration, territory, payLabel, tvaLabel, defraiement]);
 
   // Valeur HT (approx : en franchise 293 B, HT ≈ montant affiché) → déclenche la clause
   // de vigilance URSSAF au-delà de 5 000 € HT.
   const htNum = parseAmount(value);
-  const allClauses: Term[] = [...buildClauses(scenario, htNum), ...extra.map((e) => ({ l: e.l, v: e.v }))];
+  const allClauses: Term[] = [...buildClauses(scenario, htNum), ...extra.map((e) => ({ l: e.l, v: e.v }))].map((c) => ({ ...c, v: nbspFr(c.v) }));
   const nextClauseNo = buildClauses(scenario, htNum).length + 1 + extra.length;
   const isBrand = ctType !== "repr";
 
@@ -549,7 +554,7 @@ export function Contrats() {
       meta.title.toUpperCase(),
       `Réf. ${ref}`,
       "",
-      `Parties : TTP Creators & ${ctName} × ${brand || "[Marque]"}`,
+      `Parties : TTP Creators & ${ctDisplay} × ${brand || "[Marque]"}`,
       "",
       parties,
       "",
@@ -558,11 +563,11 @@ export function Contrats() {
       "CLAUSES",
       ...allClauses.map((c) => `${c.l}\n${c.v}`),
       "",
-      "Fait à Lyon — Pour TTP Creators / Pour " + ctName,
+      "Fait à Lyon — Pour TTP Creators / Pour " + ctDisplay,
     ].join("\n");
-  }, [meta.title, ref, ctName, brand, parties, terms, allClauses]);
+  }, [meta.title, ref, ctDisplay, brand, parties, terms, allClauses]);
 
-  const buildHTML = () => contractHTML({ ref, meta, ctName, brand, parties, terms, clauses: allClauses });
+  const buildHTML = () => contractHTML({ ref, meta, ctName: ctDisplay, brand, parties, terms, clauses: allClauses });
 
   const copyContract = async () => {
     try {
@@ -670,18 +675,19 @@ export function Contrats() {
   const typeToggle = (
     <>
       <SecTitle icon={FileText}>Type de contrat</SecTitle>
-      <div className="inline-flex max-w-full flex-wrap rounded-lg border border-border bg-surface p-0.5">
+      <div className="grid w-full grid-cols-3 rounded-lg border border-border bg-surface p-0.5 sm:inline-flex sm:w-auto sm:max-w-full sm:flex-wrap">
         {(Object.keys(TYPE_META) as CtType[]).map((k) => (
           <button
             key={k}
             type="button"
             onClick={() => { setCtType(k); setNavSub(k); }}
             className={cn(
-              "whitespace-nowrap rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors",
+              "rounded-md px-2 py-1.5 text-center text-[12px] font-medium leading-tight transition-colors sm:whitespace-nowrap sm:px-3",
               k === ctType ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {TYPE_META[k].chip}
+            <span className="sm:hidden">{TYPE_SHORT[k]}</span>
+            <span className="hidden sm:inline">{TYPE_META[k].chip}</span>
           </button>
         ))}
       </div>
@@ -736,8 +742,8 @@ export function Contrats() {
           ) : (
             <div className="mb-3 text-[12px] text-muted-foreground">Aucun cas enregistré pour ce créateur. Configure le contrat puis enregistre-le comme cas.</div>
           )}
-          <div className="flex items-end gap-2">
-            <div className="flex-1">
+          <div className="flex flex-wrap items-end gap-2 sm:flex-nowrap">
+            <div className="min-w-0 flex-1">
               <TextField label="Nom du cas" value={caseName} onChange={setCaseName} placeholder="ex : Standard, Exclusif, UGC…" />
             </div>
             <button type="button" onClick={saveCase} className={cn(primaryBtn, "flex h-[42px] shrink-0 items-center gap-1.5")}>
@@ -771,7 +777,7 @@ export function Contrats() {
           <SecTitle icon={SlidersHorizontal} right={<span className="text-[12px] text-muted-foreground">le contrat s'adapte tout seul</span>}>Cas de figure</SecTitle>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {ctType === "marque" && <SelectField label="Type de collab" value={collab} onChange={setCollab} opts={COLLAB_OPTS} />}
-            <SelectField label="Cession de droits" value={rights} onChange={setRights} opts={RIGHTS_OPTS} />
+            <SelectField label="Cession de droits" value={rights} onChange={setRights} opts={RIGHTS_OPTS} className="sm:col-span-2" />
             {rights !== "organic" && <SelectField label="Durée de cession" value={rightsDuration} onChange={setRightsDuration} opts={DUR_OPTS} />}
             <SelectField label="Territoire" value={territory} onChange={setTerritory} opts={TERRITORY_OPTS} />
             <SelectField label="Exclusivité" value={exclScope} onChange={setExclScope} opts={EXCL_OPTS} />
@@ -781,10 +787,10 @@ export function Contrats() {
           <button
             type="button"
             onClick={() => setDefraiement((v) => !v)}
-            className={cn("mt-3 flex w-full items-center gap-2 rounded-lg border border-border px-3.5 py-2.5 text-[13px] transition-colors", defraiement ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover")}
+            className={cn("mt-3 flex w-full items-start gap-2 rounded-lg border border-border px-3.5 py-2.5 text-left text-[13px] transition-colors sm:items-center", defraiement ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover")}
           >
-            <span className={cn("grid h-4 w-4 shrink-0 place-items-center rounded", defraiement ? "bg-foreground text-background" : "border border-border")}>{defraiement && <Check className="h-3 w-3" />}</span>
-            Frais &amp; produits pris en charge (défraiement)
+            <span className={cn("mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded sm:mt-0", defraiement ? "bg-foreground text-background" : "border border-border")}>{defraiement && <Check className="h-3 w-3" />}</span>
+            <span className="min-w-0">Frais &amp; produits pris en charge (défraiement)</span>
           </button>
         </div>
 
@@ -834,7 +840,7 @@ export function Contrats() {
         <div className="mt-5 text-[12px] text-muted-foreground">{meta.chip} · contrat de collaboration</div>
         <div className="mt-1.5 text-[22px] font-semibold leading-tight tracking-tight text-foreground">{meta.title}</div>
 
-        <div className="mt-3 text-[13px] leading-relaxed text-muted-foreground">Parties : TTP Creators &amp; {ctName} × {brand || "[Marque]"}</div>
+        <div className="mt-3 text-[13px] leading-relaxed text-muted-foreground">Parties : TTP Creators &amp; {ctDisplay} × {brand || "[Marque]"}</div>
         <div className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{parties}</div>
 
         <div className="my-4 h-px bg-border" />
@@ -863,7 +869,7 @@ export function Contrats() {
 
         <div className="mt-5 flex gap-4">
           <div className="flex-1"><div className="h-8 border-b border-border" /><div className="mt-1.5 text-[11px] text-muted-foreground">Pour TTP Creators</div></div>
-          <div className="flex-1"><div className="h-8 border-b border-border" /><div className="mt-1.5 text-[11px] text-muted-foreground">Pour {ctName}</div></div>
+          <div className="flex-1"><div className="h-8 border-b border-border" /><div className="mt-1.5 text-[11px] text-muted-foreground">Pour {ctDisplay}</div></div>
         </div>
 
         {/* Actions */}

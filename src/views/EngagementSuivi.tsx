@@ -1,3 +1,4 @@
+import { fmtCompact } from "@/lib/timeSeries";
 import { useMemo, useState, lazy, Suspense } from "react";
 import { Activity, TrendingUp, TrendingDown, Users, Hash } from "lucide-react";
 
@@ -16,6 +17,7 @@ import {
 import { useAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { SelectField } from "@/components/ui/form";
+import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { cn, titleCase } from "@/lib/utils";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 
@@ -55,11 +57,6 @@ function frTime(s: string): number {
   if (!m) return 0;
   const y = m[3].length === 2 ? "20" + m[3] : m[3];
   return new Date(Number(y), Number(m[2]) - 1, Number(m[1])).getTime();
-}
-function fmtCompact(n: number): string {
-  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
-  if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
-  return String(Math.round(n));
 }
 /** "jj/mm/aaaa" → "aaaa-mm" (regroupement par mois). */
 function ymOf(s: string): string {
@@ -309,6 +306,8 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
           <div className="mb-4 text-sm font-semibold">Interactions par mesure (30 j)</div>
           {points.length === 0 ? (
             <p className="py-6 text-center text-xs text-muted-foreground">Aucune mesure.</p>
+          ) : points.every((x) => !x.interactions) ? (
+            <p className="py-6 text-center text-xs text-muted-foreground">Pas encore de données.</p>
           ) : (
             <div className="h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -336,23 +335,26 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
       </div>
 
       {/* Détail des mesures */}
-      <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-        <div className="mb-3 text-sm font-semibold">Mesures enregistrées</div>
-        <div className="flex flex-col gap-2">
+      <div className="rounded-2xl border border-border bg-surface p-5">
+        <div className="mb-3 text-[14px] font-semibold">Mesures enregistrées</div>
+        {/* Liste à filets ; sur téléphone, le détail passe sous la date (plus de colonne écrasée). */}
+        <div className="divide-y divide-border border-t border-border">
           {points
             .slice()
             .reverse()
             .map((x, i) => (
-              <div key={`${x.full}-${i}`} className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5">
-                <span className="w-20 shrink-0 text-[11px] font-semibold tabular-nums text-muted-foreground">{x.full}</span>
-                <span className="min-w-0 flex-1 truncate text-[11px] text-faint">
-                  {fmtCompact(x.interactions)} interactions{x.followers > 0 ? ` · ${fmtCompact(x.followers)} abonnés` : ""}
+              <div key={`${x.full}-${i}`} className="flex items-center gap-3 py-2.5">
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
+                  <span className="shrink-0 text-[12px] font-medium tabular-nums text-foreground sm:w-24">{x.full}</span>
+                  <span className="min-w-0 truncate text-[12px] text-muted-foreground">
+                    {fmtCompact(x.interactions)} interactions{x.followers > 0 ? ` · ${fmtCompact(x.followers)} abonnés` : ""}
+                  </span>
                 </span>
-                <span className="shrink-0 text-sm font-bold">{String(x.er).replace(".", ",")} %</span>
+                <span className="shrink-0 text-[14px] font-semibold tabular-nums">{String(x.er).replace(".", ",")} %</span>
                 <span
                   className={cn(
-                    "shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold",
-                    x.verdict === "Moyen" ? "bg-amber/15 text-amber" : "bg-signalsoft text-signaltext",
+                    "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                    x.verdict === "Moyen" ? "bg-muted text-muted-foreground" : "bg-signalsoft text-signaltext",
                   )}
                 >
                   {x.verdict}
@@ -456,15 +458,15 @@ function AllCreatorsPanel({ entries, onOpen, period, setPeriod }: { entries: Sui
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-border bg-border">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-3">
         {[
           { l: "Créateurs suivis", v: String(rows.length), icon: Users },
           { l: "Moyenne des derniers relevés", v: `${String(avgEr).replace(".", ",")} %`, icon: Activity },
           { l: "Meilleur taux", v: rows.length ? `${String(bestGlobal).replace(".", ",")} %` : "—", icon: TrendingUp },
         ].map((c) => (
-          <div key={c.l} className="min-w-0 bg-surface px-4 py-4 sm:px-5 sm:py-5">
-            <div className="flex items-start gap-1.5 text-[12px] text-muted-foreground sm:text-[13px]"><c.icon className="h-3.5 w-3.5 shrink-0" /> <span className="line-clamp-2 leading-snug">{c.l}</span></div>
-            <div className="mt-2 text-[20px] font-semibold leading-none tracking-tight tabular-nums sm:text-[26px]">{c.v}</div>
+          <div key={c.l} className="flex min-w-0 flex-col bg-surface px-3 py-4 last:col-span-2 sm:px-5 sm:py-5 sm:last:col-span-1">
+            <div className="flex items-start gap-1.5 text-[12px] text-muted-foreground sm:text-[13px]"><c.icon className="mt-px h-3.5 w-3.5 shrink-0" /> <span className="min-w-0 break-words leading-snug sm:line-clamp-2">{c.l}</span></div>
+            <div className="mt-auto whitespace-nowrap pt-2 text-[18px] font-semibold leading-none tracking-tight tabular-nums sm:text-[26px]">{c.v}</div>
           </div>
         ))}
       </div>
@@ -472,14 +474,19 @@ function AllCreatorsPanel({ entries, onOpen, period, setPeriod }: { entries: Sui
       {/* Filtre par période (mois/année) */}
       <div className="flex items-center gap-2">
         <span className="text-[12px] font-medium text-muted-foreground">Période</span>
-        <select
-          value={period}
-          onChange={(e) => setPeriod(e.target.value)}
-          className="rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15"
-        >
-          <option value="">Toutes périodes (dernier relevé)</option>
-          {periods.map((p) => <option key={p} value={p}>{ymLabel(p)}</option>)}
-        </select>
+        <Select value={period || "__all__"} onValueChange={(v) => setPeriod(v === "__all__" ? "" : v)}>
+          <SelectTrigger className="h-10 w-auto min-w-[240px] rounded-lg bg-surface text-[12px]" placeholder="Toutes périodes (dernier relevé)" />
+          <SelectContent>
+            <SelectItem index={0} value="__all__">
+              Toutes périodes (dernier relevé)
+            </SelectItem>
+            {periods.map((p, i) => (
+              <SelectItem key={p} index={i + 1} value={p}>
+                {ymLabel(p)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Tendance du taux d'engagement moyen du roster (glass) */}
@@ -497,6 +504,11 @@ function AllCreatorsPanel({ entries, onOpen, period, setPeriod }: { entries: Sui
         </Suspense>
       )}
 
+      {rows.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-surface px-4 py-10 text-center text-[13px] text-muted-foreground">
+          Aucun relevé d'engagement{period ? " sur cette période" : ""}. Enregistre des calculs dans Roster → Engagement pour les voir ici.
+        </div>
+      ) : (<>
       {/* Mobile : cartes empilées (le tableau large ne tient pas) */}
       <div className="flex flex-col gap-2.5 md:hidden">
         {rows.map((r) => (
@@ -568,6 +580,7 @@ function AllCreatorsPanel({ entries, onOpen, period, setPeriod }: { entries: Sui
         </table>
       </div>
       <p className="px-1 text-[11px] text-faint">Clique une ligne pour voir l'évolution détaillée du créateur.</p>
+      </>)}
     </div>
   );
 }

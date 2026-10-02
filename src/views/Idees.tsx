@@ -24,6 +24,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 
 type Row = {
   id: string;
@@ -287,20 +288,16 @@ export function Idees() {
             extra={creators.length > 0 ? (
               <div className="flex flex-col gap-2">
                 <span className="text-[12px] font-medium text-muted-foreground">Créatrice</span>
-                <div className="flex items-center gap-2">
-                  <UserRound className="h-4 w-4 shrink-0 text-faint" />
-                  <select
-                    value={creatorFilter}
-                    onChange={(e) => setCreatorFilter(e.target.value)}
-                    className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
-                  >
-                    <option value="">Toutes les créatrices</option>
-                    <option value="__general__">Idées générales (non assignées)</option>
-                    {creatorOptions.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
+                <Select value={creatorFilter} onValueChange={setCreatorFilter}>
+                  <SelectTrigger icon={UserRound} className="h-10 w-full min-w-[220px] rounded-xl bg-surface sm:w-auto" placeholder="Toutes les créatrices" />
+                  <SelectContent>
+                    <SelectItem index={0} value="">Toutes les créatrices</SelectItem>
+                    <SelectItem index={1} value="__general__">Idées générales (non assignées)</SelectItem>
+                    {creatorOptions.map((o, i) => (
+                      <SelectItem key={o.value} index={i + 2} value={o.value} img={o.img}>{o.label}</SelectItem>
                     ))}
-                  </select>
-                </div>
+                  </SelectContent>
+                </Select>
               </div>
             ) : undefined}
           />

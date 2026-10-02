@@ -52,16 +52,16 @@ const B = ({ children }: { children: React.ReactNode }) => <span className="font
 const PAGES: { icon: LucideIcon; label: string; desc: string }[] = [
   { icon: BarChart3, label: "Accueil", desc: "Vue d'ensemble, envoi de tes stats et raccourcis rapides." },
   { icon: ListChecks, label: "À faire", desc: "Tes tâches, et tout ce que tu as besoin de demander à l'agence." },
-  { icon: Lightbulb, label: "Idées", desc: "Note tes idées de contenu : l'agence les voit et rebondit." },
-  { icon: FileText, label: "Briefs", desc: "Les campagnes des marques : livrables, budget, script, PDF joint." },
+  { icon: Lightbulb, label: "Idées", desc: "Note tes idées de contenu\u00A0: l'agence les voit et rebondit." },
+  { icon: FileText, label: "Briefs", desc: "Les campagnes des marques\u00A0: livrables, budget, script, PDF joint." },
   { icon: Target, label: "Ma feuille de route", desc: "Ta stratégie (niche, piliers, objectifs) et ta cadence du mois." },
   { icon: TrendingUp, label: "Évolution", desc: "Tes courbes d'abonnés et de taux d'engagement dans le temps." },
   { icon: ImageIcon, label: "Media kit", desc: "Ta page pro à partager aux marques, mise à jour par l'agence." },
-  { icon: Files, label: "Documents", desc: "Tes fichiers : factures, media kits, briefs, stats." },
+  { icon: Files, label: "Documents", desc: "Tes fichiers\u00A0: factures, media kits, briefs, stats." },
   { icon: Receipt, label: "Facturation", desc: "Tes factures et leur statut ; dépose une facture si besoin." },
   { icon: Gift, label: "Gifting", desc: "Le suivi des cadeaux et dotations reçus des marques." },
-  { icon: CalendarDays, label: "Planning", desc: "Le calendrier partagé : rendez-vous, échéances, tournages." },
-  { icon: ContactIcon, label: "Contacts", desc: "Tes contacts de marques : ajoute-les ici, ton agence les voit aussi." },
+  { icon: CalendarDays, label: "Planning", desc: "Le calendrier partagé\u00A0: rendez-vous, échéances, tournages." },
+  { icon: ContactIcon, label: "Contacts", desc: "Tes contacts de marques\u00A0: ajoute-les ici, ton agence les voit aussi." },
 ];
 
 export function CreatorGuide({
@@ -77,7 +77,7 @@ export function CreatorGuide({
     <div className="flex flex-col gap-4">
       {/* Chapeau (le titre « Guide » est déjà l'en-tête de page) */}
       <p className="-mt-2 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-        Bienvenue{firstName ? ` ${firstName}` : ""}. Tout se fait ici, <B>sur mobile comme sur ordinateur</B> : 2 minutes de lecture et tu es autonome.
+        Bienvenue{firstName ? ` ${firstName}` : ""}. Tout se fait ici, <B>sur mobile comme sur ordinateur</B>&nbsp;: 2 minutes de lecture et tu es autonome.
       </p>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
@@ -86,19 +86,19 @@ export function CreatorGuide({
           {/* Le réflexe n°1 : les tâches */}
           <DashPanel className="p-5">
             <DashSectionTitle icon={ListChecks}>Le réflexe le plus important</DashSectionTitle>
-            <div className="text-[20px] font-semibold leading-tight tracking-tight text-foreground">Note tout dans « À faire »</div>
+            <div className="text-[20px] font-semibold leading-tight tracking-tight text-foreground">Note tout dans «&nbsp;À faire&nbsp;»</div>
             <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-              Dès que tu as <B>besoin de quelque chose de l'agence</B> (une facture, un contrat, une question, un contenu à valider, une info), <B>ajoute-le dans « À faire »</B> plutôt que par message.
+              Dès que tu as <B>besoin de quelque chose de l'agence</B> (une facture, un contrat, une question, un contenu à valider, une info), <B>ajoute-le dans «&nbsp;À faire&nbsp;»</B> plutôt que par message.
             </p>
             <ul className="mt-4 divide-y divide-border border-y border-border text-[13px] text-foreground">
-              {["On le voit en direct, rien ne se perd.", "Tu suis l'avancement : À faire, En cours, Fait.", "Tu peux découper en sous-tâches et joindre le contexte."].map((t) => (
+              {["On le voit en direct, rien ne se perd.", "Tu suis l'avancement\u00A0: À faire, En cours, Fait.", "Tu peux découper en sous-tâches et joindre le contexte."].map((t) => (
                 <li key={t} className="flex items-center gap-2.5 py-2.5">
                   <Check className="h-4 w-4 shrink-0 text-emerald-500" /> <span>{t}</span>
                 </li>
               ))}
             </ul>
             <button type="button" onClick={() => onGoto("todo")} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
-              <ListChecks className="h-4 w-4" /> Ouvrir « À faire »
+              <ListChecks className="h-4 w-4" /> Ouvrir «&nbsp;À faire&nbsp;»
             </button>
           </DashPanel>
 
@@ -127,7 +127,7 @@ export function CreatorGuide({
             <DashSectionTitle icon={Smartphone}>Installe l'app</DashSectionTitle>
             <div className="-mt-2 divide-y divide-border">
               <InfoRow icon={Smartphone} title="iPhone (Safari)">
-                Bouton <B>Partager</B>, puis <B>Ajouter à l'écran d'accueil</B>. Ouvre-la ensuite depuis son icône : <B>indispensable pour recevoir les notifications</B>.
+                Bouton <B>Partager</B>, puis <B>Ajouter à l'écran d'accueil</B>. Ouvre-la ensuite depuis son icône&nbsp;: <B>indispensable pour recevoir les notifications</B>.
               </InfoRow>
               <InfoRow icon={Smartphone} title="Android (Chrome)">
                 Menu <B>trois points</B> en haut à droite, puis <B>Installer l'application</B>. Elle s'ajoute comme une vraie app.
@@ -140,7 +140,7 @@ export function CreatorGuide({
 
           <DashPanel className="p-5">
             <DashSectionTitle icon={BarChart3}>Tes stats, chaque début de mois</DashSectionTitle>
-            <p className="-mt-1 text-[12px] leading-relaxed text-muted-foreground">C'est ce qui prouve ton audience aux marques. Le plus simple :</p>
+            <p className="-mt-1 text-[12px] leading-relaxed text-muted-foreground">C'est ce qui prouve ton audience aux marques. Le plus simple&nbsp;:</p>
             <ol className="mt-3 flex flex-col gap-2.5">
               {[
                 <>Ouvre l'app <B>Edits</B> d'Instagram.</>,
@@ -166,10 +166,10 @@ export function CreatorGuide({
           </DashPanel>
 
           <DashPanel className="px-5 pt-5">
-            <DashSectionTitle icon={Monitor}>Mobile ou ordinateur ?</DashSectionTitle>
+            <DashSectionTitle icon={Monitor}>Mobile ou ordinateur&nbsp;?</DashSectionTitle>
             <div className="-mt-2 divide-y divide-border">
               <InfoRow icon={Smartphone} title="Sur mobile">
-                Le menu est <B>en bas</B>. Parfait au quotidien : envoyer une stat, cocher une tâche, lire un brief.
+                Le menu est <B>en bas</B>. Parfait au quotidien&nbsp;: envoyer une stat, cocher une tâche, lire un brief.
               </InfoRow>
               <InfoRow icon={Laptop} title="Sur ordinateur">
                 Le menu est <B>à gauche</B>. Idéal pour voir les graphiques en grand et gérer plusieurs choses.
@@ -182,8 +182,8 @@ export function CreatorGuide({
       {/* Rappel final */}
       <button type="button" onClick={() => onGoto("todo")} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface px-5 py-4 text-left transition-colors hover:bg-rowhover">
         <div>
-          <div className="text-[13px] font-semibold text-foreground">Une question ? Une demande ?</div>
-          <div className="mt-0.5 text-[12px] text-muted-foreground">Note-la dans « À faire » : c'est le plus sûr pour qu'on te réponde vite.</div>
+          <div className="text-[13px] font-semibold text-foreground">Une question&nbsp;? Une demande&nbsp;?</div>
+          <div className="mt-0.5 text-[12px] text-muted-foreground">Note-la dans «&nbsp;À faire&nbsp;»&nbsp;: c'est le plus sûr pour qu'on te réponde vite.</div>
         </div>
         <ChevronRight className="h-5 w-5 shrink-0 text-faint" />
       </button>

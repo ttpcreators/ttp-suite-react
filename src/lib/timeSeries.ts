@@ -50,9 +50,16 @@ export function monthLabel(key: string): string {
   return MONTHS_FR[m - 1] ?? key;
 }
 
-/** Nombre → format compact (1.2K, 3.4M). */
+/** Nombre → format compact FRANÇAIS, partout pareil (axes, tuiles, tableaux) :
+ *  « 19,5 k », « 1,2 M », « 850 ». Virgule décimale, k minuscule, espace fine
+ *  insécable (U+202F) avant l'unité. */
 export function fmtCompact(n: number): string {
-  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
-  if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
-  return String(Math.round(n));
+  if (!Number.isFinite(n)) return "0";
+  const sign = n < 0 ? "-" : "";
+  const a = Math.abs(n);
+  const one = (v: number) => v.toFixed(1).replace(/\.0$/, "").replace(".", ",");
+  // 999 950 → « 1 M » (et non « 1000 k »).
+  if (a >= 1e6 || Math.round(a / 100) >= 10_000) return sign + one(a / 1e6) + "\u202FM";
+  if (a >= 1e3 || Math.round(a) >= 1000) return sign + one(a / 1e3) + "\u202Fk";
+  return sign + String(Math.round(a));
 }

@@ -196,23 +196,33 @@ export function Relances() {
             const rem = reminders[iv.id];
             return (
               <div key={iv.id} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-foreground">{iv.party || "—"}</span>
-                      <span className="rounded-md bg-rowhover px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">#{iv.ref}</span>
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-faint">
-                      {iv.creator ? titleCase(iv.creator) : "Agence"}
-                      {iv.date ? ` · échéance ${iv.date}` : ""}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    {/* Réf. toujours sur sa propre ligne sous le titre : mise en page identique quelle que soit la longueur du nom */}
+                    <div className="truncate text-sm font-semibold text-foreground">{iv.party || "—"}</div>
+                    <div className="mt-1">
+                      <span className="inline-block rounded-md bg-rowhover px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">#{iv.ref}</span>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="flex shrink-0 flex-col items-end text-right">
                     <div className="whitespace-nowrap text-lg font-bold tracking-tight text-foreground">{formatEuro(parseAmount(iv.amount))}</div>
                     {late != null && late > 0 && (
-                      <div className="mt-0.5 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-500">En retard de {late} j</div>
+                      <div className="mt-0.5 whitespace-nowrap rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-500">En retard de {late} j</div>
                     )}
                   </div>
+                </div>
+                {/* Méta (créateur · échéance) hors de la ligne flex : pleine largeur, jamais comprimée par le montant */}
+                <div className="mt-1.5 text-[11px] text-faint">
+                  <span className="whitespace-nowrap">{iv.creator ? titleCase(iv.creator) : "Agence"}</span>
+                  {iv.date ? (
+                    <span className="whitespace-nowrap">
+                      {" · échéance "}
+                      {(() => {
+                        const d = parseDate(iv.date);
+                        return d ? frDate(d) : iv.date;
+                      })()}
+                    </span>
+                  ) : null}
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">

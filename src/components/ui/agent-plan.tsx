@@ -79,7 +79,7 @@ export function AgentPlan({
                   <button
                     type="button"
                     onClick={() => (onOpenTask ? onOpenTask(task.id) : setExpanded((e) => ({ ...e, [task.id]: !e[task.id] })))}
-                    className={cn("min-w-0 flex-1 truncate text-left text-[13px] font-medium text-foreground", task.done && "text-muted-foreground line-through")}
+                    className={cn("min-w-0 flex-1 text-left text-[13px] font-medium text-foreground max-md:line-clamp-2 max-md:break-words md:truncate", task.done && "text-muted-foreground line-through")}
                   >
                     {task.title}
                   </button>

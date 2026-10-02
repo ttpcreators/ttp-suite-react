@@ -188,12 +188,13 @@ export function WhatsappView() {
   const faitsSemaine = all.reduce((n, x) => n + x.list.filter((t) => new Date(t.date).getTime() >= weekMs && t.kind !== "reponse").length, 0);
   const reponsesMois = all.reduce((n, x) => n + x.list.filter((t) => t.kind === "reponse" && new Date(t.date).getTime() >= monthMs).length, 0);
   const parCanal = (["whatsapp", "instagram", "tel", "linkedin", "email"] as TouchCanal[]).map(
-    (c) => all.reduce((n, x) => n + x.list.filter((t) => t.canal === c).length, 0),
+    // Même périmètre que le chiffre affiché (cette semaine, hors réponses) : 0 → barres vides.
+    (c) => all.reduce((n, x) => n + x.list.filter((t) => t.canal === c && t.kind !== "reponse" && new Date(t.date).getTime() >= weekMs).length, 0),
   );
 
   // ── rangée d'actions d'un contact ──
   const Actions = ({ x }: { x: ReturnType<typeof enrich> }) => (
-    <div className="flex shrink-0 items-center gap-1">
+    <div className="flex shrink-0 items-center gap-1 sm:justify-end">
       {waLink(x.r.phone) && (
         <button
           type="button"
@@ -222,7 +223,7 @@ export function WhatsappView() {
           <Phone className="h-4 w-4" />
         </button>
       )}
-      {x.list.length > 0 && lastTouch(x.list)?.kind !== "reponse" && (
+      {x.list.length > 0 && lastTouch(x.list)?.kind !== "reponse" ? (
         <button
           type="button"
           onClick={() => logTouch(x.r, lastTouch(x.list)?.canal ?? "autre", "reponse")}
@@ -231,6 +232,9 @@ export function WhatsappView() {
         >
           <Check className="h-4 w-4" />
         </button>
+      ) : (
+        // Emplacement réservé : les boutons et le badge restent alignés d'une ligne à l'autre
+        <span aria-hidden className="h-8 w-8 shrink-0" />
       )}
     </div>
   );
@@ -238,18 +242,18 @@ export function WhatsappView() {
   const ContactRow = ({ x, showAgo }: { x: ReturnType<typeof enrich>; showAgo?: boolean }) => {
     const lt = lastTouch(x.list);
     return (
-      <div className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-rowhover">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 transition-colors hover:bg-rowhover sm:flex-nowrap sm:gap-y-0">
         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] bg-panel text-[11px] font-bold text-foreground">
           {initials(x.r.person !== "—" ? x.r.person : x.r.brand)}
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[calc(100%-48px)] sm:basis-auto">
           <div className="truncate text-[13px] font-semibold text-foreground">{x.r.brand}</div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-faint">
             {x.r.person !== "—" && <span className="truncate">{x.r.person}</span>}
             {showAgo && x.lastMs > 0 && (
-              <span className="flex items-center gap-1 text-muted-foreground">
-                <Clock className="h-3 w-3" /> {daysAgoLabel(x.lastMs)}
-                {lt && <span className="text-faint">· {CANAL_LABELS[lt.canal]}</span>}
+              <span className="flex flex-wrap items-center gap-x-1 text-muted-foreground">
+                <span className="flex items-center gap-1 whitespace-nowrap"><Clock className="h-3 w-3" /> {daysAgoLabel(x.lastMs)}</span>
+                {lt && <span className="whitespace-nowrap text-faint">· {CANAL_LABELS[lt.canal]}</span>}
               </span>
             )}
           </div>
@@ -257,7 +261,10 @@ export function WhatsappView() {
         <span className={cn("hidden shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium sm:inline", TONE_CLS[x.status.tone])}>
           {x.status.label}
         </span>
-        <Actions x={x} />
+        {/* Mobile : actions sur une 2e ligne sous le nom (alignées sur le texte) pour ne pas écraser la méta */}
+        <div className="w-full pl-12 sm:w-[140px] sm:shrink-0 sm:pl-0">
+          <Actions x={x} />
+        </div>
       </div>
     );
   };
@@ -296,8 +303,8 @@ export function WhatsappView() {
       {pool.length > 0 && view === "all" && (
         <StatsBento
           className="mb-5"
-          primary={{ eyebrow: "À relancer", value: String(aRelancer.length), caption: `Dernier échange il y a ${relanceDays} j ou plus. Réglable dans Paramètres.` }}
-          bars={{ label: "Par canal (total)", value: `${faitsSemaine} cette semaine`, series: parCanal }}
+          primary={{ eyebrow: "À relancer", value: String(aRelancer.length), caption: `Sans échange depuis ${relanceDays} j (Paramètres).` }}
+          bars={{ label: "Cette semaine · canaux (total)", value: String(faitsSemaine), series: parCanal }}
           small={{ value: String(reponsesMois), label: "Réponses (30 j)" }}
           accent={{ value: String(jamais.length), label: "Jamais contactés", icon: UserRound }}
         />

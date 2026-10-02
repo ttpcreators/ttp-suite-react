@@ -354,7 +354,7 @@ export function Templates() {
               className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-xs text-foreground placeholder:text-faint outline-none transition-colors focus:border-primary"
             />
           </div>
-          <div className="flex shrink-0 items-center gap-1 rounded-xl border border-border bg-surface p-1">
+          <div className="flex w-fit shrink-0 items-center gap-1 self-start rounded-xl border border-border bg-surface p-1 sm:self-auto">
             {([["cards", "Cartes", LayoutGrid], ["list", "Liste", ListIcon]] as const).map(([m, label, Icon]) => (
               <button
                 key={m}

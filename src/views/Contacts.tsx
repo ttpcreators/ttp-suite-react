@@ -888,10 +888,11 @@ export function Contacts() {
 
       {/* Filtres : « déjà échangé » (suivi de contact) + ville */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex min-w-0 max-w-full items-center gap-1.5">
-          <Clock className="h-3.5 w-3.5 shrink-0 text-faint" />
-          {/* Mobile : défile à l’horizontale au lieu de tasser les libellés sur 2 lignes */}
-          <div className="flex min-w-0 gap-1 overflow-x-auto rounded-xl bg-panel p-1 [scrollbar-width:none]">
+        <div className="flex min-w-0 max-w-full items-start gap-1.5 md:items-center">
+          {/* Mobile : icône alignée sur la 1re rangée de pastilles (pas centrée sur les deux) */}
+          <Clock className="mt-[11px] h-3.5 w-3.5 shrink-0 text-faint md:mt-0" />
+          {/* Mobile : les pastilles passent à la ligne (rien ne sort de l’écran) ; desktop : une seule ligne */}
+          <div className="flex min-w-0 flex-wrap gap-1 rounded-xl bg-panel p-1 [scrollbar-width:none] md:flex-nowrap md:overflow-x-auto">
             {([["all", "Tous"], ["contacted", "Déjà contactés"], ["never", "Jamais contactés"], ["relancer", "À relancer"]] as const).map(([v, label]) => (
               <button
                 key={v}
@@ -986,6 +987,12 @@ export function Contacts() {
                 <div className="mt-0.5 truncate text-[11px] font-normal text-faint">
                   {row.person} · {row.role}
                 </div>
+                {/* Mobile : le tag passe sous le nom pour libérer la largeur du sous-titre */}
+                {row.tag && (
+                  <span className="mt-1 inline-block max-w-full truncate rounded-full bg-rowhover px-2 py-0.5 align-top text-[10px] font-medium text-muted-foreground sm:hidden">
+                    {row.tag}
+                  </span>
+                )}
               </div>
 
               {/* Email — masqué sur mobile */}
@@ -1033,7 +1040,7 @@ export function Contacts() {
               )}
 
               {/* Pastille tag */}
-              <span className="shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
+              <span className="hidden shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2.5 py-1 text-[10px] font-medium text-muted-foreground sm:inline">
                 {row.tag}
               </span>
 

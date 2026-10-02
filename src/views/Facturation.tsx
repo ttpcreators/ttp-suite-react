@@ -159,8 +159,12 @@ function nextRefFrom(refs: string[]): string {
   const max = refs.reduce((m, ref) => Math.max(m, Number(String(ref).split("-").pop()) || 0), 180);
   return `${new Date().getFullYear()}-${String(max + 1).padStart(3, "0")}`;
 }
+/** Montant fr-FR à 2 décimales avec séparateur de milliers (« 1 273,00 € »).
+ *  Les espaces fines insécables (U+202F) sont normalisées en U+00A0 : certaines
+ *  polices/moteurs mobiles ne les affichent pas et collaient les milliers. */
+const EURO2_FMT = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true });
 function euro2(n: number): string {
-  return n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+  return EURO2_FMT.format(Number.isFinite(n) ? n : 0).replace(/[\u202f\s]/g, "\u00a0") + "\u00a0€";
 }
 function fmtRate(n: number): string {
   return String(n).replace(".", ",");
@@ -794,7 +798,7 @@ export function Facturation() {
             { label: "Part des créatrices", value: euro2(finBilled.reversal), foot: "HT moins la commission" },
           ].map((k) => (
             <div key={k.label} className="flex min-w-0 flex-col bg-surface px-4 py-4 sm:px-5">
-              <span className="text-[12px] text-muted-foreground sm:text-[13px]">{k.label}</span>
+              <span className="line-clamp-2 min-h-[2lh] text-[12px] leading-snug text-muted-foreground sm:text-[13px] lg:min-h-0">{k.label}</span>
               <span className={cn("mt-2 truncate text-[20px] font-semibold leading-none tracking-tight tabular-nums sm:text-[24px]", k.strong && "text-signaltext")}>{k.value}</span>
               <span className="mt-2.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground">{k.foot}</span>
             </div>
@@ -811,8 +815,9 @@ export function Facturation() {
           value={statusFilter}
           onChange={(v) => setStatusFilter(v as InvoiceStatus | "Tous")}
           options={statusChips}
+          className="min-w-0 flex-1 md:min-w-auto md:flex-initial"
         />
-        {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} allLabel="Toutes échéances" forward />}
+        {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} allLabel="Toutes échéances" forward className="shrink-0" />}
       </div>
 
       {/* Liste */}

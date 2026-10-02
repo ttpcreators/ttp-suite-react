@@ -17,6 +17,7 @@ import { getCache, setCache } from "@/lib/viewCache";
 import { useEffect, useRef, useState } from "react";
 import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, Trash2, BarChart3, ChevronLeft, type LucideIcon } from "lucide-react";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 
 type Row = {
   id: string;
@@ -416,14 +417,15 @@ export function Documents() {
           <FilterBar value={sort} options={SORT_OPTIONS} onChange={setSort} placeholder="Trier" />
           <div className="flex flex-wrap items-center gap-2">
             {docCreators.length > 0 && (
-              <select
-                value={creatorFilter}
-                onChange={(e) => setCreatorFilter(e.target.value)}
-                className="rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15"
-              >
-                <option value="">Tous les créateurs</option>
-                {docCreators.map((c) => <option key={c} value={c}>{titleCase(c)}</option>)}
-              </select>
+              <Select value={creatorFilter} onValueChange={setCreatorFilter}>
+                <SelectTrigger className="h-10 w-auto min-w-[200px] rounded-xl bg-surface" placeholder="Tous les créateurs" />
+                <SelectContent>
+                  <SelectItem index={0} value="">Tous les créateurs</SelectItem>
+                  {docCreators.map((c, i) => (
+                    <SelectItem key={c} index={i + 1} value={c}>{titleCase(c)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
             {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} />}
           </div>

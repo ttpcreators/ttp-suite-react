@@ -99,8 +99,8 @@ function PriorityDot({ priority }: { priority: Priority }) {
 // Couleurs de priorité : point (mobile) + pilule.
 const PRIO_ACCENT: Record<Priority, string> = {
   haute: "bg-rose-500",
-  moyenne: "bg-foreground/40",
-  basse: "bg-foreground/15",
+  moyenne: "bg-foreground/50",
+  basse: "bg-foreground/30",
 };
 const PRIO_PILL: Record<Priority, string> = {
   haute: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
@@ -749,7 +749,7 @@ export function Todo() {
                   {row.creator ? titleCase(row.creator) : "Agence"}
                 </span>
                 {row.source === "creator" && <span className="text-signaltext">du créateur</span>}
-                {formatCreatedAt(row.created_at) && <span>créée le {formatCreatedAt(row.created_at)}</span>}
+                {formatCreatedAt(row.created_at) && <span className="basis-full sm:basis-auto">créée le {formatCreatedAt(row.created_at)}</span>}
                 {(row.attachments?.length ?? 0) > 0 && <span>📎 {row.attachments!.length}</span>}
               </>
             ),
