@@ -170,7 +170,32 @@ const customText = (t: Record<string, string>, key: string, def: string) => (t[k
 /** Envoie un payload aux abonnements AGENCE ; purge les morts (404/410).
  *  Les appareils liés à un compte créateur sont EXCLUS : le digest contient des
  *  infos internes (factures en retard, contrats…) réservées à l'agence. */
+// Notifications sobres (style iPhone) : sans émojis ni tirets, même si un titre
+// personnalisé (Paramètres) en contient. Titre court, une seule ligne de texte.
+function tidyText(t: unknown): string {
+  return String(t ?? "")
+    .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, "")
+    .replace(/\s+[—–]\s+/g, " · ")
+    .replace(/\s*\n+\s*/g, " · ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+function tidyPayload(payload: string): string {
+  try {
+    const p = JSON.parse(payload);
+    p.title = tidyText(p.title) || "TTP Suite";
+    let body = tidyText(p.body);
+    // Première lettre en majuscule (lignes du résumé assemblées avec « · »).
+    body = body.charAt(0).toUpperCase() + body.slice(1);
+    p.body = body.length > 140 ? body.slice(0, 139).trimEnd() + "…" : body;
+    return JSON.stringify(p);
+  } catch {
+    return payload;
+  }
+}
+
 async function sendToAll(sb: ReturnType<typeof getServiceClient>, payload: string) {
+  payload = tidyPayload(payload);
   const { data: subsRaw } = await sb.from("push_subscriptions").select("id,endpoint,p256dh,auth,user_id");
   const all = ((subsRaw ?? []) as (Sub & { user_id: string | null })[]);
   // ALLOWLIST agence : on n'envoie QU'AUX appareils dont le compte est rôle 'agency'.
@@ -209,6 +234,7 @@ async function sendToAll(sb: ReturnType<typeof getServiceClient>, payload: strin
 /** Push vers les appareils d'UN créateur (résolu par profiles.creator_name).
  *  Réservé à l'agence : la résolution se fait côté serveur, pas de fuite croisée. */
 async function pushToCreator(sb: ReturnType<typeof getServiceClient>, creatorName: string, payload: string) {
+  payload = tidyPayload(payload);
   const { data: profs } = await sb
     .from("profiles").select("user_id").eq("role", "creator").eq("creator_name", creatorName);
   const ids = [...new Set((profs ?? []).map((p) => (p as { user_id: string | null }).user_id).filter(Boolean))] as string[];
@@ -266,20 +292,20 @@ Deno.serve(async (req: Request) => {
     // Titre personnalisable PAR TYPE d'action du créateur (blob `notifTexts`).
     const texts = await loadNotifTexts(sb);
     const DEFA: Record<string, string> = {
-      tache: "{createur} a ajouté une tâche",
-      idee: "💡 {createur} a proposé une idée",
-      contact: "{createur} a ajouté un contact",
-      evenement: "📅 {createur} a ajouté un évènement",
-      gift: "🎁 {createur} — cadeau reçu",
-      facture: "💸 {createur} a déposé une facture",
-      stats: "📊 {createur} a envoyé ses stats",
+      tache: "{createur} · nouvelle tâche",
+      idee: "{createur} · nouvelle idée",
+      contact: "{createur} · nouveau contact",
+      evenement: "{createur} · nouvel évènement",
+      gift: "{createur} · cadeau reçu",
+      facture: "{createur} · facture déposée",
+      stats: "{createur} · stats envoyées",
     };
     const KEYA: Record<string, string> = {
       tache: "a_task", idee: "a_idea", contact: "a_contact", evenement: "a_event",
       gift: "a_gift", facture: "a_facture", stats: "a_stats",
     };
     const aKind = String(body.kind ?? "tache");
-    const activityTitle = customText(texts, KEYA[aKind] ?? "a_task", DEFA[aKind] ?? "{createur} a ajouté quelque chose")
+    const activityTitle = customText(texts, KEYA[aKind] ?? "a_task", DEFA[aKind] ?? "{createur} · nouvelle activité")
       .replace(/\{createur\}/g, who)
       .slice(0, 120);
     // Tag STABLE par créateur (pas Date.now()) : deux notifs d'activité du même
@@ -307,8 +333,8 @@ Deno.serve(async (req: Request) => {
       .from("push_subscriptions").select("id,endpoint,p256dh,auth").eq("user_id", uid);
     const subs = (subsRaw ?? []) as { id: string; endpoint: string; p256dh: string; auth: string }[];
     const payload = JSON.stringify({
-      title: "TTP Suite ✓",
-      body: "Test réussi — tes notifications fonctionnent ! 🎉",
+      title: "TTP Suite",
+      body: "Les notifications fonctionnent.",
       url: "/",
       tag: "ttp-test",
     });
@@ -341,16 +367,16 @@ Deno.serve(async (req: Request) => {
     const what = String(body.text ?? "").slice(0, 140);
     const texts = await loadNotifTexts(sb);
     const DEF: Record<string, string> = {
-      document: "📄 Nouveau document de ton agence",
-      brief: "📋 Nouveau brief de ton agence",
-      debrief: "📊 Nouveau débrief de ton agence",
-      event: "📅 Nouvel évènement de ton agence",
-      mediakit: "🖼️ Nouveau media kit de ton agence",
-      "task-done": "✅ Ta demande est faite",
-      idea: "💡 Une idée de ton agence",
-      gift: "🎁 Nouveau cadeau / dotation",
-      invoice: "💸 Mise à jour de ta facture",
-      roadmap: "🎯 Ta feuille de route a été mise à jour",
+      document: "Nouveau document",
+      brief: "Nouveau brief",
+      debrief: "Nouveau débrief",
+      event: "Nouvel évènement",
+      mediakit: "Media kit mis à jour",
+      "task-done": "Ta demande est faite",
+      idea: "Nouvelle idée de l'agence",
+      gift: "Nouveau cadeau",
+      invoice: "Facture mise à jour",
+      roadmap: "Feuille de route mise à jour",
     };
     const KEY: Record<string, string> = {
       document: "c_document", brief: "c_brief", debrief: "c_debrief", event: "c_event",
@@ -358,10 +384,10 @@ Deno.serve(async (req: Request) => {
       invoice: "c_invoice", roadmap: "c_roadmap",
     };
     const kind = String(body.kind ?? "");
-    const title = customText(texts, KEY[kind] ?? "c_task", DEF[kind] ?? "✓ Nouvelle tâche de ton agence");
+    const title = customText(texts, KEY[kind] ?? "c_task", DEF[kind] ?? "Nouvelle tâche");
     const payload = JSON.stringify({
       title,
-      body: what || "Ouvre ton espace pour voir le détail.",
+      body: what || "Touche pour voir le détail.",
       url: "/",
       tag: `ttp-agency-${Date.now()}`,
     });
@@ -372,8 +398,8 @@ Deno.serve(async (req: Request) => {
   // Mode test (bouton dans l'app) : envoie une notif de contrôle, sans calcul.
   if (body?.test === true) {
     const payload = JSON.stringify({
-      title: "TTP Suite ✓",
-      body: "Test réussi — tes notifications fonctionnent ! 🎉",
+      title: "TTP Suite",
+      body: "Les notifications fonctionnent.",
       url: "/",
       tag: "ttp-test",
     });
@@ -408,8 +434,8 @@ Deno.serve(async (req: Request) => {
     const names = stale.slice(0, 8).map((c) => capName(String((c as { name?: string }).name ?? "")));
     const extra = stale.length > 8 ? ` +${stale.length - 8}` : "";
     const payloadS = JSON.stringify({
-      title: "📊 Mets à jour les données créateurs",
-      body: `${stale.length} créateur${stale.length > 1 ? "s" : ""} pas encore à jour pour ${parisMonthLabel()} :\n${names.join(", ")}${extra}`,
+      title: "Données à mettre à jour",
+      body: stale.length <= 3 ? `${names.join(", ")} · ${parisMonthLabel()}` : `${stale.length} créatrices pas à jour pour ${parisMonthLabel()}`,
       url: "/",
       tag: `ttp-stats-${today}`, // tag daté → relance chaque jour tant que c'est stale
     });
@@ -434,12 +460,12 @@ Deno.serve(async (req: Request) => {
       .or("deleted.is.null,deleted.eq.false").eq("date", today);
     const evToday = (evA ?? []).length;
     const linesA: string[] = [];
-    if (tasksLeft) linesA.push(`✓ ${tasksLeft} tâche${tasksLeft > 1 ? "s" : ""}/brief${tasksLeft > 1 ? "s" : ""} encore à traiter`);
-    if (evToday) linesA.push(`📅 ${evToday} évènement${evToday > 1 ? "s" : ""} aujourd'hui`);
+    if (tasksLeft) linesA.push(`${tasksLeft} tâche${tasksLeft > 1 ? "s" : ""} à traiter`);
+    if (evToday) linesA.push(`${evToday} évènement${evToday > 1 ? "s" : ""}`);
     if (linesA.length === 0) return jsonRes({ ok: true, sent: 0, reason: "rien à signaler (mi-journée)", today });
     const payloadA = JSON.stringify({
-      title: "TTP Suite — point de mi-journée",
-      body: linesA.join("\n"),
+      title: "Point de 14 h",
+      body: linesA.join(" · "),
       url: "/",
       tag: `ttp-afternoon-${today}`,
     });
@@ -462,12 +488,12 @@ Deno.serve(async (req: Request) => {
     const briefsWeek = (bW ?? []).filter((b) => dueInRange(b.due, monday, sunday)).length;
     const tasksWeek = todosWeek + briefsWeek;
     const linesW: string[] = [];
-    if (eventsWeek) linesW.push(`📅 ${eventsWeek} évènement${eventsWeek > 1 ? "s" : ""} cette semaine`);
-    if (tasksWeek) linesW.push(`✓ ${tasksWeek} tâche${tasksWeek > 1 ? "s" : ""}/brief${tasksWeek > 1 ? "s" : ""} à rendre`);
-    if (linesW.length === 0) linesW.push("Semaine dégagée — rien de prévu pour l'instant 👌");
+    if (eventsWeek) linesW.push(`${eventsWeek} évènement${eventsWeek > 1 ? "s" : ""}`);
+    if (tasksWeek) linesW.push(`${tasksWeek} tâche${tasksWeek > 1 ? "s" : ""} à rendre`);
+    if (linesW.length === 0) linesW.push("Rien de prévu pour l'instant");
     const payloadW = JSON.stringify({
-      title: "TTP Suite — ta semaine",
-      body: linesW.join("\n"),
+      title: "Ta semaine",
+      body: linesW.join(" · "),
       url: "/",
       tag: `ttp-weekly-${monday}`,
     });
@@ -532,16 +558,16 @@ Deno.serve(async (req: Request) => {
   if (prefOn(prefs, "digestBirthdays")) {
     for (const n of birthdays) {
       await sendToAll(sb, JSON.stringify({
-        title: "🎂 Anniversaire aujourd'hui",
-        body: `C'est l'anniversaire de ${n} aujourd'hui. Pense à lui souhaiter !`,
+        title: `Anniversaire de ${n}`,
+        body: "C'est aujourd'hui.",
         url: "/",
         tag: `ttp-birthday-${today}-${n}`,
       }));
     }
     for (const n of birthdaysTomorrow) {
       await sendToAll(sb, JSON.stringify({
-        title: "🎂 Anniversaire demain",
-        body: `Demain, c'est l'anniversaire de ${n}. Un message ou un petit cadeau à prévoir ?`,
+        title: `Anniversaire de ${n} demain`,
+        body: "Un message ou un petit cadeau ?",
         url: "/",
         tag: `ttp-birthday-eve-${today}-${n}`,
       }));
@@ -582,26 +608,26 @@ Deno.serve(async (req: Request) => {
       factured += amt;
       if (iv.status === "payee") cashed += amt;
     }
-    if (factured > 0 || cashed > 0) monthlyLine = `📊 Mois dernier : ${euro(factured)} facturés · ${euro(cashed)} encaissés`;
+    if (factured > 0 || cashed > 0) monthlyLine = `mois dernier : ${euro(factured)} facturés`;
   }
 
   // Construit le résumé (rien à dire → on n'envoie pas, pour éviter le bruit).
   // Chaque catégorie respecte les préférences (page Paramètres) — `prefs` chargé plus haut.
   const lines: string[] = [];
-  if (eventsToday && prefOn(prefs, "digestEvents")) lines.push(`📅 ${eventsToday} évènement${eventsToday > 1 ? "s" : ""} aujourd'hui`);
-  if (rdvTomorrow && prefOn(prefs, "digestRdvTomorrow")) lines.push(`🔔 ${rdvTomorrow} RDV demain`);
-  if (tasksDue && prefOn(prefs, "digestTasks")) lines.push(`✓ ${tasksDue} tâche${tasksDue > 1 ? "s" : ""}/brief${tasksDue > 1 ? "s" : ""} à échéance`);
-  if (contractsSoon && prefOn(prefs, "digestContracts")) lines.push(`📄 ${contractsSoon} contrat${contractsSoon > 1 ? "s" : ""} à surveiller`);
-  if (overdue && prefOn(prefs, "digestInvoices")) lines.push(`💶 ${overdue} facture${overdue > 1 ? "s" : ""} en retard`);
-  if (reverseCount && prefOn(prefs, "digestPayouts")) lines.push(`💸 ${reverseCount} créateur${reverseCount > 1 ? "s" : ""} à reverser · ${euro(reverseSum)}`);
-  if (birthdays.length && prefOn(prefs, "digestBirthdays")) lines.push(`🎂 Anniversaire : ${birthdays.join(", ")}`);
+  if (eventsToday && prefOn(prefs, "digestEvents")) lines.push(`${eventsToday} évènement${eventsToday > 1 ? "s" : ""}`);
+  if (rdvTomorrow && prefOn(prefs, "digestRdvTomorrow")) lines.push(`${rdvTomorrow} RDV demain`);
+  if (tasksDue && prefOn(prefs, "digestTasks")) lines.push(`${tasksDue} tâche${tasksDue > 1 ? "s" : ""} à échéance`);
+  if (contractsSoon && prefOn(prefs, "digestContracts")) lines.push(`${contractsSoon} contrat${contractsSoon > 1 ? "s" : ""} à renouveler`);
+  if (overdue && prefOn(prefs, "digestInvoices")) lines.push(`${overdue} facture${overdue > 1 ? "s" : ""} en retard`);
+  if (reverseCount && prefOn(prefs, "digestPayouts")) lines.push(`${euro(reverseSum)} à reverser`);
+  if (birthdays.length && prefOn(prefs, "digestBirthdays")) lines.push(`anniversaire de ${birthdays.join(", ")}`);
   if (monthlyLine && prefOn(prefs, "digestMonthly")) lines.push(monthlyLine);
 
   if (lines.length === 0) return jsonRes({ ok: true, sent: 0, reason: "rien à signaler", today });
 
   const payload = JSON.stringify({
-    title: "TTP Suite — ta journée",
-    body: lines.join("\n"),
+    title: "Ta journée",
+    body: lines.join(" · "),
     url: "/",
     tag: `ttp-daily-${today}`,
   });

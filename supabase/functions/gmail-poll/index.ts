@@ -153,7 +153,7 @@ Deno.serve(async (req: Request) => {
   if (fresh.length && prefs.emailReceivedPush !== false) {
     const first = parseFrom(fresh[0].from);
     const payload = JSON.stringify({
-      title: fresh.length === 1 ? `Nouvel email — ${first.name}` : `${fresh.length} nouveaux emails`,
+      title: fresh.length === 1 ? `Email de ${first.name}` : `${fresh.length} nouveaux emails`,
       body: fresh[0].subject || first.email,
       url: "/",
       tag: `ttp-inbox-${maxTs}`,

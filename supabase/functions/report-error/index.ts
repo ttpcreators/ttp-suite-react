@@ -113,8 +113,8 @@ Deno.serve(async (req: Request) => {
     // vers les téléphones agence. Corps générique ; le détail reste dans error_log.
     // Tag FIXE → les pushs se remplacent au lieu de s'empiler (anti-spam).
     const payload = JSON.stringify({
-      title: "⚠️ Bug dans l'app",
-      body: "Un incident a été signalé. Ouvre le journal des erreurs pour le détail.",
+      title: "Erreur dans l'app",
+      body: "Détail dans Diagnostique.",
       url: "/",
       tag: "ttp-error",
     });

@@ -12,27 +12,27 @@ export type NotifTextField = { key: string; label: string; def: string; hint?: s
 
 /** Notifs reçues par un CRÉATEUR (quand l'agence agit). */
 export const NOTIF_TEXTS_CREATOR: NotifTextField[] = [
-  { key: "c_task", label: "Nouvelle tâche", def: "✓ Nouvelle tâche de ton agence" },
-  { key: "c_brief", label: "Nouveau brief", def: "📋 Nouveau brief de ton agence" },
-  { key: "c_debrief", label: "Nouveau débrief", def: "📊 Nouveau débrief de ton agence" },
-  { key: "c_document", label: "Nouveau document", def: "📄 Nouveau document de ton agence" },
-  { key: "c_event", label: "Nouvel évènement", def: "📅 Nouvel évènement de ton agence" },
-  { key: "c_mediakit", label: "Nouveau media kit", def: "🖼️ Nouveau media kit de ton agence" },
-  { key: "c_taskdone", label: "Demande terminée", def: "✅ Ta demande est faite" },
-  { key: "c_idea", label: "Nouvelle idée", def: "💡 Une idée de ton agence" },
-  { key: "c_gift", label: "Cadeau / dotation", def: "🎁 Nouveau cadeau / dotation" },
-  { key: "c_invoice", label: "Facture", def: "💸 Mise à jour de ta facture" },
-  { key: "c_roadmap", label: "Feuille de route", def: "🎯 Ta feuille de route a été mise à jour" },
+  { key: "c_task", label: "Nouvelle tâche", def: "Nouvelle tâche" },
+  { key: "c_brief", label: "Nouveau brief", def: "Nouveau brief" },
+  { key: "c_debrief", label: "Nouveau débrief", def: "Nouveau débrief" },
+  { key: "c_document", label: "Nouveau document", def: "Nouveau document" },
+  { key: "c_event", label: "Nouvel évènement", def: "Nouvel évènement" },
+  { key: "c_mediakit", label: "Nouveau media kit", def: "Media kit mis à jour" },
+  { key: "c_taskdone", label: "Demande terminée", def: "Ta demande est faite" },
+  { key: "c_idea", label: "Nouvelle idée", def: "Nouvelle idée de l'agence" },
+  { key: "c_gift", label: "Cadeau / dotation", def: "Nouveau cadeau" },
+  { key: "c_invoice", label: "Facture", def: "Facture mise à jour" },
+  { key: "c_roadmap", label: "Feuille de route", def: "Feuille de route mise à jour" },
 ];
 
 /** Notifs reçues par l'AGENCE (quand un créateur agit), PAR type d'action.
  *  Variable disponible : {createur} = le prénom du créateur. */
 export const NOTIF_TEXTS_AGENCY: NotifTextField[] = [
-  { key: "a_task", label: "Créateur ajoute une tâche", def: "{createur} a ajouté une tâche", hint: "Variable : {createur} = le prénom du créateur." },
-  { key: "a_idea", label: "Créateur propose une idée", def: "💡 {createur} a proposé une idée" },
-  { key: "a_contact", label: "Créateur ajoute un contact", def: "{createur} a ajouté un contact" },
-  { key: "a_event", label: "Créateur ajoute un évènement", def: "📅 {createur} a ajouté un évènement" },
-  { key: "a_gift", label: "Créateur — cadeau / dotation", def: "🎁 {createur} — cadeau reçu" },
-  { key: "a_facture", label: "Créateur dépose une facture", def: "💸 {createur} a déposé une facture" },
-  { key: "a_stats", label: "Créateur envoie ses stats", def: "📊 {createur} a envoyé ses stats" },
+  { key: "a_task", label: "Créateur ajoute une tâche", def: "{createur} · nouvelle tâche", hint: "Variable : {createur} = le prénom du créateur." },
+  { key: "a_idea", label: "Créateur propose une idée", def: "{createur} · nouvelle idée" },
+  { key: "a_contact", label: "Créateur ajoute un contact", def: "{createur} · nouveau contact" },
+  { key: "a_event", label: "Créateur ajoute un évènement", def: "{createur} · nouvel évènement" },
+  { key: "a_gift", label: "Créateur — cadeau / dotation", def: "{createur} · cadeau reçu" },
+  { key: "a_facture", label: "Créateur dépose une facture", def: "{createur} · facture déposée" },
+  { key: "a_stats", label: "Créateur envoie ses stats", def: "{createur} · stats envoyées" },
 ];

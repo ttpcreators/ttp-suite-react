@@ -165,8 +165,13 @@
   --color-onsignal: var(--onsignal);
 }
 
-* {
-  border-color: var(--border);
+/* Couleur de bordure PAR DÉFAUT. En @layer base pour que les utilitaires
+   (border-red-500/40, border-foreground, focus:border-primary…) gardent la main :
+   hors couche, cette règle repeignait en gris TOUTES les bordures colorées. */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
 }
 
 html,
