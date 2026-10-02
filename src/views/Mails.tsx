@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Mail, ArrowDownLeft, ArrowUpRight, ArrowLeft, Inbox, Search, Loader2, Send, PenLine } from "lucide-react";
+import { Mail, ArrowDownLeft, ArrowUpRight, ArrowLeft, Inbox, Search, Loader2, PenLine, Reply, Forward, Settings2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { DashPanel } from "@/components/ui/dash";
@@ -8,7 +8,9 @@ import type { MailMessage } from "@/lib/creatorMail";
 import { toast } from "@/components/ui/toast";
 import { parseTouches, nextKind, touchId, type Touch } from "@/lib/touches";
 import { updateTouches } from "@/lib/touchesDb";
-import { MailComposer, BOX_LABEL, type ComposerContact, type MailBox } from "@/components/mail-composer";
+import { MailComposer, type ComposerContact } from "@/components/mail-composer";
+import { BOX_LABEL, sendErrorText, sendGmail, type MailBox } from "@/lib/mailSend";
+import { ForwardDialog, MailSettingsDialog, ReplyBox } from "@/components/mail-tools";
 
 /**
  * Page « Mails » : historique des échanges Gmail par contact + lecture d'un fil
@@ -89,8 +91,9 @@ export function Mails() {
   const [thread, setThread] = useState<{ contact: string; subject: string; threadId: string; box: MailBox } | null>(null);
   const [threadMsgs, setThreadMsgs] = useState<ThreadMsg[] | null>(null);
   const [threadBusy, setThreadBusy] = useState(false);
-  const [replyText, setReplyText] = useState("");
-  const [replySending, setReplySending] = useState(false);
+  const [replyFocus, setReplyFocus] = useState(0); // « Répondre » sur une carte → focus de la réponse
+  const [forwardMsg, setForwardMsg] = useState<MailMessage | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // messages dépliés du fil
 
   // Contacts avec un email valide.
@@ -173,7 +176,6 @@ export function Mails() {
     const mBox: MailBox = m.box ?? (box === "talent" ? "talent" : "partnerships");
     setThread({ contact: selected?.email.toLowerCase() ?? "", subject: m.subject, threadId: m.threadId, box: mBox });
     setThreadMsgs(null);
-    setReplyText("");
     setThreadBusy(true);
     const res = await invokeJson<{ ok?: boolean; messages?: ThreadMsg[] }>("gmail-thread", {
       threadId: m.threadId,
@@ -188,40 +190,26 @@ export function Mails() {
   };
 
   // Répondre : envoie via Gmail dans le MÊME fil (threadId) → apparaît chez le contact.
-  const sendReply = async () => {
-    if (!thread || replySending) return;
-    const body = replyText.trim();
-    if (!body) return;
-    setReplySending(true);
-    const subject = thread.subject.replace(/^\s*re\s*:\s*/i, "");
-    const html = `<div style="font-family:system-ui,Arial,sans-serif;font-size:14px;line-height:1.6;white-space:pre-line">${body
-      .replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c)}</div>`;
-    const res = await invokeJson<{ ok?: boolean; error?: string }>("gmail-send", {
-      to: thread.contact,
-      subject: `Re: ${subject}`,
-      html,
-      threadId: thread.threadId,
-      source: "manual",
-      box: thread.box,
-    });
-    setReplySending(false);
-    if (!res?.ok) {
-      toast(
-        res?.error === "google_non_connecte" ? "Reconnecte Google (droits Gmail)."
-          : res?.error === "talent_droit_manquant" ? "Envoi depuis talent@ pas encore autorisé (admin.google.com)."
-            : "Envoi échoué, réessaie",
-      );
-      return;
+  // Répondre : envoie via Gmail dans le MÊME fil (threadId), depuis la boîte du fil.
+  // Appelé à l'envoi réel (après le délai d'annulation de ReplyBox).
+  const sendReply = async ({ cc, html }: { cc: string[]; html: string }): Promise<boolean> => {
+    if (!thread) return false;
+    const t = thread;
+    const subject = t.subject.replace(/^\s*re\s*:\s*/i, "");
+    const res = await sendGmail({ to: t.contact, cc, subject: `Re: ${subject}`, html, threadId: t.threadId, source: "manual", box: t.box });
+    if (!res.ok) {
+      toast(sendErrorText(res.error));
+      return false;
     }
     toast("Réponse envoyée ✓");
-    setReplyText("");
     // Recharge le fil pour afficher la réponse.
-    const fresh = await invokeJson<{ ok?: boolean; messages?: ThreadMsg[] }>("gmail-thread", { threadId: thread.threadId, contact: thread.contact, box: thread.box });
+    const fresh = await invokeJson<{ ok?: boolean; messages?: ThreadMsg[] }>("gmail-thread", { threadId: t.threadId, contact: t.contact, box: t.box });
     if (fresh?.ok) {
       const msgs = fresh.messages ?? [];
       setThreadMsgs(msgs);
       if (msgs.length) setExpanded((e) => new Set([...e, msgs[msgs.length - 1].id]));
     }
+    return true;
   };
 
   // Tags/niches réellement présents (pour le filtre) — hors « perso » (défaut créateurs).
@@ -277,6 +265,13 @@ export function Mails() {
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          className="order-last ml-auto flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+        >
+          <Settings2 className="h-3.5 w-3.5" /> Signature et délai
+        </button>
         <span className="text-[12px] text-muted-foreground">
           {box === "partnerships" ? "Prospection et contacts agence." : box === "talent" ? "Échanges liés aux créatrices (leurs alias)." : "Chaque échange indique sa boîte."}
         </span>
@@ -392,46 +387,44 @@ export function Mails() {
             ) : readerMsgs.length === 0 ? (
               <div className="px-5 py-10 text-center text-[13px] text-muted-foreground">Impossible de charger ce fil.</div>
             ) : (
-              <div className="divide-y divide-border">
-                {readerMsgs.map((m) => (
-                  <MailItem
-                    key={m.id}
-                    m={m}
-                    open={expanded.has(m.id)}
-                    onToggle={() => setExpanded((s) => {
-                      const n = new Set(s);
-                      if (n.has(m.id)) n.delete(m.id); else n.add(m.id);
-                      return n;
-                    })}
-                  />
-                ))}
+              <div className="flex flex-col gap-3 bg-panel/60 p-3 sm:p-4">
+                {readerMsgs.map((m, i) => {
+                  const last = i === readerMsgs.length - 1;
+                  return (
+                    <MailItem
+                      key={m.id}
+                      m={m}
+                      index={i}
+                      open={expanded.has(m.id)}
+                      onToggle={() => setExpanded((s) => {
+                        const n = new Set(s);
+                        if (n.has(m.id)) n.delete(m.id); else n.add(m.id);
+                        return n;
+                      })}
+                      actions={[
+                        {
+                          icon: Reply, label: "Répondre",
+                          onClick: () => {
+                            const lastId = readerMsgs[readerMsgs.length - 1].id;
+                            setExpanded((s) => new Set([...s, lastId]));
+                            setReplyFocus(Date.now());
+                          },
+                        },
+                        { icon: Forward, label: "Transférer", onClick: () => setForwardMsg(m) },
+                      ]}
+                      footer={last ? (
+                        <ReplyBox
+                          box={thread.box}
+                          focusKey={replyFocus}
+                          placeholder={`Répondre à ${titleCase(selected.person || displayName(thread.contact))}…`}
+                          onSend={sendReply}
+                        />
+                      ) : undefined}
+                    />
+                  );
+                })}
               </div>
             )}
-            {/* Répondre dans le fil */}
-            <div className="border-t border-border px-4 py-4 sm:px-6">
-              <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface p-1.5 pl-3.5 focus-within:border-primary">
-                <textarea
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void sendReply();
-                  }}
-                  rows={1}
-                  placeholder={`Répondre à ${titleCase(selected.person || displayName(thread.contact))}…`}
-                  className="max-h-48 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[13px] text-foreground outline-none [field-sizing:content] placeholder:text-faint"
-                />
-                <button
-                  type="button"
-                  onClick={() => void sendReply()}
-                  disabled={replySending || !replyText.trim()}
-                  aria-label="Envoyer la réponse"
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
-                >
-                  {replySending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </button>
-              </div>
-              <p className="mt-1.5 text-[11px] text-faint">La réponse part depuis {BOX_LABEL[thread.box]}, dans ce fil.</p>
-            </div>
           </DashPanel>
         ) : (
           <DashPanel className="flex min-w-0 flex-col">
@@ -504,6 +497,14 @@ export function Mails() {
           </DashPanel>
         )}
       </div>
+
+      <ForwardDialog
+        message={forwardMsg}
+        subject={thread?.subject ?? ""}
+        defaultBox={thread?.box ?? "partnerships"}
+        onClose={() => setForwardMsg(null)}
+      />
+      <MailSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Composeur : nouveau mail depuis un modèle (prospection / relance) */}
       <MailComposer

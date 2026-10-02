@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Send, Loader2, Settings2, Plus, Trash2, ArrowLeft, ExternalLink } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import {
+  BOX_LABEL, buildHtml, parseEmails, readMailSettings, scheduleSend, sendErrorText, sendGmail, type MailBox,
+} from "@/lib/mailSend";
 import {
   DEFAULT_TEMPLATES,
   KIND_LABEL,
@@ -46,20 +48,6 @@ type Props = {
   defaultBox?: MailBox;
 };
 
-export type MailBox = "partnerships" | "talent";
-export const BOX_LABEL: Record<MailBox, string> = { partnerships: "partnerships@", talent: "talent@" };
-
-async function invokeJson<T>(fn: string, body: Record<string, unknown>): Promise<T | null> {
-  const { data, error } = await supabase.functions.invoke(fn, { body });
-  if (error && (error as { context?: { json?: () => Promise<unknown> } }).context?.json)
-    return (await (error as { context: { json: () => Promise<unknown> } }).context.json().catch(() => null)) as T | null;
-  return (data as T) ?? null;
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c);
-}
-
 export function MailComposer({ open, contact, onClose, onSent, defaultBox = "partnerships" }: Props) {
   const { data: stored } = useAppState<MailTemplate[] | undefined>(
     (s: AppState) => readProspectTemplates(s),
@@ -78,6 +66,9 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [box, setBox] = useState<MailBox>(defaultBox);
+  const [cc, setCc] = useState("");
+  const { data: mailSettings } = useAppState((s: AppState) => readMailSettings(s));
+  const [withSig, setWithSig] = useState(true);
 
   // Gestionnaire : copie de travail éditable.
   const [draftList, setDraftList] = useState<MailTemplate[]>(templates);
@@ -93,6 +84,8 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
     if (!open) return;
     setManage(contact === null);
     setBox(defaultBox);
+    setCc("");
+    setWithSig(mailSettings?.signatureOn ?? true);
     setDraftList(templates);
     baseListRef.current = templates;
     setEditId(null);
@@ -116,35 +109,32 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
     setBody(renderTemplate(tpl.body, contact));
   };
 
-  const send = async () => {
+  const send = () => {
     if (!contact || sending) return;
     if (!subject.trim() || !body.trim()) {
       toast("Objet et message requis");
       return;
     }
-    setSending(true);
-    const html = `<div style="font-family:system-ui,Arial,sans-serif;font-size:14px;line-height:1.6;white-space:pre-line">${escapeHtml(body.trim())}</div>`;
-    const res = await invokeJson<{ ok?: boolean; error?: string; id?: string }>("gmail-send", {
-      to: contact.email,
-      subject: subject.trim(),
-      html,
-      source: "prospection",
-      contactName: contact.label,
-      box,
-    });
-    setSending(false);
-    if (!res?.ok) {
-      toast(
-        res?.error === "google_non_connecte" || res?.error === "gmail_scope_manquant"
-          ? "Reconnecte Google (droits Gmail) dans l'app."
-          : res?.error === "talent_droit_manquant"
-            ? "Envoi depuis talent@ pas encore autorisé (admin.google.com)."
-            : "Envoi échoué, réessaie",
-      );
+    const copy = parseEmails(cc);
+    if (copy.bad.length) {
+      toast(`Adresse en copie invalide : ${copy.bad[0]}`);
       return;
     }
-    toast("Mail envoyé ✓");
-    onSent?.(res.id);
+    const settings = mailSettings ?? readMailSettings({} as AppState);
+    const html = buildHtml(body, { signature: withSig ? settings.signatureHtml : "" });
+    const params = { to: contact.email, cc: copy.ok, subject: subject.trim(), html, source: "prospection", contactName: contact.label, box };
+    // Délai d'annulation : le mail part après N s (barre « Annuler » en bas de l'écran).
+    scheduleSend(`Mail à ${contact.label}`, settings.delaySec, async () => {
+      setSending(true);
+      const res = await sendGmail(params);
+      setSending(false);
+      if (!res.ok) {
+        toast(sendErrorText(res.error));
+        return;
+      }
+      toast("Mail envoyé ✓");
+      onSent?.(res.id);
+    });
     onClose();
   };
 
@@ -340,6 +330,13 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
                 </div>
               </div>
               <input
+                value={cc}
+                onChange={(e) => setCc(e.target.value)}
+                placeholder="Cc (facultatif) : adresse@exemple.com"
+                inputMode="email"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              />
+              <input
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 placeholder="Objet"
@@ -355,7 +352,16 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
-              <p className="min-w-0 text-[10px] text-faint">La prise de contact est notée toute seule, quel que soit le chemin.</p>
+              <label className={cn("flex select-none items-center gap-1.5 text-[12px] text-muted-foreground", !mailSettings?.signatureHtml && "opacity-50")}>
+                <input
+                  type="checkbox"
+                  checked={withSig && !!mailSettings?.signatureHtml}
+                  disabled={!mailSettings?.signatureHtml}
+                  onChange={(e) => setWithSig(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-[var(--color-primary)]"
+                />
+                {mailSettings?.signatureHtml ? "Ajouter ma signature" : "Signature : à coller dans Mails → Réglages"}
+              </label>
               <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"

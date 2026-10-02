@@ -5,7 +5,8 @@
 // Gmail (scope gmail.send). Réservé à l'AGENCE (verify_jwt=true + rôle agence).
 // Réutilise getAccessToken() (refresh auto du token, comme la sync Agenda).
 //
-// Entrée : { to, subject, html, threadId?, inReplyTo?, source?, contactName?, box? }.
+// Entrée : { to, cc?, subject, html, threadId?, inReplyTo?, source?, contactName?, box? }.
+//  - cc = liste d'adresses en copie (10 max).
 //  - box = "partnerships" (défaut, connexion de l'app) | "talent" (compte de service).
 //  - threadId + inReplyTo : pour threader une relance dans le même fil (et
 //    permettre la détection de réponse).
@@ -54,7 +55,7 @@ Deno.serve(async (req: Request) => {
   if (!(await isAgency(req, sb))) return jsonRes({ error: "unauthorized" }, 401);
 
   let body: {
-    to?: string; subject?: string; html?: string;
+    to?: string; cc?: string[] | string; subject?: string; html?: string;
     threadId?: string; inReplyTo?: string; source?: string; contactName?: string; box?: string;
     attachments?: { filename?: string; mimeType?: string; contentBase64?: string }[];
   } = {};
@@ -68,6 +69,11 @@ Deno.serve(async (req: Request) => {
   const subject = String(body.subject ?? "").trim();
   const html = body.html ?? "";
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return jsonRes({ error: "destinataire_invalide" }, 400);
+  // Copie : adresses validées une par une (jamais de CR/LF ni de séparateur injecté).
+  const ccList = (Array.isArray(body.cc) ? body.cc : String(body.cc ?? "").split(/[,;\s]+/))
+    .map((x) => String(x).trim().toLowerCase()).filter(Boolean);
+  if (ccList.some((x) => !/^[^@\s,;<>"]+@[^@\s,;<>"]+\.[^@\s,;<>"]+$/.test(x))) return jsonRes({ error: "copie_invalide" }, 400);
+  if (ccList.length > 10) return jsonRes({ error: "copie_trop_longue" }, 400);
   if (!subject) return jsonRes({ error: "objet_requis" }, 400);
   if (!html.trim()) return jsonRes({ error: "contenu_requis" }, 400);
 
@@ -86,6 +92,7 @@ Deno.serve(async (req: Request) => {
   // Construit le message MIME. Entêtes de base + threading éventuel.
   const attachments = (Array.isArray(body.attachments) ? body.attachments : []).filter((a) => a?.contentBase64);
   const base = [`To: ${to}`, `Subject: ${encSubject(subject)}`, "MIME-Version: 1.0"];
+  if (ccList.length) base.push(`Cc: ${[...new Set(ccList)].join(", ")}`);
   if (body.inReplyTo) {
     // Anti-injection d'entêtes MIME : jamais de CR/LF dans une valeur d'entête.
     const irt = String(body.inReplyTo).replace(/[\r\n]/g, "").slice(0, 400);

@@ -6,6 +6,7 @@ import type { Session } from "@supabase/supabase-js";
 import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { Toaster } from "@/components/ui/toast";
+import { UndoSendBar } from "@/components/ui/undo-send";
 import { Notifications } from "@/components/ui/notifications";
 import { useNotifications } from "@/lib/useNotifications";
 import { useCreators } from "@/lib/useCreators";
@@ -935,6 +936,7 @@ export default function App() {
         )}
       </div>
       <Toaster />
+      <UndoSendBar />
     </NavSubSetContext.Provider>
     </SearchContext.Provider>
     </ThemeContext.Provider>

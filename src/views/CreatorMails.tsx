@@ -284,11 +284,12 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
           <div className="flex items-center justify-center gap-2 px-5 py-16 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Ouverture…</div>
         ) : (
           <>
-            <div className="divide-y divide-border">
-              {thread.messages.map((m) => (
+            <div className="flex flex-col gap-3 bg-panel/60 p-3 sm:p-4">
+              {thread.messages.map((m, i) => (
                 <MailItem
                   key={m.id}
                   m={m}
+                  index={i}
                   open={expanded.has(m.id)}
                   onToggle={() => setExpanded((s) => {
                     const n = new Set(s);
