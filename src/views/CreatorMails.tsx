@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, AtSign, Image as ImageIcon, Inbox, Loader2, Mail, MessageSquare, Paperclip, RefreshCw, Send, Settings2, Tag,
+  ArrowLeft, AtSign, Inbox, Loader2, Mail, MessageSquare, Paperclip, RefreshCw, Send, Settings2, Tag,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
@@ -10,7 +10,7 @@ import { StatusSelect } from "@/components/ui/status-select";
 import { notifyAgency } from "@/lib/push";
 import {
   MAIL_STATUS, statusMeta, listMails, getMailThread, sendManagerNote, downloadAttachment, listGmailLabels,
-  mailDocument, hasRemoteImages, fmtSize,
+  mailDocument, hasQuote, mailSnippet, fmtSize,
   type MailStatus, type MailThread, type MailThreadLite, type MailMessage, type MailSettings,
 } from "@/lib/creatorMail";
 
@@ -39,24 +39,57 @@ const fmtFull = (ts: number) =>
 
 function StatusBadge({ status }: { status: string }) {
   const m = statusMeta(status);
-  return <span className={cn("inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium", m.badge)}>
-    <span className={cn("size-1.5 rounded-full", m.dot)} />{m.label}
-  </span>;
+  return (
+    <span className={cn("inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium", m.badge)}>
+      <span className={cn("size-1.5 rounded-full", m.dot)} />
+      {m.label}
+    </span>
+  );
 }
 
-/** Corps d'un mail : iframe isolée (aucun script), hauteur ajustée au contenu. */
-function MailBody({ m, showImages }: { m: MailMessage; showImages: boolean }) {
+/** Statut discret (pastille + texte) pour les lignes de la liste. */
+function StatusDot({ status }: { status: string }) {
+  const m = statusMeta(status);
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[11px] text-muted-foreground">
+      <span className={cn("size-1.5 rounded-full", m.dot)} />
+      {m.label}
+    </span>
+  );
+}
+
+/** Pastille d'initiale (marque ou expéditeur). L'agence = pastille pleine. */
+function Initial({ name, agency, size = "md" }: { name: string; agency?: boolean; size?: "sm" | "md" }) {
+  return (
+    <span
+      className={cn(
+        "grid shrink-0 place-items-center rounded-full font-semibold uppercase",
+        size === "md" ? "h-9 w-9 text-[13px]" : "h-8 w-8 text-[12px]",
+        agency ? "bg-foreground text-background" : "bg-foreground/[0.07] text-foreground",
+      )}
+    >
+      {agency ? "T" : (name.trim().charAt(0) || "?")}
+    </span>
+  );
+}
+
+/** Corps d'un mail : iframe isolée (aucun script), hauteur suivie en continu. */
+function MailBody({ m, showQuoted }: { m: MailMessage; showQuoted: boolean }) {
   const ref = useRef<HTMLIFrameElement>(null);
-  const [h, setH] = useState(120);
-  const doc = useMemo(() => mailDocument(m.html, m.text, showImages), [m.html, m.text, showImages]);
-  const fit = useCallback(() => {
+  const [h, setH] = useState(80);
+  const doc = useMemo(() => mailDocument(m.html, m.text, showQuoted), [m.html, m.text, showQuoted]);
+  const obs = useRef<ResizeObserver | null>(null);
+  const onLoad = useCallback(() => {
     const d = ref.current?.contentDocument;
-    if (d?.body) setH(Math.min(4000, Math.max(60, d.documentElement.scrollHeight)));
+    if (!d?.documentElement) return;
+    const fit = () => setH(Math.min(6000, Math.max(24, d.documentElement.scrollHeight)));
+    fit();
+    // Les images (logos, signatures) arrivent après coup : on suit la hauteur.
+    obs.current?.disconnect();
+    obs.current = new ResizeObserver(fit);
+    obs.current.observe(d.body);
   }, []);
-  useEffect(() => {
-    const t = window.setTimeout(fit, 400); // images chargées après coup
-    return () => window.clearTimeout(t);
-  }, [doc, fit]);
+  useEffect(() => () => obs.current?.disconnect(), []);
   return (
     <iframe
       ref={ref}
@@ -65,24 +98,105 @@ function MailBody({ m, showImages }: { m: MailMessage; showImages: boolean }) {
       // Pas de allow-scripts : aucun code du mail ne peut s'exécuter. allow-same-origin
       // sert uniquement à mesurer la hauteur ; les liens s'ouvrent dans un nouvel onglet.
       sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-      onLoad={fit}
+      onLoad={onLoad}
       style={{ height: h }}
-      className="block w-full border-0 bg-transparent"
+      className="block w-full border-0 bg-white"
     />
   );
 }
 
+/** Un message du fil : replié (une ligne) ou déplié (corps + pièces jointes). */
+function MailItem({
+  m, open, onToggle, threadId, creator,
+}: { m: MailMessage; open: boolean; onToggle: () => void; threadId: string; creator?: string }) {
+  const [showQuoted, setShowQuoted] = useState(false);
+  const snippet = useMemo(() => mailSnippet(m.html, m.text), [m.html, m.text]);
+  const name = m.fromAgency ? "TTP Creators" : m.from;
+  if (!open) {
+    return (
+      <button type="button" onClick={onToggle} className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-rowhover sm:px-6">
+        <Initial name={m.from} agency={m.fromAgency} size="sm" />
+        {/* Mobile : nom + date, puis l'aperçu dessous ; ≥ sm : tout sur une ligne. */}
+        <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-3 sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center">
+          <span className="truncate text-[13px] font-medium text-foreground">{name}</span>
+          <span className="col-span-2 row-start-2 truncate text-[13px] text-muted-foreground sm:col-span-1 sm:col-start-2 sm:row-start-1">{snippet}</span>
+          <span className="col-start-2 row-start-1 shrink-0 text-[11px] tabular-nums text-faint sm:col-start-3">{fmtWhen(m.ts)}</span>
+        </span>
+      </button>
+    );
+  }
+  return (
+    <div className="px-4 py-4 sm:px-6">
+      <button type="button" onClick={onToggle} className="mb-3 flex w-full items-start gap-3 text-left">
+        <Initial name={m.from} agency={m.fromAgency} size="sm" />
+        <span className="min-w-0 flex-1">
+          <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+            <span className="truncate text-[13px] font-semibold text-foreground">{name}</span>
+            <span className="truncate text-[12px] text-faint">{m.fromAgency ? m.from : m.fromEmail}</span>
+          </span>
+          <span className="block truncate text-[12px] text-faint">à {m.to.replace(/"?([^"<,]+?)"?\s*<[^>]+>/g, "$1")}{m.cc ? ` · cc ${m.cc.replace(/"?([^"<,]+?)"?\s*<[^>]+>/g, "$1")}` : ""}</span>
+        </span>
+        <span className="shrink-0 text-[11px] tabular-nums text-faint">
+          <span className="sm:hidden">{fmtWhen(m.ts)}</span>
+          <span className="hidden sm:inline">{fmtFull(m.ts)}</span>
+        </span>
+      </button>
+      <div className="overflow-hidden rounded-xl bg-white sm:ml-11 dark:p-4">
+        <MailBody m={m} showQuoted={showQuoted} />
+      </div>
+      {hasQuote(m.html) && (
+        <button
+          type="button"
+          onClick={() => setShowQuoted((v) => !v)}
+          title={showQuoted ? "Masquer l'historique" : "Afficher l'historique"}
+          className="mt-2 rounded-md bg-muted px-2 py-0.5 text-[12px] font-semibold leading-none tracking-widest text-muted-foreground transition-colors hover:text-foreground sm:ml-11"
+        >
+          {showQuoted ? "Masquer" : "···"}
+        </button>
+      )}
+      {m.attachments.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2 sm:ml-11">
+          {m.attachments.map((a) => (
+            <button
+              key={a.attachmentId}
+              type="button"
+              onClick={() => downloadAttachment(threadId, a, creator).catch((e) => toast((e as Error).message))}
+              className="flex max-w-full items-center gap-2.5 rounded-xl border border-border bg-surface px-3 py-2 text-left transition-colors hover:bg-rowhover"
+            >
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted">
+                <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-[12px] font-medium text-foreground">{a.filename}</span>
+                <span className="block text-[11px] text-faint">{fmtSize(a.size)} · Télécharger</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const FILTERS: { key: "tous" | "encours" | "valide" | "refuse"; label: string; match: (s: MailStatus) => boolean }[] = [
+  { key: "tous", label: "Tous", match: () => true },
+  { key: "encours", label: "En cours", match: (s) => s === "nouvelle" || s === "negociation" },
+  { key: "valide", label: "Validés", match: (s) => s === "valide" },
+  { key: "refuse", label: "Refusés", match: (s) => s === "refuse" },
+];
+
 export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode }) {
   const asAgency = mode !== "creator";
+  const forCreator = asAgency ? creator : undefined;
   const [threads, setThreads] = useState<MailThreadLite[] | null>(null);
   const [configured, setConfigured] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState<MailStatus | "tous">("tous");
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("tous");
   const [openId, setOpenId] = useState<string | null>(null);
   const [thread, setThread] = useState<MailThread | null>(null);
   const [threadErr, setThreadErr] = useState<string | null>(null);
-  const [showImages, setShowImages] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -90,7 +204,7 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
     setLoading(true);
     setErr(null);
     try {
-      const r = await listMails(asAgency ? creator : undefined);
+      const r = await listMails(forCreator);
       setConfigured(r.configured);
       setThreads(r.threads);
     } catch (e) {
@@ -99,7 +213,7 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
     } finally {
       setLoading(false);
     }
-  }, [creator, asAgency]);
+  }, [forCreator]);
 
   useEffect(() => {
     setThreads(null);
@@ -112,11 +226,12 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
     let alive = true;
     setThread(null);
     setThreadErr(null);
-    setShowImages(false);
-    getMailThread(openId, asAgency ? creator : undefined)
+    getMailThread(openId, forCreator)
       .then((t) => {
         if (!alive) return;
         setThread(t);
+        // Dernier message déplié, les précédents repliés (comme Gmail).
+        setExpanded(new Set(t.messages.length ? [t.messages[t.messages.length - 1].id] : []));
         // Agence : les notes de la créatrice sont marquées lues à l'ouverture.
         if (mode === "agency" && t.notes.some((n) => !n.agency_read_at)) {
           void supabase.from("creator_mail_notes").update({ agency_read_at: new Date().toISOString() })
@@ -127,7 +242,7 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
     return () => {
       alive = false;
     };
-  }, [openId, creator, asAgency, mode]);
+  }, [openId, forCreator, creator, mode]);
 
   const setStatus = async (threadId: string, status: MailStatus) => {
     const prev = threads;
@@ -159,12 +274,12 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
   };
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { tous: threads?.length ?? 0 };
-    for (const t of threads ?? []) c[t.status] = (c[t.status] ?? 0) + 1;
+    const c: Record<string, number> = {};
+    for (const f of FILTERS) c[f.key] = (threads ?? []).filter((t) => f.match(t.status)).length;
     return c;
   }, [threads]);
-  const shown = (threads ?? []).filter((t) => filter === "tous" || t.status === filter);
-  const remote = thread?.messages.some((m) => hasRemoteImages(m.html)) ?? false;
+  const cur = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
+  const shown = (threads ?? []).filter((t) => cur.match(t.status));
 
   if (threads === null) {
     return <DashPanel className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Chargement des mails…</DashPanel>;
@@ -182,20 +297,20 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
 
   const list = (
     <DashPanel className={cn("flex min-w-0 flex-col", openId && "max-lg:hidden")}>
-      <div className="flex items-start gap-2 border-b border-border px-4 py-3">
-        <div className="flex min-w-0 flex-1 flex-wrap gap-1">
-          {(["tous", ...MAIL_STATUS.map((s) => s.value)] as const).map((k) => (
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+        <div className="flex min-w-0 flex-1 gap-0.5 rounded-lg bg-muted p-0.5">
+          {FILTERS.map((f) => (
             <button
-              key={k}
+              key={f.key}
               type="button"
-              onClick={() => setFilter(k)}
+              onClick={() => setFilter(f.key)}
               className={cn(
-                "shrink-0 whitespace-nowrap rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
-                filter === k ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+                "flex min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-md px-1.5 py-1.5 text-[12px] font-medium transition-colors",
+                filter === f.key ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {k === "tous" ? "Tous" : statusMeta(k).short}
-              <span className="ml-1 tabular-nums text-faint">{counts[k] ?? 0}</span>
+              {f.label}
+              {counts[f.key] > 0 && <span className="tabular-nums text-faint">{counts[f.key]}</span>}
             </button>
           ))}
         </div>
@@ -206,9 +321,9 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
       </div>
       {err && <div className="border-b border-border px-4 py-2.5 text-[12px] text-red-600 dark:text-red-400">{err}</div>}
       {shown.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
+        <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
           <Mail className="h-5 w-5 text-faint" />
-          <p className="text-[13px] text-muted-foreground">{filter === "tous" ? "Aucun échange pour le moment." : "Aucun échange avec ce statut."}</p>
+          <p className="text-[13px] text-muted-foreground">{filter === "tous" ? "Aucun échange pour le moment." : "Aucun échange ici."}</p>
         </div>
       ) : (
         <ul className="divide-y divide-border">
@@ -217,23 +332,28 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
               <button
                 type="button"
                 onClick={() => setOpenId(t.id)}
-                className={cn("flex w-full flex-col gap-1 px-4 py-3 text-left transition-colors hover:bg-rowhover", openId === t.id && "bg-rowhover")}
+                className={cn("flex w-full gap-3 px-4 py-3.5 text-left transition-colors hover:bg-rowhover", openId === t.id && "bg-rowhover")}
               >
-                <span className="flex min-w-0 items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{t.brand || "Marque"}</span>
-                  {t.notes > 0 && (
-                    <span className="flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground" title="Messages au manager">
-                      <MessageSquare className="h-3 w-3" />{t.notes}
-                    </span>
-                  )}
-                  <span className="shrink-0 text-[11px] tabular-nums text-faint">{fmtWhen(t.ts)}</span>
+                <Initial name={t.brand} />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="flex min-w-0 items-baseline gap-2">
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{t.brand || "Marque"}</span>
+                    <span className="shrink-0 text-[11px] tabular-nums text-faint">{fmtWhen(t.ts)}</span>
+                  </span>
+                  <span className="truncate text-[13px] text-foreground">
+                    {t.subject}
+                    {t.count > 1 && <span className="ml-1 text-faint">{t.count}</span>}
+                  </span>
+                  <span className="line-clamp-1 text-[12px] text-muted-foreground">{t.excerpt}</span>
+                  <span className="mt-1 flex items-center gap-3">
+                    <StatusDot status={t.status} />
+                    {t.notes > 0 && (
+                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground" title="Messages au manager">
+                        <MessageSquare className="h-3 w-3" />{t.notes}
+                      </span>
+                    )}
+                  </span>
                 </span>
-                <span className="truncate text-[13px] text-foreground">
-                  {t.subject}
-                  {t.count > 1 && <span className="ml-1 text-faint">({t.count})</span>}
-                </span>
-                <span className="line-clamp-1 text-[12px] text-muted-foreground">{t.excerpt}</span>
-                <span className="mt-1"><StatusBadge status={t.status} /></span>
               </button>
             </li>
           ))}
@@ -244,19 +364,23 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
 
   const view = openId && (
     <DashPanel className="flex min-w-0 flex-col">
-      <div className="flex items-start gap-3 border-b border-border px-4 py-3 sm:px-5">
+      <div className="flex items-start gap-3 border-b border-border px-4 py-4 sm:px-6">
         <button type="button" onClick={() => setOpenId(null)} aria-label="Retour à la liste"
-          className="-ml-1 mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground lg:hidden">
+          className="-ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground lg:hidden">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div className="min-w-0 flex-1">
-          <div className="text-[12px] text-muted-foreground">{thread?.brand || " "}</div>
-          <div className="text-[15px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{thread?.subject ?? "Chargement…"}</div>
+          <h2 className="text-[17px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere]">{thread?.subject ?? "Chargement…"}</h2>
+          {thread && (
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              {thread.brand ? `${thread.brand} · ` : ""}{thread.messages.length} message{thread.messages.length > 1 ? "s" : ""}
+            </p>
+          )}
         </div>
         {thread && (mode === "agency" ? (
           <StatusSelect value={thread.status} options={STATUS_OPTIONS} onChange={(v) => void setStatus(thread.id, v as MailStatus)} className="w-[170px] shrink-0 max-sm:w-[150px]" />
         ) : (
-          <span className="mt-1"><StatusBadge status={thread.status} /></span>
+          <span className="mt-0.5"><StatusBadge status={thread.status} /></span>
         ))}
       </div>
 
@@ -266,92 +390,65 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
         <div className="flex items-center justify-center gap-2 px-5 py-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Ouverture…</div>
       ) : (
         <>
-          {remote && (
-            <div className="flex items-center gap-2 border-b border-border px-4 py-2 text-[12px] text-muted-foreground sm:px-5">
-              <ImageIcon className="h-3.5 w-3.5 shrink-0" />
-              <span className="flex-1">{showImages ? "Images affichées." : "Images distantes bloquées pour ta sécurité."}</span>
-              <button type="button" onClick={() => setShowImages((v) => !v)} className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline">
-                {showImages ? "Masquer" : "Afficher les images"}
-              </button>
-            </div>
-          )}
-          <ol className="divide-y divide-border">
+          <div className="divide-y divide-border">
             {thread.messages.map((m) => (
-              <li key={m.id} className="px-4 py-4 sm:px-5">
-                <div className="mb-3 flex items-start gap-3">
-                  <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full text-[12px] font-semibold",
-                    m.fromAgency ? "bg-foreground text-background" : "bg-foreground/[0.08] text-foreground")}>
-                    {m.fromAgency ? "T" : (m.from || "?").charAt(0).toUpperCase()}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                      <span className="truncate text-[13px] font-semibold text-foreground">{m.fromAgency ? "TTP Creators" : m.from}</span>
-                      <span className="truncate text-[12px] text-faint">{m.fromAgency ? m.from : m.fromEmail}</span>
-                    </div>
-                    <div className="text-[11px] text-faint">{fmtFull(m.ts)}</div>
-                  </div>
-                </div>
-                <div className="overflow-hidden rounded-xl border border-border bg-white px-3 py-3 sm:px-4">
-                  <MailBody m={m} showImages={showImages} />
-                </div>
-                {m.attachments.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {m.attachments.map((a) => (
-                      <button
-                        key={a.attachmentId}
-                        type="button"
-                        onClick={() => downloadAttachment(thread.id, a, asAgency ? creator : undefined).catch((e) => toast((e as Error).message))}
-                        className="flex max-w-full items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-[12px] text-foreground transition-colors hover:bg-rowhover"
-                      >
-                        <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                        <span className="truncate">{a.filename}</span>
-                        <span className="shrink-0 text-faint">{fmtSize(a.size)}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </li>
+              <MailItem
+                key={m.id}
+                m={m}
+                open={expanded.has(m.id)}
+                onToggle={() => setExpanded((s) => {
+                  const n = new Set(s);
+                  if (n.has(m.id)) n.delete(m.id); else n.add(m.id);
+                  return n;
+                })}
+                threadId={thread.id}
+                creator={forCreator}
+              />
             ))}
-          </ol>
+          </div>
 
           {/* Échanges internes avec le manager (jamais envoyés à la marque) */}
-          <div className="border-t border-border bg-muted/40 px-4 py-4 sm:px-5">
-            <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <div className="border-t border-border px-4 py-5 sm:px-6">
+            <div className="mb-3 flex items-center gap-2">
               <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="text-[13px] font-semibold text-foreground">{asAgency ? "Messages de la créatrice" : "Mes messages au manager"}</span>
-              <span className="basis-full pl-6 text-[11px] text-faint sm:basis-auto sm:pl-0">jamais envoyés à la marque</span>
+              <span className="text-[13px] font-semibold text-foreground">{asAgency ? "Messages de la créatrice" : "Échanges avec ton manager"}</span>
             </div>
-            {thread.notes.length === 0 ? (
-              <p className="mb-3 text-[12px] text-muted-foreground">{asAgency ? "Aucun message sur cet échange." : "Une question sur cet échange ? Écris à ton manager."}</p>
-            ) : (
+            <p className="mb-3 text-[12px] text-muted-foreground">
+              {asAgency ? "Ses questions sur cet échange. Jamais envoyées à la marque." : "Une question sur cet échange ? Elle reste entre toi et TTP, la marque ne la voit jamais."}
+            </p>
+            {thread.notes.length > 0 && (
               <ul className="mb-3 flex flex-col gap-2">
                 {thread.notes.map((n) => (
-                  <li key={n.id} className="rounded-xl border border-border bg-surface px-3 py-2.5">
+                  <li key={n.id} className={cn("max-w-[85%] rounded-2xl bg-muted px-3.5 py-2.5", !asAgency && "self-end rounded-br-md", asAgency && "rounded-bl-md")}>
                     <p className="whitespace-pre-wrap text-[13px] text-foreground [overflow-wrap:anywhere]">{n.body}</p>
                     <p className="mt-1 text-[11px] text-faint">
                       {fmtFull(new Date(n.created_at).getTime())}
-                      {!asAgency && (n.agency_read_at ? " · lu par ton manager" : " · envoyé")}
+                      {!asAgency && (n.agency_read_at ? " · lu" : " · envoyé")}
                     </p>
                   </li>
                 ))}
               </ul>
             )}
             {mode === "creator" && (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface p-1.5 pl-3.5 focus-within:border-primary">
                 <textarea
                   value={note}
                   onChange={(e) => setNote(e.target.value.slice(0, 4000))}
-                  rows={2}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submitNote();
+                  }}
+                  rows={1}
                   placeholder="Écrire à mon manager…"
-                  className="min-h-[44px] w-full flex-1 resize-y rounded-lg border border-border bg-surface px-3 py-2 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
+                  className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[13px] text-foreground outline-none [field-sizing:content] placeholder:text-faint"
                 />
                 <button
                   type="button"
                   onClick={() => void submitNote()}
                   disabled={!note.trim() || sending}
-                  className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-3.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                  aria-label="Envoyer à mon manager"
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
                 >
-                  {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Envoyer
+                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </button>
               </div>
             )}
@@ -365,7 +462,7 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] lg:items-start">
       {list}
       {view || (
-        <DashPanel className="hidden flex-col items-center justify-center gap-2 px-6 py-16 text-center lg:flex">
+        <DashPanel className="hidden flex-col items-center justify-center gap-2 px-6 py-20 text-center lg:flex">
           <Inbox className="h-6 w-6 text-faint" />
           <p className="text-[13px] text-muted-foreground">Choisis un échange pour le lire.</p>
         </DashPanel>

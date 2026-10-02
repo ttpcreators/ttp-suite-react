@@ -84,32 +84,48 @@ export async function downloadAttachment(threadId: string, a: MailAttachment, cr
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+/** Le mail contient-il un historique cité (réponse précédente recopiée) ? */
+export const hasQuote = (html: string) => /class="[^"]*gmail_quote|<blockquote/i.test(html);
+
+/** Texte brut court d'un mail (aperçu des messages repliés). */
+export function mailSnippet(html: string, text: string): string {
+  let t = text;
+  if (html) {
+    // Espace après chaque fin de bloc : « Bonjour,</p><p>Je » → « Bonjour, Je ».
+    const spaced = html.replace(/<(br|\/p|\/div|\/li|\/tr|\/h\d)\b[^>]*>/gi, "$& ");
+    const d = new DOMParser().parseFromString(DOMPurify.sanitize(spaced), "text/html");
+    d.querySelectorAll(".gmail_quote, blockquote, style").forEach((n) => n.remove());
+    t = d.body.textContent ?? "";
+  }
+  return t.replace(/\s+/g, " ").trim().slice(0, 160);
+}
+
 /**
  * Document autonome pour l'iframe de lecture (sandbox sans scripts).
- * Second assainissement (DOMPurify) après celui du serveur, et CSP : aucune
- * ressource distante tant que `showImages` est faux. Fond blanc fixe : les mails
- * portent leurs propres couleurs (texte sombre), comme dans Gmail.
+ * Second assainissement (DOMPurify) après celui du serveur, et CSP : aucun script,
+ * aucune ressource à part les images (logos, signatures). Fond blanc fixe : les
+ * mails portent leurs propres couleurs, comme dans Gmail. L'historique cité est
+ * masqué tant que `showQuoted` est faux.
  */
-export function mailDocument(html: string, text: string, showImages: boolean): string {
+export function mailDocument(html: string, text: string, showQuoted: boolean): string {
   const body = html
     ? DOMPurify.sanitize(html, {
         FORBID_TAGS: ["script", "style", "form", "input", "button", "textarea", "select", "iframe", "object", "embed", "link", "meta", "base", "svg", "math"],
         FORBID_ATTR: ["srcset", "action", "formaction", "background", "ping"],
       })
     : `<pre>${text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c)}</pre>`;
-  const img = showImages ? "img-src https: data:;" : "img-src data:;";
+  const quotes = showQuoted ? "" : ".gmail_quote,.gmail_extra,.gmail_attr,blockquote{display:none!important}";
   return `<!doctype html><html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; ${img} style-src 'unsafe-inline'; font-src data:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; font-src data:;">
 <base target="_blank">
 <style>
-  html,body{margin:0;padding:0;background:transparent;color:#18181b;font:14px/1.55 Inter,-apple-system,system-ui,sans-serif;word-wrap:break-word;overflow-wrap:anywhere}
+  html,body{margin:0;padding:0;background:#fff;color:#18181b;font:14px/1.6 Inter,-apple-system,system-ui,sans-serif;word-wrap:break-word;overflow-wrap:anywhere}
+  body>*:first-child{margin-top:0} body>*:last-child{margin-bottom:0}
   img{max-width:100%;height:auto} table{max-width:100%} pre{white-space:pre-wrap;font:inherit;margin:0}
-  a{color:#2563eb} blockquote{margin:8px 0;padding-left:10px;border-left:2px solid #d4d4d8;color:#71717a}
+  a{color:#2563eb} blockquote{margin:8px 0;padding-left:12px;border-left:2px solid #e4e4e7;color:#71717a}
+  ${quotes}
 </style></head><body>${body}</body></html>`;
 }
-
-/** Le mail contient-il des images distantes (pour proposer « Afficher les images ») ? */
-export const hasRemoteImages = (html: string) => /<img[^>]+src=["']?https?:/i.test(html);
 
 export const fmtSize = (n: number) =>
   n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1).replace(".", ",")} Mo` : `${Math.max(1, Math.round(n / 1024))} Ko`;

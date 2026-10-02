@@ -153,12 +153,20 @@ function decodeEntities(s: string): string {
   return s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }
 
+type Inline = { cid: string; mimeType: string; size: number; attachmentId?: string; data?: string };
+
 function extract(payload: GPart | undefined, messageId: string) {
   let html = "";
   let text = "";
   const attachments: { messageId: string; attachmentId: string; filename: string; mimeType: string; size: number }[] = [];
+  // Images intégrées au corps (logos de signature…) : référencées par « cid: » dans le HTML.
+  const inline: Inline[] = [];
   const walk = (p?: GPart) => {
     if (!p) return;
+    const cid = header(p.headers ?? [], "Content-ID").replace(/^<|>$/g, "").trim();
+    if (cid && (p.mimeType ?? "").startsWith("image/") && (p.body?.attachmentId || p.body?.data)) {
+      inline.push({ cid, mimeType: p.mimeType ?? "image/png", size: p.body?.size ?? 0, attachmentId: p.body?.attachmentId, data: p.body?.data });
+    }
     if (p.filename && p.body?.attachmentId) {
       attachments.push({
         messageId, attachmentId: p.body.attachmentId, filename: p.filename,
@@ -169,12 +177,42 @@ function extract(payload: GPart | undefined, messageId: string) {
     for (const c of p.parts ?? []) walk(c);
   };
   walk(payload);
-  return { html, text, attachments };
+  return { html, text, attachments, inline };
+}
+
+const INLINE_MAX_BYTES = 600 * 1024; // par image
+const INLINE_TOTAL_MAX = 4 * 1024 * 1024; // par fil
+
+/** Remplace les « cid: » du HTML par les images elles-mêmes (data URI). */
+async function embedInline(token: string, messageId: string, html: string, inline: Inline[], budget: { left: number }) {
+  const used = new Set<string>();
+  let out = html;
+  for (const im of inline) {
+    const ref = new RegExp(`cid:${im.cid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi");
+    if (!ref.test(out)) continue;
+    used.add(im.cid);
+    if (im.size > INLINE_MAX_BYTES || im.size > budget.left) continue;
+    let data = im.data;
+    if (!data && im.attachmentId) {
+      const a = await cached(`a:${messageId}:${im.attachmentId}`, 600_000, () =>
+        gmail<{ data?: string }>(token, `/messages/${messageId}/attachments/${encodeURIComponent(im.attachmentId!)}`)).catch(() => null);
+      data = a?.data;
+    }
+    if (!data) continue;
+    budget.left -= im.size;
+    const b64 = data.replace(/-/g, "+").replace(/_/g, "/");
+    out = out.replace(ref, `data:${im.mimeType.replace(/[^\w/+.-]/g, "")};base64,${b64}`);
+  }
+  return { html: out, used };
 }
 
 // Assainissement serveur : aucun script, formulaire, iframe, style global ni
-// gestionnaire d'événement. Les images restent mais seront bloquées par la CSP
-// du lecteur côté client tant que la créatrice ne les affiche pas.
+// gestionnaire d'événement. Les images (logos, signatures) sont conservées.
+const tiny = (v?: string) => {
+  const n = parseInt(v ?? "", 10);
+  return !Number.isNaN(n) && n <= 2;
+};
+
 function clean(html: string): string {
   return sanitizeHtml(html, {
     allowedTags: [
@@ -183,7 +221,7 @@ function clean(html: string): string {
       "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup", "col", "img", "center", "font",
     ],
     allowedAttributes: {
-      "*": ["style", "align", "valign", "width", "height", "bgcolor", "color", "dir"],
+      "*": ["style", "class", "align", "valign", "width", "height", "bgcolor", "color", "dir"],
       a: ["href", "title"],
       img: ["src", "alt", "title", "width", "height"],
       td: ["colspan", "rowspan"], th: ["colspan", "rowspan"], font: ["face", "size", "color"],
@@ -192,6 +230,8 @@ function clean(html: string): string {
     allowedSchemesByTag: { img: ["http", "https", "data"] },
     transformTags: { a: sanitizeHtml.simpleTransform("a", { target: "_blank", rel: "noopener noreferrer nofollow" }) },
     disallowedTagsMode: "discard",
+    // Pixels espions (images 1×1 de suivi d'ouverture) : retirés.
+    exclusiveFilter: (frame: { tag: string; attribs: Record<string, string> }) => frame.tag === "img" && tiny(frame.attribs.width) && tiny(frame.attribs.height),
   });
 }
 
@@ -279,12 +319,19 @@ async function listThreads(sb: Sb, token: string, s: Settings) {
 
 async function threadView(sb: Sb, token: string, s: Settings, threadId: string) {
   const t = await ownedThread(token, s, threadId);
-  const messages = (t.messages ?? []).filter((m) => isVisibleMessage(lite(m))).map((m) => {
+  const budget = { left: INLINE_TOTAL_MAX };
+  const messages = [];
+  for (const m of (t.messages ?? []).filter((x) => isVisibleMessage(lite(x)))) {
     const hs = m.payload?.headers ?? [];
-    const { html, text, attachments } = extract(m.payload, m.id);
+    const ex = extract(m.payload, m.id);
+    const { text } = ex;
+    const { html, used } = ex.html ? await embedInline(token, m.id, ex.html, ex.inline, budget) : { html: "", used: new Set<string>() };
+    // Les images intégrées au corps ne sont pas des pièces jointes à télécharger.
+    const inlineIds = new Set(ex.inline.filter((i) => used.has(i.cid)).map((i) => i.attachmentId));
+    const attachments = ex.attachments.filter((a) => !inlineIds.has(a.attachmentId));
     const from = header(hs, "From");
     const fromAddr = (from.match(/[^\s<>"]+@[^\s<>"]+/)?.[0] ?? "").toLowerCase();
-    return {
+    messages.push({
       id: m.id,
       from: displayName(from),
       fromEmail: fromAddr,
@@ -295,8 +342,8 @@ async function threadView(sb: Sb, token: string, s: Settings, threadId: string) 
       html: html ? clean(html) : "",
       text: html ? "" : text,
       attachments,
-    };
-  });
+    });
+  }
   const [{ data: row }, { data: notes }] = await Promise.all([
     sb.from("creator_mail_threads").select("status, brand").eq("creator", s.creator).eq("thread_id", threadId).maybeSingle(),
     sb.from("creator_mail_notes").select("id, body, created_at, agency_read_at")
