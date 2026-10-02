@@ -14,7 +14,7 @@ import { boxToken, boxError, talentAddress, type Box } from "../_shared/gmailBox
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const MAX = 15;
+const MAX = 50; // historique : 50 derniers messages par boîte
 
 async function isAgency(req: Request, sb: ReturnType<typeof getServiceClient>): Promise<boolean> {
   const authz = req.headers.get("Authorization") ?? "";
@@ -60,9 +60,8 @@ Deno.serve(async (req: Request) => {
     const list = await listRes.json().catch(() => ({}));
     if (!listRes.ok) throw new Error(listRes.status === 403 ? "gmail_scope_manquant" : "lecture_echouee");
     const ids: string[] = ((list as { messages?: { id: string }[] }).messages ?? []).map((m) => m.id);
-    // Parallèle (évite le N+1 séquentiel : ~15 messages en une salve au lieu d'un par un).
-    const fetched = await Promise.all(
-      ids.map(async (id): Promise<Msg | null> => {
+    // Par salves de 10 (évite le N+1 séquentiel sans dépasser les limites de Gmail).
+    const one = async (id: string): Promise<Msg | null> => {
         const mr = await fetch(
           `${GMAIL}/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
           { headers: { Authorization: `Bearer ${token}` } },
@@ -80,8 +79,9 @@ Deno.serve(async (req: Request) => {
           ts: Number(m.internalDate ?? 0),
           box,
         };
-      }),
-    );
+    };
+    const fetched: (Msg | null)[] = [];
+    for (let i = 0; i < ids.length; i += 10) fetched.push(...await Promise.all(ids.slice(i, i + 10).map(one)));
     return fetched.filter((m): m is Msg => m !== null);
   }
 

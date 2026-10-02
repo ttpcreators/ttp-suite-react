@@ -71,13 +71,18 @@ export async function downloadAttachment(threadId: string, a: MailAttachment, cr
   const r = await call<{ filename: string; mimeType: string; data: string }>({
     action: "attachment", threadId, messageId: a.messageId, attachmentId: a.attachmentId, creator,
   });
-  const bin = atob(r.data);
+  saveBase64(r.data, r.filename || a.filename);
+}
+
+/** Enregistre un fichier reçu en base64 (téléchargement). */
+export function saveBase64(data: string, filename: string) {
+  const bin = atob(data);
   const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
   // Type forcé en binaire : le fichier est enregistré, jamais interprété par la page.
   const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
   const link = document.createElement("a");
   link.href = url;
-  link.download = r.filename || a.filename || "piece-jointe";
+  link.download = filename || "piece-jointe";
   document.body.appendChild(link);
   link.click();
   link.remove();

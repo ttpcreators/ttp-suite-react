@@ -4,8 +4,12 @@ import { cn, initials, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import {
-  BOX_LABEL, buildHtml, parseEmails, readMailSettings, scheduleSend, sendErrorText, sendGmail, type MailBox,
+  buildHtml, parseEmails, scheduleSend, sendErrorText, sendGmail, type MailBox,
 } from "@/lib/mailSend";
+import { useAttachments } from "@/lib/useAttachments";
+import { useMailSettings } from "@/lib/useMailSettings";
+import { AttachButton, AttachChips } from "@/components/mail-attach";
+import { BoxPicker } from "@/components/mail-box-chip";
 import {
   DEFAULT_TEMPLATES,
   KIND_LABEL,
@@ -67,7 +71,9 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
   const [sending, setSending] = useState(false);
   const [box, setBox] = useState<MailBox>(defaultBox);
   const [cc, setCc] = useState("");
-  const { data: mailSettings } = useAppState((s: AppState) => readMailSettings(s));
+  const [bcc, setBcc] = useState("");
+  const att = useAttachments();
+  const mailSettings = useMailSettings();
   const [withSig, setWithSig] = useState(true);
 
   // Gestionnaire : copie de travail éditable.
@@ -85,7 +91,9 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
     setManage(contact === null);
     setBox(defaultBox);
     setCc("");
-    setWithSig(mailSettings?.signatureOn ?? true);
+    setBcc("");
+    att.clear();
+    setWithSig(mailSettings.signatureOn);
     setDraftList(templates);
     baseListRef.current = templates;
     setEditId(null);
@@ -116,13 +124,14 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
       return;
     }
     const copy = parseEmails(cc);
-    if (copy.bad.length) {
-      toast(`Adresse en copie invalide : ${copy.bad[0]}`);
+    const hidden = parseEmails(bcc);
+    if (copy.bad.length || hidden.bad.length) {
+      toast(`Adresse en copie invalide : ${copy.bad[0] ?? hidden.bad[0]}`);
       return;
     }
-    const settings = mailSettings ?? readMailSettings({} as AppState);
+    const settings = mailSettings;
     const html = buildHtml(body, { signature: withSig ? settings.signatureHtml : "" });
-    const params = { to: contact.email, cc: copy.ok, subject: subject.trim(), html, source: "prospection", contactName: contact.label, box };
+    const params = { to: contact.email, cc: copy.ok, bcc: hidden.ok, subject: subject.trim(), html, attachments: att.files, source: "prospection", contactName: contact.label, box };
     // Délai d'annulation : le mail part après N s (barre « Annuler » en bas de l'écran).
     scheduleSend(`Mail à ${contact.label}`, settings.delaySec, async () => {
       setSending(true);
@@ -313,29 +322,24 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
               {/* Boîte d'envoi : prospection (partnerships@) ou créatrices (talent@) */}
               <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
                 <span>Envoyer depuis</span>
-                <div className="flex gap-0.5 rounded-lg bg-muted p-0.5">
-                  {(["partnerships", "talent"] as const).map((b) => (
-                    <button
-                      key={b}
-                      type="button"
-                      onClick={() => setBox(b)}
-                      className={cn(
-                        "rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
-                        box === b ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {BOX_LABEL[b]}
-                    </button>
-                  ))}
-                </div>
+                <BoxPicker value={box} onChange={setBox} />
               </div>
-              <input
-                value={cc}
-                onChange={(e) => setCc(e.target.value)}
-                placeholder="Cc (facultatif) : adresse@exemple.com"
-                inputMode="email"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-              />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input
+                  value={cc}
+                  onChange={(e) => setCc(e.target.value)}
+                  placeholder="Cc (facultatif)"
+                  inputMode="email"
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                />
+                <input
+                  value={bcc}
+                  onChange={(e) => setBcc(e.target.value)}
+                  placeholder="Cci (facultatif)"
+                  inputMode="email"
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                />
+              </div>
               <input
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
@@ -349,19 +353,23 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
                 placeholder="Ton message…"
                 className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2.5 text-[13px] leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               />
+              <AttachChips files={att.files} onRemove={att.remove} />
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
-              <label className={cn("flex select-none items-center gap-1.5 text-[12px] text-muted-foreground", !mailSettings?.signatureHtml && "opacity-50")}>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <AttachButton onFiles={(f) => void att.add(f)} label="Joindre un fichier" className="text-[12px] text-muted-foreground" />
+              <label className={cn("flex select-none items-center gap-1.5 text-[12px] text-muted-foreground", !mailSettings.signatureHtml && "opacity-50")}>
                 <input
                   type="checkbox"
-                  checked={withSig && !!mailSettings?.signatureHtml}
-                  disabled={!mailSettings?.signatureHtml}
+                  checked={withSig && !!mailSettings.signatureHtml}
+                  disabled={!mailSettings.signatureHtml}
                   onChange={(e) => setWithSig(e.target.checked)}
                   className="h-3.5 w-3.5 accent-[var(--color-primary)]"
                 />
-                {mailSettings?.signatureHtml ? "Ajouter ma signature" : "Signature : à coller dans Mails → Réglages"}
+                {mailSettings.signatureHtml ? "Ajouter ma signature" : "Signature : à coller dans Mails → Réglages"}
               </label>
+              </div>
               <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"

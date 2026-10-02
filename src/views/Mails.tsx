@@ -4,12 +4,13 @@ import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { DashPanel } from "@/components/ui/dash";
 import { Initial, MailItem } from "@/components/mail-reader";
-import type { MailMessage } from "@/lib/creatorMail";
+import { saveBase64, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
 import { toast } from "@/components/ui/toast";
 import { parseTouches, nextKind, touchId, type Touch } from "@/lib/touches";
 import { updateTouches } from "@/lib/touchesDb";
 import { MailComposer, type ComposerContact } from "@/components/mail-composer";
-import { BOX_LABEL, sendErrorText, sendGmail, type MailBox } from "@/lib/mailSend";
+import { BoxChip } from "@/components/mail-box-chip";
+import { BOX_LABEL, BOX_STYLE, sendErrorText, sendGmail, type MailBox, type OutAttachment } from "@/lib/mailSend";
 import { ForwardDialog, MailSettingsDialog, ReplyBox } from "@/components/mail-tools";
 
 /**
@@ -29,7 +30,10 @@ type Contact = {
   touches?: unknown;
 };
 type MailMsg = { id: string; threadId: string; from: string; to?: string; subject: string; date: string; snippet: string; direction: "in" | "out"; source?: string; box?: MailBox };
-type ThreadMsg = { id: string; from: string; to?: string; subject: string; date: string; html: string; text: string; direction: "in" | "out"; ts: number };
+type ThreadMsg = {
+  id: string; from: string; to?: string; cc?: string; subject: string; date: string; html: string; text: string;
+  direction: "in" | "out"; ts: number; attachments?: MailAttachment[];
+};
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -86,6 +90,7 @@ export function Mails() {
   const [history, setHistory] = useState<MailMsg[] | null>(null);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyErr, setHistoryErr] = useState("");
+  const [historyPartial, setHistoryPartial] = useState(false); // une des deux boîtes n'a pas répondu
 
   const [composerOpen, setComposerOpen] = useState(false);
   const [thread, setThread] = useState<{ contact: string; subject: string; threadId: string; box: MailBox } | null>(null);
@@ -137,7 +142,8 @@ export function Mails() {
     (async () => {
       // Gmail (fils réels) + email_activity (envois Resend / media kit non présents dans Gmail).
       const [res, act] = await Promise.all([
-        invokeJson<{ ok?: boolean; messages?: MailMsg[]; error?: string }>("gmail-history", { contact: email, box }),
+        // Toujours les DEUX boîtes : le choix de boîte filtre ensuite l'affichage (bascule instantanée).
+        invokeJson<{ ok?: boolean; messages?: MailMsg[]; error?: string; partial?: boolean }>("gmail-history", { contact: email, box: "all" }),
         supabase
           .from("email_activity")
           .select("subject,snippet,direction,source,created_at,thread_id,gmail_message_id")
@@ -149,10 +155,11 @@ export function Mails() {
       if (res?.error === "google_non_connecte" || res?.error === "gmail_scope_manquant")
         setHistoryErr("Reconnecte Google (droits Gmail) dans l'app pour lire tes mails.");
       else if (res?.error === "talent_non_configure") setHistoryErr("La boîte talent@ n'est pas encore reliée à l'app.");
+      setHistoryPartial(!!res?.partial);
       const gmail = res?.ok ? res.messages ?? [] : [];
       const gmailIds = new Set(gmail.map((m) => m.id));
       const extra: MailMsg[] = ((act.data as { subject: string | null; snippet: string | null; direction: string | null; source: string | null; created_at: string | null; thread_id: string | null; gmail_message_id: string | null }[]) ?? [])
-        .filter((a) => box !== "talent" && a.source && a.source !== "manual" && (!a.gmail_message_id || !gmailIds.has(a.gmail_message_id)))
+        .filter((a) => a.source && a.source !== "manual" && (!a.gmail_message_id || !gmailIds.has(a.gmail_message_id)))
         .map((a) => ({
           id: `act-${a.created_at}-${a.subject ?? ""}`.slice(0, 60),
           threadId: a.thread_id ?? "",
@@ -162,6 +169,7 @@ export function Mails() {
           snippet: a.snippet ?? "",
           direction: a.direction === "in" ? "in" : "out",
           source: a.source ?? undefined,
+          box: "partnerships" as const, // envois automatiques : partent de partnerships@
         }));
       const merged = [...gmail, ...extra].sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime());
       setHistory(merged);
@@ -170,7 +178,7 @@ export function Mails() {
     return () => {
       alive = false;
     };
-  }, [selected, box]);
+  }, [selected]);
 
   const openThread = async (m: MailMsg) => {
     const mBox: MailBox = m.box ?? (box === "talent" ? "talent" : "partnerships");
@@ -192,11 +200,11 @@ export function Mails() {
   // Répondre : envoie via Gmail dans le MÊME fil (threadId) → apparaît chez le contact.
   // Répondre : envoie via Gmail dans le MÊME fil (threadId), depuis la boîte du fil.
   // Appelé à l'envoi réel (après le délai d'annulation de ReplyBox).
-  const sendReply = async ({ cc, html }: { cc: string[]; html: string }): Promise<boolean> => {
+  const sendReply = async ({ cc, bcc, html, attachments }: { cc: string[]; bcc: string[]; html: string; attachments: OutAttachment[] }): Promise<boolean> => {
     if (!thread) return false;
     const t = thread;
     const subject = t.subject.replace(/^\s*re\s*:\s*/i, "");
-    const res = await sendGmail({ to: t.contact, cc, subject: `Re: ${subject}`, html, threadId: t.threadId, source: "manual", box: t.box });
+    const res = await sendGmail({ to: t.contact, cc, subject: `Re: ${subject}`, html, threadId: t.threadId, source: "manual", box: t.box, bcc, attachments });
     if (!res.ok) {
       toast(sendErrorText(res.error));
       return false;
@@ -231,6 +239,11 @@ export function Mails() {
     });
   }, [contacts, query, tagFilter, contactFilter]);
 
+  // Historique filtré par la boîte choisie (le serveur renvoie les deux).
+  const boxOf = (m: MailMsg): MailBox => m.box ?? "partnerships";
+  const visibleHistory = useMemo(() => (history ?? []).filter((m) => box === "all" || boxOf(m) === box), [history, box]);
+  const boxCount = (b: MailBox) => (history ?? []).filter((m) => boxOf(m) === b).length;
+
   const contacted = (c: Contact) => !!c.lastContacted || parseTouches(c.touches).length > 0;
   // Fil → format du lecteur partagé (messages envoyés = agence).
   const readerMsgs: MailMessage[] = (threadMsgs ?? []).map((m) => ({
@@ -239,31 +252,48 @@ export function Mails() {
     fromEmail: (m.from.match(/[^\s<>"]+@[^\s<>"]+/)?.[0] ?? "").toLowerCase(),
     fromAgency: m.direction === "out",
     to: m.to ?? "",
-    cc: "",
+    cc: m.cc ?? "",
     ts: m.ts || new Date(m.date).getTime(),
     html: m.html,
     text: m.html ? "" : m.text,
-    attachments: [],
+    attachments: m.attachments ?? [],
   }));
+
+  // Pièce jointe d'un fil agence : lue côté serveur dans la boîte du fil.
+  const downloadAgencyAttachment = async (a: MailAttachment) => {
+    if (!thread) return;
+    const r = await invokeJson<{ ok?: boolean; data?: string; error?: string }>("gmail-thread", {
+      action: "attachment", messageId: a.messageId, attachmentId: a.attachmentId, box: thread.box,
+    });
+    if (!r?.ok || !r.data) return toast(r?.error === "piece_trop_lourde" ? "Pièce jointe trop lourde (20 Mo max)." : "Téléchargement impossible");
+    saveBase64(r.data, a.filename);
+  };
 
   return (
     <>
       {/* Boîte affichée */}
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="flex gap-0.5 rounded-lg bg-muted p-0.5">
-          {([["all", "Les deux boîtes"], ["partnerships", BOX_LABEL.partnerships], ["talent", BOX_LABEL.talent]] as const).map(([v, label]) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setBox(v)}
-              className={cn(
-                "whitespace-nowrap rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors",
-                box === v ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="flex max-w-full gap-0.5 overflow-x-auto rounded-lg bg-muted p-0.5">
+          {([["all", "Les deux boîtes"], ["partnerships", BOX_LABEL.partnerships], ["talent", BOX_LABEL.talent]] as const).map(([v, label]) => {
+            const on = box === v;
+            const n = selected && history ? (v === "all" ? history.length : boxCount(v)) : null;
+            return (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setBox(v)}
+                aria-pressed={on}
+                className={cn(
+                  "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-[12px] font-semibold transition-colors",
+                  on ? (v === "all" ? "bg-surface text-foreground shadow-sm" : BOX_STYLE[v].chip + " shadow-sm") : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {v !== "all" && !on && <span className={cn("h-2 w-2 rounded-full", BOX_STYLE[v].dot)} />}
+                {label}
+                {n !== null && <span className={cn("tabular-nums", on ? "opacity-75" : "text-faint")}>{n}</span>}
+              </button>
+            );
+          })}
         </div>
         <button
           type="button"
@@ -378,7 +408,8 @@ export function Mails() {
               <div className="min-w-0 flex-1">
                 <h2 className="text-[17px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere]">{thread.subject || "(sans objet)"}</h2>
                 <p className="mt-1 truncate text-[12px] text-muted-foreground">
-                  {selected.label} · {BOX_LABEL[thread.box]}{threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
+                  <BoxChip box={thread.box} className="mr-1.5 align-[1px] text-[10px]" />
+                  {selected.label}{threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
                 </p>
               </div>
             </div>
@@ -395,6 +426,7 @@ export function Mails() {
                       key={m.id}
                       m={m}
                       index={i}
+                      onDownload={downloadAgencyAttachment}
                       open={expanded.has(m.id)}
                       onToggle={() => setExpanded((s) => {
                         const n = new Set(s);
@@ -453,14 +485,24 @@ export function Mails() {
               </div>
             ) : historyErr ? (
               <div className="px-5 py-10 text-center text-[13px] text-muted-foreground">{historyErr}</div>
-            ) : !history || history.length === 0 ? (
+            ) : visibleHistory.length === 0 ? (
               <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
                 <Mail className="h-5 w-5 text-faint" />
-                <p className="text-[13px] text-muted-foreground">Aucun échange trouvé dans Gmail avec ce contact.</p>
+                <p className="text-[13px] text-muted-foreground">
+                  {box === "all" ? "Aucun échange trouvé dans Gmail avec ce contact." : <>Aucun échange avec ce contact depuis <BoxChip box={box} />.</>}
+                </p>
+                {box !== "all" && (history?.length ?? 0) > 0 && (
+                  <button type="button" onClick={() => setBox("all")} className="text-[12px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+                    Voir les {history?.length} échanges des deux boîtes
+                  </button>
+                )}
               </div>
             ) : (
               <ul className="divide-y divide-border">
-                {history.map((m) => (
+                {historyPartial && (
+                  <li className="px-4 py-2 text-[12px] text-amber-700 sm:px-6 dark:text-amber-400">Une des deux boîtes n'a pas répondu : l'historique peut être incomplet.</li>
+                )}
+                {visibleHistory.map((m) => (
                   <li key={m.id}>
                     <button
                       type="button"
@@ -468,7 +510,7 @@ export function Mails() {
                       className={cn("flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors sm:px-6", m.threadId ? "hover:bg-rowhover" : "cursor-default")}
                     >
                       <span
-                        className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground"
+                        className={cn("mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full", BOX_STYLE[boxOf(m)].soft)}
                         title={m.direction === "in" ? "Reçu" : "Envoyé"}
                       >
                         {m.direction === "in" ? <ArrowDownLeft className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
@@ -480,9 +522,7 @@ export function Mails() {
                         </span>
                         <span className="mt-0.5 flex min-w-0 items-center gap-2">
                           <span className="shrink-0 text-[11px] text-muted-foreground">{m.direction === "in" ? "Reçu" : "Envoyé"}</span>
-                          {box === "all" && m.box && (
-                            <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">{BOX_LABEL[m.box]}</span>
-                          )}
+                          <BoxChip box={boxOf(m)} className="text-[10px]" />
                           {m.source === "mediakit" && (
                             <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Media kit</span>
                           )}
@@ -502,6 +542,7 @@ export function Mails() {
         message={forwardMsg}
         subject={thread?.subject ?? ""}
         defaultBox={thread?.box ?? "partnerships"}
+        sourceBox={thread?.box}
         onClose={() => setForwardMsg(null)}
       />
       <MailSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />

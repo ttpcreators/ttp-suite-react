@@ -3,7 +3,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { Paperclip, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
-import { mailDocument, hasQuote, mailSnippet, fmtSize, downloadAttachment, type MailMessage } from "@/lib/creatorMail";
+import { mailDocument, hasQuote, mailSnippet, fmtSize, downloadAttachment, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
 
 /*
  * Lecteur de mails partagé (page Mails agence + section Mails des créatrices) :
@@ -78,9 +78,11 @@ const cleanAddr = (v: string) => v.replace(/"?([^"<,]+?)"?\s*<[^>]+>/g, "$1");
  * Replié : une ligne compacte (expéditeur, aperçu, date).
  */
 export function MailItem({
-  m, open, onToggle, threadId, creator, actions = [], footer, index = 0,
+  m, open, onToggle, threadId, creator, actions = [], footer, index = 0, onDownload,
 }: {
   m: MailMessage; open: boolean; onToggle: () => void; threadId?: string; creator?: string;
+  /** Téléchargement personnalisé (page Mails agence) ; sinon via creator-mail. */
+  onDownload?: (a: MailAttachment) => Promise<void> | void;
   actions?: MailAction[]; footer?: ReactNode; index?: number;
 }) {
   const [showQuoted, setShowQuoted] = useState(false);
@@ -163,7 +165,10 @@ export function MailItem({
               <button
                 key={a.attachmentId}
                 type="button"
-                onClick={() => threadId && downloadAttachment(threadId, a, creator).catch((e) => toast((e as Error).message))}
+                onClick={() => {
+                  const run = onDownload ? Promise.resolve(onDownload(a)) : threadId ? downloadAttachment(threadId, a, creator) : null;
+                  run?.catch((e) => toast((e as Error).message));
+                }}
                 className="flex max-w-full items-center gap-2.5 rounded-xl border border-border bg-surface px-3 py-2 text-left transition-colors hover:bg-rowhover"
               >
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted">

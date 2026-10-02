@@ -5,8 +5,13 @@
 // Gmail (scope gmail.send). Réservé à l'AGENCE (verify_jwt=true + rôle agence).
 // Réutilise getAccessToken() (refresh auto du token, comme la sync Agenda).
 //
-// Entrée : { to, cc?, subject, html, threadId?, inReplyTo?, source?, contactName?, box? }.
-//  - cc = liste d'adresses en copie (10 max).
+// Entrée : { to, cc?, bcc?, subject, html, threadId?, inReplyTo?, source?, contactName?, box?,
+//           attachments?, forward? }.
+//  - cc / bcc = adresses en copie / copie cachée (10 max chacune).
+//  - attachments = fichiers joints [{ filename, mimeType, contentBase64 }].
+//  - forward = { box, messageId } : joint les pièces jointes d'origine de ce
+//    message (lues côté serveur dans sa boîte, jamais renvoyées au navigateur).
+//  - Taille totale des pièces jointes : 20 Mo max.
 //  - box = "partnerships" (défaut, connexion de l'app) | "talent" (compte de service).
 //  - threadId + inReplyTo : pour threader une relance dans le même fil (et
 //    permettre la détection de réponse).
@@ -18,6 +23,46 @@ import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 import { boxToken, boxError, parseBox } from "../_shared/gmailBox.ts";
 
 const GMAIL_SEND = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
+const GMAIL_UPLOAD = "https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=multipart";
+const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
+const ATTACH_TOTAL_MAX = 20 * 1024 * 1024;
+const EMAIL_RE = /^[^@\s,;<>"]+@[^@\s,;<>"]+\.[^@\s,;<>"]+$/;
+
+type Att = { filename?: string; mimeType?: string; contentBase64?: string };
+type Part = { mimeType?: string; filename?: string; body?: { attachmentId?: string; size?: number }; parts?: Part[] };
+
+/** Liste d'adresses (tableau ou « a, b ») normalisée ; null si une adresse est invalide. */
+function addrList(v: unknown): string[] | null {
+  const list = (Array.isArray(v) ? v : String(v ?? "").split(/[,;\s]+/)).map((x) => String(x).trim().toLowerCase()).filter(Boolean);
+  return list.every((x) => EMAIL_RE.test(x)) ? [...new Set(list)] : null;
+}
+
+/** Pièces jointes d'un message existant, lues dans sa boîte (transfert). */
+async function originalAttachments(token: string, messageId: string): Promise<Att[]> {
+  const r = await fetch(`${GMAIL}/messages/${encodeURIComponent(messageId)}?format=full`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error("original_introuvable");
+  const msg = await r.json() as { payload?: Part };
+  const found: { filename: string; mimeType: string; attachmentId: string; size: number }[] = [];
+  const walk = (p?: Part) => {
+    if (!p) return;
+    if (p.filename && p.body?.attachmentId) {
+      found.push({ filename: p.filename, mimeType: p.mimeType ?? "application/octet-stream", attachmentId: p.body.attachmentId, size: p.body.size ?? 0 });
+    }
+    for (const c of p.parts ?? []) walk(c);
+  };
+  walk(msg.payload);
+  if (found.reduce((n, a) => n + a.size, 0) > ATTACH_TOTAL_MAX) throw new Error("pieces_trop_lourdes");
+  const out: Att[] = [];
+  for (const a of found) {
+    const ar = await fetch(`${GMAIL}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(a.attachmentId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const d = await ar.json().catch(() => ({})) as { data?: string };
+    if (!ar.ok || !d.data) throw new Error("original_introuvable");
+    out.push({ filename: a.filename, mimeType: a.mimeType, contentBase64: d.data.replace(/-/g, "+").replace(/_/g, "/") });
+  }
+  return out;
+}
 
 async function isAgency(req: Request, sb: ReturnType<typeof getServiceClient>): Promise<boolean> {
   const authz = req.headers.get("Authorization") ?? "";
@@ -55,9 +100,9 @@ Deno.serve(async (req: Request) => {
   if (!(await isAgency(req, sb))) return jsonRes({ error: "unauthorized" }, 401);
 
   let body: {
-    to?: string; cc?: string[] | string; subject?: string; html?: string;
+    to?: string; cc?: string[] | string; bcc?: string[] | string; subject?: string; html?: string;
     threadId?: string; inReplyTo?: string; source?: string; contactName?: string; box?: string;
-    attachments?: { filename?: string; mimeType?: string; contentBase64?: string }[];
+    attachments?: Att[]; forward?: { box?: string; messageId?: string };
   } = {};
   try {
     body = await req.json();
@@ -69,11 +114,11 @@ Deno.serve(async (req: Request) => {
   const subject = String(body.subject ?? "").trim();
   const html = body.html ?? "";
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return jsonRes({ error: "destinataire_invalide" }, 400);
-  // Copie : adresses validées une par une (jamais de CR/LF ni de séparateur injecté).
-  const ccList = (Array.isArray(body.cc) ? body.cc : String(body.cc ?? "").split(/[,;\s]+/))
-    .map((x) => String(x).trim().toLowerCase()).filter(Boolean);
-  if (ccList.some((x) => !/^[^@\s,;<>"]+@[^@\s,;<>"]+\.[^@\s,;<>"]+$/.test(x))) return jsonRes({ error: "copie_invalide" }, 400);
-  if (ccList.length > 10) return jsonRes({ error: "copie_trop_longue" }, 400);
+  // Copie / copie cachée : adresses validées une par une (jamais de CR/LF ni de séparateur injecté).
+  const ccList = addrList(body.cc);
+  const bccList = addrList(body.bcc);
+  if (!ccList || !bccList) return jsonRes({ error: "copie_invalide" }, 400);
+  if (ccList.length > 10 || bccList.length > 10) return jsonRes({ error: "copie_trop_longue" }, 400);
   if (!subject) return jsonRes({ error: "objet_requis" }, 400);
   if (!html.trim()) return jsonRes({ error: "contenu_requis" }, 400);
 
@@ -89,10 +134,29 @@ Deno.serve(async (req: Request) => {
     return jsonRes({ error: be.error, detail }, be.status);
   }
 
-  // Construit le message MIME. Entêtes de base + threading éventuel.
+  // Pièces jointes : fichiers envoyés par l'app + celles du message transféré.
   const attachments = (Array.isArray(body.attachments) ? body.attachments : []).filter((a) => a?.contentBase64);
+  if (body.forward?.messageId) {
+    try {
+      const fwdToken = await boxToken(sb, parseBox(body.forward.box), "read");
+      attachments.push(...await originalAttachments(fwdToken, String(body.forward.messageId)));
+    } catch (e) {
+      const msg = (e as Error)?.message ?? "";
+      if (msg === "pieces_trop_lourdes") return jsonRes({ error: "pieces_trop_lourdes" }, 413);
+      if (msg === "original_introuvable") return jsonRes({ error: "original_introuvable" }, 404);
+      const be = boxError(e);
+      return jsonRes({ error: be.error }, be.status);
+    }
+  }
+  // Taille réelle ≈ 3/4 de la longueur base64.
+  const attBytes = attachments.reduce((n, a) => n + Math.floor(String(a.contentBase64 ?? "").length * 0.75), 0);
+  if (attBytes > ATTACH_TOTAL_MAX) return jsonRes({ error: "pieces_trop_lourdes" }, 413);
+
+  // Construit le message MIME. Entêtes de base + threading éventuel.
   const base = [`To: ${to}`, `Subject: ${encSubject(subject)}`, "MIME-Version: 1.0"];
-  if (ccList.length) base.push(`Cc: ${[...new Set(ccList)].join(", ")}`);
+  if (ccList.length) base.push(`Cc: ${ccList.join(", ")}`);
+  // Gmail retire l'entête Bcc du message livré : les destinataires ne la voient pas.
+  if (bccList.length) base.push(`Bcc: ${bccList.join(", ")}`);
   if (body.inReplyTo) {
     // Anti-injection d'entêtes MIME : jamais de CR/LF dans une valeur d'entête.
     const irt = String(body.inReplyTo).replace(/[\r\n]/g, "").slice(0, 400);
@@ -117,9 +181,15 @@ Deno.serve(async (req: Request) => {
       html,
     ];
     for (const a of attachments) {
-      const fn = String(a.filename ?? "piece-jointe").replace(/["\r\n]/g, "");
-      const ct = String(a.mimeType || "application/octet-stream").replace(/[\r\n]/g, "");
-      const content = String(a.contentBase64 ?? "").replace(/\s+/g, "");
+      const clean = String(a.filename ?? "piece-jointe").replace(/["\r\n\\]/g, "") || "piece-jointe";
+      // Nom avec accents → encodé (RFC 2047), sinon tel quel.
+      const fn = /^[\x20-\x7e]*$/.test(clean) ? clean : encSubject(clean);
+      const ct = String(a.mimeType || "application/octet-stream").replace(/[^\w.+\-\/]/g, "") || "application/octet-stream";
+      // Base64 en lignes de 76 caractères (norme MIME).
+      const flat = String(a.contentBase64 ?? "").replace(/\s+/g, "");
+      const chunks: string[] = [];
+      for (let i = 0; i < flat.length; i += 76) chunks.push(flat.slice(i, i + 76));
+      const content = chunks.join("\r\n");
       lines.push(
         `--${boundary}`,
         `Content-Type: ${ct}; name="${fn}"`,
@@ -132,16 +202,31 @@ Deno.serve(async (req: Request) => {
     lines.push(`--${boundary}--`, "");
     mime = lines.join("\r\n");
   }
-  const raw = b64url(new TextEncoder().encode(mime));
-
-  const payload: Record<string, unknown> = { raw };
-  if (body.threadId) payload.threadId = body.threadId;
-
-  const r = await fetch(GMAIL_SEND, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  let r: Response;
+  if (attachments.length === 0) {
+    const payload: Record<string, unknown> = { raw: b64url(new TextEncoder().encode(mime)) };
+    if (body.threadId) payload.threadId = body.threadId;
+    r = await fetch(GMAIL_SEND, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } else {
+    // Avec pièces jointes : point d'envoi « upload » de Gmail (jusqu'à 35 Mo), le mail
+    // part tel quel sans être ré-encodé (évite la limite de calcul des fonctions).
+    const rel = "ttp_rel_" + Date.now().toString(36);
+    const meta = JSON.stringify(body.threadId ? { threadId: body.threadId } : {});
+    const upload = [
+      `--${rel}`, "Content-Type: application/json; charset=UTF-8", "", meta,
+      `--${rel}`, "Content-Type: message/rfc822", "", mime,
+      `--${rel}--`, "",
+    ].join("\r\n");
+    r = await fetch(GMAIL_UPLOAD, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${rel}` },
+      body: upload,
+    });
+  }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) {
     const detail = String((data as { error?: { message?: string } })?.error?.message ?? r.status).slice(0, 200);

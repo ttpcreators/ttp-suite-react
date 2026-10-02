@@ -11,6 +11,19 @@ import { saveAppStateKey, type AppState } from "@/lib/appState";
 
 export type MailBox = "partnerships" | "talent";
 export const BOX_LABEL: Record<MailBox, string> = { partnerships: "partnerships@", talent: "talent@" };
+/** Code couleur des boîtes : violet = partnerships@, vert fluo = talent@. */
+export const BOX_STYLE: Record<MailBox, { dot: string; chip: string; soft: string }> = {
+  partnerships: {
+    dot: "bg-violet-500",
+    chip: "bg-violet-600 text-white",
+    soft: "bg-violet-500/12 text-violet-700 dark:text-violet-300",
+  },
+  talent: {
+    dot: "bg-[#39ff6a]",
+    chip: "bg-[#39ff6a] text-zinc-900",
+    soft: "bg-[#39ff6a]/20 text-emerald-800 dark:text-[#6dff92]",
+  },
+};
 export type MailSettings = { signatureHtml: string; signatureOn: boolean; delaySec: number };
 export const DEFAULT_MAIL_SETTINGS: MailSettings = { signatureHtml: "", signatureOn: true, delaySec: 10 };
 export const DELAYS = [0, 5, 10, 20, 30];
@@ -23,7 +36,25 @@ export function readMailSettings(s: AppState): MailSettings {
     delaySec: DELAYS.includes(Number(v.delaySec)) ? Number(v.delaySec) : DEFAULT_MAIL_SETTINGS.delaySec,
   };
 }
-export const saveMailSettings = (v: MailSettings) => saveAppStateKey("mailSettings", v);
+// Dernière valeur enregistrée sur ce poste : visible tout de suite partout
+// (sans attendre le rafraîchissement périodique des réglages partagés).
+let savedLocal: MailSettings | null = null;
+const settingsListeners = new Set<(v: MailSettings) => void>();
+export const localMailSettings = () => savedLocal;
+export function subscribeMailSettings(fn: (v: MailSettings) => void) {
+  settingsListeners.add(fn);
+  return () => {
+    settingsListeners.delete(fn);
+  };
+}
+export async function saveMailSettings(v: MailSettings): Promise<boolean> {
+  const ok = await saveAppStateKey("mailSettings", v);
+  if (ok) {
+    savedLocal = v;
+    for (const l of settingsListeners) l(v);
+  }
+  return ok;
+}
 
 const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c);
 
@@ -42,10 +73,30 @@ export function parseEmails(raw: string): { ok: string[]; bad: string[] } {
   return { ok: parts.filter((p) => re.test(p)), bad: parts.filter((p) => !re.test(p)) };
 }
 
+export type OutAttachment = { filename: string; mimeType: string; contentBase64: string; size: number };
 export type SendParams = {
-  to: string; cc?: string[]; subject: string; html: string; box: MailBox;
+  to: string; cc?: string[]; bcc?: string[]; subject: string; html: string; box: MailBox;
   threadId?: string; source?: string; contactName?: string;
+  attachments?: OutAttachment[];
+  /** Transfert : le serveur joint les pièces jointes d'origine de ce message. */
+  forward?: { box: MailBox; messageId: string };
 };
+
+/** Taille totale max des pièces jointes d'un envoi (comme côté serveur). */
+export const ATTACH_MAX_BYTES = 20 * 1024 * 1024;
+
+/** Fichier choisi → pièce jointe prête à envoyer (base64). */
+export function readAttachment(file: File): Promise<OutAttachment> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const url = String(r.result ?? "");
+      resolve({ filename: file.name, mimeType: file.type || "application/octet-stream", contentBase64: url.slice(url.indexOf(",") + 1), size: file.size });
+    };
+    r.onerror = () => reject(new Error("Lecture du fichier impossible"));
+    r.readAsDataURL(file);
+  });
+}
 export type SendResult = { ok?: boolean; error?: string; id?: string; threadId?: string };
 
 export async function sendGmail(p: SendParams): Promise<SendResult> {
@@ -60,6 +111,8 @@ export function sendErrorText(code?: string): string {
   if (code === "talent_droit_manquant") return "Envoi depuis talent@ pas encore autorisé (admin.google.com).";
   if (code === "copie_invalide") return "Une adresse en copie est invalide.";
   if (code === "destinataire_invalide") return "Adresse du destinataire invalide.";
+  if (code === "pieces_trop_lourdes") return "Pièces jointes trop lourdes (20 Mo au total).";
+  if (code === "original_introuvable") return "Mail d'origine introuvable pour le transfert.";
   return "Envoi échoué, réessaie";
 }
 

@@ -4,8 +4,9 @@
 // Fil complet d'un échange Gmail : tous les messages + leur corps (texte/HTML).
 // Réservé à l'AGENCE (verify_jwt=true + rôle agence). Scope gmail.readonly.
 //
-// Entrée : { threadId, contact?, box? } (box = "partnerships" défaut | "talent").  Sortie : { ok, messages:[{from,to,subject,
-//           date,html,text,direction,ts}] }.
+// Entrée : { threadId, contact?, box? } (box = "partnerships" défaut | "talent").  Sortie : { ok, messages:[{from,to,cc,subject,
+//           date,html,text,direction,ts,attachments}] }.
+// Pièce jointe : { action: "attachment", messageId, attachmentId, box? } → { ok, data (base64) }.
 // ============================================================================
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
@@ -37,19 +38,28 @@ function decodeB64Url(data: string): string {
   }
 }
 
-type Part = { mimeType?: string; body?: { data?: string }; parts?: Part[] };
-/** Extrait le corps HTML et/ou texte d'un message (parcours récursif des parts). */
-function extractBody(payload: Part | undefined): { html: string; text: string } {
+type Part = { mimeType?: string; filename?: string; body?: { data?: string; attachmentId?: string; size?: number }; parts?: Part[] };
+type Attachment = { messageId: string; attachmentId: string; filename: string; mimeType: string; size: number };
+const ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
+
+/** Extrait le corps HTML et/ou texte d'un message + ses pièces jointes (parcours récursif des parts). */
+function extractBody(payload: Part | undefined, messageId: string): { html: string; text: string; attachments: Attachment[] } {
   let html = "";
   let text = "";
+  const attachments: Attachment[] = [];
   const walk = (p?: Part) => {
     if (!p) return;
-    if (p.mimeType === "text/html" && p.body?.data && !html) html = decodeB64Url(p.body.data);
+    if (p.filename && p.body?.attachmentId) {
+      attachments.push({
+        messageId, attachmentId: p.body.attachmentId, filename: p.filename,
+        mimeType: p.mimeType ?? "application/octet-stream", size: p.body.size ?? 0,
+      });
+    } else if (p.mimeType === "text/html" && p.body?.data && !html) html = decodeB64Url(p.body.data);
     else if (p.mimeType === "text/plain" && p.body?.data && !text) text = decodeB64Url(p.body.data);
     if (p.parts) for (const c of p.parts) walk(c);
   };
   walk(payload);
-  return { html, text };
+  return { html, text, attachments };
 }
 
 type Header = { name: string; value: string };
@@ -63,7 +73,7 @@ Deno.serve(async (req: Request) => {
   const sb = getServiceClient();
   if (!(await isAgency(req, sb))) return jsonRes({ error: "unauthorized" }, 401);
 
-  let body: { threadId?: string; contact?: string; box?: string } = {};
+  let body: { threadId?: string; contact?: string; box?: string; action?: string; messageId?: string; attachmentId?: string } = {};
   try {
     body = await req.json();
   } catch {
@@ -71,7 +81,8 @@ Deno.serve(async (req: Request) => {
   }
   const threadId = String(body.threadId ?? "").trim();
   const contact = String(body.contact ?? "").trim().toLowerCase();
-  if (!threadId) return jsonRes({ error: "thread_requis" }, 400);
+  const isAttachment = body.action === "attachment";
+  if (!threadId && !isAttachment) return jsonRes({ error: "thread_requis" }, 400);
 
   let token: string;
   try {
@@ -79,6 +90,20 @@ Deno.serve(async (req: Request) => {
   } catch (e) {
     const be = boxError(e);
     return jsonRes({ error: be.error }, be.status);
+  }
+
+  // Téléchargement d'une pièce jointe (agence seulement, boîte choisie).
+  if (isAttachment) {
+    const messageId = String(body.messageId ?? "").trim();
+    const attachmentId = String(body.attachmentId ?? "").trim();
+    if (!messageId || !attachmentId) return jsonRes({ error: "bad_request" }, 400);
+    const a = await fetch(`${GMAIL}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const ad = await a.json().catch(() => ({})) as { data?: string; size?: number };
+    if (!a.ok || !ad.data) return jsonRes({ error: "introuvable" }, 404);
+    if ((ad.size ?? 0) > ATTACHMENT_MAX_BYTES) return jsonRes({ error: "piece_trop_lourde" }, 413);
+    return jsonRes({ ok: true, data: ad.data.replace(/-/g, "+").replace(/_/g, "/") });
   }
 
   const r = await fetch(`${GMAIL}/threads/${encodeURIComponent(threadId)}?format=full`, {
@@ -96,18 +121,20 @@ Deno.serve(async (req: Request) => {
     const headers: Header[] = m.payload?.headers ?? [];
     const h = (name: string) => headers.find((x) => x.name.toLowerCase() === name)?.value ?? "";
     const from = h("from");
-    const { html, text } = extractBody(m.payload);
+    const { html, text, attachments } = extractBody(m.payload, m.id);
     const direction: "in" | "out" = contact && from.toLowerCase().includes(contact) ? "in" : contact ? "out" : "in";
     return {
       id: m.id,
       from,
       to: h("to"),
+      cc: h("cc"),
       subject: h("subject"),
       date: h("date"),
       html,
       text,
       direction,
       ts: Number(m.internalDate ?? 0),
+      attachments,
     };
   }).sort((a, b) => a.ts - b.ts); // ordre chronologique (conversation)
 
