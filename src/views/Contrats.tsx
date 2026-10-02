@@ -1,6 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Copy, Check, Plus, Trash2, Save, FileText, Eye, X, History } from "lucide-react";
-import { cn, initials, titleCase } from "@/lib/utils";
+import { Copy, Check, Plus, Trash2, Save, FileText, Eye, X, History, UserRound, Bookmark, PenLine, SlidersHorizontal, ListPlus, type LucideIcon } from "lucide-react";
+
+const BASE = import.meta.env.BASE_URL;
+
+/** Titre de section façon Aperçu : icône grise + intitulé 14 px. */
+function SecTitle({ icon: Icon, children, right }: { icon: LucideIcon; children: ReactNode; right?: ReactNode }) {
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <span className="text-[14px] font-semibold text-foreground">{children}</span>
+      {right && <div className="ml-auto">{right}</div>}
+    </div>
+  );
+}
+import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { printHtml } from "@/lib/printPdf";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, parseAmount, type AppState } from "@/lib/appState";
@@ -18,7 +31,7 @@ type CtType = "marque" | "repr" | "ugc";
 const TYPE_META: Record<CtType, { chip: string; label: string; title: string }> = {
   marque: { chip: "Marque × Créateur", label: "MARQUE × CRÉATEUR", title: "Contrat de partenariat commercial" },
   repr: { chip: "Représentation", label: "AGENCE × CRÉATEUR", title: "Contrat de représentation" },
-  ugc: { chip: "Contrat UGC", label: "CONTRAT UGC", title: "Cession de droits — UGC" },
+  ugc: { chip: "Contrat UGC", label: "CONTRAT UGC", title: "Cession de droits UGC" },
 };
 
 type Term = { l: string; v: string };
@@ -72,7 +85,7 @@ const COLLAB_OPTS: Opt[] = [
   { v: "event", label: "Prestation événementielle" },
 ];
 const RIGHTS_OPTS: Opt[] = [
-  { v: "organic", label: "Organique — compte créateur seul" },
+  { v: "organic", label: "Organique, compte créateur seul" },
   { v: "repost", label: "Repost organique par la marque" },
   { v: "paid", label: "Paid media / whitelisting (ads)" },
   { v: "buyout", label: "Cession totale (buyout)" },
@@ -146,7 +159,7 @@ function rightsValue(s: Scenario): string {
     case "repost": return `Repost organique — ${s.rightsDuration}`;
     case "paid": return `Paid media / whitelisting — ${s.rightsDuration}`;
     case "buyout": return `Cession totale (buyout) — ${s.rightsDuration}`;
-    default: return "Organique — compte du créateur uniquement";
+    default: return "Organique, compte du créateur uniquement";
   }
 }
 
@@ -656,16 +669,16 @@ export function Contrats() {
 
   const typeToggle = (
     <>
-      <div className="mb-2 text-[11px] font-medium text-muted-foreground">Type de contrat</div>
-      <div className="flex flex-wrap gap-2">
+      <SecTitle icon={FileText}>Type de contrat</SecTitle>
+      <div className="inline-flex max-w-full flex-wrap rounded-lg border border-border bg-surface p-0.5">
         {(Object.keys(TYPE_META) as CtType[]).map((k) => (
           <button
             key={k}
             type="button"
             onClick={() => { setCtType(k); setNavSub(k); }}
             className={cn(
-              "whitespace-nowrap rounded-xl px-3.5 py-2.5 text-[10px] font-semibold transition-colors",
-              k === ctType ? "bg-foreground text-background" : "border border-border text-muted-foreground hover:bg-rowhover",
+              "whitespace-nowrap rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors",
+              k === ctType ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >
             {TYPE_META[k].chip}
@@ -678,7 +691,7 @@ export function Contrats() {
   if (ctType === "repr") {
     return (
       <div className="flex flex-col gap-4">
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">{typeToggle}</div>
+        <div>{typeToggle}</div>
         <RepresentationContract />
       </div>
     );
@@ -687,16 +700,17 @@ export function Contrats() {
   return (
     <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_1.15fr]">
       {/* ============ FORMULAIRE ============ */}
-      <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface p-5">
         {typeToggle}
 
         {/* Créateur */}
-        <div className="mb-2 mt-5 text-[11px] font-medium text-muted-foreground">Créateur</div>
+        <div className="mt-5 border-t border-border pt-5">
+        <SecTitle icon={UserRound}>Créateur</SecTitle>
         {creators.length === 0 ? (
-          <div className="text-xs text-faint">Aucun créateur dans le roster — le contrat utilisera « [Créateur] ».</div>
+          <div className="text-[12px] text-muted-foreground">Aucun créateur dans le roster : le contrat utilisera « [Créateur] ».</div>
         ) : (
           <Select value={ctName} onValueChange={setCreatorName}>
-            <SelectTrigger className="h-9 w-auto min-w-[190px] rounded-full bg-surface" placeholder="Choisir un créateur" />
+            <SelectTrigger className="h-[42px] w-full rounded-lg bg-surface sm:w-auto sm:min-w-[240px]" placeholder="Choisir un créateur" />
             <SelectContent>
               {creators.map((c, i) => (
                 <SelectItem key={c.id} index={i} value={c.name} img={c.photo_url}>{titleCase(c.name)}</SelectItem>
@@ -705,11 +719,11 @@ export function Contrats() {
           </Select>
         )}
 
+        </div>
+
         {/* Cas de configuration */}
-        <div className="mt-5 rounded-xl border border-border bg-panel p-3.5">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-medium text-muted-foreground">Cas de configuration · {titleCase(ctName)}</span>
-          </div>
+        <div className="mt-5 border-t border-border pt-5">
+          <SecTitle icon={Bookmark}>Cas enregistrés</SecTitle>
           {cases.length > 0 ? (
             <div className="mb-2.5 flex flex-wrap gap-1.5">
               {cases.map((cs) => (
@@ -720,11 +734,11 @@ export function Contrats() {
               ))}
             </div>
           ) : (
-            <div className="mb-2.5 text-[11px] text-faint">Aucun cas enregistré pour ce créateur. Configure puis enregistre un cas.</div>
+            <div className="mb-3 text-[12px] text-muted-foreground">Aucun cas enregistré pour ce créateur. Configure le contrat puis enregistre-le comme cas.</div>
           )}
           <div className="flex items-end gap-2">
             <div className="flex-1">
-              <TextField label="Nom du cas" value={caseName} onChange={setCaseName} placeholder="ex Standard, Exclusif, UGC…" />
+              <TextField label="Nom du cas" value={caseName} onChange={setCaseName} placeholder="ex : Standard, Exclusif, UGC…" />
             </div>
             <button type="button" onClick={saveCase} className={cn(primaryBtn, "flex h-[42px] shrink-0 items-center gap-1.5")}>
               <Save className="h-3.5 w-3.5" /> Enregistrer
@@ -733,9 +747,11 @@ export function Contrats() {
         </div>
 
         {/* Champs */}
+        <div className="mt-5 border-t border-border pt-5">
+        <SecTitle icon={PenLine}>Conditions</SecTitle>
         {isBrand && (
           <>
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <TextField label="Marque" value={brand} onChange={setBrand} placeholder="ex Sephora" />
               <TextField label="Valeur" value={value} onChange={setValue} placeholder="ex 32 000 €" />
             </div>
@@ -748,10 +764,11 @@ export function Contrats() {
           <TextField label="Commission (%)" value={commission} onChange={setCommission} type="number" placeholder="ex 20" />
           <TextField label="Durée" value={duration} onChange={setDuration} placeholder="ex 12 mois" />
         </div>
+        </div>
 
         {/* ── Cas de figure : sélecteurs qui adaptent le contrat ── */}
-        <div className="mt-5 rounded-xl border border-border bg-panel p-3.5">
-          <div className="mb-2.5 text-[11px] font-medium text-muted-foreground">Cas de figure — le contrat s'adapte tout seul</div>
+        <div className="mt-5 border-t border-border pt-5">
+          <SecTitle icon={SlidersHorizontal} right={<span className="text-[12px] text-muted-foreground">le contrat s'adapte tout seul</span>}>Cas de figure</SecTitle>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {ctType === "marque" && <SelectField label="Type de collab" value={collab} onChange={setCollab} opts={COLLAB_OPTS} />}
             <SelectField label="Cession de droits" value={rights} onChange={setRights} opts={RIGHTS_OPTS} />
@@ -764,27 +781,31 @@ export function Contrats() {
           <button
             type="button"
             onClick={() => setDefraiement((v) => !v)}
-            className={cn("mt-3 flex w-full items-center gap-2 rounded-lg px-3.5 py-2.5 text-[11px] font-semibold transition-colors", defraiement ? "bg-signalsoft text-signaltext" : "border border-border text-muted-foreground hover:bg-rowhover")}
+            className={cn("mt-3 flex w-full items-center gap-2 rounded-lg border border-border px-3.5 py-2.5 text-[13px] transition-colors", defraiement ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover")}
           >
-            <span className={cn("grid h-4 w-4 shrink-0 place-items-center rounded", defraiement ? "bg-primary text-primary-foreground" : "border border-border")}>{defraiement && <Check className="h-3 w-3" />}</span>
+            <span className={cn("grid h-4 w-4 shrink-0 place-items-center rounded", defraiement ? "bg-foreground text-background" : "border border-border")}>{defraiement && <Check className="h-3 w-3" />}</span>
             Frais &amp; produits pris en charge (défraiement)
           </button>
         </div>
 
         {/* Clauses additionnelles */}
-        <div className="mt-5">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-medium text-muted-foreground">Clauses additionnelles</span>
-            <button type="button" onClick={() => setExtra([...extra, { id: uid(), l: `Art. ${nextClauseNo} — Clause`, v: "" }])} className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover">
-              <Plus className="h-3.5 w-3.5" /> Ajouter
-            </button>
-          </div>
+        <div className="mt-5 border-t border-border pt-5">
+          <SecTitle
+            icon={ListPlus}
+            right={
+              <button type="button" onClick={() => setExtra([...extra, { id: uid(), l: `Art. ${nextClauseNo} — Clause`, v: "" }])} className="flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                <Plus className="h-3.5 w-3.5" /> Ajouter
+              </button>
+            }
+          >
+            Clauses additionnelles
+          </SecTitle>
           {extra.length === 0 ? (
-            <div className="text-[11px] text-faint">Ajoute des clauses spécifiques (options) pour un contrat sur-mesure.</div>
+            <div className="text-[12px] text-muted-foreground">Ajoute des clauses spécifiques pour un contrat sur mesure.</div>
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
               {extra.map((e) => (
-                <div key={e.id} className="rounded-lg border border-border bg-panel p-2.5">
+                <div key={e.id} className="p-3">
                   <div className="flex items-center gap-2">
                     <input value={e.l} onChange={(ev) => setExtra(extra.map((x) => (x.id === e.id ? { ...x, l: ev.target.value } : x)))} placeholder="Titre de la clause" className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm font-medium outline-none focus:border-primary" />
                     <button type="button" onClick={() => setExtra(extra.filter((x) => x.id !== e.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-rose-500" title="Supprimer"><Trash2 className="h-4 w-4" /></button>
@@ -798,32 +819,31 @@ export function Contrats() {
       </div>
 
       {/* ============ APERÇU ============ */}
-      <div className="flex flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm md:p-7">
+      <div className="flex flex-col rounded-2xl border border-border bg-surface p-6 md:p-7">
         <div className="flex items-center justify-between border-b border-border pb-4">
           <div className="flex items-center gap-2.5">
-            <div className="grid h-8 w-8 place-items-center rounded-lg bg-[#14181E] text-[10px] font-bold text-white">{initials(ctName) || "TTP"}</div>
+            <div className="h-8 w-8 overflow-hidden rounded-lg bg-[#14181E]"><img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" /></div>
             <div>
-              <div className="text-xs font-bold text-foreground">TTP CREATORS</div>
-              <div className="text-[9px] text-faint">Lyon · France</div>
+              <div className="text-[13px] font-semibold text-foreground">TTP Creators</div>
+              <div className="text-[11px] text-muted-foreground">Lyon · France</div>
             </div>
           </div>
-          <div className="text-[9px] font-semibold text-faint">RÉF. {ref}</div>
+          <div className="text-[11px] tabular-nums text-muted-foreground">Réf. {ref}</div>
         </div>
 
-        <div className="mt-5 text-[12px] font-mediumr text-signaltext">{meta.label}</div>
-        <div className="mt-1 text-[14px] font-semibold text-foreground">Contrat de collaboration</div>
-        <div className="mt-1.5 text-xl font-semibold tracking-tight text-foreground">{meta.title}</div>
+        <div className="mt-5 text-[12px] text-muted-foreground">{meta.chip} · contrat de collaboration</div>
+        <div className="mt-1.5 text-[22px] font-semibold leading-tight tracking-tight text-foreground">{meta.title}</div>
 
-        <div className="mt-3 text-xs leading-relaxed text-muted-foreground">Parties : TTP Creators &amp; {ctName} × {brand || "[Marque]"}</div>
-        <div className="mt-2 text-xs leading-relaxed text-muted-foreground">{parties}</div>
+        <div className="mt-3 text-[13px] leading-relaxed text-muted-foreground">Parties : TTP Creators &amp; {ctName} × {brand || "[Marque]"}</div>
+        <div className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{parties}</div>
 
         <div className="my-4 h-px bg-border" />
 
         <div>
           {terms.map((t, i) => (
             <div key={i} className="flex justify-between gap-4 border-b border-border py-2.5 last:border-0">
-              <span className="text-xs font-medium text-muted-foreground">{t.l}</span>
-              <span className="text-right text-xs font-semibold text-foreground">{t.v}</span>
+              <span className="text-[13px] text-muted-foreground">{t.l}</span>
+              <span className="text-right text-[13px] font-medium text-foreground">{t.v}</span>
             </div>
           ))}
         </div>
@@ -835,26 +855,26 @@ export function Contrats() {
         <div className="mt-4 space-y-2.5">
           {allClauses.map((c, i) => (
             <div key={i}>
-              <div className="text-[10px] font-semibold text-foreground">{c.l}</div>
-              <div className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">{c.v || "—"}</div>
+              <div className="text-[12px] font-semibold text-foreground">{c.l}</div>
+              <div className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">{c.v || "—"}</div>
             </div>
           ))}
         </div>
 
         <div className="mt-5 flex gap-4">
-          <div className="flex-1"><div className="h-8 border-b border-border" /><div className="mt-1.5 text-[10px] font-medium text-faint">Pour TTP Creators</div></div>
-          <div className="flex-1"><div className="h-8 border-b border-border" /><div className="mt-1.5 text-[10px] font-medium text-faint">Pour {ctName}</div></div>
+          <div className="flex-1"><div className="h-8 border-b border-border" /><div className="mt-1.5 text-[11px] text-muted-foreground">Pour TTP Creators</div></div>
+          <div className="flex-1"><div className="h-8 border-b border-border" /><div className="mt-1.5 text-[11px] text-muted-foreground">Pour {ctName}</div></div>
         </div>
 
         {/* Actions */}
         <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <button type="button" onClick={copyContract} className="flex items-center justify-center gap-2 rounded-xl border border-border py-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={copyContract} className="flex items-center justify-center gap-2 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} {copied ? "Copié ✓" : "Copier"}
           </button>
-          <button type="button" onClick={() => setPreview({ html: buildHTML(), hist: false })} className="flex items-center justify-center gap-2 rounded-xl border border-border py-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={() => setPreview({ html: buildHTML(), hist: false })} className="flex items-center justify-center gap-2 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
             <Eye className="h-3.5 w-3.5" /> Aperçu
           </button>
-          <button type="button" onClick={downloadPDF} className="flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+          <button type="button" onClick={downloadPDF} className="flex items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
             <FileText className="h-3.5 w-3.5" /> PDF
           </button>
         </div>
@@ -862,31 +882,27 @@ export function Contrats() {
 
       {/* ============ HISTORIQUE ============ */}
       {history.length > 0 && (
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm lg:col-span-2">
-          <div className="mb-3 flex items-center gap-2">
-            <History className="h-4 w-4 text-faint" />
-            <span className="text-[13px] font-semibold text-foreground">Historique des contrats</span>
-            <span className="text-[11px] text-faint">· {history.length}</span>
-          </div>
-          <div className="flex max-h-[380px] flex-col gap-2 overflow-y-auto pr-0.5">
+        <div className="rounded-2xl border border-border bg-surface p-5 lg:col-span-2">
+          <SecTitle icon={History} right={<span className="text-[12px] tabular-nums text-muted-foreground">{history.length} contrat{history.length > 1 ? "s" : ""}</span>}>Historique des contrats</SecTitle>
+          <div className="max-h-[380px] divide-y divide-border overflow-y-auto border-t border-border">
             {history.map((h) => (
-              <div key={h.id} className="flex items-center gap-3 rounded-xl border border-border bg-panel/40 p-3 transition-colors hover:bg-rowhover">
+              <div key={h.id} className="flex items-center gap-3 py-3 transition-colors hover:bg-rowhover/50">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-[13px] font-semibold text-foreground">{h.title}</span>
-                    <span className="shrink-0 rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{TYPE_META[h.ctType]?.label ?? h.ctType}</span>
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{TYPE_META[h.ctType]?.label ?? h.ctType}</span>
                   </div>
-                  <div className="mt-0.5 truncate text-[11px] text-faint">
+                  <div className="mt-0.5 truncate text-[12px] text-muted-foreground">
                     {titleCase(h.ctName)}{h.brand ? ` × ${h.brand}` : ""} · {h.ref} · {new Date(h.ts).toLocaleDateString("fr-FR")}
                   </div>
                 </div>
-                <button type="button" onClick={() => setPreview({ html: h.html, hist: true })} title="Aperçu" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-surface hover:text-foreground">
+                <button type="button" onClick={() => setPreview({ html: h.html, hist: true })} title="Aperçu" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                   <Eye className="h-4 w-4" />
                 </button>
-                <button type="button" onClick={() => printHtml(h.html)} title="Enregistrer en PDF" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-surface hover:text-primary">
+                <button type="button" onClick={() => printHtml(h.html)} title="Enregistrer en PDF" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-primary">
                   <FileText className="h-4 w-4" />
                 </button>
-                <button type="button" onClick={() => setPendingDel({ title: "Retirer de l'historique", message: `Retirer « ${h.title} » (${h.ref}) de l'historique ? Cette action est irréversible.`, run: () => deleteHistory(h.id) })} title="Supprimer" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-surface hover:text-rose-500">
+                <button type="button" onClick={() => setPendingDel({ title: "Retirer de l'historique", message: `Retirer « ${h.title} » (${h.ref}) de l'historique ? Cette action est irréversible.`, run: () => deleteHistory(h.id) })} title="Supprimer" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-rose-500">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
