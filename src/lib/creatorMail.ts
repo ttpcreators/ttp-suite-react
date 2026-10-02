@@ -1,0 +1,115 @@
+import DOMPurify from "dompurify";
+import { supabase } from "@/lib/supabase";
+
+/*
+ * Client de la section « Mails » de l'Espace Créateur.
+ * Tout passe par la fonction serveur creator-mail (filtrage par alias/libellé
+ * CÔTÉ SERVEUR). Le navigateur ne reçoit que les fils de la créatrice.
+ */
+
+export type MailStatus = "nouvelle" | "negociation" | "valide" | "refuse";
+
+export const MAIL_STATUS: { value: MailStatus; label: string; short: string; dot: string; badge: string }[] = [
+  { value: "nouvelle", short: "Nouvelles", label: "Nouvelle demande", dot: "bg-sky-500", badge: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
+  { value: "negociation", short: "Négociation", label: "En négociation", dot: "bg-amber-500", badge: "bg-amber-500/10 text-amber-700 dark:text-amber-400" },
+  { value: "valide", short: "Validés", label: "Validé", dot: "bg-emerald-500", badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" },
+  { value: "refuse", short: "Refusés", label: "Refusé", dot: "bg-red-500", badge: "bg-red-500/10 text-red-600 dark:text-red-400" },
+];
+export const statusMeta = (s: string) => MAIL_STATUS.find((x) => x.value === s) ?? MAIL_STATUS[0];
+
+export type MailThreadLite = {
+  id: string; subject: string; brand: string; excerpt: string; ts: number;
+  count: number; status: MailStatus; notes: number;
+};
+export type MailAttachment = { messageId: string; attachmentId: string; filename: string; mimeType: string; size: number };
+export type MailMessage = {
+  id: string; from: string; fromEmail: string; fromAgency: boolean; to: string; cc: string;
+  ts: number; html: string; text: string; attachments: MailAttachment[];
+};
+export type MailNote = { id: string; body: string; created_at: string; agency_read_at: string | null };
+export type MailThread = {
+  id: string; subject: string; brand: string; status: MailStatus; messages: MailMessage[]; notes: MailNote[];
+};
+export type MailSettings = { creator: string; alias: string | null; label_id: string | null; label_name: string | null; enabled: boolean };
+
+const ERRORS: Record<string, string> = {
+  introuvable: "Cette conversation est introuvable.",
+  gmail_non_connecte: "La boîte mail de l'agence n'est pas connectée.",
+  gmail_acces_refuse: "Accès à la boîte mail refusé.",
+  gmail_indisponible: "Boîte mail indisponible pour le moment.",
+  piece_trop_lourde: "Pièce jointe trop lourde (20 Mo max).",
+  note_invalide: "Message vide ou trop long.",
+};
+
+export class MailError extends Error {}
+
+async function call<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke("creator-mail", { body });
+  let payload = data as (T & { error?: string }) | null;
+  if (error) {
+    const ctx = (error as { context?: { json?: () => Promise<unknown> } }).context;
+    payload = ctx?.json ? ((await ctx.json().catch(() => null)) as typeof payload) : null;
+  }
+  if (!payload || payload.error) {
+    const code = payload?.error ?? "";
+    throw new MailError(ERRORS[code] ?? "Impossible de charger les mails.");
+  }
+  return payload;
+}
+
+/** `creator` n'est pris en compte par le serveur que pour un compte agence. */
+export const listMails = (creator?: string) =>
+  call<{ configured: boolean; threads: MailThreadLite[] }>({ action: "list", creator });
+export const getMailThread = (threadId: string, creator?: string) =>
+  call<{ thread: MailThread }>({ action: "thread", threadId, creator }).then((r) => r.thread);
+export const sendManagerNote = (threadId: string, body: string) =>
+  call<{ note: MailNote }>({ action: "note", threadId, body }).then((r) => r.note);
+export const listGmailLabels = () =>
+  call<{ labels: { id: string; name: string }[] }>({ action: "labels" }).then((r) => r.labels);
+
+export async function downloadAttachment(threadId: string, a: MailAttachment, creator?: string) {
+  const r = await call<{ filename: string; mimeType: string; data: string }>({
+    action: "attachment", threadId, messageId: a.messageId, attachmentId: a.attachmentId, creator,
+  });
+  const bin = atob(r.data);
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  // Type forcé en binaire : le fichier est enregistré, jamais interprété par la page.
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = r.filename || a.filename || "piece-jointe";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/**
+ * Document autonome pour l'iframe de lecture (sandbox sans scripts).
+ * Second assainissement (DOMPurify) après celui du serveur, et CSP : aucune
+ * ressource distante tant que `showImages` est faux. Fond blanc fixe : les mails
+ * portent leurs propres couleurs (texte sombre), comme dans Gmail.
+ */
+export function mailDocument(html: string, text: string, showImages: boolean): string {
+  const body = html
+    ? DOMPurify.sanitize(html, {
+        FORBID_TAGS: ["script", "style", "form", "input", "button", "textarea", "select", "iframe", "object", "embed", "link", "meta", "base", "svg", "math"],
+        FORBID_ATTR: ["srcset", "action", "formaction", "background", "ping"],
+      })
+    : `<pre>${text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c)}</pre>`;
+  const img = showImages ? "img-src https: data:;" : "img-src data:;";
+  return `<!doctype html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; ${img} style-src 'unsafe-inline'; font-src data:;">
+<base target="_blank">
+<style>
+  html,body{margin:0;padding:0;background:transparent;color:#18181b;font:14px/1.55 Inter,-apple-system,system-ui,sans-serif;word-wrap:break-word;overflow-wrap:anywhere}
+  img{max-width:100%;height:auto} table{max-width:100%} pre{white-space:pre-wrap;font:inherit;margin:0}
+  a{color:#2563eb} blockquote{margin:8px 0;padding-left:10px;border-left:2px solid #d4d4d8;color:#71717a}
+</style></head><body>${body}</body></html>`;
+}
+
+/** Le mail contient-il des images distantes (pour proposer « Afficher les images ») ? */
+export const hasRemoteImages = (html: string) => /<img[^>]+src=["']?https?:/i.test(html);
+
+export const fmtSize = (n: number) =>
+  n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1).replace(".", ",")} Mo` : `${Math.max(1, Math.round(n / 1024))} Ko`;

@@ -87,3 +87,8 @@ verify_jwt = false
 # appelé par pg_cron (CRON_SECRET) → verify_jwt=false, auth dans le code.
 [functions.gmail-reconcile]
 verify_jwt = false
+
+# creator-mail : JWT requis (créatrice OU agence) — section « Mails » de l'Espace
+# Créateur, lecture Gmail filtrée côté serveur par alias/libellé (gmail.readonly).
+[functions.creator-mail]
+verify_jwt = true

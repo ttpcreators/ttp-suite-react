@@ -299,10 +299,11 @@ Deno.serve(async (req: Request) => {
       gift: "{createur} · cadeau reçu",
       facture: "{createur} · facture déposée",
       stats: "{createur} · stats envoyées",
+      mail: "{createur} · message sur un mail",
     };
     const KEYA: Record<string, string> = {
       tache: "a_task", idee: "a_idea", contact: "a_contact", evenement: "a_event",
-      gift: "a_gift", facture: "a_facture", stats: "a_stats",
+      gift: "a_gift", facture: "a_facture", stats: "a_stats", mail: "a_mail",
     };
     const aKind = String(body.kind ?? "tache");
     const activityTitle = customText(texts, KEYA[aKind] ?? "a_task", DEFA[aKind] ?? "{createur} · nouvelle activité")

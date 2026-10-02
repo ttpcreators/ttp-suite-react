@@ -122,7 +122,7 @@ type Contact = { id: string; brand: string; person: string | null; role: string 
 
 type Tab =
   | "accueil" | "guide" | "evolution" | "debrief" | "roadmap"
-  | "todo" | "ideas" | "briefs" | "gifting" | "planning"
+  | "todo" | "ideas" | "briefs" | "mails" | "gifting" | "planning"
   | "mediakit" | "documents" | "contacts" | "facturation";
 
 /**
@@ -158,6 +158,8 @@ const CREATOR_GROUPS: {
       { id: "todo", label: "À faire", icon: ListChecks },
       { id: "ideas", label: "Idées", icon: Lightbulb },
       { id: "briefs", label: "Briefs", icon: FileText },
+      // Visible seulement si l'agence a activé la section pour la créatrice (voir `navGroups`).
+      { id: "mails", label: "Mails", icon: Mail },
       { id: "gifting", label: "Gifting", icon: Gift },
       { id: "planning", label: "Planning", icon: CalendarDays },
     ],
@@ -175,10 +177,6 @@ const CREATOR_GROUPS: {
   },
 ];
 const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = CREATOR_GROUPS.flatMap((g) => g.items);
-// Nav mobile animée (ExpandableTabs) — dérivée des mêmes groupes.
-const MOBILE_FAMILIES: { id: string; label: string; icon: typeof LayoutDashboard; items: Tab[] }[] = CREATOR_GROUPS.map(
-  (g) => ({ id: g.id, label: g.label, icon: g.icon, items: g.items.map((i) => i.id) }),
-);
 
 /** Carte animée (identique à l'Aperçu agence : entrée douce + délai décalé). */
 function Card({ children, className = "", index = 0, onClick }: { children: ReactNode; className?: string; index?: number; onClick?: () => void }) {
@@ -252,6 +250,7 @@ const FOLLOWER_PLAT: Record<string, { label: string; color: string }> = {
 };
 const CreatorStatsCard = lazy(() => import("./charts/CreatorStatsCard"));
 const GlobeStickers = lazy(() => import("@/components/ui/cobe-globe-stickers"));
+const CreatorMailbox = lazy(() => import("./CreatorMails").then((m) => ({ default: m.CreatorMailbox })));
 const DashArea = lazy(() => import("./charts/DashArea"));
 
 /** Salutation selon l'heure (comme l'Aperçu agence). */
@@ -410,6 +409,24 @@ export function CreatorSpace({
   const attFileRef = useRef<HTMLInputElement>(null);
   const [attUploading, setAttUploading] = useState(false);
   const live = useLiveKey();
+  // Section « Mails » : affichée seulement si l'agence l'a activée et liée à un alias/libellé.
+  const [mailsOn, setMailsOn] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    supabase.from("creator_mail_settings").select("enabled, alias, label_id").eq("creator", name).maybeSingle()
+      .then(({ data }) => {
+        const d = data as { enabled: boolean; alias: string | null; label_id: string | null } | null;
+        if (alive) setMailsOn(!!d?.enabled && !!(d.alias || d.label_id));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [name, live]);
+  const navGroups = useMemo(
+    () => (mailsOn ? CREATOR_GROUPS : CREATOR_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => i.id !== "mails") }))),
+    [mailsOn],
+  );
+  const navTabs = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
   // Historique d'engagement du créateur — via la fonction serveur creator-history
   // (le blob agence est inaccessible aux créateurs ; le serveur filtre sur SON nom).
   const [suivi, setSuivi] = useState<SuiviEntry[] | null>(null);
@@ -1422,7 +1439,7 @@ export function CreatorSpace({
               <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
             </button>
             <nav className="mt-3 flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {TABS.map((t) => (
+              {navTabs.map((t) => (
                 <button
                   key={t.id}
                   type="button"
@@ -1448,7 +1465,7 @@ export function CreatorSpace({
              état mémorisé) — les deux espaces restent visuellement cohérents. */
           <div className="hidden h-full md:block">
             <SidebarNav
-              groups={CREATOR_GROUPS}
+              groups={navGroups}
               activeId={tab}
               onSelect={(id) => setTab(id as Tab)}
               header={<SidebarBrand title="Espace créateur" sub="TTP Creators" onCollapse={() => setSbCollapsed(true)} />}
@@ -2686,6 +2703,18 @@ export function CreatorSpace({
           {/* Ma feuille de route — partagée par l'agence (lecture) + report de cadence */}
           {tab === "roadmap" && <CreatorRoadmap name={name} preview={!!preview} />}
 
+          {tab === "mails" && (
+            mailsOn ? (
+              <Suspense fallback={null}>
+                <CreatorMailbox creator={name} mode={preview ? "preview" : "creator"} />
+              </Suspense>
+            ) : (
+              <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
+                Ta boîte mail n'est pas encore activée. Ton agence s'en occupe.
+              </div>
+            )
+          )}
+
           {/* Media kit — la créatrice consulte SA page publique générée */}
           {tab === "mediakit" && (
             <div className="space-y-4">
@@ -2945,7 +2974,7 @@ export function CreatorSpace({
       <div className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center md:hidden">
         <div className="pointer-events-auto">
           <ExpandableTabs
-            items={MOBILE_FAMILIES.map((f) => ({
+            items={navGroups.map((g) => ({ id: g.id, label: g.label, icon: g.icon, items: g.items.map((i) => i.id) })).map((f) => ({
               id: f.id,
               label: f.label,
               icon: <f.icon className="h-4 w-4" />,

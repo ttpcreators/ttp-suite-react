@@ -1,5 +1,5 @@
 import { fmtCompact } from "@/lib/timeSeries";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X, ArrowUpRight, Share2, IdCard, ScrollText, Receipt, ListChecks, FileText, Lightbulb, type LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
@@ -10,6 +10,8 @@ import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useLiveKey } from "@/lib/useLive";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+
+const CreatorMailsAgency = lazy(() => import("./CreatorMails").then((m) => ({ default: m.CreatorMailsAgency })));
 import { parseAmount, formatEuro } from "@/lib/money";
 
 type CtDeadline = { id?: string; creator: string; start: string; months: number; type?: string; note?: string };
@@ -865,6 +867,11 @@ export function CreatorDetail({
           )}
         </div>
       </div>
+
+      {/* Mails : lien alias/libellé + boîte filtrée (statuts, messages de la créatrice) */}
+      <Suspense fallback={null}>
+        <CreatorMailsAgency creator={name} suggestedAlias={c?.email_pro} />
+      </Suspense>
     </div>
   );
 }
