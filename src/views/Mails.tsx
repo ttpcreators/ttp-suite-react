@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Mail, ArrowDownLeft, ArrowUpRight, X, Search, Loader2, Send, PenLine } from "lucide-react";
+import { Mail, ArrowDownLeft, ArrowUpRight, ArrowLeft, Inbox, Search, Loader2, Send, PenLine } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { cn, initials, titleCase } from "@/lib/utils";
-import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
+import { cn, titleCase } from "@/lib/utils";
+import { DashPanel } from "@/components/ui/dash";
+import { Initial, MailItem } from "@/components/mail-reader";
+import type { MailMessage } from "@/lib/creatorMail";
 import { toast } from "@/components/ui/toast";
 import { parseTouches, nextKind, touchId, type Touch } from "@/lib/touches";
 import { updateTouches } from "@/lib/touchesDb";
@@ -33,35 +35,17 @@ function fmtDate(d: string): string {
   const t = new Date(d);
   return Number.isNaN(t.getTime()) ? "" : t.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "2-digit" });
 }
-function fmtDateTime(d: string): string {
-  const t = new Date(d);
-  return Number.isNaN(t.getTime())
-    ? ""
-    : t.toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-}
 /** Nom affiché depuis un entête "Nom <email>" ou "email". */
 function displayName(from: string): string {
   const m = /^\s*"?([^"<]+?)"?\s*</.exec(from);
   return (m ? m[1] : from.replace(/[<>]/g, "")).trim();
 }
-/** Corps lisible : texte brut si présent, sinon HTML nettoyé en texte. */
-function readableBody(m: ThreadMsg): string {
-  if (m.text && m.text.trim()) return m.text.trim();
-  return m.html
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|tr|li|h[1-6])>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&quot;/gi, '"')
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+/** Décode les entités HTML des extraits Gmail (« l&#39;ensemble » → « l'ensemble »). */
+function decodeEntities(s: string): string {
+  if (!s.includes("&")) return s;
+  const t = document.createElement("textarea");
+  t.innerHTML = s;
+  return t.value;
 }
 
 /** supabase-js met le corps JSON des réponses non-2xx dans error.context. */
@@ -89,6 +73,7 @@ export function Mails() {
   const [threadBusy, setThreadBusy] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [replySending, setReplySending] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set()); // messages dépliés du fil
 
   // Contacts avec un email valide.
   useEffect(() => {
@@ -174,7 +159,10 @@ export function Mails() {
       threadId: m.threadId,
       contact: selected?.email.toLowerCase(),
     });
-    setThreadMsgs(res?.ok ? res.messages ?? [] : []);
+    const msgs = res?.ok ? res.messages ?? [] : [];
+    setThreadMsgs(msgs);
+    // Dernier message déplié, les précédents repliés (comme Gmail).
+    setExpanded(new Set(msgs.length ? [msgs[msgs.length - 1].id] : []));
     setThreadBusy(false);
   };
 
@@ -203,7 +191,11 @@ export function Mails() {
     setReplyText("");
     // Recharge le fil pour afficher la réponse.
     const fresh = await invokeJson<{ ok?: boolean; messages?: ThreadMsg[] }>("gmail-thread", { threadId: thread.threadId, contact: thread.contact });
-    if (fresh?.ok) setThreadMsgs(fresh.messages ?? []);
+    if (fresh?.ok) {
+      const msgs = fresh.messages ?? [];
+      setThreadMsgs(msgs);
+      if (msgs.length) setExpanded((e) => new Set([...e, msgs[msgs.length - 1].id]));
+    }
   };
 
   // Tags/niches réellement présents (pour le filtre) — hors « perso » (défaut créateurs).
@@ -225,172 +217,241 @@ export function Mails() {
     });
   }, [contacts, query, tagFilter, contactFilter]);
 
+  const contacted = (c: Contact) => !!c.lastContacted || parseTouches(c.touches).length > 0;
+  // Fil → format du lecteur partagé (messages envoyés = agence).
+  const readerMsgs: MailMessage[] = (threadMsgs ?? []).map((m) => ({
+    id: m.id,
+    from: displayName(m.from),
+    fromEmail: (m.from.match(/[^\s<>"]+@[^\s<>"]+/)?.[0] ?? "").toLowerCase(),
+    fromAgency: m.direction === "out",
+    to: m.to ?? "",
+    cc: "",
+    ts: m.ts || new Date(m.date).getTime(),
+    html: m.html,
+    text: m.html ? "" : m.text,
+    attachments: [],
+  }));
+
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[300px_1fr] lg:grid-cols-[360px_1fr]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] lg:items-start">
         {/* Colonne : contacts */}
-        <div className={cn("rounded-2xl border border-border bg-surface p-3 shadow-sm", selected && "hidden md:block")}>
-          <div className="relative mb-3">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher un contact…"
-              className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-            />
-          </div>
-
-          {/* Filtre par niche/tag (marques, agence…) — pastilles scrollables */}
-          {tagList.length > 0 && (
-            <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {[{ value: "__all__", label: "Tous" }, ...tagList.map((t) => ({ value: t, label: t }))].map((o) => (
+        <DashPanel className={cn("flex min-w-0 flex-col", selected && "max-lg:hidden")}>
+          <div className="flex flex-col gap-2.5 border-b border-border p-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Rechercher un contact…"
+                className="h-9 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-[13px] outline-none placeholder:text-faint focus:border-primary"
+              />
+            </div>
+            {/* Filtre « déjà échangé » (basé sur le suivi de contact) */}
+            <div className="flex gap-0.5 rounded-lg bg-muted p-0.5">
+              {([["all", "Tous"], ["contacted", "Déjà échangé"], ["never", "Jamais"]] as const).map(([v, label]) => (
                 <button
-                  key={o.value}
+                  key={v}
                   type="button"
-                  onClick={() => setTagFilter(o.value)}
+                  onClick={() => setContactFilter(v)}
                   className={cn(
-                    "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors",
-                    tagFilter === o.value ? "bg-foreground text-background" : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground",
+                    "flex-1 whitespace-nowrap rounded-md px-2 py-1.5 text-[12px] font-medium transition-colors",
+                    contactFilter === v ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {o.label}
+                  {label}
                 </button>
               ))}
             </div>
-          )}
-
-          {/* Filtre « déjà échangé » (basé sur le suivi de contact) */}
-          <div className="mb-3 flex gap-1 rounded-xl bg-panel p-1">
-            {([["all", "Tous"], ["contacted", "Déjà échangé"], ["never", "Jamais"]] as const).map(([v, label]) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setContactFilter(v)}
-                className={cn(
-                  "flex-1 rounded-lg px-2 py-1.5 text-[10px] font-semibold transition-colors",
-                  contactFilter === v ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {label}
-              </button>
-            ))}
+            {/* Filtre par type (marque, agence…) */}
+            {tagList.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {[{ value: "__all__", label: "Tous types" }, ...tagList.map((t) => ({ value: t, label: t }))].map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => setTagFilter(o.value)}
+                    className={cn(
+                      "rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                      tagFilter === o.value ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="max-h-[70vh] space-y-0.5 overflow-y-auto pr-1">
+          <div className="max-h-[70vh] overflow-y-auto">
             {filtered.length === 0 ? (
-              <div className="px-2 py-6 text-center text-[12px] text-faint">
+              <div className="px-4 py-12 text-center text-[13px] text-muted-foreground">
                 {query.trim() || tagFilter !== "__all__" || contactFilter !== "all" ? "Aucun contact pour ce filtre." : "Aucun contact avec email."}
               </div>
             ) : (
-              filtered.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setSelected(c)}
-                  className={cn(
-                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
-                    selected?.id === c.id ? "bg-primary/10" : "hover:bg-rowhover",
-                  )}
-                >
-                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-panel text-[10px] font-bold text-foreground">
-                    {initials(c.label)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start gap-1.5">
-                      <span className="line-clamp-2 break-words text-[12px] font-semibold leading-snug text-foreground" title={c.label}>{c.label}</span>
-                      {(c.lastContacted || parseTouches(c.touches).length > 0) && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà échangé" />}
-                    </div>
-                    <div className="truncate text-[11px] text-faint">{c.email}</div>
-                  </div>
-                  {c.tag && c.tag.toLowerCase() !== "perso" && (
-                    <span className="ml-1 shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{c.tag}</span>
-                  )}
-                </button>
-              ))
+              <ul className="divide-y divide-border">
+                {filtered.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => { setSelected(c); setThread(null); }}
+                      className={cn("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-rowhover", selected?.id === c.id && "bg-rowhover")}
+                    >
+                      <Initial name={c.brand || c.label} />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="truncate text-[13px] font-semibold text-foreground" title={c.label}>{c.brand || c.label}</span>
+                          {contacted(c) && <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà échangé" />}
+                        </span>
+                        <span className="block truncate text-[12px] text-muted-foreground">{c.person || c.email}</span>
+                      </span>
+                      {c.tag && c.tag.toLowerCase() !== "perso" && (
+                        <span className="shrink-0 whitespace-nowrap text-[11px] text-faint">{c.tag}</span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
-        </div>
+        </DashPanel>
 
-        {/* Colonne : historique (mobile : masquée tant qu'aucun contact n'est choisi) */}
-        <div className={cn("rounded-2xl border border-border bg-surface p-4 shadow-sm", !selected && "hidden md:block")}>
-          {!selected ? (
-            <div className="flex h-full min-h-[300px] flex-col items-center justify-center gap-2 text-center text-sm text-faint">
-              <Mail className="h-8 w-8 opacity-40" />
-              <span>Choisis un contact pour voir vos échanges.</span>
-              <span className="flex items-center gap-1.5 rounded-full bg-panel px-3 py-1.5 text-[11px] text-muted-foreground">
-                <PenLine className="h-3 w-3" /> Le bouton « Nouveau mail » (modèles + variables) apparaît sur sa fiche.
-              </span>
+        {/* Colonne : historique / fil (mobile : masquée tant qu'aucun contact n'est choisi) */}
+        {!selected ? (
+          <DashPanel className="hidden flex-col items-center justify-center gap-2 px-6 py-20 text-center lg:flex">
+            <Inbox className="h-6 w-6 text-faint" />
+            <p className="text-[13px] text-muted-foreground">Choisis un contact pour voir vos échanges.</p>
+            <p className="flex items-center gap-1.5 text-[12px] text-faint">
+              <PenLine className="h-3 w-3" /> « Nouveau mail » (modèles + variables) apparaît sur sa fiche.
+            </p>
+          </DashPanel>
+        ) : thread ? (
+          <DashPanel className="flex min-w-0 flex-col">
+            <div className="flex items-start gap-3 border-b border-border px-4 py-4 sm:px-6">
+              <button type="button" onClick={() => setThread(null)} aria-label="Retour aux échanges"
+                className="-ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-[17px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere]">{thread.subject || "(sans objet)"}</h2>
+                <p className="mt-1 truncate text-[12px] text-muted-foreground">
+                  {selected.label}{threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
+                </p>
+              </div>
             </div>
-          ) : (
-            <>
-              <div className="mb-3 flex items-center gap-2">
+            {threadBusy ? (
+              <div className="flex items-center justify-center gap-2 px-5 py-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Ouverture…</div>
+            ) : readerMsgs.length === 0 ? (
+              <div className="px-5 py-10 text-center text-[13px] text-muted-foreground">Impossible de charger ce fil.</div>
+            ) : (
+              <div className="divide-y divide-border">
+                {readerMsgs.map((m) => (
+                  <MailItem
+                    key={m.id}
+                    m={m}
+                    open={expanded.has(m.id)}
+                    onToggle={() => setExpanded((s) => {
+                      const n = new Set(s);
+                      if (n.has(m.id)) n.delete(m.id); else n.add(m.id);
+                      return n;
+                    })}
+                  />
+                ))}
+              </div>
+            )}
+            {/* Répondre dans le fil */}
+            <div className="border-t border-border px-4 py-4 sm:px-6">
+              <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface p-1.5 pl-3.5 focus-within:border-primary">
+                <textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void sendReply();
+                  }}
+                  rows={1}
+                  placeholder={`Répondre à ${titleCase(selected.person || displayName(thread.contact))}…`}
+                  className="max-h-48 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[13px] text-foreground outline-none [field-sizing:content] placeholder:text-faint"
+                />
                 <button
                   type="button"
-                  onClick={() => setSelected(null)}
-                  className="rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover md:hidden"
+                  onClick={() => void sendReply()}
+                  disabled={replySending || !replyText.trim()}
+                  aria-label="Envoyer la réponse"
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
                 >
-                  ← Retour
-                </button>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-foreground">{selected.label}</div>
-                  <div className="truncate text-[11px] text-faint">{selected.email}</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setComposerOpen(true)}
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
-                >
-                  <PenLine className="h-3.5 w-3.5" /> Nouveau mail
+                  {replySending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </button>
               </div>
+              <p className="mt-1.5 text-[11px] text-faint">La réponse part depuis ta boîte Gmail, dans ce fil.</p>
+            </div>
+          </DashPanel>
+        ) : (
+          <DashPanel className="flex min-w-0 flex-col">
+            <div className="flex items-start gap-3 border-b border-border px-4 py-4 sm:px-6">
+              <button type="button" onClick={() => setSelected(null)} aria-label="Retour aux contacts"
+                className="-ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground lg:hidden">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <Initial name={selected.brand || selected.label} />
+              <div className="min-w-0 flex-1">
+                <h2 className="truncate text-[15px] font-semibold text-foreground">{selected.label}</h2>
+                <p className="truncate text-[12px] text-muted-foreground">{selected.email}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setComposerOpen(true)}
+                className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                <PenLine className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Nouveau mail</span>
+              </button>
+            </div>
 
-              {historyBusy ? (
-                <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Chargement des échanges…
-                </div>
-              ) : historyErr ? (
-                <div className="rounded-lg border border-border bg-panel p-4 text-[12px] text-muted-foreground">{historyErr}</div>
-              ) : !history || history.length === 0 ? (
-                <div className="py-8 text-center text-sm text-faint">Aucun échange trouvé dans Gmail avec ce contact.</div>
-              ) : (
-                <div className="space-y-1.5">
-                  {history.map((m) => (
+            {historyBusy ? (
+              <div className="flex items-center justify-center gap-2 px-5 py-12 text-[13px] text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Chargement des échanges…
+              </div>
+            ) : historyErr ? (
+              <div className="px-5 py-10 text-center text-[13px] text-muted-foreground">{historyErr}</div>
+            ) : !history || history.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
+                <Mail className="h-5 w-5 text-faint" />
+                <p className="text-[13px] text-muted-foreground">Aucun échange trouvé dans Gmail avec ce contact.</p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {history.map((m) => (
+                  <li key={m.id}>
                     <button
-                      key={m.id}
                       type="button"
                       onClick={() => m.threadId && openThread(m)}
-                      className={cn(
-                        "flex w-full items-start gap-3 rounded-xl border border-border bg-panel px-3 py-2.5 text-left transition-colors",
-                        m.threadId ? "hover:border-primary/40 hover:bg-rowhover" : "cursor-default",
-                      )}
+                      className={cn("flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors sm:px-6", m.threadId ? "hover:bg-rowhover" : "cursor-default")}
                     >
                       <span
-                        className={cn(
-                          "mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full",
-                          m.direction === "in" ? "bg-signal/15 text-signaltext" : "bg-primary/10 text-primary",
-                        )}
+                        className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground"
+                        title={m.direction === "in" ? "Reçu" : "Envoyé"}
                       >
                         {m.direction === "in" ? <ArrowDownLeft className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
                       </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="flex min-w-0 items-center gap-1.5">
-                            <span className="truncate text-[12px] font-semibold text-foreground">{m.subject || "(sans objet)"}</span>
-                            {m.source === "mediakit" && (
-                              <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase text-primary">Media kit</span>
-                            )}
-                          </span>
-                          <span className="shrink-0 text-[10px] text-faint">{fmtDate(m.date)}</span>
-                        </div>
-                        <div className="truncate text-[11px] text-faint">{m.snippet}</div>
-                      </div>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex min-w-0 items-baseline gap-2">
+                          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{m.subject || "(sans objet)"}</span>
+                          <span className="shrink-0 text-[11px] tabular-nums text-faint">{fmtDate(m.date)}</span>
+                        </span>
+                        <span className="mt-0.5 flex min-w-0 items-center gap-2">
+                          <span className="shrink-0 text-[11px] text-muted-foreground">{m.direction === "in" ? "Reçu" : "Envoyé"}</span>
+                          {m.source === "mediakit" && (
+                            <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Media kit</span>
+                          )}
+                          <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{decodeEntities(m.snippet)}</span>
+                        </span>
+                      </span>
                     </button>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DashPanel>
+        )}
       </div>
 
       {/* Composeur : nouveau mail depuis un modèle (prospection / relance) */}
@@ -427,76 +488,6 @@ export function Mails() {
         }}
       />
 
-      {/* Fil complet */}
-      {thread && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClick={() => setThread(null)}>
-          <div
-            className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-foreground">{thread.subject || "(sans objet)"}</div>
-                <div className="truncate text-[11px] text-faint">Conversation avec {titleCase(displayName(thread.contact))}</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setThread(null)}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
-              {threadBusy ? (
-                <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Chargement du fil…
-                </div>
-              ) : !threadMsgs || threadMsgs.length === 0 ? (
-                <div className="py-8 text-center text-sm text-faint">Impossible de charger ce fil.</div>
-              ) : (
-                threadMsgs.map((m) => (
-                  <div key={m.id} className="rounded-xl border border-border bg-panel p-3.5">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <AnimatedBadge status={m.direction === "in" ? "success" : "info"} size="sm">
-                          {m.direction === "in" ? "Reçu" : "Envoyé"}
-                        </AnimatedBadge>
-                        <span className="truncate text-[12px] font-medium text-foreground">{displayName(m.from)}</span>
-                      </div>
-                      <span className="shrink-0 text-[10px] text-faint">{fmtDateTime(m.date)}</span>
-                    </div>
-                    <div className="whitespace-pre-line break-words text-[13px] leading-relaxed text-foreground">{readableBody(m)}</div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Répondre */}
-            <div className="border-t border-border px-5 py-3">
-              <div className="flex items-end gap-2">
-                <textarea
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  rows={2}
-                  placeholder={`Répondre à ${titleCase(displayName(thread.contact))}…`}
-                  className="flex-1 resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                />
-                <button
-                  type="button"
-                  onClick={sendReply}
-                  disabled={replySending || !replyText.trim()}
-                  className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-                >
-                  <Send className="h-3.5 w-3.5" /> {replySending ? "Envoi…" : "Répondre"}
-                </button>
-              </div>
-              <p className="mt-1 text-[10px] text-faint">La réponse part depuis ta boîte Gmail, dans ce fil.</p>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
