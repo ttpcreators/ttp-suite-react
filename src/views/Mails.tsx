@@ -8,7 +8,7 @@ import type { MailMessage } from "@/lib/creatorMail";
 import { toast } from "@/components/ui/toast";
 import { parseTouches, nextKind, touchId, type Touch } from "@/lib/touches";
 import { updateTouches } from "@/lib/touchesDb";
-import { MailComposer, type ComposerContact } from "@/components/mail-composer";
+import { MailComposer, BOX_LABEL, type ComposerContact, type MailBox } from "@/components/mail-composer";
 
 /**
  * Page « Mails » : historique des échanges Gmail par contact + lecture d'un fil
@@ -26,7 +26,7 @@ type Contact = {
   first_name?: string | null;
   touches?: unknown;
 };
-type MailMsg = { id: string; threadId: string; from: string; to?: string; subject: string; date: string; snippet: string; direction: "in" | "out"; source?: string };
+type MailMsg = { id: string; threadId: string; from: string; to?: string; subject: string; date: string; snippet: string; direction: "in" | "out"; source?: string; box?: MailBox };
 type ThreadMsg = { id: string; from: string; to?: string; subject: string; date: string; html: string; text: string; direction: "in" | "out"; ts: number };
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -62,13 +62,31 @@ export function Mails() {
   const [tagFilter, setTagFilter] = useState("__all__"); // filtre par niche/tag
   const [contactFilter, setContactFilter] = useState<"all" | "contacted" | "never">("all"); // déjà échangé ?
   const [selected, setSelected] = useState<Contact | null>(null);
+  // Boîte affichée : les deux (défaut), partnerships@ (prospection) ou talent@ (créatrices).
+  const [box, setBoxState] = useState<"all" | MailBox>(() => {
+    try {
+      const v = localStorage.getItem("ttp:mails-box");
+      return v === "partnerships" || v === "talent" ? v : "all";
+    } catch {
+      return "all";
+    }
+  });
+  const setBox = (v: "all" | MailBox) => {
+    setBoxState(v);
+    setThread(null);
+    try {
+      localStorage.setItem("ttp:mails-box", v);
+    } catch {
+      /* stockage indisponible */
+    }
+  };
 
   const [history, setHistory] = useState<MailMsg[] | null>(null);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyErr, setHistoryErr] = useState("");
 
   const [composerOpen, setComposerOpen] = useState(false);
-  const [thread, setThread] = useState<{ contact: string; subject: string; threadId: string } | null>(null);
+  const [thread, setThread] = useState<{ contact: string; subject: string; threadId: string; box: MailBox } | null>(null);
   const [threadMsgs, setThreadMsgs] = useState<ThreadMsg[] | null>(null);
   const [threadBusy, setThreadBusy] = useState(false);
   const [replyText, setReplyText] = useState("");
@@ -116,7 +134,7 @@ export function Mails() {
     (async () => {
       // Gmail (fils réels) + email_activity (envois Resend / media kit non présents dans Gmail).
       const [res, act] = await Promise.all([
-        invokeJson<{ ok?: boolean; messages?: MailMsg[]; error?: string }>("gmail-history", { contact: email }),
+        invokeJson<{ ok?: boolean; messages?: MailMsg[]; error?: string }>("gmail-history", { contact: email, box }),
         supabase
           .from("email_activity")
           .select("subject,snippet,direction,source,created_at,thread_id,gmail_message_id")
@@ -127,10 +145,11 @@ export function Mails() {
       if (!alive) return;
       if (res?.error === "google_non_connecte" || res?.error === "gmail_scope_manquant")
         setHistoryErr("Reconnecte Google (droits Gmail) dans l'app pour lire tes mails.");
+      else if (res?.error === "talent_non_configure") setHistoryErr("La boîte talent@ n'est pas encore reliée à l'app.");
       const gmail = res?.ok ? res.messages ?? [] : [];
       const gmailIds = new Set(gmail.map((m) => m.id));
       const extra: MailMsg[] = ((act.data as { subject: string | null; snippet: string | null; direction: string | null; source: string | null; created_at: string | null; thread_id: string | null; gmail_message_id: string | null }[]) ?? [])
-        .filter((a) => a.source && a.source !== "manual" && (!a.gmail_message_id || !gmailIds.has(a.gmail_message_id)))
+        .filter((a) => box !== "talent" && a.source && a.source !== "manual" && (!a.gmail_message_id || !gmailIds.has(a.gmail_message_id)))
         .map((a) => ({
           id: `act-${a.created_at}-${a.subject ?? ""}`.slice(0, 60),
           threadId: a.thread_id ?? "",
@@ -148,16 +167,18 @@ export function Mails() {
     return () => {
       alive = false;
     };
-  }, [selected]);
+  }, [selected, box]);
 
   const openThread = async (m: MailMsg) => {
-    setThread({ contact: selected?.email.toLowerCase() ?? "", subject: m.subject, threadId: m.threadId });
+    const mBox: MailBox = m.box ?? (box === "talent" ? "talent" : "partnerships");
+    setThread({ contact: selected?.email.toLowerCase() ?? "", subject: m.subject, threadId: m.threadId, box: mBox });
     setThreadMsgs(null);
     setReplyText("");
     setThreadBusy(true);
     const res = await invokeJson<{ ok?: boolean; messages?: ThreadMsg[] }>("gmail-thread", {
       threadId: m.threadId,
       contact: selected?.email.toLowerCase(),
+      box: mBox,
     });
     const msgs = res?.ok ? res.messages ?? [] : [];
     setThreadMsgs(msgs);
@@ -181,16 +202,21 @@ export function Mails() {
       html,
       threadId: thread.threadId,
       source: "manual",
+      box: thread.box,
     });
     setReplySending(false);
     if (!res?.ok) {
-      toast(res?.error === "google_non_connecte" ? "Reconnecte Google (droits Gmail)." : "Envoi échoué — réessaie");
+      toast(
+        res?.error === "google_non_connecte" ? "Reconnecte Google (droits Gmail)."
+          : res?.error === "talent_droit_manquant" ? "Envoi depuis talent@ pas encore autorisé (admin.google.com)."
+            : "Envoi échoué, réessaie",
+      );
       return;
     }
     toast("Réponse envoyée ✓");
     setReplyText("");
     // Recharge le fil pour afficher la réponse.
-    const fresh = await invokeJson<{ ok?: boolean; messages?: ThreadMsg[] }>("gmail-thread", { threadId: thread.threadId, contact: thread.contact });
+    const fresh = await invokeJson<{ ok?: boolean; messages?: ThreadMsg[] }>("gmail-thread", { threadId: thread.threadId, contact: thread.contact, box: thread.box });
     if (fresh?.ok) {
       const msgs = fresh.messages ?? [];
       setThreadMsgs(msgs);
@@ -234,6 +260,28 @@ export function Mails() {
 
   return (
     <>
+      {/* Boîte affichée */}
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex gap-0.5 rounded-lg bg-muted p-0.5">
+          {([["all", "Les deux boîtes"], ["partnerships", BOX_LABEL.partnerships], ["talent", BOX_LABEL.talent]] as const).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setBox(v)}
+              className={cn(
+                "whitespace-nowrap rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors",
+                box === v ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="text-[12px] text-muted-foreground">
+          {box === "partnerships" ? "Prospection et contacts agence." : box === "talent" ? "Échanges liés aux créatrices (leurs alias)." : "Chaque échange indique sa boîte."}
+        </span>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] lg:items-start">
         {/* Colonne : contacts */}
         <DashPanel className={cn("flex min-w-0 flex-col", selected && "max-lg:hidden")}>
@@ -335,7 +383,7 @@ export function Mails() {
               <div className="min-w-0 flex-1">
                 <h2 className="text-[17px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere]">{thread.subject || "(sans objet)"}</h2>
                 <p className="mt-1 truncate text-[12px] text-muted-foreground">
-                  {selected.label}{threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
+                  {selected.label} · {BOX_LABEL[thread.box]}{threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
                 </p>
               </div>
             </div>
@@ -382,7 +430,7 @@ export function Mails() {
                   {replySending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </button>
               </div>
-              <p className="mt-1.5 text-[11px] text-faint">La réponse part depuis ta boîte Gmail, dans ce fil.</p>
+              <p className="mt-1.5 text-[11px] text-faint">La réponse part depuis {BOX_LABEL[thread.box]}, dans ce fil.</p>
             </div>
           </DashPanel>
         ) : (
@@ -439,6 +487,9 @@ export function Mails() {
                         </span>
                         <span className="mt-0.5 flex min-w-0 items-center gap-2">
                           <span className="shrink-0 text-[11px] text-muted-foreground">{m.direction === "in" ? "Reçu" : "Envoyé"}</span>
+                          {box === "all" && m.box && (
+                            <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">{BOX_LABEL[m.box]}</span>
+                          )}
                           {m.source === "mediakit" && (
                             <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Media kit</span>
                           )}
@@ -470,6 +521,7 @@ export function Mails() {
             : null
         }
         onClose={() => setComposerOpen(false)}
+        defaultBox={box === "talent" ? "talent" : "partnerships"}
         onSent={(gmailId) => {
           // Journalise la touche (même logique que le poste de prospection)
           // puis recharge l'historique du contact.

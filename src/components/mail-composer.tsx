@@ -42,7 +42,12 @@ type Props = {
   /** Appelé après envoi. `gmailId` = id du message Gmail (envoi via Gmail) : la touche
    *  prend l'id « gm<id> », le même que le scan horaire → jamais comptée deux fois. */
   onSent?: (gmailId?: string) => void;
+  /** Boîte d'envoi proposée par défaut (la page Mails transmet la boîte affichée). */
+  defaultBox?: MailBox;
 };
+
+export type MailBox = "partnerships" | "talent";
+export const BOX_LABEL: Record<MailBox, string> = { partnerships: "partnerships@", talent: "talent@" };
 
 async function invokeJson<T>(fn: string, body: Record<string, unknown>): Promise<T | null> {
   const { data, error } = await supabase.functions.invoke(fn, { body });
@@ -55,7 +60,7 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c);
 }
 
-export function MailComposer({ open, contact, onClose, onSent }: Props) {
+export function MailComposer({ open, contact, onClose, onSent, defaultBox = "partnerships" }: Props) {
   const { data: stored } = useAppState<MailTemplate[] | undefined>(
     (s: AppState) => readProspectTemplates(s),
   );
@@ -72,6 +77,7 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [box, setBox] = useState<MailBox>(defaultBox);
 
   // Gestionnaire : copie de travail éditable.
   const [draftList, setDraftList] = useState<MailTemplate[]>(templates);
@@ -86,6 +92,7 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
   useEffect(() => {
     if (!open) return;
     setManage(contact === null);
+    setBox(defaultBox);
     setDraftList(templates);
     baseListRef.current = templates;
     setEditId(null);
@@ -123,13 +130,16 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
       html,
       source: "prospection",
       contactName: contact.label,
+      box,
     });
     setSending(false);
     if (!res?.ok) {
       toast(
         res?.error === "google_non_connecte" || res?.error === "gmail_scope_manquant"
           ? "Reconnecte Google (droits Gmail) dans l'app."
-          : "Envoi échoué — réessaie",
+          : res?.error === "talent_droit_manquant"
+            ? "Envoi depuis talent@ pas encore autorisé (admin.google.com)."
+            : "Envoi échoué, réessaie",
       );
       return;
     }
@@ -310,6 +320,25 @@ export function MailComposer({ open, contact, onClose, onSent }: Props) {
 
             {/* Mail éditable */}
             <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+              {/* Boîte d'envoi : prospection (partnerships@) ou créatrices (talent@) */}
+              <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+                <span>Envoyer depuis</span>
+                <div className="flex gap-0.5 rounded-lg bg-muted p-0.5">
+                  {(["partnerships", "talent"] as const).map((b) => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => setBox(b)}
+                      className={cn(
+                        "rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
+                        box === b ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {BOX_LABEL[b]}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <input
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}

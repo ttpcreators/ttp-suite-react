@@ -4,11 +4,12 @@
 // Fil complet d'un échange Gmail : tous les messages + leur corps (texte/HTML).
 // Réservé à l'AGENCE (verify_jwt=true + rôle agence). Scope gmail.readonly.
 //
-// Entrée : { threadId, contact? }.  Sortie : { ok, messages:[{from,to,subject,
+// Entrée : { threadId, contact?, box? } (box = "partnerships" défaut | "talent").  Sortie : { ok, messages:[{from,to,subject,
 //           date,html,text,direction,ts}] }.
 // ============================================================================
 
-import { getServiceClient, getAccessToken, corsHeaders } from "../_shared/google.ts";
+import { getServiceClient, corsHeaders } from "../_shared/google.ts";
+import { boxToken, boxError, parseBox } from "../_shared/gmailBox.ts";
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 
@@ -62,7 +63,7 @@ Deno.serve(async (req: Request) => {
   const sb = getServiceClient();
   if (!(await isAgency(req, sb))) return jsonRes({ error: "unauthorized" }, 401);
 
-  let body: { threadId?: string; contact?: string } = {};
+  let body: { threadId?: string; contact?: string; box?: string } = {};
   try {
     body = await req.json();
   } catch {
@@ -74,12 +75,10 @@ Deno.serve(async (req: Request) => {
 
   let token: string;
   try {
-    token = await getAccessToken(sb);
+    token = await boxToken(sb, parseBox(body.box), "read");
   } catch (e) {
-    const msg = (e as Error)?.message ?? "";
-    if (msg === "not_connected" || msg === "invalid_grant")
-      return jsonRes({ error: "google_non_connecte" }, 409);
-    return jsonRes({ error: "token_indisponible", detail: msg.slice(0, 160) }, 502);
+    const be = boxError(e);
+    return jsonRes({ error: be.error }, be.status);
   }
 
   const r = await fetch(`${GMAIL}/threads/${encodeURIComponent(threadId)}?format=full`, {

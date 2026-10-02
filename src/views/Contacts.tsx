@@ -390,7 +390,7 @@ export function Contacts() {
     let alive = true;
     setHistoryBusy(true);
     (async () => {
-      const { data, error } = await supabase.functions.invoke("gmail-history", { body: { contact: email } });
+      const { data, error } = await supabase.functions.invoke("gmail-history", { body: { contact: email, box: "all" } }); // partnerships@ + talent@
       let res = data as { ok?: boolean; messages?: MailMsg[] } | null;
       if (error && (error as { context?: { json?: () => Promise<unknown> } }).context?.json)
         res = (await (error as { context: { json: () => Promise<unknown> } }).context.json().catch(() => null)) as typeof res;

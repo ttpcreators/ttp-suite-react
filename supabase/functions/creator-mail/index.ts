@@ -26,6 +26,7 @@
 
 import sanitizeHtml from "npm:sanitize-html@2.13.0";
 import { getServiceClient, getAccessToken, corsHeaders } from "../_shared/google.ts";
+import { serviceAccountToken, talentAddress } from "../_shared/gmailBox.ts";
 import {
   aliasQuery, brandOf, displayName, header, isVisibleMessage, normEmail, threadMatches,
   type GHeader, type GMessageLite,
@@ -73,48 +74,9 @@ async function whoAmI(req: Request, sb: Sb): Promise<Me | null> {
 // ---------------------------------------------------------------------------
 // Jeton Gmail : compte de service (si configuré) sinon connexion agence
 // ---------------------------------------------------------------------------
-let saToken: { token: string; exp: number } | null = null;
-
-function b64url(bytes: Uint8Array | string): string {
-  const bin = typeof bytes === "string" ? bytes : String.fromCharCode(...bytes);
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-async function serviceAccountToken(rawKey: string, subject: string): Promise<string> {
-  if (saToken && saToken.exp > Date.now() + 60_000) return saToken.token;
-  const key = JSON.parse(rawKey) as { client_email: string; private_key: string };
-  const pem = key.private_key.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
-  const der = Uint8Array.from(atob(pem), (c) => c.charCodeAt(0));
-  const cryptoKey = await crypto.subtle.importKey(
-    "pkcs8", der, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"],
-  );
-  const now = Math.floor(Date.now() / 1000);
-  const unsigned =
-    b64url(JSON.stringify({ alg: "RS256", typ: "JWT" })) + "." +
-    b64url(JSON.stringify({
-      iss: key.client_email, sub: subject, aud: "https://oauth2.googleapis.com/token",
-      scope: "https://www.googleapis.com/auth/gmail.readonly", iat: now, exp: now + 3600,
-    }));
-  const sig = new Uint8Array(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", cryptoKey, new TextEncoder().encode(unsigned)));
-  const r = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: `${unsigned}.${b64url(sig)}`,
-    }),
-  });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok || !d.access_token) throw new Error("sa_token_failed");
-  saToken = { token: d.access_token, exp: Date.now() + Number(d.expires_in ?? 3600) * 1000 };
-  return saToken.token;
-}
-
 async function gmailToken(sb: Sb): Promise<string> {
-  const saKey = Deno.env.get("GMAIL_SA_KEY");
-  const subject = Deno.env.get("GMAIL_IMPERSONATE");
-  if (saKey && subject) return serviceAccountToken(saKey, subject);
-  return getAccessToken(sb);
+  // talent@ via le compte de service s'il est configuré, sinon la connexion de l'app.
+  return talentAddress() ? serviceAccountToken("https://www.googleapis.com/auth/gmail.readonly") : getAccessToken(sb);
 }
 
 class HttpError extends Error {
@@ -259,6 +221,17 @@ async function ownedThread(token: string, s: Settings, threadId: string): Promis
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
+/** Un message vient-il de l'agence (domaine ttpcreators.pro) ? */
+const fromAgency = (m: GMessage) =>
+  (header(m.payload?.headers ?? [], "From").match(/[^\s<>"]+@[^\s<>"]+/)?.[0] ?? "").toLowerCase().endsWith("@" + AGENCY_DOMAIN);
+
+/**
+ * Statut automatique tant que l'agence n'en a pas choisi un : « Nouvelle demande »,
+ * puis « En négociation » dès que l'agence a répondu dans le fil. Un statut choisi
+ * à la main (table creator_mail_threads) l'emporte toujours.
+ */
+const autoStatus = (msgs: GMessage[]) => (msgs.slice(1).some(fromAgency) ? "negociation" : "nouvelle");
+
 async function gmailThreads(token: string, s: Settings): Promise<GThread[]> {
   return cached(`l:${s.alias ?? ""}:${s.label_id ?? ""}`, 60_000, async () => {
     const ids = new Set<string>();
@@ -309,7 +282,7 @@ async function listThreads(sb: Sb, token: string, s: Settings) {
         excerpt: decodeEntities(last.snippet ?? "").slice(0, 220),
         ts: Number(last.internalDate ?? 0),
         count: msgs.length,
-        status: row?.status ?? "nouvelle",
+        status: row?.status ?? autoStatus(msgs),
         notes: noteCount.get(t.id) ?? 0,
       };
     })
@@ -354,7 +327,7 @@ async function threadView(sb: Sb, token: string, s: Settings, threadId: string) 
     id: threadId,
     subject: header(first?.payload?.headers ?? [], "Subject") || "(sans objet)",
     brand: (row as { brand?: string } | null)?.brand || brandOf((t.messages ?? []).map(lite), AGENCY_DOMAIN),
-    status: (row as { status?: string } | null)?.status ?? "nouvelle",
+    status: (row as { status?: string } | null)?.status ?? autoStatus((t.messages ?? []).filter((x) => isVisibleMessage(lite(x)))),
     messages,
     notes: notes ?? [],
   };

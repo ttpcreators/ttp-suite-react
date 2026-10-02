@@ -12,11 +12,14 @@
 // avancent sans que Marc ouvre quoi que ce soit.
 //
 // Appelé par pg_cron toutes les heures (Bearer CRON_SECRET) OU par l'agence
-// (JWT) pour un passage manuel. Curseur : blob clé `gmailReconcileState.lastTs`.
+// (JWT) pour un passage manuel. Curseur : blob clé `gmailReconcileState`
+// ({ lastTs } pour partnerships@, { talentLastTs } pour talent@ : les DEUX boîtes
+// sont scannées, talent@ via le compte de service si configuré).
 // 1er passage : regarde 24 h en arrière (petit amorçage, pas d'historique massif).
 // ============================================================================
 
 import { getServiceClient, getAccessToken, corsHeaders, timingSafeEqualStr } from "../_shared/google.ts";
+import { boxToken, talentAddress } from "../_shared/gmailBox.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -70,43 +73,66 @@ Deno.serve(async (req: Request) => {
   const sb = getServiceClient();
   if (!(await authorized(req, sb))) return jsonRes({ error: "unauthorized" }, 401);
 
-  let token: string;
-  try {
-    token = await getAccessToken(sb);
-  } catch {
-    return jsonRes({ ok: true, skipped: "google_non_connecte" });
+  type Sent = { id: string; ts: number; to: string[] };
+
+  /** Mails ENVOYÉS depuis `lastTs` dans une boîte (null si la lecture échoue). */
+  async function scanSent(token: string, lastTs: number): Promise<Sent[] | null> {
+    const q = encodeURIComponent(`in:sent after:${Math.floor(lastTs / 1000)}`);
+    const listRes = await fetch(`${GMAIL}/messages?q=${q}&maxResults=50`, { headers: { Authorization: `Bearer ${token}` } });
+    const list = await listRes.json().catch(() => ({}));
+    if (!listRes.ok) return null;
+    const ids: string[] = ((list as { messages?: { id: string }[] }).messages ?? []).map((m) => m.id);
+    const metas = await Promise.all(
+      ids.map(async (id): Promise<Sent | null> => {
+        const mr = await fetch(`${GMAIL}/messages/${id}?format=metadata&metadataHeaders=To&metadataHeaders=Cc`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!mr.ok) return null;
+        const m = await mr.json().catch(() => null);
+        if (!m) return null;
+        const ts = Number(m.internalDate ?? 0);
+        if (!ts || ts <= lastTs) return null;
+        const headers: Header[] = m.payload?.headers ?? [];
+        const h = (n: string) => headers.find((x) => x.name.toLowerCase() === n)?.value ?? "";
+        const to = [...parseEmails(h("to")), ...parseEmails(h("cc"))];
+        return to.length ? { id: m.id, ts, to } : null;
+      }),
+    );
+    return metas.filter((x): x is Sent => x !== null);
   }
 
   const { id: blobId, obj: blob } = await readBlob(sb);
-  const state = (blob.gmailReconcileState as { lastTs?: number }) ?? {};
-  // 1er passage : petit amorçage de 24 h (jamais tout l'historique).
-  const lastTs = Number(state.lastTs ?? 0) || Date.now() - 24 * 3600e3;
+  const state = (blob.gmailReconcileState as { lastTs?: number; talentLastTs?: number }) ?? {};
+  // 1er passage (par boîte) : petit amorçage de 24 h (jamais tout l'historique).
+  const dayAgo = Date.now() - 24 * 3600e3;
+  const nextState: { lastTs?: number; talentLastTs?: number } = { ...state };
+  const sent: Sent[] = [];
+  let scanned = 0;
 
-  // Mails ENVOYÉS depuis le dernier passage.
-  const q = encodeURIComponent(`in:sent after:${Math.floor(lastTs / 1000)}`);
-  const listRes = await fetch(`${GMAIL}/messages?q=${q}&maxResults=50`, { headers: { Authorization: `Bearer ${token}` } });
-  const list = await listRes.json().catch(() => ({}));
-  if (!listRes.ok) return jsonRes({ ok: false, error: "lecture_echouee" }, 502);
-  const ids: string[] = ((list as { messages?: { id: string }[] }).messages ?? []).map((m) => m.id);
+  // partnerships@ (connexion de l'app).
+  try {
+    const lastTs = Number(state.lastTs ?? 0) || dayAgo;
+    const got = await scanSent(await getAccessToken(sb), lastTs);
+    if (got) {
+      scanned++;
+      sent.push(...got);
+      nextState.lastTs = Math.max(lastTs, ...got.map((x) => x.ts));
+    }
+  } catch { /* Google non connecté : on passe à talent@ */ }
 
-  type Sent = { id: string; ts: number; to: string[] };
-  const metas = await Promise.all(
-    ids.map(async (id): Promise<Sent | null> => {
-      const mr = await fetch(`${GMAIL}/messages/${id}?format=metadata&metadataHeaders=To&metadataHeaders=Cc`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!mr.ok) return null;
-      const m = await mr.json().catch(() => null);
-      if (!m) return null;
-      const ts = Number(m.internalDate ?? 0);
-      if (!ts || ts <= lastTs) return null;
-      const headers: Header[] = m.payload?.headers ?? [];
-      const h = (n: string) => headers.find((x) => x.name.toLowerCase() === n)?.value ?? "";
-      const to = [...parseEmails(h("to")), ...parseEmails(h("cc"))];
-      return to.length ? { id: m.id, ts, to } : null;
-    }),
-  );
-  const sent = metas.filter((x): x is Sent => x !== null).sort((a, b) => a.ts - b.ts);
-  let maxTs = lastTs;
-  for (const s of sent) if (s.ts > maxTs) maxTs = s.ts;
+  // talent@ (compte de service, lecture seule).
+  if (talentAddress()) {
+    try {
+      const lastTs = Number(state.talentLastTs ?? 0) || dayAgo;
+      const got = await scanSent(await boxToken(sb, "talent", "read"), lastTs);
+      if (got) {
+        scanned++;
+        sent.push(...got);
+        nextState.talentLastTs = Math.max(lastTs, ...got.map((x) => x.ts));
+      }
+    } catch { /* compte de service indisponible : partnerships@ seul */ }
+  }
+
+  if (!scanned) return jsonRes({ ok: true, skipped: "aucune_boite" });
+  sent.sort((a, b) => a.ts - b.ts);
 
   // Carnet : tous les contacts avec email, indexés par adresse.
   const { data: contactsRaw } = await sb.from("contacts").select("id,email,last_contacted,touches");
@@ -155,6 +181,6 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  await writeBlobKey(sb, blobId, blob, "gmailReconcileState", { lastTs: maxTs });
+  await writeBlobKey(sb, blobId, blob, "gmailReconcileState", nextState);
   return jsonRes({ ok: true, mails: sent.length, contacts: updated, touches: touchesAdded });
 });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft, AtSign, Inbox, Loader2, Mail, MessageSquare, RefreshCw, Send, Settings2, Tag,
+  ArrowLeft, AtSign, Inbox, Info, Loader2, Mail, MessageSquare, RefreshCw, Send, Settings2, Tag,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
@@ -362,6 +362,15 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
   return (
     <div className="flex flex-col gap-4">
       {kpis}
+      {/* Comment les statuts avancent (affiché pour éviter toute confusion). */}
+      <p className="-mt-1 flex items-start gap-2 px-1 text-[12px] leading-relaxed text-muted-foreground">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span>
+          {asAgency
+            ? "Statut automatique : « Nouvelle demande », puis « En négociation » dès que l'agence répond. Ouvre un échange et choisis « Validé » ou « Refusé » en haut à droite quand c'est décidé."
+            : "Chaque échange avance tout seul : « Nouvelle demande », puis « En négociation » dès que ton agence répond. « Validé » ou « Refusé » est indiqué par ton agence quand c'est décidé."}
+        </span>
+      </p>
       {/* Messagerie : liste + lecture dans un seul panneau (hauteur fixe sur ordinateur, défilement interne). */}
       <DashPanel className="flex min-w-0 flex-col lg:grid lg:h-[min(820px,calc(100dvh-300px))] lg:min-h-[520px] lg:grid-cols-[minmax(300px,370px)_minmax(0,1fr)]">
         {list}

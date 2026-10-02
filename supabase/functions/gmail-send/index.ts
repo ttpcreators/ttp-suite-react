@@ -5,14 +5,16 @@
 // Gmail (scope gmail.send). Réservé à l'AGENCE (verify_jwt=true + rôle agence).
 // Réutilise getAccessToken() (refresh auto du token, comme la sync Agenda).
 //
-// Entrée : { to, subject, html, threadId?, inReplyTo?, source?, contactName? }.
+// Entrée : { to, subject, html, threadId?, inReplyTo?, source?, contactName?, box? }.
+//  - box = "partnerships" (défaut, connexion de l'app) | "talent" (compte de service).
 //  - threadId + inReplyTo : pour threader une relance dans le même fil (et
 //    permettre la détection de réponse).
 // Sortie : { ok, id, threadId }.
 // Journalise dans email_activity (best-effort).
 // ============================================================================
 
-import { getServiceClient, getAccessToken, corsHeaders } from "../_shared/google.ts";
+import { getServiceClient, corsHeaders } from "../_shared/google.ts";
+import { boxToken, boxError, parseBox } from "../_shared/gmailBox.ts";
 
 const GMAIL_SEND = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 
@@ -53,7 +55,7 @@ Deno.serve(async (req: Request) => {
 
   let body: {
     to?: string; subject?: string; html?: string;
-    threadId?: string; inReplyTo?: string; source?: string; contactName?: string;
+    threadId?: string; inReplyTo?: string; source?: string; contactName?: string; box?: string;
     attachments?: { filename?: string; mimeType?: string; contentBase64?: string }[];
   } = {};
   try {
@@ -69,15 +71,16 @@ Deno.serve(async (req: Request) => {
   if (!subject) return jsonRes({ error: "objet_requis" }, 400);
   if (!html.trim()) return jsonRes({ error: "contenu_requis" }, 400);
 
-  // Token OAuth Google (refresh auto). not_connected → l'agence doit (re)connecter Google.
+  // Jeton de la boîte d'envoi : connexion de l'app (partnerships@) ou compte de service (talent@).
+  const box = parseBox(body.box);
   let token: string;
   try {
-    token = await getAccessToken(sb);
+    token = await boxToken(sb, box, "send");
   } catch (e) {
-    const msg = (e as Error)?.message ?? "";
-    if (msg === "not_connected" || msg === "invalid_grant")
-      return jsonRes({ error: "google_non_connecte", detail: "Reconnecte Google (avec les droits Gmail) dans l'app." }, 409);
-    return jsonRes({ error: "token_indisponible", detail: msg.slice(0, 160) }, 502);
+    const be = boxError(e);
+    const detail = be.error === "google_non_connecte" ? "Reconnecte Google (avec les droits Gmail) dans l'app."
+      : be.error === "talent_droit_manquant" ? "Autorise l'envoi (gmail.send) pour le compte de service dans admin.google.com." : undefined;
+    return jsonRes({ error: be.error, detail }, be.status);
   }
 
   // Construit le message MIME. Entêtes de base + threading éventuel.
@@ -157,5 +160,5 @@ Deno.serve(async (req: Request) => {
     });
   } catch { /* table absente / RLS : on ignore */ }
 
-  return jsonRes({ ok: true, id, threadId });
+  return jsonRes({ ok: true, id, threadId, box });
 });
