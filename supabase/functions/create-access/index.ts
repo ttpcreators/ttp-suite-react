@@ -5,8 +5,11 @@
 // Supabase — SANS déconnecter l'agence (contrairement à un signUp côté client).
 // La clé service_role reste côté serveur (getServiceClient).
 //
-// AUTH (config.toml -> verify_jwt = true) : réservé à l'AGENCE.
+// AUTH (config.toml -> verify_jwt = true) : réservé aux FONDATEURS.
 // Entrée : { email, password, role: 'creator'|'agency', creator? }.
+// « Nouveau mot de passe » : { action: 'reset', email, password } → remplace le mot
+// de passe d'un compte existant. Le mot de passe n'est JAMAIS stocké par l'app :
+// il est seulement montré une fois au fondateur, pour le transmettre.
 // ============================================================================
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
@@ -33,7 +36,7 @@ Deno.serve(async (req: Request) => {
   const sb = getServiceClient();
   if (!(await isFounder(req, sb))) return jsonRes({ error: "unauthorized" }, 401);
 
-  let body: { email?: string; password?: string; role?: string; creator?: string; agencyRole?: string } = {};
+  let body: { action?: string; email?: string; password?: string; role?: string; creator?: string; agencyRole?: string } = {};
   try {
     body = await req.json();
   } catch {
@@ -48,6 +51,22 @@ Deno.serve(async (req: Request) => {
 
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return jsonRes({ error: "email_invalide" }, 400);
   if (password.length < 6) return jsonRes({ error: "mot_de_passe_trop_court" }, 400);
+
+  // Nouveau mot de passe pour un compte qui existe déjà (perdu, oublié…).
+  if (body.action === "reset") {
+    let userId: string | null = null;
+    for (let page = 1; page <= 25 && !userId; page++) {
+      const { data, error } = await sb.auth.admin.listUsers({ page, perPage: 200 });
+      if (error) return jsonRes({ error: "reset_echoue" }, 502);
+      userId = data.users.find((u) => (u.email ?? "").toLowerCase() === email)?.id ?? null;
+      if (data.users.length < 200) break;
+    }
+    if (!userId) return jsonRes({ error: "compte_introuvable" }, 404);
+    const { error: upErr } = await sb.auth.admin.updateUserById(userId, { password });
+    if (upErr) return jsonRes({ error: "reset_echoue", detail: String(upErr.message).slice(0, 200) }, 400);
+    return jsonRes({ ok: true, email });
+  }
+
   if (role === "creator" && !creator) return jsonRes({ error: "createur_requis" }, 400);
 
   // Création du compte (email déjà confirmé → connexion immédiate).

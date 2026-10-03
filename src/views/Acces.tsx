@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Trash2, RefreshCw, Copy, X, Crown } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Trash2, RefreshCw, Copy, X, Crown, KeyRound } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
@@ -10,7 +10,7 @@ import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
-import { ActionMenu } from "@/components/ui/action-menu";
+import { ActionMenu, type ActionItem } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -28,12 +28,25 @@ type AccessAccount = {
 
 type AgencyAccount = { user_id: string; email: string; agency_role: string; display_name: string | null; last_sign_in_at: string | null };
 
+/** Entrée « Nouveau mot de passe » du menu ⋯ d'un compte (fondateurs). */
+const resetItem = (email: string, onReset: (email: string) => void): ActionItem => ({
+  key: "reset",
+  label: "Nouveau mot de passe",
+  icon: KeyRound,
+  onClick: () => onReset(email),
+  confirm: {
+    title: "Nouveau mot de passe",
+    message: `Créer un nouveau mot de passe pour ${email} ? L'ancien ne marchera plus : tu verras le nouveau une seule fois, pour le transmettre.`,
+    confirmLabel: "Créer",
+  },
+});
+
 /**
  * Comptes AGENCE réels, lus dans la base (fonction agency_accounts, fondateurs
  * seulement) : qui est propriétaire (fondateur) et qui est membre. Masqué tant
  * que le SQL « équipe, activité, routines » n'est pas lancé.
  */
-function AgencyAccountsPanel() {
+function AgencyAccountsPanel({ onReset }: { onReset: (email: string) => void }) {
   const [list, setList] = useState<AgencyAccount[] | null>(null);
   useEffect(() => {
     void supabase.rpc("agency_accounts").then(({ data, error }) => setList(error ? null : ((data ?? []) as AgencyAccount[])));
@@ -59,6 +72,7 @@ function AgencyAccountsPanel() {
             <AnimatedBadge status={a.agency_role === "founder" ? "success" : "neutral"} size="sm">
               {a.agency_role === "founder" ? "Propriétaire" : "Membre"}
             </AnimatedBadge>
+            <ActionMenu items={[resetItem(a.email, onReset)]} />
           </li>
         ))}
       </ul>
@@ -77,7 +91,7 @@ function genPwd(): string {
   const a = "ABCDEFGHJKLMNPQRSTUVWXYZ";
   const b = "abcdefghijkmnpqrstuvwxyz";
   const n = "23456789";
-  const pick = (s: string, k: number) => Array.from({ length: k }, () => s[Math.floor(Math.random() * s.length)]).join("");
+  const pick = (s: string, k: number) => Array.from(crypto.getRandomValues(new Uint32Array(k)), (x) => s[x % s.length]).join("");
   return `${pick(a, 2)}${pick(b, 4)}${pick(n, 3)}!`;
 }
 
@@ -90,7 +104,7 @@ function stripPwd(list: AccessAccount[]): AccessAccount[] {
   });
 }
 
-function AccountRow({ a, onDelete, photoUrl }: { a: AccessAccount; onDelete: (a: AccessAccount) => void; photoUrl?: string | null }) {
+function AccountRow({ a, onDelete, onReset, photoUrl }: { a: AccessAccount; onDelete: (a: AccessAccount) => void; onReset: (email: string) => void; photoUrl?: string | null }) {
   const avatarSource = a.role === "creator" && a.creator ? titleCase(a.creator) : a.email;
   const subtitle =
     a.role === "creator"
@@ -120,9 +134,10 @@ function AccountRow({ a, onDelete, photoUrl }: { a: AccessAccount; onDelete: (a:
       )}
 
       <div className="flex shrink-0 items-center gap-2">
-        {/* Mot de passe plus affiché ni stocké : montré une seule fois à la création. */}
+        {/* Mot de passe jamais stocké : montré une seule fois (création ou « Nouveau mot de passe »). */}
         <ActionMenu
           items={[
+            resetItem(a.email, onReset),
             {
               key: "del",
               label: "Retirer de la liste",
@@ -170,8 +185,12 @@ export function Acces() {
   useEffect(() => {
     setLocal(null);
   }, [accounts]);
-  // Identifiants à montrer UNE fois après création (jamais persistés).
-  const [created, setCreated] = useState<{ email: string; pwd: string } | null>(null);
+  // Identifiants à montrer UNE fois après création ou « Nouveau mot de passe » (jamais persistés).
+  const [created, setCreated] = useState<{ email: string; pwd: string; reset?: boolean } | null>(null);
+  const createdRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (created) createdRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [created]);
   // Compte créé mais liste non enregistrée : on peut réessayer sans recréer le compte.
   const [pendingEntry, setPendingEntry] = useState<AccessAccount | null>(null);
 
@@ -231,6 +250,34 @@ export function Acces() {
       setFormOpen(false);
       resetForm();
       await saveEntry(entry);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Nouveau mot de passe pour un compte existant (fondateurs ; vérifié aussi côté serveur).
+  const resetPassword = async (mail: string) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const newPwd = genPwd();
+      const { data, error: fnErr } = await supabase.functions.invoke("create-access", {
+        body: { action: "reset", email: mail.trim().toLowerCase(), password: newPwd },
+      });
+      let res = data as { ok?: boolean; error?: string } | null;
+      if (fnErr && (fnErr as { context?: { json?: () => Promise<unknown> } }).context?.json)
+        res = (await (fnErr as { context: { json: () => Promise<unknown> } }).context.json().catch(() => null)) as typeof res;
+      if (fnErr || !res?.ok) {
+        const map: Record<string, string> = {
+          compte_introuvable: "Aucun compte de connexion pour cet email",
+          unauthorized: "Action réservée aux fondateurs",
+          email_invalide: "Email invalide",
+        };
+        toast(map[res?.error ?? ""] ?? "Nouveau mot de passe impossible, réessaie");
+        return;
+      }
+      setCreated({ email: mail, pwd: newPwd, reset: true });
+      toast("Nouveau mot de passe créé ✓ Copie-le maintenant");
     } finally {
       setBusy(false);
     }
@@ -364,16 +411,16 @@ export function Acces() {
 
       {form}
 
-      <AgencyAccountsPanel />
+      <AgencyAccountsPanel onReset={(m) => void resetPassword(m)} />
 
       {/* Identifiants affichés une seule fois (non stockés dans l'app). */}
       {created && (
-        <div className="mb-4 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+        <div ref={createdRef} className="mb-4 scroll-mt-4 rounded-2xl border border-border bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-[13px] font-semibold text-foreground">Identifiants à transmettre</div>
+              <div className="text-[13px] font-semibold text-foreground">{created.reset ? "Nouveau mot de passe à transmettre" : "Identifiants à transmettre"}</div>
               <div className="mt-0.5 text-[11px] text-faint">
-                Le mot de passe n'est pas conservé dans l'app : copie-le maintenant.
+                {created.reset ? "L'ancien ne marche plus. " : ""}Le mot de passe n'est pas conservé dans l'app : copie-le maintenant.
               </div>
             </div>
             <button
@@ -455,6 +502,7 @@ export function Acces() {
               key={`${a.email}-${i}`}
               a={a}
               onDelete={removeAccount}
+              onReset={(m) => void resetPassword(m)}
               photoUrl={a.role === "creator" && a.creator ? creators.find((c) => c.name.trim().toLowerCase() === a.creator!.trim().toLowerCase())?.photo_url ?? null : null}
             />
           ))}
