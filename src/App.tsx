@@ -17,7 +17,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PageFrame } from "@/components/ui/page-header";
 import { Login } from "@/components/Login";
-import { NAV, findItem, viewTitle, type NavItem, type ViewId } from "@/lib/nav";
+import { NAV, findItem, findPinnable, viewTitle, type NavItem, type ViewId } from "@/lib/nav";
 import { NavSubContext, NavSubSetContext } from "@/lib/navSub";
 import { setTeamSession } from "@/lib/team";
 import { supabase } from "@/lib/supabase";
@@ -551,7 +551,7 @@ export default function App() {
   // Famille « Raccourcis » (pages épinglées) ajoutée en tête de la nav mobile aussi.
   const pinnedNavItems = pinned
     .filter(canSee)
-    .map((id) => findItem(id))
+    .map((id) => findPinnable(id))
     .filter((i): i is NavItem => !!i)
     .map((i) => ({ id: i.id, label: i.label, icon: i.icon, children: i.children }));
   const navFiltered = NAV.map((f) => ({ ...f, items: f.items.filter((i) => canSee(i.id)) })).filter((f) => f.items.length > 0);
@@ -813,7 +813,7 @@ export default function App() {
                     </section>
                     {/* Volet secondaire (à côté) */}
                     <section className="flex min-w-0 flex-1 flex-col overflow-hidden border-t border-border md:border-t-0">
-                      <PaneHeader title={findItem(splitShown)?.label ?? ""} onClose={() => setSplitView(null)} />
+                      <PaneHeader title={findPinnable(splitShown)?.label ?? viewTitle(splitShown)} onClose={() => setSplitView(null)} />
                       <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4 md:px-6 md:pb-6">
                         <ErrorBoundary variant="inline" label="Ce volet" resetKey={`split:${splitShown}`}>
                           <Suspense fallback={PANE_FALLBACK}>
@@ -897,7 +897,7 @@ export default function App() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="truncate px-3 py-1.5 text-[12px] font-medium text-muted-foreground">
-                {findItem(ctxMenu.id)?.label}
+                {findPinnable(ctxMenu.id)?.label}
               </div>
               <button
                 type="button"

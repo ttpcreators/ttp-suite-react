@@ -37,6 +37,7 @@ import {
   FolderOpen,
   History,
   type LucideIcon,
+  Mail,
 } from "lucide-react";
 
 export type ViewId =
@@ -75,7 +76,8 @@ export type ViewId =
   | "corbeille";
 
 /** Sous-page d'une page (3e niveau de nav) : `id` = onglet ciblé dans la vue parente. */
-export type NavChild = { id: string; label: string };
+/** Sous-page. `pinnable` : c'est aussi une vraie page, épinglable aux raccourcis (avec son icône). */
+export type NavChild = { id: string; label: string; icon?: LucideIcon; pinnable?: boolean };
 export type NavItem = { id: ViewId; label: string; icon: LucideIcon; children?: NavChild[] };
 export type NavFamily = {
   id: string;
@@ -155,7 +157,7 @@ export const NAV: NavFamily[] = [
         id: "whatsapp",
         label: "Prospection",
         icon: MessageCircle,
-        children: [{ id: "mails", label: "Mails" }],
+        children: [{ id: "mails", label: "Mails", icon: Mail, pinnable: true }],
       },
       { id: "prospection", label: "Pipeline", icon: Search },
       { id: "vivier", label: "Scouting", icon: UserPlus },
@@ -205,6 +207,17 @@ export const ALL_ITEMS: NavItem[] = NAV.flatMap((f) => f.items);
 
 export function findItem(id: ViewId): NavItem | undefined {
   return ALL_ITEMS.find((i) => i.id === id);
+}
+
+/** Page épinglable : une entrée de nav, ou une sous-page qui est aussi une page (Mails). */
+export function findPinnable(id: ViewId): NavItem | undefined {
+  const it = findItem(id);
+  if (it) return it;
+  for (const i of ALL_ITEMS) {
+    const c = (i.children ?? []).find((x) => x.id === id && x.pinnable);
+    if (c) return { id: c.id as ViewId, label: c.label, icon: c.icon ?? i.icon };
+  }
+  return undefined;
 }
 
 /** Titre affiché d'une vue : entrée de nav, sinon SOUS-PAGE portant le même id

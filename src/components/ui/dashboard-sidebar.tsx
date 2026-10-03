@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL;
 
-export type SbChild = { id: string; label: string };
+/** Sous-page ; `pinnable` = aussi une vraie page, épinglable aux raccourcis (étoile, clic droit). */
+export type SbChild = { id: string; label: string; pinnable?: boolean };
 export type SbItem = { id: string; label: string; icon: LucideIcon; badge?: number | string; children?: SbChild[] };
 export type SbGroup = { id: string; label: string; icon: LucideIcon; items: SbItem[] };
 
@@ -226,15 +227,34 @@ function ItemBlock({
             <div className="my-0.5 ml-[17px] flex flex-col gap-0.5 border-l border-foreground/10 pl-2">
               {item.children!.map((c) => {
                 const on = parentActive && activeSub === c.id;
+                const pin = c.pinnable && onTogglePin ? () => onTogglePin(c.id) : null;
+                const pinnedChild = !!(c.pinnable && isPinned?.(c.id));
                 return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => onSelect(item.id, c.id)}
-                    className={cn(sbItemCls(on), "py-[5px]")}
-                  >
-                    <span className="truncate">{c.label}</span>
-                  </button>
+                  <div key={c.id} className="group relative flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => onSelect(item.id, c.id)}
+                      onContextMenu={c.pinnable && onItemContext ? (e) => onItemContext(c.id, e) : undefined}
+                      className={cn(sbItemCls(on), "py-[5px]", pin && "pr-9")}
+                    >
+                      <span className="truncate">{c.label}</span>
+                    </button>
+                    {pin && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          pin();
+                        }}
+                        title={pinnedChild ? "Détacher des raccourcis" : "Épingler aux raccourcis"}
+                        aria-label={pinnedChild ? "Détacher des raccourcis" : "Épingler aux raccourcis"}
+                        aria-pressed={pinnedChild}
+                        className={cn("absolute right-1.5 focus-visible:opacity-100", ghostBtn, pinnedChild ? "opacity-100" : "opacity-0 group-hover:opacity-100")}
+                      >
+                        <Star className="h-3.5 w-3.5" style={pinnedChild ? { stroke: `url(#${ACCENT_GRAD_ID})`, fill: `url(#${ACCENT_GRAD_ID})` } : undefined} />
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>

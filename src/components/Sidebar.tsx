@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { Building2, LogOut, Moon, PanelLeftOpen, Settings, Sparkles, Star, Sun, Trash2 } from "lucide-react";
-import { NAV, findItem, type ViewId } from "@/lib/nav";
+import { NAV, findPinnable, type ViewId } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { AgencyAvatar } from "@/components/ui/agency-avatar";
@@ -68,7 +68,7 @@ export function Sidebar({
       .filter((g) => g.items.length > 0);
     const items = (pinned ?? [])
       .filter((id) => !isHidden(id))
-      .map((id) => findItem(id))
+      .map((id) => findPinnable(id))
       .filter((i): i is NonNullable<typeof i> => !!i)
       .map((i) => ({ id: i.id, label: i.label, icon: i.icon }));
     return items.length ? [{ id: "__pins__", label: "Raccourcis", icon: Star, items }, ...base] : base;

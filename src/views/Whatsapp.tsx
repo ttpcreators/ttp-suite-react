@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { MailAvatar } from "@/components/mail-avatar";
+import { brandDomainFrom } from "@/lib/mailAvatar";
 import {
   MessageCircle, Mail, Phone, AtSign, Check, Clock, Send, ScrollText, ChevronDown, UserRound,
 } from "lucide-react";
@@ -249,6 +250,8 @@ export function WhatsappView() {
         <MailAvatar
           name={x.r.person !== "—" ? x.r.person : x.r.brand}
           email={x.r.email}
+          brand={x.r.brand}
+          brandDomain={brandDomainFrom(rows ?? [], x.r.brand)}
           className="h-9 w-9 rounded-[9px]"
           fallback={initials(x.r.person !== "—" ? x.r.person : x.r.brand)}
           fallbackClassName="bg-panel text-[11px] font-bold text-foreground"

@@ -11,17 +11,21 @@ const SIZES = { sm: "h-8 w-8 text-[12px]", md: "h-9 w-9 text-[13px]", lg: "h-10 
  * `fallback` remplace la lettre en couleur quand rien n'est trouvé (ex. initiales des Contacts).
  */
 export function MailAvatar({
-  name, email, agency, size = "md", className, fallback, fallbackClassName,
+  name, email, agency, size = "md", className, fallback, fallbackClassName, brand, brandDomain,
 }: {
   name: string; email?: string | null; agency?: boolean; size?: keyof typeof SIZES; className?: string;
   fallback?: ReactNode; fallbackClassName?: string;
+  /** Nom de la marque (Contacts, Prospection) : son logo est cherché si l'adresse ne suffit pas. */
+  brand?: string | null;
+  /** Site d'entreprise de la marque, appris d'un autre contact (brandDomainFrom). */
+  brandDomain?: string | null;
 }) {
   const addr = emailOf(email);
   const ref = useRef<HTMLSpanElement | null>(null);
   const [visible, setVisible] = useState(false);
   const [found, setFound] = useState<{ key: string; avatar: Avatar } | null>(null);
   const [broken, setBroken] = useState<string | null>(null);
-  const key = `${agency ? "a" : ""}:${addr}`;
+  const key = `${agency ? "a" : ""}:${addr}|${brand ?? ""}|${brandDomain ?? ""}`;
 
   useEffect(() => {
     const el = ref.current;
@@ -41,13 +45,13 @@ export function MailAvatar({
   }, [visible]);
 
   useEffect(() => {
-    if (!visible || (!addr && !agency)) return;
+    if (!visible || (!addr && !agency && !brand)) return;
     let alive = true;
-    void resolveAvatar(addr, !!agency).then((avatar) => alive && setFound({ key, avatar }));
+    void resolveAvatar(addr, !!agency, { brand, brandDomain }).then((avatar) => alive && setFound({ key, avatar }));
     return () => {
       alive = false;
     };
-  }, [visible, addr, agency, key]);
+  }, [visible, addr, agency, key, brand, brandDomain]);
 
   const avatar = found?.key === key ? found.avatar : null;
   const label = (name || addr).trim();

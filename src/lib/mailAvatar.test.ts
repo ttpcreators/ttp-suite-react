@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avatarCandidates, emailOf, isWebmail, letterColor, logoUrl } from "./mailAvatar";
+import { avatarCandidates, brandDomainFrom, buildBrandDomains, brandKey, emailOf, hostOf, isGenericBrand, isWebmail, letterColor, logoUrl, parentDomain } from "./mailAvatar";
 import { brandAddressOf, type GMessageLite } from "../../supabase/functions/creator-mail/logic.ts";
 
 describe("photos de profil des mails", () => {
@@ -46,5 +46,46 @@ describe("boîtes communes de l'agence", () => {
     expect(SHARED_BOXES.test("talent@ttpcreators.pro")).toBe(true);
     expect(SHARED_BOXES.test("Partnerships@ttpcreators.pro")).toBe(true);
     expect(SHARED_BOXES.test("chloedifranscesco@ttpcreators.pro")).toBe(false);
+  });
+});
+
+describe("plus de logos de marques", () => {
+  it("domaine principal d'un sous-domaine", () => {
+    expect(parentDomain("fr.loreal.com")).toBe("loreal.com");
+    expect(parentDomain("mail.marque.co.uk")).toBe("marque.co.uk");
+    expect(parentDomain("marque.co.uk")).toBe("");
+    expect(parentDomain("sephora.fr")).toBe("");
+    const c = avatarCandidates("julie@fr.loreal.com").map((x) => x.url);
+    expect(c).toEqual([logoUrl("fr.loreal.com"), logoUrl("loreal.com")]);
+  });
+
+  it("une marque en gmail prend le site d'un autre contact de la même marque", () => {
+    const rows = [
+      { brand: "Sephora", email: "netty@gmail.com" },
+      { brand: "SEPHORA ", email: "Julie <julie@sephora.fr>" },
+      { brand: "Sephora", email: "paul@sephora.fr" },
+      { brand: "Sephora", email: "x@agence-rp.com" },
+      { brand: "Freelance", email: "a@freelance-studio.com" },
+    ];
+    const m = buildBrandDomains(rows);
+    expect(m.get(brandKey("Séphora"))).toBe("sephora.fr");
+    expect(m.has(brandKey("Freelance"))).toBe(false);
+    expect(brandDomainFrom(rows, "sephora")).toBe("sephora.fr");
+    const c = avatarCandidates("netty@gmail.com", { brandDomain: "sephora.fr" });
+    expect(c.map((x) => x.url)).toEqual([logoUrl("sephora.fr")]);
+    // Jamais deux fois le même logo.
+    expect(avatarCandidates("julie@sephora.fr", { brandDomain: "sephora.fr" })).toHaveLength(1);
+  });
+
+  it("noms génériques : aucun logo cherché", () => {
+    expect(isGenericBrand("Freelance")).toBe(true);
+    expect(isGenericBrand("—")).toBe(true);
+    expect(isGenericBrand("Agence RP")).toBe(true);
+    expect(isGenericBrand("Aroma-Zone")).toBe(false);
+  });
+
+  it("site officiel → domaine", () => {
+    expect(hostOf("https://www.sephora.fr/")).toBe("sephora.fr");
+    expect(hostOf("pas un site")).toBe("");
   });
 });

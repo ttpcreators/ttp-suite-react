@@ -9,6 +9,7 @@ import { useAppState, type AppState } from "@/lib/appState";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { MailAvatar } from "@/components/mail-avatar";
+import { brandDomainFrom } from "@/lib/mailAvatar";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
@@ -977,6 +978,8 @@ export function Contacts() {
               <MailAvatar
                 name={row.person}
                 email={row.email}
+                brand={row.brand}
+                brandDomain={brandDomainFrom(currentRows ?? [], row.brand)}
                 className="h-[38px] w-[38px] rounded-[9px]"
                 fallback={initials(row.person)}
                 fallbackClassName="bg-panel text-[11px] font-bold text-foreground"
@@ -1094,6 +1097,8 @@ export function Contacts() {
               <MailAvatar
                 name={selected.person}
                 email={selected.email}
+                brand={selected.brand}
+                brandDomain={brandDomainFrom(currentRows ?? [], selected.brand)}
                 className="h-11 w-11 rounded-xl"
                 fallback={initials(selected.person)}
                 fallbackClassName="bg-muted text-sm font-bold text-foreground"
