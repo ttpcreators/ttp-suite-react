@@ -4,6 +4,7 @@ import { NAV, findItem, type ViewId } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { AgencyAvatar } from "@/components/ui/agency-avatar";
+import { useMyName } from "@/lib/useMyName";
 import {
   SidebarBrand,
   SidebarLogo,
@@ -54,6 +55,8 @@ export function Sidebar({
   userId?: string;
 }) {
   const { dark, toggle: toggleTheme } = useTheme();
+  // Nom de la personne connectée (chacun le sien), à la place de « Marc & Gianni ».
+  const myName = useMyName(userId);
   const isPinned = (id: string) => (pinned ?? []).includes(id as ViewId);
   const isHidden = (id: string) => (hidden ?? []).includes(id as ViewId);
   // Section « Raccourcis » (pages épinglées) ajoutée en TÊTE, sans sous-pages
@@ -154,7 +157,7 @@ export function Sidebar({
       <SidebarUser
         avatar={<AgencyAvatar userId={userId} readOnly className="h-8 w-8" rounded="rounded-full" />}
         menuAvatar={<AgencyAvatar userId={userId} className="h-8 w-8" rounded="rounded-full" />}
-        name="Marc & Gianni"
+        name={myName || "Marc & Gianni"}
         sub="Direction · TTP"
         actions={[
           { icon: Settings, label: "Paramètres", onClick: () => onSelect("parametres") },

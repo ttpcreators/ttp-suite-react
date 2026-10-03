@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent } from "react";
 import { Camera, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
+import { useMyName } from "@/lib/useMyName";
 import { toast } from "@/components/ui/toast";
 
 const BASE = import.meta.env.BASE_URL;
@@ -101,4 +102,10 @@ export function AgencyAvatar({
       <input ref={inputRef} type="file" accept="image/*" aria-label="Fichier photo" onChange={onFile} className="hidden" />
     </div>
   );
+}
+
+/** Prénom de la personne connectée, en texte (pour les endroits sans hook, comme App). */
+export function MyName({ userId, fallback }: { userId?: string; fallback: string }) {
+  const name = useMyName(userId);
+  return <>{name || fallback}</>;
 }

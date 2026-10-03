@@ -23,7 +23,7 @@ import { setTeamSession } from "@/lib/team";
 import { supabase } from "@/lib/supabase";
 import { SearchContext } from "@/lib/search";
 import { ThemeContext } from "@/lib/theme";
-import { AgencyAvatar } from "@/components/ui/agency-avatar";
+import { AgencyAvatar, MyName } from "@/components/ui/agency-avatar";
 
 // Vues chargées à la demande (code-splitting → démarrage plus léger, mobile compris).
 const RosterTabs = lazy(() => import("@/views/RosterTabs").then((m) => ({ default: m.RosterTabs })));
@@ -703,7 +703,7 @@ export default function App() {
         <div className="hidden items-center gap-2.5 rounded-lg bg-surface py-1.5 pl-2 pr-3.5 sm:flex md:hidden">
           <AgencyAvatar userId={session.user.id} />
           <div className="leading-tight">
-            <div className="whitespace-nowrap text-xs font-medium text-foreground">Marc &amp; Gianni</div>
+            <div className="whitespace-nowrap text-xs font-medium text-foreground"><MyName userId={session.user.id} fallback="Marc & Gianni" /></div>
             <div className="whitespace-nowrap text-[10px] text-faint">Direction · TTP</div>
           </div>
         </div>

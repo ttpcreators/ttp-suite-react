@@ -46,6 +46,18 @@ export function guessName(email: string): string {
 }
 
 let myName: string | null = null;
+const nameListeners = new Set<() => void>();
+/** Prévenu quand le prénom de la personne connectée change (barre de gauche). */
+export function onMyNameChange(fn: () => void): () => void {
+  nameListeners.add(fn);
+  return () => {
+    nameListeners.delete(fn);
+  };
+}
+const nameChanged = () => {
+  for (const fn of nameListeners) fn();
+};
+
 /** Prénom de la personne connectée (Paramètres → Ton prénom, sinon deviné depuis l'adresse). */
 export async function myDisplayName(): Promise<string> {
   if (myName) return myName;
@@ -63,7 +75,22 @@ export async function saveMyDisplayName(name: string): Promise<boolean> {
   const { error } = await supabase.rpc("set_my_display_name", { name: name.trim() });
   if (error) return false;
   myName = name.trim() || null;
+  nameChanged();
   return true;
+}
+
+/**
+ * Fondateur : change le nom affiché de n'importe quel compte agence.
+ * Renvoie "ok", "sql" (SQL « nom fondateur » pas encore lancé) ou "erreur".
+ */
+export async function saveAgencyName(userId: string, name: string): Promise<"ok" | "sql" | "erreur"> {
+  const { error } = await supabase.rpc("set_agency_display_name", { target: userId, name: name.trim() });
+  if (error) return /set_agency_display_name|function|schema cache/i.test(error.message) ? "sql" : "erreur";
+  if (userId === teamUid) {
+    myName = name.trim() || null;
+    nameChanged();
+  }
+  return "ok";
 }
 
 /** Prénoms connus des comptes agence (user_id → prénom), pour afficher le journal. */

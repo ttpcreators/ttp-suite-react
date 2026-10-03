@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Trash2, RefreshCw, Copy, X, Crown, KeyRound } from "lucide-react";
+import { Trash2, RefreshCw, Copy, X, Crown, KeyRound, Pencil } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
@@ -14,6 +14,8 @@ import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { AgencyAvatar } from "@/components/ui/agency-avatar";
+import { guessName, saveAgencyName } from "@/lib/team";
 
 type AccessAccount = {
   email: string;
@@ -57,13 +59,64 @@ function ResetPasswordButton({ email, onReset }: { email: string; onReset: (emai
   );
 }
 
+/** Nom + photo d'un compte agence, modifiables par un fondateur. */
+function AgencyAccountEditor({ a, onSaved, onClose }: { a: AgencyAccount; onSaved: (name: string) => void; onClose: () => void }) {
+  const [name, setName] = useState(a.display_name ?? guessName(a.email));
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    if (saving) return;
+    const n = name.trim();
+    if (!n) {
+      toast("Écris un nom");
+      return;
+    }
+    setSaving(true);
+    const r = await saveAgencyName(a.user_id, n);
+    setSaving(false);
+    if (r === "sql") return toast("Lance d'abord le SQL « nom fondateur » dans Supabase.");
+    if (r === "erreur") return toast("Nom non enregistré, réessaie");
+    onSaved(n);
+    toast("Nom enregistré ✓");
+  };
+  return (
+    <div className="flex flex-col gap-3 bg-muted/40 px-4 py-3.5 sm:flex-row sm:items-center">
+      <div className="flex items-center gap-3">
+        <AgencyAvatar userId={a.user_id} className="h-14 w-14" rounded="rounded-full" />
+        <span className="max-w-[9rem] text-[11px] leading-snug text-muted-foreground">Clique sur la photo pour la changer.</span>
+      </div>
+      <label className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="text-[11px] font-medium text-muted-foreground">Nom affiché</span>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value.slice(0, 40))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void save();
+            if (e.key === "Escape") onClose();
+          }}
+          placeholder="Prénom"
+          className="h-9 rounded-lg border border-border bg-surface px-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
+        />
+      </label>
+      <div className="flex shrink-0 justify-end gap-2 sm:self-end">
+        <button type="button" onClick={onClose} className="h-9 rounded-lg px-3 text-[13px] text-muted-foreground transition-colors hover:text-foreground">Fermer</button>
+        <button type="button" onClick={() => void save()} disabled={saving}
+          className="h-9 rounded-lg bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+          Enregistrer
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Comptes AGENCE réels, lus dans la base (fonction agency_accounts, fondateurs
- * seulement) : qui est propriétaire (fondateur) et qui est membre. Masqué tant
- * que le SQL « équipe, activité, routines » n'est pas lancé.
+ * seulement) : qui est propriétaire (fondateur) et qui est membre. Un fondateur peut
+ * changer le nom et la photo de chacun (« Modifier »). Masqué tant que le SQL
+ * « équipe, activité, routines » n'est pas lancé.
  */
 function AgencyAccountsPanel({ onReset }: { onReset: (email: string) => void }) {
   const [list, setList] = useState<AgencyAccount[] | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   useEffect(() => {
     void supabase.rpc("agency_accounts").then(({ data, error }) => setList(error ? null : ((data ?? []) as AgencyAccount[])));
   }, []);
@@ -79,16 +132,38 @@ function AgencyAccountsPanel({ onReset }: { onReset: (email: string) => void }) 
       </div>
       <ul className="divide-y divide-border">
         {list.map((a) => (
-          <li key={a.user_id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
-            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">
-              {a.email}
-              {a.display_name && <span className="ml-1.5 font-normal text-muted-foreground">({a.display_name})</span>}
-            </span>
-            <span className="text-[11px] text-faint">{when(a.last_sign_in_at)}</span>
-            <AnimatedBadge status={a.agency_role === "founder" ? "success" : "neutral"} size="sm">
-              {a.agency_role === "founder" ? "Propriétaire" : "Membre"}
-            </AnimatedBadge>
-            <ResetPasswordButton email={a.email} onReset={onReset} />
+          <li key={a.user_id}>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
+              <AgencyAvatar userId={a.user_id} readOnly className="h-9 w-9" rounded="rounded-full" />
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-[13px] font-semibold text-foreground">{a.display_name || guessName(a.email)}</span>
+                <span className="truncate text-[12px] text-muted-foreground">{a.email}</span>
+              </span>
+              <span className="text-[11px] text-faint max-sm:hidden">{when(a.last_sign_in_at)}</span>
+              <AnimatedBadge status={a.agency_role === "founder" ? "success" : "neutral"} size="sm">
+                {a.agency_role === "founder" ? "Propriétaire" : "Membre"}
+              </AnimatedBadge>
+              <button
+                type="button"
+                onClick={() => setEditing((e) => (e === a.user_id ? null : a.user_id))}
+                aria-expanded={editing === a.user_id}
+                title="Changer le nom et la photo"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
+              >
+                <Pencil className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Modifier</span>
+              </button>
+              <ResetPasswordButton email={a.email} onReset={onReset} />
+            </div>
+            {editing === a.user_id && (
+              <AgencyAccountEditor
+                a={a}
+                onClose={() => setEditing(null)}
+                onSaved={(n) => {
+                  setList((l) => l?.map((x) => (x.user_id === a.user_id ? { ...x, display_name: n } : x)) ?? l);
+                  setEditing(null);
+                }}
+              />
+            )}
           </li>
         ))}
       </ul>
