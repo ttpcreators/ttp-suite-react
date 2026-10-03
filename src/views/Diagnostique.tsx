@@ -4,6 +4,7 @@ import { useAppState, type AppState } from "@/lib/appState";
 import { runDiagnostics, type DiagSnapshot, type DiagStatus, type DiagCheck } from "@/lib/diagnostics";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
+import { BugsPanel } from "@/components/BugsPanel";
 
 /**
  * Page « Diagnostique » (Réglages) : santé de l'app. Un audit tourne 2×/jour
@@ -99,6 +100,9 @@ export function Diagnostique() {
           </button>
         </div>
       </div>
+
+      {/* Bugs remontés automatiquement par l'app */}
+      <BugsPanel />
 
       {/* Détail par composant */}
       <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">

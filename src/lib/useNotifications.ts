@@ -67,7 +67,9 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       supabase.from("ideas").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
       supabase.from("events").select("title,who,created_at").eq("source", "creator").or("deleted.is.null,deleted.eq.false").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
       supabase.from("email_activity").select("subject,contact_name,contact_email,created_at,gmail_message_id").eq("direction", "in").gte("created_at", emailSince).order("created_at", { ascending: false }).limit(8),
-    ]).then(([inv, br, ev, app, tdC, idC, evC, mailIn]) => {
+      // Bugs remontés par l'app (agence uniquement via RLS). « * » : marche avant/après la colonne resolved_at.
+      supabase.from("error_log").select("*").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(100),
+    ]).then(([inv, br, ev, app, tdC, idC, evC, mailIn, bugs]) => {
       if (!alive) return;
       if (inv.error || br.error || ev.error) {
         console.error("Chargement des notifications échoué:", { inv: inv.error, br: br.error, ev: ev.error });
@@ -75,6 +77,20 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
         return;
       }
       const out: NotificationItem[] = [];
+      // Bugs non résolus (7 j) : une seule alerte, id = dernier bug (réapparaît si un nouveau survient).
+      if (!bugs.error) {
+        const openBugs = ((bugs.data as { id: string; message: string | null; created_at: string; resolved_at?: string | null }[]) ?? []).filter((b) => !b.resolved_at);
+        if (openBugs.length) {
+          const kinds = new Set(openBugs.map((b) => b.message ?? ""));
+          out.push({
+            id: `bug:${openBugs[0].id}`,
+            title: kinds.size > 1 ? `${kinds.size} bugs à regarder` : "Un bug à regarder",
+            description: `${(openBugs[0].message ?? "").slice(0, 90)} · Réglages → Diagnostique`,
+            time: agoLabel(openBugs[0].created_at),
+            kind: "bug",
+          });
+        }
+      }
       // Activité créateur en premier (7 derniers jours) — désactivable dans Paramètres.
       const prefs = ((app as Record<string, unknown>).notifPrefs as Record<string, boolean | undefined>) ?? {};
       const bellCreator = prefs.bellCreatorActivity !== false;

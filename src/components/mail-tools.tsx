@@ -348,3 +348,101 @@ export function ForwardDialog({
     </div>
   );
 }
+
+// ── Nouveau mail libre (n'importe quelle adresse, boîte au choix) ────────────
+export function NewMailDialog({
+  open, defaultBox, onClose, onSent,
+}: { open: boolean; defaultBox: MailBox; onClose: () => void; onSent?: () => void }) {
+  const settings = useMailSettings();
+  const [to, setTo] = useState("");
+  const [cc, setCc] = useState("");
+  const [bcc, setBcc] = useState("");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [box, setBox] = useState<MailBox>(defaultBox);
+  const [sig, setSig] = useState(settings.signatureOn);
+  const att = useAttachments();
+
+  useEffect(() => {
+    if (!open) return;
+    setTo("");
+    setCc("");
+    setBcc("");
+    setSubject("");
+    setBody("");
+    setBox(defaultBox);
+    setSig(settings.signatureOn);
+    att.clear();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  if (!open) return null;
+
+  const send = () => {
+    const dest = parseEmails(to);
+    const copy = parseEmails(cc);
+    const hidden = parseEmails(bcc);
+    if (dest.ok.length !== 1 || dest.bad.length) return toast("Indique une adresse de destinataire valide (une seule, les autres en Cc)");
+    if (copy.bad.length) return toast(`Adresse en copie invalide : ${copy.bad[0]}`);
+    if (hidden.bad.length) return toast(`Adresse en copie cachée invalide : ${hidden.bad[0]}`);
+    if (!subject.trim() || !body.trim()) return toast("Objet et message requis");
+    const html = buildHtml(body, { signature: sig ? settings.signatureHtml : "" });
+    const params = {
+      to: dest.ok[0], cc: copy.ok, bcc: hidden.ok, subject: subject.trim(), html, box,
+      attachments: att.files, source: "manual",
+    };
+    scheduleSend(`Mail à ${dest.ok[0]}`, settings.delaySec, async () => {
+      const r = await sendGmail(params);
+      if (!r.ok) return toast(sendErrorText(r.error));
+      toast(`Mail envoyé depuis ${BOX_LABEL[box]} ✓`);
+      onSent?.();
+    });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={onClose}>
+      <div className="flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-border bg-surface shadow-xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 border-b border-border px-5 py-3.5">
+          <PenLine className="h-4 w-4 text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-foreground">Nouveau mail</span>
+          <button type="button" onClick={onClose} aria-label="Fermer" className="grid h-8 w-8 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex-1 space-y-2.5 overflow-y-auto px-5 py-4">
+          <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
+            <span>Envoyer depuis</span>
+            <BoxPicker value={box} onChange={setBox} />
+          </div>
+          <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="À : adresse@exemple.com" className={field} autoFocus inputMode="email" />
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="Cc (facultatif)" className={field} inputMode="email" />
+            <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="Cci (facultatif)" className={field} inputMode="email" />
+          </div>
+          <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Objet" className={cn(field, "font-medium")} />
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
+            }}
+            rows={10}
+            placeholder="Ton message…"
+            className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2.5 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-faint focus:border-primary"
+          />
+          <AttachChips files={att.files} onRemove={att.remove} />
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-5 py-3 text-[12px] text-muted-foreground">
+          <AttachButton onFiles={(f) => void att.add(f)} label="Joindre un fichier" />
+          <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
+          <span className="text-faint max-sm:hidden">{settings.delaySec ? `Annulable ${settings.delaySec} s · ` : ""}⌘↵</span>
+          <button type="button" onClick={send}
+            className="ml-auto flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40">
+            <Send className="h-4 w-4" /> Envoyer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

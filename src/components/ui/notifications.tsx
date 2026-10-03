@@ -7,7 +7,7 @@ import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";
 
-export type NotifKind = "creator" | "email" | "facture" | "brief" | "event" | "contrat";
+export type NotifKind = "creator" | "email" | "facture" | "brief" | "event" | "contrat" | "bug";
 
 export interface NotificationItem {
   id: string;
@@ -25,6 +25,7 @@ export const NOTIF_KINDS: { value: NotifKind; label: string }[] = [
   { value: "brief", label: "Briefs" },
   { value: "event", label: "Agenda" },
   { value: "contrat", label: "Contrats" },
+  { value: "bug", label: "Bugs" },
 ];
 
 /** Bouton d'activation des notifications push (par téléphone) — au-dessus de la liste. */

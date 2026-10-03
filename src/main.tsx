@@ -4,9 +4,13 @@ import './index.css'
 import App from './App.tsx'
 import { ErrorBoundary, reloadOnce } from './components/ErrorBoundary.tsx'
 import { initAccent } from './lib/accent'
+import { installGlobalErrorReporting } from './lib/errorReport'
 
 // Couleur d'accent personnalisée (localStorage) posée AVANT le rendu → pas de flash.
 initAccent()
+
+// Tout bug non rattrapé (JS, action qui échoue) est remonté : journal + alerte agence.
+installGlobalErrorReporting()
 
 // Après un déploiement, l'app restée ouverte peut demander un ancien chunk (hash
 // remplacé) → Vite émet `vite:preloadError`. On recharge automatiquement (1×)

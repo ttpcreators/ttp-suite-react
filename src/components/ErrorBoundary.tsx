@@ -1,33 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { supabase } from "@/lib/supabase";
-
-// Anti-répétition (session) : on n'envoie pas 10× la même erreur au serveur.
-const _reported = new Set<string>();
-
-/** Remonte le crash au serveur (journal + notif agence). Best-effort : ne lève JAMAIS. */
-function reportError(error: Error, componentStack: string, page: string) {
-  try {
-    const message = String(error?.message ?? error ?? "Erreur inconnue").slice(0, 500);
-    const sig = `${page}|${message}`;
-    if (_reported.has(sig)) return;
-    _reported.add(sig);
-    if (_reported.size > 50) _reported.clear(); // borne mémoire
-    void supabase.functions
-      .invoke("report-error", {
-        body: {
-          message,
-          page: page.slice(0, 80),
-          stack: String(error?.stack ?? "").slice(0, 4000),
-          componentStack: String(componentStack ?? "").slice(0, 4000),
-          url: typeof location !== "undefined" ? location.href : "",
-          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
-        },
-      })
-      .catch(() => {}); // la remontée ne doit jamais casser le boundary
-  } catch {
-    /* rien : reporter une erreur ne doit jamais en provoquer une */
-  }
-}
+import { reportError as report } from "@/lib/errorReport";
 
 // Erreur de chargement d'un chunk (module dynamique) : arrive quand l'app est
 // restée ouverte pendant un déploiement et demande un ancien fichier au hash
@@ -99,7 +71,7 @@ export class ErrorBoundary extends Component<Props, State> {
     // code : on NE le remonte PAS au journal (sinon spam après chaque déploiement).
     if (isChunkError(error) && reloadOnce()) return;
     // + remontée serveur : journal + notif push à l'agence.
-    reportError(error, info.componentStack ?? "", String(this.props.resetKey ?? this.props.label ?? ""));
+    report(error, { componentStack: info.componentStack ?? "", page: String(this.props.resetKey ?? this.props.label ?? "") || undefined, source: "écran" });
   }
 
   componentDidUpdate(prev: Props) {

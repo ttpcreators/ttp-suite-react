@@ -11,7 +11,7 @@ import { updateTouches } from "@/lib/touchesDb";
 import { MailComposer, type ComposerContact } from "@/components/mail-composer";
 import { BoxChip } from "@/components/mail-box-chip";
 import { BOX_LABEL, BOX_STYLE, sendErrorText, sendGmail, type MailBox, type OutAttachment } from "@/lib/mailSend";
-import { ForwardDialog, MailSettingsDialog, ReplyBox } from "@/components/mail-tools";
+import { ForwardDialog, MailSettingsDialog, NewMailDialog, ReplyBox } from "@/components/mail-tools";
 import { Tabs } from "@/components/ui/animated-tabs";
 
 /**
@@ -120,6 +120,7 @@ export function Mails() {
   const [replyFocus, setReplyFocus] = useState(0); // « Répondre » sur une carte → focus de la réponse
   const [forwardMsg, setForwardMsg] = useState<MailMessage | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [newMailOpen, setNewMailOpen] = useState(false); // mail libre, n'importe quelle adresse
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // messages dépliés du fil
 
   // Contacts avec un email valide.
@@ -342,13 +343,22 @@ export function Mails() {
             );
           })}
         </div>
+        <div className="order-last ml-auto flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setNewMailOpen(true)}
+          className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+        >
+          <PenLine className="h-3.5 w-3.5" /> Nouveau mail
+        </button>
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
-          className="order-last ml-auto flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+          className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
         >
-          <Settings2 className="h-3.5 w-3.5" /> Signature et délai
+          <Settings2 className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Signature et délai</span><span className="sm:hidden">Réglages</span>
         </button>
+        </div>
         <span className="text-[12px] text-muted-foreground">
           {selected ? "Échanges avec ce contact, dans les deux boîtes." : box === "partnerships" ? "Boîte de prospection et contacts agence." : box === "talent" ? "Boîte des échanges créatrices (leurs alias)." : "Les deux boîtes réunies."}
         </span>
@@ -647,6 +657,12 @@ export function Mails() {
         onClose={() => setForwardMsg(null)}
       />
       <MailSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <NewMailDialog
+        open={newMailOpen}
+        defaultBox={box === "talent" ? "talent" : "partnerships"}
+        onClose={() => setNewMailOpen(false)}
+        onSent={() => setInboxTick((n) => n + 1)}
+      />
 
       {/* Composeur : nouveau mail depuis un modèle (prospection / relance) */}
       <MailComposer
