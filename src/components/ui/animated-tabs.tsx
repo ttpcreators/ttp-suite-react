@@ -22,7 +22,18 @@ const INDICATOR = { type: "spring", stiffness: 620, damping: 42, mass: 0.35 } as
 const PANEL = { type: "spring", stiffness: 460, damping: 38, mass: 0.8 } as const;
 const useIso = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-export type TabItem = { value: string; label: string; icon?: ReactNode; disabled?: boolean };
+export type TabItem = {
+  value: string;
+  label: string;
+  icon?: ReactNode;
+  disabled?: boolean;
+  /** Compteur affiché après le libellé (ex. nombre d'éléments filtrés). */
+  count?: number;
+  /** Pastille de couleur avant le libellé (classe Tailwind, ex. "bg-emerald-500"). */
+  dot?: string;
+  /** Masque le libellé (l'icône reste) : toujours, ou seulement sur mobile. */
+  hideLabel?: "always" | "mobile";
+};
 export type TabsActivation = "automatic" | "manual";
 
 type UseTabsOptions = {
@@ -123,9 +134,16 @@ export type TabsProps = {
   label?: string;
   className?: string;
   panelClassName?: string;
+  /** "md" (défaut) : barre de page. "sm" : version compacte (dans une carte, un graphique…). */
+  size?: "sm" | "md";
+  /** Occupe toute la largeur, onglets répartis à parts égales. */
+  fullWidth?: boolean;
+  /** Passe à la ligne à toutes les tailles (filtres à nombreuses options) au lieu de défiler. */
+  wrap?: boolean;
 };
 
-export function Tabs({ items, value, defaultValue, onValueChange, activation = "automatic", renderPanel, label = "Onglets", className = "", panelClassName = "" }: TabsProps) {
+export function Tabs({ items, value, defaultValue, onValueChange, activation = "automatic", renderPanel, label = "Onglets", className = "", panelClassName = "", size = "md", fullWidth = false, wrap = false }: TabsProps) {
+  const sm = size === "sm";
   const tabs = useTabs({ items, value, defaultValue, onValueChange, activation });
   const reduced = useReducedMotion();
   const rowRef = useRef<HTMLDivElement | null>(null);
@@ -153,14 +171,21 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
         {...tabs.tabListProps}
         ref={rowRef}
         aria-label={label}
-        className="relative flex w-fit max-w-full flex-wrap gap-0.5 overflow-x-auto rounded-xl sm:flex-nowrap border border-border bg-surface p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className={cn(
+          "relative flex max-w-full flex-wrap gap-0.5 overflow-x-auto border border-border bg-surface [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          !wrap && "sm:flex-nowrap",
+          sm ? "rounded-lg p-0.5" : "rounded-xl p-1",
+          fullWidth ? "w-full" : "w-fit",
+        )}
       >
-        {/* Indicateur glissant (fond de l'onglet actif) */}
+        {/* Indicateur glissant (fond de l'onglet actif) : animé via `animate` (un simple
+            `style` ne déclenche pas le ressort). Masqué si aucune valeur ne correspond. */}
         <motion.span
           aria-hidden
-          className="pointer-events-none absolute rounded-lg bg-muted"
-          style={{ left: ind.x, top: ind.y, width: ind.width, height: ind.height, opacity: ind.ready ? 1 : 0 }}
-          transition={reduced ? { duration: 0 } : INDICATOR}
+          className={cn("pointer-events-none absolute bg-muted", sm ? "rounded-md" : "rounded-lg")}
+          initial={false}
+          animate={{ left: ind.x, top: ind.y, width: ind.width, height: ind.height, opacity: ind.ready && selectedIndex >= 0 ? 1 : 0 }}
+          transition={reduced || !ind.ready ? { duration: 0 } : INDICATOR}
         />
         {items.map((item, index) => {
           const selected = item.value === tabs.value;
@@ -169,13 +194,23 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
               key={item.value}
               {...tabs.getTabProps(item, index)}
               ref={(node) => { tabRefs.current[index] = node; }}
+              aria-label={item.hideLabel ? item.label : undefined}
+              title={item.hideLabel === "always" ? item.label : undefined}
               className={cn(
-                "relative z-10 flex h-8 shrink-0 items-center gap-2 rounded-lg px-3 text-[13px] font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-foreground/20 [&_svg]:text-current",
+                "relative z-10 flex shrink-0 items-center justify-center whitespace-nowrap font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-foreground/20 [&_svg]:text-current",
+                sm ? "h-7 gap-1.5 rounded-md px-2.5 text-[12px]" : "h-8 gap-2 rounded-lg px-3 text-[13px]",
+                fullWidth && "flex-1",
                 item.disabled ? "cursor-default text-faint" : selected ? "text-foreground" : "text-muted-foreground hover:text-foreground",
               )}
             >
+              {item.dot && <span className={cn("size-1.5 shrink-0 rounded-full", item.dot)} />}
               {item.icon}
-              {item.label}
+              {item.hideLabel !== "always" && (
+                <span className={cn(item.hideLabel === "mobile" && "max-sm:sr-only")}>{item.label}</span>
+              )}
+              {item.count !== undefined && (
+                <span className={cn("tabular-nums", selected ? "text-muted-foreground" : "text-faint")}>{item.count}</span>
+              )}
             </button>
           );
         })}

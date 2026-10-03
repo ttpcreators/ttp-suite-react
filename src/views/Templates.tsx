@@ -8,6 +8,7 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn } from "@/lib/utils";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { Tabs } from "@/components/ui/animated-tabs";
 
 /** `id` : présent sur les modèles perso (généré à l'écriture pour les anciens). */
 type Template = { id?: string; category: string; title: string; body: string };
@@ -315,35 +316,14 @@ export function Templates() {
 
       {!loading && (
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveCategory("Tous")}
-              className={cn(
-                "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors",
-                activeCategory === "Tous"
-                  ? "bg-foreground text-background"
-                  : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
-              )}
-            >
-              Tous
-            </button>
-            {allCategories.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setActiveCategory(cat)}
-                className={cn(
-                  "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors",
-                  activeCategory === cat
-                    ? "bg-foreground text-background"
-                    : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
-                )}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            className="min-w-0"
+            label="Filtrer par catégorie"
+            wrap
+            items={[{ value: "Tous", label: "Tous" }, ...allCategories.map((cat) => ({ value: cat, label: cat }))]}
+            value={activeCategory}
+            onValueChange={setActiveCategory}
+          />
           <div className="relative sm:w-64">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
             <input
@@ -354,23 +334,16 @@ export function Templates() {
               className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-xs text-foreground placeholder:text-faint outline-none transition-colors focus:border-primary"
             />
           </div>
-          <div className="flex w-fit shrink-0 items-center gap-1 self-start rounded-xl border border-border bg-surface p-1 sm:self-auto">
-            {([["cards", "Cartes", LayoutGrid], ["list", "Liste", ListIcon]] as const).map(([m, label, Icon]) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setViewT(m)}
-                title={label}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors",
-                  viewT === m ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{label}</span>
-              </button>
-            ))}
-          </div>
+          <Tabs
+            className="shrink-0 self-start sm:self-auto"
+            label="Affichage"
+            items={[
+              { value: "cards", label: "Cartes", icon: <LayoutGrid className="h-4 w-4" />, hideLabel: "mobile" },
+              { value: "list", label: "Liste", icon: <ListIcon className="h-4 w-4" />, hideLabel: "mobile" },
+            ]}
+            value={viewT}
+            onValueChange={(v) => setViewT(v as "cards" | "list")}
+          />
         </div>
       )}
 

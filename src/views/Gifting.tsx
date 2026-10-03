@@ -17,6 +17,7 @@ import { cn, titleCase } from "@/lib/utils";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, giftStatusMeta, type Gift as GiftRow } from "@/lib/gifting";
 import { PeriodFilter, periodsFrom, inPeriod } from "@/components/ui/period-filter";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { Tabs } from "@/components/ui/animated-tabs";
 
 type GView = "cards" | "list";
 
@@ -235,23 +236,15 @@ export function Gifting() {
         </div>
         <div className="flex items-center gap-2">
           {list.length > 0 && (
-            <div className="flex items-center gap-1 rounded-xl border border-border bg-panel p-1">
-              {([["cards", LayoutGrid, "Cartes"], ["list", ListIcon, "Liste"]] as [GView, typeof LayoutGrid, string][]).map(([v, Icon, label]) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setView(v)}
-                  title={label}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors",
-                    view === v ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{label}</span>
-                </button>
-              ))}
-            </div>
+            <Tabs
+              label="Affichage des giftings"
+              value={view}
+              onValueChange={(v) => setView(v as GView)}
+              items={[
+                { value: "cards", label: "Cartes", icon: <LayoutGrid className="h-4 w-4" />, hideLabel: "mobile" },
+                { value: "list", label: "Liste", icon: <ListIcon className="h-4 w-4" />, hideLabel: "mobile" },
+              ]}
+            />
           )}
           {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} />}
           <span className="hidden sm:contents">

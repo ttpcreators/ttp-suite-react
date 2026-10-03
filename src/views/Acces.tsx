@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Trash2, RefreshCw, Copy, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { titleCase, cn } from "@/lib/utils";
+import { titleCase } from "@/lib/utils";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
 import { CredentialVault } from "@/views/CredentialVault";
@@ -13,6 +13,7 @@ import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/f
 import { ActionMenu } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { Tabs } from "@/components/ui/animated-tabs";
 
 type AccessAccount = {
   email: string;
@@ -295,21 +296,20 @@ export function Acces() {
   return (
     <>
       {/* Sous-pages : Comptes app / E-mails créateurs */}
-      <div className="mb-4 inline-flex rounded-xl border border-border bg-surface p-1 text-[12px] font-medium">
-        {([["comptes", "Comptes app"], ["emails", "E-mails créateurs"]] as const).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => {
-              setSection(id);
-              setNavSub(id);
-            }}
-            className={cn("rounded-lg px-4 py-2 transition-colors", section === id ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        className="mb-4"
+        label="Sous-pages des accès"
+        items={[
+          { value: "comptes", label: "Comptes app" },
+          { value: "emails", label: "E-mails créateurs" },
+        ]}
+        value={section}
+        onValueChange={(v) => {
+          const id = v as "comptes" | "emails";
+          setSection(id);
+          setNavSub(id);
+        }}
+      />
 
       {section === "emails" ? (
         <CredentialVault />

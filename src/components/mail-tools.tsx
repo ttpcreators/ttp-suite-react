@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, PenLine, Send, Settings2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { useMailSettings } from "@/lib/useMailSettings";
 import {
   BOX_LABEL, DELAYS, buildHtml, parseEmails, saveMailSettings, scheduleSend, sendErrorText, sendGmail,
@@ -120,21 +121,13 @@ export function MailSettingsDialog({ open, onClose }: { open: boolean; onClose: 
           <section>
             <div className="mb-1 text-[13px] font-semibold text-foreground">Délai d'annulation</div>
             <p className="mb-2 text-[12px] text-muted-foreground">Le mail part après ce délai : tu as le temps de cliquer sur « Annuler » si tu as fait une erreur. Garde l'app ouverte pendant ce temps.</p>
-            <div className="flex flex-wrap gap-1">
-              {DELAYS.map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setDelay(d)}
-                  className={cn(
-                    "rounded-md border px-3 py-1.5 text-[12px] font-medium transition-colors",
-                    delay === d ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {d === 0 ? "Aucun" : `${d} s`}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              size="sm"
+              label="Délai d'annulation"
+              value={String(delay)}
+              onValueChange={(v) => setDelay(Number(v))}
+              items={DELAYS.map((d) => ({ value: String(d), label: d === 0 ? "Aucun" : `${d} s` }))}
+            />
           </section>
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-3">

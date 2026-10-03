@@ -6,7 +6,7 @@ import { notifyCreator } from "@/lib/push";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
-import { cn, titleCase } from "@/lib/utils";
+import { titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { RecipientPicker } from "@/components/ui/recipient-picker";
@@ -16,6 +16,7 @@ import { MediakitEditor } from "@/views/MediakitEditor";
 import { readMediakitTemplates, MEDIAKIT_TEMPLATES_KEY } from "@/lib/mailTemplates";
 import { AgencyTab } from "@/views/MediakitAgence";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
+import { Tabs, type TabItem } from "@/components/ui/animated-tabs";
 
 /**
  * Media kit = bibliothèque de fichiers. L'agence dépose les media kits qu'elle a
@@ -728,6 +729,11 @@ function MediakitFiles() {
 }
 
 type MkTab = "creatrices" | "agence" | "files";
+const MK_TABS: TabItem[] = [
+  { value: "creatrices", label: "Créatrices" },
+  { value: "agence", label: "Agence" },
+  { value: "files", label: "Fichiers" },
+];
 
 /**
  * Page « Media kit » UNIFIÉE = 3 onglets (fusion de l'ancienne « Media kit » et de
@@ -745,30 +751,18 @@ export function Mediakit() {
   useEffect(() => {
     if (sub === "creatrices" || sub === "agence" || sub === "files") setTab(sub);
   }, [sub]);
-  // Onglets façon sélecteur de l'Aperçu ; le choix est remonté à la sidebar.
-  const tabBtn = (id: MkTab, label: string) => (
-    <button
-      type="button"
-      onClick={() => {
-        setTab(id);
-        setNavSub(id);
-      }}
-      aria-pressed={tab === id}
-      className={cn(
-        "rounded-md px-3 py-1.5 transition-colors",
-        tab === id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {label}
-    </button>
-  );
   return (
     <div className="space-y-4">
-      <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-[12px] font-medium">
-        {tabBtn("creatrices", "Créatrices")}
-        {tabBtn("agence", "Agence")}
-        {tabBtn("files", "Fichiers")}
-      </div>
+      {/* Sous-pages ; le choix est remonté à la sidebar. */}
+      <Tabs
+        label="Sous-pages Media kit"
+        items={MK_TABS}
+        value={tab}
+        onValueChange={(v) => {
+          setTab(v as MkTab);
+          setNavSub(v);
+        }}
+      />
       {tab === "creatrices" ? (
         <div>
           <p className="mb-4 text-[13px] text-muted-foreground">

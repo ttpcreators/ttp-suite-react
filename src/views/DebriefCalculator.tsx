@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import { downscaleImage } from "@/components/ui/image-field";
 import { cn } from "@/lib/utils";
+import { Tabs } from "@/components/ui/animated-tabs";
 import {
   totalsOf,
   parseNum,
@@ -282,21 +283,6 @@ export function DebriefCalculator({
     signCache.delete(path);
   };
 
-  const modeBtn = (m: CalcMode, Icon: typeof Rows3, label: string, hint: string) => (
-    <button
-      key={m}
-      type="button"
-      onClick={() => set({ mode: m })}
-      title={hint}
-      className={cn(
-        "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors",
-        mode === m ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
-      )}
-    >
-      <Icon className="h-3.5 w-3.5" /> {label}
-    </button>
-  );
-
   return (
     <div className="min-w-full rounded-xl border border-border bg-panel p-3.5">
       {/* En-tête */}
@@ -304,10 +290,17 @@ export function DebriefCalculator({
         <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
           <Calculator className="h-3.5 w-3.5" /> Calculateur d'engagement
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-0.5">
-          {modeBtn("global", Layers, "Global", "Les totaux + le nombre de publications")}
-          {modeBtn("detail", Rows3, "Par publication", "Une ligne par publication")}
-        </div>
+        <Tabs
+          size="sm"
+          fullWidth
+          label="Mode de calcul"
+          value={mode}
+          onValueChange={(v) => set({ mode: v as CalcMode })}
+          items={[
+            { value: "global", label: "Global", icon: <Layers className="h-3.5 w-3.5" /> },
+            { value: "detail", label: "Par publication", icon: <Rows3 className="h-3.5 w-3.5" /> },
+          ]}
+        />
       </div>
 
       {/* Base de compte */}

@@ -50,7 +50,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, SelectField, AutoGrowTextField } from "@/components/ui/form";
-import { GooeyTabs } from "@/components/ui/gooey-tabs";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
@@ -1883,12 +1883,14 @@ export function CreatorSpace({
                   </div>
                 ) : (
                   <>
-                    {/* Toggle segmenté « gooey » (la pastille active se déforme en glissant) */}
-                    <GooeyTabs
+                    <Tabs
+                      size="sm"
+                      fullWidth
                       className="mb-4"
+                      label="Mes infos"
                       value={infoTab}
-                      onChange={(v) => setInfoTab(v as "stats" | "coord")}
-                      tabs={[{ value: "stats", label: "Statistiques" }, { value: "coord", label: "Coordonnées" }]}
+                      onValueChange={(v) => setInfoTab(v as "stats" | "coord")}
+                      items={[{ value: "stats", label: "Statistiques" }, { value: "coord", label: "Coordonnées" }]}
                     />
 
                     <AnimatePresence mode="wait" initial={false}>
@@ -2099,42 +2101,25 @@ export function CreatorSpace({
               <PageHeaderRow>
                 <div className="flex flex-wrap items-center gap-2">
                   {todoView === "liste" && (
-                    <div className="flex rounded-lg border border-border bg-surface p-0.5">
-                      {TODO_FILTERS.map((f) => (
-                        <button
-                          key={f.id}
-                          type="button"
-                          onClick={() => setTodoFilter(f.id)}
-                          aria-pressed={todoFilter === f.id}
-                          className={
-                            "rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors " +
-                            (todoFilter === f.id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")
-                          }
-                        >
-                          {f.label}
-                        </button>
-                      ))}
-                    </div>
+                    <Tabs
+                      size="sm"
+                      label="Filtrer les tâches"
+                      value={todoFilter}
+                      onValueChange={(v) => setTodoFilter(v as TodoFilter)}
+                      items={TODO_FILTERS.map((f) => ({ value: f.id, label: f.label }))}
+                    />
                   )}
                   {/* Bascule Liste / Colonnes (mémorisée) */}
-                  <div className="flex items-center rounded-lg border border-border bg-surface p-0.5">
-                    {([["liste", List], ["colonnes", Columns3]] as const).map(([m, Icon]) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => setTodoView(m)}
-                        aria-pressed={todoView === m}
-                        className={
-                          "grid h-7 w-8 place-items-center rounded-md transition-colors " +
-                          (todoView === m ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")
-                        }
-                        aria-label={m === "liste" ? "Vue liste" : "Vue colonnes"}
-                        title={m === "liste" ? "Liste" : "Colonnes par statut"}
-                      >
-                        <Icon className="h-4 w-4" />
-                      </button>
-                    ))}
-                  </div>
+                  <Tabs
+                    size="sm"
+                    label="Affichage des tâches"
+                    value={todoView}
+                    onValueChange={(v) => setTodoView(v as "liste" | "colonnes")}
+                    items={[
+                      { value: "liste", label: "Liste", icon: <List className="h-3.5 w-3.5" />, hideLabel: "always" },
+                      { value: "colonnes", label: "Colonnes par statut", icon: <Columns3 className="h-3.5 w-3.5" />, hideLabel: "always" },
+                    ]}
+                  />
                 </div>
                 <AddButton label="Tâche" onClick={() => setTdOpen(true)} />
               </PageHeaderRow>
@@ -2287,22 +2272,16 @@ export function CreatorSpace({
                 </div>
                 <div className="flex items-center gap-2">
                   {ideas.length > 0 && (
-                    <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
-                      {([["liste", "Liste", List], ["colonnes", "Colonnes", Columns3]] as const).map(([m, label, Icon]) => (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => setIdeaView(m)}
-                          className={
-                            "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors " +
-                            (ideaView === m ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")
-                          }
-                        >
-                          <Icon className="h-3.5 w-3.5" />
-                          <span className="hidden sm:inline">{label}</span>
-                        </button>
-                      ))}
-                    </div>
+                    <Tabs
+                      size="sm"
+                      label="Affichage des idées"
+                      value={ideaView}
+                      onValueChange={(v) => setIdeaView(v as "liste" | "colonnes")}
+                      items={[
+                        { value: "liste", label: "Liste", icon: <List className="h-3.5 w-3.5" />, hideLabel: "mobile" },
+                        { value: "colonnes", label: "Colonnes", icon: <Columns3 className="h-3.5 w-3.5" />, hideLabel: "mobile" },
+                      ]}
+                    />
                   )}
                   <AddButton label="Idée" onClick={() => setIdOpen(true)} />
                 </div>

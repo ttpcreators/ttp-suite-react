@@ -20,6 +20,7 @@ import { SelectField } from "@/components/ui/form";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { cn, titleCase } from "@/lib/utils";
 import { PlatformIcon } from "@/components/ui/platform-icon";
+import { Tabs } from "@/components/ui/animated-tabs";
 
 /**
  * Suivi engagement — page dédiée à l'ÉVOLUTION des mesures enregistrées dans
@@ -173,24 +174,14 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
         ) : (
           <div className="text-sm font-semibold text-foreground">Ton évolution</div>
         )}
-        <div className="flex flex-wrap gap-2">
-          {platforms.map((pk) => (
-            <button
-              key={pk}
-              type="button"
-              onClick={() => setSelPlatform(pk)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[11px] font-semibold transition-colors",
-                pk === platform
-                  ? "bg-foreground text-background"
-                  : "border border-border text-muted-foreground hover:bg-rowhover",
-              )}
-            >
-              <PlatformIcon platform={pk} className="h-3.5 w-3.5" />
-              {PLATFORM_LABELS[pk] ?? pk}
-            </button>
-          ))}
-        </div>
+        {platforms.length > 0 && (
+          <Tabs
+            label="Plateforme"
+            value={platform}
+            onValueChange={setSelPlatform}
+            items={platforms.map((pk) => ({ value: pk, label: PLATFORM_LABELS[pk] ?? pk, icon: <PlatformIcon platform={pk} className="h-4 w-4" /> }))}
+          />
+        )}
       </div>
 
       {/* Cartes de synthèse */}
@@ -606,21 +597,15 @@ export function EngagementSuivi() {
   return (
     <div className="space-y-4">
       {/* Bascule Tous / Un créateur */}
-      <div className="flex w-fit gap-1 rounded-xl bg-panel p-1">
-        {([["all", "Tous les créateurs"], ["one", "Un créateur"]] as const).map(([m, label]) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => setView(m)}
-            className={cn(
-              "flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-colors",
-              view === m ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {m === "all" ? <Users className="h-4 w-4" /> : <Activity className="h-4 w-4" />} {label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="Vue du suivi"
+        value={view}
+        onValueChange={(v) => setView(v as "all" | "one")}
+        items={[
+          { value: "all", label: "Tous les créateurs", icon: <Users className="h-4 w-4" /> },
+          { value: "one", label: "Un créateur", icon: <Activity className="h-4 w-4" /> },
+        ]}
+      />
 
       {view === "all" ? (
         <AllCreatorsPanel entries={entries} period={period} setPeriod={setPeriod} onOpen={(c) => { setFocus(c); setView("one"); }} />

@@ -1,11 +1,12 @@
 import { cn } from "@/lib/utils";
 import { SlidersHorizontal, X, ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { Tabs } from "./animated-tabs";
 
 /**
  * Panneau de filtres dans le langage de l'Aperçu : panneau plat bordé, titre
- * de section avec icône, groupes de pastilles avec libellé en minuscules, et
- * pastille active NEUTRE (encre pleine, pas la couleur d'accent) : le bleu reste
+ * de section avec icône, groupes d'onglets segmentés (Tabs) avec libellé en
+ * minuscules, onglet actif NEUTRE (pas la couleur d'accent) : le bleu reste
  * réservé aux actions. « Tout effacer » en pied. Repliable.
  *
  * Composant natif (tokens app, lucide-react) — pas de dépendances Radix.
@@ -63,35 +64,19 @@ export function FilterPanel({
 
       {open && (
         <>
-          {/* Groupes de pastilles */}
+          {/* Groupes d'onglets segmentés */}
           <div className={cn("mt-4 grid gap-4", groups.length > 1 && "sm:grid-cols-2")}>
             {groups.map((g) => (
               <div key={g.id} className="flex flex-col gap-2">
                 <span className="text-[12px] font-medium text-muted-foreground">{g.label}</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {g.options.map((o) => {
-                    const active = g.value === o.value;
-                    return (
-                      <button
-                        key={o.value}
-                        type="button"
-                        onClick={() => g.onChange(o.value)}
-                        aria-pressed={active}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors",
-                          active
-                            ? "border-foreground bg-foreground text-background"
-                            : "border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
-                        )}
-                      >
-                        {o.label}
-                        {o.count != null && (
-                          <span className={cn("tabular-nums", active ? "text-background/70" : "text-faint")}>{o.count}</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                <Tabs
+                  size="sm"
+                  label={g.label}
+                  wrap
+                  value={g.value}
+                  onValueChange={g.onChange}
+                  items={g.options.map((o) => ({ value: o.value, label: o.label, count: o.count ?? undefined }))}
+                />
               </div>
             ))}
           </div>

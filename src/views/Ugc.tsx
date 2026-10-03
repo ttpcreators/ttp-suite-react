@@ -7,7 +7,8 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
-import { cn, titleCase } from "@/lib/utils";
+import { titleCase } from "@/lib/utils";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
 
 /**
@@ -115,10 +116,6 @@ export function Ugc() {
     return matchQuery(query, u.name, u.handle, u.niche, u.city, u.email, u.platform);
   });
 
-  const pillBase = "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors";
-  const pillActive = "bg-foreground text-background";
-  const pillInactive = "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground";
-
   return (
     <>
       <PageHeaderRow>
@@ -130,16 +127,15 @@ export function Ugc() {
       </PageHeaderRow>
 
       {platList.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-2">
-          <button type="button" onClick={() => setPlatFilter(ALL)} className={cn(pillBase, platFilter === ALL ? pillActive : pillInactive)}>
-            Tous
-          </button>
-          {platList.map((p) => (
-            <button key={p} type="button" onClick={() => setPlatFilter(p)} className={cn(pillBase, platFilter === p ? pillActive : pillInactive)}>
-              {p}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          className="mb-4"
+          size="md"
+          label="Filtrer par plateforme"
+          wrap
+          value={platFilter}
+          onValueChange={setPlatFilter}
+          items={[{ value: ALL, label: "Tous" }, ...platList.map((p) => ({ value: p, label: p }))]}
+        />
       )}
 
       <InlineForm

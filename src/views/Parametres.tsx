@@ -9,6 +9,7 @@ import { RELANCE_DAYS, type ProspectSettings, type WaMode } from "@/lib/touches"
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { Tabs } from "@/components/ui/animated-tabs";
 
 /**
  * Préférences de notifications (agence) — stockées dans le blob `notifPrefs`.
@@ -241,21 +242,17 @@ export function Parametres() {
               Minuit : noir profond et monochrome. Classique : l'ancien sombre bleuté.
             </div>
           </div>
-          <div className="flex shrink-0 gap-1 rounded-xl bg-panel p-1">
-            {([["minuit", "Minuit"], ["classic", "Classique"]] as const).map(([v, label]) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => chooseDarkStyle(v)}
-                className={cn(
-                  "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                  darkStyle === v ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            size="sm"
+            className="shrink-0"
+            label="Style sombre"
+            items={[
+              { value: "minuit", label: "Minuit" },
+              { value: "classic", label: "Classique" },
+            ]}
+            value={darkStyle}
+            onValueChange={(v) => chooseDarkStyle(v as DarkStyle)}
+          />
         </div>
       </Section>
 
@@ -364,21 +361,17 @@ export function Parametres() {
                 C'est le compte connecté qui envoie, pas un réglage : choisis WhatsApp Web si ton numéro PRO y est connecté (web.whatsapp.com), l'application sinon.
               </div>
             </div>
-            <div className="flex shrink-0 gap-1 rounded-xl bg-panel p-1">
-              {([["app", "Application"], ["web", "WhatsApp Web"]] as const).map(([v, label]) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => void saveProspect({ waMode: v })}
-                  className={cn(
-                    "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                    waMode === v ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              size="sm"
+              className="shrink-0"
+              label="Ouverture WhatsApp"
+              items={[
+                { value: "app", label: "Application" },
+                { value: "web", label: "WhatsApp Web" },
+              ]}
+              value={waMode}
+              onValueChange={(v) => void saveProspect({ waMode: v as WaMode })}
+            />
           </div>
         </div>
       </Section>

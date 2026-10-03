@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/form";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
@@ -605,41 +606,31 @@ export function Todo() {
             groups={groups}
             onClear={() => { setCreatorFilter(null); setPriorityFilter(null); setTodoFilter("encours"); }}
             right={
-              <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
-                {([["liste", "Liste", List], ["colonnes", "Colonnes", Columns3]] as const).map(([mode, label, Icon]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setViewMode(mode)}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                      viewMode === mode ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{label}</span>
-                  </button>
-                ))}
-              </div>
+              <Tabs
+                size="sm"
+                label="Affichage"
+                items={[
+                  { value: "liste", label: "Liste", icon: <List className="h-3.5 w-3.5" />, hideLabel: "mobile" },
+                  { value: "colonnes", label: "Colonnes", icon: <Columns3 className="h-3.5 w-3.5" />, hideLabel: "mobile" },
+                ]}
+                value={viewMode}
+                onValueChange={(v) => setViewMode(v as "liste" | "colonnes")}
+              />
             }
             extra={
               <div className="flex flex-col gap-2">
                 <span className="text-[12px] font-medium text-muted-foreground">Périmètre</span>
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
-                    {([[null, "Tous"], ["__agency__", "Agence"]] as const).map(([val, label]) => (
-                      <button
-                        key={label}
-                        type="button"
-                        onClick={() => setCreatorFilter(val)}
-                        className={cn(
-                          "rounded-full px-3.5 py-1.5 text-[11px] font-semibold transition-colors",
-                          creatorFilter === val ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  <Tabs
+                    size="sm"
+                    label="Périmètre"
+                    items={[
+                      { value: "__all__", label: "Tous" },
+                      { value: "__agency__", label: "Agence" },
+                    ]}
+                    value={creatorFilter ?? "__all__"}
+                    onValueChange={(v) => setCreatorFilter(v === "__all__" ? null : "__agency__")}
+                  />
                   <Select value={creatorSelectValue} onValueChange={onCreatorSelect}>
                     <SelectTrigger className="h-9 w-auto min-w-[170px] rounded-full bg-surface" placeholder="Une créatrice…" />
                     <SelectContent>

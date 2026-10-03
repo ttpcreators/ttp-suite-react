@@ -28,6 +28,7 @@ import { StatsBento } from "@/components/ui/stats-bento";
 import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { DEFAULT_TEMPLATES, mailtoHref, readProspectTemplates, suggestedMail, type MailTemplate } from "@/lib/mailTemplates";
 
 type Row = {
@@ -890,23 +891,20 @@ export function Contacts() {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="flex min-w-0 max-w-full items-start gap-1.5 md:items-center">
           {/* Mobile : icône alignée sur la 1re rangée de pastilles (pas centrée sur les deux) */}
-          <Clock className="mt-[11px] h-3.5 w-3.5 shrink-0 text-faint md:mt-0" />
-          {/* Mobile : les pastilles passent à la ligne (rien ne sort de l’écran) ; desktop : une seule ligne */}
-          <div className="flex min-w-0 flex-wrap gap-1 rounded-xl bg-panel p-1 [scrollbar-width:none] md:flex-nowrap md:overflow-x-auto">
-            {([["all", "Tous"], ["contacted", "Déjà contactés"], ["never", "Jamais contactés"], ["relancer", "À relancer"]] as const).map(([v, label]) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setContactFilter(v)}
-                className={cn(
-                  "shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors",
-                  contactFilter === v ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <Clock className="mt-[13px] h-3.5 w-3.5 shrink-0 text-faint sm:mt-0 sm:self-center" />
+          {/* Mobile : les onglets passent à la ligne (rien ne sort de l’écran) ; desktop : une seule ligne */}
+          <Tabs
+            className="min-w-0 max-w-full"
+            label="Filtrer par suivi de contact"
+            items={[
+              { value: "all", label: "Tous" },
+              { value: "contacted", label: "Déjà contactés" },
+              { value: "never", label: "Jamais contactés" },
+              { value: "relancer", label: "À relancer" },
+            ]}
+            value={contactFilter}
+            onValueChange={(v) => setContactFilter(v as "all" | "contacted" | "never" | "relancer")}
+          />
         </div>
         {cityList.length > 0 && (
           <div className="flex items-center gap-1.5">
@@ -1395,31 +1393,24 @@ export function Contacts() {
 
             <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
               <div className="flex flex-col gap-1">
-                <div className="inline-flex overflow-hidden rounded-lg border border-border">
-                  <button
-                    type="button"
-                    onClick={() => setSendVia("gmail")}
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                      sendVia === "gmail" ? "bg-foreground text-background" : "bg-surface text-muted-foreground hover:bg-rowhover",
-                    )}
-                  >
-                    <GmailLogo className="h-3.5 w-3.5" /> Gmail
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSendVia("resend")}
-                    className={cn(
-                      "flex items-center gap-1.5 border-l border-border px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                      sendVia === "resend" ? "bg-foreground text-background" : "bg-surface text-muted-foreground hover:bg-rowhover",
-                    )}
-                  >
-                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
-                      <path d="M4 3h8.6c3 0 5 1.8 5 4.6 0 2-1 3.4-2.8 4.1L18.9 21h-4.3l-2.7-7.7H8.1V21H4V3zm4.1 3.3v4.1h4c1.3 0 2.2-.8 2.2-2s-.9-2.1-2.2-2.1H8.1z" />
-                    </svg>
-                    Resend
-                  </button>
-                </div>
+                <Tabs
+                  size="sm"
+                  label="Envoyer via"
+                  items={[
+                    { value: "gmail", label: "Gmail", icon: <GmailLogo className="h-3.5 w-3.5" /> },
+                    {
+                      value: "resend",
+                      label: "Resend",
+                      icon: (
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
+                          <path d="M4 3h8.6c3 0 5 1.8 5 4.6 0 2-1 3.4-2.8 4.1L18.9 21h-4.3l-2.7-7.7H8.1V21H4V3zm4.1 3.3v4.1h4c1.3 0 2.2-.8 2.2-2s-.9-2.1-2.2-2.1H8.1z" />
+                        </svg>
+                      ),
+                    },
+                  ]}
+                  value={sendVia}
+                  onValueChange={(v) => setSendVia(v as "gmail" | "resend")}
+                />
                 <span className="text-[10px] text-faint">
                   {sendVia === "gmail" ? "Depuis ta boîte Gmail — réponses dans tes fils" : "Depuis ton domaine TTP (Resend)"}
                 </span>

@@ -11,6 +11,7 @@ import { Users, ListChecks, CalendarDays, Wallet, ArrowRight, Sparkles, FileText
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { presetRange, previousRange, rangeBounds, rangeDays, sameRange, standardPresets, type DateRange } from "@/lib/dateRange";
 
 // Graphique recharts lazy-chargé : sort la lib (~101 Ko gzip) du premier écran.
@@ -265,22 +266,13 @@ export function ApercuView({
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[24px] font-semibold tracking-tight md:text-[28px]">{greeting()}</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg border border-border bg-surface p-0.5">
-            {(["7j", "30j", "90j"] as const).map((id) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setRange(presetRange(id)!)}
-                aria-pressed={quick === id}
-                className={cn(
-                  "rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors",
-                  quick === id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {parseInt(id, 10)} jours
-              </button>
-            ))}
-          </div>
+          <Tabs
+            size="sm"
+            label="Période rapide"
+            items={(["7j", "30j", "90j"] as const).map((id) => ({ value: id, label: `${parseInt(id, 10)} jours` }))}
+            value={quick ?? ""}
+            onValueChange={(v) => setRange(presetRange(v as "7j" | "30j" | "90j")!)}
+          />
           {/* Dates libres : raccourcis + calendrier « du … au … » */}
           <DateRangePicker
             value={range}
@@ -334,22 +326,16 @@ export function ApercuView({
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2">
-                <div className="flex rounded-lg border border-border p-0.5">
-                  {([["emission", "Facturé"], ["echeance", "Attendu"]] as const).map(([v, l]) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => setCaBasis(v)}
-                      aria-pressed={caBasis === v}
-                      className={cn(
-                        "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
-                        caBasis === v ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {l}
-                    </button>
-                  ))}
-                </div>
+                <Tabs
+                  size="sm"
+                  label="Base du chiffre d'affaires"
+                  items={[
+                    { value: "emission", label: "Facturé" },
+                    { value: "echeance", label: "Attendu" },
+                  ]}
+                  value={caBasis}
+                  onValueChange={(v) => setCaBasis(v as "emission" | "echeance")}
+                />
                 <Delta value={mom} suffix="vs mois préc." />
               </div>
             </div>

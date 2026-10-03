@@ -1,10 +1,11 @@
 import { cn } from "@/lib/utils";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "./select";
+import { Tabs } from "./animated-tabs";
 
 export type FilterOpt = { value: string; label: string };
 
 /**
- * Barre de filtres responsive : pastilles horizontales sur desktop, sélecteur
+ * Barre de filtres responsive : onglets segmentés sur desktop, sélecteur
  * compact sur mobile (gagne de la place quand il y a beaucoup d'options).
  */
 export function FilterBar({
@@ -35,24 +36,16 @@ export function FilterBar({
           </SelectContent>
         </Select>
       </div>
-      {/* Desktop : pastilles */}
-      <div className={cn("hidden flex-wrap gap-2 md:flex", className)}>
-        {options.map((o) => (
-          <button
-            key={o.value}
-            type="button"
-            onClick={() => onChange(o.value)}
-            className={cn(
-              "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors",
-              value === o.value
-                ? "bg-foreground text-background"
-                : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
-            )}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
+      {/* Desktop : onglets segmentés */}
+      <Tabs
+        className={cn("hidden md:block", className)}
+        size="md"
+        label={placeholder}
+        wrap
+        value={value}
+        onValueChange={onChange}
+        items={options.map((o) => ({ value: o.value, label: o.label }))}
+      />
     </>
   );
 }

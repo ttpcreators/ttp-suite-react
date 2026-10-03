@@ -22,6 +22,7 @@ import { TextField } from "@/components/ui/form";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/action-menu";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { RepresentationContract } from "@/views/RepresentationContract";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
 import { ttpLogoImg } from "@/lib/pdfDoc";
@@ -34,8 +35,6 @@ const TYPE_META: Record<CtType, { chip: string; label: string; title: string }> 
   repr: { chip: "Représentation", label: "AGENCE × CRÉATEUR", title: "Contrat de représentation" },
   ugc: { chip: "Contrat UGC", label: "CONTRAT UGC", title: "Cession de droits UGC" },
 };
-/** Libellés courts du sélecteur sur téléphone (une seule ligne chacun). */
-const TYPE_SHORT: Record<CtType, string> = { marque: "Marque", repr: "Représentation", ugc: "UGC" };
 
 type Term = { l: string; v: string };
 
@@ -675,22 +674,12 @@ export function Contrats() {
   const typeToggle = (
     <>
       <SecTitle icon={FileText}>Type de contrat</SecTitle>
-      <div className="grid w-full grid-cols-3 rounded-lg border border-border bg-surface p-0.5 sm:inline-flex sm:w-auto sm:max-w-full sm:flex-wrap">
-        {(Object.keys(TYPE_META) as CtType[]).map((k) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => { setCtType(k); setNavSub(k); }}
-            className={cn(
-              "rounded-md px-2 py-1.5 text-center text-[12px] font-medium leading-tight transition-colors sm:whitespace-nowrap sm:px-3",
-              k === ctType ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <span className="sm:hidden">{TYPE_SHORT[k]}</span>
-            <span className="hidden sm:inline">{TYPE_META[k].chip}</span>
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="Type de contrat"
+        items={(Object.keys(TYPE_META) as CtType[]).map((k) => ({ value: k, label: TYPE_META[k].chip }))}
+        value={ctType}
+        onValueChange={(v) => { setCtType(v as CtType); setNavSub(v as CtType); }}
+      />
     </>
   );
 

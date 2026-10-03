@@ -4,6 +4,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn, titleCase } from "@/lib/utils";
 import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown, Paperclip, FileText, UserRound, Clock } from "lucide-react";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
@@ -533,24 +534,16 @@ export function Briefs() {
             groups={groups}
             onClear={() => { setStatusFilter(ALL); setCreatorFilter(""); }}
             right={
-              <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
-                {([
-                  { id: "list", label: "Liste", icon: ListIcon },
-                  { id: "board", label: "Colonnes", icon: Columns3 },
-                ] as const).map((v) => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => setView(v.id)}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                      view === v.id ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    <v.icon className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{v.label}</span>
-                  </button>
-                ))}
-              </div>
+              <Tabs
+                size="sm"
+                label="Affichage des briefs"
+                items={[
+                  { value: "list", label: "Liste", icon: <ListIcon className="h-3.5 w-3.5" />, hideLabel: "mobile" },
+                  { value: "board", label: "Colonnes", icon: <Columns3 className="h-3.5 w-3.5" />, hideLabel: "mobile" },
+                ]}
+                value={view}
+                onValueChange={(v) => setView(v as "list" | "board")}
+              />
             }
             extra={creators.length > 0 ? (
               <div className="flex flex-col gap-2">

@@ -18,12 +18,13 @@ import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/f
 import { ActionMenu } from "@/components/ui/action-menu";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { useCreators } from "@/lib/useCreators";
-import { cn, titleCase } from "@/lib/utils";
+import { titleCase } from "@/lib/utils";
 import { DebriefCalculator, ShotStrip, useShotUrls, resolveShots, type CalcState } from "@/views/DebriefCalculator";
 import { printHtml } from "@/lib/printPdf";
 import { pdfShell, pdfHeading, pdfMeta, pdfSection, pdfKpis, pdfTicks, pdfShots } from "@/lib/pdfDoc";
 import { totalsOf as engTotals, parseNum as engParse, fmtCompact, fmtPct } from "@/lib/engagement";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { Tabs } from "@/components/ui/animated-tabs";
 
 /** Une petite statistique de campagne (label / valeur). */
 type Kpi = { l: string; v: string };
@@ -503,31 +504,16 @@ export function Debrief() {
         </div>
         <div className="flex items-center gap-2">
           {list.length > 0 && (
-            <div className="flex items-center gap-1 rounded-xl border border-border bg-panel p-1">
-              {(
-                [
-                  ["cards", LayoutGrid, "Cartes"],
-                  ["list", List, "Liste"],
-                  ["table", Table2, "Tableau"],
-                ] as [DebriefView, typeof LayoutGrid, string][]
-              ).map(([v, Icon, label]) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setView(v)}
-                  title={label}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors",
-                    view === v
-                      ? "bg-foreground text-background"
-                      : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{label}</span>
-                </button>
-              ))}
-            </div>
+            <Tabs
+              label="Affichage des bilans"
+              value={view}
+              onValueChange={(v) => setView(v as DebriefView)}
+              items={[
+                { value: "cards", label: "Cartes", icon: <LayoutGrid className="h-4 w-4" />, hideLabel: "mobile" },
+                { value: "list", label: "Liste", icon: <List className="h-4 w-4" />, hideLabel: "mobile" },
+                { value: "table", label: "Tableau", icon: <Table2 className="h-4 w-4" />, hideLabel: "mobile" },
+              ]}
+            />
           )}
           <AddButton label="Debrief" onClick={openCreate} />
         </div>
@@ -849,10 +835,13 @@ export function Debrief() {
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3.5">
-              <div className="inline-flex overflow-hidden rounded-lg border border-border">
-                <button type="button" onClick={() => setShareVia("gmail")} className={cn("px-3 py-1.5 text-[11px] font-semibold transition-colors", shareVia === "gmail" ? "bg-foreground text-background" : "bg-surface text-muted-foreground hover:bg-rowhover")}>Gmail</button>
-                <button type="button" onClick={() => setShareVia("resend")} className={cn("border-l border-border px-3 py-1.5 text-[11px] font-semibold transition-colors", shareVia === "resend" ? "bg-foreground text-background" : "bg-surface text-muted-foreground hover:bg-rowhover")}>Resend</button>
-              </div>
+              <Tabs
+                size="sm"
+                label="Envoyer via"
+                value={shareVia}
+                onValueChange={(v) => setShareVia(v as "gmail" | "resend")}
+                items={[{ value: "gmail", label: "Gmail" }, { value: "resend", label: "Resend" }]}
+              />
               <div className="flex gap-2">
                 <button type="button" onClick={() => printDebrief(shareD)} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
                   <FileText className="h-3.5 w-3.5" /> PDF

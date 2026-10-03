@@ -10,6 +10,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { StatCard } from "@/components/ui/stat-card";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import {
   BarChart,
@@ -105,21 +106,13 @@ function RevenueChart({ points }: { points: RevenuePoint[] }) {
           <div className="text-sm font-semibold text-foreground">Chiffre d'affaires</div>
           <div className="mt-0.5 text-[11px] text-faint">Évolution mensuelle · facturé vs encaissé</div>
         </div>
-        <div className="flex rounded-lg border border-border bg-card p-0.5">
-          {periods.map((p) => (
-            <button
-              key={p.k}
-              type="button"
-              onClick={() => setPeriod(p.k)}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
-                period === p.k ? "bg-foreground text-background" : "text-faint hover:text-foreground",
-              )}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          size="sm"
+          label="Période du graphique"
+          items={periods.map((p) => ({ value: String(p.k), label: p.label }))}
+          value={String(period)}
+          onValueChange={(v) => setPeriod(Number(v))}
+        />
       </div>
 
       <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -481,35 +474,23 @@ export function Stats() {
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="text-sm font-semibold text-foreground">Comparaison</div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex flex-wrap gap-0.5 rounded-lg border border-border bg-card p-0.5">
-              {([1, 3, 6, 12] as const).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setCmpMonths(n)}
-                  className={cn("rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors", cmpMonths === n ? "bg-foreground text-background" : "text-faint hover:text-foreground")}
-                >
-                  {n === 1 ? "1 mois" : `${n} mois`}
-                </button>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-0.5 rounded-lg border border-border bg-card p-0.5">
-              {(
-                [
-                  ["prev", "Période préc."],
-                  ["year", "Année N-1"],
-                ] as const
-              ).map(([k, lbl]) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setCmpAgainst(k)}
-                  className={cn("rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors", cmpAgainst === k ? "bg-foreground text-background" : "text-faint hover:text-foreground")}
-                >
-                  {lbl}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              size="sm"
+              label="Durée de comparaison"
+              items={([1, 3, 6, 12] as const).map((n) => ({ value: String(n), label: n === 1 ? "1 mois" : `${n} mois` }))}
+              value={String(cmpMonths)}
+              onValueChange={(v) => setCmpMonths(Number(v) as 1 | 3 | 6 | 12)}
+            />
+            <Tabs
+              size="sm"
+              label="Comparer avec"
+              items={[
+                { value: "prev", label: "Période préc." },
+                { value: "year", label: "Année N-1" },
+              ]}
+              value={cmpAgainst}
+              onValueChange={(v) => setCmpAgainst(v as "prev" | "year")}
+            />
           </div>
         </div>
 

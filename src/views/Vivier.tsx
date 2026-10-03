@@ -15,6 +15,7 @@ import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type App
 import GlassStatChart from "@/components/ui/glass-stat-chart";
 import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus } from "lucide-react";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { DateInput } from "@/components/ui/date-range-picker";
 import { todayISO } from "@/lib/dates";
 
@@ -244,31 +245,39 @@ export function Vivier() {
 
       {/* Filtre par niche */}
       {tagList.length > 0 && (
-        <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {[{ value: ALL, label: "Tous" }, ...tagList.map((t) => ({ value: t, label: t }))].map((o) => (
-            <button key={o.value} type="button" onClick={() => setTagFilter(o.value)} className={cn("shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors", tagFilter === o.value ? "bg-foreground text-background" : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
-              {o.label}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          className="mb-2"
+          size="md"
+          label="Filtrer par niche"
+          wrap
+          value={tagFilter}
+          onValueChange={setTagFilter}
+          items={[{ value: ALL, label: "Tous" }, ...tagList.map((t) => ({ value: t, label: t }))]}
+        />
       )}
       {/* Filtre par statut de scouting (segmenté, cohérent avec « déjà contactés ») */}
-      <div className="mb-2 flex w-fit max-w-full flex-wrap gap-1 overflow-x-auto rounded-xl bg-panel p-1 sm:flex-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {[{ v: "__all__" as const, label: "Tous", dot: "" }, ...STATUSES].map((s) => (
-          <button key={s.v} type="button" onClick={() => setStatusFilter(s.v)} className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors", statusFilter === s.v ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-            {s.dot && <span className={cn("h-1.5 w-1.5 rounded-full", s.dot)} />}
-            {s.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        className="mb-2"
+        size="md"
+        label="Filtrer par statut de scouting"
+        wrap
+        value={statusFilter}
+        onValueChange={(v) => setStatusFilter(v as ScoutStatus | "__all__")}
+        items={[{ value: "__all__", label: "Tous" }, ...STATUSES.map((s) => ({ value: s.v, label: s.label, dot: s.dot }))]}
+      />
       {/* Filtre « déjà contactés » */}
-      <div className="mb-4 flex w-fit gap-1 rounded-xl bg-panel p-1">
-        {([["all", "Tous"], ["contacted", "Déjà contactés"], ["never", "Jamais"]] as const).map(([v, label]) => (
-          <button key={v} type="button" onClick={() => setContactFilter(v)} className={cn("rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors", contactFilter === v ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        className="mb-4"
+        size="md"
+        label="Filtrer par prise de contact"
+        value={contactFilter}
+        onValueChange={(v) => setContactFilter(v as "all" | "contacted" | "never")}
+        items={[
+          { value: "all", label: "Tous" },
+          { value: "contacted", label: "Déjà contactés" },
+          { value: "never", label: "Jamais" },
+        ]}
+      />
 
       <InlineForm open={formOpen} title={editId ? "Modifier le créateur" : "Nouveau créateur (vivier)"} onClose={() => setFormOpen(false)} onSubmit={submit} submitLabel={editId ? "Enregistrer" : "Ajouter"}>
         <TextField label="Nom" value={fName} onChange={setFName} placeholder="Ex : Léna Marchand" className="min-w-[200px] flex-[2]" />

@@ -2,8 +2,8 @@ import { fmtCompact } from "@/lib/timeSeries";
 import { useState } from "react";
 import { Area, AreaChart, Line, LineChart, CartesianGrid, XAxis, YAxis, Tooltip } from "recharts";
 import { ChartContainer } from "@/components/ui/chart";
-import { cn } from "@/lib/utils";
 import { Delta } from "@/components/ui/dash";
+import { Tabs } from "@/components/ui/animated-tabs";
 
 /**
  * Carte de courbe réutilisable (agence + créateur) : panneau façon Aperçu, gros
@@ -66,22 +66,17 @@ export default function GlassStatChart({
           <div className="text-[14px] font-semibold text-foreground">{title}</div>
           {subtitle && <div className="mt-0.5 text-[12px] text-muted-foreground">{subtitle}</div>}
         </div>
-        <div className="flex shrink-0 rounded-lg border border-border bg-surface p-0.5">
-          {(["area", "line"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setType(t)}
-              aria-pressed={type === t}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
-                type === t ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {t === "area" ? "Aire" : "Ligne"}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          className="shrink-0"
+          size="sm"
+          label="Type de graphique"
+          value={type}
+          onValueChange={(v) => setType(v as "line" | "area")}
+          items={[
+            { value: "area", label: "Aire" },
+            { value: "line", label: "Ligne" },
+          ]}
+        />
       </div>
 
       {/* Gros chiffre + évolution */}

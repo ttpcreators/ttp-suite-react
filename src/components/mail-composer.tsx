@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Send, Loader2, Settings2, Plus, Trash2, ArrowLeft, ExternalLink } from "lucide-react";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import {
   buildHtml, parseEmails, scheduleSend, sendErrorText, sendGmail, type MailBox,
@@ -51,6 +52,9 @@ type Props = {
   /** Boîte d'envoi proposée par défaut (la page Mails transmet la boîte affichée). */
   defaultBox?: MailBox;
 };
+
+/** Valeur d'onglet de « Page blanche » (aucun modèle). */
+const BLANK_TPL = "__blank__";
 
 export function MailComposer({ open, contact, onClose, onSent, defaultBox = "partnerships" }: Props) {
   const { data: stored } = useAppState<MailTemplate[] | undefined>(
@@ -286,35 +290,18 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
         {!manage && contact ? (
           <>
             {/* Choix du modèle */}
-            <div className="flex flex-wrap gap-1.5 border-b border-border px-5 py-3">
-              {templates.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => applyTemplate(t)}
-                  className={cn(
-                    "rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                    tplId === t.id
-                      ? "bg-foreground text-background"
-                      : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground",
-                  )}
-                  title={KIND_LABEL[t.kind]}
-                >
-                  {t.name}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => applyTemplate(null)}
-                className={cn(
-                  "rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors",
-                  tplId === null
-                    ? "bg-foreground text-background"
-                    : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground",
-                )}
-              >
-                Page blanche
-              </button>
+            {/* Re-cliquer l'onglet actif ré-applique le modèle (efface les retouches),
+                comme avant : Tabs ne notifie pas ce cas, on l'intercepte ici. */}
+            <div
+              className="border-b border-border px-5 py-3"
+            >
+              <Tabs
+                size="sm"
+                label="Choix du modèle"
+                value={tplId ?? BLANK_TPL}
+                onValueChange={(v) => applyTemplate(v === BLANK_TPL ? null : (templates.find((t) => t.id === v) ?? null))}
+                items={[...templates.map((t) => ({ value: t.id, label: t.name })), { value: BLANK_TPL, label: "Page blanche" }]}
+              />
             </div>
 
             {/* Mail éditable */}

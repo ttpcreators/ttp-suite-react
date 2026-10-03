@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/toast";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { useSearch, matchQuery } from "@/lib/search";
@@ -312,48 +313,28 @@ export function WhatsappView() {
 
       {/* Filtres : quelle file afficher + quel type de contact */}
       <div className="mb-4 space-y-2">
-        <div className="flex flex-wrap gap-1.5">
-          {(
-            [
-              ["all", `Tous (${shownCount})`],
-              ["relance", `À relancer (${aRelancer.length})`],
-              ["jamais", `Jamais contactés (${jamais.length})`],
-              ["encours", `En cours (${enCours.length})`],
-            ] as const
-          ).map(([v, label]) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              className={cn(
-                "rounded-full px-3.5 py-1.5 text-[11px] font-semibold transition-colors",
-                view === v
-                  ? "bg-foreground text-background"
-                  : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          size="md"
+          label="Choisir la file à afficher"
+          wrap
+          value={view}
+          onValueChange={(v) => setView(v as "all" | "relance" | "jamais" | "encours")}
+          items={[
+            { value: "all", label: "Tous", count: shownCount },
+            { value: "relance", label: "À relancer", count: aRelancer.length },
+            { value: "jamais", label: "Jamais contactés", count: jamais.length },
+            { value: "encours", label: "En cours", count: enCours.length },
+          ]}
+        />
         {tagList.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {[{ value: "__all__", label: "Tous les types" }, ...tagList.map((t) => ({ value: t, label: t }))].map((o) => (
-              <button
-                key={o.value}
-                type="button"
-                onClick={() => setTagFilter(o.value)}
-                className={cn(
-                  "rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors",
-                  tagFilter === o.value
-                    ? "bg-foreground text-background"
-                    : "bg-panel text-muted-foreground hover:bg-rowhover hover:text-foreground",
-                )}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            size="md"
+            label="Filtrer par type de contact"
+            wrap
+            value={tagFilter}
+            onValueChange={setTagFilter}
+            items={[{ value: "__all__", label: "Tous les types" }, ...tagList.map((t) => ({ value: t, label: t }))]}
+          />
         )}
       </div>
 

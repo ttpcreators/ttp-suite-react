@@ -12,6 +12,7 @@ import { SelectField } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { isMainPlatform, type PlatformKey } from "@/lib/platform";
 import { PlatformIcon } from "@/components/ui/platform-icon";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { cn, titleCase } from "@/lib/utils";
 
 /**
@@ -370,28 +371,16 @@ export function Engagement() {
         <Calculator className="h-4 w-4 text-muted-foreground" /> Calculer un taux
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          {PLATFORMS.map((pl) => {
-            const active = pl.key === platformKey;
-            return (
-              <button
-                key={pl.key}
-                type="button"
-                onClick={() => {
-                  setPlatformKey(pl.key);
-                  setSavedOk(false);
-                }}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
-                  active ? "bg-foreground text-background" : "border border-border text-muted-foreground hover:bg-rowhover",
-                )}
-              >
-                <PlatformIcon platform={pl.key} className="h-3.5 w-3.5" />
-                {pl.label}
-              </button>
-            );
-          })}
-        </div>
+        <Tabs
+          size="sm"
+          label="Plateforme"
+          value={platformKey}
+          onValueChange={(v) => {
+            setPlatformKey(v as PlatformKey);
+            setSavedOk(false);
+          }}
+          items={PLATFORMS.map((pl) => ({ value: pl.key, label: pl.label, icon: <PlatformIcon platform={pl.key} className="h-3.5 w-3.5" /> }))}
+        />
         <span className="rounded-lg bg-muted px-3 py-1.5 text-[11px] text-muted-foreground">{p.formula}</span>
       </div>
 

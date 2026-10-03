@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { Tabs } from "@/components/ui/animated-tabs";
 
 type Row = {
   id: string;
@@ -217,26 +218,14 @@ export function Prospection() {
   const effStage = stageChips.includes(stageFilter) ? stageFilter : "Tous";
 
   const stageBar = (
-    <div className="mb-4 flex flex-wrap gap-2">
-      {stageChips.map((chip) => {
-        const active = effStage === chip;
-        return (
-          <button
-            key={chip}
-            type="button"
-            onClick={() => setStageFilter(chip)}
-            className={cn(
-              "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors",
-              active
-                ? "bg-foreground text-background"
-                : "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
-            )}
-          >
-            {chip}
-          </button>
-        );
-      })}
-    </div>
+    <Tabs
+      className="mb-4"
+      label="Filtrer par étape"
+      wrap
+      items={stageChips.map((chip) => ({ value: chip, label: chip }))}
+      value={effStage}
+      onValueChange={setStageFilter}
+    />
   );
 
   const filtered = rows.filter(

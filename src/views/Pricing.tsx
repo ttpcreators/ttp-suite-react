@@ -3,8 +3,9 @@ import { Info, Plus, Trash2, Copy, Users, Sparkles, Calculator, Tag, Lightbulb }
 import { supabase } from "@/lib/supabase";
 import { useCreators } from "@/lib/useCreators";
 import { formatEuro } from "@/lib/appState";
-import { cn, titleCase } from "@/lib/utils";
+import { titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import {
   INF_PLATFORMS, NICHES, nicheMult, infFormat, tier, computeInfluence, parseFollowers, parseEr,
@@ -143,21 +144,16 @@ export function Pricing() {
         </div>
         {/* Mode + créateur */}
         <div>
-          <div className="flex w-fit items-center gap-1 rounded-full border border-border bg-panel p-1">
-            {([["influence", "Influence", Users], ["ugc", "UGC", Sparkles]] as const).map(([m, label, Icon]) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors",
-                  mode === m ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" /> {label}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            size="sm"
+            label="Type de package"
+            items={[
+              { value: "influence", label: "Influence", icon: <Users className="h-3.5 w-3.5" /> },
+              { value: "ugc", label: "UGC", icon: <Sparkles className="h-3.5 w-3.5" /> },
+            ]}
+            value={mode}
+            onValueChange={(v) => setMode(v as Mode)}
+          />
           <p className="mt-2 text-[12px] leading-snug text-muted-foreground">
             {mode === "influence"
               ? "Le créateur publie sur son propre compte : prix basé sur l'audience de chaque plateforme."

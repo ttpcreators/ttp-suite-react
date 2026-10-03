@@ -12,6 +12,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useLiveKey } from "@/lib/useLive";
 import { frDate } from "@/lib/dates";
+import { Tabs } from "@/components/ui/animated-tabs";
 
 /**
  * Page « Agent » (Espace Agence, fondateurs) — pilote l'agent IA branché sur le
@@ -550,17 +551,14 @@ export function AgentView() {
           <Empty text="Rien en mémoire pour le moment. L'agent y notera ce que les créatrices partagent (jamais de santé ni de vie privée)." />
         ) : (
           <div>
-            <div className="mb-3 flex flex-wrap gap-1.5">
-              {creatricesMem.map(([name, count]) => (
-                <button key={name} type="button" onClick={() => setMemCreatrice(name)}
-                  className={cn(
-                    "rounded-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition-colors",
-                    memSel === name ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground hover:text-foreground",
-                  )}>
-                  {name} · {count}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              className="mb-3"
+              size="sm"
+              label="Créatrice"
+              items={creatricesMem.map(([name, count]) => ({ value: name, label: titleCase(name), count }))}
+              value={memSel}
+              onValueChange={setMemCreatrice}
+            />
             <div className="flex flex-col gap-1.5">
               {memEntries.map((e) => (
                 <div key={e.id} className="flex items-start gap-2.5 rounded-lg bg-panel px-3 py-2">

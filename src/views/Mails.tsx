@@ -12,6 +12,7 @@ import { MailComposer, type ComposerContact } from "@/components/mail-composer";
 import { BoxChip } from "@/components/mail-box-chip";
 import { BOX_LABEL, BOX_STYLE, sendErrorText, sendGmail, type MailBox, type OutAttachment } from "@/lib/mailSend";
 import { ForwardDialog, MailSettingsDialog, ReplyBox } from "@/components/mail-tools";
+import { Tabs } from "@/components/ui/animated-tabs";
 
 /**
  * Page « Mails » : historique des échanges Gmail par contact + lecture d'un fil
@@ -367,38 +368,28 @@ export function Mails() {
               />
             </div>
             {/* Filtre « déjà échangé » (basé sur le suivi de contact) */}
-            <div className="flex gap-0.5 rounded-lg bg-muted p-0.5">
-              {([["all", "Tous"], ["contacted", "Déjà échangé"], ["never", "Jamais"]] as const).map(([v, label]) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setContactFilter(v)}
-                  className={cn(
-                    "flex-1 whitespace-nowrap rounded-md px-2 py-1.5 text-[12px] font-medium transition-colors",
-                    contactFilter === v ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              size="sm"
+              fullWidth
+              label="Filtrer par échange"
+              items={[
+                { value: "all", label: "Tous" },
+                { value: "contacted", label: "Déjà échangé" },
+                { value: "never", label: "Jamais" },
+              ]}
+              value={contactFilter}
+              onValueChange={(v) => setContactFilter(v as "all" | "contacted" | "never")}
+            />
             {/* Filtre par type (marque, agence…) */}
             {tagList.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {[{ value: "__all__", label: "Tous types" }, ...tagList.map((t) => ({ value: t, label: t }))].map((o) => (
-                  <button
-                    key={o.value}
-                    type="button"
-                    onClick={() => setTagFilter(o.value)}
-                    className={cn(
-                      "rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
-                      tagFilter === o.value ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {o.label}
-                  </button>
-                ))}
-              </div>
+              <Tabs
+                size="sm"
+                label="Filtrer par type"
+                wrap
+                items={[{ value: "__all__", label: "Tous types" }, ...tagList.map((t) => ({ value: t, label: t }))]}
+                value={tagFilter}
+                onValueChange={setTagFilter}
+              />
             )}
           </div>
 

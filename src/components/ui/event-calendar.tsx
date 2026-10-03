@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, X, Trash2 } from "lucide-react";
 import { TextField, TextAreaField, SelectField } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { cn } from "@/lib/utils";
+import { Tabs } from "@/components/ui/animated-tabs";
 
 export type Ev = {
   id: string;
@@ -350,34 +351,23 @@ export function EventCalendar({
         ) : <div />}
 
         {/* ViewToggle */}
-        <div className="flex items-center gap-1 rounded-xl border border-border bg-panel p-1">
-          {(
-            [
-              ["month", "Mois"],
-              ["week", "Semaine"],
-              ["list", "Liste"],
-            ] as [View, string][]
-          ).map(([v, label]) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => {
-                if (v === "week") setCursor((c) => startOfWeek(c));
-                // Mois : recale au 1er du mois du curseur (cohérent + pas d'overflow).
-                if (v === "month") setCursor((c) => new Date(c.getFullYear(), c.getMonth(), 1));
-                setView(v);
-              }}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors",
-                view === v
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          size="md"
+          label="Vue du calendrier"
+          value={view}
+          onValueChange={(next) => {
+            const v = next as View;
+            if (v === "week") setCursor((c) => startOfWeek(c));
+            // Mois : recale au 1er du mois du curseur (cohérent + pas d'overflow).
+            if (v === "month") setCursor((c) => new Date(c.getFullYear(), c.getMonth(), 1));
+            setView(v);
+          }}
+          items={[
+            { value: "month", label: "Mois" },
+            { value: "week", label: "Semaine" },
+            { value: "list", label: "Liste" },
+          ]}
+        />
       </div>
 
       {/* Filtres de catégorie (cliquables) + légende des types d'événement */}
@@ -677,21 +667,13 @@ function ListView({ events, onEventClick }: { events: Ev[]; onEventClick: (e: Ev
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex w-fit gap-1 rounded-xl bg-panel p-1">
-        {FILTERS.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => setFilter(f.id)}
-            className={cn(
-              "rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors",
-              filter === f.id ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        size="sm"
+        label="Filtrer les événements"
+        value={filter}
+        onValueChange={(v) => setFilter(v as "avenir" | "passe" | "tous")}
+        items={FILTERS.map((f) => ({ value: f.id, label: f.label }))}
+      />
       {groups.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-8 text-center text-sm text-muted-foreground shadow-sm">
           Aucun événement {filter === "passe" ? "passé" : filter === "avenir" ? "à venir" : ""}.
