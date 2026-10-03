@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
+import { MailAvatar } from "@/components/mail-avatar";
 import {
   MessageCircle, Mail, Phone, AtSign, Check, Clock, Send, ScrollText, ChevronDown, UserRound,
 } from "lucide-react";
@@ -244,9 +245,14 @@ export function WhatsappView() {
     const lt = lastTouch(x.list);
     return (
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 transition-colors hover:bg-rowhover sm:flex-nowrap sm:gap-y-0">
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] bg-panel text-[11px] font-bold text-foreground">
-          {initials(x.r.person !== "—" ? x.r.person : x.r.brand)}
-        </div>
+        {/* Photo ou logo de la marque (trouvé automatiquement depuis l'email), sinon initiales */}
+        <MailAvatar
+          name={x.r.person !== "—" ? x.r.person : x.r.brand}
+          email={x.r.email}
+          className="h-9 w-9 rounded-[9px]"
+          fallback={initials(x.r.person !== "—" ? x.r.person : x.r.brand)}
+          fallbackClassName="bg-panel text-[11px] font-bold text-foreground"
+        />
         <div className="min-w-0 flex-1 basis-[calc(100%-48px)] sm:basis-auto">
           <div className="truncate text-[13px] font-semibold text-foreground">{x.r.brand}</div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-faint">

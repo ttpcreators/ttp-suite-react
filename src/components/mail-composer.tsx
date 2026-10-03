@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Send, Loader2, Settings2, Plus, Trash2, ArrowLeft, ExternalLink } from "lucide-react";
 import { cn, initials, titleCase } from "@/lib/utils";
+import { MailAvatar } from "@/components/mail-avatar";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
@@ -257,9 +258,13 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
             </button>
           )}
           {!manage && contact && (
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-panel text-[11px] font-bold text-foreground">
-              {initials(contact.label)}
-            </div>
+            <MailAvatar
+              name={contact.label}
+              email={contact.email}
+              className="h-9 w-9 rounded-lg"
+              fallback={initials(contact.label)}
+              fallbackClassName="bg-panel text-[11px] font-bold text-foreground"
+            />
           )}
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold text-foreground">
