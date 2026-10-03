@@ -22,10 +22,41 @@ export const fmtWhen = (ts: number) => {
 };
 export const fmtFull = (ts: number) =>
   ts ? new Date(ts).toLocaleString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+/** « il y a 15 min », « il y a 3 h », « il y a 2 jours » ; rien au-delà d'une semaine. */
+export const fmtAgo = (ts: number) => {
+  if (!ts) return "";
+  const min = Math.round((Date.now() - ts) / 60_000);
+  if (min < 1) return "à l'instant";
+  if (min < 60) return `il y a ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `il y a ${h} h`;
+  const d = Math.round(h / 24);
+  return d < 7 ? `il y a ${d} jour${d > 1 ? "s" : ""}` : "";
+};
 
 /** Photo de profil (marque ou expéditeur), comme dans Gmail. L'agence = logo TTP. */
-export function Initial({ name, agency, size = "md", email }: { name: string; agency?: boolean; size?: "sm" | "md"; email?: string | null }) {
+export function Initial({ name, agency, size = "md", email }: { name: string; agency?: boolean; size?: "sm" | "md" | "lg"; email?: string | null }) {
   return <MailAvatar name={agency ? "TTP" : name} email={email} agency={agency} size={size} />;
+}
+
+/** Pastille du type de fichier (PDF rouge, tableur vert…), comme dans les clients mail. */
+const FILE_TONE: [RegExp, string][] = [
+  [/^pdf$/, "bg-red-500"],
+  [/^(docx?|odt|rtf|pages)$/, "bg-blue-500"],
+  [/^(xlsx?|csv|ods|numbers)$/, "bg-emerald-600"],
+  [/^(pptx?|key|odp)$/, "bg-orange-500"],
+  [/^(zip|rar|7z|tar|gz)$/, "bg-violet-500"],
+  [/^(png|jpe?g|gif|webp|heic|svg)$/, "bg-pink-500"],
+  [/^(mp4|mov|webm|avi)$/, "bg-zinc-700"],
+];
+function FileBadge({ name }: { name: string }) {
+  const ext = (name.includes(".") ? name.split(".").pop() ?? "" : "").toLowerCase().slice(0, 4);
+  const tone = FILE_TONE.find(([re]) => re.test(ext))?.[1] ?? "bg-zinc-500";
+  return (
+    <span className={`grid h-9 w-8 shrink-0 place-items-center rounded-md text-[9px] font-bold uppercase tracking-wide text-white ${tone}`}>
+      {ext || "?"}
+    </span>
+  );
 }
 
 /** Corps d'un mail : iframe isolée (aucun script), hauteur suivie en continu. */
@@ -70,18 +101,131 @@ const cleanAddr = (v: string) => v.replace(/"?([^"<,]+?)"?\s*<[^>]+>/g, "$1");
  * Replié : une ligne compacte (expéditeur, aperçu, date).
  */
 export function MailItem({
-  m, open, onToggle, threadId, creator, actions = [], footer, index = 0, onDownload,
+  m, open, onToggle, threadId, creator, actions = [], footer, index = 0, onDownload, variant = "card",
 }: {
   m: MailMessage; open: boolean; onToggle: () => void; threadId?: string; creator?: string;
   /** Téléchargement personnalisé (page Mails agence) ; sinon via creator-mail. */
   onDownload?: (a: MailAttachment) => Promise<void> | void;
   actions?: MailAction[]; footer?: ReactNode; index?: number;
+  /** « plain » : sans cadre, façon client mail (page Mails agence). */
+  variant?: "card" | "plain";
 }) {
   const [showQuoted, setShowQuoted] = useState(false);
   const snippet = useMemo(() => mailSnippet(m.html, m.text), [m.html, m.text]);
   const name = m.fromAgency ? "TTP Creators" : m.from;
   const reduce = useReducedMotion();
   const enter = reduce ? {} : { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.25, delay: Math.min(index, 6) * 0.04 } };
+  const download = (a: MailAttachment) => {
+    const run = onDownload ? Promise.resolve(onDownload(a)) : threadId ? downloadAttachment(threadId, a, creator) : null;
+    return run?.catch((e) => toast((e as Error).message));
+  };
+
+  if (variant === "plain") {
+    if (!open) {
+      return (
+        <motion.button
+          {...enter}
+          type="button"
+          onClick={onToggle}
+          className="-mx-3 flex items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-rowhover"
+        >
+          <Initial name={m.from} email={m.fromEmail} agency={m.fromAgency} size="sm" />
+          <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center">
+            <span className="truncate text-[13px] font-medium text-foreground">{name}</span>
+            <span className="col-span-2 row-start-2 truncate text-[13px] text-muted-foreground sm:col-span-1 sm:col-start-2 sm:row-start-1">{snippet}</span>
+            <span className="col-start-2 row-start-1 shrink-0 text-[11px] tabular-nums text-faint sm:col-start-3">{fmtWhen(m.ts)}</span>
+          </span>
+        </motion.button>
+      );
+    }
+    const ago = fmtAgo(m.ts);
+    return (
+      <motion.article {...enter} className="flex flex-col py-5">
+        <div className="flex items-start gap-3">
+          <button type="button" onClick={onToggle} className="flex min-w-0 flex-1 items-start gap-3 text-left" title="Replier">
+            <Initial name={m.from} email={m.fromEmail} agency={m.fromAgency} size="lg" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[14px] font-semibold text-foreground">{name}</span>
+              <span className="block truncate text-[12.5px] text-muted-foreground">{m.fromAgency ? m.from : m.fromEmail}</span>
+              <span className="mt-0.5 block truncate text-[11.5px] text-faint">
+                à {cleanAddr(m.to)}{m.cc ? ` · cc ${cleanAddr(m.cc)}` : ""}
+              </span>
+            </span>
+          </button>
+          <div className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
+            <span className="mr-1 hidden text-[12px] tabular-nums text-muted-foreground sm:inline">
+              {fmtFull(m.ts)}{ago && <span className="text-faint"> ({ago})</span>}
+            </span>
+            <span className="mr-1 text-[11px] tabular-nums text-faint sm:hidden">{fmtWhen(m.ts)}</span>
+            {actions.map((a) => (
+              <button
+                key={a.label}
+                type="button"
+                onClick={a.onClick}
+                title={a.label}
+                aria-label={a.label}
+                className="grid h-8 w-8 place-items-center rounded-lg transition-colors hover:bg-rowhover hover:text-foreground"
+              >
+                <a.icon className="h-4 w-4" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5 overflow-hidden rounded-lg bg-white dark:p-4">
+          <MailBody m={m} showQuoted={showQuoted} />
+        </div>
+        {hasQuote(m.html) && (
+          <button
+            type="button"
+            onClick={() => setShowQuoted((v) => !v)}
+            title={showQuoted ? "Masquer l'historique" : "Afficher l'historique"}
+            className="mt-2 self-start rounded-md bg-muted px-2 py-0.5 text-[12px] font-semibold leading-none tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {showQuoted ? "Masquer" : "···"}
+          </button>
+        )}
+
+        {m.attachments.length > 0 && (
+          <div className="mt-6">
+            <div className="mb-2.5 flex items-center justify-between gap-3">
+              <span className="text-[13px] font-semibold text-foreground">
+                {m.attachments.length} pièce{m.attachments.length > 1 ? "s" : ""} jointe{m.attachments.length > 1 ? "s" : ""}
+              </span>
+              {m.attachments.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => void m.attachments.reduce<Promise<unknown>>((p, a) => p.then(() => download(a)), Promise.resolve())}
+                  className="text-[12.5px] font-medium text-primary hover:underline"
+                >
+                  Tout télécharger
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2.5">
+              {m.attachments.map((a) => (
+                <button
+                  key={a.attachmentId}
+                  type="button"
+                  onClick={() => void download(a)}
+                  title={`Télécharger ${a.filename}`}
+                  className="flex w-full items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:bg-rowhover sm:w-[260px]"
+                >
+                  <FileBadge name={a.filename} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[12.5px] font-medium text-foreground">{a.filename}</span>
+                    <span className="block text-[11px] text-faint">{fmtSize(a.size)}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {footer && <div className="mt-6">{footer}</div>}
+      </motion.article>
+    );
+  }
 
   if (!open) {
     return (

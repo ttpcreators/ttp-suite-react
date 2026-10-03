@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, PenLine, Send, Settings2, X } from "lucide-react";
+import { Loader2, PenLine, Reply, Send, Settings2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -143,11 +143,15 @@ export function MailSettingsDialog({ open, onClose }: { open: boolean; onClose: 
 
 // ── Réponse dans le fil ─────────────────────────────────────────────────────
 export function ReplyBox({
-  placeholder, box, focusKey, onSend,
+  placeholder, box, focusKey, onSend, variant = "bar", to,
 }: {
   placeholder: string; box: MailBox; focusKey?: number;
   /** Appelé au moment de l'envoi réel (après le délai d'annulation). */
   onSend: (p: { text: string; cc: string[]; bcc: string[]; html: string; attachments: OutAttachment[] }) => Promise<boolean>;
+  /** « card » : cadre complet façon client mail (destinataire, zone haute, bouton Envoyer). */
+  variant?: "bar" | "card";
+  /** Destinataire affiché en tête du cadre (variante « card »). */
+  to?: string;
 }) {
   const settings = useMailSettings();
   const [text, setText] = useState("");
@@ -187,6 +191,64 @@ export function ReplyBox({
       }
     });
   };
+
+  if (variant === "card") {
+    const line = "flex items-center gap-2 border-b border-border px-3.5 py-1.5";
+    const addr = "h-7 min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-faint";
+    return (
+      <div className="overflow-hidden rounded-xl border border-border bg-surface transition-colors focus-within:border-primary">
+        <div className="flex items-center gap-2 border-b border-border px-3.5 py-2 text-[12.5px]">
+          <Reply className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="shrink-0 text-muted-foreground">À :</span>
+          {to && <span className="min-w-0 truncate rounded-md bg-muted px-2 py-0.5 font-medium text-foreground">{to}</span>}
+          <span className="flex-1" />
+          <button type="button" onClick={() => setCcOpen((v) => !v)} className={cn("shrink-0 rounded px-1 font-medium text-muted-foreground hover:text-foreground", ccOpen && "text-foreground")}>Cc</button>
+          <button type="button" onClick={() => setBccOpen((v) => !v)} className={cn("shrink-0 rounded px-1 font-medium text-muted-foreground hover:text-foreground", bccOpen && "text-foreground")}>Cci</button>
+        </div>
+        {ccOpen && (
+          <div className={line}>
+            <span className="w-8 shrink-0 text-[12px] text-muted-foreground">Cc</span>
+            <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="adresse@exemple.com, autre@exemple.com" className={addr} autoFocus inputMode="email" />
+          </div>
+        )}
+        {bccOpen && (
+          <div className={line}>
+            <span className="w-8 shrink-0 text-[12px] text-muted-foreground">Cci</span>
+            <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="Invisible pour les autres : adresse@exemple.com" className={addr} autoFocus inputMode="email" />
+          </div>
+        )}
+        <textarea
+          ref={ref}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
+          }}
+          rows={3}
+          placeholder={placeholder}
+          className="block max-h-80 min-h-[96px] w-full resize-none bg-transparent px-4 py-3 text-[13px] leading-relaxed text-foreground outline-none [field-sizing:content] placeholder:text-faint"
+        />
+        {att.files.length > 0 && <div className="px-3.5 pb-2.5"><AttachChips files={att.files} onRemove={att.remove} /></div>}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-3.5 py-2 text-[12px] text-muted-foreground">
+          <AttachButton onFiles={(f) => void att.add(f)} />
+          <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
+          <BoxChip box={box} prefix="Depuis" />
+          <span className="flex-1" />
+          <span className="text-faint max-sm:hidden">
+            {settings.delaySec ? `annulable ${settings.delaySec} s · ` : ""}⌘↵
+          </span>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!text.trim()}
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-35"
+          >
+            <Send className="h-3.5 w-3.5" /> Envoyer
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2">

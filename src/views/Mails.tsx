@@ -1,9 +1,11 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
-import { Mail, ArrowDownLeft, ArrowUpRight, ArrowLeft, Inbox, Search, Loader2, PenLine, Reply, Forward, Settings2, RefreshCw, Send, MessageSquareText, Trash2, Undo2 } from "lucide-react";
+import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Mail, ArrowDownLeft, ArrowUpRight, ArrowLeft, Inbox, Search, Loader2, PenLine, Reply, Forward, Settings2, RefreshCw, Send,
+  MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, CircleAlert, type LucideIcon,
+} from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
-import { DashPanel } from "@/components/ui/dash";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
 import { saveBase64, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
 import { toast } from "@/components/ui/toast";
@@ -72,6 +74,130 @@ function decodeEntities(s: string): string {
   return t.value;
 }
 
+/*
+ * Mise en page façon client mail : barre d'icônes (dossiers + boîtes), liste,
+ * lecture, et à droite (grand écran) les créatrices en accès direct.
+ */
+type Mode = "inbox" | "sent" | "contacts" | "creators";
+const MODES: { id: Mode; label: string; short: string; icon: LucideIcon }[] = [
+  { id: "inbox", label: "Boîte de réception", short: "Reçus", icon: Inbox },
+  { id: "sent", label: "Envoyés", short: "Envoyés", icon: Send },
+  { id: "contacts", label: "Contacts", short: "Contacts", icon: BookUser },
+  { id: "creators", label: "Par créatrice", short: "Créatrices", icon: UsersRound },
+];
+const BOXES: { id: "all" | MailBox; label: string; short: string; hint: string }[] = [
+  { id: "all", label: "Les deux boîtes", short: "Les deux", hint: "Les deux boîtes réunies" },
+  { id: "partnerships", label: BOX_LABEL.partnerships, short: BOX_LABEL.partnerships, hint: "Prospection et contacts agence" },
+  { id: "talent", label: BOX_LABEL.talent, short: BOX_LABEL.talent, hint: "Échanges créatrices (leurs alias)" },
+];
+function readPref<T extends string>(key: string, allowed: readonly T[], def: T): T {
+  try {
+    const v = localStorage.getItem(key) as T | null;
+    return v && allowed.includes(v) ? v : def;
+  } catch {
+    return def;
+  }
+}
+function writePref(key: string, v: string) {
+  try {
+    localStorage.setItem(key, v);
+  } catch {
+    /* stockage indisponible */
+  }
+}
+
+/** Carré de couleur d'une boîte : violet = partnerships@, vert = talent@, les deux = moitié-moitié. */
+function BoxSquare({ box, className }: { box: "all" | MailBox; className?: string }) {
+  if (box === "all") {
+    return (
+      <span aria-hidden className={cn("grid size-3.5 shrink-0 grid-cols-2 overflow-hidden rounded-[4px]", className)}>
+        <span className={BOX_STYLE.partnerships.dot} />
+        <span className={BOX_STYLE.talent.dot} />
+      </span>
+    );
+  }
+  return <span aria-hidden className={cn("size-3.5 shrink-0 rounded-[4px]", BOX_STYLE[box].dot, className)} />;
+}
+
+/** Bulle au survol, à droite d'un bouton de la barre d'icônes. */
+function Tip({ children }: { children: ReactNode }) {
+  return (
+    <span role="tooltip" className="pointer-events-none absolute left-full top-1/2 z-30 ml-2.5 -translate-y-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[11px] font-medium text-background opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
+      {children}
+    </span>
+  );
+}
+
+/** Bouton de la barre d'icônes : trait à gauche quand c'est le dossier affiché. */
+function RailButton({ label, active, bar = true, badge, onClick, children }: {
+  label: string; active?: boolean; bar?: boolean; badge?: number | null; onClick: () => void; children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      className={cn(
+        "group relative grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-colors",
+        active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
+        active && !bar && "ring-1 ring-border",
+      )}
+    >
+      {active && bar && <span aria-hidden className="absolute -left-3 bottom-2 top-2 w-[3px] rounded-r-full bg-foreground" />}
+      {children}
+      {badge ? (
+        <span className="absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-foreground px-1 text-center text-[10px] font-semibold leading-[18px] tabular-nums text-background ring-2 ring-surface">
+          {badge > 99 ? "99+" : badge}
+        </span>
+      ) : null}
+      <Tip>{label}</Tip>
+    </button>
+  );
+}
+
+/** Bouton icône des barres du lecteur. */
+function ToolButton({ icon: Icon, label, onClick, disabled, busy, spin, danger, className }: {
+  icon: LucideIcon; label: string; onClick: () => void; disabled?: boolean; busy?: boolean; spin?: boolean; danger?: boolean; className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className={cn(
+        "grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:pointer-events-none disabled:opacity-35",
+        danger && "hover:bg-red-500/[0.08] hover:text-red-600 dark:hover:text-red-400",
+        className,
+      )}
+    >
+      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className={cn("h-[17px] w-[17px]", spin && "animate-spin")} />}
+    </button>
+  );
+}
+
+/** Bouton avec texte de la barre du bas (Répondre, Transférer…). */
+function BarButton({ icon: Icon, label, onClick, disabled, busy, danger }: {
+  icon: LucideIcon; label: string; onClick: () => void; disabled?: boolean; busy?: boolean; danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50",
+        danger && "hover:bg-red-500/[0.08] hover:text-red-600 dark:hover:text-red-400",
+      )}
+    >
+      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
+      {label}
+    </button>
+  );
+}
+
 /** supabase-js met le corps JSON des réponses non-2xx dans error.context. */
 async function invokeJson<T>(fn: string, body: Record<string, unknown>): Promise<T | null> {
   const { data, error } = await supabase.functions.invoke(fn, { body });
@@ -136,18 +262,32 @@ export function Mails() {
     return names;
   }, [linked, allCreators]);
 
+  // Dossier affiché dans la barre d'icônes (retenu sur cet appareil).
+  const [mode, setModeState] = useState<Mode>(() => readPref("ttp:mails-mode", MODES.map((m) => m.id), "inbox"));
+  const setMode = (m: Mode) => {
+    setModeState(m);
+    writePref("ttp:mails-mode", m);
+  };
+  // Dossier Gmail lu : reçus ou envoyés (Contacts et Créatrices gardent les reçus).
+  const folder: "inbox" | "sent" = mode === "sent" ? "sent" : "inbox";
+  const goMode = (m: Mode) => {
+    if ((m === "inbox" || m === "sent") && (m === "sent") !== (folder === "sent")) setInbox(null);
+    setMode(m);
+    setThread(null);
+    if (m !== "contacts") setSelected(null);
+  };
+  const openCreator = (name: string, threadId?: string) => {
+    setCreatorView({ name, threadId });
+    setMode("creators");
+  };
+
   // Choisir une boîte = afficher SA boîte de réception (le contact sélectionné est fermé).
   const setBox = (v: "all" | MailBox) => {
     setBoxState(v);
-    setCreatorView(null);
     setThread(null);
     setSelected(null);
-    setMobileInbox(true);
-    try {
-      localStorage.setItem("ttp:mails-box", v);
-    } catch {
-      /* stockage indisponible */
-    }
+    if (mode !== "inbox" && mode !== "sent") setMode("inbox");
+    writePref("ttp:mails-box", v);
   };
 
   const [history, setHistory] = useState<MailMsg[] | null>(null);
@@ -163,9 +303,8 @@ export function Mails() {
   const [inboxErr, setInboxErr] = useState("");
   const [inboxPartial, setInboxPartial] = useState(false);
   const [inboxTick, setInboxTick] = useState(0); // « Actualiser »
-  // Dossier affiché, comme Gmail : mails reçus (boîte de réception) ou envoyés.
-  const [folder, setFolder] = useState<"inbox" | "sent">("inbox");
-  const [mobileInbox, setMobileInbox] = useState(false); // mobile : boîte de réception au lieu des contacts
+  const [inboxQuery, setInboxQuery] = useState(""); // recherche dans la liste chargée
+  const [unread, setUnread] = useState<number | null>(null); // non lus de la boîte (pastille)
   const [threadMsgs, setThreadMsgs] = useState<ThreadMsg[] | null>(null);
   const [threadBusy, setThreadBusy] = useState(false);
   const [replyFocus, setReplyFocus] = useState(0); // « Répondre » sur une carte → focus de la réponse
@@ -264,6 +403,7 @@ export function Mails() {
       if (res?.ok) {
         setInbox(res.threads ?? []);
         setInboxPartial(!!res.partial);
+        if (folder === "inbox") setUnread((res.threads ?? []).filter((t) => t.unread).length);
       } else {
         setInbox([]);
         setInboxErr(
@@ -412,6 +552,37 @@ export function Mails() {
     attachments: m.attachments ?? [],
   }));
 
+  // Recherche dans la boîte affichée (nom, adresse, objet, extrait).
+  const inboxQ = inboxQuery.trim().toLowerCase();
+  const shownInbox = useMemo(
+    () => (inbox ?? []).filter((t) => !inboxQ || `${t.name} ${t.email} ${t.subject} ${decodeEntities(t.snippet)}`.toLowerCase().includes(inboxQ)),
+    [inbox, inboxQ],
+  );
+  // « 3 sur 12 » ‹ › : les fils de la liste d'où le mail a été ouvert.
+  type NavRef = { threadId: string; subject: string; box: MailBox; contact?: string; name?: string };
+  const navList = useMemo<NavRef[]>(() => {
+    if (selected) {
+      const seen = new Set<string>();
+      const out: NavRef[] = [];
+      for (const m of history ?? []) {
+        const b = m.box ?? "partnerships";
+        if (!m.threadId || seen.has(`${b}-${m.threadId}`)) continue;
+        seen.add(`${b}-${m.threadId}`);
+        out.push({ threadId: m.threadId, subject: m.subject, box: b });
+      }
+      return out;
+    }
+    return shownInbox.map((t) => ({ threadId: t.threadId, subject: t.subject, box: t.box, contact: t.email, name: t.name }));
+  }, [selected, history, shownInbox]);
+  const navIdx = thread ? navList.findIndex((n) => n.threadId === thread.threadId && n.box === thread.box) : -1;
+  const focusReply = () => {
+    const last = readerMsgs[readerMsgs.length - 1];
+    if (last) setExpanded((s) => new Set([...s, last.id]));
+    setReplyFocus(Date.now());
+  };
+  const photoOf = (n: string) => allCreators.find((c) => sameName(c.name, n))?.photo_url ?? null;
+  const readerOpen = !!thread || (mode === "contacts" && !!selected);
+
   // Pièce jointe d'un fil agence : lue côté serveur dans la boîte du fil.
   const downloadAgencyAttachment = async (a: MailAttachment) => {
     if (!thread) return;
@@ -422,223 +593,293 @@ export function Mails() {
     saveBase64(r.data, a.filename);
   };
 
-  return (
-    <>
-      {/* Boîte affichée */}
-      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="flex max-w-full gap-0.5 overflow-x-auto rounded-lg bg-muted p-0.5">
-          {([["all", "Les deux boîtes"], ["partnerships", BOX_LABEL.partnerships], ["talent", BOX_LABEL.talent]] as const).map(([v, label]) => {
-            const on = box === v;
-            const n = !selected && inbox && !inboxBusy && box === v ? inbox.length : null;
-            return (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setBox(v)}
-                aria-pressed={on}
-                className={cn(
-                  "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-[12px] font-semibold transition-colors",
-                  on ? (v === "all" ? "bg-surface text-foreground shadow-sm" : BOX_STYLE[v].chip + " shadow-sm") : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {v !== "all" && !on && <span className={cn("h-2 w-2 rounded-full", BOX_STYLE[v].dot)} />}
-                {label}
-                {n !== null && <span className={cn("tabular-nums", on ? "opacity-75" : "text-faint")}>{n}</span>}
-              </button>
-            );
-          })}
-        </div>
-        <div className="order-last ml-auto flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setNewMailOpen(true)}
-          className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
-        >
-          <PenLine className="h-3.5 w-3.5" /> Nouveau mail
-        </button>
-        <button
-          type="button"
-          onClick={() => setSettingsOpen(true)}
-          className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-        >
-          <Settings2 className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Signature et délai</span><span className="sm:hidden">Réglages</span>
-        </button>
-        </div>
-        <span className="text-[12px] text-muted-foreground">
-          {selected ? "Échanges avec ce contact, dans les deux boîtes." : box === "partnerships" ? "Boîte de prospection et contacts agence." : box === "talent" ? "Boîte des échanges créatrices (leurs alias)." : "Les deux boîtes réunies."}
-        </span>
+  const boxMeta = BOXES.find((b) => b.id === box) ?? BOXES[0];
+  const listCls = "flex min-h-0 min-w-0 flex-col bg-panel lg:border-r lg:border-border";
+  const rowCls = (on: boolean) =>
+    cn("flex w-full gap-3 px-4 text-left transition-colors sm:px-5", on ? "bg-surface dark:bg-white/[0.07]" : "hover:bg-surface/60 dark:hover:bg-white/[0.04]");
+  const listHead = (title: string, meta: ReactNode, right?: ReactNode) => (
+    <div className="px-4 pt-4 sm:px-5 sm:pt-5">
+      <div className="flex items-center gap-2">
+        <h2 className="min-w-0 flex-1 truncate text-[20px] font-semibold tracking-tight text-foreground sm:text-[22px]">{title}</h2>
+        {right}
       </div>
+      <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">{meta}</p>
+    </div>
+  );
+  const searchField = (value: string, onChange: (v: string) => void, placeholder: string) => (
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-9 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
+      />
+    </div>
+  );
+  const listNote = (text: string) => (
+    <div className="flex items-center gap-2 px-4 py-2.5 text-[12px] text-muted-foreground sm:px-5">
+      <CircleAlert className="h-3.5 w-3.5 shrink-0" /> {text}
+    </div>
+  );
+  const centerNote = (icon: ReactNode, text: string) => (
+    <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
+      {icon}
+      <p className="text-[13px] text-muted-foreground">{text}</p>
+    </div>
+  );
 
-      {/* Par créatrice : ses échanges, avec statut (À vérifier, À valider…) et remarques qu'elle voit */}
-      {creatorChoices.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span className="text-[12px] font-medium text-muted-foreground">Par créatrice</span>
+  // ── Barre d'icônes (ordinateur) ──────────────────────────────────────────
+  const rail = (
+    <nav aria-label="Dossiers et boîtes" className="hidden min-h-0 flex-col items-center gap-1.5 border-r border-border py-3 lg:flex">
+      <button
+        type="button"
+        onClick={() => setNewMailOpen(true)}
+        aria-label="Nouveau mail"
+        className="group relative mb-2 grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition-opacity hover:opacity-90"
+      >
+        <PenLine className="h-[17px] w-[17px]" />
+        <Tip>Nouveau mail</Tip>
+      </button>
+      {MODES.map((m) => (
+        <RailButton key={m.id} label={m.label} active={mode === m.id} badge={m.id === "inbox" ? unread : null} onClick={() => goMode(m.id)}>
+          <m.icon className="h-[18px] w-[18px]" />
+        </RailButton>
+      ))}
+      <span aria-hidden className="my-2 h-px w-6 shrink-0 bg-border" />
+      {BOXES.map((b) => (
+        <RailButton key={b.id} label={`${b.label} · ${b.hint}`} active={box === b.id} bar={false} onClick={() => setBox(b.id)}>
+          <BoxSquare box={b.id} />
+        </RailButton>
+      ))}
+      <span className="flex-1" />
+      <RailButton label="Signature et délai" onClick={() => setSettingsOpen(true)}>
+        <Settings2 className="h-[18px] w-[18px]" />
+      </RailButton>
+    </nav>
+  );
+
+  // ── Même barre, en ligne (téléphone, tablette) ──────────────────────────
+  const pill = "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-semibold transition-colors";
+  const mobileNav = (
+    <nav aria-label="Dossiers et boîtes" className="flex gap-1.5 overflow-x-auto border-b border-border p-2 [scrollbar-width:none] lg:hidden">
+      <button type="button" onClick={() => setNewMailOpen(true)} className={cn(pill, "bg-primary px-3 text-primary-foreground hover:opacity-90")}>
+        <PenLine className="h-3.5 w-3.5" /> Nouveau
+      </button>
+      {MODES.map((m) => {
+        const on = mode === m.id;
+        return (
+          <button key={m.id} type="button" onClick={() => goMode(m.id)} aria-pressed={on}
+            className={cn(pill, on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+            <m.icon className="h-3.5 w-3.5" /> {m.short}
+            {m.id === "inbox" && unread ? <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{unread}</span> : null}
+          </button>
+        );
+      })}
+      <span aria-hidden className="mx-0.5 my-1.5 w-px shrink-0 bg-border" />
+      {BOXES.map((b) => {
+        const on = box === b.id;
+        return (
+          <button key={b.id} type="button" onClick={() => setBox(b.id)} aria-pressed={on} title={b.hint}
+            className={cn(pill, on ? "bg-muted text-foreground ring-1 ring-border" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+            <BoxSquare box={b.id} className="size-3 rounded-[3px]" /> {b.short}
+          </button>
+        );
+      })}
+      <button type="button" onClick={() => setSettingsOpen(true)} aria-label="Signature et délai"
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+        <Settings2 className="h-4 w-4" />
+      </button>
+    </nav>
+  );
+
+  // ── Liste : boîte de réception / envoyés ────────────────────────────────
+  const nInbox = inbox?.length ?? 0;
+  const inboxCol = (
+    <section className={cn(listCls, readerOpen && "max-lg:hidden")}>
+      {listHead(
+        folder === "sent" ? "Envoyés" : "Boîte de réception",
+        <>
+          <BoxSquare box={box} className="size-2.5 rounded-[3px]" />
+          <span className="truncate">
+            {boxMeta.label}
+            {inbox && !inboxBusy ? ` · ${inboxQ ? `${shownInbox.length} sur ${nInbox}` : nInbox} conversation${nInbox > 1 ? "s" : ""}` : ""}
+          </span>
+        </>,
+        <ToolButton icon={RefreshCw} label="Actualiser" spin={inboxBusy} disabled={inboxBusy} onClick={() => setInboxTick((n) => n + 1)} />,
+      )}
+      <div className="px-4 pb-3 pt-3 sm:px-5">{searchField(inboxQuery, setInboxQuery, "Rechercher dans ces mails…")}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto border-t border-border">
+        {inboxBusy && !inbox?.length ? (
+          <div className="flex items-center justify-center gap-2 px-5 py-12 text-[13px] text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Chargement de la boîte…
+          </div>
+        ) : inboxErr ? (
+          <div className="px-5 py-10 text-center text-[13px] text-muted-foreground">{inboxErr}</div>
+        ) : !inbox?.length ? (
+          centerNote(<Inbox className="h-5 w-5 text-faint" />, folder === "sent" ? "Aucun mail envoyé depuis cette boîte." : "Aucun mail dans cette boîte.")
+        ) : (
+          <ul className={cn("divide-y divide-border transition-opacity", inboxBusy && "opacity-60")}>
+            {inboxPartial && <li>{listNote("Une des deux boîtes n'a pas répondu : la liste peut être incomplète.")}</li>}
+            {shownInbox.length === 0 && <li>{centerNote(<Search className="h-5 w-5 text-faint" />, `Aucun mail ne correspond à « ${inboxQuery.trim()} ».`)}</li>}
+            {shownInbox.map((t) => {
+              const on = thread?.threadId === t.threadId && thread.box === t.box;
+              return (
+                <li key={`${t.box}-${t.threadId}`}>
+                  <button
+                    type="button"
+                    aria-current={on || undefined}
+                    onClick={() => void openThread({ threadId: t.threadId, subject: t.subject, box: t.box, contact: t.email, name: t.name })}
+                    className={cn(rowCls(on), "py-4")}
+                  >
+                    <Initial name={prettyName(t.name)} email={t.email} size="md" />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-2">
+                        {t.unread && <span className="size-2 shrink-0 rounded-full bg-primary" title="Non lu" />}
+                        <span className={cn("min-w-0 flex-1 truncate text-[12.5px]", t.unread ? "font-semibold text-foreground" : "font-medium text-muted-foreground")}>
+                          {folder === "sent" && <span className="font-normal">À : </span>}
+                          {prettyName(t.name) || t.email}
+                          {t.count > 1 && <span className="ml-1.5 font-normal text-faint">{t.count}</span>}
+                        </span>
+                        <span className={cn("shrink-0 text-[11px] tabular-nums", t.unread ? "font-semibold text-foreground" : "text-faint")}>{fmtWhen(t.ts)}</span>
+                      </span>
+                      <span className={cn("mt-1 block truncate text-[13.5px] text-foreground", t.unread ? "font-bold" : "font-semibold")}>{t.subject || "(sans objet)"}</span>
+                      <span className="mt-1 flex min-w-0 items-end gap-3">
+                        <span className="line-clamp-2 min-w-0 flex-1 text-[12.5px] leading-[1.45] text-muted-foreground">
+                          {t.direction === "out" && folder === "inbox" && <span className="text-faint">Vous : </span>}
+                          {decodeEntities(t.snippet)}
+                        </span>
+                        <span title={BOX_LABEL[t.box]} className="mb-0.5 shrink-0"><BoxSquare box={t.box} className="size-2.5 rounded-[3px]" /></span>
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+
+  // ── Liste : contacts ─────────────────────────────────────────────────────
+  const contactsCol = (
+    <section className={cn(listCls, readerOpen && "max-lg:hidden")}>
+      {listHead("Contacts", `${filtered.length} contact${filtered.length > 1 ? "s" : ""} avec e-mail`)}
+      <div className="flex flex-col gap-2.5 px-4 pb-3 pt-3 sm:px-5">
+        {searchField(query, setQuery, "Rechercher un contact…")}
+        {/* Filtre « déjà échangé » (basé sur le suivi de contact) */}
+        <Tabs
+          size="sm"
+          fullWidth
+          label="Filtrer par échange"
+          items={[
+            { value: "all", label: "Tous" },
+            { value: "contacted", label: "Déjà échangé" },
+            { value: "never", label: "Jamais" },
+          ]}
+          value={contactFilter}
+          onValueChange={(v) => setContactFilter(v as "all" | "contacted" | "never")}
+        />
+        {/* Filtre par type (marque, agence…) */}
+        {tagList.length > 0 && (
           <Tabs
             size="sm"
+            label="Filtrer par type"
             wrap
-            label="Créatrice"
-            value={creatorView?.name ?? ""}
-            onValueChange={(v) => setCreatorView(v ? { name: v } : null)}
-            items={[
-              { value: "", label: "Toutes" },
-              ...creatorChoices.map((n) => ({
-                value: n,
-                label: titleCase(n),
-                icon: (
-                  <CreatorAvatar
-                    name={n}
-                    photoUrl={allCreators.find((c) => sameName(c.name, n))?.photo_url ?? null}
-                    className="h-4 w-4 rounded-full text-[7px]"
-                  />
-                ),
-              })),
-            ]}
+            items={[{ value: "__all__", label: "Tous types" }, ...tagList.map((t) => ({ value: t, label: t }))]}
+            value={tagFilter}
+            onValueChange={setTagFilter}
           />
+        )}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto border-t border-border">
+        {filtered.length === 0 ? (
+          <div className="px-4 py-12 text-center text-[13px] text-muted-foreground">
+            {query.trim() || tagFilter !== "__all__" || contactFilter !== "all" ? "Aucun contact pour ce filtre." : "Aucun contact avec email."}
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {filtered.map((c) => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  aria-current={selected?.id === c.id || undefined}
+                  onClick={() => { setSelected(c); setThread(null); }}
+                  className={cn(rowCls(selected?.id === c.id), "items-center py-3.5")}
+                >
+                  <Initial name={c.brand || c.label} email={c.email} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-[13px] font-semibold text-foreground" title={c.label}>{c.brand || c.label}</span>
+                      {contacted(c) && <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà échangé" />}
+                    </span>
+                    <span className="block truncate text-[12px] text-muted-foreground">{c.person || c.email}</span>
+                  </span>
+                  {c.tag && c.tag.toLowerCase() !== "perso" && (
+                    <span className="shrink-0 whitespace-nowrap text-[11px] text-faint">{c.tag}</span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+
+  // ── Lecture d'un fil ─────────────────────────────────────────────────────
+  const openThreadCreator = () => {
+    if (thread && threadCreator) openCreator(threadCreator.creator, thread.threadId);
+  };
+  const replyTo = thread ? titleCase(prettyName(selected?.person || thread.name || displayName(thread.contact))) || thread.contact : "";
+  const threadReader = thread && (
+    <section className="flex min-h-0 min-w-0 flex-col">
+      <div className="flex h-14 shrink-0 items-center gap-0.5 border-b border-border px-2 sm:px-3">
+        <ToolButton icon={ArrowLeft} label={selected ? "Retour aux échanges" : "Fermer"} onClick={() => setThread(null)} />
+        {readerMsgs.length > 0 && (
+          <ToolButton icon={Trash2} label="Supprimer (corbeille Gmail)" danger busy={trashBusy} disabled={trashBusy} onClick={() => setTrashAsk(true)} />
+        )}
+        {threadCreator && (
+          <ToolButton icon={MessageSquareText} label={`Statut et remarques que ${firstName(threadCreator.creator)} voit`} onClick={openThreadCreator} />
+        )}
+        <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5">
+          {navIdx >= 0 && navList.length > 1 && (
+            <>
+              <ToolButton icon={ChevronLeft} label="Mail précédent" className="h-8 w-8" disabled={navIdx <= 0} onClick={() => void openThread(navList[navIdx - 1])} />
+              <span className="whitespace-nowrap px-1 text-[12.5px] tabular-nums text-muted-foreground">{navIdx + 1} sur {navList.length}</span>
+              <ToolButton icon={ChevronRight} label="Mail suivant" className="h-8 w-8" disabled={navIdx >= navList.length - 1} onClick={() => void openThread(navList[navIdx + 1])} />
+            </>
+          )}
         </div>
-      )}
+        {readerMsgs.length > 0 && <ToolButton icon={Reply} label="Répondre" onClick={focusReply} />}
+        {readerMsgs.length > 0 && <ToolButton icon={Forward} label="Transférer" onClick={() => setForwardMsg(readerMsgs[readerMsgs.length - 1])} />}
+      </div>
 
-      {creatorView ? (
-        <Suspense fallback={<DashPanel className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Chargement…</DashPanel>}>
-          <CreatorMailsAgency
-            key={`${creatorView.name}-${creatorView.threadId ?? ""}`}
-            creator={creatorView.name}
-            suggestedAlias={emailPro.get(creatorView.name.trim().toLowerCase()) ?? null}
-            initialThreadId={creatorView.threadId}
-            onSaved={() => setLinkedTick((n) => n + 1)}
-            className="mt-0"
-          />
-        </Suspense>
-      ) : (
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] lg:items-start">
-        {/* Colonne : contacts */}
-        <DashPanel className={cn("flex min-w-0 flex-col", (selected || thread || mobileInbox) && "max-lg:hidden")}>
-          <div className="flex flex-col gap-2.5 border-b border-border p-3">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Rechercher un contact…"
-                className="h-9 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-[13px] outline-none placeholder:text-faint focus:border-primary"
-              />
-            </div>
-            {/* Filtre « déjà échangé » (basé sur le suivi de contact) */}
-            <Tabs
-              size="sm"
-              fullWidth
-              label="Filtrer par échange"
-              items={[
-                { value: "all", label: "Tous" },
-                { value: "contacted", label: "Déjà échangé" },
-                { value: "never", label: "Jamais" },
-              ]}
-              value={contactFilter}
-              onValueChange={(v) => setContactFilter(v as "all" | "contacted" | "never")}
-            />
-            {/* Filtre par type (marque, agence…) */}
-            {tagList.length > 0 && (
-              <Tabs
-                size="sm"
-                label="Filtrer par type"
-                wrap
-                items={[{ value: "__all__", label: "Tous types" }, ...tagList.map((t) => ({ value: t, label: t }))]}
-                value={tagFilter}
-                onValueChange={setTagFilter}
-              />
-            )}
-          </div>
-
-          <div className="max-h-[70vh] overflow-y-auto">
-            {filtered.length === 0 ? (
-              <div className="px-4 py-12 text-center text-[13px] text-muted-foreground">
-                {query.trim() || tagFilter !== "__all__" || contactFilter !== "all" ? "Aucun contact pour ce filtre." : "Aucun contact avec email."}
-              </div>
-            ) : (
-              <ul className="divide-y divide-border">
-                {filtered.map((c) => (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      onClick={() => { setSelected(c); setThread(null); setMobileInbox(false); }}
-                      className={cn("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-rowhover", selected?.id === c.id && "bg-rowhover")}
-                    >
-                      <Initial name={c.brand || c.label} email={c.email} />
-                      <span className="min-w-0 flex-1">
-                        <span className="flex min-w-0 items-center gap-1.5">
-                          <span className="truncate text-[13px] font-semibold text-foreground" title={c.label}>{c.brand || c.label}</span>
-                          {contacted(c) && <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà échangé" />}
-                        </span>
-                        <span className="block truncate text-[12px] text-muted-foreground">{c.person || c.email}</span>
-                      </span>
-                      {c.tag && c.tag.toLowerCase() !== "perso" && (
-                        <span className="shrink-0 whitespace-nowrap text-[11px] text-faint">{c.tag}</span>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </DashPanel>
-
-        {/* Colonne : fil ouvert, sinon échanges du contact, sinon boîte de réception */}
-        {thread ? (
-          <DashPanel className="flex min-w-0 flex-col">
-            <div className="flex items-start gap-3 border-b border-border px-4 py-4 sm:px-6">
-              <button type="button" onClick={() => setThread(null)} aria-label="Retour aux échanges"
-                className="-ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-              <div className="min-w-0 flex-1">
-                <h2 className="text-[17px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere]">{thread.subject || "(sans objet)"}</h2>
-                <p className="mt-1 truncate text-[12px] text-muted-foreground">
-                  <BoxChip box={thread.box} className="mr-1.5 align-[1px] text-[10px]" />
-                  {selected?.label ?? (thread.name || thread.contact)}{threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
-                </p>
-              </div>
-              {threadCreator && (
-                <button
-                  type="button"
-                  onClick={() => setCreatorView({ name: threadCreator.creator, threadId: thread.threadId })}
-                  title={`Statut et remarques que ${firstName(threadCreator.creator)} voit dans son espace`}
-                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
-                >
-                  <MessageSquareText className="h-4 w-4" /> <span className="max-sm:hidden">Statut et remarques · {firstName(threadCreator.creator)}</span>
-                </button>
-              )}
-              {readerMsgs.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setForwardMsg(readerMsgs[readerMsgs.length - 1])}
-                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
-                >
-                  <Forward className="h-4 w-4" /> <span className="max-sm:hidden">Transférer</span>
-                </button>
-              )}
-              {readerMsgs.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setTrashAsk(true)}
-                  disabled={trashBusy}
-                  title="Mettre à la corbeille Gmail"
-                  aria-label="Supprimer ce mail"
-                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:border-red-500/40 hover:bg-red-500/[0.06] hover:text-red-600 disabled:opacity-60 dark:hover:text-red-400"
-                >
-                  {trashBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} <span className="max-sm:hidden">Supprimer</span>
-                </button>
-              )}
-            </div>
-            {threadBusy ? (
-              <div className="flex items-center justify-center gap-2 px-5 py-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Ouverture…</div>
-            ) : readerMsgs.length === 0 ? (
-              <div className="px-5 py-10 text-center text-[13px] text-muted-foreground">Impossible de charger ce fil.</div>
-            ) : (
-              <div className="flex flex-col gap-3 bg-panel/60 p-3 sm:p-4">
-                {readerMsgs.map((m, i) => {
-                  const last = i === readerMsgs.length - 1;
-                  return (
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="px-4 py-6 sm:px-8">
+          <h1 className="text-[20px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere] [text-wrap:balance] sm:text-[22px]">
+            {thread.subject || "(sans objet)"}
+          </h1>
+          <p className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+            <BoxChip box={thread.box} className="text-[10px]" />
+            <span className="min-w-0 truncate">
+              {selected?.label ?? (prettyName(thread.name) || thread.contact)}
+              {threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
+            </span>
+          </p>
+          {threadBusy ? (
+            <div className="flex items-center justify-center gap-2 py-16 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Ouverture…</div>
+          ) : readerMsgs.length === 0 ? (
+            <div className="py-16 text-center text-[13px] text-muted-foreground">Impossible de charger ce fil.</div>
+          ) : (
+            <div className="mt-3 flex flex-col divide-y divide-border">
+              {readerMsgs.map((m, i) => {
+                const last = i === readerMsgs.length - 1;
+                return (
+                  <div key={m.id} className="flex flex-col">
                     <MailItem
-                      key={m.id}
+                      variant="plain"
                       m={m}
                       index={i}
                       onDownload={downloadAgencyAttachment}
@@ -649,190 +890,259 @@ export function Mails() {
                         return n;
                       })}
                       actions={[
-                        {
-                          icon: Reply, label: "Répondre",
-                          onClick: () => {
-                            const lastId = readerMsgs[readerMsgs.length - 1].id;
-                            setExpanded((s) => new Set([...s, lastId]));
-                            setReplyFocus(Date.now());
-                          },
-                        },
+                        { icon: Reply, label: "Répondre", onClick: focusReply },
                         { icon: Forward, label: "Transférer", onClick: () => setForwardMsg(m) },
                       ]}
                       footer={last ? (
                         <ReplyBox
+                          variant="card"
+                          to={replyTo}
                           box={thread.box}
                           focusKey={replyFocus}
-                          placeholder={`Répondre à ${titleCase(selected?.person || thread.name || displayName(thread.contact))}…`}
+                          placeholder="Écris ta réponse…"
                           onSend={sendReply}
                         />
                       ) : undefined}
                     />
-                  );
-                })}
-              </div>
-            )}
-          </DashPanel>
-        ) : !selected ? (
-          <DashPanel className={cn("min-w-0 flex-col", mobileInbox ? "flex" : "hidden lg:flex")}>
-            <div className="flex items-center gap-3 border-b border-border px-4 py-3.5 sm:px-6">
-              <button type="button" onClick={() => setMobileInbox(false)} aria-label="Retour aux contacts"
-                className="-ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground lg:hidden">
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-              <div className="min-w-0 flex-1">
-                {/* Dossiers comme Gmail (libellé court sur téléphone pour tenir sur une ligne) */}
-                {([["max-sm:hidden", "Boîte de réception"], ["sm:hidden", "Reçus"]] as const).map(([vis, inboxLabel]) => (
-                  <Tabs
-                    key={vis}
-                    className={vis}
-                    size="sm"
-                    label="Dossier"
-                    value={folder}
-                    onValueChange={(v) => { setFolder(v as "inbox" | "sent"); setInbox(null); }}
-                    items={[
-                      { value: "inbox", label: inboxLabel, icon: <Inbox className="h-3.5 w-3.5" /> },
-                      { value: "sent", label: "Envoyés", icon: <Send className="h-3.5 w-3.5" /> },
-                    ]}
-                  />
-                ))}
-              </div>
-              {box === "all" ? (
-                <span className="flex shrink-0 gap-1 max-sm:hidden"><BoxChip box="partnerships" className="text-[10px]" /><BoxChip box="talent" className="text-[10px]" /></span>
-              ) : (
-                <BoxChip box={box} className="max-sm:hidden" />
-              )}
-              <button type="button" onClick={() => setInboxTick((n) => n + 1)} disabled={inboxBusy}
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover disabled:opacity-60">
-                <RefreshCw className={cn("h-3.5 w-3.5", inboxBusy && "animate-spin")} /> <span className="max-sm:hidden">Actualiser</span>
-              </button>
+                  </div>
+                );
+              })}
             </div>
-            {inboxBusy && !inbox?.length ? (
-              <div className="flex items-center justify-center gap-2 px-5 py-12 text-[13px] text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Chargement de la boîte…
-              </div>
-            ) : inboxErr ? (
-              <div className="px-5 py-10 text-center text-[13px] text-muted-foreground">{inboxErr}</div>
-            ) : !inbox?.length ? (
-              <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
-                <Inbox className="h-5 w-5 text-faint" />
-                <p className="text-[13px] text-muted-foreground">{folder === "sent" ? "Aucun mail envoyé depuis cette boîte." : "Aucun mail dans cette boîte."}</p>
-              </div>
-            ) : (
-              <ul className={cn("divide-y divide-border transition-opacity", inboxBusy && "opacity-60")}>
-                {inboxPartial && (
-                  <li className="px-4 py-2 text-[12px] text-amber-700 sm:px-6 dark:text-amber-400">Une des deux boîtes n'a pas répondu : la liste peut être incomplète.</li>
-                )}
-                {inbox.map((t) => (
-                  <li key={`${t.box}-${t.threadId}`}>
-                    <button
-                      type="button"
-                      onClick={() => openThread({ threadId: t.threadId, subject: t.subject, box: t.box, contact: t.email, name: t.name })}
-                      className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-rowhover sm:px-6"
-                    >
-                      <span className="relative shrink-0">
-                        <Initial name={prettyName(t.name)} email={t.email} size="md" />
-                        <span className={cn("absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-surface", BOX_STYLE[t.box].dot)} title={BOX_LABEL[t.box]} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex min-w-0 items-baseline gap-2">
-                          <span className={cn("min-w-0 flex-1 truncate text-[13px] text-foreground", t.unread ? "font-bold" : "font-semibold")}>
-                            {folder === "sent" && <span className="font-normal text-muted-foreground">À : </span>}
-                            {prettyName(t.name) || t.email}
-                            {t.count > 1 && <span className="ml-1.5 text-[11px] font-normal text-faint">{t.count}</span>}
-                          </span>
-                          {t.unread && <span className="size-2 shrink-0 self-center rounded-full bg-primary" title="Non lu" />}
-                          <span className={cn("shrink-0 text-[11px] tabular-nums", t.unread ? "font-semibold text-foreground" : "text-faint")}>{fmtWhen(t.ts)}</span>
-                        </span>
-                        <span className={cn("block truncate text-[12.5px]", t.unread ? "font-semibold text-foreground" : "text-foreground/90")}>{t.subject || "(sans objet)"}</span>
-                        <span className="mt-0.5 flex min-w-0 items-center gap-2">
-                          {box === "all" && <BoxChip box={t.box} className="text-[10px]" />}
-                          <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
-                            {t.direction === "out" && folder === "inbox" && <span className="text-faint">Vous : </span>}
-                            {decodeEntities(t.snippet)}
-                          </span>
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </DashPanel>
-        ) : (
-          <DashPanel className="flex min-w-0 flex-col">
-            <div className="flex items-start gap-3 border-b border-border px-4 py-4 sm:px-6">
-              <button type="button" onClick={() => setSelected(null)} aria-label="Retour aux contacts"
-                className="-ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground lg:hidden">
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-              <Initial name={selected.brand || selected.label} email={selected.email} />
-              <div className="min-w-0 flex-1">
-                <h2 className="truncate text-[15px] font-semibold text-foreground">{selected.label}</h2>
-                <p className="truncate text-[12px] text-muted-foreground">{selected.email}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setComposerOpen(true)}
-                className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
-              >
-                <PenLine className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Nouveau mail</span>
-              </button>
-            </div>
+          )}
+        </div>
+      </div>
 
-            {historyBusy ? (
-              <div className="flex items-center justify-center gap-2 px-5 py-12 text-[13px] text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Chargement des échanges…
-              </div>
-            ) : historyErr ? (
-              <div className="px-5 py-10 text-center text-[13px] text-muted-foreground">{historyErr}</div>
-            ) : visibleHistory.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
-                <Mail className="h-5 w-5 text-faint" />
-                <p className="text-[13px] text-muted-foreground">Aucun échange trouvé dans les deux boîtes avec ce contact.</p>
-              </div>
-            ) : (
-              <ul className="divide-y divide-border">
-                {historyPartial && (
-                  <li className="px-4 py-2 text-[12px] text-amber-700 sm:px-6 dark:text-amber-400">Une des deux boîtes n'a pas répondu : l'historique peut être incomplet.</li>
-                )}
-                {visibleHistory.map((m) => (
-                  <li key={m.id}>
-                    <button
-                      type="button"
-                      onClick={() => m.threadId && openThread({ threadId: m.threadId, subject: m.subject, box: m.box })}
-                      className={cn("flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors sm:px-6", m.threadId ? "hover:bg-rowhover" : "cursor-default")}
+      {readerMsgs.length > 0 && (
+        <div className="flex h-14 shrink-0 items-center gap-1 border-t border-border px-2 max-sm:hidden sm:px-3">
+          <BarButton icon={Reply} label="Répondre" onClick={focusReply} />
+          <BarButton icon={Forward} label="Transférer" onClick={() => setForwardMsg(readerMsgs[readerMsgs.length - 1])} />
+          <span className="flex-1" />
+          {threadCreator && <BarButton icon={MessageSquareText} label={`Statut et remarques · ${firstName(threadCreator.creator)}`} onClick={openThreadCreator} />}
+          <BarButton icon={Trash2} label="Supprimer" danger busy={trashBusy} disabled={trashBusy} onClick={() => setTrashAsk(true)} />
+        </div>
+      )}
+    </section>
+  );
+
+  // ── Lecture : échanges d'un contact ──────────────────────────────────────
+  const contactReader = selected && (
+    <section className="flex min-h-0 min-w-0 flex-col">
+      <div className="flex h-14 shrink-0 items-center gap-1 border-b border-border px-2 sm:px-3">
+        <ToolButton icon={ArrowLeft} label="Retour aux contacts" className="lg:hidden" onClick={() => setSelected(null)} />
+        <span className="min-w-0 flex-1 truncate px-2 text-[12.5px] text-muted-foreground">Échanges avec ce contact, dans les deux boîtes</span>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="flex items-center gap-4 px-4 py-6 sm:px-8">
+          <Initial name={selected.brand || selected.label} email={selected.email} size="lg" />
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-[20px] font-semibold tracking-tight text-foreground sm:text-[22px]">{selected.brand || selected.person || selected.email}</h1>
+            <p className="truncate text-[12.5px] text-muted-foreground">{[selected.brand ? selected.person : null, selected.email].filter(Boolean).join(" · ")}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setComposerOpen(true)}
+            className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            <PenLine className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Nouveau mail</span>
+          </button>
+        </div>
+
+        <div className="border-t border-border">
+          {historyBusy ? (
+            <div className="flex items-center justify-center gap-2 px-5 py-12 text-[13px] text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Chargement des échanges…
+            </div>
+          ) : historyErr ? (
+            <div className="px-5 py-10 text-center text-[13px] text-muted-foreground">{historyErr}</div>
+          ) : visibleHistory.length === 0 ? (
+            centerNote(<Mail className="h-5 w-5 text-faint" />, "Aucun échange trouvé dans les deux boîtes avec ce contact.")
+          ) : (
+            <ul className="divide-y divide-border">
+              {historyPartial && <li>{listNote("Une des deux boîtes n'a pas répondu : l'historique peut être incomplet.")}</li>}
+              {visibleHistory.map((m) => (
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    onClick={() => m.threadId && void openThread({ threadId: m.threadId, subject: m.subject, box: m.box })}
+                    className={cn("flex w-full items-start gap-3 px-4 py-4 text-left transition-colors sm:px-8", m.threadId ? "hover:bg-rowhover" : "cursor-default")}
+                  >
+                    <span
+                      className={cn("mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full", BOX_STYLE[boxOf(m)].soft)}
+                      title={m.direction === "in" ? "Reçu" : "Envoyé"}
                     >
-                      <span
-                        className={cn("mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full", BOX_STYLE[boxOf(m)].soft)}
-                        title={m.direction === "in" ? "Reçu" : "Envoyé"}
-                      >
-                        {m.direction === "in" ? <ArrowDownLeft className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
+                      {m.direction === "in" ? <ArrowDownLeft className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-baseline gap-2">
+                        <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-foreground">{m.subject || "(sans objet)"}</span>
+                        <span className="shrink-0 text-[11px] tabular-nums text-faint">{fmtDate(m.date)}</span>
                       </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex min-w-0 items-baseline gap-2">
-                          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{m.subject || "(sans objet)"}</span>
-                          <span className="shrink-0 text-[11px] tabular-nums text-faint">{fmtDate(m.date)}</span>
-                        </span>
-                        <span className="mt-0.5 flex min-w-0 items-center gap-2">
-                          <span className="shrink-0 text-[11px] text-muted-foreground">{m.direction === "in" ? "Reçu" : "Envoyé"}</span>
-                          <BoxChip box={boxOf(m)} className="text-[10px]" />
-                          {m.source === "mediakit" && (
-                            <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Media kit</span>
-                          )}
-                          <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{decodeEntities(m.snippet)}</span>
-                        </span>
+                      <span className="mt-1 flex min-w-0 items-center gap-2">
+                        <span className="shrink-0 text-[11px] text-muted-foreground">{m.direction === "in" ? "Reçu" : "Envoyé"}</span>
+                        <BoxChip box={boxOf(m)} className="text-[10px]" />
+                        {m.source === "mediakit" && (
+                          <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Media kit</span>
+                        )}
+                        <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{decodeEntities(m.snippet)}</span>
                       </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </DashPanel>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+
+  // ── Lecture vide (ordinateur) ────────────────────────────────────────────
+  const emptyReader = (
+    <section className="hidden min-h-0 min-w-0 flex-col items-center justify-center gap-3 px-6 text-center lg:flex">
+      <span className="grid h-12 w-12 place-items-center rounded-full bg-muted"><Mail className="h-5 w-5 text-muted-foreground" /></span>
+      <p className="text-[14px] font-medium text-foreground">{mode === "contacts" ? "Aucun contact ouvert" : "Aucun mail ouvert"}</p>
+      <p className="max-w-[300px] text-[13px] text-muted-foreground">
+        {mode === "contacts" ? "Choisis un contact pour voir tous vos échanges, dans les deux boîtes." : "Choisis un mail dans la liste pour le lire ici."}
+      </p>
+      <button
+        type="button"
+        onClick={() => setNewMailOpen(true)}
+        className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 text-[13px] font-semibold text-foreground transition-colors hover:bg-rowhover"
+      >
+        <PenLine className="h-3.5 w-3.5" /> Nouveau mail
+      </button>
+    </section>
+  );
+
+  // ── Par créatrice : ses échanges (talent@, son alias), statuts et remarques ──
+  const creatorsCol = (
+    <section className="min-h-0 min-w-0 overflow-y-auto">
+      <div className="px-4 pt-4 sm:px-6 sm:pt-5">
+        <div className="flex items-center gap-1">
+          {creatorView && <ToolButton icon={ArrowLeft} label="Toutes les créatrices" className="-ml-2" onClick={() => setCreatorView(null)} />}
+          <h2 className="min-w-0 flex-1 truncate text-[20px] font-semibold tracking-tight text-foreground sm:text-[22px]">Par créatrice</h2>
+        </div>
+        <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+          Ses échanges (talent@, son alias), rangés par statut, avec les remarques qu'elle voit dans son espace.
+        </p>
+        {creatorView && creatorChoices.length > 1 && (
+          <Tabs
+            className="mt-3 xl:hidden"
+            size="sm"
+            wrap
+            label="Créatrice"
+            value={creatorView.name}
+            onValueChange={(v) => openCreator(v)}
+            items={creatorChoices.map((n) => ({
+              value: n,
+              label: titleCase(n),
+              icon: <CreatorAvatar name={n} photoUrl={photoOf(n)} className="h-4 w-4 rounded-full text-[7px]" />,
+            }))}
+          />
         )}
       </div>
-      )}
+      <div className="px-4 pb-6 pt-4 sm:px-6">
+        {creatorView ? (
+          <Suspense fallback={<div className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Chargement…</div>}>
+            <CreatorMailsAgency
+              key={`${creatorView.name}-${creatorView.threadId ?? ""}`}
+              creator={creatorView.name}
+              suggestedAlias={emailPro.get(creatorView.name.trim().toLowerCase()) ?? null}
+              initialThreadId={creatorView.threadId}
+              onSaved={() => setLinkedTick((n) => n + 1)}
+              className="mt-0"
+            />
+          </Suspense>
+        ) : creatorChoices.length === 0 ? (
+          <p className="py-10 text-center text-[13px] text-muted-foreground">Aucune créatrice active dans le Roster.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 2xl:grid-cols-3">
+            {creatorChoices.map((n) => {
+              const l = linked.find((x) => sameName(x.creator, n));
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => openCreator(n)}
+                  className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-left transition-colors hover:bg-rowhover"
+                >
+                  <CreatorAvatar name={n} photoUrl={photoOf(n)} className="h-10 w-10 shrink-0 rounded-full text-[12px]" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13.5px] font-semibold text-foreground">{titleCase(n)}</span>
+                    <span className={cn("block truncate text-[12px]", l ? "text-muted-foreground" : "text-faint")}>
+                      {l ? l.alias ?? "Libellé Gmail" : "Pas encore reliée"}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  );
 
+  // ── Colonne de droite (grand écran) : les créatrices en un clic ─────────
+  const rightRail = (
+    <aside aria-label="Créatrices" className="hidden min-h-0 flex-col items-center border-l border-border xl:flex">
+      <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-border">
+        <button
+          type="button"
+          onClick={() => { goMode("creators"); setCreatorView(null); }}
+          title="Par créatrice"
+          aria-label="Par créatrice"
+          className={cn(
+            "grid h-9 w-9 place-items-center rounded-lg transition-colors",
+            mode === "creators" && !creatorView ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
+          )}
+        >
+          <UsersRound className="h-[17px] w-[17px]" />
+        </button>
+      </div>
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-2.5 overflow-y-auto py-3 [scrollbar-width:none]">
+        {creatorChoices.map((n) => {
+          const on = mode === "creators" && !!creatorView && sameName(creatorView.name, n);
+          return (
+            <button
+              key={n}
+              type="button"
+              onClick={() => openCreator(n)}
+              title={`Mails de ${titleCase(n)}`}
+              aria-label={`Mails de ${titleCase(n)}`}
+              aria-pressed={on}
+              className={cn("shrink-0 rounded-full p-0.5 ring-2 transition-shadow", on ? "ring-foreground" : "ring-transparent hover:ring-border")}
+            >
+              <CreatorAvatar name={n} photoUrl={photoOf(n)} className="h-8 w-8 rounded-full text-[10px]" />
+            </button>
+          );
+        })}
+      </div>
+    </aside>
+  );
+
+  return (
+    <>
+      <div
+        className={cn(
+          "flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-surface lg:grid lg:h-[calc(100dvh-204px)] lg:min-h-[560px] lg:grid-rows-[minmax(0,1fr)]",
+          mode === "creators"
+            ? "lg:grid-cols-[64px_minmax(0,1fr)] xl:grid-cols-[64px_minmax(0,1fr)_60px]"
+            : "lg:grid-cols-[64px_minmax(280px,320px)_minmax(0,1fr)] xl:grid-cols-[64px_minmax(300px,350px)_minmax(0,1fr)_60px]",
+        )}
+      >
+        {rail}
+        {mobileNav}
+        {mode === "creators" ? (
+          creatorsCol
+        ) : (
+          <>
+            {mode === "contacts" ? contactsCol : inboxCol}
+            {thread ? threadReader : mode === "contacts" && selected ? contactReader : emptyReader}
+          </>
+        )}
+        {rightRail}
+      </div>
       {trashAsk && thread && (
         <ConfirmDialog
           title="Supprimer ce mail ?"
