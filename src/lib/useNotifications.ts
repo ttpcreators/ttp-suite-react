@@ -69,7 +69,12 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       supabase.from("email_activity").select("subject,contact_name,contact_email,created_at,gmail_message_id").eq("direction", "in").gte("created_at", emailSince).order("created_at", { ascending: false }).limit(8),
       // Bugs remontés par l'app (agence uniquement via RLS). « * » : marche avant/après la colonne resolved_at.
       supabase.from("error_log").select("*").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(100),
-    ]).then(([inv, br, ev, app, tdC, idC, evC, mailIn, bugs]) => {
+      // Mails créatrices : leurs avis (En cours / Validé / Refusé) et leurs messages non lus.
+      supabase.from("creator_mail_status_log").select("id,creator,status,comment,created_at").eq("by_role", "creator")
+        .gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
+      supabase.from("creator_mail_notes").select("id,creator,body,created_at").is("agency_read_at", null)
+        .gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
+    ]).then(([inv, br, ev, app, tdC, idC, evC, mailIn, bugs, mailAvis, mailNotes]) => {
       if (!alive) return;
       if (inv.error || br.error || ev.error) {
         console.error("Chargement des notifications échoué:", { inv: inv.error, br: br.error, ev: ev.error });
@@ -123,6 +128,29 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
             title: "Nouvel évènement d'un créateur",
             description: `${e.who ? titleCase(e.who) : "Créateur"} · ${e.title}`,
             time: agoLabel(e.created_at),
+            kind: "creator",
+          }),
+        );
+      }
+      if (bellCreator && !mailAvis.error) {
+        const AVIS: Record<string, string> = { encours: "En cours", valide: "Validé", refuse: "Refusé" };
+        ((mailAvis.data as { id: string; creator: string; status: string; comment: string | null; created_at: string }[]) ?? []).forEach((a) =>
+          out.push({
+            id: `cma:${a.id}`,
+            title: "Avis sur un mail",
+            description: `${titleCase(a.creator)} · ${AVIS[a.status] ?? a.status}${a.comment ? ` · « ${a.comment.slice(0, 80)} »` : ""}`,
+            time: agoLabel(a.created_at),
+            kind: "creator",
+          }),
+        );
+      }
+      if (bellCreator && !mailNotes.error) {
+        ((mailNotes.data as { id: string; creator: string; body: string; created_at: string }[]) ?? []).forEach((n) =>
+          out.push({
+            id: `cmn:${n.id}`,
+            title: "Message sur un mail",
+            description: `${titleCase(n.creator)} · ${n.body.slice(0, 100)}`,
+            time: agoLabel(n.created_at),
             kind: "creator",
           }),
         );

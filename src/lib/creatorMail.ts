@@ -34,6 +34,51 @@ export type MailThread = Decision & {
 };
 export type MailSettings = { creator: string; alias: string | null; label_id: string | null; label_name: string | null; enabled: boolean };
 
+/** Rangement choisi à la main avec le grand sélecteur d'un échange. */
+export type MailChoice = "encours" | "valide" | "refuse";
+/** « Nouvelle demande » et « En négociation » sont tous deux « En cours ». */
+export const choiceOf = (s: MailStatus): MailChoice => (s === "valide" || s === "refuse" ? s : "encours");
+/** Statut automatique (comme le serveur) : « En négociation » dès que l'agence a répondu. */
+export const autoStatusOf = (messages: Pick<MailMessage, "fromAgency">[]): MailStatus =>
+  messages.slice(1).some((m) => m.fromAgency) ? "negociation" : "nouvelle";
+
+/** Une ligne de l'historique : qui a rangé l'échange, où, quand, avec quel mot. */
+export type MailStatusEvent = {
+  id: string; status: MailChoice; by_role: "creator" | "agency"; comment: string | null; created_at: string;
+};
+/** Élément du suivi d'un échange : message de la créatrice ou changement de statut, dans l'ordre. */
+export type FeedItem = { kind: "note"; at: number; note: MailNote } | { kind: "event"; at: number; event: MailStatusEvent };
+
+/**
+ * Suivi chronologique d'un échange. Une décision prise avant l'historique (aucune
+ * ligne enregistrée) reste visible grâce à `legacy` (auteur + date de la décision).
+ */
+export function buildFeed(
+  notes: MailNote[], events: MailStatusEvent[] | null,
+  legacy?: { status: MailStatus; decidedBy: Decision["decidedBy"]; decidedAt: string | null },
+): FeedItem[] {
+  const evs = [...(events ?? [])];
+  if (!evs.length && legacy?.decidedBy && legacy.decidedAt && (legacy.status === "valide" || legacy.status === "refuse")) {
+    evs.push({ id: "decision", status: legacy.status, by_role: legacy.decidedBy, comment: null, created_at: legacy.decidedAt });
+  }
+  const items: FeedItem[] = [
+    ...notes.map((n) => ({ kind: "note" as const, at: new Date(n.created_at).getTime(), note: n })),
+    ...evs.map((e) => ({ kind: "event" as const, at: new Date(e.created_at).getTime(), event: e })),
+  ];
+  return items.sort((a, b) => a.at - b.at);
+}
+
+/**
+ * Historique des statuts d'un échange (RLS : l'agence voit tout, la créatrice ses lignes).
+ * null = historique pas encore activé (SQL à lancer) : l'écran fait sans.
+ */
+export async function getStatusHistory(creator: string, threadId: string): Promise<MailStatusEvent[] | null> {
+  const { data, error } = await supabase.from("creator_mail_status_log")
+    .select("id, status, by_role, comment, created_at")
+    .eq("creator", creator).eq("thread_id", threadId).order("created_at");
+  return error ? null : ((data ?? []) as MailStatusEvent[]);
+}
+
 const ERRORS: Record<string, string> = {
   introuvable: "Cette conversation est introuvable.",
   gmail_non_connecte: "La boîte mail de l'agence n'est pas connectée.",
@@ -69,9 +114,15 @@ export const getMailThread = (threadId: string, creator?: string) =>
   call<{ thread: MailThread }>({ action: "thread", threadId, creator }).then((r) => r.thread);
 export const sendManagerNote = (threadId: string, body: string) =>
   call<{ note: MailNote }>({ action: "note", threadId, body }).then((r) => r.note);
-/** Réponse de la créatrice à une proposition : accepter, refuser ou annuler sa réponse. */
-export const sendDecision = (threadId: string, decision: "valide" | "refuse" | "annuler") =>
-  call<Decision & { status: MailStatus }>({ action: "decision", threadId, decision });
+/**
+ * Avis de la créatrice : range l'échange (En cours / Validé / Refusé) avec un mot
+ * facultatif. « En cours » part sous son ancien nom « annuler », compris par toutes
+ * les versions du serveur.
+ */
+export const sendDecision = (threadId: string, choice: MailChoice, comment?: string) =>
+  call<Decision & { status: MailStatus; logged?: boolean }>({
+    action: "decision", threadId, decision: choice === "encours" ? "annuler" : choice, comment: comment || undefined,
+  });
 export const listGmailLabels = () =>
   call<{ labels: { id: string; name: string }[] }>({ action: "labels" }).then((r) => r.labels);
 

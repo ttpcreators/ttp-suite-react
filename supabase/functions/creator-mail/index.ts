@@ -10,8 +10,8 @@
 //      creator_name. Le client ne choisit JAMAIS sa créatrice ; seule l'agence
 //      peut passer { creator } (aperçu « vue créatrice »).
 //   2. Réglage lu en base (creator_mail_settings) : section activée + alias/libellé.
-//   3. Chaque accès à un fil (ouverture, pièce jointe, note) revérifie que le fil
-//      appartient à la créatrice (logic.threadMatches) ; sinon 404.
+//   3. Chaque accès à un fil (ouverture, pièce jointe, note, avis) revérifie que
+//      le fil appartient à la créatrice (logic.threadMatches) ; sinon 404.
 //   4. Accès Gmail : compte de service (secret GMAIL_SA_KEY + GMAIL_IMPERSONATE,
 //      délégation de domaine, scope gmail.readonly) ; à défaut, la connexion
 //      Gmail de l'agence déjà en place (google_tokens). Jamais côté client.
@@ -20,15 +20,17 @@
 // Cache mémoire court (liste 60 s, fil 2 min). Pas de Pub/Sub pour l'instant :
 // pour l'ajouter, il suffira d'invalider `cache` depuis un webhook.
 //
-// Entrée (POST JSON) : { action: "list" | "thread" | "attachment" | "note" | "labels",
-//                        creator?, threadId?, messageId?, attachmentId?, body? }
+// Entrée (POST JSON) : { action: "list" | "thread" | "attachment" | "note" | "decision" | "labels",
+//                        creator?, threadId?, messageId?, attachmentId?, body?, decision?, comment? }
+// « decision » (créatrice) : decision = "encours" | "valide" | "refuse", comment facultatif,
+// noté dans creator_mail_status_log (l'agence, elle, écrit directement via la RLS).
 // ============================================================================
 
 import sanitizeHtml from "npm:sanitize-html@2.13.0";
 import { getServiceClient, getAccessToken, corsHeaders } from "../_shared/google.ts";
 import { serviceAccountToken, talentAddress } from "../_shared/gmailBox.ts";
 import {
-  aliasQuery, brandOf, displayName, header, isVisibleMessage, normEmail, threadMatches,
+  aliasQuery, brandOf, cleanComment, displayName, header, isVisibleMessage, normEmail, parseChoice, threadMatches,
   type GHeader, type GMessageLite,
 } from "./logic.ts";
 
@@ -419,24 +421,29 @@ Deno.serve(async (req: Request) => {
       return res({ ok: true, note: data });
     }
 
-    // Décision de la créatrice : « J'accepte » / « Je refuse » / annuler.
-    // Elle ne peut pas modifier une décision prise par l'agence.
+    // Avis de la créatrice : elle range l'échange dans « En cours », « Validé » ou
+    // « Refusé », avec un mot facultatif. Elle peut toujours changer d'avis (même
+    // après un choix de l'agence) : chaque changement est noté dans l'historique.
     if (action === "decision") {
       if (me.agency) return res({ error: "non_autorise" }, 403);
-      const decision = String(body.decision ?? "");
-      if (!["valide", "refuse", "annuler"].includes(decision)) return res({ error: "requete_invalide" }, 400);
+      const choice = parseChoice(body.decision);
+      if (!choice) return res({ error: "requete_invalide" }, 400);
+      const comment = cleanComment(body.comment);
       const t = await ownedThread(await gmailToken(sb), s, threadId);
-      const { data: cur } = await sb.from("creator_mail_threads").select("*")
-        .eq("creator", creator).eq("thread_id", threadId).maybeSingle<ThreadRow>();
-      if (cur && decisionOf(cur).decidedBy === "agency") return res({ error: "decision_agence" }, 409);
       const now = new Date().toISOString();
-      const row = decision === "annuler"
+      const row = choice === "encours"
         ? { creator, thread_id: threadId, status: "nouvelle", decided_by: null, decided_at: null, updated_at: now }
-        : { creator, thread_id: threadId, status: decision, decided_by: "creator", decided_at: now, updated_at: now };
+        : { creator, thread_id: threadId, status: choice, decided_by: "creator", decided_at: now, updated_at: now };
       const { error } = await sb.from("creator_mail_threads").upsert(row, { onConflict: "creator,thread_id" });
       if (error) return res({ error: /decided_/.test(error.message) ? "migration_manquante" : "decision_non_enregistree" }, 500);
+      // Trace (qui, quand, son mot). Le choix est déjà enregistré : un échec ici
+      // (SQL de l'historique pas encore lancé) ne l'annule pas.
+      const { error: logError } = await sb.from("creator_mail_status_log").insert({
+        creator, thread_id: threadId, status: choice, by_role: "creator", author_user_id: me.userId, comment,
+      });
+      if (logError) console.error("creator-mail historique", logError.message);
       const msgs = (t.messages ?? []).filter((m) => isVisibleMessage(lite(m)));
-      return res({ ok: true, status: effectiveStatus(row as ThreadRow, msgs), ...decisionOf(row as ThreadRow) });
+      return res({ ok: true, status: effectiveStatus(row as ThreadRow, msgs), ...decisionOf(row as ThreadRow), logged: !logError });
     }
 
     const token = await gmailToken(sb);

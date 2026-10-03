@@ -108,3 +108,19 @@ export type MailStatus = (typeof MAIL_STATUSES)[number];
 export function isMailStatus(s: unknown): s is MailStatus {
   return typeof s === "string" && (MAIL_STATUSES as readonly string[]).includes(s);
 }
+
+/** Rangement d'un échange choisi à la main : « En cours », « Validé » ou « Refusé ». */
+export const MAIL_CHOICES = ["encours", "valide", "refuse"] as const;
+export type MailChoice = (typeof MAIL_CHOICES)[number];
+/** Choix reçu du client (« annuler », ancien nom de « En cours », reste accepté), sinon null. */
+export function parseChoice(raw: unknown): MailChoice | null {
+  const v = raw === "annuler" ? "encours" : raw;
+  return typeof v === "string" && (MAIL_CHOICES as readonly string[]).includes(v) ? (v as MailChoice) : null;
+}
+/** Mot facultatif joint à un choix : sans espaces autour, 1000 caractères max, null si vide. */
+export function cleanComment(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  // Découpe par caractère (pas par unité UTF-16) : un émoji n'est jamais coupé en deux.
+  const t = Array.from(raw.trim()).slice(0, 1000).join("").trim();
+  return t || null;
+}

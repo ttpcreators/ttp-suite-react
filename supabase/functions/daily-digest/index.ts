@@ -378,11 +378,12 @@ Deno.serve(async (req: Request) => {
       gift: "Nouveau cadeau",
       invoice: "Facture mise à jour",
       roadmap: "Feuille de route mise à jour",
+      mail: "Un échange a changé de statut",
     };
     const KEY: Record<string, string> = {
       document: "c_document", brief: "c_brief", debrief: "c_debrief", event: "c_event",
       mediakit: "c_mediakit", "task-done": "c_taskdone", idea: "c_idea", gift: "c_gift",
-      invoice: "c_invoice", roadmap: "c_roadmap",
+      invoice: "c_invoice", roadmap: "c_roadmap", mail: "c_mail",
     };
     const kind = String(body.kind ?? "");
     const title = customText(texts, KEY[kind] ?? "c_task", DEF[kind] ?? "Nouvelle tâche");

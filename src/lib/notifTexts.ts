@@ -23,6 +23,7 @@ export const NOTIF_TEXTS_CREATOR: NotifTextField[] = [
   { key: "c_gift", label: "Cadeau / dotation", def: "Nouveau cadeau" },
   { key: "c_invoice", label: "Facture", def: "Facture mise à jour" },
   { key: "c_roadmap", label: "Feuille de route", def: "Feuille de route mise à jour" },
+  { key: "c_mail", label: "Statut d'un échange mail", def: "Un échange a changé de statut" },
 ];
 
 /** Notifs reçues par l'AGENCE (quand un créateur agit), PAR type d'action.
@@ -35,4 +36,5 @@ export const NOTIF_TEXTS_AGENCY: NotifTextField[] = [
   { key: "a_gift", label: "Créateur — cadeau / dotation", def: "{createur} · cadeau reçu" },
   { key: "a_facture", label: "Créateur dépose une facture", def: "{createur} · facture déposée" },
   { key: "a_stats", label: "Créateur envoie ses stats", def: "{createur} · stats envoyées" },
+  { key: "a_mail", label: "Créateur : avis ou message sur un mail", def: "{createur} · message sur un mail" },
 ];

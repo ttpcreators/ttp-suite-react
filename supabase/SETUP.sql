@@ -1321,3 +1321,26 @@ create policy creator_mail_notes_agency_update on public.creator_mail_notes for 
 drop policy if exists creator_mail_notes_own on public.creator_mail_notes;
 create policy creator_mail_notes_own on public.creator_mail_notes for select to authenticated
   using (creator = public.my_creator());
+
+-- 4) Historique des statuts (2026-10-03) : « En cours » / « Validé » / « Refusé »,
+--    qui, quand et son mot. Créatrice : ajout par la fonction creator-mail seulement
+--    (fil vérifié). Agence : ajout direct en son propre nom. Ni modification ni suppression.
+create table if not exists public.creator_mail_status_log (
+  id              uuid primary key default gen_random_uuid(),
+  creator         text not null,
+  thread_id       text not null,
+  status          text not null check (status in ('encours', 'valide', 'refuse')),
+  by_role         text not null check (by_role in ('creator', 'agency')),
+  author_user_id  uuid,
+  comment         text check (comment is null or char_length(comment) between 1 and 1000),
+  created_at      timestamptz not null default now()
+);
+create index if not exists creator_mail_status_log_thread_idx
+  on public.creator_mail_status_log (creator, thread_id, created_at);
+alter table public.creator_mail_status_log enable row level security;
+drop policy if exists creator_mail_status_log_read on public.creator_mail_status_log;
+create policy creator_mail_status_log_read on public.creator_mail_status_log for select to authenticated
+  using (public.is_agency() or creator = public.my_creator());
+drop policy if exists creator_mail_status_log_agency_insert on public.creator_mail_status_log;
+create policy creator_mail_status_log_agency_insert on public.creator_mail_status_log for insert to authenticated
+  with check (public.is_agency() and by_role = 'agency' and author_user_id = auth.uid());

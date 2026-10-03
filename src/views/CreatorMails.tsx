@@ -1,46 +1,40 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, AtSign, Check, Inbox, Info, Loader2, Mail, MessageSquare, RefreshCw, Send, Settings2, Tag, Undo2, X,
+  ArrowLeft, AtSign, Check, History, Hourglass, Inbox, Info, Loader2, Mail, MessageSquare, RefreshCw, Send, Settings2, Tag, X,
+  type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { DashPanel, DashSectionTitle } from "@/components/ui/dash";
-import { notifyAgency } from "@/lib/push";
+import { notifyAgency, notifyCreator } from "@/lib/push";
 import {
-  statusMeta, listMails, getMailThread, sendManagerNote, sendDecision, listGmailLabels,
-  type Decision, type MailStatus, type MailThread, type MailThreadLite, type MailSettings,
+  statusMeta, listMails, getMailThread, sendManagerNote, sendDecision, listGmailLabels, getStatusHistory,
+  buildFeed, choiceOf, autoStatusOf,
+  type Decision, type FeedItem, type MailChoice, type MailStatus, type MailStatusEvent, type MailThread,
+  type MailThreadLite, type MailSettings,
 } from "@/lib/creatorMail";
-import { Initial, MailItem, fmtWhen, fmtFull } from "@/components/mail-reader";
+import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
 
 /*
  * Section « Mails » (lecture seule) : les échanges de la boîte agence où apparaît
  * l'alias de la créatrice. Trois usages :
- *   - "creator" : la créatrice (lecture + « Écrire à mon manager ») ;
- *   - "agency"  : fiche créatrice côté agence (statuts + lecture des notes) ;
- *   - "preview" : l'agence regarde l'espace créateur (lecture seule).
+ *   - "creator" : la créatrice (lecture, son avis, « Écrire à mon manager ») ;
+ *   - "agency"  : fiche créatrice côté agence (statut + lecture du suivi) ;
+ *   - "preview" : l'agence regarde l'espace créateur (un choix y est noté au nom de l'agence).
  * Le filtrage est fait par le serveur (fonction creator-mail) : ce composant ne
  * reçoit jamais un mail qui ne concerne pas la créatrice.
  */
 type Mode = "creator" | "agency" | "preview";
 
-function StatusBadge({ status }: { status: string }) {
+/** Statut discret (pastille + texte) pour les lignes de la liste, avec l'auteur du choix. */
+function StatusDot({ status, by }: { status: string; by?: string }) {
   const m = statusMeta(status);
   return (
-    <span className={cn("inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium", m.badge)}>
-      <span className={cn("size-1.5 rounded-full", m.dot)} />
+    <span className="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[11px] text-muted-foreground">
+      <span className={cn("size-1.5 shrink-0 rounded-full", m.dot)} />
       {m.label}
-    </span>
-  );
-}
-
-/** Statut discret (pastille + texte) pour les lignes de la liste. */
-function StatusDot({ status }: { status: string }) {
-  const m = statusMeta(status);
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[11px] text-muted-foreground">
-      <span className={cn("size-1.5 rounded-full", m.dot)} />
-      {m.label}
+      {by && <span className="truncate text-faint">· par {by}</span>}
     </span>
   );
 }
@@ -52,62 +46,199 @@ const FILTERS: { key: "tous" | "encours" | "valide" | "refuse"; label: string; d
   { key: "refuse", label: "Refusés", dot: "bg-red-500", match: (s) => s === "refuse" },
 ];
 
+/** Les trois cases du grand sélecteur (mêmes couleurs que les tuiles du haut). */
+const CHOICES: { value: MailChoice; label: string; hint: string; icon: LucideIcon; tile: string; disc: string; confirm: string }[] = [
+  {
+    value: "encours", label: "En cours", hint: "On en discute", icon: Hourglass,
+    tile: "border-amber-500/70 bg-amber-500/[0.09] text-amber-800 dark:text-amber-300",
+    disc: "bg-amber-500 text-zinc-950", confirm: "bg-amber-500 text-zinc-950",
+  },
+  {
+    value: "valide", label: "Validé", hint: "C'est oui", icon: Check,
+    tile: "border-emerald-600/70 bg-emerald-500/[0.09] text-emerald-800 dark:text-emerald-300",
+    disc: "bg-emerald-600 text-white", confirm: "bg-emerald-600 text-white",
+  },
+  {
+    value: "refuse", label: "Refusé", hint: "C'est non", icon: X,
+    tile: "border-red-500/70 bg-red-500/[0.08] text-red-700 dark:text-red-300",
+    disc: "bg-red-600 text-white", confirm: "bg-red-600 text-white",
+  },
+];
+const choiceMeta = (c: MailChoice) => CHOICES.find((x) => x.value === c) ?? CHOICES[0];
+
 const fmtDay = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "";
+const fmtStamp = (ts: number) =>
+  new Date(ts).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+/** Auteur d'un choix, vu par la personne qui regarde (« toi », « ton agence », « Chloé », « l'agence »). */
+const authorName = (by: "creator" | "agency", mode: Mode, creatorName: string) =>
+  mode === "creator" ? (by === "creator" ? "toi" : "ton agence") : by === "creator" ? creatorName : "l'agence";
+const authorSubject = (by: "creator" | "agency", mode: Mode, creatorName: string) =>
+  mode === "creator" ? (by === "creator" ? "Tu as" : "Ton agence a") : by === "creator" ? `${creatorName} a` : "L'agence a";
+const VERB: Record<MailChoice, string> = {
+  encours: "remis l'échange en cours", valide: "validé l'échange", refuse: "refusé l'échange",
+};
+/** Texte de la notification envoyée à l'agence quand la créatrice choisit. */
+const PUSH_VERB: Record<MailChoice, string> = { encours: "a remis en cours", valide: "a validé", refuse: "a refusé" };
 
 /**
- * Bandeau de décision sous l'en-tête d'un échange :
- *   créatrice → « J'accepte » / « Je refuse » (ou sa réponse + « Changer d'avis ») ;
- *   agence    → réponse de la créatrice, ou « Valider » / « Refuser » à sa place.
+ * Grand sélecteur sous l'en-tête d'un échange : « En cours », « Validé », « Refusé ».
+ * Un clic ouvre une confirmation avec un mot facultatif (son avis), puis le choix
+ * est enregistré et noté dans le suivi (qui, quand, son mot).
  */
-function DecisionBar({
-  thread, mode, creatorName, busy, onDecide,
+function StatusPanel({
+  thread, mode, creatorName, creatorSees, busy, feedCount, onChoose, onShowFeed,
 }: {
-  thread: MailThread; mode: Mode; creatorName: string; busy: boolean;
-  onDecide: (d: "valide" | "refuse" | null) => void;
+  thread: MailThread; mode: Mode; creatorName: string; creatorSees: boolean; busy: boolean; feedCount: number;
+  onChoose: (choice: MailChoice, comment: string) => Promise<boolean>;
+  onShowFeed: () => void;
 }) {
-  const decided = thread.status === "valide" || thread.status === "refuse";
-  const ok = thread.status === "valide";
-  const byCreator = thread.decidedBy === "creator";
+  const current = choiceOf(thread.status);
+  const [pending, setPending] = useState<MailChoice | null>(null);
+  const [comment, setComment] = useState("");
+  const pick = pending ? choiceMeta(pending) : null;
   const when = fmtDay(thread.decidedAt);
-  const btn = "inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50";
-  const accept = <button type="button" disabled={busy} onClick={() => onDecide("valide")} className={cn(btn, "bg-emerald-600 text-white")}><Check className="h-4 w-4" />{mode === "creator" ? "J'accepte" : "Valider"}</button>;
-  const refuse = <button type="button" disabled={busy} onClick={() => onDecide("refuse")} className={cn(btn, "border border-red-500/40 bg-surface text-red-600 dark:text-red-400")}><X className="h-4 w-4" />{mode === "creator" ? "Je refuse" : "Refuser"}</button>;
-  const undo = (label: string) => (
-    <button type="button" disabled={busy} onClick={() => onDecide(null)} className="inline-flex items-center gap-1 text-[12px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50">
-      <Undo2 className="h-3.5 w-3.5" />{label}
-    </button>
-  );
 
-  if (decided) {
-    const who = byCreator ? (mode === "creator" ? "Tu as" : `${creatorName} a`) : mode === "creator" ? "Ton agence a" : "L'agence a";
-    const verb = byCreator ? (ok ? "accepté" : "refusé") : ok ? "validé" : "refusé";
-    return (
-      <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-4 py-3 sm:px-6", ok ? "bg-emerald-500/[0.07]" : "bg-red-500/[0.06]")}>
-        <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full", ok ? "bg-emerald-600 text-white" : "bg-red-600 text-white")}>
-          {ok ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
-        </span>
-        <span className="min-w-0 flex-1 text-[13px] font-medium text-foreground">
-          {who} {verb} cet échange{when ? ` le ${when}` : ""}.
-        </span>
-        {mode === "creator" && byCreator && undo("Changer d'avis")}
-        {mode === "agency" && undo("Annuler la décision")}
-      </div>
-    );
-  }
-  if (mode === "preview") return null;
+  const hintFor = (c: (typeof CHOICES)[number]) => {
+    if (c.value !== current) return c.hint;
+    // Case active : « Nouvelle demande » / « En négociation », ou qui a tranché et quand.
+    if (c.value === "encours") return statusMeta(thread.status).label;
+    return thread.decidedBy ? `par ${authorName(thread.decidedBy, mode, creatorName)}${when ? `, ${when}` : ""}` : c.hint;
+  };
+
+  const confirm = async () => {
+    if (!pending || busy) return;
+    if (await onChoose(pending, comment)) {
+      setPending(null);
+      setComment("");
+    }
+  };
+
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 border-b border-border bg-muted/40 px-4 py-3.5 sm:px-6">
-      <div className="min-w-0 flex-1 basis-[220px]">
-        <p className="text-[13px] font-semibold text-foreground">
-          {mode === "creator" ? "Ta réponse à cette proposition" : `En attente de la réponse de ${creatorName}`}
+    <div className="border-b border-border px-4 py-3.5 sm:px-6">
+      <div className="mb-2.5 flex items-center gap-3">
+        <p className="min-w-0 flex-1 text-[13px] font-semibold text-foreground">
+          {mode === "creator" ? "Ton avis sur cet échange" : "Où en est cet échange ?"}
         </p>
-        <p className="text-[12px] text-muted-foreground">
-          {mode === "creator" ? "Ton manager est prévenu dès que tu réponds. Tu peux changer d'avis." : "Elle peut accepter ou refuser depuis son espace. Tu peux aussi trancher à sa place."}
-        </p>
+        {feedCount > 0 && (
+          <button type="button" onClick={onShowFeed}
+            className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline">
+            <History className="h-3.5 w-3.5" /> Voir le suivi ({feedCount})
+          </button>
+        )}
       </div>
-      <div className="flex shrink-0 gap-2">{accept}{refuse}</div>
+
+      <div role="radiogroup" aria-label="Statut de l'échange" className="grid grid-cols-3 gap-2">
+        {CHOICES.map((c) => {
+          const active = c.value === current;
+          const picked = c.value === pending;
+          const Icon = c.icon;
+          return (
+            <button
+              key={c.value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              disabled={busy}
+              onClick={() => setPending(active ? null : c.value)}
+              className={cn(
+                "flex min-w-0 flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 text-center outline-none transition-colors focus-visible:ring-2 focus-visible:ring-foreground/20 disabled:opacity-60 sm:flex-row sm:gap-3 sm:px-3.5 sm:py-3 sm:text-left",
+                active ? cn(c.tile, "cursor-default")
+                  : picked ? "border-foreground/40 bg-rowhover text-foreground"
+                  : "border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
+              )}
+            >
+              <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors", active || picked ? c.disc : "bg-muted text-muted-foreground")}>
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className="flex min-w-0 max-w-full flex-col">
+                <span className="text-[14px] font-semibold leading-tight">{c.label}</span>
+                <span className="truncate text-[11px] opacity-80 sm:text-[12px]">{hintFor(c)}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {pick && (
+        <div className="mt-3 rounded-xl border border-border bg-surface p-3">
+          <p className="text-[13px] font-medium text-foreground">Passer cet échange en « {pick.label} » ?</p>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void confirm();
+              if (e.key === "Escape") setPending(null);
+            }}
+            maxLength={1000}
+            rows={2}
+            placeholder={mode === "creator" ? "Un mot pour ton manager (facultatif) : pourquoi, tes conditions…" : `Un mot pour ${creatorName} (facultatif)`}
+            className="mt-2 max-h-40 min-h-[60px] w-full resize-none rounded-lg border border-border bg-transparent px-3 py-2 text-[13px] text-foreground outline-none [field-sizing:content] placeholder:text-faint focus:border-primary"
+          />
+          <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+            <span className="mr-auto w-full text-[11px] text-faint sm:w-auto">
+              {mode === "creator" ? "Ton manager reçoit une notification." : creatorSees ? `${creatorName} reçoit une notification.` : "Sa section Mails n'est pas encore activée : pas de notification."}
+            </span>
+            <button type="button" onClick={() => setPending(null)} className="h-9 rounded-lg px-3 text-[13px] text-muted-foreground transition-colors hover:text-foreground">
+              Annuler
+            </button>
+            <button type="button" onClick={() => void confirm()} disabled={busy}
+              className={cn("inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50", pick.confirm)}>
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Confirmer
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === "preview" && !pick && (
+        <p className="mt-2 text-[11px] text-muted-foreground">Aperçu de ce que voit {creatorName}. Un choix fait ici est noté au nom de l'agence.</p>
+      )}
     </div>
+  );
+}
+
+/** Suivi d'un échange : messages de la créatrice et changements de statut, dans l'ordre. */
+function Feed({ items, mode, creatorName }: { items: FeedItem[]; mode: Mode; creatorName: string }) {
+  const asAgency = mode !== "creator";
+  return (
+    <ul className="mb-3 flex flex-col gap-2.5">
+      {items.map((it) => {
+        if (it.kind === "note") {
+          const n = it.note;
+          return (
+            <li key={`n-${n.id}`} className={cn("max-w-[85%] rounded-2xl border border-border bg-surface px-3.5 py-2.5", asAgency ? "self-start rounded-bl-md" : "self-end rounded-br-md")}>
+              <p className="whitespace-pre-wrap text-[13px] text-foreground [overflow-wrap:anywhere]">{n.body}</p>
+              <p className="mt-1 text-[11px] text-faint">
+                {fmtStamp(it.at)}
+                {!asAgency && (n.agency_read_at ? " · lu" : " · envoyé")}
+              </p>
+            </li>
+          );
+        }
+        const e: MailStatusEvent = it.event;
+        const c = choiceMeta(e.status);
+        const Icon = c.icon;
+        // Chacun de son côté, comme une conversation : à droite ce qui vient de soi.
+        const mine = (mode === "creator") === (e.by_role === "creator");
+        return (
+          <li key={`e-${e.id}`} className={cn("flex max-w-[85%] flex-col gap-1", mine ? "items-end self-end" : "items-start self-start")}>
+            <span className="inline-flex max-w-full items-start gap-2 rounded-xl border border-border bg-surface px-2.5 py-1.5 text-[12px] text-muted-foreground">
+              <span className={cn("mt-px grid h-4 w-4 shrink-0 place-items-center rounded-full", c.disc)}><Icon className="h-2.5 w-2.5" /></span>
+              <span className="min-w-0">
+                <span className="font-medium text-foreground">{authorSubject(e.by_role, mode, creatorName)} {VERB[e.status]}</span>
+                <span className="text-faint"> · {fmtStamp(it.at)}</span>
+              </span>
+            </span>
+            {e.comment && (
+              <p className={cn("whitespace-pre-wrap rounded-2xl border border-border bg-surface px-3.5 py-2.5 text-[13px] text-foreground [overflow-wrap:anywhere]", mine ? "rounded-br-md" : "rounded-bl-md")}>
+                {e.comment}
+              </p>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -117,9 +248,14 @@ function prettyName(n: string): string {
   return n.toLowerCase().replace(/\p{L}[\p{L}'’-]*/gu, (w) => (w.length <= 3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)));
 }
 
-export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode }) {
+export function CreatorMailbox({ creator, mode, creatorSees = true }: {
+  creator: string; mode: Mode;
+  /** La créatrice a-t-elle accès à sa section Mails ? (sinon pas de notification pour elle) */
+  creatorSees?: boolean;
+}) {
   const asAgency = mode !== "creator";
   const forCreator = asAgency ? creator : undefined;
+  const creatorName = prettyName(titleCase(creator));
   const [threads, setThreads] = useState<MailThreadLite[] | null>(null);
   const [configured, setConfigured] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -133,6 +269,9 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
   const [sending, setSending] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [deciding, setDeciding] = useState(false);
+  // Historique des statuts de l'échange ouvert (events null = SQL pas encore lancé).
+  const [history, setHistory] = useState<{ id: string; events: MailStatusEvent[] | null } | null>(null);
+  const feedRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -182,6 +321,7 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
         }
       })
       .catch((e) => alive && setThreadErr((e as Error).message));
+    getStatusHistory(creator, openId).then((events) => alive && setHistory({ id: openId, events }));
     return () => {
       alive = false;
     };
@@ -193,38 +333,60 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
   };
 
   /**
-   * Décision Validé / Refusé (null = annuler : retour au statut automatique).
-   * Créatrice : via le serveur (vérifie que l'échange est à elle). Agence : écriture directe (RLS agence).
+   * Range l'échange dans « En cours », « Validé » ou « Refusé », avec un mot facultatif.
+   * Créatrice : via le serveur (vérifie que l'échange est à elle, note la trace).
+   * Agence : écriture directe (RLS agence) + ligne d'historique à son nom.
    */
-  const decide = async (threadId: string, decision: "valide" | "refuse" | null) => {
-    if (deciding) return;
+  const choose = async (threadId: string, choice: MailChoice, comment: string): Promise<boolean> => {
+    if (deciding) return false;
     setDeciding(true);
+    const word = comment.trim().slice(0, 1000);
+    const open = thread && thread.id === threadId ? thread : null;
+    const lite = threads?.find((x) => x.id === threadId);
+    const what = prettyName(lite?.brand || open?.brand || "") || lite?.subject || open?.subject || "un échange";
+    const label = choiceMeta(choice).label;
     try {
       if (mode === "creator") {
-        const r = await sendDecision(threadId, decision ?? "annuler");
+        const r = await sendDecision(threadId, choice, word);
         applyDecision(threadId, r);
-        if (decision) {
-          const t = threads?.find((x) => x.id === threadId);
-          notifyAgency("mail", creator, `${decision === "valide" ? "a accepté" : "a refusé"} : ${prettyName(t?.brand ?? "") || t?.subject || "un échange"}`);
-          toast(decision === "valide" ? "Réponse envoyée : tu acceptes ✓" : "Réponse envoyée : tu refuses");
+        notifyAgency("mail", creator, `${PUSH_VERB[choice]} : ${what}${word ? ` · « ${word} »` : ""}`);
+        toast(`${label} ✓ Ton manager est prévenu`);
+      } else {
+        const now = new Date().toISOString();
+        const row: Record<string, string | null> = choice === "encours"
+          ? { creator, thread_id: threadId, status: "nouvelle", decided_by: null, decided_at: null, updated_at: now }
+          : { creator, thread_id: threadId, status: choice, decided_by: "agency", decided_at: now, updated_at: now };
+        let { error } = await supabase.from("creator_mail_threads").upsert(row, { onConflict: "creator,thread_id" });
+        // SQL « décision » pas encore lancé : on enregistre au moins le statut.
+        if (error && /decided_/.test(error.message)) {
+          ({ error } = await supabase.from("creator_mail_threads")
+            .upsert({ creator, thread_id: threadId, status: row.status, updated_at: now }, { onConflict: "creator,thread_id" }));
         }
-        return;
+        if (error) {
+          toast("Statut non enregistré, réessaie");
+          return false;
+        }
+        // Trace à son nom (sans effet tant que le SQL « historique » n'est pas lancé).
+        const { data: auth } = await supabase.auth.getSession();
+        const uid = auth.session?.user.id;
+        if (uid) {
+          await supabase.from("creator_mail_status_log").insert({
+            creator, thread_id: threadId, status: choice, by_role: "agency", author_user_id: uid, comment: word || null,
+          });
+        }
+        applyDecision(threadId, choice === "encours"
+          ? { status: open ? autoStatusOf(open.messages) : "nouvelle", decidedBy: null, decidedAt: null }
+          : { status: choice, decidedBy: "agency", decidedAt: now });
+        if (creatorSees) notifyCreator("mail", creator, `${what} : ${label} par ton agence${word ? ` · « ${word} »` : ""}`);
+        toast(`Statut enregistré : ${label} ✓`);
       }
-      const now = new Date().toISOString();
-      const row: Record<string, string | null> = decision
-        ? { creator, thread_id: threadId, status: decision, decided_by: "agency", decided_at: now, updated_at: now }
-        : { creator, thread_id: threadId, status: "nouvelle", decided_by: null, decided_at: null, updated_at: now };
-      let { error } = await supabase.from("creator_mail_threads").upsert(row, { onConflict: "creator,thread_id" });
-      // SQL « décision » pas encore lancé : on enregistre au moins le statut.
-      if (error && /decided_/.test(error.message)) {
-        ({ error } = await supabase.from("creator_mail_threads")
-          .upsert({ creator, thread_id: threadId, status: row.status, updated_at: now }, { onConflict: "creator,thread_id" }));
-      }
-      if (error) return toast("Statut non enregistré");
-      if (decision) applyDecision(threadId, { status: decision, decidedBy: "agency", decidedAt: now });
-      else void load(); // retour au statut automatique, recalculé par le serveur
+      const events = await getStatusHistory(creator, threadId);
+      // Un autre échange a été ouvert entre-temps : on ne touche pas à son historique.
+      setHistory((cur) => (cur && cur.id !== threadId ? cur : { id: threadId, events }));
+      return true;
     } catch (e) {
       toast((e as Error).message);
+      return false;
     } finally {
       setDeciding(false);
     }
@@ -254,6 +416,13 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
   }, [threads]);
   const cur = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
   const shown = (threads ?? []).filter((t) => cur.match(t.status));
+
+  // Suivi de l'échange ouvert. Une ancienne décision (avant l'historique) n'est ajoutée
+  // qu'une fois l'historique chargé, pour éviter un clignotement.
+  const events = thread && history?.id === thread.id ? history.events : undefined;
+  const feed = thread
+    ? buildFeed(thread.notes, events ?? null, events === undefined ? undefined : { status: thread.status, decidedBy: thread.decidedBy, decidedAt: thread.decidedAt })
+    : [];
 
   if (threads === null) {
     return <DashPanel className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Chargement des mails…</DashPanel>;
@@ -331,10 +500,10 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
                       {t.count > 1 && <span className="ml-1 text-faint">{t.count}</span>}
                     </span>
                     <span className="line-clamp-1 text-[12px] text-muted-foreground">{t.excerpt}</span>
-                    <span className="mt-1 flex items-center gap-3">
-                      <StatusDot status={t.status} />
+                    <span className="mt-1 flex min-w-0 items-center gap-3">
+                      <StatusDot status={t.status} by={t.decidedBy ? authorName(t.decidedBy, mode, creatorName) : undefined} />
                       {t.notes > 0 && (
-                        <span className="flex items-center gap-1 text-[11px] text-muted-foreground" title="Messages au manager">
+                        <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground" title="Messages au manager">
                           <MessageSquare className="h-3 w-3" />{t.notes}
                         </span>
                       )}
@@ -364,15 +533,18 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
             </p>
           )}
         </div>
-        {thread && <span className="mt-0.5"><StatusBadge status={thread.status} /></span>}
       </div>
       {thread && (
-        <DecisionBar
+        <StatusPanel
+          key={thread.id}
           thread={thread}
           mode={mode}
-          creatorName={prettyName(titleCase(creator))}
+          creatorName={creatorName}
+          creatorSees={creatorSees}
           busy={deciding}
-          onDecide={(d) => void decide(thread.id, d)}
+          feedCount={feed.length}
+          onChoose={(c, w) => choose(thread.id, c, w)}
+          onShowFeed={() => feedRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
         />
       )}
 
@@ -401,28 +573,22 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
               ))}
             </div>
 
-            {/* Échanges internes avec le manager (jamais envoyés à la marque) */}
-            <div className="border-t border-border bg-muted/40 px-4 py-5 sm:px-6">
+            {/* Suivi interne avec le manager : avis, questions, changements de statut (jamais envoyés à la marque) */}
+            <div ref={feedRef} className="scroll-mt-2 border-t border-border bg-muted/40 px-4 py-5 sm:px-6">
               <div className="mb-1 flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="text-[13px] font-semibold text-foreground">{asAgency ? "Messages de la créatrice" : "Échanges avec ton manager"}</span>
+                <History className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="text-[13px] font-semibold text-foreground">{asAgency ? `Suivi avec ${creatorName}` : "Suivi avec ton manager"}</span>
               </div>
               <p className="mb-3 pl-6 text-[12px] text-muted-foreground">
-                {asAgency ? "Ses questions sur cet échange. Jamais envoyées à la marque." : "Une question sur cet échange ? Elle reste entre toi et TTP, la marque ne la voit jamais."}
+                {asAgency
+                  ? "Ses avis, ses questions et chaque changement de statut, avec la date. Jamais envoyés à la marque."
+                  : "Tes avis, tes questions et les choix de ton agence. La marque ne voit jamais rien de tout ça."}
               </p>
-              {thread.notes.length > 0 && (
-                <ul className="mb-3 flex flex-col gap-2">
-                  {thread.notes.map((n) => (
-                    <li key={n.id} className={cn("max-w-[85%] rounded-2xl border border-border bg-surface px-3.5 py-2.5", !asAgency && "self-end rounded-br-md", asAgency && "rounded-bl-md")}>
-                      <p className="whitespace-pre-wrap text-[13px] text-foreground [overflow-wrap:anywhere]">{n.body}</p>
-                      <p className="mt-1 text-[11px] text-faint">
-                        {fmtFull(new Date(n.created_at).getTime())}
-                        {!asAgency && (n.agency_read_at ? " · lu" : " · envoyé")}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              {feed.length > 0 ? (
+                <Feed items={feed} mode={mode} creatorName={creatorName} />
+              ) : asAgency ? (
+                <p className="pl-6 text-[12px] text-faint">Rien pour l'instant.</p>
+              ) : null}
               {mode === "creator" && (
                 <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface p-1.5 pl-3.5 focus-within:border-primary">
                   <textarea
@@ -467,12 +633,12 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
           {asAgency
-            ? "« Nouvelle demande » : la marque a écrit. « En négociation » : l'agence a répondu. « Validé » / « Refusé » : la créatrice a cliqué « J'accepte » ou « Je refuse » (tu es prévenu), ou l'agence l'a décidé."
-            : "« Nouvelle demande » : une marque t'écrit. « En négociation » : ton agence lui a répondu. Quand c'est à toi de choisir, clique « J'accepte » ou « Je refuse » dans l'échange : ton manager est prévenu tout de suite."}
+            ? `Ouvre un échange et range-le dans « En cours », « Validé » ou « Refusé » avec le grand sélecteur. ${creatorName} a le même dans son espace pour donner son avis. Chaque changement (qui, quand, son mot) est gardé dans le suivi de l'échange.`
+            : "Ouvre un échange et range-le dans « En cours », « Validé » ou « Refusé » pour donner ton avis, avec un mot si tu veux. Ton manager est prévenu et tout est gardé dans le suivi de l'échange."}
         </span>
       </p>
       {/* Messagerie : liste + lecture dans un seul panneau (hauteur fixe sur ordinateur, défilement interne). */}
-      <DashPanel className="flex min-w-0 flex-col lg:grid lg:h-[min(820px,calc(100dvh-300px))] lg:min-h-[520px] lg:grid-cols-[minmax(300px,370px)_minmax(0,1fr)]">
+      <DashPanel className="flex min-w-0 flex-col lg:grid lg:h-[min(860px,calc(100dvh-260px))] lg:min-h-[560px] lg:grid-cols-[minmax(300px,370px)_minmax(0,1fr)]">
         {list}
         {view}
       </DashPanel>
@@ -622,7 +788,7 @@ export function CreatorMailsAgency({ creator, suggestedAlias }: { creator: strin
         )}
       </DashPanel>
 
-      {linked && !editing && <CreatorMailbox creator={creator} mode="agency" />}
+      {linked && !editing && <CreatorMailbox creator={creator} mode="agency" creatorSees={!!settings?.enabled} />}
     </div>
   );
 }
