@@ -1282,6 +1282,16 @@ drop policy if exists creator_mail_threads_own on public.creator_mail_threads;
 create policy creator_mail_threads_own on public.creator_mail_threads for select to authenticated
   using (creator = public.my_creator());
 
+-- 2b) Décision « J'accepte / Je refuse » (2026-10-03) : seule la décision est stockée.
+alter table public.creator_mail_threads add column if not exists decided_by text;
+alter table public.creator_mail_threads add column if not exists decided_at timestamptz;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'creator_mail_threads_decided_by_check') then
+    alter table public.creator_mail_threads
+      add constraint creator_mail_threads_decided_by_check check (decided_by is null or decided_by in ('creator', 'agency'));
+  end if;
+end $$;
+
 -- 3) Notes « Écrire à mon manager » (jamais envoyées à la marque).
 --    AUCUNE écriture directe pour une créatrice : l'insertion passe par la fonction
 --    serveur creator-mail, qui vérifie d'abord que le fil lui appartient.

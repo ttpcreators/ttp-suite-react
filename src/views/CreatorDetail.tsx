@@ -472,10 +472,11 @@ export function CreatorDetail({
   return (
     <div>
       <button
+        type="button"
         onClick={onBack}
-        className="mb-4 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+        className="mb-5 inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface pl-2.5 pr-3.5 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
       >
-        <ArrowLeft className="h-3.5 w-3.5" /> Roster
+        <ArrowLeft className="h-4 w-4" /> Retour au roster
       </button>
 
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">

@@ -214,7 +214,9 @@ async function loadThread(token: string, threadId: string): Promise<GThread> {
 /** Fil chargé ET vérifié comme appartenant à la créatrice, sinon 404. */
 async function ownedThread(token: string, s: Settings, threadId: string): Promise<GThread> {
   const t = await loadThread(token, threadId);
-  if (!threadMatches((t.messages ?? []).map(lite), s.alias ?? "", s.label_id)) throw new HttpError(404, "introuvable");
+  // Seuls les messages visibles comptent (un mail à la corbeille ne donne plus accès au fil).
+  const visible = (t.messages ?? []).filter((m) => isVisibleMessage(lite(m)));
+  if (!visible.length || !threadMatches(visible.map(lite), s.alias ?? "", s.label_id)) throw new HttpError(404, "introuvable");
   return t;
 }
 
@@ -231,6 +233,18 @@ const fromAgency = (m: GMessage) =>
  * à la main (table creator_mail_threads) l'emporte toujours.
  */
 const autoStatus = (msgs: GMessage[]) => (msgs.slice(1).some(fromAgency) ? "negociation" : "nouvelle");
+
+type ThreadRow = { thread_id: string; status: string; brand: string | null; decided_by?: string | null; decided_at?: string | null };
+/**
+ * Statut affiché : la DÉCISION enregistrée (Validé / Refusé, par la créatrice ou
+ * l'agence) l'emporte ; sinon statut automatique (Nouvelle demande / En négociation).
+ */
+const effectiveStatus = (row: ThreadRow | null | undefined, msgs: GMessage[]) =>
+  row && (row.status === "valide" || row.status === "refuse") ? row.status : autoStatus(msgs);
+const decisionOf = (row: ThreadRow | null | undefined) =>
+  row && (row.status === "valide" || row.status === "refuse")
+    ? { decidedBy: row.decided_by ?? "agency", decidedAt: row.decided_at ?? null }
+    : { decidedBy: null, decidedAt: null };
 
 async function gmailThreads(token: string, s: Settings): Promise<GThread[]> {
   return cached(`l:${s.alias ?? ""}:${s.label_id ?? ""}`, 60_000, async () => {
@@ -260,10 +274,11 @@ async function listThreads(sb: Sb, token: string, s: Settings) {
   const threads = await gmailThreads(token, s);
   // Statuts et notes : toujours relus en base (pas de cache), l'agence les modifie.
   const [{ data: rows }, { data: notes }] = await Promise.all([
-    sb.from("creator_mail_threads").select("thread_id, status, brand").eq("creator", s.creator),
+    // « * » : fonctionne avant et après l'ajout des colonnes decided_by / decided_at.
+    sb.from("creator_mail_threads").select("*").eq("creator", s.creator),
     sb.from("creator_mail_notes").select("thread_id").eq("creator", s.creator),
   ]);
-  const byId = new Map(((rows ?? []) as { thread_id: string; status: string; brand: string | null }[]).map((r) => [r.thread_id, r]));
+  const byId = new Map(((rows ?? []) as ThreadRow[]).map((r) => [r.thread_id, r]));
   const noteCount = new Map<string, number>();
   for (const n of (notes ?? []) as { thread_id: string }[]) noteCount.set(n.thread_id, (noteCount.get(n.thread_id) ?? 0) + 1);
 
@@ -282,7 +297,8 @@ async function listThreads(sb: Sb, token: string, s: Settings) {
         excerpt: decodeEntities(last.snippet ?? "").slice(0, 220),
         ts: Number(last.internalDate ?? 0),
         count: msgs.length,
-        status: row?.status ?? autoStatus(msgs),
+        status: effectiveStatus(row, msgs),
+        ...decisionOf(row),
         notes: noteCount.get(t.id) ?? 0,
       };
     })
@@ -318,7 +334,7 @@ async function threadView(sb: Sb, token: string, s: Settings, threadId: string) 
     });
   }
   const [{ data: row }, { data: notes }] = await Promise.all([
-    sb.from("creator_mail_threads").select("status, brand").eq("creator", s.creator).eq("thread_id", threadId).maybeSingle(),
+    sb.from("creator_mail_threads").select("*").eq("creator", s.creator).eq("thread_id", threadId).maybeSingle(),
     sb.from("creator_mail_notes").select("id, body, created_at, agency_read_at")
       .eq("creator", s.creator).eq("thread_id", threadId).order("created_at"),
   ]);
@@ -326,8 +342,9 @@ async function threadView(sb: Sb, token: string, s: Settings, threadId: string) 
   return {
     id: threadId,
     subject: header(first?.payload?.headers ?? [], "Subject") || "(sans objet)",
-    brand: (row as { brand?: string } | null)?.brand || brandOf((t.messages ?? []).map(lite), AGENCY_DOMAIN),
-    status: (row as { status?: string } | null)?.status ?? autoStatus((t.messages ?? []).filter((x) => isVisibleMessage(lite(x)))),
+    brand: (row as ThreadRow | null)?.brand || brandOf((t.messages ?? []).map(lite), AGENCY_DOMAIN),
+    status: effectiveStatus(row as ThreadRow | null, (t.messages ?? []).filter((x) => isVisibleMessage(lite(x)))),
+    ...decisionOf(row as ThreadRow | null),
     messages,
     notes: notes ?? [],
   };
@@ -400,6 +417,26 @@ Deno.serve(async (req: Request) => {
         .select("id, body, created_at, agency_read_at").single();
       if (error) return res({ error: "note_non_enregistree" }, 500);
       return res({ ok: true, note: data });
+    }
+
+    // Décision de la créatrice : « J'accepte » / « Je refuse » / annuler.
+    // Elle ne peut pas modifier une décision prise par l'agence.
+    if (action === "decision") {
+      if (me.agency) return res({ error: "non_autorise" }, 403);
+      const decision = String(body.decision ?? "");
+      if (!["valide", "refuse", "annuler"].includes(decision)) return res({ error: "requete_invalide" }, 400);
+      const t = await ownedThread(await gmailToken(sb), s, threadId);
+      const { data: cur } = await sb.from("creator_mail_threads").select("*")
+        .eq("creator", creator).eq("thread_id", threadId).maybeSingle<ThreadRow>();
+      if (cur && decisionOf(cur).decidedBy === "agency") return res({ error: "decision_agence" }, 409);
+      const now = new Date().toISOString();
+      const row = decision === "annuler"
+        ? { creator, thread_id: threadId, status: "nouvelle", decided_by: null, decided_at: null, updated_at: now }
+        : { creator, thread_id: threadId, status: decision, decided_by: "creator", decided_at: now, updated_at: now };
+      const { error } = await sb.from("creator_mail_threads").upsert(row, { onConflict: "creator,thread_id" });
+      if (error) return res({ error: /decided_/.test(error.message) ? "migration_manquante" : "decision_non_enregistree" }, 500);
+      const msgs = (t.messages ?? []).filter((m) => isVisibleMessage(lite(m)));
+      return res({ ok: true, status: effectiveStatus(row as ThreadRow, msgs), ...decisionOf(row as ThreadRow) });
     }
 
     const token = await gmailToken(sb);

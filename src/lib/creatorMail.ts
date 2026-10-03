@@ -17,7 +17,9 @@ export const MAIL_STATUS: { value: MailStatus; label: string; short: string; dot
 ];
 export const statusMeta = (s: string) => MAIL_STATUS.find((x) => x.value === s) ?? MAIL_STATUS[0];
 
-export type MailThreadLite = {
+/** Qui a pris la décision Validé / Refusé (null = pas encore décidé). */
+export type Decision = { decidedBy: "creator" | "agency" | null; decidedAt: string | null };
+export type MailThreadLite = Decision & {
   id: string; subject: string; brand: string; excerpt: string; ts: number;
   count: number; status: MailStatus; notes: number;
 };
@@ -27,7 +29,7 @@ export type MailMessage = {
   ts: number; html: string; text: string; attachments: MailAttachment[];
 };
 export type MailNote = { id: string; body: string; created_at: string; agency_read_at: string | null };
-export type MailThread = {
+export type MailThread = Decision & {
   id: string; subject: string; brand: string; status: MailStatus; messages: MailMessage[]; notes: MailNote[];
 };
 export type MailSettings = { creator: string; alias: string | null; label_id: string | null; label_name: string | null; enabled: boolean };
@@ -39,6 +41,9 @@ const ERRORS: Record<string, string> = {
   gmail_indisponible: "Boîte mail indisponible pour le moment.",
   piece_trop_lourde: "Pièce jointe trop lourde (20 Mo max).",
   note_invalide: "Message vide ou trop long.",
+  decision_agence: "Ton agence a déjà tranché sur cet échange.",
+  migration_manquante: "Fonction pas encore activée (SQL à lancer).",
+  decision_non_enregistree: "Réponse non enregistrée, réessaie.",
 };
 
 export class MailError extends Error {}
@@ -64,6 +69,9 @@ export const getMailThread = (threadId: string, creator?: string) =>
   call<{ thread: MailThread }>({ action: "thread", threadId, creator }).then((r) => r.thread);
 export const sendManagerNote = (threadId: string, body: string) =>
   call<{ note: MailNote }>({ action: "note", threadId, body }).then((r) => r.note);
+/** Réponse de la créatrice à une proposition : accepter, refuser ou annuler sa réponse. */
+export const sendDecision = (threadId: string, decision: "valide" | "refuse" | "annuler") =>
+  call<Decision & { status: MailStatus }>({ action: "decision", threadId, decision });
 export const listGmailLabels = () =>
   call<{ labels: { id: string; name: string }[] }>({ action: "labels" }).then((r) => r.labels);
 

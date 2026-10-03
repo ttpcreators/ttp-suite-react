@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft, AtSign, Inbox, Info, Loader2, Mail, MessageSquare, RefreshCw, Send, Settings2, Tag,
+  ArrowLeft, AtSign, Check, Inbox, Info, Loader2, Mail, MessageSquare, RefreshCw, Send, Settings2, Tag, Undo2, X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { DashPanel, DashSectionTitle } from "@/components/ui/dash";
-import { StatusSelect } from "@/components/ui/status-select";
 import { notifyAgency } from "@/lib/push";
 import {
-  MAIL_STATUS, statusMeta, listMails, getMailThread, sendManagerNote, listGmailLabels,
-  type MailStatus, type MailThread, type MailThreadLite, type MailSettings,
+  statusMeta, listMails, getMailThread, sendManagerNote, sendDecision, listGmailLabels,
+  type Decision, type MailStatus, type MailThread, type MailThreadLite, type MailSettings,
 } from "@/lib/creatorMail";
 import { Initial, MailItem, fmtWhen, fmtFull } from "@/components/mail-reader";
 
@@ -24,8 +23,6 @@ import { Initial, MailItem, fmtWhen, fmtFull } from "@/components/mail-reader";
  * reçoit jamais un mail qui ne concerne pas la créatrice.
  */
 type Mode = "creator" | "agency" | "preview";
-
-const STATUS_OPTIONS = MAIL_STATUS.map((s) => ({ value: s.value, label: s.label, dot: s.dot }));
 
 function StatusBadge({ status }: { status: string }) {
   const m = statusMeta(status);
@@ -55,6 +52,65 @@ const FILTERS: { key: "tous" | "encours" | "valide" | "refuse"; label: string; d
   { key: "refuse", label: "Refusés", dot: "bg-red-500", match: (s) => s === "refuse" },
 ];
 
+const fmtDay = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "";
+
+/**
+ * Bandeau de décision sous l'en-tête d'un échange :
+ *   créatrice → « J'accepte » / « Je refuse » (ou sa réponse + « Changer d'avis ») ;
+ *   agence    → réponse de la créatrice, ou « Valider » / « Refuser » à sa place.
+ */
+function DecisionBar({
+  thread, mode, creatorName, busy, onDecide,
+}: {
+  thread: MailThread; mode: Mode; creatorName: string; busy: boolean;
+  onDecide: (d: "valide" | "refuse" | null) => void;
+}) {
+  const decided = thread.status === "valide" || thread.status === "refuse";
+  const ok = thread.status === "valide";
+  const byCreator = thread.decidedBy === "creator";
+  const when = fmtDay(thread.decidedAt);
+  const btn = "inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50";
+  const accept = <button type="button" disabled={busy} onClick={() => onDecide("valide")} className={cn(btn, "bg-emerald-600 text-white")}><Check className="h-4 w-4" />{mode === "creator" ? "J'accepte" : "Valider"}</button>;
+  const refuse = <button type="button" disabled={busy} onClick={() => onDecide("refuse")} className={cn(btn, "border border-red-500/40 bg-surface text-red-600 dark:text-red-400")}><X className="h-4 w-4" />{mode === "creator" ? "Je refuse" : "Refuser"}</button>;
+  const undo = (label: string) => (
+    <button type="button" disabled={busy} onClick={() => onDecide(null)} className="inline-flex items-center gap-1 text-[12px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50">
+      <Undo2 className="h-3.5 w-3.5" />{label}
+    </button>
+  );
+
+  if (decided) {
+    const who = byCreator ? (mode === "creator" ? "Tu as" : `${creatorName} a`) : mode === "creator" ? "Ton agence a" : "L'agence a";
+    const verb = byCreator ? (ok ? "accepté" : "refusé") : ok ? "validé" : "refusé";
+    return (
+      <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-4 py-3 sm:px-6", ok ? "bg-emerald-500/[0.07]" : "bg-red-500/[0.06]")}>
+        <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full", ok ? "bg-emerald-600 text-white" : "bg-red-600 text-white")}>
+          {ok ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+        </span>
+        <span className="min-w-0 flex-1 text-[13px] font-medium text-foreground">
+          {who} {verb} cet échange{when ? ` le ${when}` : ""}.
+        </span>
+        {mode === "creator" && byCreator && undo("Changer d'avis")}
+        {mode === "agency" && undo("Annuler la décision")}
+      </div>
+    );
+  }
+  if (mode === "preview") return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 border-b border-border bg-muted/40 px-4 py-3.5 sm:px-6">
+      <div className="min-w-0 flex-1 basis-[220px]">
+        <p className="text-[13px] font-semibold text-foreground">
+          {mode === "creator" ? "Ta réponse à cette proposition" : `En attente de la réponse de ${creatorName}`}
+        </p>
+        <p className="text-[12px] text-muted-foreground">
+          {mode === "creator" ? "Ton manager est prévenu dès que tu réponds. Tu peux changer d'avis." : "Elle peut accepter ou refuser depuis son espace. Tu peux aussi trancher à sa place."}
+        </p>
+      </div>
+      <div className="flex shrink-0 gap-2">{accept}{refuse}</div>
+    </div>
+  );
+}
+
 /** « TTP CREATORS » → « TTP Creators » (les mots de 3 lettres ou moins restent en capitales). */
 function prettyName(n: string): string {
   if (!n || n !== n.toUpperCase() || !/[A-Z]/.test(n)) return n;
@@ -75,6 +131,8 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [deciding, setDeciding] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -83,10 +141,14 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
       const r = await listMails(forCreator);
       setConfigured(r.configured);
       setThreads(r.threads);
-      // Ordinateur : le dernier échange s'ouvre directement (pas de panneau vide).
-      if (r.threads.length && window.matchMedia("(min-width: 1024px)").matches) {
-        setOpenId((cur) => cur ?? r.threads[0].id);
-      }
+      const desktop = window.matchMedia("(min-width: 1024px)").matches;
+      setOpenId((cur) => {
+        // Échange ouvert disparu (supprimé dans Gmail…) : on le ferme.
+        const still = cur && r.threads.some((t) => t.id === cur) ? cur : null;
+        // Ordinateur : le dernier échange s'ouvre directement (pas de panneau vide).
+        return still ?? (desktop && r.threads.length ? r.threads[0].id : null);
+      });
+      setReloadKey((n) => n + 1); // recharge aussi l'échange ouvert (nouvelles réponses)
     } catch (e) {
       setErr((e as Error).message);
       setThreads((t) => t ?? []);
@@ -104,8 +166,9 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
   useEffect(() => {
     if (!openId) return;
     let alive = true;
-    setThread(null);
     setThreadErr(null);
+    // Même échange rechargé (« Actualiser ») : pas de clignotement.
+    setThread((t) => (t && t.id === openId ? t : null));
     getMailThread(openId, forCreator)
       .then((t) => {
         if (!alive) return;
@@ -122,17 +185,48 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
     return () => {
       alive = false;
     };
-  }, [openId, forCreator, creator, mode]);
+  }, [openId, forCreator, creator, mode, reloadKey]);
 
-  const setStatus = async (threadId: string, status: MailStatus) => {
-    const prev = threads;
-    setThreads((l) => l?.map((t) => (t.id === threadId ? { ...t, status } : t)) ?? l);
-    setThread((t) => (t && t.id === threadId ? { ...t, status } : t));
-    const { error } = await supabase.from("creator_mail_threads")
-      .upsert({ creator, thread_id: threadId, status, updated_at: new Date().toISOString() }, { onConflict: "creator,thread_id" });
-    if (error) {
-      setThreads(prev);
-      toast("Statut non enregistré");
+  const applyDecision = (threadId: string, d: Decision & { status: MailStatus }) => {
+    setThreads((l) => l?.map((t) => (t.id === threadId ? { ...t, ...d } : t)) ?? l);
+    setThread((t) => (t && t.id === threadId ? { ...t, ...d } : t));
+  };
+
+  /**
+   * Décision Validé / Refusé (null = annuler : retour au statut automatique).
+   * Créatrice : via le serveur (vérifie que l'échange est à elle). Agence : écriture directe (RLS agence).
+   */
+  const decide = async (threadId: string, decision: "valide" | "refuse" | null) => {
+    if (deciding) return;
+    setDeciding(true);
+    try {
+      if (mode === "creator") {
+        const r = await sendDecision(threadId, decision ?? "annuler");
+        applyDecision(threadId, r);
+        if (decision) {
+          const t = threads?.find((x) => x.id === threadId);
+          notifyAgency("mail", creator, `${decision === "valide" ? "a accepté" : "a refusé"} : ${prettyName(t?.brand ?? "") || t?.subject || "un échange"}`);
+          toast(decision === "valide" ? "Réponse envoyée : tu acceptes ✓" : "Réponse envoyée : tu refuses");
+        }
+        return;
+      }
+      const now = new Date().toISOString();
+      const row: Record<string, string | null> = decision
+        ? { creator, thread_id: threadId, status: decision, decided_by: "agency", decided_at: now, updated_at: now }
+        : { creator, thread_id: threadId, status: "nouvelle", decided_by: null, decided_at: null, updated_at: now };
+      let { error } = await supabase.from("creator_mail_threads").upsert(row, { onConflict: "creator,thread_id" });
+      // SQL « décision » pas encore lancé : on enregistre au moins le statut.
+      if (error && /decided_/.test(error.message)) {
+        ({ error } = await supabase.from("creator_mail_threads")
+          .upsert({ creator, thread_id: threadId, status: row.status, updated_at: now }, { onConflict: "creator,thread_id" }));
+      }
+      if (error) return toast("Statut non enregistré");
+      if (decision) applyDecision(threadId, { status: decision, decidedBy: "agency", decidedAt: now });
+      else void load(); // retour au statut automatique, recalculé par le serveur
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setDeciding(false);
     }
   };
 
@@ -205,9 +299,9 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
           {cur.key === "tous" ? "Boîte de réception" : cur.label}
           <span className="ml-1.5 font-normal tabular-nums text-faint">{shown.length}</span>
         </span>
-        <button type="button" onClick={() => void load()} title="Actualiser" aria-label="Actualiser"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+        <button type="button" onClick={() => void load()} disabled={loading}
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover disabled:opacity-60">
+          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} /> Actualiser
         </button>
       </div>
       {err && <div className="border-b border-border px-4 py-2.5 text-[12px] text-red-600 dark:text-red-400">{err}</div>}
@@ -270,12 +364,17 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
             </p>
           )}
         </div>
-        {thread && (mode === "agency" ? (
-          <StatusSelect value={thread.status} options={STATUS_OPTIONS} onChange={(v) => void setStatus(thread.id, v as MailStatus)} className="w-[170px] shrink-0 max-sm:w-[150px]" />
-        ) : (
-          <span className="mt-0.5"><StatusBadge status={thread.status} /></span>
-        ))}
+        {thread && <span className="mt-0.5"><StatusBadge status={thread.status} /></span>}
       </div>
+      {thread && (
+        <DecisionBar
+          thread={thread}
+          mode={mode}
+          creatorName={prettyName(titleCase(creator))}
+          busy={deciding}
+          onDecide={(d) => void decide(thread.id, d)}
+        />
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {threadErr ? (
@@ -368,8 +467,8 @@ export function CreatorMailbox({ creator, mode }: { creator: string; mode: Mode 
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
           {asAgency
-            ? "Statut automatique : « Nouvelle demande », puis « En négociation » dès que l'agence répond. Ouvre un échange et choisis « Validé » ou « Refusé » en haut à droite quand c'est décidé."
-            : "Chaque échange avance tout seul : « Nouvelle demande », puis « En négociation » dès que ton agence répond. « Validé » ou « Refusé » est indiqué par ton agence quand c'est décidé."}
+            ? "« Nouvelle demande » : la marque a écrit. « En négociation » : l'agence a répondu. « Validé » / « Refusé » : la créatrice a cliqué « J'accepte » ou « Je refuse » (tu es prévenu), ou l'agence l'a décidé."
+            : "« Nouvelle demande » : une marque t'écrit. « En négociation » : ton agence lui a répondu. Quand c'est à toi de choisir, clique « J'accepte » ou « Je refuse » dans l'échange : ton manager est prévenu tout de suite."}
         </span>
       </p>
       {/* Messagerie : liste + lecture dans un seul panneau (hauteur fixe sur ordinateur, défilement interne). */}

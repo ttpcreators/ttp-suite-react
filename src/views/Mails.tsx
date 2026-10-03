@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Mail, ArrowDownLeft, ArrowUpRight, ArrowLeft, Inbox, Search, Loader2, PenLine, Reply, Forward, Settings2 } from "lucide-react";
+import { Mail, ArrowDownLeft, ArrowUpRight, ArrowLeft, Inbox, Search, Loader2, PenLine, Reply, Forward, Settings2, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { DashPanel } from "@/components/ui/dash";
@@ -35,6 +35,11 @@ type ThreadMsg = {
   direction: "in" | "out"; ts: number; attachments?: MailAttachment[];
 };
 
+type InboxThread = {
+  threadId: string; subject: string; name: string; email: string; snippet: string;
+  ts: number; count: number; direction: "in" | "out"; unread: boolean; box: MailBox;
+};
+
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 function fmtDate(d: string): string {
@@ -45,6 +50,11 @@ function fmtDate(d: string): string {
 function displayName(from: string): string {
   const m = /^\s*"?([^"<]+?)"?\s*</.exec(from);
   return (m ? m[1] : from.replace(/[<>]/g, "")).trim();
+}
+/** « CLARA FRECHIN » → « Clara Frechin » (noms d'expéditeur tout en majuscules). */
+function prettyName(n: string): string {
+  if (!n || n !== n.toUpperCase() || !/[A-Z]/.test(n)) return n;
+  return n.toLowerCase().replace(/\p{L}[\p{L}'’-]*/gu, (w) => (w.length <= 3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)));
 }
 /** Décode les entités HTML des extraits Gmail (« l&#39;ensemble » → « l'ensemble »). */
 function decodeEntities(s: string): string {
@@ -77,9 +87,12 @@ export function Mails() {
       return "all";
     }
   });
+  // Choisir une boîte = afficher SA boîte de réception (le contact sélectionné est fermé).
   const setBox = (v: "all" | MailBox) => {
     setBoxState(v);
     setThread(null);
+    setSelected(null);
+    setMobileInbox(true);
     try {
       localStorage.setItem("ttp:mails-box", v);
     } catch {
@@ -93,7 +106,14 @@ export function Mails() {
   const [historyPartial, setHistoryPartial] = useState(false); // une des deux boîtes n'a pas répondu
 
   const [composerOpen, setComposerOpen] = useState(false);
-  const [thread, setThread] = useState<{ contact: string; subject: string; threadId: string; box: MailBox } | null>(null);
+  const [thread, setThread] = useState<{ contact: string; name: string; subject: string; threadId: string; box: MailBox } | null>(null);
+  // Boîte de réception de la boîte choisie (quand aucun contact n'est sélectionné).
+  const [inbox, setInbox] = useState<InboxThread[] | null>(null);
+  const [inboxBusy, setInboxBusy] = useState(false);
+  const [inboxErr, setInboxErr] = useState("");
+  const [inboxPartial, setInboxPartial] = useState(false);
+  const [inboxTick, setInboxTick] = useState(0); // « Actualiser »
+  const [mobileInbox, setMobileInbox] = useState(false); // mobile : boîte de réception au lieu des contacts
   const [threadMsgs, setThreadMsgs] = useState<ThreadMsg[] | null>(null);
   const [threadBusy, setThreadBusy] = useState(false);
   const [replyFocus, setReplyFocus] = useState(0); // « Répondre » sur une carte → focus de la réponse
@@ -180,14 +200,41 @@ export function Mails() {
     };
   }, [selected]);
 
-  const openThread = async (m: MailMsg) => {
+  // Boîte de réception : dernières conversations de la boîte choisie (les deux = fusion).
+  useEffect(() => {
+    let alive = true;
+    setInboxBusy(true);
+    setInboxErr("");
+    (async () => {
+      const res = await invokeJson<{ ok?: boolean; threads?: InboxThread[]; error?: string; partial?: boolean }>("gmail-history", { inbox: true, box });
+      if (!alive) return;
+      if (res?.ok) {
+        setInbox(res.threads ?? []);
+        setInboxPartial(!!res.partial);
+      } else {
+        setInbox([]);
+        setInboxErr(
+          res?.error === "google_non_connecte" || res?.error === "gmail_scope_manquant" ? "Reconnecte Google (droits Gmail) dans l'app pour lire tes mails."
+            : res?.error === "talent_non_configure" ? "La boîte talent@ n'est pas encore reliée à l'app."
+            : "Impossible de charger la boîte de réception.",
+        );
+      }
+      setInboxBusy(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [box, inboxTick]);
+
+  const openThread = async (m: { threadId: string; subject: string; box?: MailBox; contact?: string; name?: string }) => {
     const mBox: MailBox = m.box ?? (box === "talent" ? "talent" : "partnerships");
-    setThread({ contact: selected?.email.toLowerCase() ?? "", subject: m.subject, threadId: m.threadId, box: mBox });
+    const contact = (m.contact ?? selected?.email ?? "").toLowerCase();
+    setThread({ contact, name: m.name ?? selected?.person ?? "", subject: m.subject, threadId: m.threadId, box: mBox });
     setThreadMsgs(null);
     setThreadBusy(true);
     const res = await invokeJson<{ ok?: boolean; messages?: ThreadMsg[] }>("gmail-thread", {
       threadId: m.threadId,
-      contact: selected?.email.toLowerCase(),
+      contact,
       box: mBox,
     });
     const msgs = res?.ok ? res.messages ?? [] : [];
@@ -241,8 +288,7 @@ export function Mails() {
 
   // Historique filtré par la boîte choisie (le serveur renvoie les deux).
   const boxOf = (m: MailMsg): MailBox => m.box ?? "partnerships";
-  const visibleHistory = useMemo(() => (history ?? []).filter((m) => box === "all" || boxOf(m) === box), [history, box]);
-  const boxCount = (b: MailBox) => (history ?? []).filter((m) => boxOf(m) === b).length;
+  const visibleHistory = history ?? [];
 
   const contacted = (c: Contact) => !!c.lastContacted || parseTouches(c.touches).length > 0;
   // Fil → format du lecteur partagé (messages envoyés = agence).
@@ -276,7 +322,7 @@ export function Mails() {
         <div className="flex max-w-full gap-0.5 overflow-x-auto rounded-lg bg-muted p-0.5">
           {([["all", "Les deux boîtes"], ["partnerships", BOX_LABEL.partnerships], ["talent", BOX_LABEL.talent]] as const).map(([v, label]) => {
             const on = box === v;
-            const n = selected && history ? (v === "all" ? history.length : boxCount(v)) : null;
+            const n = !selected && inbox && !inboxBusy && box === v ? inbox.length : null;
             return (
               <button
                 key={v}
@@ -303,13 +349,13 @@ export function Mails() {
           <Settings2 className="h-3.5 w-3.5" /> Signature et délai
         </button>
         <span className="text-[12px] text-muted-foreground">
-          {box === "partnerships" ? "Prospection et contacts agence." : box === "talent" ? "Échanges liés aux créatrices (leurs alias)." : "Chaque échange indique sa boîte."}
+          {selected ? "Échanges avec ce contact, dans les deux boîtes." : box === "partnerships" ? "Boîte de prospection et contacts agence." : box === "talent" ? "Boîte des échanges créatrices (leurs alias)." : "Les deux boîtes réunies."}
         </span>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] lg:items-start">
         {/* Colonne : contacts */}
-        <DashPanel className={cn("flex min-w-0 flex-col", selected && "max-lg:hidden")}>
+        <DashPanel className={cn("flex min-w-0 flex-col", (selected || thread || mobileInbox) && "max-lg:hidden")}>
           <div className="flex flex-col gap-2.5 border-b border-border p-3">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
@@ -367,7 +413,7 @@ export function Mails() {
                   <li key={c.id}>
                     <button
                       type="button"
-                      onClick={() => { setSelected(c); setThread(null); }}
+                      onClick={() => { setSelected(c); setThread(null); setMobileInbox(false); }}
                       className={cn("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-rowhover", selected?.id === c.id && "bg-rowhover")}
                     >
                       <Initial name={c.brand || c.label} />
@@ -389,16 +435,8 @@ export function Mails() {
           </div>
         </DashPanel>
 
-        {/* Colonne : historique / fil (mobile : masquée tant qu'aucun contact n'est choisi) */}
-        {!selected ? (
-          <DashPanel className="hidden flex-col items-center justify-center gap-2 px-6 py-20 text-center lg:flex">
-            <Inbox className="h-6 w-6 text-faint" />
-            <p className="text-[13px] text-muted-foreground">Choisis un contact pour voir vos échanges.</p>
-            <p className="flex items-center gap-1.5 text-[12px] text-faint">
-              <PenLine className="h-3 w-3" /> « Nouveau mail » (modèles + variables) apparaît sur sa fiche.
-            </p>
-          </DashPanel>
-        ) : thread ? (
+        {/* Colonne : fil ouvert, sinon échanges du contact, sinon boîte de réception */}
+        {thread ? (
           <DashPanel className="flex min-w-0 flex-col">
             <div className="flex items-start gap-3 border-b border-border px-4 py-4 sm:px-6">
               <button type="button" onClick={() => setThread(null)} aria-label="Retour aux échanges"
@@ -409,7 +447,7 @@ export function Mails() {
                 <h2 className="text-[17px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere]">{thread.subject || "(sans objet)"}</h2>
                 <p className="mt-1 truncate text-[12px] text-muted-foreground">
                   <BoxChip box={thread.box} className="mr-1.5 align-[1px] text-[10px]" />
-                  {selected.label}{threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
+                  {selected?.label ?? (thread.name || thread.contact)}{threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
                 </p>
               </div>
             </div>
@@ -448,7 +486,7 @@ export function Mails() {
                         <ReplyBox
                           box={thread.box}
                           focusKey={replyFocus}
-                          placeholder={`Répondre à ${titleCase(selected.person || displayName(thread.contact))}…`}
+                          placeholder={`Répondre à ${titleCase(selected?.person || thread.name || displayName(thread.contact))}…`}
                           onSend={sendReply}
                         />
                       ) : undefined}
@@ -456,6 +494,76 @@ export function Mails() {
                   );
                 })}
               </div>
+            )}
+          </DashPanel>
+        ) : !selected ? (
+          <DashPanel className={cn("min-w-0 flex-col", mobileInbox ? "flex" : "hidden lg:flex")}>
+            <div className="flex items-center gap-3 border-b border-border px-4 py-3.5 sm:px-6">
+              <button type="button" onClick={() => setMobileInbox(false)} aria-label="Retour aux contacts"
+                className="-ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground lg:hidden">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <Inbox className="h-4 w-4 shrink-0 text-muted-foreground max-lg:hidden" />
+              <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-foreground">Boîte de réception</h2>
+              {box === "all" ? (
+                <span className="flex shrink-0 gap-1"><BoxChip box="partnerships" className="text-[10px]" /><BoxChip box="talent" className="text-[10px]" /></span>
+              ) : (
+                <BoxChip box={box} />
+              )}
+              <button type="button" onClick={() => setInboxTick((n) => n + 1)} disabled={inboxBusy}
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover disabled:opacity-60">
+                <RefreshCw className={cn("h-3.5 w-3.5", inboxBusy && "animate-spin")} /> <span className="max-sm:hidden">Actualiser</span>
+              </button>
+            </div>
+            {inboxBusy && !inbox?.length ? (
+              <div className="flex items-center justify-center gap-2 px-5 py-12 text-[13px] text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Chargement de la boîte…
+              </div>
+            ) : inboxErr ? (
+              <div className="px-5 py-10 text-center text-[13px] text-muted-foreground">{inboxErr}</div>
+            ) : !inbox?.length ? (
+              <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
+                <Inbox className="h-5 w-5 text-faint" />
+                <p className="text-[13px] text-muted-foreground">Aucun mail dans cette boîte.</p>
+              </div>
+            ) : (
+              <ul className={cn("divide-y divide-border transition-opacity", inboxBusy && "opacity-60")}>
+                {inboxPartial && (
+                  <li className="px-4 py-2 text-[12px] text-amber-700 sm:px-6 dark:text-amber-400">Une des deux boîtes n'a pas répondu : la liste peut être incomplète.</li>
+                )}
+                {inbox.map((t) => (
+                  <li key={`${t.box}-${t.threadId}`}>
+                    <button
+                      type="button"
+                      onClick={() => openThread({ threadId: t.threadId, subject: t.subject, box: t.box, contact: t.email, name: t.name })}
+                      className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-rowhover sm:px-6"
+                    >
+                      <span className="relative shrink-0">
+                        <Initial name={prettyName(t.name)} />
+                        <span className={cn("absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-surface", BOX_STYLE[t.box].dot)} title={BOX_LABEL[t.box]} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex min-w-0 items-baseline gap-2">
+                          <span className={cn("min-w-0 flex-1 truncate text-[13px] text-foreground", t.unread ? "font-bold" : "font-semibold")}>
+                            {prettyName(t.name) || t.email}
+                            {t.count > 1 && <span className="ml-1.5 text-[11px] font-normal text-faint">{t.count}</span>}
+                          </span>
+                          {t.unread && <span className="size-2 shrink-0 self-center rounded-full bg-primary" title="Non lu" />}
+                          <span className="shrink-0 text-[11px] tabular-nums text-faint">{fmtDate(new Date(t.ts).toISOString())}</span>
+                        </span>
+                        <span className={cn("block truncate text-[12.5px]", t.unread ? "font-semibold text-foreground" : "text-foreground/90")}>{t.subject || "(sans objet)"}</span>
+                        <span className="mt-0.5 flex min-w-0 items-center gap-2">
+                          {box === "all" && <BoxChip box={t.box} className="text-[10px]" />}
+                          <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+                            {t.direction === "out" && <span className="text-faint">Vous : </span>}
+                            {decodeEntities(t.snippet)}
+                          </span>
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </DashPanel>
         ) : (
@@ -488,14 +596,7 @@ export function Mails() {
             ) : visibleHistory.length === 0 ? (
               <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
                 <Mail className="h-5 w-5 text-faint" />
-                <p className="text-[13px] text-muted-foreground">
-                  {box === "all" ? "Aucun échange trouvé dans Gmail avec ce contact." : <>Aucun échange avec ce contact depuis <BoxChip box={box} />.</>}
-                </p>
-                {box !== "all" && (history?.length ?? 0) > 0 && (
-                  <button type="button" onClick={() => setBox("all")} className="text-[12px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
-                    Voir les {history?.length} échanges des deux boîtes
-                  </button>
-                )}
+                <p className="text-[13px] text-muted-foreground">Aucun échange trouvé dans les deux boîtes avec ce contact.</p>
               </div>
             ) : (
               <ul className="divide-y divide-border">
@@ -506,7 +607,7 @@ export function Mails() {
                   <li key={m.id}>
                     <button
                       type="button"
-                      onClick={() => m.threadId && openThread(m)}
+                      onClick={() => m.threadId && openThread({ threadId: m.threadId, subject: m.subject, box: m.box })}
                       className={cn("flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors sm:px-6", m.threadId ? "hover:bg-rowhover" : "cursor-default")}
                     >
                       <span
