@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Mail, ArrowDownLeft, ArrowUpRight, ArrowLeft, Inbox, Search, Loader2, PenLine, Reply, Forward, Settings2, RefreshCw } from "lucide-react";
+import { Mail, ArrowDownLeft, ArrowUpRight, ArrowLeft, Inbox, Search, Loader2, PenLine, Reply, Forward, Settings2, RefreshCw, Send } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { DashPanel } from "@/components/ui/dash";
-import { Initial, MailItem } from "@/components/mail-reader";
+import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
 import { saveBase64, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
 import { toast } from "@/components/ui/toast";
 import { parseTouches, nextKind, touchId, type Touch } from "@/lib/touches";
@@ -43,9 +43,10 @@ type InboxThread = {
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+/** Date façon Gmail : « 14:32 » aujourd'hui, « 3 oct. » cette année, « 03/10/2025 » avant. */
 function fmtDate(d: string): string {
-  const t = new Date(d);
-  return Number.isNaN(t.getTime()) ? "" : t.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "2-digit" });
+  const t = new Date(d).getTime();
+  return Number.isNaN(t) ? "" : fmtWhen(t);
 }
 /** Nom affiché depuis un entête "Nom <email>" ou "email". */
 function displayName(from: string): string {
@@ -114,6 +115,8 @@ export function Mails() {
   const [inboxErr, setInboxErr] = useState("");
   const [inboxPartial, setInboxPartial] = useState(false);
   const [inboxTick, setInboxTick] = useState(0); // « Actualiser »
+  // Dossier affiché, comme Gmail : mails reçus (boîte de réception) ou envoyés.
+  const [folder, setFolder] = useState<"inbox" | "sent">("inbox");
   const [mobileInbox, setMobileInbox] = useState(false); // mobile : boîte de réception au lieu des contacts
   const [threadMsgs, setThreadMsgs] = useState<ThreadMsg[] | null>(null);
   const [threadBusy, setThreadBusy] = useState(false);
@@ -208,7 +211,7 @@ export function Mails() {
     setInboxBusy(true);
     setInboxErr("");
     (async () => {
-      const res = await invokeJson<{ ok?: boolean; threads?: InboxThread[]; error?: string; partial?: boolean }>("gmail-history", { inbox: true, box });
+      const res = await invokeJson<{ ok?: boolean; threads?: InboxThread[]; error?: string; partial?: boolean }>("gmail-history", { inbox: true, box, folder });
       if (!alive) return;
       if (res?.ok) {
         setInbox(res.threads ?? []);
@@ -226,7 +229,7 @@ export function Mails() {
     return () => {
       alive = false;
     };
-  }, [box, inboxTick]);
+  }, [box, folder, inboxTick]);
 
   const openThread = async (m: { threadId: string; subject: string; box?: MailBox; contact?: string; name?: string }) => {
     const mBox: MailBox = m.box ?? (box === "talent" ? "talent" : "partnerships");
@@ -417,7 +420,7 @@ export function Mails() {
                       onClick={() => { setSelected(c); setThread(null); setMobileInbox(false); }}
                       className={cn("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-rowhover", selected?.id === c.id && "bg-rowhover")}
                     >
-                      <Initial name={c.brand || c.label} />
+                      <Initial name={c.brand || c.label} email={c.email} />
                       <span className="min-w-0 flex-1">
                         <span className="flex min-w-0 items-center gap-1.5">
                           <span className="truncate text-[13px] font-semibold text-foreground" title={c.label}>{c.brand || c.label}</span>
@@ -513,12 +516,27 @@ export function Mails() {
                 className="-ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground lg:hidden">
                 <ArrowLeft className="h-4 w-4" />
               </button>
-              <Inbox className="h-4 w-4 shrink-0 text-muted-foreground max-lg:hidden" />
-              <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-foreground">Boîte de réception</h2>
+              <div className="min-w-0 flex-1">
+                {/* Dossiers comme Gmail (libellé court sur téléphone pour tenir sur une ligne) */}
+                {([["max-sm:hidden", "Boîte de réception"], ["sm:hidden", "Reçus"]] as const).map(([vis, inboxLabel]) => (
+                  <Tabs
+                    key={vis}
+                    className={vis}
+                    size="sm"
+                    label="Dossier"
+                    value={folder}
+                    onValueChange={(v) => { setFolder(v as "inbox" | "sent"); setInbox(null); }}
+                    items={[
+                      { value: "inbox", label: inboxLabel, icon: <Inbox className="h-3.5 w-3.5" /> },
+                      { value: "sent", label: "Envoyés", icon: <Send className="h-3.5 w-3.5" /> },
+                    ]}
+                  />
+                ))}
+              </div>
               {box === "all" ? (
-                <span className="flex shrink-0 gap-1"><BoxChip box="partnerships" className="text-[10px]" /><BoxChip box="talent" className="text-[10px]" /></span>
+                <span className="flex shrink-0 gap-1 max-sm:hidden"><BoxChip box="partnerships" className="text-[10px]" /><BoxChip box="talent" className="text-[10px]" /></span>
               ) : (
-                <BoxChip box={box} />
+                <BoxChip box={box} className="max-sm:hidden" />
               )}
               <button type="button" onClick={() => setInboxTick((n) => n + 1)} disabled={inboxBusy}
                 className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover disabled:opacity-60">
@@ -534,7 +552,7 @@ export function Mails() {
             ) : !inbox?.length ? (
               <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
                 <Inbox className="h-5 w-5 text-faint" />
-                <p className="text-[13px] text-muted-foreground">Aucun mail dans cette boîte.</p>
+                <p className="text-[13px] text-muted-foreground">{folder === "sent" ? "Aucun mail envoyé depuis cette boîte." : "Aucun mail dans cette boîte."}</p>
               </div>
             ) : (
               <ul className={cn("divide-y divide-border transition-opacity", inboxBusy && "opacity-60")}>
@@ -549,23 +567,24 @@ export function Mails() {
                       className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-rowhover sm:px-6"
                     >
                       <span className="relative shrink-0">
-                        <Initial name={prettyName(t.name)} />
+                        <Initial name={prettyName(t.name)} email={t.email} size="md" />
                         <span className={cn("absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-surface", BOX_STYLE[t.box].dot)} title={BOX_LABEL[t.box]} />
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex min-w-0 items-baseline gap-2">
                           <span className={cn("min-w-0 flex-1 truncate text-[13px] text-foreground", t.unread ? "font-bold" : "font-semibold")}>
+                            {folder === "sent" && <span className="font-normal text-muted-foreground">À : </span>}
                             {prettyName(t.name) || t.email}
                             {t.count > 1 && <span className="ml-1.5 text-[11px] font-normal text-faint">{t.count}</span>}
                           </span>
                           {t.unread && <span className="size-2 shrink-0 self-center rounded-full bg-primary" title="Non lu" />}
-                          <span className="shrink-0 text-[11px] tabular-nums text-faint">{fmtDate(new Date(t.ts).toISOString())}</span>
+                          <span className={cn("shrink-0 text-[11px] tabular-nums", t.unread ? "font-semibold text-foreground" : "text-faint")}>{fmtWhen(t.ts)}</span>
                         </span>
                         <span className={cn("block truncate text-[12.5px]", t.unread ? "font-semibold text-foreground" : "text-foreground/90")}>{t.subject || "(sans objet)"}</span>
                         <span className="mt-0.5 flex min-w-0 items-center gap-2">
                           {box === "all" && <BoxChip box={t.box} className="text-[10px]" />}
                           <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
-                            {t.direction === "out" && <span className="text-faint">Vous : </span>}
+                            {t.direction === "out" && folder === "inbox" && <span className="text-faint">Vous : </span>}
                             {decodeEntities(t.snippet)}
                           </span>
                         </span>
@@ -583,7 +602,7 @@ export function Mails() {
                 className="-ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground lg:hidden">
                 <ArrowLeft className="h-4 w-4" />
               </button>
-              <Initial name={selected.brand || selected.label} />
+              <Initial name={selected.brand || selected.label} email={selected.email} />
               <div className="min-w-0 flex-1">
                 <h2 className="truncate text-[15px] font-semibold text-foreground">{selected.label}</h2>
                 <p className="truncate text-[12px] text-muted-foreground">{selected.email}</p>

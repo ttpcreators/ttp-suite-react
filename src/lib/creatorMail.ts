@@ -22,6 +22,8 @@ export type Decision = { decidedBy: "creator" | "agency" | null; decidedAt: stri
 export type MailThreadLite = Decision & {
   id: string; subject: string; brand: string; excerpt: string; ts: number;
   count: number; status: MailStatus; notes: number;
+  /** Adresse de la marque (pour son logo) ; absente avec une ancienne version du serveur. */
+  brandEmail?: string;
 };
 export type MailAttachment = { messageId: string; attachmentId: string; filename: string; mimeType: string; size: number };
 export type MailMessage = {

@@ -95,6 +95,22 @@ export function brandOf(messages: GMessageLite[], agencyDomain: string): string 
   return "";
 }
 
+/** Adresse de la marque d'un fil (même ordre que brandOf), "" si aucune : sert à son logo. */
+export function brandAddressOf(messages: GMessageLite[], agencyDomain: string): string {
+  const dom = agencyDomain.toLowerCase();
+  const isAgency = (addr: string) => addr.endsWith("@" + dom);
+  for (const m of messages) {
+    if (!isVisibleMessage(m)) continue;
+    const fromAddr = addressesIn(header(m.headers, "From"))[0] ?? "";
+    if (fromAddr && !isAgency(fromAddr)) return fromAddr;
+    for (const h of ["To", "Cc"]) {
+      const ext = addressesIn(header(m.headers, h)).find((a) => !isAgency(a));
+      if (ext) return ext;
+    }
+  }
+  return "";
+}
+
 function prettyBrand(raw: string, addr: string): string {
   const name = displayName(raw);
   if (name && !name.includes("@")) return name;

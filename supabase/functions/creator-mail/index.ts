@@ -30,7 +30,7 @@ import sanitizeHtml from "npm:sanitize-html@2.13.0";
 import { getServiceClient, getAccessToken, corsHeaders } from "../_shared/google.ts";
 import { serviceAccountToken, talentAddress } from "../_shared/gmailBox.ts";
 import {
-  aliasQuery, brandOf, cleanComment, displayName, header, isVisibleMessage, normEmail, parseChoice, threadMatches,
+  aliasQuery, brandAddressOf, brandOf, cleanComment, displayName, header, isVisibleMessage, normEmail, parseChoice, threadMatches,
   type GHeader, type GMessageLite,
 } from "./logic.ts";
 
@@ -296,6 +296,7 @@ async function listThreads(sb: Sb, token: string, s: Settings) {
         id: t.id,
         subject: header(first.payload?.headers ?? [], "Subject") || "(sans objet)",
         brand: row?.brand || brandOf(msgs.map(lite), AGENCY_DOMAIN) || displayName(header(first.payload?.headers ?? [], "From")),
+        brandEmail: brandAddressOf(msgs.map(lite), AGENCY_DOMAIN),
         excerpt: decodeEntities(last.snippet ?? "").slice(0, 220),
         ts: Number(last.internalDate ?? 0),
         count: msgs.length,

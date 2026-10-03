@@ -489,7 +489,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true }: {
                   onClick={() => setOpenId(t.id)}
                   className={cn("flex w-full gap-3 px-4 py-3.5 text-left transition-colors hover:bg-rowhover", openId === t.id && "bg-rowhover")}
                 >
-                  <Initial name={prettyName(t.brand)} />
+                  <Initial name={prettyName(t.brand)} email={t.brandEmail} />
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span className="flex min-w-0 items-baseline gap-2">
                       <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{prettyName(t.brand) || "Marque"}</span>

@@ -3,8 +3,9 @@ import { useSearch, matchQuery } from "@/lib/search";
 import { cn, titleCase } from "@/lib/utils";
 import {
   ArrowRight, Pencil, Trash2, X, UserRound, Package, Wallet, Clock, Trophy,
-  XCircle, Archive, CircleDot, Check, ListChecks, ChevronDown, RotateCcw, StickyNote,
+  XCircle, Archive, CircleDot, Check, ListChecks, ChevronDown, RotateCcw, StickyNote, LayoutGrid, List as ListIcon,
 } from "lucide-react";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -76,6 +77,22 @@ export function Collabs() {
   const [statusFilter, setStatusFilter] = useState<string>("active");
   const [creatorFilter, setCreatorFilter] = useState<string>("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Affichage : cartes (grille) ou liste (une collab par ligne). Retenu sur l'appareil.
+  const [layout, setLayout] = useState<"cards" | "list">(() => {
+    try {
+      return localStorage.getItem("ttp:collabs-layout") === "list" ? "list" : "cards";
+    } catch {
+      return "cards";
+    }
+  });
+  const changeLayout = (v: "cards" | "list") => {
+    setLayout(v);
+    try {
+      localStorage.setItem("ttp:collabs-layout", v);
+    } catch {
+      /* stockage indisponible */
+    }
+  };
 
   // formulaire de création
   const [formOpen, setFormOpen] = useState(false);
@@ -242,6 +259,118 @@ export function Collabs() {
   };
   const filtered = (rows ?? []).filter((row) => matchesExcept(row, null));
 
+  // ── éléments partagés par la carte et la ligne ──
+  const statusMetaFor = (row: Row) =>
+    row.status === "gagnee" ? { variant: "success" as const, label: "Gagnée" }
+    : row.status === "perdue" ? { variant: "danger" as const, label: "Perdue" }
+    : row.status === "archivee" ? { variant: "neutral" as const, label: "Archivée" }
+    : isDone(row.step) ? { variant: "success" as const, label: "Bouclée" }
+    : { variant: "info" as const, label: "En cours" };
+
+  const menuFor = (row: Row) => (
+    <ActionMenu
+      items={[
+        { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(row) },
+        ...(row.status !== "active" ? [{ key: "reopen", label: "Remettre en cours", icon: RotateCcw, onClick: () => setStatus(row, "active") }] : []),
+        { key: "won", label: "Marquer gagnée", icon: Trophy, onClick: () => setStatus(row, "gagnee") },
+        { key: "lost", label: "Marquer perdue", icon: XCircle, onClick: () => setStatus(row, "perdue") },
+        { key: "archive", label: "Archiver", icon: Archive, onClick: () => setStatus(row, "archivee") },
+        { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: () => del(row), confirm: { title: "Mettre à la corbeille", message: `Déplacer la collab « ${row.brand} » vers la corbeille ? Tu pourras la restaurer.`, confirmLabel: "Mettre à la corbeille" } },
+      ]}
+    />
+  );
+
+  /** Progression segmentée (11 segments, remplis jusqu'à l'étape courante) ; clic = aller à l'étape. */
+  const progressFor = (row: Row) => (
+    <div className="flex gap-1">
+      {STEPS.map((s) => (
+        <button
+          key={s.n}
+          type="button"
+          title={`${s.n}. ${s.label}`}
+          onClick={() => setStep(row, s.n)}
+          className={cn(
+            "h-1.5 flex-1 rounded-full transition-colors",
+            s.n <= row.step ? PHASE_DOT[s.phase] : "bg-border hover:bg-muted-foreground/40",
+          )}
+        />
+      ))}
+    </div>
+  );
+
+  /** Historique détaillé des 11 étapes (dates), affiché en dépliant. */
+  const stepsListFor = (row: Row) => {
+    const stepHits = steps[row.id] ?? [];
+    const dateForStep = (n: number): string | null => {
+      const hit = [...stepHits].reverse().find((s) => s.step === n);
+      return hit ? hit.reached_at : null;
+    };
+    return (
+      <ol className="mt-3 flex flex-col gap-0.5 border-t border-border pt-3">
+        {STEPS.map((s) => {
+          const reachedStep = s.n < row.step;
+          const current = s.n === row.step;
+          const d = dateForStep(s.n);
+          return (
+            <li key={s.n}>
+              <button
+                type="button"
+                onClick={() => setStep(row, s.n)}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[11px] transition-colors hover:bg-rowhover",
+                  current ? "font-semibold text-foreground" : reachedStep ? "text-muted-foreground" : "text-faint",
+                )}
+              >
+                {reachedStep ? (
+                  <Check className="h-3.5 w-3.5 shrink-0 text-signal" />
+                ) : current ? (
+                  <CircleDot className="h-3.5 w-3.5 shrink-0 text-primary" />
+                ) : (
+                  <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-border" />
+                )}
+                <span className="flex-1 truncate">{s.n}. {s.label}</span>
+                {d && <span className="shrink-0 tabular-nums text-faint">{frDate(d)}</span>}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    );
+  };
+
+  /** Bouton « étape suivante » (ou « Collab bouclée ») + bouton de dépliage des étapes. */
+  const actionsFor = (row: Row, compact = false) => {
+    const isOpen = expanded.has(row.id);
+    const h = compact ? "h-8" : "h-[38px]";
+    return (
+      <>
+        {isDone(row.step) ? (
+          <div className={cn("flex items-center justify-center gap-1.5 rounded-lg border border-signal/30 bg-signal/[0.08] px-3 text-[11px] font-semibold text-signal", h, compact ? "max-md:flex-1" : "flex-1")}>
+            <Check className="h-3.5 w-3.5" /> Collab bouclée
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setStep(row, row.step + 1)}
+            className={cn("flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-primary px-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90", h, compact ? "max-md:flex-1" : "flex-1")}
+          >
+            {stepDef(row.step + 1).short} <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => toggleExpand(row.id)}
+          className={cn("flex shrink-0 items-center gap-1 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground", h)}
+          title="Voir toutes les étapes"
+          aria-expanded={isOpen}
+        >
+          <ListChecks className="h-3.5 w-3.5" />
+          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", isOpen && "rotate-180")} />
+        </button>
+      </>
+    );
+  };
+
   // ── carte d'une collab ──
   const renderCard = (row: Row): ReactElement => {
     if (editId === row.id) {
@@ -274,22 +403,10 @@ export function Collabs() {
     }
 
     const def = stepDef(row.step);
-    const done = isDone(row.step);
     const stale = staleDays(row);
     const reached = reachedAt(row);
     const isOpen = expanded.has(row.id);
-    const stepHits = steps[row.id] ?? [];
-    const dateForStep = (n: number): string | null => {
-      const hit = [...stepHits].reverse().find((s) => s.step === n);
-      return hit ? hit.reached_at : null;
-    };
-
-    const statusMeta =
-      row.status === "gagnee" ? { variant: "success" as const, label: "Gagnée" }
-      : row.status === "perdue" ? { variant: "danger" as const, label: "Perdue" }
-      : row.status === "archivee" ? { variant: "neutral" as const, label: "Archivée" }
-      : done ? { variant: "success" as const, label: "Bouclée" }
-      : { variant: "info" as const, label: "En cours" };
+    const statusMeta = statusMetaFor(row);
 
     return (
       <div key={row.id} className="flex flex-col rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:bg-rowhover">
@@ -301,16 +418,7 @@ export function Collabs() {
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <AnimatedBadge status={statusMeta.variant} size="sm">{statusMeta.label}</AnimatedBadge>
-            <ActionMenu
-              items={[
-                { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(row) },
-                ...(row.status !== "active" ? [{ key: "reopen", label: "Remettre en cours", icon: RotateCcw, onClick: () => setStatus(row, "active") }] : []),
-                { key: "won", label: "Marquer gagnée", icon: Trophy, onClick: () => setStatus(row, "gagnee") },
-                { key: "lost", label: "Marquer perdue", icon: XCircle, onClick: () => setStatus(row, "perdue") },
-                { key: "archive", label: "Archiver", icon: Archive, onClick: () => setStatus(row, "archivee") },
-                { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: () => del(row), confirm: { title: "Mettre à la corbeille", message: `Déplacer la collab « ${row.brand} » vers la corbeille ? Tu pourras la restaurer.`, confirmLabel: "Mettre à la corbeille" } },
-              ]}
-            />
+            {menuFor(row)}
           </div>
         </div>
 
@@ -342,20 +450,7 @@ export function Collabs() {
           </div>
           <div className="mt-1 text-[13px] font-semibold text-foreground">{def.label}</div>
           {/* progression segmentée (11 segments, remplis jusqu'à l'étape courante) */}
-          <div className="mt-2 flex gap-1">
-            {STEPS.map((s) => (
-              <button
-                key={s.n}
-                type="button"
-                title={`${s.n}. ${s.label}`}
-                onClick={() => setStep(row, s.n)}
-                className={cn(
-                  "h-1.5 flex-1 rounded-full transition-colors",
-                  s.n <= row.step ? PHASE_DOT[s.phase] : "bg-border hover:bg-muted-foreground/40",
-                )}
-              />
-            ))}
-          </div>
+          <div className="mt-2">{progressFor(row)}</div>
           {reached && (
             <div className="mt-1.5 text-[10px] text-faint">Depuis le {frDate(reached)}</div>
           )}
@@ -388,63 +483,76 @@ export function Collabs() {
         )}
 
         {/* Action : faire avancer d'une étape */}
-        <div className="mt-3 flex items-center gap-2">
-          {done ? (
-            <div className="flex h-[38px] flex-1 items-center justify-center gap-1.5 rounded-lg border border-signal/30 bg-signal/[0.08] text-[11px] font-semibold text-signal">
-              <Check className="h-3.5 w-3.5" /> Collab bouclée
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setStep(row, row.step + 1)}
-              className="flex h-[38px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
-            >
-              {stepDef(row.step + 1).short} <ArrowRight className="h-3.5 w-3.5" />
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => toggleExpand(row.id)}
-            className="flex h-[38px] items-center gap-1 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-            title="Voir toutes les étapes"
-          >
-            <ListChecks className="h-3.5 w-3.5" />
-            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", isOpen && "rotate-180")} />
-          </button>
-        </div>
+        <div className="mt-3 flex items-center gap-2">{actionsFor(row)}</div>
 
         {/* Historique détaillé des 11 étapes (dates) */}
-        {isOpen && (
-          <ol className="mt-3 flex flex-col gap-0.5 border-t border-border pt-3">
-            {STEPS.map((s) => {
-              const reachedStep = s.n < row.step;
-              const current = s.n === row.step;
-              const d = dateForStep(s.n);
-              return (
-                <li key={s.n}>
-                  <button
-                    type="button"
-                    onClick={() => setStep(row, s.n)}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[11px] transition-colors hover:bg-rowhover",
-                      current ? "font-semibold text-foreground" : reachedStep ? "text-muted-foreground" : "text-faint",
-                    )}
-                  >
-                    {reachedStep ? (
-                      <Check className="h-3.5 w-3.5 shrink-0 text-signal" />
-                    ) : current ? (
-                      <CircleDot className="h-3.5 w-3.5 shrink-0 text-primary" />
-                    ) : (
-                      <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-border" />
-                    )}
-                    <span className="flex-1 truncate">{s.n}. {s.label}</span>
-                    {d && <span className="shrink-0 tabular-nums text-faint">{frDate(d)}</span>}
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        )}
+        {isOpen && stepsListFor(row)}
+      </div>
+    );
+  };
+
+  // ── ligne d'une collab (affichage Liste) ──
+  const renderRow = (row: Row): ReactElement => {
+    // Modification : même formulaire que la carte, sur toute la largeur.
+    if (editId === row.id) return <div key={row.id} className="p-3">{renderCard(row)}</div>;
+    const def = stepDef(row.step);
+    const stale = staleDays(row);
+    const reached = reachedAt(row);
+    const statusMeta = statusMetaFor(row);
+    return (
+      <div key={row.id} className="px-4 py-3.5 transition-colors hover:bg-rowhover/60">
+        <div className="grid grid-cols-1 items-center gap-x-5 gap-y-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.5fr)_21rem]">
+          {/* Marque + libellé, avec statut et menu sur mobile */}
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h2 className="truncate text-[14px] font-semibold tracking-tight text-foreground">{row.brand}</h2>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {[row.title, row.cachet].filter(Boolean).join(" · ") || "Collab"}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1 md:hidden">
+              <AnimatedBadge status={statusMeta.variant} size="sm">{statusMeta.label}</AnimatedBadge>
+              {menuFor(row)}
+            </div>
+          </div>
+
+          {/* Créatrice + contact */}
+          <div className="min-w-0 text-[12px] text-muted-foreground">
+            {row.creator ? (
+              <span className="flex min-w-0 items-center gap-1.5 text-foreground">
+                <CreatorAvatar name={row.creator} photoUrl={photoOf(row.creator)} className="h-5 w-5 shrink-0 rounded-full text-[9px]" />
+                <span className="truncate">{titleCase(row.creator)}</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5"><UserRound className="h-3.5 w-3.5 text-faint" /> Aucune créatrice</span>
+            )}
+            {row.contact && <span className="mt-0.5 block truncate text-[11px]">Contact · {row.contact}</span>}
+          </div>
+
+          {/* Étape courante + progression */}
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2 text-[12px]">
+              <span className={cn("size-2 shrink-0 rounded-full", PHASE_DOT[def.phase])} />
+              <span className="shrink-0 font-medium text-muted-foreground">{row.step} / {STEP_COUNT}</span>
+              <span className="min-w-0 truncate font-semibold text-foreground">{def.label}</span>
+              {stale !== null && (
+                <span className="flex shrink-0 items-center gap-1 rounded-full bg-amber/15 px-2 py-0.5 text-[9px] font-semibold text-amber">
+                  <Clock className="h-3 w-3" /> {stale} j
+                </span>
+              )}
+            </div>
+            <div className="mt-1.5">{progressFor(row)}</div>
+            {reached && <div className="mt-1 text-[10px] text-faint">Depuis le {frDate(reached)}</div>}
+          </div>
+
+          {/* Statut + actions */}
+          <div className="flex min-w-0 items-center gap-2 md:justify-end">
+            <span className="max-md:hidden"><AnimatedBadge status={statusMeta.variant} size="sm">{statusMeta.label}</AnimatedBadge></span>
+            <div className="flex flex-1 items-center gap-2 md:flex-none">{actionsFor(row, true)}</div>
+            <span className="max-md:hidden">{menuFor(row)}</span>
+          </div>
+        </div>
+        {expanded.has(row.id) && stepsListFor(row)}
       </div>
     );
   };
@@ -472,7 +580,11 @@ export function Collabs() {
   } else if (filtered.length === 0) {
     content = <div className="rounded-xl border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">{query.trim() ? `Aucun résultat pour « ${query} »` : "Aucune collab pour ces filtres."}</div>;
   } else {
-    content = <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">{filtered.map((r) => renderCard(r))}</div>;
+    content = layout === "list" ? (
+      <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-sm">{filtered.map((r) => renderRow(r))}</div>
+    ) : (
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">{filtered.map((r) => renderCard(r))}</div>
+    );
   }
 
   const activeRows = (rows ?? []).filter((r) => r.status === "active");
@@ -537,6 +649,18 @@ export function Collabs() {
             activeCount={activeCount}
             groups={groups}
             onClear={() => { setPhaseFilter(ALL); setStatusFilter("active"); setCreatorFilter(""); }}
+            right={
+              <Tabs
+                size="sm"
+                label="Affichage des collabs"
+                value={layout}
+                onValueChange={(v) => changeLayout(v as "cards" | "list")}
+                items={[
+                  { value: "cards", label: "Cartes", icon: <LayoutGrid className="h-3.5 w-3.5" />, hideLabel: "mobile" },
+                  { value: "list", label: "Liste", icon: <ListIcon className="h-3.5 w-3.5" />, hideLabel: "mobile" },
+                ]}
+              />
+            }
             extra={creators.length > 0 ? (
               <div className="flex flex-col gap-2">
                 <span className="text-[12px] font-medium text-muted-foreground">Créatrice</span>

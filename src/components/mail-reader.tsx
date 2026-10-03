@@ -1,39 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { Paperclip, type LucideIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
+import { MailAvatar } from "@/components/mail-avatar";
 import { mailDocument, hasQuote, mailSnippet, fmtSize, downloadAttachment, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
 
 /*
  * Lecteur de mails partagé (page Mails agence + section Mails des créatrices) :
- * pastille d'initiale, corps isolé dans une iframe sans scripts, message replié
+ * photo de profil, corps isolé dans une iframe sans scripts, message replié
  * ou déplié façon Gmail (historique cité masqué, pièces jointes en cartes).
  */
 
+/** Date d'une ligne de liste, comme Gmail : « 14:32 » aujourd'hui, « 3 oct. » cette année, « 03/10/2025 » avant. */
 export const fmtWhen = (ts: number) => {
   if (!ts) return "";
   const d = new Date(ts);
   const now = new Date();
   if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) });
+  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 };
 export const fmtFull = (ts: number) =>
   ts ? new Date(ts).toLocaleString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
 
-/** Pastille d'initiale (marque ou expéditeur). L'agence = pastille pleine. */
-export function Initial({ name, agency, size = "md" }: { name: string; agency?: boolean; size?: "sm" | "md" }) {
-  return (
-    <span
-      className={cn(
-        "grid shrink-0 place-items-center rounded-full font-semibold uppercase",
-        size === "md" ? "h-9 w-9 text-[13px]" : "h-8 w-8 text-[12px]",
-        agency ? "bg-foreground text-background" : "bg-foreground/[0.07] text-foreground",
-      )}
-    >
-      {agency ? "T" : (name.trim().charAt(0) || "?")}
-    </span>
-  );
+/** Photo de profil (marque ou expéditeur), comme dans Gmail. L'agence = logo TTP. */
+export function Initial({ name, agency, size = "md", email }: { name: string; agency?: boolean; size?: "sm" | "md"; email?: string | null }) {
+  return <MailAvatar name={agency ? "TTP" : name} email={email} agency={agency} size={size} />;
 }
 
 /** Corps d'un mail : iframe isolée (aucun script), hauteur suivie en continu. */
@@ -99,7 +91,7 @@ export function MailItem({
         onClick={onToggle}
         className="flex w-full items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-left shadow-sm shadow-black/[0.02] transition-colors hover:bg-rowhover"
       >
-        <Initial name={m.from} agency={m.fromAgency} size="sm" />
+        <Initial name={m.from} email={m.fromEmail} agency={m.fromAgency} size="sm" />
         {/* Mobile : nom + date, puis l'aperçu dessous ; ≥ sm : tout sur une ligne. */}
         <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-3 sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center">
           <span className="truncate text-[13px] font-medium text-foreground">{name}</span>
@@ -115,7 +107,7 @@ export function MailItem({
       {/* En-tête */}
       <div className="flex items-start gap-3 border-b border-border px-4 py-3.5 sm:px-5">
         <button type="button" onClick={onToggle} className="flex min-w-0 flex-1 items-start gap-3 text-left" title="Replier">
-          <Initial name={m.from} agency={m.fromAgency} />
+          <Initial name={m.from} email={m.fromEmail} agency={m.fromAgency} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[14px] font-semibold text-foreground">{name}</span>
             <span className="block truncate text-[12px] text-muted-foreground">{m.fromAgency ? m.from : m.fromEmail}</span>
