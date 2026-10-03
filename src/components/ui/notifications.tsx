@@ -7,7 +7,7 @@ import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";
 
-export type NotifKind = "creator" | "email" | "facture" | "brief" | "event" | "contrat" | "bug";
+export type NotifKind = "team" | "creator" | "email" | "facture" | "brief" | "event" | "contrat" | "bug";
 
 export interface NotificationItem {
   id: string;
@@ -19,6 +19,7 @@ export interface NotificationItem {
 
 /** Types de notifications (ordre d'affichage des filtres). */
 export const NOTIF_KINDS: { value: NotifKind; label: string }[] = [
+  { value: "team", label: "Équipe" },
   { value: "creator", label: "Créateurs" },
   { value: "email", label: "Emails" },
   { value: "facture", label: "Factures" },

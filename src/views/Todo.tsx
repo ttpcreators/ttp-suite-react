@@ -18,6 +18,7 @@ import { Tabs } from "@/components/ui/animated-tabs";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
+import { myDisplayName } from "@/lib/team";
 import { useLiveKey } from "@/lib/useLive";
 import { toISODate, frDate } from "@/lib/dates";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
@@ -30,7 +31,8 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3, UserRound, Building2, Plus, Upload, Type, AlignLeft, CalendarClock } from "lucide-react";
+import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3, UserRound, Building2, Plus, Upload, Type, AlignLeft, CalendarClock, Repeat } from "lucide-react";
+import { WeeklyRoutines } from "@/components/WeeklyRoutines";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
 import { AgentPlan, type PlanTask } from "@/components/ui/agent-plan";
 import { PageHeaderRow } from "@/components/ui/page-header";
@@ -55,6 +57,9 @@ type Row = {
   created_at: string | null;
   subtasks?: Subtask[] | null;
   attachments?: Attachment[] | null;
+  /** Traçabilité du « Fait » : quand et par qui (colonnes ajoutées par le SQL équipe). */
+  done_at?: string | null;
+  done_by?: string | null;
 };
 
 let _stid = 0;
@@ -112,6 +117,11 @@ const PRIO_PILL: Record<Priority, string> = {
 // Formate created_at en fr-FR ; rien si absent.
 const formatCreatedAt = (created_at: string | null): string | null =>
   created_at ? new Date(created_at).toLocaleDateString("fr-FR") : null;
+/** « le 03/10/2026 à 14:32 · Marc » : quand et par qui une tâche a été faite. */
+const formatDone = (r: Pick<Row, "done_at" | "done_by">): string | null =>
+  r.done_at
+    ? `le ${new Date(r.done_at).toLocaleDateString("fr-FR")} à ${new Date(r.done_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}${r.done_by ? ` · ${r.done_by}` : ""}`
+    : null;
 
 // Filtre créateur : null = tous, "__agency__" = agence, sinon nom du créateur.
 type CreatorFilter = null | "__agency__" | string;
@@ -134,6 +144,7 @@ export function Todo() {
   const live = useLiveKey();
 
   const [formOpen, setFormOpen] = useState(false);
+  const [routineAdd, setRoutineAdd] = useState(0); // « + Tâche → Chaque semaine »
   const [text, setText] = useState("");
   const [descr, setDescr] = useState("");
   const [note, setNote] = useState("");
@@ -287,10 +298,25 @@ export function Todo() {
     if (status === "Fait" && row.creator) notifyCreator("task-done", row.creator, `✅ Ta demande est faite : « ${row.text} »`);
   };
 
+  /**
+   * Écrit le statut d'une tâche + la trace du « Fait » (date et auteur). Repli sans la
+   * trace tant que le SQL équipe n'est pas lancé. Renvoie ce qui a été enregistré.
+   */
+  const writeStatus = async (id: string, status: string): Promise<Partial<Row> | null> => {
+    const isDone = status === "Fait";
+    const traced: Partial<Row> = isDone
+      ? { status, done: true, done_at: new Date().toISOString(), done_by: await myDisplayName() }
+      : { status, done: false, done_at: null, done_by: null };
+    if (await dbUpdate("todos", id, traced)) return traced;
+    const plain: Partial<Row> = { status, done: isDone };
+    return (await dbUpdate("todos", id, plain)) ? plain : null;
+  };
+
   const setStatus = async (row: Row, status: string) => {
-    if (await dbUpdate("todos", row.id, { status, done: status === "Fait" })) {
-      setRows((prev) => (prev ?? []).map((r) => (r.id === row.id ? { ...r, status, done: status === "Fait" } : r)));
-      setSelectedTodo((prev) => (prev?.id === row.id ? { ...prev, status, done: status === "Fait" } : prev));
+    const saved = await writeStatus(row.id, status);
+    if (saved) {
+      setRows((prev) => (prev ?? []).map((r) => (r.id === row.id ? { ...r, ...saved } : r)));
+      setSelectedTodo((prev) => (prev?.id === row.id ? { ...prev, ...saved } : prev));
       notifyTaskDone(row, status);
     } else {
       toast("Statut non enregistré — la colonne « status » manque (lance le SQL)");
@@ -507,6 +533,13 @@ export function Todo() {
                 setFormOpen(true);
               },
             },
+            {
+              key: "weekly",
+              label: "Chaque semaine",
+              hint: "Revient toute seule chaque lundi",
+              icon: Repeat,
+              onClick: () => setRoutineAdd((n) => n + 1),
+            },
           ]}
         />
       </PageHeaderRow>
@@ -650,6 +683,9 @@ export function Todo() {
         );
       })()}
 
+      {/* Tâches qui reviennent chaque semaine (date et auteur de chaque « Fait ») */}
+      <WeeklyRoutines addSignal={routineAdd} />
+
       {rows === null ? (
         <div className="rounded-xl border border-border bg-card shadow-sm px-4 py-3">
           <AnimatedBadge status="loading" size="sm">
@@ -741,6 +777,7 @@ export function Todo() {
                 </span>
                 {row.source === "creator" && <span className="text-signaltext">du créateur</span>}
                 {formatCreatedAt(row.created_at) && <span className="basis-full sm:basis-auto">créée le {formatCreatedAt(row.created_at)}</span>}
+                {row.done && formatDone(row) && <span className="basis-full text-signaltext sm:basis-auto">faite {formatDone(row)}</span>}
                 {(row.attachments?.length ?? 0) > 0 && <span>📎 {row.attachments!.length}</span>}
               </>
             ),
@@ -817,9 +854,10 @@ export function Todo() {
             if (!row) return;
             const order = ["À faire", "En cours", "Fait"];
             const status = order[(order.indexOf(todoStatus(row)) + 1) % order.length];
-            if (await dbUpdate("todos", id, { status, done: status === "Fait" })) {
-              setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, status, done: status === "Fait" } : r)));
-              setSelectedTodo((prev) => (prev?.id === id ? { ...prev, status, done: status === "Fait" } : prev));
+            const saved = await writeStatus(id, status);
+            if (saved) {
+              setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, ...saved } : r)));
+              setSelectedTodo((prev) => (prev?.id === id ? { ...prev, ...saved } : prev));
               notifyTaskDone(row, status);
             } else {
               toast("Statut non enregistré — la colonne « status » manque (lance le SQL)");
@@ -1012,6 +1050,12 @@ export function Todo() {
                     <p className="text-[13px] text-foreground">
                       {formatCreatedAt(selectedTodo.created_at)}
                     </p>
+                  </DetailBlock>
+                )}
+
+                {selectedTodo.done && formatDone(selectedTodo) && (
+                  <DetailBlock label="Faite">
+                    <p className="text-[13px] text-foreground">{formatDone(selectedTodo)}</p>
                   </DetailBlock>
                 )}
               </div>

@@ -92,3 +92,8 @@ verify_jwt = false
 # Créateur, lecture Gmail filtrée côté serveur par alias/libellé (gmail.readonly).
 [functions.creator-mail]
 verify_jwt = true
+
+# team-notify : notifications « qui fait quoi » de l'équipe agence. JWT requis
+# (verify_jwt) + rôle agence vérifié dans le code ; envoie aux AUTRES comptes agence.
+[functions.team-notify]
+verify_jwt = true

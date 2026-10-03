@@ -35,11 +35,13 @@ import {
   MessageCircle,
   CreditCard,
   FolderOpen,
+  History,
   type LucideIcon,
 } from "lucide-react";
 
 export type ViewId =
   | "apercu"
+  | "activite"
   | "agent"
   | "stats"
   | "objectifs"
@@ -92,6 +94,7 @@ export const NAV: NavFamily[] = [
     icon: Gauge,
     items: [
       { id: "apercu", label: "Aperçu", icon: LayoutDashboard },
+      { id: "activite", label: "Activité", icon: History },
       { id: "agent", label: "Agent", icon: Bot },
       { id: "stats", label: "Stats", icon: TrendingUp },
       { id: "objectifs", label: "Objectifs", icon: Target },

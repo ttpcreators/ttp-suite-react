@@ -6,6 +6,8 @@ import { todayISO } from "./dates";
 import { titleCase } from "./utils";
 import { toast } from "@/components/ui/toast";
 import type { NotificationItem } from "@/components/ui/notifications";
+import { teamNames } from "./team";
+import { activityText } from "../../supabase/functions/_shared/activityText";
 
 type Deadline = { creator: string; type: string; start: string; months: number };
 function ctEnd(start: string, months: number): Date | null {
@@ -74,7 +76,12 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
         .gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
       supabase.from("creator_mail_notes").select("id,creator,body,created_at").is("agency_read_at", null)
         .gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
-    ]).then(([inv, br, ev, app, tdC, idC, evC, mailIn, bugs, mailAvis, mailNotes]) => {
+      // Équipe agence : ce que les AUTRES ont fait (3 derniers jours).
+      supabase.from("agency_activity").select("*").neq("actor_id", s.session.user.id)
+        .gte("created_at", new Date(Date.now() - 3 * 86400000).toISOString())
+        .order("created_at", { ascending: false }).limit(15),
+      teamNames(),
+    ]).then(([inv, br, ev, app, tdC, idC, evC, mailIn, bugs, mailAvis, mailNotes, team, names]) => {
       if (!alive) return;
       if (inv.error || br.error || ev.error) {
         console.error("Chargement des notifications échoué:", { inv: inv.error, br: br.error, ev: ev.error });
@@ -98,6 +105,14 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       }
       // Activité créateur en premier (7 derniers jours) — désactivable dans Paramètres.
       const prefs = ((app as Record<string, unknown>).notifPrefs as Record<string, boolean | undefined>) ?? {};
+      // Équipe : « Gianni a terminé la tâche … » (désactivable dans Paramètres).
+      if (prefs.bellTeamActivity !== false && !team.error) {
+        for (const a of (team.data ?? []) as { id: string; actor_id: string | null; actor_name: string | null; verb: string; entity: string; label: string; detail: string | null; created_at: string }[]) {
+          const t = activityText(a);
+          const who = (a.actor_id && names.get(a.actor_id)) || a.actor_name || "L'équipe";
+          out.push({ id: `team:${a.id}`, title: `${who} ${t.action}`, description: t.what, time: agoLabel(a.created_at), kind: "team" });
+        }
+      }
       const bellCreator = prefs.bellCreatorActivity !== false;
       if (bellCreator && !tdC.error) {
         ((tdC.data as { text: string; creator: string | null; created_at: string | null }[]) ?? []).forEach((t) =>

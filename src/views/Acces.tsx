@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Trash2, RefreshCw, Copy, X } from "lucide-react";
+import { Trash2, RefreshCw, Copy, X, Crown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
@@ -25,6 +25,46 @@ type AccessAccount = {
   creator?: string;
   cloud?: string;
 };
+
+type AgencyAccount = { user_id: string; email: string; agency_role: string; display_name: string | null; last_sign_in_at: string | null };
+
+/**
+ * Comptes AGENCE réels, lus dans la base (fonction agency_accounts, fondateurs
+ * seulement) : qui est propriétaire (fondateur) et qui est membre. Masqué tant
+ * que le SQL « équipe, activité, routines » n'est pas lancé.
+ */
+function AgencyAccountsPanel() {
+  const [list, setList] = useState<AgencyAccount[] | null>(null);
+  useEffect(() => {
+    void supabase.rpc("agency_accounts").then(({ data, error }) => setList(error ? null : ((data ?? []) as AgencyAccount[])));
+  }, []);
+  if (!list?.length) return null;
+  const when = (iso: string | null) =>
+    iso ? `connecté le ${new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}` : "jamais connecté";
+  return (
+    <div className="mb-4 rounded-2xl border border-border bg-surface shadow-sm">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <Crown className="h-4 w-4 text-muted-foreground" />
+        <span className="text-[14px] font-semibold text-foreground">Comptes de l'agence</span>
+        <span className="text-[12px] text-faint">· tels qu'enregistrés dans la base</span>
+      </div>
+      <ul className="divide-y divide-border">
+        {list.map((a) => (
+          <li key={a.user_id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
+            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">
+              {a.email}
+              {a.display_name && <span className="ml-1.5 font-normal text-muted-foreground">({a.display_name})</span>}
+            </span>
+            <span className="text-[11px] text-faint">{when(a.last_sign_in_at)}</span>
+            <AnimatedBadge status={a.agency_role === "founder" ? "success" : "neutral"} size="sm">
+              {a.agency_role === "founder" ? "Propriétaire" : "Membre"}
+            </AnimatedBadge>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function cloudBadge(cloud: string | undefined) {
   if (cloud === "ok") return { status: "success" as const, label: "Actif" };
@@ -323,6 +363,8 @@ export function Acces() {
       </PageHeaderRow>
 
       {form}
+
+      <AgencyAccountsPanel />
 
       {/* Identifiants affichés une seule fois (non stockés dans l'app). */}
       {created && (

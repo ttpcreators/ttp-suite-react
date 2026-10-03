@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, AtSign, Check, History, Hourglass, Inbox, Info, Loader2, Mail, MessageSquare, RefreshCw, Send, Settings2, Tag, X,
+  ArrowLeft, AtSign, Check, CircleHelp, History, Hourglass, Inbox, Info, Loader2, Mail, MessageSquare, RefreshCw, SearchCheck, Send, Settings2, Tag, X,
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -8,10 +8,11 @@ import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { DashPanel, DashSectionTitle } from "@/components/ui/dash";
 import { notifyAgency, notifyCreator } from "@/lib/push";
+import { myDisplayName } from "@/lib/team";
 import {
   statusMeta, listMails, getMailThread, sendManagerNote, sendDecision, listGmailLabels, getStatusHistory,
-  buildFeed, choiceOf, autoStatusOf,
-  type Decision, type FeedItem, type MailChoice, type MailStatus, type MailStatusEvent, type MailThread,
+  getThreadNotes, buildFeed, choiceOf, autoStatusOf,
+  type Decision, type FeedItem, type MailChoice, type MailNote, type MailStatus, type MailStatusEvent, type MailThread,
   type MailThreadLite, type MailSettings,
 } from "@/lib/creatorMail";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
@@ -39,19 +40,33 @@ function StatusDot({ status, by }: { status: string; by?: string }) {
   );
 }
 
-const FILTERS: { key: "tous" | "encours" | "valide" | "refuse"; label: string; dot?: string; match: (s: MailStatus) => boolean }[] = [
+const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse"; label: string; dot?: string; match: (s: MailStatus) => boolean }[] = [
   { key: "tous", label: "Tous les échanges", match: () => true },
   { key: "encours", label: "En cours", dot: "bg-amber-500", match: (s) => s === "nouvelle" || s === "negociation" },
+  { key: "atraiter", label: "À vérifier / valider", dot: "bg-orange-500", match: (s) => s === "a_verifier" || s === "a_valider" },
   { key: "valide", label: "Validés", dot: "bg-emerald-500", match: (s) => s === "valide" },
   { key: "refuse", label: "Refusés", dot: "bg-red-500", match: (s) => s === "refuse" },
 ];
 
-/** Les trois cases du grand sélecteur (mêmes couleurs que les tuiles du haut). */
-const CHOICES: { value: MailChoice; label: string; hint: string; icon: LucideIcon; tile: string; disc: string; confirm: string }[] = [
+/**
+ * Cases du grand sélecteur (mêmes couleurs que les tuiles du haut). « À vérifier » et
+ * « À valider » sont posés par l'agence (la créatrice les voit, sans pouvoir les choisir).
+ */
+const CHOICES: { value: MailChoice; label: string; hint: string; icon: LucideIcon; tile: string; disc: string; confirm: string; agencyOnly?: boolean }[] = [
   {
     value: "encours", label: "En cours", hint: "On en discute", icon: Hourglass,
     tile: "border-amber-500/70 bg-amber-500/[0.09] text-amber-800 dark:text-amber-300",
     disc: "bg-amber-500 text-zinc-950", confirm: "bg-amber-500 text-zinc-950",
+  },
+  {
+    value: "a_verifier", label: "À vérifier", hint: "Un point à contrôler", icon: SearchCheck, agencyOnly: true,
+    tile: "border-orange-500/70 bg-orange-500/[0.09] text-orange-800 dark:text-orange-300",
+    disc: "bg-orange-500 text-white", confirm: "bg-orange-500 text-white",
+  },
+  {
+    value: "a_valider", label: "À valider", hint: "Réponse attendue", icon: CircleHelp, agencyOnly: true,
+    tile: "border-indigo-500/70 bg-indigo-500/[0.09] text-indigo-800 dark:text-indigo-300",
+    disc: "bg-indigo-500 text-white", confirm: "bg-indigo-500 text-white",
   },
   {
     value: "valide", label: "Validé", hint: "C'est oui", icon: Check,
@@ -78,14 +93,15 @@ const authorSubject = (by: "creator" | "agency", mode: Mode, creatorName: string
   mode === "creator" ? (by === "creator" ? "Tu as" : "Ton agence a") : by === "creator" ? `${creatorName} a` : "L'agence a";
 const VERB: Record<MailChoice, string> = {
   encours: "remis l'échange en cours", valide: "validé l'échange", refuse: "refusé l'échange",
+  a_verifier: "passé l'échange en « À vérifier »", a_valider: "passé l'échange en « À valider »",
 };
 /** Texte de la notification envoyée à l'agence quand la créatrice choisit. */
-const PUSH_VERB: Record<MailChoice, string> = { encours: "a remis en cours", valide: "a validé", refuse: "a refusé" };
+const PUSH_VERB: Record<"encours" | "valide" | "refuse", string> = { encours: "a remis en cours", valide: "a validé", refuse: "a refusé" };
 
 /**
- * Grand sélecteur sous l'en-tête d'un échange : « En cours », « Validé », « Refusé ».
- * Un clic ouvre une confirmation avec un mot facultatif (son avis), puis le choix
- * est enregistré et noté dans le suivi (qui, quand, son mot).
+ * Grand sélecteur sous l'en-tête d'un échange : « En cours », « Validé », « Refusé »
+ * (+ « À vérifier » et « À valider » côté agence). Un clic ouvre une confirmation avec
+ * un mot facultatif, puis le choix est enregistré et noté dans le suivi.
  */
 function StatusPanel({
   thread, mode, creatorName, creatorSees, busy, feedCount, onChoose, onShowFeed,
@@ -94,7 +110,12 @@ function StatusPanel({
   onChoose: (choice: MailChoice, comment: string) => Promise<boolean>;
   onShowFeed: () => void;
 }) {
-  const current = choiceOf(thread.status);
+  const real = choiceOf(thread.status);
+  // Créatrice : trois cases ; un statut posé par l'agence (« À valider »…) s'affiche
+  // dans un bandeau, la case « En cours » restant cochée.
+  const tiles = mode === "creator" ? CHOICES.filter((c) => !c.agencyOnly) : CHOICES;
+  const flagged = mode === "creator" && !!choiceMeta(real).agencyOnly ? choiceMeta(real) : null;
+  const current: MailChoice = flagged ? "encours" : real;
   const [pending, setPending] = useState<MailChoice | null>(null);
   const [comment, setComment] = useState("");
   const pick = pending ? choiceMeta(pending) : null;
@@ -103,7 +124,7 @@ function StatusPanel({
   const hintFor = (c: (typeof CHOICES)[number]) => {
     if (c.value !== current) return c.hint;
     // Case active : « Nouvelle demande » / « En négociation », ou qui a tranché et quand.
-    if (c.value === "encours") return statusMeta(thread.status).label;
+    if (c.value === "encours") return flagged ? `${flagged.label}, par ton agence` : statusMeta(thread.status).label;
     return thread.decidedBy ? `par ${authorName(thread.decidedBy, mode, creatorName)}${when ? `, ${when}` : ""}` : c.hint;
   };
 
@@ -129,8 +150,17 @@ function StatusPanel({
         )}
       </div>
 
-      <div role="radiogroup" aria-label="Statut de l'échange" className="grid grid-cols-3 gap-2">
-        {CHOICES.map((c) => {
+      {flagged && (
+        <div className={cn("mb-2.5 flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-[12px]", flagged.tile)}>
+          <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full", flagged.disc)}><flagged.icon className="h-3.5 w-3.5" /></span>
+          <span className="min-w-0 pt-0.5">
+            <b>Ton agence a passé cet échange en « {flagged.label} »{when ? ` le ${when.replace(/\.$/, "")}` : ""}.</b>{" "}
+            {flagged.value === "a_valider" ? "C'est à toi de répondre : Validé ou Refusé." : "Elle vérifie un point avant d'aller plus loin."}
+          </span>
+        </div>
+      )}
+      <div role="radiogroup" aria-label="Statut de l'échange" className={cn("grid gap-2", tiles.length > 3 ? "grid-cols-3 sm:grid-cols-5" : "grid-cols-3")}>
+        {tiles.map((c) => {
           const active = c.value === current;
           const picked = c.value === pending;
           const Icon = c.icon;
@@ -143,7 +173,9 @@ function StatusPanel({
               disabled={busy}
               onClick={() => setPending(active ? null : c.value)}
               className={cn(
-                "flex min-w-0 flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 text-center outline-none transition-colors focus-visible:ring-2 focus-visible:ring-foreground/20 disabled:opacity-60 sm:flex-row sm:gap-3 sm:px-3.5 sm:py-3 sm:text-left",
+                "flex min-w-0 flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 text-center outline-none transition-colors focus-visible:ring-2 focus-visible:ring-foreground/20 disabled:opacity-60",
+                // Trois cases : icône à gauche sur ordinateur ; cinq cases : empilées, plus lisibles.
+                tiles.length <= 3 && "sm:flex-row sm:gap-3 sm:px-3.5 sm:py-3 sm:text-left",
                 active ? cn(c.tile, "cursor-default")
                   : picked ? "border-foreground/40 bg-rowhover text-foreground"
                   : "border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
@@ -206,12 +238,19 @@ function Feed({ items, mode, creatorName }: { items: FeedItem[]; mode: Mode; cre
       {items.map((it) => {
         if (it.kind === "note") {
           const n = it.note;
+          const byAgency = n.by_role === "agency";
+          // À droite ce qui vient de soi : la créatrice voit les remarques de l'agence à gauche.
+          const mine = asAgency === byAgency;
+          const author = byAgency
+            ? (asAgency ? n.author_name || "L'agence" : `Ton agence${n.author_name ? ` · ${n.author_name}` : ""}`)
+            : asAgency ? creatorName : null;
           return (
-            <li key={`n-${n.id}`} className={cn("max-w-[85%] rounded-2xl border border-border bg-surface px-3.5 py-2.5", asAgency ? "self-start rounded-bl-md" : "self-end rounded-br-md")}>
+            <li key={`n-${n.id}`} className={cn("max-w-[85%] rounded-2xl border px-3.5 py-2.5", byAgency ? "border-primary/20 bg-primary/[0.05]" : "border-border bg-surface", mine ? "self-end rounded-br-md" : "self-start rounded-bl-md")}>
+              {author && <p className="mb-0.5 text-[11px] font-semibold text-muted-foreground">{author}</p>}
               <p className="whitespace-pre-wrap text-[13px] text-foreground [overflow-wrap:anywhere]">{n.body}</p>
               <p className="mt-1 text-[11px] text-faint">
                 {fmtStamp(it.at)}
-                {!asAgency && (n.agency_read_at ? " · lu" : " · envoyé")}
+                {!asAgency && !byAgency && (n.agency_read_at ? " · lu" : " · envoyé")}
               </p>
             </li>
           );
@@ -248,10 +287,12 @@ function prettyName(n: string): string {
   return n.toLowerCase().replace(/\p{L}[\p{L}'’-]*/gu, (w) => (w.length <= 3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)));
 }
 
-export function CreatorMailbox({ creator, mode, creatorSees = true }: {
+export function CreatorMailbox({ creator, mode, creatorSees = true, initialThreadId }: {
   creator: string; mode: Mode;
   /** La créatrice a-t-elle accès à sa section Mails ? (sinon pas de notification pour elle) */
   creatorSees?: boolean;
+  /** Échange à ouvrir directement (lien depuis la page Mails de l'agence). */
+  initialThreadId?: string;
 }) {
   const asAgency = mode !== "creator";
   const forCreator = asAgency ? creator : undefined;
@@ -271,7 +312,10 @@ export function CreatorMailbox({ creator, mode, creatorSees = true }: {
   const [deciding, setDeciding] = useState(false);
   // Historique des statuts de l'échange ouvert (events null = SQL pas encore lancé).
   const [history, setHistory] = useState<{ id: string; events: MailStatusEvent[] | null } | null>(null);
+  // Suivi écrit (messages de la créatrice + remarques de l'agence), lu directement.
+  const [threadNotes, setThreadNotes] = useState<{ id: string; list: MailNote[] } | null>(null);
   const feedRef = useRef<HTMLDivElement | null>(null);
+  const initialRef = useRef(initialThreadId ?? null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -281,11 +325,13 @@ export function CreatorMailbox({ creator, mode, creatorSees = true }: {
       setConfigured(r.configured);
       setThreads(r.threads);
       const desktop = window.matchMedia("(min-width: 1024px)").matches;
+      // Échange demandé par un lien (une seule fois), sinon sur ordinateur le dernier.
+      const wanted = initialRef.current && r.threads.some((t) => t.id === initialRef.current) ? initialRef.current : null;
+      initialRef.current = null;
       setOpenId((cur) => {
         // Échange ouvert disparu (supprimé dans Gmail…) : on le ferme.
         const still = cur && r.threads.some((t) => t.id === cur) ? cur : null;
-        // Ordinateur : le dernier échange s'ouvre directement (pas de panneau vide).
-        return still ?? (desktop && r.threads.length ? r.threads[0].id : null);
+        return wanted ?? still ?? (desktop && r.threads.length ? r.threads[0].id : null);
       });
       setReloadKey((n) => n + 1); // recharge aussi l'échange ouvert (nouvelles réponses)
     } catch (e) {
@@ -322,6 +368,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true }: {
       })
       .catch((e) => alive && setThreadErr((e as Error).message));
     getStatusHistory(creator, openId).then((events) => alive && setHistory({ id: openId, events }));
+    getThreadNotes(creator, openId).then((list) => alive && list && setThreadNotes({ id: openId, list }));
     return () => {
       alive = false;
     };
@@ -347,6 +394,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true }: {
     const label = choiceMeta(choice).label;
     try {
       if (mode === "creator") {
+        // La créatrice ne choisit qu'entre En cours, Validé et Refusé.
+        if (choice === "a_verifier" || choice === "a_valider") return false;
         const r = await sendDecision(threadId, choice, word);
         applyDecision(threadId, r);
         notifyAgency("mail", creator, `${PUSH_VERB[choice]} : ${what}${word ? ` · « ${word} »` : ""}`);
@@ -363,7 +412,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true }: {
             .upsert({ creator, thread_id: threadId, status: row.status, updated_at: now }, { onConflict: "creator,thread_id" }));
         }
         if (error) {
-          toast("Statut non enregistré, réessaie");
+          toast(/status_check/.test(error.message) ? "Lance d'abord le SQL « remarques » dans Supabase." : "Statut non enregistré, réessaie");
           return false;
         }
         // Trace à son nom (sans effet tant que le SQL « historique » n'est pas lancé).
@@ -392,16 +441,42 @@ export function CreatorMailbox({ creator, mode, creatorSees = true }: {
     }
   };
 
+  const addNote = (threadId: string, n: MailNote) => {
+    setThread((t) => (t && t.id === threadId ? { ...t, notes: [...t.notes, n] } : t));
+    setThreadNotes((cur) => (cur && cur.id === threadId ? { id: threadId, list: [...cur.list, n] } : cur));
+    setThreads((l) => l?.map((t) => (t.id === threadId ? { ...t, notes: t.notes + 1 } : t)) ?? l);
+  };
+
   const submitNote = async () => {
     if (!thread || !note.trim() || sending) return;
     setSending(true);
+    const body = note.trim();
+    const what = prettyName(thread.brand) || thread.subject;
     try {
-      const n = await sendManagerNote(thread.id, note.trim());
-      setThread((t) => (t ? { ...t, notes: [...t.notes, n] } : t));
-      setThreads((l) => l?.map((t) => (t.id === thread.id ? { ...t, notes: t.notes + 1 } : t)) ?? l);
-      notifyAgency("mail", creator, `${thread.brand || thread.subject} : ${note.trim()}`);
+      if (mode === "creator") {
+        const n = await sendManagerNote(thread.id, body);
+        addNote(thread.id, { ...n, by_role: "creator" });
+        notifyAgency("mail", creator, `${what} : ${body}`);
+        toast("Message envoyé à ton manager ✓");
+      } else {
+        // Remarque de l'agence : visible par la créatrice dans le suivi de l'échange.
+        const { data: auth } = await supabase.auth.getSession();
+        const uid = auth.session?.user.id;
+        if (!uid) return;
+        const now = new Date().toISOString();
+        const { data, error } = await supabase.from("creator_mail_notes").insert({
+          creator, thread_id: thread.id, author_user_id: uid, body, by_role: "agency",
+          author_name: await myDisplayName(), agency_read_at: now,
+        }).select("*").single();
+        if (error) {
+          toast(/by_role|author_name|row-level/.test(error.message) ? "Lance d'abord le SQL « remarques » dans Supabase." : "Remarque non enregistrée, réessaie");
+          return;
+        }
+        addNote(thread.id, data as MailNote);
+        if (creatorSees) notifyCreator("mail", creator, `Remarque de ton agence · ${what} : ${body}`);
+        toast(creatorSees ? `Remarque envoyée à ${creatorName} ✓` : "Remarque enregistrée ✓");
+      }
       setNote("");
-      toast("Message envoyé à ton manager ✓");
     } catch (e) {
       toast((e as Error).message);
     } finally {
@@ -420,8 +495,9 @@ export function CreatorMailbox({ creator, mode, creatorSees = true }: {
   // Suivi de l'échange ouvert. Une ancienne décision (avant l'historique) n'est ajoutée
   // qu'une fois l'historique chargé, pour éviter un clignotement.
   const events = thread && history?.id === thread.id ? history.events : undefined;
+  const notesList = thread ? (threadNotes?.id === thread.id ? threadNotes.list : thread.notes) : [];
   const feed = thread
-    ? buildFeed(thread.notes, events ?? null, events === undefined ? undefined : { status: thread.status, decidedBy: thread.decidedBy, decidedAt: thread.decidedAt })
+    ? buildFeed(notesList, events ?? null, events === undefined ? undefined : { status: thread.status, decidedBy: thread.decidedBy, decidedAt: thread.decidedAt })
     : [];
 
   if (threads === null) {
@@ -439,7 +515,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true }: {
   }
 
   const kpis = (
-    <DashPanel className="grid grid-cols-2 gap-px bg-border lg:grid-cols-4">
+    <DashPanel className="grid grid-cols-2 gap-px bg-border lg:grid-cols-5">
       {FILTERS.map((f) => (
         <button
           key={f.key}
@@ -447,7 +523,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true }: {
           onClick={() => setFilter(f.key)}
           aria-pressed={filter === f.key}
           className={cn(
-            "flex min-w-0 flex-col items-start bg-surface px-4 py-3.5 text-left transition-colors sm:px-5 sm:py-4",
+            "flex min-w-0 flex-col items-start bg-surface px-4 py-3.5 text-left transition-colors last:max-lg:col-span-2 sm:px-5 sm:py-4",
             filter === f.key ? "bg-rowhover" : "hover:bg-rowhover/60",
           )}
         >
@@ -581,37 +657,33 @@ export function CreatorMailbox({ creator, mode, creatorSees = true }: {
               </div>
               <p className="mb-3 pl-6 text-[12px] text-muted-foreground">
                 {asAgency
-                  ? "Ses avis, ses questions et chaque changement de statut, avec la date. Jamais envoyés à la marque."
-                  : "Tes avis, tes questions et les choix de ton agence. La marque ne voit jamais rien de tout ça."}
+                  ? `Ses avis, ses questions, tes remarques et chaque changement de statut, avec la date. ${creatorName} voit tout ce suivi ; la marque, jamais.`
+                  : "Tes avis, tes questions, les remarques et les choix de ton agence. La marque ne voit jamais rien de tout ça."}
               </p>
               {feed.length > 0 ? (
                 <Feed items={feed} mode={mode} creatorName={creatorName} />
-              ) : asAgency ? (
-                <p className="pl-6 text-[12px] text-faint">Rien pour l'instant.</p>
               ) : null}
-              {mode === "creator" && (
-                <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface p-1.5 pl-3.5 focus-within:border-primary">
-                  <textarea
-                    value={note}
-                    onChange={(e) => setNote(e.target.value.slice(0, 4000))}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submitNote();
-                    }}
-                    rows={1}
-                    placeholder="Écrire à mon manager…"
-                    className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[13px] text-foreground outline-none [field-sizing:content] placeholder:text-faint"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void submitNote()}
-                    disabled={!note.trim() || sending}
-                    aria-label="Envoyer à mon manager"
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
-                  >
-                    {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  </button>
-                </div>
-              )}
+              <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface p-1.5 pl-3.5 focus-within:border-primary">
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value.slice(0, 4000))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submitNote();
+                  }}
+                  rows={1}
+                  placeholder={asAgency ? `Écrire une remarque à ${creatorName}…` : "Écrire à mon manager…"}
+                  className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[13px] text-foreground outline-none [field-sizing:content] placeholder:text-faint"
+                />
+                <button
+                  type="button"
+                  onClick={() => void submitNote()}
+                  disabled={!note.trim() || sending}
+                  aria-label={asAgency ? "Envoyer la remarque" : "Envoyer à mon manager"}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
+                >
+                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -633,8 +705,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true }: {
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
           {asAgency
-            ? `Ouvre un échange et range-le dans « En cours », « Validé » ou « Refusé » avec le grand sélecteur. ${creatorName} a le même dans son espace pour donner son avis. Chaque changement (qui, quand, son mot) est gardé dans le suivi de l'échange.`
-            : "Ouvre un échange et range-le dans « En cours », « Validé » ou « Refusé » pour donner ton avis, avec un mot si tu veux. Ton manager est prévenu et tout est gardé dans le suivi de l'échange."}
+            ? `Ouvre un échange et range-le avec le grand sélecteur : En cours, À vérifier, À valider, Validé ou Refusé. Écris-lui une remarque en bas de l'échange. ${creatorName} voit tout dans son espace et donne son avis ; chaque changement (qui, quand, son mot) est gardé dans le suivi.`
+            : "Ouvre un échange et range-le dans « En cours », « Validé » ou « Refusé » pour donner ton avis, avec un mot si tu veux. Ton manager est prévenu ; ses remarques et tout l'historique sont dans le suivi de l'échange."}
         </span>
       </p>
       {/* Messagerie : liste + lecture dans un seul panneau (hauteur fixe sur ordinateur, défilement interne). */}

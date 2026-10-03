@@ -19,6 +19,7 @@ import { PageFrame } from "@/components/ui/page-header";
 import { Login } from "@/components/Login";
 import { NAV, findItem, viewTitle, type NavItem, type ViewId } from "@/lib/nav";
 import { NavSubContext, NavSubSetContext } from "@/lib/navSub";
+import { setTeamSession } from "@/lib/team";
 import { supabase } from "@/lib/supabase";
 import { SearchContext } from "@/lib/search";
 import { ThemeContext } from "@/lib/theme";
@@ -52,6 +53,7 @@ const Templates = lazy(() => import("@/views/Templates").then((m) => ({ default:
 const CreatorDetail = lazy(() => import("@/views/CreatorDetail").then((m) => ({ default: m.CreatorDetail })));
 const CreatorSpace = lazy(() => import("@/views/CreatorSpace").then((m) => ({ default: m.CreatorSpace })));
 const Corbeille = lazy(() => import("@/views/Corbeille").then((m) => ({ default: m.Corbeille })));
+const Activite = lazy(() => import("@/views/Activite").then((m) => ({ default: m.Activite })));
 const Reversements = lazy(() => import("@/views/Reversements").then((m) => ({ default: m.Reversements })));
 const Relances = lazy(() => import("@/views/Relances").then((m) => ({ default: m.Relances })));
 const Echeances = lazy(() => import("@/views/Echeances").then((m) => ({ default: m.Echeances })));
@@ -94,6 +96,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   suivi: EngagementSuivi,
   engagement: Engagement,
   corbeille: Corbeille,
+  activite: Activite,
 };
 
 // `roster` est une vue valide gérée à part (pas dans VIEWS). hasOwn : `in`
@@ -428,6 +431,7 @@ export default function App() {
     // fuit jamais et le spinner s'affiche avant la coque.
     setProfile(uid === null ? null : undefined);
     setAgencyRole("pending");
+    setTeamSession(null);
     if (!uid) return;
     let alive = true;
     let attempt = 0;
@@ -457,6 +461,8 @@ export default function App() {
           // Ligne absente = compte non rattaché (écran dédié, jamais la coque agence).
           const row = data as { role: string; creator_name: string | null; agency_role?: string | null } | null;
           setAgencyRole(row?.agency_role || "member");
+          // Session agence : ses actions préviennent le reste de l'équipe (« qui fait quoi »).
+          setTeamSession(row?.role === "agency" ? uid : null);
           setProfile(row ? { role: row.role, creator_name: row.creator_name } : { role: "none", creator_name: null });
         });
     };

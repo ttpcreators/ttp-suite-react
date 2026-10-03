@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { pokeTeam } from "./team";
 
 /**
  * Helpers de mutation Supabase (miroir de _dbInsert / _dbUpdate / _dbDelete de
@@ -14,6 +15,7 @@ export async function dbInsert<T extends Record<string, unknown>>(
     console.warn(`[db] insert ${table}:`, error.message);
     return null;
   }
+  pokeTeam(table); // prévient l'équipe agence (« Gianni a ajouté… »)
   return (data && (data[0] as T & { id: string })) || null;
 }
 
@@ -34,7 +36,9 @@ export async function dbUpdate(
   // 0 ligne affectée (sans erreur) = écriture bloquée par la RLS ou ligne inexistante.
   // On renvoie false pour ne PAS afficher un faux « enregistré ✓ » suivi d'un retour en
   // arrière (ex : un créateur qui tente d'éditer un évènement multi-créateurs de l'agence).
-  return (data?.length ?? 0) > 0;
+  const ok = (data?.length ?? 0) > 0;
+  if (ok) pokeTeam(table, patch);
+  return ok;
 }
 
 export async function dbDelete(table: string, id: string): Promise<boolean> {
@@ -51,6 +55,7 @@ export async function dbDelete(table: string, id: string): Promise<boolean> {
       console.warn(`[db] soft-delete events:`, error.message);
       return false;
     }
+    if (data?.length) pokeTeam("events", { deleted: true });
     return (data?.length ?? 0) > 0;
   }
 
@@ -59,6 +64,7 @@ export async function dbDelete(table: string, id: string): Promise<boolean> {
     console.warn(`[db] delete ${table}:`, error.message);
     return false;
   }
+  if (data?.length) pokeTeam(table);
   return (data?.length ?? 0) > 0;
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check, MessageCircle } from "lucide-react";
+import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check, MessageCircle, History } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
 import { ACCENT_PRESETS, ACCENT_GRADIENTS, getAccent, setAccent, isHex, parseGradient, getDarkStyle, setDarkStyle, type DarkStyle } from "@/lib/accent";
@@ -10,6 +10,7 @@ import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { myDisplayName, saveMyDisplayName } from "@/lib/team";
 
 /**
  * Préférences de notifications (agence) — stockées dans le blob `notifPrefs`.
@@ -34,6 +35,8 @@ export type NotifPrefs = {
   emailReceivedBell?: boolean; // cloche : mail reçu sur la boîte agence
   emailReceivedPush?: boolean; // push : mail reçu sur la boîte agence
   pushErrors?: boolean; // push : un bug (crash de rendu) est survenu dans l'app
+  pushTeamActivity?: boolean; // push : un autre compte agence a ajouté / terminé / supprimé qqch
+  bellTeamActivity?: boolean; // cloche : actions des autres comptes agence
 };
 
 const on = (v: boolean | undefined) => v !== false; // défaut = activé
@@ -70,6 +73,51 @@ function PrefRow({
         {hint && <div className="mt-0.5 text-[11px] leading-snug text-faint">{hint}</div>}
       </div>
       <Toggle checked={checked} onChange={onChange} />
+    </div>
+  );
+}
+
+/** « Ton prénom » : affiché dans l'activité de l'équipe et ses notifications. */
+function TeamNameField() {
+  const [name, setName] = useState("");
+  const [saved, setSaved] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void myDisplayName().then((n) => {
+      setName(n);
+      setSaved(n);
+    });
+  }, []);
+  const save = async () => {
+    const v = name.trim();
+    if (!v || v === saved || busy) return;
+    setBusy(true);
+    const ok = await saveMyDisplayName(v);
+    setBusy(false);
+    if (ok) {
+      setSaved(v);
+      toast("Prénom enregistré ✓");
+    } else toast("Prénom non enregistré : lance d'abord le SQL « équipe, activité, routines ».");
+  };
+  return (
+    <div className="flex flex-col gap-2 border-b border-border py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <div className="text-[13px] font-medium text-foreground">Ton prénom</div>
+        <div className="text-[11px] text-faint">Affiché dans l'activité et les notifications : « {saved || "Marc"} a terminé la tâche… ».</div>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value.slice(0, 40))}
+          onKeyDown={(e) => e.key === "Enter" && void save()}
+          className="h-9 w-40 rounded-lg border border-border bg-surface px-3 text-[13px] text-foreground outline-none focus:border-primary"
+          placeholder="Ton prénom"
+        />
+        <button type="button" onClick={() => void save()} disabled={busy || !name.trim() || name.trim() === saved}
+          className="h-9 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+          Enregistrer
+        </button>
+      </div>
     </div>
   );
 }
@@ -569,6 +617,27 @@ export function Parametres() {
           hint="Un push « ⚠️ bug » à la première occurrence (anti-spam), et l'erreur est journalisée pour diagnostic."
           checked={on(prefs.pushErrors)}
           onChange={(v) => setPref("pushErrors", v)}
+        />
+      </Section>
+
+      {/* Équipe agence : qui fait quoi */}
+      <Section
+        icon={<History className="h-4 w-4" />}
+        title="Équipe agence"
+        hint="Chaque ajout, « Fait », suppression ou avancée est noté dans Pilotage → Activité. Ces réglages valent pour toute l'équipe."
+      >
+        <TeamNameField />
+        <PrefRow
+          label="Notification quand l'autre agit"
+          hint="Un push sur ton téléphone dès qu'un autre compte de l'agence ajoute, termine ou supprime quelque chose. Plusieurs actions rapprochées = une seule notification."
+          checked={on(prefs.pushTeamActivity)}
+          onChange={(v) => setPref("pushTeamActivity", v)}
+        />
+        <PrefRow
+          label="Afficher dans la cloche"
+          hint="Les actions des autres des 3 derniers jours, filtre « Équipe »."
+          checked={on(prefs.bellTeamActivity)}
+          onChange={(v) => setPref("bellTeamActivity", v)}
         />
       </Section>
 

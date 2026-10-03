@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { pokeTeam } from "./team";
 import { getAppState, invalidateAppState, saveAppStateKey } from "./appState";
 
 /**
@@ -101,6 +102,7 @@ export async function dbTrash(table: string, id: string, label: string, sub?: st
     await mutateBin((bin) => bin.filter((e) => e.id !== entry.id));
     return false;
   }
+  pokeTeam(table); // prévient l'équipe agence (« Marc a supprimé… »)
   return true;
 }
 

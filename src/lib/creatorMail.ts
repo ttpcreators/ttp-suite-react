@@ -7,11 +7,13 @@ import { supabase } from "@/lib/supabase";
  * CÔTÉ SERVEUR). Le navigateur ne reçoit que les fils de la créatrice.
  */
 
-export type MailStatus = "nouvelle" | "negociation" | "valide" | "refuse";
+export type MailStatus = "nouvelle" | "negociation" | "a_verifier" | "a_valider" | "valide" | "refuse";
 
 export const MAIL_STATUS: { value: MailStatus; label: string; short: string; dot: string; badge: string }[] = [
   { value: "nouvelle", short: "Nouvelles", label: "Nouvelle demande", dot: "bg-sky-500", badge: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
   { value: "negociation", short: "Négociation", label: "En négociation", dot: "bg-amber-500", badge: "bg-amber-500/10 text-amber-700 dark:text-amber-400" },
+  { value: "a_verifier", short: "À vérifier", label: "À vérifier", dot: "bg-orange-500", badge: "bg-orange-500/10 text-orange-700 dark:text-orange-400" },
+  { value: "a_valider", short: "À valider", label: "À valider", dot: "bg-indigo-500", badge: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" },
   { value: "valide", short: "Validés", label: "Validé", dot: "bg-emerald-500", badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" },
   { value: "refuse", short: "Refusés", label: "Refusé", dot: "bg-red-500", badge: "bg-red-500/10 text-red-600 dark:text-red-400" },
 ];
@@ -30,16 +32,22 @@ export type MailMessage = {
   id: string; from: string; fromEmail: string; fromAgency: boolean; to: string; cc: string;
   ts: number; html: string; text: string; attachments: MailAttachment[];
 };
-export type MailNote = { id: string; body: string; created_at: string; agency_read_at: string | null };
+export type MailNote = {
+  id: string; body: string; created_at: string; agency_read_at: string | null;
+  /** Qui a écrit : la créatrice (« Écrire à mon manager ») ou l'agence (remarque). */
+  by_role?: "creator" | "agency"; author_name?: string | null;
+};
 export type MailThread = Decision & {
   id: string; subject: string; brand: string; status: MailStatus; messages: MailMessage[]; notes: MailNote[];
 };
 export type MailSettings = { creator: string; alias: string | null; label_id: string | null; label_name: string | null; enabled: boolean };
 
 /** Rangement choisi à la main avec le grand sélecteur d'un échange. */
-export type MailChoice = "encours" | "valide" | "refuse";
-/** « Nouvelle demande » et « En négociation » sont tous deux « En cours ». */
-export const choiceOf = (s: MailStatus): MailChoice => (s === "valide" || s === "refuse" ? s : "encours");
+export type MailChoice = "encours" | "a_verifier" | "a_valider" | "valide" | "refuse";
+/** Statuts choisis à la main (les autres, « Nouvelle demande » et « En négociation », sont « En cours »). */
+export const STORED_STATUSES = ["a_verifier", "a_valider", "valide", "refuse"] as const;
+export const choiceOf = (s: MailStatus): MailChoice =>
+  (STORED_STATUSES as readonly string[]).includes(s) ? (s as MailChoice) : "encours";
 /** Statut automatique (comme le serveur) : « En négociation » dès que l'agence a répondu. */
 export const autoStatusOf = (messages: Pick<MailMessage, "fromAgency">[]): MailStatus =>
   messages.slice(1).some((m) => m.fromAgency) ? "negociation" : "nouvelle";
@@ -60,14 +68,24 @@ export function buildFeed(
   legacy?: { status: MailStatus; decidedBy: Decision["decidedBy"]; decidedAt: string | null },
 ): FeedItem[] {
   const evs = [...(events ?? [])];
-  if (!evs.length && legacy?.decidedBy && legacy.decidedAt && (legacy.status === "valide" || legacy.status === "refuse")) {
-    evs.push({ id: "decision", status: legacy.status, by_role: legacy.decidedBy, comment: null, created_at: legacy.decidedAt });
+  if (!evs.length && legacy?.decidedBy && legacy.decidedAt && (STORED_STATUSES as readonly string[]).includes(legacy.status)) {
+    evs.push({ id: "decision", status: legacy.status as MailChoice, by_role: legacy.decidedBy, comment: null, created_at: legacy.decidedAt });
   }
   const items: FeedItem[] = [
     ...notes.map((n) => ({ kind: "note" as const, at: new Date(n.created_at).getTime(), note: n })),
     ...evs.map((e) => ({ kind: "event" as const, at: new Date(e.created_at).getTime(), event: e })),
   ];
   return items.sort((a, b) => a.at - b.at);
+}
+
+/**
+ * Suivi écrit d'un échange (messages de la créatrice + remarques de l'agence), lu
+ * directement (RLS : agence tout, créatrice les siens). null = lecture impossible.
+ */
+export async function getThreadNotes(creator: string, threadId: string): Promise<MailNote[] | null> {
+  const { data, error } = await supabase.from("creator_mail_notes").select("*")
+    .eq("creator", creator).eq("thread_id", threadId).order("created_at");
+  return error ? null : ((data ?? []) as MailNote[]);
 }
 
 /**
@@ -121,7 +139,7 @@ export const sendManagerNote = (threadId: string, body: string) =>
  * facultatif. « En cours » part sous son ancien nom « annuler », compris par toutes
  * les versions du serveur.
  */
-export const sendDecision = (threadId: string, choice: MailChoice, comment?: string) =>
+export const sendDecision = (threadId: string, choice: "encours" | "valide" | "refuse", comment?: string) =>
   call<Decision & { status: MailStatus; logged?: boolean }>({
     action: "decision", threadId, decision: choice === "encours" ? "annuler" : choice, comment: comment || undefined,
   });

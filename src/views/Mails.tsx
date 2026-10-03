@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Mail, ArrowDownLeft, ArrowUpRight, ArrowLeft, Inbox, Search, Loader2, PenLine, Reply, Forward, Settings2, RefreshCw, Send } from "lucide-react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Mail, ArrowDownLeft, ArrowUpRight, ArrowLeft, Inbox, Search, Loader2, PenLine, Reply, Forward, Settings2, RefreshCw, Send, MessageSquareText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { DashPanel } from "@/components/ui/dash";
@@ -13,6 +13,11 @@ import { BoxChip } from "@/components/mail-box-chip";
 import { BOX_LABEL, BOX_STYLE, sendErrorText, sendGmail, type MailBox, type OutAttachment } from "@/lib/mailSend";
 import { ForwardDialog, MailSettingsDialog, NewMailDialog, ReplyBox } from "@/components/mail-tools";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { CreatorAvatar } from "@/components/ui/creator-avatar";
+import { useCreators } from "@/lib/useCreators";
+
+// Espace mails d'une créatrice (statuts, remarques, suivi), chargé seulement à la demande.
+const CreatorMailbox = lazy(() => import("@/views/CreatorMails").then((m) => ({ default: m.CreatorMailbox })));
 
 /**
  * Page « Mails » : historique des échanges Gmail par contact + lecture d'un fil
@@ -89,9 +94,26 @@ export function Mails() {
       return "all";
     }
   });
+  // Filtre « Par créatrice » : ses échanges (talent@, son alias) avec statuts et remarques.
+  const allCreators = useCreators();
+  const [linked, setLinked] = useState<{ creator: string; alias: string | null; enabled: boolean }[]>([]);
+  const [creatorView, setCreatorView] = useState<{ name: string; threadId?: string } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void supabase.from("creator_mail_settings").select("creator, alias, label_id, enabled").then(({ data }) => {
+      if (!alive) return;
+      const rows = (data ?? []) as { creator: string; alias: string | null; label_id: string | null; enabled: boolean }[];
+      setLinked(rows.filter((r) => r.alias || r.label_id).sort((a, b) => a.creator.localeCompare(b.creator)));
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // Choisir une boîte = afficher SA boîte de réception (le contact sélectionné est fermé).
   const setBox = (v: "all" | MailBox) => {
     setBoxState(v);
+    setCreatorView(null);
     setThread(null);
     setSelected(null);
     setMobileInbox(true);
@@ -296,6 +318,15 @@ export function Mails() {
   const visibleHistory = history ?? [];
 
   const contacted = (c: Contact) => !!c.lastContacted || parseTouches(c.touches).length > 0;
+  // Échange de talent@ qui concerne une créatrice liée (son alias y apparaît) :
+  // lien direct vers son suivi (statut, remarques).
+  const threadCreator = (() => {
+    if (!thread || thread.box !== "talent" || !threadMsgs?.length || !linked.length) return null;
+    const addrs = new Set(threadMsgs.flatMap((m) => `${m.from} ${m.to ?? ""} ${m.cc ?? ""}`.toLowerCase().match(/[^\s<>"',;]+@[^\s<>"',;]+/g) ?? []));
+    return linked.find((l) => l.alias && addrs.has(l.alias.toLowerCase())) ?? null;
+  })();
+  const firstName = (n: string) => titleCase(n).split(" ")[0] || titleCase(n);
+
   // Fil → format du lecteur partagé (messages envoyés = agence).
   const readerMsgs: MailMessage[] = (threadMsgs ?? []).map((m) => ({
     id: m.id,
@@ -367,6 +398,45 @@ export function Mails() {
         </span>
       </div>
 
+      {/* Par créatrice : ses échanges, avec statut (À vérifier, À valider…) et remarques qu'elle voit */}
+      {linked.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="text-[12px] font-medium text-muted-foreground">Par créatrice</span>
+          <Tabs
+            size="sm"
+            wrap
+            label="Créatrice"
+            value={creatorView?.name ?? ""}
+            onValueChange={(v) => setCreatorView(v ? { name: v } : null)}
+            items={[
+              { value: "", label: "Toutes" },
+              ...linked.map((l) => ({
+                value: l.creator,
+                label: titleCase(l.creator),
+                icon: (
+                  <CreatorAvatar
+                    name={l.creator}
+                    photoUrl={allCreators.find((c) => c.name.trim().toLowerCase() === l.creator.trim().toLowerCase())?.photo_url ?? null}
+                    className="h-4 w-4 rounded-full text-[7px]"
+                  />
+                ),
+              })),
+            ]}
+          />
+        </div>
+      )}
+
+      {creatorView ? (
+        <Suspense fallback={<DashPanel className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Chargement…</DashPanel>}>
+          <CreatorMailbox
+            key={`${creatorView.name}-${creatorView.threadId ?? ""}`}
+            creator={creatorView.name}
+            mode="agency"
+            creatorSees={!!linked.find((l) => l.creator === creatorView.name)?.enabled}
+            initialThreadId={creatorView.threadId}
+          />
+        </Suspense>
+      ) : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] lg:items-start">
         {/* Colonne : contacts */}
         <DashPanel className={cn("flex min-w-0 flex-col", (selected || thread || mobileInbox) && "max-lg:hidden")}>
@@ -454,6 +524,16 @@ export function Mails() {
                   {selected?.label ?? (thread.name || thread.contact)}{threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
                 </p>
               </div>
+              {threadCreator && (
+                <button
+                  type="button"
+                  onClick={() => setCreatorView({ name: threadCreator.creator, threadId: thread.threadId })}
+                  title={`Statut et remarques que ${firstName(threadCreator.creator)} voit dans son espace`}
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
+                >
+                  <MessageSquareText className="h-4 w-4" /> <span className="max-sm:hidden">Statut et remarques · {firstName(threadCreator.creator)}</span>
+                </button>
+              )}
               {readerMsgs.length > 0 && (
                 <button
                   type="button"
@@ -667,6 +747,7 @@ export function Mails() {
           </DashPanel>
         )}
       </div>
+      )}
 
       <ForwardDialog
         message={forwardMsg}
