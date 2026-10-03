@@ -146,6 +146,9 @@ async function sha256(s: string): Promise<string | null> {
   }
 }
 
+/** Boîtes communes de l'agence : jamais la photo d'une créatrice. */
+export const SHARED_BOXES = /^(talent|partnerships|contact|marc|hello|info|bonjour|team|admin)@ttpcreators\.pro$/i;
+
 // Photos des créatrices : alias (Mails) et adresse pro (fiche) → photo du Roster.
 let photosLoad: Promise<Map<string, string>> | null = null;
 function creatorPhotos(): Promise<Map<string, string>> {
@@ -157,10 +160,15 @@ function creatorPhotos(): Promise<Map<string, string>> {
     ]);
     const rows = (cs ?? []) as { name: string; email_pro: string | null; photo_url: string | null }[];
     const byName = new Map(rows.map((c) => [c.name.trim().toLowerCase(), c.photo_url]));
-    for (const c of rows) if (c.email_pro && c.photo_url) m.set(emailOf(c.email_pro), c.photo_url);
+    // Une adresse partagée (talent@, partnerships@… ou notée sur plusieurs fiches)
+    // n'est pas celle d'une créatrice : elle garde le logo TTP.
+    const uses = new Map<string, number>();
+    for (const c of rows) if (c.email_pro) uses.set(emailOf(c.email_pro), (uses.get(emailOf(c.email_pro)) ?? 0) + 1);
+    const own = (e: string) => !!e && !SHARED_BOXES.test(e) && (uses.get(e) ?? 0) <= 1;
+    for (const c of rows) if (c.email_pro && c.photo_url && own(emailOf(c.email_pro))) m.set(emailOf(c.email_pro), c.photo_url);
     for (const s of (st ?? []) as { creator: string; alias: string | null }[]) {
       const p = byName.get(s.creator.trim().toLowerCase());
-      if (s.alias && p) m.set(emailOf(s.alias), p);
+      if (s.alias && p && !SHARED_BOXES.test(emailOf(s.alias))) m.set(emailOf(s.alias), p);
     }
     // Rien de lisible (session pas encore prête) : on retentera plus tard.
     if (!m.size) window.setTimeout(() => { photosLoad = null; }, 30_000);

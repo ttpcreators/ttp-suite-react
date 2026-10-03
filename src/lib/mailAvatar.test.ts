@@ -39,3 +39,12 @@ describe("photos de profil des mails", () => {
     expect(brandAddressOf([m({ From: "talent@ttpcreators.pro", To: "lea@ttpcreators.pro" })], "ttpcreators.pro")).toBe("");
   });
 });
+
+describe("boîtes communes de l'agence", () => {
+  it("talent@ et partnerships@ ne sont jamais l'adresse d'une créatrice", async () => {
+    const { SHARED_BOXES } = await import("./mailAvatar");
+    expect(SHARED_BOXES.test("talent@ttpcreators.pro")).toBe(true);
+    expect(SHARED_BOXES.test("Partnerships@ttpcreators.pro")).toBe(true);
+    expect(SHARED_BOXES.test("chloedifranscesco@ttpcreators.pro")).toBe(false);
+  });
+});
