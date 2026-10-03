@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, AtSign, Check, CircleHelp, History, Hourglass, Inbox, Info, Link2, Loader2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X,
+  ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleHelp, History, Hourglass, Inbox, Info, Link2, Loader2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X,
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -17,6 +17,7 @@ import {
   type MailThreadLite, type MailSettings,
 } from "@/lib/creatorMail";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
+import { BarButton, RailButton, SearchField, ToolButton, mailRowCls, pillCls } from "@/components/mail-shell";
 
 /*
  * Section « Mails » (lecture seule) : les échanges de la boîte agence où apparaît
@@ -140,7 +141,7 @@ function StatusPanel({
   };
 
   return (
-    <div className="border-b border-border px-4 py-3.5 sm:px-6">
+    <div className="rounded-xl border border-border bg-panel/60 p-3.5 sm:p-4">
       <div className="mb-2.5 flex items-center gap-3">
         <p className="min-w-0 flex-1 text-[13px] font-semibold text-foreground">
           {mode === "creator" ? "Ton avis sur cet échange" : "Où en est cet échange ?"}
@@ -324,6 +325,23 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const feedRef = useRef<HTMLDivElement | null>(null);
   const noteRef = useRef<HTMLTextAreaElement | null>(null);
   const initialRef = useRef(initialThreadId ?? null);
+  const [query, setQuery] = useState(""); // recherche dans la liste (marque, objet, extrait)
+  // Aide « comment ça marche » : affichée tant qu'elle n'a pas été fermée sur cet appareil.
+  const [help, setHelpState] = useState(() => {
+    try {
+      return localStorage.getItem("ttp:cmail-help") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const setHelp = (v: boolean) => {
+    setHelpState(v);
+    try {
+      localStorage.setItem("ttp:cmail-help", v ? "1" : "0");
+    } catch {
+      /* stockage indisponible */
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -498,7 +516,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     return c;
   }, [threads]);
   const cur = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
-  const shown = (threads ?? []).filter((t) => cur.match(t.status));
+  const q = query.trim().toLowerCase();
+  const shown = (threads ?? []).filter((t) => cur.match(t.status) && (!q || `${t.brand} ${t.subject} ${t.excerpt}`.toLowerCase().includes(q)));
 
   // Suivi de l'échange ouvert. Une ancienne décision (avant l'historique) n'est ajoutée
   // qu'une fois l'historique chargé, pour éviter un clignotement.
@@ -522,119 +541,151 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     );
   }
 
-  const kpis = (
-    <DashPanel className="grid grid-cols-2 gap-px bg-border lg:grid-cols-5">
-      {FILTERS.map((f) => (
-        <button
-          key={f.key}
-          type="button"
-          onClick={() => setFilter(f.key)}
-          aria-pressed={filter === f.key}
-          className={cn(
-            "flex min-w-0 flex-col items-start bg-surface px-4 py-3.5 text-left transition-colors last:max-lg:col-span-2 sm:px-5 sm:py-4",
-            filter === f.key ? "bg-rowhover" : "hover:bg-rowhover/60",
-          )}
-        >
-          <span className={cn("flex items-center gap-1.5 text-[12px] sm:text-[13px]", filter === f.key ? "text-foreground" : "text-muted-foreground")}>
-            {f.dot && <span className={cn("size-1.5 rounded-full", f.dot)} />}
-            {f.label}
-          </span>
-          <span className="mt-1.5 text-[22px] font-semibold leading-none tracking-tight tabular-nums text-foreground sm:text-[26px]">{counts[f.key]}</span>
-        </button>
-      ))}
-    </DashPanel>
+  const showFeed = () => feedRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const writeNote = () => {
+    noteRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    noteRef.current?.focus({ preventScroll: true });
+  };
+  const navIdx = openId ? shown.findIndex((t) => t.id === openId) : -1;
+  const plural = (n: number) => (n > 1 ? "s" : "");
+
+  // Comment les statuts avancent (affiché pour éviter toute confusion, refermable).
+  const helpBanner = (
+    <div className="flex items-start gap-2.5 rounded-xl border border-border bg-surface px-3.5 py-3 text-left text-[12px] leading-relaxed text-muted-foreground">
+      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 flex-1">
+        {asAgency
+          ? `Ouvre un échange et range-le avec le grand sélecteur : En cours, À vérifier, À valider, Validé ou Refusé. « Ajouter une remarque » lui écrit un mot sur cet échange. ${creatorName} voit tout dans son espace et donne son avis ; chaque changement (qui, quand, son mot) est gardé dans le suivi.`
+          : "Ouvre un échange et range-le dans « En cours », « Validé » ou « Refusé » pour donner ton avis. Avec « Ajouter une remarque », écris à ton manager quand tu veux. Il est prévenu ; ses remarques et tout l'historique sont dans le suivi de l'échange."}
+      </span>
+      <button type="button" onClick={() => setHelp(false)} aria-label="Masquer l'aide"
+        className="-mr-1 -mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
   );
 
+  // ── Barre d'icônes (ordinateur) : les cinq rangements, avec leur nombre ──
+  const rail = (
+    <nav aria-label="Ranger les échanges" className="hidden min-h-0 flex-col items-center gap-1.5 border-r border-border py-3 lg:flex">
+      {FILTERS.map((f, i) => (
+        <Fragment key={f.key}>
+          {i === 1 && <span aria-hidden className="my-1.5 h-px w-6 shrink-0 bg-border" />}
+          <RailButton label={`${f.label} · ${counts[f.key]}`} active={filter === f.key} count={counts[f.key]} onClick={() => setFilter(f.key)}>
+            {f.dot ? <span aria-hidden className={cn("size-3.5 rounded-[4px]", f.dot)} /> : <Inbox className="h-[18px] w-[18px]" />}
+          </RailButton>
+        </Fragment>
+      ))}
+      <span className="flex-1" />
+      <RailButton label={help ? "Masquer l'aide" : "Comment ça marche"} active={help} bar={false} onClick={() => setHelp(!help)}>
+        <Info className="h-[18px] w-[18px]" />
+      </RailButton>
+    </nav>
+  );
+
+  // ── Même barre, en ligne (téléphone, tablette) ──────────────────────────
+  const pills = (
+    <nav aria-label="Ranger les échanges" className="flex gap-1.5 overflow-x-auto border-b border-border p-2 [scrollbar-width:none] lg:hidden">
+      {FILTERS.map((f) => {
+        const on = filter === f.key;
+        return (
+          <button key={f.key} type="button" onClick={() => setFilter(f.key)} aria-pressed={on}
+            className={cn(pillCls, on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+            {f.dot ? <span aria-hidden className={cn("size-2.5 rounded-[3px]", f.dot)} /> : <Inbox className="h-3.5 w-3.5" />}
+            {f.key === "tous" ? "Tous" : f.label}
+            <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{counts[f.key]}</span>
+          </button>
+        );
+      })}
+      <button type="button" onClick={() => setHelp(!help)} aria-label={help ? "Masquer l'aide" : "Comment ça marche"} aria-pressed={help}
+        className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors", help ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+        <Info className="h-4 w-4" />
+      </button>
+    </nav>
+  );
+
+  // ── Liste ────────────────────────────────────────────────────────────────
   const list = (
-    <section className={cn("flex min-h-0 min-w-0 flex-col lg:border-r lg:border-border", openId && "max-lg:hidden")}>
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <span className="flex-1 text-[13px] font-semibold text-foreground">
-          {cur.key === "tous" ? "Boîte de réception" : cur.label}
-          <span className="ml-1.5 font-normal tabular-nums text-faint">{shown.length}</span>
-        </span>
-        <button type="button" onClick={() => void load()} disabled={loading}
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover disabled:opacity-60">
-          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} /> Actualiser
-        </button>
+    <section className={cn("flex min-h-0 min-w-0 flex-col bg-panel lg:border-r lg:border-border", openId && "max-lg:hidden")}>
+      <div className="px-4 pt-4 sm:px-5 sm:pt-5">
+        <div className="flex items-center gap-2">
+          <h2 className="min-w-0 flex-1 truncate text-[20px] font-semibold tracking-tight text-foreground sm:text-[22px]">
+            {cur.key === "tous" ? "Boîte de réception" : cur.label}
+          </h2>
+          <ToolButton icon={RefreshCw} label="Actualiser" spin={loading} disabled={loading} onClick={() => void load()} />
+        </div>
+        <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">
+          {cur.dot && <span aria-hidden className={cn("size-2.5 shrink-0 rounded-[3px]", cur.dot)} />}
+          {q ? `${shown.length} sur ${counts[cur.key]}` : counts[cur.key]} échange{plural(q ? counts[cur.key] : shown.length)}
+        </p>
       </div>
-      {err && <div className="border-b border-border px-4 py-2.5 text-[12px] text-red-600 dark:text-red-400">{err}</div>}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="px-4 pb-3 pt-3 sm:px-5">
+        <SearchField value={query} onChange={setQuery} placeholder="Rechercher une marque, un objet…" />
+      </div>
+      {help && <div className="px-4 pb-3 sm:px-5 lg:hidden">{helpBanner}</div>}
+      {err && <div className="border-t border-border px-4 py-2.5 text-[12px] text-red-600 sm:px-5 dark:text-red-400">{err}</div>}
+      <div className="min-h-0 flex-1 overflow-y-auto border-t border-border">
         {shown.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
             <span className="grid h-10 w-10 place-items-center rounded-full bg-muted"><Mail className="h-4 w-4 text-muted-foreground" /></span>
-            <p className="text-[13px] text-muted-foreground">{filter === "tous" ? "Aucun échange pour le moment." : "Aucun échange ici."}</p>
+            <p className="text-[13px] text-muted-foreground">
+              {q ? `Aucun échange ne correspond à « ${query.trim()} ».` : filter === "tous" ? "Aucun échange pour le moment." : "Aucun échange ici."}
+            </p>
           </div>
         ) : (
           <ul className="divide-y divide-border">
-            {shown.map((t) => (
-              <li key={t.id}>
-                <button
-                  type="button"
-                  onClick={() => setOpenId(t.id)}
-                  className={cn("flex w-full gap-3 px-4 py-3.5 text-left transition-colors hover:bg-rowhover", openId === t.id && "bg-rowhover")}
-                >
-                  <Initial name={prettyName(t.brand)} email={t.brandEmail} />
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="flex min-w-0 items-baseline gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{prettyName(t.brand) || "Marque"}</span>
-                      <span className="shrink-0 text-[11px] tabular-nums text-faint">{fmtWhen(t.ts)}</span>
-                    </span>
-                    <span className="truncate text-[13px] text-foreground">
-                      {t.subject}
-                      {t.count > 1 && <span className="ml-1 text-faint">{t.count}</span>}
-                    </span>
-                    <span className="line-clamp-1 text-[12px] text-muted-foreground">{t.excerpt}</span>
-                    <span className="mt-1 flex min-w-0 items-center gap-3">
-                      <StatusDot status={t.status} by={t.decidedBy ? authorName(t.decidedBy, mode, creatorName) : undefined} />
-                      {t.notes > 0 && (
-                        <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground" title="Remarques">
-                          <MessageSquare className="h-3 w-3" />{t.notes}
+            {shown.map((t) => {
+              const on = openId === t.id;
+              return (
+                <li key={t.id}>
+                  <button type="button" aria-current={on || undefined} onClick={() => setOpenId(t.id)} className={cn(mailRowCls(on), "py-4")}>
+                    <Initial name={prettyName(t.brand)} email={t.brandEmail} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground">
+                          {prettyName(t.brand) || "Marque"}
+                          {t.count > 1 && <span className="ml-1.5 font-normal text-faint">{t.count}</span>}
                         </span>
-                      )}
+                        <span className="shrink-0 text-[11px] tabular-nums text-faint">{fmtWhen(t.ts)}</span>
+                      </span>
+                      <span className="mt-1 block truncate text-[13.5px] font-semibold text-foreground">{t.subject}</span>
+                      <span className="mt-1 line-clamp-2 text-[12.5px] leading-[1.45] text-muted-foreground">{t.excerpt}</span>
+                      <span className="mt-2 flex min-w-0 items-center gap-3">
+                        <StatusDot status={t.status} by={t.decidedBy ? authorName(t.decidedBy, mode, creatorName) : undefined} />
+                        {t.notes > 0 && (
+                          <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground" title="Remarques">
+                            <MessageSquare className="h-3 w-3" />{t.notes}
+                          </span>
+                        )}
+                      </span>
                     </span>
-                  </span>
-                </button>
-              </li>
-            ))}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
     </section>
   );
 
+  // ── Lecture d'un échange ─────────────────────────────────────────────────
   const view = openId ? (
     <section className="flex min-h-0 min-w-0 flex-col">
-      <div className="flex items-start gap-3 border-b border-border px-4 py-4 sm:px-6">
-        <button type="button" onClick={() => setOpenId(null)} aria-label="Retour à la liste"
-          className="-ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground lg:hidden">
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-[17px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere]">{thread?.subject ?? "Chargement…"}</h2>
-          {thread && (
-            <p className="mt-1 text-[12px] text-muted-foreground">
-              {thread.brand ? `${prettyName(thread.brand)} · ` : ""}{thread.messages.length} message{thread.messages.length > 1 ? "s" : ""}
-            </p>
+      <div className="flex h-14 shrink-0 items-center gap-0.5 border-b border-border px-2 sm:px-3">
+        <ToolButton icon={ArrowLeft} label="Retour à la liste" onClick={() => setOpenId(null)} />
+        <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5">
+          {navIdx >= 0 && shown.length > 1 && (
+            <>
+              <ToolButton icon={ChevronLeft} label="Échange précédent" className="h-8 w-8" disabled={navIdx <= 0} onClick={() => setOpenId(shown[navIdx - 1].id)} />
+              <span className="whitespace-nowrap px-1 text-[12.5px] tabular-nums text-muted-foreground">{navIdx + 1} sur {shown.length}</span>
+              <ToolButton icon={ChevronRight} label="Échange suivant" className="h-8 w-8" disabled={navIdx >= shown.length - 1} onClick={() => setOpenId(shown[navIdx + 1].id)} />
+            </>
           )}
         </div>
+        {thread && <ToolButton icon={History} label={`Voir le suivi (${feed.length})`} onClick={showFeed} />}
+        {thread && <ToolButton icon={MessageSquarePlus} label="Ajouter une remarque" onClick={writeNote} />}
       </div>
-      {thread && (
-        <StatusPanel
-          key={thread.id}
-          thread={thread}
-          mode={mode}
-          creatorName={creatorName}
-          creatorSees={creatorSees}
-          busy={deciding}
-          feedCount={feed.length}
-          onChoose={(c, w) => choose(thread.id, c, w)}
-          onShowFeed={() => feedRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-          onWriteNote={() => {
-            noteRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-            noteRef.current?.focus({ preventScroll: true });
-          }}
-        />
-      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {threadErr ? (
@@ -642,27 +693,51 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         ) : !thread ? (
           <div className="flex items-center justify-center gap-2 px-5 py-16 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Ouverture…</div>
         ) : (
-          <>
-            <div className="flex flex-col gap-3 bg-panel/60 p-3 sm:p-4">
+          <div className="px-4 py-6 sm:px-8">
+            {help && <div className="mb-6 max-lg:hidden">{helpBanner}</div>}
+            <h1 className="text-[20px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere] [text-wrap:balance] sm:text-[22px]">{thread.subject}</h1>
+            <p className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
+              <span>{thread.brand ? `${prettyName(thread.brand)} · ` : ""}{thread.messages.length} message{plural(thread.messages.length)}</span>
+              <StatusDot status={thread.status} by={thread.decidedBy ? authorName(thread.decidedBy, mode, creatorName) : undefined} />
+            </p>
+
+            <div className="mt-5">
+              <StatusPanel
+                key={thread.id}
+                thread={thread}
+                mode={mode}
+                creatorName={creatorName}
+                creatorSees={creatorSees}
+                busy={deciding}
+                feedCount={feed.length}
+                onChoose={(c, w) => choose(thread.id, c, w)}
+                onShowFeed={showFeed}
+                onWriteNote={writeNote}
+              />
+            </div>
+
+            <div className="mt-3 flex flex-col divide-y divide-border">
               {thread.messages.map((m, i) => (
-                <MailItem
-                  key={m.id}
-                  m={m}
-                  index={i}
-                  open={expanded.has(m.id)}
-                  onToggle={() => setExpanded((s) => {
-                    const n = new Set(s);
-                    if (n.has(m.id)) n.delete(m.id); else n.add(m.id);
-                    return n;
-                  })}
-                  threadId={thread.id}
-                  creator={forCreator}
-                />
+                <div key={m.id} className="flex flex-col">
+                  <MailItem
+                    variant="plain"
+                    m={m}
+                    index={i}
+                    open={expanded.has(m.id)}
+                    onToggle={() => setExpanded((s) => {
+                      const n = new Set(s);
+                      if (n.has(m.id)) n.delete(m.id); else n.add(m.id);
+                      return n;
+                    })}
+                    threadId={thread.id}
+                    creator={forCreator}
+                  />
+                </div>
               ))}
             </div>
 
             {/* Suivi interne avec le manager : avis, questions, changements de statut (jamais envoyés à la marque) */}
-            <div ref={feedRef} className="scroll-mt-2 border-t border-border bg-muted/40 px-4 py-5 sm:px-6">
+            <div ref={feedRef} className="mt-6 scroll-mt-4 rounded-xl border border-border bg-panel/60 p-4 sm:p-5">
               <div className="mb-1 flex items-center gap-2">
                 <History className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="text-[13px] font-semibold text-foreground">{asAgency ? `Suivi avec ${creatorName}` : "Suivi avec ton manager"}</span>
@@ -672,10 +747,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
                   ? `Ses avis, ses questions, tes remarques et chaque changement de statut, avec la date. ${creatorName} voit tout ce suivi ; la marque, jamais.`
                   : "Tes avis, tes questions, les remarques et les choix de ton agence. La marque ne voit jamais rien de tout ça."}
               </p>
-              {feed.length > 0 ? (
-                <Feed items={feed} mode={mode} creatorName={creatorName} />
-              ) : null}
-              <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface p-1.5 pl-3.5 focus-within:border-primary">
+              {feed.length > 0 ? <Feed items={feed} mode={mode} creatorName={creatorName} /> : null}
+              <div className="overflow-hidden rounded-xl border border-border bg-surface transition-colors focus-within:border-primary">
                 <textarea
                   ref={noteRef}
                   value={note}
@@ -683,50 +756,54 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submitNote();
                   }}
-                  rows={1}
+                  rows={2}
                   placeholder={asAgency ? `Écrire une remarque à ${creatorName}…` : "Écrire une remarque à mon manager…"}
-                  className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[13px] text-foreground outline-none [field-sizing:content] placeholder:text-faint"
+                  className="block max-h-60 min-h-[72px] w-full resize-none bg-transparent px-4 py-3 text-[13px] leading-relaxed text-foreground outline-none [field-sizing:content] placeholder:text-faint"
                 />
-                <button
-                  type="button"
-                  onClick={() => void submitNote()}
-                  disabled={!note.trim() || sending}
-                  aria-label="Envoyer la remarque"
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
-                >
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </button>
+                <div className="flex items-center gap-3 border-t border-border px-3.5 py-2 text-[12px]">
+                  <span className="min-w-0 flex-1 truncate text-faint">
+                    {asAgency ? (creatorSees ? `${creatorName} la voit dans son espace` : "Sa section Mails n'est pas encore activée") : "Ton manager est prévenu ; la marque ne la voit jamais"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void submitNote()}
+                    disabled={!note.trim() || sending}
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-35"
+                  >
+                    {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Envoyer
+                  </button>
+                </div>
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
+
+      {thread && (
+        <div className="flex h-14 shrink-0 items-center gap-1 border-t border-border px-2 max-sm:hidden sm:px-3">
+          <BarButton icon={MessageSquarePlus} label="Ajouter une remarque" onClick={writeNote} />
+          <BarButton icon={History} label={`Voir le suivi (${feed.length})`} onClick={showFeed} />
+          <span className="flex-1" />
+          <span className="px-3"><StatusDot status={thread.status} by={thread.decidedBy ? authorName(thread.decidedBy, mode, creatorName) : undefined} /></span>
+        </div>
+      )}
     </section>
   ) : (
-    <section className="hidden min-h-0 flex-col items-center justify-center gap-3 px-6 text-center lg:flex">
+    <section className="hidden min-h-0 min-w-0 flex-col items-center justify-center gap-3 px-6 text-center lg:flex">
       <span className="grid h-12 w-12 place-items-center rounded-full bg-muted"><Inbox className="h-5 w-5 text-muted-foreground" /></span>
       <p className="text-[14px] font-medium text-foreground">Aucun échange ouvert</p>
-      <p className="max-w-[280px] text-[13px] text-muted-foreground">Choisis un échange dans la liste pour lire la conversation avec la marque.</p>
+      <p className="max-w-[300px] text-[13px] text-muted-foreground">Choisis un échange dans la liste pour lire la conversation avec la marque.</p>
+      {help && <div className="mt-2 w-full max-w-[460px]">{helpBanner}</div>}
     </section>
   );
 
+  // Messagerie en un seul panneau : barre d'icônes, liste, lecture (hauteur fixe sur ordinateur).
   return (
-    <div className="flex flex-col gap-4">
-      {kpis}
-      {/* Comment les statuts avancent (affiché pour éviter toute confusion). */}
-      <p className="-mt-1 flex items-start gap-2 px-1 text-[12px] leading-relaxed text-muted-foreground">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>
-          {asAgency
-            ? `Ouvre un échange et range-le avec le grand sélecteur : En cours, À vérifier, À valider, Validé ou Refusé. « Ajouter une remarque » lui écrit un mot sur cet échange. ${creatorName} voit tout dans son espace et donne son avis ; chaque changement (qui, quand, son mot) est gardé dans le suivi.`
-            : "Ouvre un échange et range-le dans « En cours », « Validé » ou « Refusé » pour donner ton avis. Avec « Ajouter une remarque », écris à ton manager quand tu veux. Il est prévenu ; ses remarques et tout l'historique sont dans le suivi de l'échange."}
-        </span>
-      </p>
-      {/* Messagerie : liste + lecture dans un seul panneau (hauteur fixe sur ordinateur, défilement interne). */}
-      <DashPanel className="flex min-w-0 flex-col lg:grid lg:h-[min(860px,calc(100dvh-260px))] lg:min-h-[560px] lg:grid-cols-[minmax(300px,370px)_minmax(0,1fr)]">
-        {list}
-        {view}
-      </DashPanel>
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-surface lg:grid lg:h-[min(900px,calc(100dvh-150px))] lg:min-h-[560px] lg:grid-cols-[64px_minmax(260px,300px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[64px_minmax(280px,320px)_minmax(0,1fr)] 2xl:grid-cols-[64px_minmax(300px,350px)_minmax(0,1fr)]">
+      {rail}
+      {pills}
+      {list}
+      {view}
     </div>
   );
 }

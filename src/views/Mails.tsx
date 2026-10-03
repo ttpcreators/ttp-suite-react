@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui/action-menu";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
+import { BarButton, RailButton, SearchField, Tip, ToolButton, mailRowCls, pillCls } from "@/components/mail-shell";
 import { saveBase64, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
 import { toast } from "@/components/ui/toast";
 import { parseTouches, nextKind, touchId, type Touch } from "@/lib/touches";
@@ -117,85 +118,6 @@ function BoxSquare({ box, className }: { box: "all" | MailBox; className?: strin
     );
   }
   return <span aria-hidden className={cn("size-3.5 shrink-0 rounded-[4px]", BOX_STYLE[box].dot, className)} />;
-}
-
-/** Bulle au survol, à droite d'un bouton de la barre d'icônes. */
-function Tip({ children }: { children: ReactNode }) {
-  return (
-    <span role="tooltip" className="pointer-events-none absolute left-full top-1/2 z-30 ml-2.5 -translate-y-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[11px] font-medium text-background opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
-      {children}
-    </span>
-  );
-}
-
-/** Bouton de la barre d'icônes : trait à gauche quand c'est le dossier affiché. */
-function RailButton({ label, active, bar = true, badge, onClick, children }: {
-  label: string; active?: boolean; bar?: boolean; badge?: number | null; onClick: () => void; children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      aria-pressed={active}
-      className={cn(
-        "group relative grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-colors",
-        active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
-        active && !bar && "ring-1 ring-border",
-      )}
-    >
-      {active && bar && <span aria-hidden className="absolute -left-3 bottom-2 top-2 w-[3px] rounded-r-full bg-foreground" />}
-      {children}
-      {badge ? (
-        <span className="absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-foreground px-1 text-center text-[10px] font-semibold leading-[18px] tabular-nums text-background ring-2 ring-surface">
-          {badge > 99 ? "99+" : badge}
-        </span>
-      ) : null}
-      <Tip>{label}</Tip>
-    </button>
-  );
-}
-
-/** Bouton icône des barres du lecteur. */
-function ToolButton({ icon: Icon, label, onClick, disabled, busy, spin, danger, className }: {
-  icon: LucideIcon; label: string; onClick: () => void; disabled?: boolean; busy?: boolean; spin?: boolean; danger?: boolean; className?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-      aria-label={label}
-      className={cn(
-        "grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:pointer-events-none disabled:opacity-35",
-        danger && "hover:bg-red-500/[0.08] hover:text-red-600 dark:hover:text-red-400",
-        className,
-      )}
-    >
-      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className={cn("h-[17px] w-[17px]", spin && "animate-spin")} />}
-    </button>
-  );
-}
-
-/** Bouton avec texte de la barre du bas (Répondre, Transférer…). */
-function BarButton({ icon: Icon, label, onClick, disabled, busy, danger }: {
-  icon: LucideIcon; label: string; onClick: () => void; disabled?: boolean; busy?: boolean; danger?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50",
-        danger && "hover:bg-red-500/[0.08] hover:text-red-600 dark:hover:text-red-400",
-      )}
-    >
-      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
-      {label}
-    </button>
-  );
 }
 
 /** supabase-js met le corps JSON des réponses non-2xx dans error.context. */
@@ -595,8 +517,6 @@ export function Mails() {
 
   const boxMeta = BOXES.find((b) => b.id === box) ?? BOXES[0];
   const listCls = "flex min-h-0 min-w-0 flex-col bg-panel lg:border-r lg:border-border";
-  const rowCls = (on: boolean) =>
-    cn("flex w-full gap-3 px-4 text-left transition-colors sm:px-5", on ? "bg-surface dark:bg-white/[0.07]" : "hover:bg-surface/60 dark:hover:bg-white/[0.04]");
   const listHead = (title: string, meta: ReactNode, right?: ReactNode) => (
     <div className="px-4 pt-4 sm:px-5 sm:pt-5">
       <div className="flex items-center gap-2">
@@ -604,17 +524,6 @@ export function Mails() {
         {right}
       </div>
       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">{meta}</p>
-    </div>
-  );
-  const searchField = (value: string, onChange: (v: string) => void, placeholder: string) => (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="h-9 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
-      />
     </div>
   );
   const listNote = (text: string) => (
@@ -660,17 +569,16 @@ export function Mails() {
   );
 
   // ── Même barre, en ligne (téléphone, tablette) ──────────────────────────
-  const pill = "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-semibold transition-colors";
   const mobileNav = (
     <nav aria-label="Dossiers et boîtes" className="flex gap-1.5 overflow-x-auto border-b border-border p-2 [scrollbar-width:none] lg:hidden">
-      <button type="button" onClick={() => setNewMailOpen(true)} className={cn(pill, "bg-primary px-3 text-primary-foreground hover:opacity-90")}>
+      <button type="button" onClick={() => setNewMailOpen(true)} className={cn(pillCls, "bg-primary px-3 text-primary-foreground hover:opacity-90")}>
         <PenLine className="h-3.5 w-3.5" /> Nouveau
       </button>
       {MODES.map((m) => {
         const on = mode === m.id;
         return (
           <button key={m.id} type="button" onClick={() => goMode(m.id)} aria-pressed={on}
-            className={cn(pill, on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+            className={cn(pillCls, on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
             <m.icon className="h-3.5 w-3.5" /> {m.short}
             {m.id === "inbox" && unread ? <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{unread}</span> : null}
           </button>
@@ -681,7 +589,7 @@ export function Mails() {
         const on = box === b.id;
         return (
           <button key={b.id} type="button" onClick={() => setBox(b.id)} aria-pressed={on} title={b.hint}
-            className={cn(pill, on ? "bg-muted text-foreground ring-1 ring-border" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+            className={cn(pillCls, on ? "bg-muted text-foreground ring-1 ring-border" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
             <BoxSquare box={b.id} className="size-3 rounded-[3px]" /> {b.short}
           </button>
         );
@@ -708,7 +616,7 @@ export function Mails() {
         </>,
         <ToolButton icon={RefreshCw} label="Actualiser" spin={inboxBusy} disabled={inboxBusy} onClick={() => setInboxTick((n) => n + 1)} />,
       )}
-      <div className="px-4 pb-3 pt-3 sm:px-5">{searchField(inboxQuery, setInboxQuery, "Rechercher dans ces mails…")}</div>
+      <div className="px-4 pb-3 pt-3 sm:px-5"><SearchField value={inboxQuery} onChange={setInboxQuery} placeholder="Rechercher dans ces mails…" /></div>
       <div className="min-h-0 flex-1 overflow-y-auto border-t border-border">
         {inboxBusy && !inbox?.length ? (
           <div className="flex items-center justify-center gap-2 px-5 py-12 text-[13px] text-muted-foreground">
@@ -730,7 +638,7 @@ export function Mails() {
                     type="button"
                     aria-current={on || undefined}
                     onClick={() => void openThread({ threadId: t.threadId, subject: t.subject, box: t.box, contact: t.email, name: t.name })}
-                    className={cn(rowCls(on), "py-4")}
+                    className={cn(mailRowCls(on), "py-4")}
                   >
                     <Initial name={prettyName(t.name)} email={t.email} size="md" />
                     <span className="min-w-0 flex-1">
@@ -767,7 +675,7 @@ export function Mails() {
     <section className={cn(listCls, readerOpen && "max-lg:hidden")}>
       {listHead("Contacts", `${filtered.length} contact${filtered.length > 1 ? "s" : ""} avec e-mail`)}
       <div className="flex flex-col gap-2.5 px-4 pb-3 pt-3 sm:px-5">
-        {searchField(query, setQuery, "Rechercher un contact…")}
+        <SearchField value={query} onChange={setQuery} placeholder="Rechercher un contact…" />
         {/* Filtre « déjà échangé » (basé sur le suivi de contact) */}
         <Tabs
           size="sm"
@@ -806,7 +714,7 @@ export function Mails() {
                   type="button"
                   aria-current={selected?.id === c.id || undefined}
                   onClick={() => { setSelected(c); setThread(null); }}
-                  className={cn(rowCls(selected?.id === c.id), "items-center py-3.5")}
+                  className={cn(mailRowCls(selected?.id === c.id), "items-center py-3.5")}
                 >
                   <Initial name={c.brand || c.label} email={c.email} />
                   <span className="min-w-0 flex-1">
