@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
 import { useMyName } from "@/lib/useMyName";
 import { toast } from "@/components/ui/toast";
+import { downscaleImage } from "@/components/ui/image-field";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -51,21 +52,34 @@ export function AgencyAvatar({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
+    if (!file.type.startsWith("image/") && !/\.(heic|heif)$/i.test(file.name)) {
       toast("Choisis une image");
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast("Image trop lourde (max 5 Mo)");
+    if (file.size > 25 * 1024 * 1024) {
+      toast("Image trop lourde (max 25 Mo)");
       return;
     }
     setBusy(true);
-    const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    // Photo réduite en JPEG 800 px (photos d'iPhone lourdes ou en HEIC) ; repli : le fichier tel quel.
+    let blob: Blob = file;
+    let ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    let contentType = file.type || "image/jpeg";
+    try {
+      blob = await downscaleImage(file, 800, "image/jpeg", 0.88);
+      ext = "jpg";
+      contentType = "image/jpeg";
+    } catch {
+      /* fichier d'origine */
+    }
     const path = `${userId ? `user/${userId}` : "agency"}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: true, cacheControl: "3600", contentType: file.type });
+    // Chemin horodaté = toujours unique → INSERT pur (upsert:false) : « remplacer »
+    // (upsert) exige un droit de lecture que le bucket n'accorde pas, d'où l'échec.
+    const { error } = await supabase.storage.from("avatars").upload(path, blob, { upsert: false, cacheControl: "3600", contentType });
     if (error) {
       setBusy(false);
-      toast("Échec de l'upload — réessaie");
+      console.warn("[avatar agence] upload", error);
+      toast(`Échec de l'upload : ${(error.message || "réessaie").slice(0, 80)}`);
       return;
     }
     const { data } = supabase.storage.from("avatars").getPublicUrl(path);
