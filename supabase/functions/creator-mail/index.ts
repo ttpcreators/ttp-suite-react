@@ -238,13 +238,16 @@ const autoStatus = (msgs: GMessage[]) => (msgs.slice(1).some(fromAgency) ? "nego
 
 type ThreadRow = { thread_id: string; status: string; brand: string | null; decided_by?: string | null; decided_at?: string | null };
 /**
- * Statut affiché : la DÉCISION enregistrée (Validé / Refusé, par la créatrice ou
- * l'agence) l'emporte ; sinon statut automatique (Nouvelle demande / En négociation).
+ * Statut affiché : le statut ENREGISTRÉ (Validé / Refusé par la créatrice ou l'agence,
+ * À vérifier / À valider par l'agence) l'emporte ; sinon statut automatique
+ * (Nouvelle demande / En négociation).
  */
+/** Statuts posés à la main (créatrice ou agence) ; les autres sont calculés depuis Gmail. */
+const STORED = ["a_verifier", "a_valider", "valide", "refuse"];
 const effectiveStatus = (row: ThreadRow | null | undefined, msgs: GMessage[]) =>
-  row && (row.status === "valide" || row.status === "refuse") ? row.status : autoStatus(msgs);
+  row && STORED.includes(row.status) ? row.status : autoStatus(msgs);
 const decisionOf = (row: ThreadRow | null | undefined) =>
-  row && (row.status === "valide" || row.status === "refuse")
+  row && STORED.includes(row.status)
     ? { decidedBy: row.decided_by ?? "agency", decidedAt: row.decided_at ?? null }
     : { decidedBy: null, decidedAt: null };
 
