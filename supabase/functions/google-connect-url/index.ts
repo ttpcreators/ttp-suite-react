@@ -22,6 +22,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/calendar.events", // agenda (invitations datées)
   "https://www.googleapis.com/auth/gmail.send", // envoyer depuis ta vraie boîte (séquences/relances)
   "https://www.googleapis.com/auth/gmail.readonly", // lire les fils : historique + détection des réponses
+  "https://www.googleapis.com/auth/gmail.modify", // mettre un mail à la corbeille depuis l'app (jamais de suppression définitive)
 ].join(" ");
 
 function getAllowedOrigins(): string[] {

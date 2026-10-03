@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
-import { Mail, ArrowDownLeft, ArrowUpRight, ArrowLeft, Inbox, Search, Loader2, PenLine, Reply, Forward, Settings2, RefreshCw, Send, MessageSquareText } from "lucide-react";
+import { Mail, ArrowDownLeft, ArrowUpRight, ArrowLeft, Inbox, Search, Loader2, PenLine, Reply, Forward, Settings2, RefreshCw, Send, MessageSquareText, Trash2, Undo2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/action-menu";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { DashPanel } from "@/components/ui/dash";
@@ -296,6 +297,51 @@ export function Mails() {
     setThreadBusy(false);
   };
 
+  // Supprimer = corbeille Gmail (récupérable 30 jours), jamais de suppression définitive.
+  const [trashAsk, setTrashAsk] = useState(false);
+  const [trashBusy, setTrashBusy] = useState(false);
+  const [trashed, setTrashed] = useState<{ threadId: string; box: MailBox; subject: string } | null>(null);
+  useEffect(() => {
+    if (!trashed) return;
+    const t = window.setTimeout(() => setTrashed(null), 10_000);
+    return () => window.clearTimeout(t);
+  }, [trashed]);
+  const trashErrorText = (code?: string, b?: MailBox) =>
+    code === "gmail_scope_manquant" || code === "talent_droit_manquant"
+      ? b === "talent"
+        ? "Suppression depuis talent@ pas encore autorisée (admin.google.com, droit gmail.modify)."
+        : "Reconnecte Google (Planning → Google Agenda) pour autoriser la suppression."
+      : code === "introuvable" ? "Mail introuvable (déjà supprimé ?)" : "Suppression impossible, réessaie";
+  const trashThread = async () => {
+    if (!thread || trashBusy) return;
+    const t = thread;
+    setTrashBusy(true);
+    const res = await invokeJson<{ ok?: boolean; error?: string }>("gmail-trash", { threadId: t.threadId, box: t.box });
+    setTrashBusy(false);
+    setTrashAsk(false);
+    if (!res?.ok) {
+      toast(trashErrorText(res?.error, t.box));
+      return;
+    }
+    // Retiré tout de suite des listes affichées ; « Annuler » pendant 10 s.
+    setInbox((l) => l?.filter((x) => x.threadId !== t.threadId) ?? l);
+    setHistory((l) => l?.filter((x) => x.threadId !== t.threadId) ?? l);
+    setThread(null);
+    setTrashed({ threadId: t.threadId, box: t.box, subject: t.subject });
+  };
+  const untrash = async () => {
+    if (!trashed) return;
+    const t = trashed;
+    setTrashed(null);
+    const res = await invokeJson<{ ok?: boolean; error?: string }>("gmail-trash", { threadId: t.threadId, box: t.box, undo: true });
+    if (!res?.ok) {
+      toast(trashErrorText(res?.error, t.box));
+      return;
+    }
+    toast("Mail restauré ✓");
+    setInboxTick((n) => n + 1);
+  };
+
   // Répondre : envoie via Gmail dans le MÊME fil (threadId) → apparaît chez le contact.
   // Répondre : envoie via Gmail dans le MÊME fil (threadId), depuis la boîte du fil.
   // Appelé à l'envoi réel (après le délai d'annulation de ReplyBox).
@@ -569,6 +615,18 @@ export function Mails() {
                   <Forward className="h-4 w-4" /> <span className="max-sm:hidden">Transférer</span>
                 </button>
               )}
+              {readerMsgs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTrashAsk(true)}
+                  disabled={trashBusy}
+                  title="Mettre à la corbeille Gmail"
+                  aria-label="Supprimer ce mail"
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:border-red-500/40 hover:bg-red-500/[0.06] hover:text-red-600 disabled:opacity-60 dark:hover:text-red-400"
+                >
+                  {trashBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} <span className="max-sm:hidden">Supprimer</span>
+                </button>
+              )}
             </div>
             {threadBusy ? (
               <div className="flex items-center justify-center gap-2 px-5 py-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Ouverture…</div>
@@ -775,6 +833,28 @@ export function Mails() {
       </div>
       )}
 
+      {trashAsk && thread && (
+        <ConfirmDialog
+          title="Supprimer ce mail ?"
+          message={`« ${thread.subject || "(sans objet)"} » part dans la corbeille de ${BOX_LABEL[thread.box]}, avec toute la conversation. Il y reste 30 jours : tu peux le récupérer dans Gmail.`}
+          confirmLabel={trashBusy ? "Suppression…" : "Supprimer"}
+          danger
+          onConfirm={() => void trashThread()}
+          onCancel={() => setTrashAsk(false)}
+        />
+      )}
+      {trashed && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(10rem+env(safe-area-inset-bottom))] z-[201] flex justify-center px-4 md:bottom-24">
+          <div role="status" className="pointer-events-auto flex w-full max-w-[440px] items-center gap-3 rounded-xl border border-border bg-surface px-4 py-2.5 shadow-lg shadow-black/5">
+            <Trash2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">« {trashed.subject || "(sans objet)"} » mis à la corbeille</span>
+            <button type="button" onClick={() => void untrash()}
+              className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover">
+              <Undo2 className="h-3.5 w-3.5" /> Annuler
+            </button>
+          </div>
+        </div>
+      )}
       <ForwardDialog
         message={forwardMsg}
         subject={thread?.subject ?? ""}

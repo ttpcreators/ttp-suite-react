@@ -78,6 +78,10 @@ verify_jwt = true
 [functions.gmail-thread]
 verify_jwt = true
 
+# gmail-trash : JWT agence requis — met un fil Gmail à la corbeille (ou l'en sort).
+[functions.gmail-trash]
+verify_jwt = true
+
 # gmail-poll : appelé par pg_cron (CRON_SECRET) ou agence (JWT) → verify_jwt=false,
 # auth applicative dans le code (CRON_SECRET OU rôle agence).
 [functions.gmail-poll]

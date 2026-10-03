@@ -5,7 +5,8 @@
 //     prospection, Agenda, envois historiques.
 //   • "talent"       : talent@ via le COMPTE DE SERVICE (délégation de domaine),
 //     secrets GMAIL_SA_KEY + GMAIL_IMPERSONATE. Lecture = gmail.readonly ;
-//     envoi = gmail.send (doit être autorisé dans admin.google.com).
+//     envoi = gmail.send ; corbeille = gmail.modify (chacun doit être autorisé
+//     dans admin.google.com).
 // Les jetons ne quittent jamais le serveur.
 // ============================================================================
 
@@ -17,6 +18,8 @@ export const BOXES: Box[] = ["partnerships", "talent"];
 const SCOPE = {
   read: "https://www.googleapis.com/auth/gmail.readonly",
   send: "https://www.googleapis.com/auth/gmail.send",
+  // Corbeille (gmail-trash). Pas de suppression définitive : celle-ci exigerait le droit complet.
+  modify: "https://www.googleapis.com/auth/gmail.modify",
 } as const;
 
 /** Adresse de la boîte talent@ (compte de service), "" si non configurée. */
@@ -72,8 +75,8 @@ export async function serviceAccountToken(scope: string): Promise<string> {
   return d.access_token;
 }
 
-/** Jeton Gmail pour une boîte, en lecture ou en envoi. */
-export function boxToken(sb: ReturnType<typeof getServiceClient>, box: Box, mode: "read" | "send"): Promise<string> {
+/** Jeton Gmail pour une boîte, en lecture, en envoi ou pour la corbeille. */
+export function boxToken(sb: ReturnType<typeof getServiceClient>, box: Box, mode: "read" | "send" | "modify"): Promise<string> {
   if (box === "talent") return serviceAccountToken(SCOPE[mode]);
   return getAccessToken(sb);
 }
