@@ -450,6 +450,15 @@ export function Mails() {
                   {selected?.label ?? (thread.name || thread.contact)}{threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
                 </p>
               </div>
+              {readerMsgs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setForwardMsg(readerMsgs[readerMsgs.length - 1])}
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
+                >
+                  <Forward className="h-4 w-4" /> <span className="max-sm:hidden">Transférer</span>
+                </button>
+              )}
             </div>
             {threadBusy ? (
               <div className="flex items-center justify-center gap-2 px-5 py-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Ouverture…</div>

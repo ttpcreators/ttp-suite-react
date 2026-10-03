@@ -105,21 +105,37 @@ function MobileMenu({
   onSelect,
 }: {
   items: NavItem[];
-  onSelect: (id: ViewId) => void;
+  onSelect: (id: ViewId, sub?: string) => void;
 }) {
   return (
-    <div className="flex w-[15rem] flex-col gap-0.5">
+    <div className="flex max-h-[60dvh] w-[15rem] flex-col gap-0.5 overflow-y-auto">
       {items.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          onClick={() => onSelect(item.id)}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted"
-        >
-          <item.icon className="h-4 w-4 text-muted-foreground" />
-          <span className="flex-1">{item.label}</span>
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        </button>
+        <div key={item.id}>
+          <button
+            type="button"
+            onClick={() => onSelect(item.id)}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            <item.icon className="h-4 w-4 text-muted-foreground" />
+            <span className="flex-1">{item.label}</span>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </button>
+          {/* Sous-pages (ex. Prospection → Mails), comme dans le menu ordinateur */}
+          {item.children && item.children.length > 0 && (
+            <div className="mb-1 ml-[1.15rem] flex flex-col gap-0.5 border-l border-foreground/10 pl-2.5">
+              {item.children.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => onSelect(item.id, c.id)}
+                  className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       ))}
     </div>
   );
@@ -531,7 +547,7 @@ export default function App() {
     .filter(canSee)
     .map((id) => findItem(id))
     .filter((i): i is NavItem => !!i)
-    .map((i) => ({ id: i.id, label: i.label, icon: i.icon }));
+    .map((i) => ({ id: i.id, label: i.label, icon: i.icon, children: i.children }));
   const navFiltered = NAV.map((f) => ({ ...f, items: f.items.filter((i) => canSee(i.id)) })).filter((f) => f.items.length > 0);
   const mobileFamilies = pinnedNavItems.length
     ? [{ id: "__pins__", label: "Raccourcis", icon: Star, items: pinnedNavItems }, ...navFiltered]
