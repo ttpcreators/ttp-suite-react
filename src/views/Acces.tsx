@@ -10,7 +10,7 @@ import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
-import { ActionMenu, type ActionItem } from "@/components/ui/action-menu";
+import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -28,18 +28,34 @@ type AccessAccount = {
 
 type AgencyAccount = { user_id: string; email: string; agency_role: string; display_name: string | null; last_sign_in_at: string | null };
 
-/** Entrée « Nouveau mot de passe » du menu ⋯ d'un compte (fondateurs). */
-const resetItem = (email: string, onReset: (email: string) => void): ActionItem => ({
-  key: "reset",
-  label: "Nouveau mot de passe",
-  icon: KeyRound,
-  onClick: () => onReset(email),
-  confirm: {
-    title: "Nouveau mot de passe",
-    message: `Créer un nouveau mot de passe pour ${email} ? L'ancien ne marchera plus : tu verras le nouveau une seule fois, pour le transmettre.`,
-    confirmLabel: "Créer",
-  },
-});
+/** Bouton visible « Nouveau mot de passe » d'un compte (fondateurs), avec confirmation. */
+function ResetPasswordButton({ email, onReset }: { email: string; onReset: (email: string) => void }) {
+  const [ask, setAsk] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setAsk(true)}
+        title={`Nouveau mot de passe pour ${email}`}
+        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
+      >
+        <KeyRound className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Nouveau mot de passe</span>
+      </button>
+      {ask && (
+        <ConfirmDialog
+          title="Nouveau mot de passe"
+          message={`Créer un nouveau mot de passe pour ${email} ? L'ancien ne marchera plus : tu verras le nouveau une seule fois, pour le transmettre.`}
+          confirmLabel="Créer"
+          onConfirm={() => {
+            setAsk(false);
+            onReset(email);
+          }}
+          onCancel={() => setAsk(false)}
+        />
+      )}
+    </>
+  );
+}
 
 /**
  * Comptes AGENCE réels, lus dans la base (fonction agency_accounts, fondateurs
@@ -72,7 +88,7 @@ function AgencyAccountsPanel({ onReset }: { onReset: (email: string) => void }) 
             <AnimatedBadge status={a.agency_role === "founder" ? "success" : "neutral"} size="sm">
               {a.agency_role === "founder" ? "Propriétaire" : "Membre"}
             </AnimatedBadge>
-            <ActionMenu items={[resetItem(a.email, onReset)]} />
+            <ResetPasswordButton email={a.email} onReset={onReset} />
           </li>
         ))}
       </ul>
@@ -135,9 +151,9 @@ function AccountRow({ a, onDelete, onReset, photoUrl }: { a: AccessAccount; onDe
 
       <div className="flex shrink-0 items-center gap-2">
         {/* Mot de passe jamais stocké : montré une seule fois (création ou « Nouveau mot de passe »). */}
+        <ResetPasswordButton email={a.email} onReset={onReset} />
         <ActionMenu
           items={[
-            resetItem(a.email, onReset),
             {
               key: "del",
               label: "Retirer de la liste",
