@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, AtSign, Check, CircleHelp, History, Hourglass, Inbox, Info, Loader2, Mail, MessageSquare, RefreshCw, SearchCheck, Send, Settings2, Tag, X,
+  ArrowLeft, AtSign, Check, CircleHelp, History, Hourglass, Inbox, Info, Link2, Loader2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X,
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -9,6 +9,7 @@ import { toast } from "@/components/ui/toast";
 import { DashPanel, DashSectionTitle } from "@/components/ui/dash";
 import { notifyAgency, notifyCreator } from "@/lib/push";
 import { myDisplayName } from "@/lib/team";
+import { SHARED_BOXES, emailOf } from "@/lib/mailAvatar";
 import {
   statusMeta, listMails, getMailThread, sendManagerNote, sendDecision, listGmailLabels, getStatusHistory,
   getThreadNotes, buildFeed, choiceOf, autoStatusOf,
@@ -20,7 +21,7 @@ import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
 /*
  * Section « Mails » (lecture seule) : les échanges de la boîte agence où apparaît
  * l'alias de la créatrice. Trois usages :
- *   - "creator" : la créatrice (lecture, son avis, « Écrire à mon manager ») ;
+ *   - "creator" : la créatrice (lecture, son avis, ses remarques à son manager) ;
  *   - "agency"  : fiche créatrice côté agence (statut + lecture du suivi) ;
  *   - "preview" : l'agence regarde l'espace créateur (un choix y est noté au nom de l'agence).
  * Le filtrage est fait par le serveur (fonction creator-mail) : ce composant ne
@@ -104,11 +105,13 @@ const PUSH_VERB: Record<"encours" | "valide" | "refuse", string> = { encours: "a
  * un mot facultatif, puis le choix est enregistré et noté dans le suivi.
  */
 function StatusPanel({
-  thread, mode, creatorName, creatorSees, busy, feedCount, onChoose, onShowFeed,
+  thread, mode, creatorName, creatorSees, busy, feedCount, onChoose, onShowFeed, onWriteNote,
 }: {
   thread: MailThread; mode: Mode; creatorName: string; creatorSees: boolean; busy: boolean; feedCount: number;
   onChoose: (choice: MailChoice, comment: string) => Promise<boolean>;
   onShowFeed: () => void;
+  /** Descend jusqu'au champ « Écrire une remarque » (sous les mails) et le sélectionne. */
+  onWriteNote: () => void;
 }) {
   const real = choiceOf(thread.status);
   // Créatrice : trois cases ; un statut posé par l'agence (« À valider »…) s'affiche
@@ -145,9 +148,13 @@ function StatusPanel({
         {feedCount > 0 && (
           <button type="button" onClick={onShowFeed}
             className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline">
-            <History className="h-3.5 w-3.5" /> Voir le suivi ({feedCount})
+            <History className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Voir le suivi</span><span className="sm:hidden">Suivi</span> ({feedCount})
           </button>
         )}
+        <button type="button" onClick={onWriteNote}
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover">
+          <MessageSquarePlus className="h-3.5 w-3.5" /> Ajouter une remarque
+        </button>
       </div>
 
       {flagged && (
@@ -315,6 +322,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   // Suivi écrit (messages de la créatrice + remarques de l'agence), lu directement.
   const [threadNotes, setThreadNotes] = useState<{ id: string; list: MailNote[] } | null>(null);
   const feedRef = useRef<HTMLDivElement | null>(null);
+  const noteRef = useRef<HTMLTextAreaElement | null>(null);
   const initialRef = useRef(initialThreadId ?? null);
 
   const load = useCallback(async () => {
@@ -457,7 +465,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         const n = await sendManagerNote(thread.id, body);
         addNote(thread.id, { ...n, by_role: "creator" });
         notifyAgency("mail", creator, `${what} : ${body}`);
-        toast("Message envoyé à ton manager ✓");
+        toast("Remarque envoyée à ton manager ✓");
       } else {
         // Remarque de l'agence : visible par la créatrice dans le suivi de l'échange.
         const { data: auth } = await supabase.auth.getSession();
@@ -579,7 +587,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
                     <span className="mt-1 flex min-w-0 items-center gap-3">
                       <StatusDot status={t.status} by={t.decidedBy ? authorName(t.decidedBy, mode, creatorName) : undefined} />
                       {t.notes > 0 && (
-                        <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground" title="Messages au manager">
+                        <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground" title="Remarques">
                           <MessageSquare className="h-3 w-3" />{t.notes}
                         </span>
                       )}
@@ -621,6 +629,10 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           feedCount={feed.length}
           onChoose={(c, w) => choose(thread.id, c, w)}
           onShowFeed={() => feedRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+          onWriteNote={() => {
+            noteRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+            noteRef.current?.focus({ preventScroll: true });
+          }}
         />
       )}
 
@@ -665,20 +677,21 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
               ) : null}
               <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface p-1.5 pl-3.5 focus-within:border-primary">
                 <textarea
+                  ref={noteRef}
                   value={note}
                   onChange={(e) => setNote(e.target.value.slice(0, 4000))}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submitNote();
                   }}
                   rows={1}
-                  placeholder={asAgency ? `Écrire une remarque à ${creatorName}…` : "Écrire à mon manager…"}
+                  placeholder={asAgency ? `Écrire une remarque à ${creatorName}…` : "Écrire une remarque à mon manager…"}
                   className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[13px] text-foreground outline-none [field-sizing:content] placeholder:text-faint"
                 />
                 <button
                   type="button"
                   onClick={() => void submitNote()}
                   disabled={!note.trim() || sending}
-                  aria-label={asAgency ? "Envoyer la remarque" : "Envoyer à mon manager"}
+                  aria-label="Envoyer la remarque"
                   className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
                 >
                   {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -705,8 +718,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
           {asAgency
-            ? `Ouvre un échange et range-le avec le grand sélecteur : En cours, À vérifier, À valider, Validé ou Refusé. Écris-lui une remarque en bas de l'échange. ${creatorName} voit tout dans son espace et donne son avis ; chaque changement (qui, quand, son mot) est gardé dans le suivi.`
-            : "Ouvre un échange et range-le dans « En cours », « Validé » ou « Refusé » pour donner ton avis, avec un mot si tu veux. Ton manager est prévenu ; ses remarques et tout l'historique sont dans le suivi de l'échange."}
+            ? `Ouvre un échange et range-le avec le grand sélecteur : En cours, À vérifier, À valider, Validé ou Refusé. « Ajouter une remarque » lui écrit un mot sur cet échange. ${creatorName} voit tout dans son espace et donne son avis ; chaque changement (qui, quand, son mot) est gardé dans le suivi.`
+            : "Ouvre un échange et range-le dans « En cours », « Validé » ou « Refusé » pour donner ton avis. Avec « Ajouter une remarque », écris à ton manager quand tu veux. Il est prévenu ; ses remarques et tout l'historique sont dans le suivi de l'échange."}
         </span>
       </p>
       {/* Messagerie : liste + lecture dans un seul panneau (hauteur fixe sur ordinateur, défilement interne). */}
@@ -733,8 +746,18 @@ function useMailSettings(creator: string) {
   return { settings: s, reload };
 }
 
-/** Fiche créatrice (agence) : lien alias / libellé + activation, puis la boîte. */
-export function CreatorMailsAgency({ creator, suggestedAlias }: { creator: string; suggestedAlias?: string | null }) {
+/**
+ * Fiche créatrice et page Mails (agence) : lien alias / libellé + activation, puis la
+ * boîte (statuts, remarques).
+ */
+export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, onSaved, className }: {
+  creator: string; suggestedAlias?: string | null;
+  /** Échange à ouvrir directement (lien depuis la page Mails). */
+  initialThreadId?: string;
+  /** Appelé après un changement de réglage (la page Mails relit la liste des créatrices liées). */
+  onSaved?: () => void;
+  className?: string;
+}) {
   const { settings, reload } = useMailSettings(creator);
   const [editing, setEditing] = useState(false);
   const [alias, setAlias] = useState("");
@@ -743,7 +766,9 @@ export function CreatorMailsAgency({ creator, suggestedAlias }: { creator: strin
   const [saving, setSaving] = useState(false);
 
   const openEdit = () => {
-    setAlias(settings?.alias ?? suggestedAlias ?? "");
+    // Une boîte commune (talent@, partnerships@…) n'est jamais proposée comme alias.
+    const suggested = suggestedAlias && !SHARED_BOXES.test(emailOf(suggestedAlias)) ? emailOf(suggestedAlias) : "";
+    setAlias(settings?.alias ?? suggested);
     setLabelId(settings?.label_id ?? "");
     setEditing(true);
     if (!labels) listGmailLabels().then(setLabels).catch(() => setLabels([]));
@@ -767,6 +792,7 @@ export function CreatorMailsAgency({ creator, suggestedAlias }: { creator: strin
       return false;
     }
     await reload();
+    onSaved?.();
     return true;
   };
 
@@ -774,6 +800,11 @@ export function CreatorMailsAgency({ creator, suggestedAlias }: { creator: strin
     const a = alias.trim().toLowerCase();
     if (a && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a)) {
       toast("Alias invalide : il faut une adresse e-mail complète");
+      return;
+    }
+    // Sinon elle verrait TOUS les mails de cette boîte, pas seulement les siens.
+    if (a && SHARED_BOXES.test(a)) {
+      toast("C'est une boîte commune : mets son alias à elle (ex. prenom@ttpcreators.pro)");
       return;
     }
     const lbl = labels?.find((l) => l.id === labelId);
@@ -787,20 +818,32 @@ export function CreatorMailsAgency({ creator, suggestedAlias }: { creator: strin
   const linked = !!(settings?.alias || settings?.label_id);
 
   return (
-    <div className="mt-4 flex flex-col gap-4">
+    <div className={cn("mt-4 flex flex-col gap-4", className)}>
       <DashPanel className="p-5">
         <DashSectionTitle
           icon={Mail}
-          right={!editing && (
+          right={!editing && linked && (
             <button type="button" onClick={openEdit}
               className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-              <Settings2 className="h-3.5 w-3.5" /> {linked ? "Modifier" : "Lier"}
+              <Settings2 className="h-3.5 w-3.5" /> Modifier
             </button>
           )}
         >
           Mails de {titleCase(creator)}
         </DashSectionTitle>
 
+        {!linked && !editing && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-3 text-[13px] text-muted-foreground">
+            <Link2 className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="min-w-0 flex-1">
+              Relie l'adresse mail de {titleCase(creator)} (son alias) pour voir ses échanges ici, les ranger (À vérifier, À valider, Validé, Refusé) et lui écrire des remarques.
+            </span>
+            <button type="button" onClick={openEdit}
+              className="h-8 shrink-0 rounded-lg bg-primary px-3 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+              Relier
+            </button>
+          </div>
+        )}
         {editing ? (
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -830,7 +873,7 @@ export function CreatorMailsAgency({ creator, suggestedAlias }: { creator: strin
               </button>
             </div>
           </div>
-        ) : (
+        ) : linked && (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="flex min-w-0 flex-1 flex-wrap gap-x-5 gap-y-1.5 text-[13px]">
               <span className="flex min-w-0 items-center gap-1.5 text-foreground">
@@ -860,7 +903,7 @@ export function CreatorMailsAgency({ creator, suggestedAlias }: { creator: strin
         )}
       </DashPanel>
 
-      {linked && !editing && <CreatorMailbox creator={creator} mode="agency" creatorSees={!!settings?.enabled} />}
+      {linked && !editing && <CreatorMailbox creator={creator} mode="agency" creatorSees={!!settings?.enabled} initialThreadId={initialThreadId} />}
     </div>
   );
 }

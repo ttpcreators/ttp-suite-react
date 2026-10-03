@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { emailOf, letterColor, resolveAvatar, type Avatar } from "@/lib/mailAvatar";
 
@@ -8,11 +8,13 @@ const SIZES = { sm: "h-8 w-8 text-[12px]", md: "h-9 w-9 text-[13px]", lg: "h-10 
  * Photo de profil d'un expéditeur, comme dans Gmail : photo de la créatrice,
  * logo TTP, photo Gravatar, logo de la marque, sinon lettre en couleur.
  * L'image n'est cherchée qu'une fois la pastille visible à l'écran.
+ * `fallback` remplace la lettre en couleur quand rien n'est trouvé (ex. initiales des Contacts).
  */
 export function MailAvatar({
-  name, email, agency, size = "md", className,
+  name, email, agency, size = "md", className, fallback, fallbackClassName,
 }: {
   name: string; email?: string | null; agency?: boolean; size?: keyof typeof SIZES; className?: string;
+  fallback?: ReactNode; fallbackClassName?: string;
 }) {
   const addr = emailOf(email);
   const ref = useRef<HTMLSpanElement | null>(null);
@@ -65,6 +67,9 @@ export function MailAvatar({
         />
       </span>
     );
+  }
+  if (fallback !== undefined) {
+    return <span ref={ref} aria-hidden className={cn(base, fallbackClassName)}>{fallback}</span>;
   }
   return (
     <span ref={ref} aria-hidden className={cn(base, "font-semibold uppercase text-white")} style={{ backgroundColor: letterColor(addr || label || "?") }}>

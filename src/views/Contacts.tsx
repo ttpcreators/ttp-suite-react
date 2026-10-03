@@ -8,6 +8,7 @@ import { updateTouches, applyTouchChange, type TouchChange } from "@/lib/touches
 import { useAppState, type AppState } from "@/lib/appState";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { cn, initials, titleCase } from "@/lib/utils";
+import { MailAvatar } from "@/components/mail-avatar";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
@@ -972,10 +973,14 @@ export function Contacts() {
               onClick={() => setSelected(row)}
               className="flex cursor-pointer items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-rowhover"
             >
-              {/* Avatar */}
-              <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[9px] bg-panel text-[11px] font-bold text-foreground">
-                {initials(row.person)}
-              </div>
+              {/* Avatar : photo ou logo de la marque (trouvé automatiquement), sinon initiales */}
+              <MailAvatar
+                name={row.person}
+                email={row.email}
+                className="h-[38px] w-[38px] rounded-[9px]"
+                fallback={initials(row.person)}
+                fallbackClassName="bg-panel text-[11px] font-bold text-foreground"
+              />
 
               {/* Marque + person · role */}
               <div className="min-w-0 flex-1">
@@ -1086,9 +1091,13 @@ export function Contacts() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-start gap-3">
-              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-muted text-sm font-bold text-foreground">
-                {initials(selected.person)}
-              </div>
+              <MailAvatar
+                name={selected.person}
+                email={selected.email}
+                className="h-11 w-11 rounded-xl"
+                fallback={initials(selected.person)}
+                fallbackClassName="bg-muted text-sm font-bold text-foreground"
+              />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-base font-semibold">{selected.brand}</div>
                 <div className="truncate text-xs text-faint">

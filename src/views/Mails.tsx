@@ -17,7 +17,7 @@ import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useCreators } from "@/lib/useCreators";
 
 // Espace mails d'une créatrice (statuts, remarques, suivi), chargé seulement à la demande.
-const CreatorMailbox = lazy(() => import("@/views/CreatorMails").then((m) => ({ default: m.CreatorMailbox })));
+const CreatorMailsAgency = lazy(() => import("@/views/CreatorMails").then((m) => ({ default: m.CreatorMailsAgency })));
 
 /**
  * Page « Mails » : historique des échanges Gmail par contact + lecture d'un fil
@@ -95,8 +95,12 @@ export function Mails() {
     }
   });
   // Filtre « Par créatrice » : ses échanges (talent@, son alias) avec statuts et remarques.
+  // Toutes les créatrices du Roster y sont : une créatrice pas encore reliée affiche
+  // de quoi relier son adresse mail.
   const allCreators = useCreators();
   const [linked, setLinked] = useState<{ creator: string; alias: string | null; enabled: boolean }[]>([]);
+  const [linkedTick, setLinkedTick] = useState(0);
+  const [emailPro, setEmailPro] = useState<Map<string, string>>(new Map());
   const [creatorView, setCreatorView] = useState<{ name: string; threadId?: string } | null>(null);
   useEffect(() => {
     let alive = true;
@@ -108,7 +112,28 @@ export function Mails() {
     return () => {
       alive = false;
     };
+  }, [linkedTick]);
+  useEffect(() => {
+    let alive = true;
+    void supabase.from("creators").select("name, email_pro").then(({ data }) => {
+      if (!alive) return;
+      const m = new Map<string, string>();
+      for (const c of (data ?? []) as { name: string; email_pro: string | null }[]) if (c.email_pro) m.set(c.name.trim().toLowerCase(), c.email_pro);
+      setEmailPro(m);
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
+  const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  // Créatrices reliées d'abord, puis le reste du Roster actif.
+  const creatorChoices = useMemo(() => {
+    const names = linked.map((l) => l.creator);
+    for (const c of allCreators) {
+      if (c.status !== "inactif" && !names.some((n) => sameName(n, c.name))) names.push(c.name);
+    }
+    return names;
+  }, [linked, allCreators]);
 
   // Choisir une boîte = afficher SA boîte de réception (le contact sélectionné est fermé).
   const setBox = (v: "all" | MailBox) => {
@@ -399,7 +424,7 @@ export function Mails() {
       </div>
 
       {/* Par créatrice : ses échanges, avec statut (À vérifier, À valider…) et remarques qu'elle voit */}
-      {linked.length > 0 && (
+      {creatorChoices.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="text-[12px] font-medium text-muted-foreground">Par créatrice</span>
           <Tabs
@@ -410,13 +435,13 @@ export function Mails() {
             onValueChange={(v) => setCreatorView(v ? { name: v } : null)}
             items={[
               { value: "", label: "Toutes" },
-              ...linked.map((l) => ({
-                value: l.creator,
-                label: titleCase(l.creator),
+              ...creatorChoices.map((n) => ({
+                value: n,
+                label: titleCase(n),
                 icon: (
                   <CreatorAvatar
-                    name={l.creator}
-                    photoUrl={allCreators.find((c) => c.name.trim().toLowerCase() === l.creator.trim().toLowerCase())?.photo_url ?? null}
+                    name={n}
+                    photoUrl={allCreators.find((c) => sameName(c.name, n))?.photo_url ?? null}
                     className="h-4 w-4 rounded-full text-[7px]"
                   />
                 ),
@@ -428,12 +453,13 @@ export function Mails() {
 
       {creatorView ? (
         <Suspense fallback={<DashPanel className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Chargement…</DashPanel>}>
-          <CreatorMailbox
+          <CreatorMailsAgency
             key={`${creatorView.name}-${creatorView.threadId ?? ""}`}
             creator={creatorView.name}
-            mode="agency"
-            creatorSees={!!linked.find((l) => l.creator === creatorView.name)?.enabled}
+            suggestedAlias={emailPro.get(creatorView.name.trim().toLowerCase()) ?? null}
             initialThreadId={creatorView.threadId}
+            onSaved={() => setLinkedTick((n) => n + 1)}
+            className="mt-0"
           />
         </Suspense>
       ) : (
