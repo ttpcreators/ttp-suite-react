@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronRight, Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus, LogOut, Pin, PinOff, Star } from "lucide-react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
+import { ChevronRight, Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus, LogOut, Pin, PinOff, Star, House, CircleEllipsis, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { restoreTabs, navigateTab, addTab, closeTab as closeTabState } from "@/lib/tabs";
 import type { Session } from "@supabase/supabase-js";
@@ -24,6 +24,9 @@ import { supabase } from "@/lib/supabase";
 import { SearchContext } from "@/lib/search";
 import { ThemeContext } from "@/lib/theme";
 import { AgencyAvatar, MyName } from "@/components/ui/agency-avatar";
+import { useIosUi, useIsPhone } from "@/lib/iosUi";
+import { IosBackButton, IosBarIcon, IosNavBar, IosTabBar, type IosTab } from "@/components/mobile/ios-shell";
+import { MoreScreen } from "@/components/mobile/more-screen";
 
 // Vues chargées à la demande (code-splitting → démarrage plus léger, mobile compris).
 const RosterTabs = lazy(() => import("@/views/RosterTabs").then((m) => ({ default: m.RosterTabs })));
@@ -303,6 +306,8 @@ export default function App() {
   // toujours en clair au rechargement). Classe déjà posée par initAccent().
   const [dark, setDark] = useState(() => getThemePref());
   const [mobileTab, setMobileTab] = useState<string | null>(null);
+  // Mode iPhone : écran « Plus » ou « Rechercher » affiché par-dessus la page courante.
+  const [phoneScreen, setPhoneScreen] = useState<null | "more" | "search">(null);
   const [query, setQuery] = useState("");
   const [detailCreator, setDetailCreator] = useState<string | null>(null);
   // Cache keep-alive : les vues déjà visitées restent MONTÉES (masquées) pour
@@ -482,6 +487,7 @@ export default function App() {
     navigateCurrentTab(id);
     setSub(subId ?? null); // sous-page ciblée (ou reset si nav normale)
     setMobileTab(null);
+    setPhoneScreen(null);
     setQuery("");
     setDetailCreator(null);
     setSpace("agency");
@@ -520,7 +526,10 @@ export default function App() {
   };
   const toggleTheme = () => setDark((d) => !d);
   const logout = () => supabase.auth.signOut();
-  const openDetail = (name: string) => setDetailCreator(name);
+  const openDetail = (name: string) => {
+    setDetailCreator(name);
+    setPhoneScreen(null);
+  };
   // Navigation depuis la recherche globale : garde la requête pour que la vue
   // cible filtre dessus (contrairement à `select` qui remet à zéro).
   const gotoSearch = (id: ViewId) => {
@@ -528,6 +537,7 @@ export default function App() {
     setDetailCreator(null);
     setSpace("agency");
     setMobileTab(null);
+    setPhoneScreen(null);
   };
   const openPortal = (name: string) => {
     setPortalCreator(name);
@@ -567,6 +577,49 @@ export default function App() {
 
   const { items: notifs, dismiss: dismissNotifs } = useNotifications();
   const title = viewTitle(active);
+
+  // ── Mode iPhone (bêta, téléphone seulement) ──
+  const iosOn = useIosUi();
+  const isPhone = useIsPhone();
+  const iosPhone = iosOn && isPhone;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Onglets du bas : Accueil + 3 pages (les Raccourcis d'abord, sinon les plus utiles) + Plus.
+  const tabIds = [...new Set<ViewId>([
+    "apercu",
+    ...pinned.filter((id) => canSee(id) && !!findPinnable(id)),
+    ...(["contacts", "roster", "planning", "mails", "todo"] as ViewId[]).filter(canSee),
+  ])].slice(0, 4);
+  const iosTabs: IosTab[] = [
+    ...tabIds.map((id) => ({ id, label: id === "apercu" ? "Accueil" : findPinnable(id)?.label ?? viewTitle(id), icon: id === "apercu" ? House : findPinnable(id)?.icon ?? Star })),
+    { id: "__more", label: "Plus", icon: CircleEllipsis },
+  ];
+  const iosActive = phoneScreen === "more" ? "__more" : phoneScreen === "search" ? "" : tabIds.includes(active) ? active : "__more";
+  // Chaque écran garde sa position de défilement, comme les onglets d'une app iOS.
+  const screenKey = phoneScreen ?? (detailCreator ? `d:${detailCreator}` : active);
+  const scrollMem = useRef(new Map<string, number>());
+  const lastScroll = useRef(0);
+  const prevScreen = useRef(screenKey);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!iosPhone || !el || prevScreen.current === screenKey) return;
+    scrollMem.current.set(prevScreen.current, lastScroll.current);
+    prevScreen.current = screenKey;
+    const y = scrollMem.current.get(screenKey) ?? 0;
+    el.scrollTop = y;
+    lastScroll.current = y;
+    if (!y) return;
+    // La page peut finir de charger après coup : on reprend la position une fois.
+    const t = window.setTimeout(() => { el.scrollTop = y; }, 250);
+    return () => window.clearTimeout(t);
+  }, [screenKey, iosPhone]);
+  const scrollTop = () => scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+
+  // Pastille sur l'icône de l'app (écran d'accueil iPhone) : nombre de notifications.
+  useEffect(() => {
+    const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+    if (!nav.setAppBadge) return;
+    (notifs.length ? nav.setAppBadge(notifs.length) : nav.clearAppBadge?.())?.catch(() => {});
+  }, [notifs.length]);
 
   if (session === undefined) {
     return (
@@ -746,7 +799,8 @@ export default function App() {
   const primaryTitle = detailCreator ?? (canSee(active) ? title : "Accès réservé");
   const showPrimaryH1 = !detailCreator && active !== "apercu";
   // Multi-pages actif dès qu'il y a ≥ 2 onglets ou un volet latéral.
-  const multi = tabs.length > 1 || splitShown != null;
+  // (Mode iPhone : toujours une seule page à la fois, comme une app.)
+  const multi = !iosPhone && (tabs.length > 1 || splitShown != null);
   // Overlay = fiche créateur (rendue PAR-DESSUS les vues nav, qui restent montées
   // en dessous pour ne pas perdre leur état).
   const overlayActive = !!detailCreator;
@@ -758,8 +812,8 @@ export default function App() {
     <ThemeContext.Provider value={{ dark, toggle: toggleTheme }}>
     <SearchContext.Provider value={{ query, setQuery }}>
     <NavSubSetContext.Provider value={setSub}>
-      <div className="h-[100dvh] bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]">
-        <div className="flex h-full overflow-hidden rounded-[22px]">
+      <div className={iosPhone ? "h-[100dvh] bg-panel" : "h-[100dvh] bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
+        <div className={cn("flex h-full overflow-hidden", !iosPhone && "rounded-[22px]")}>
           {/* Desktop sidebar */}
           <div className="hidden h-full md:block">
             <Sidebar
@@ -781,15 +835,67 @@ export default function App() {
           </div>
 
           {/* Main panel */}
-          <div className="shell-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] bg-panel">
+          <div className={cn("shell-panel flex min-w-0 flex-1 flex-col overflow-hidden bg-panel", !iosPhone && "rounded-[22px]")}>
             {!multi ? (
               /* Une seule page : mise en page d'origine (l'en-tête défile avec le contenu). */
-              <div className="flex-1 overflow-y-auto pb-28 md:pb-7">
-                {topBar}
-                <main className="px-4 pt-5 md:px-6">
-                  <ErrorBoundary variant="inline" label="Cette page" resetKey={`${space}:${detailCreator ?? ""}:${active}`}>
+              <div
+                ref={scrollRef}
+                onScroll={iosPhone ? (e) => { lastScroll.current = e.currentTarget.scrollTop; } : undefined}
+                className={cn("flex-1 overflow-y-auto md:pb-7", iosPhone ? "pb-[calc(env(safe-area-inset-bottom)+5.5rem)]" : "pb-28")}
+              >
+                {iosPhone ? (
+                  <IosNavBar
+                    scrollRef={scrollRef}
+                    title={phoneScreen === "more" ? "Plus" : phoneScreen === "search" ? "Rechercher" : primaryTitle}
+                    left={
+                      phoneScreen ? null
+                        : detailCreator ? <IosBackButton label={title} onClick={() => setDetailCreator(null)} />
+                        : !tabIds.includes(active) ? <IosBackButton label="Plus" onClick={() => setPhoneScreen("more")} />
+                        : null
+                    }
+                    right={
+                      phoneScreen === "search" ? (
+                        <button type="button" onClick={() => { setPhoneScreen(null); setQuery(""); }} className="h-11 px-3 text-[17px] text-primary">Annuler</button>
+                      ) : (
+                        <>
+                          <IosBarIcon icon={Search} label="Rechercher" onClick={() => setPhoneScreen("search")} />
+                          <Notifications items={notifs} onDismiss={dismissNotifs} variant="bar" />
+                        </>
+                      )
+                    }
+                  />
+                ) : (
+                  topBar
+                )}
+                <main className={cn("px-4 md:px-6", iosPhone ? "pt-1" : "pt-5")}>
+                  <ErrorBoundary variant="inline" label="Cette page" resetKey={`${space}:${detailCreator ?? ""}:${active}:${phoneScreen ?? ""}`}>
                     <Suspense fallback={PANE_FALLBACK}>
-                      {showPrimaryH1 ? <PageFrame title={title}>{mainInner}</PageFrame> : mainInner}
+                      {iosPhone && phoneScreen === "more" ? (
+                        <PageFrame title="Plus">
+                          <MoreScreen
+                            profile={{
+                              avatar: <AgencyAvatar userId={session.user.id} readOnly className="h-[54px] w-[54px]" rounded="rounded-full" />,
+                              name: <MyName userId={session.user.id} fallback="Marc & Gianni" />,
+                              sub: isFounder ? "Direction · TTP" : "Équipe · TTP",
+                              onClick: () => select("parametres"),
+                            }}
+                            pinned={pinnedNavItems}
+                            sections={navFiltered.map((f) => ({ id: f.id, label: f.label, items: f.items }))}
+                            onSelect={(id, subId) => select(id as ViewId, subId)}
+                            dark={dark}
+                            onToggleTheme={toggleTheme}
+                            onExit={logout}
+                          />
+                        </PageFrame>
+                      ) : iosPhone && phoneScreen === "search" ? (
+                        <PageFrame title="Rechercher">
+                          <GlobalSearch inline autoFocus query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={hiddenIds} />
+                        </PageFrame>
+                      ) : showPrimaryH1 ? (
+                        <PageFrame title={title}>{mainInner}</PageFrame>
+                      ) : (
+                        mainInner
+                      )}
                     </Suspense>
                   </ErrorBoundary>
                 </main>
@@ -870,8 +976,22 @@ export default function App() {
           </div>
         </div>
 
+        {/* Mode iPhone : barre d'onglets en bas */}
+        {iosPhone && (
+          <IosTabBar
+            items={iosTabs}
+            active={iosActive}
+            onSelect={(id) => (id === "__more" ? setPhoneScreen("more") : select(id as ViewId))}
+            onReselect={(id) => {
+              // Comme iOS : retoucher l'onglet ouvert revient à sa racine, puis en haut.
+              if (id === "__more" && phoneScreen !== "more") setPhoneScreen("more");
+              else if (detailCreator) setDetailCreator(null);
+              else scrollTop();
+            }}
+          />
+        )}
         {/* Mobile bottom nav */}
-        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center md:hidden">
+        <div className={cn("pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center md:hidden", iosPhone && "hidden")}>
           <div className="pointer-events-auto">
             <ExpandableTabs
               items={mobileItems}

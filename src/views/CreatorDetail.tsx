@@ -474,7 +474,7 @@ export function CreatorDetail({
       <button
         type="button"
         onClick={onBack}
-        className="mb-5 inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface pl-2.5 pr-3.5 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
+        className="ios-phone-hide mb-5 inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface pl-2.5 pr-3.5 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
       >
         <ArrowLeft className="h-4 w-4" /> Retour au roster
       </button>

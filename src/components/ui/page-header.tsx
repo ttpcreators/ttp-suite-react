@@ -22,7 +22,7 @@ export function PageFrame({ title, children }: { title: ReactNode; children: Rea
   return (
     <>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-        <h1 className="text-[24px] font-semibold tracking-tight md:text-[28px]">{title}</h1>
+        <h1 className="page-title text-[24px] font-semibold tracking-tight md:text-[28px]">{title}</h1>
         {/* Mobile : pleine largeur sous le titre, compteur à gauche / actions à
             droite, et les groupes d'actions passent à la ligne au lieu de déborder.
             ≥ sm : collé à droite du titre. */}

@@ -240,3 +240,62 @@ body {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ── Mode iPhone (bêta) : coque façon app iOS sur téléphone ─────────────────
+   Actif seulement avec la classe `ios-ui` (lib/iosUi.ts) ET sur petit écran. */
+@media (max-width: 767px) {
+  .ios-ui {
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* La page entière ne rebondit plus (seules les listes défilent, comme une app). */
+  .ios-ui body {
+    overscroll-behavior: none;
+  }
+  /* Champs en 16 px : taille de lecture iOS, et iOS ne zoome jamais dessus. */
+  .ios-ui input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  .ios-ui textarea,
+  .ios-ui select {
+    font-size: 16px;
+  }
+  /* Retour au toucher façon iOS : l'élément pâlit pendant l'appui. */
+  .ios-ui :is(button, a, [role="button"], [role="tab"], [role="radio"], summary) {
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
+  }
+  .ios-ui :is(button, a, [role="button"], [role="tab"], [role="radio"], summary):not(:disabled):active {
+    opacity: 0.55;
+    transition: opacity 0s;
+  }
+  /* Barres de l'app (onglets, titre) : pas de sélection de texte au toucher long. */
+  .ios-ui .ios-chrome {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+/* Matière translucide des barres iOS (onglets, titre replié) : fond de page flouté. */
+.ios-bar {
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+.dark:not(.dark-classic) .ios-bar {
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+}
+@media (max-width: 767px) {
+  /* Grand titre iOS (34 pt) en tête de chaque page. */
+  .ios-ui .page-title {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+  }
+  /* Doublons de la barre de titre (ex. « Retour au roster » : la barre a déjà « ‹ Roster »). */
+  .ios-ui .ios-phone-hide {
+    display: none;
+  }
+  /* Pleine largeur : plus de cadre arrondi autour de l'app sur téléphone. */
+  .ios-ui .shell-panel {
+    box-shadow: none;
+  }
+}

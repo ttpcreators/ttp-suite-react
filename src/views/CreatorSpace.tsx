@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { fmtCompact } from "@/lib/timeSeries";
 import {
   LayoutDashboard,
+  CircleEllipsis,
+  House,
   ListChecks,
   Lightbulb,
   FileText,
@@ -72,6 +74,9 @@ import { AgentPlan, type PlanTask } from "@/components/ui/agent-plan";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, type Gift as GiftRow } from "@/lib/gifting";
 import { PageFrame, PageHeaderRow } from "@/components/ui/page-header";
+import { useIosUi, useIsPhone } from "@/lib/iosUi";
+import { IosBackButton, IosNavBar, IosTabBar } from "@/components/mobile/ios-shell";
+import { MoreScreen } from "@/components/mobile/more-screen";
 import { Delta, DashPanel, DashSectionTitle, DashWideLink } from "@/components/ui/dash";
 
 const BASE = import.meta.env.BASE_URL;
@@ -427,6 +432,35 @@ export function CreatorSpace({
     [mailsOn],
   );
   const navTabs = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
+
+  // ── Mode iPhone (bêta, téléphone seulement) : onglets en bas + écran « Plus » ──
+  const iosOn = useIosUi();
+  const isPhone = useIsPhone();
+  const iosPhone = iosOn && isPhone;
+  const [moreOpen, setMoreOpen] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+  const ctabIds: Tab[] = ["accueil", "todo", "briefs", mailsOn ? "mails" : "planning"];
+  const goTab = (t: Tab) => {
+    setMoreOpen(false);
+    setTab(t);
+  };
+  // Chaque onglet garde sa position de défilement (comme une app iOS).
+  const screenKey = moreOpen ? "__more" : tab;
+  const scrollMem = useRef(new Map<string, number>());
+  const lastScroll = useRef(0);
+  const prevScreen = useRef(screenKey);
+  useLayoutEffect(() => {
+    const el = mainRef.current;
+    if (!iosPhone || !el || prevScreen.current === screenKey) return;
+    scrollMem.current.set(prevScreen.current, lastScroll.current);
+    prevScreen.current = screenKey;
+    const y = scrollMem.current.get(screenKey) ?? 0;
+    el.scrollTop = y;
+    lastScroll.current = y;
+    if (!y) return;
+    const t = window.setTimeout(() => { el.scrollTop = y; }, 250);
+    return () => window.clearTimeout(t);
+  }, [screenKey, iosPhone]);
   // Historique d'engagement du créateur — via la fonction serveur creator-history
   // (le blob agence est inaccessible aux créateurs ; le serveur filtre sur SON nom).
   const [suivi, setSuivi] = useState<SuiviEntry[] | null>(null);
@@ -1397,7 +1431,7 @@ export function CreatorSpace({
   );
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]">
+    <div className={iosPhone ? "flex h-[100dvh] flex-col bg-panel" : "flex h-[100dvh] flex-col bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
       {preview && (
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-primary/30 bg-primary/[0.06] px-3 py-2">
           <div className="flex items-center gap-2 text-[12px] font-semibold text-primary">
@@ -1424,7 +1458,7 @@ export function CreatorSpace({
           </div>
         </div>
       )}
-      <div className="flex min-h-0 flex-1 overflow-hidden rounded-[22px]">
+      <div className={cn("flex min-h-0 flex-1 overflow-hidden", !iosPhone && "rounded-[22px]")}>
         {/* Sidebar desktop repliable */}
         {sbCollapsed ? (
           <aside className="hidden w-[68px] shrink-0 flex-col items-center p-2 md:flex">
@@ -1498,10 +1532,22 @@ export function CreatorSpace({
         {/* Cadre arrondi FIXE (comme côté agence) qui contient la zone qui défile : un
             conteneur à la fois arrondi ET défilant laisse Chrome peindre des coins noirs
             quand la page contient des calques animés (badges). */}
-        <div className="shell-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] bg-panel">
-        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto px-4 pb-4 pt-4 [&>*]:shrink-0 md:px-6 md:pb-8 md:pt-6">
+        <div className={cn("shell-panel flex min-w-0 flex-1 flex-col overflow-hidden bg-panel", !iosPhone && "rounded-[22px]")}>
+        <main
+          ref={mainRef}
+          onScroll={iosPhone ? (e) => { lastScroll.current = e.currentTarget.scrollTop; } : undefined}
+          className={cn("flex min-w-0 flex-1 flex-col overflow-y-auto px-4 pb-4 [&>*]:shrink-0 md:px-6 md:pb-8 md:pt-6", iosPhone ? "pt-0" : "pt-4")}
+        >
+          {iosPhone && (
+            <IosNavBar
+              className="-mx-4"
+              scrollRef={mainRef}
+              title={moreOpen ? "Plus" : tab === "accueil" ? "Accueil" : TABS.find((t) => t.id === tab)?.label ?? ""}
+              left={!moreOpen && !ctabIds.includes(tab) ? <IosBackButton label="Plus" onClick={() => setMoreOpen(true)} /> : null}
+            />
+          )}
           {/* Barre du haut (mobile) */}
-          <div className="mb-5 flex items-center justify-between gap-3 md:hidden">
+          <div className={cn("mb-5 flex items-center justify-between gap-3 md:hidden", iosPhone && "hidden")}>
             <div className="flex items-center gap-2.5">
               <div className="h-9 w-9 overflow-hidden rounded-lg bg-[#14181E]">
                 <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
@@ -1521,12 +1567,37 @@ export function CreatorSpace({
             </div>
           </div>
 
+          {iosPhone && moreOpen && (
+            <PageFrame title="Plus">
+              <MoreScreen
+                profile={{
+                  avatar: creator?.photo_url ? (
+                    <img src={creator.photo_url} alt="" className="h-[54px] w-[54px] shrink-0 rounded-full object-cover" />
+                  ) : (
+                    <span className="grid h-[54px] w-[54px] shrink-0 place-items-center rounded-full bg-foreground/[0.08] text-[20px] font-semibold text-foreground">{titleCase(name).charAt(0)}</span>
+                  ),
+                  name: titleCase(name),
+                  sub: preview ? "Vue agence" : "Créatrice TTP",
+                }}
+                sections={navGroups
+                  .map((g) => ({ id: g.id, label: g.label, items: g.items.filter((i) => !ctabIds.includes(i.id)) }))
+                  .filter((g) => g.items.length > 0)}
+                onSelect={(id) => goTab(id as Tab)}
+                dark={dark}
+                onToggleTheme={onToggleTheme}
+                exitLabel={exitTitle}
+                exitIcon={preview ? ArrowLeft : LogOut}
+                onExit={exitAction}
+              />
+            </PageFrame>
+          )}
+          {!(iosPhone && moreOpen) && (<>
           {/* En-tête de l'accueil (langage Aperçu) : salutation selon l'heure + photo.
               Les autres onglets affichent leur propre titre (TabFrame ci-dessous). */}
           {tab === "accueil" && (
             <div className="mb-6 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <h1 className="text-[24px] font-semibold tracking-tight md:text-[28px]">{greetingWord()} {firstName}</h1>
+                <h1 className="page-title text-[24px] font-semibold tracking-tight md:text-[28px]">{greetingWord()} {firstName}</h1>
                 <div className="mt-1 text-[13px] text-muted-foreground">Ton espace TTP Creators</div>
               </div>
               <AvatarUpload
@@ -2942,6 +3013,7 @@ export function CreatorSpace({
           )}
           </TabFrame>
           </ErrorBoundary>
+          </>)}
           {/* Espaceur mobile (plus fiable que le padding bas d'un conteneur flex défilant sur iOS) */}
           <div aria-hidden className="h-[calc(6rem+env(safe-area-inset-bottom))] md:hidden" />
         </main>
@@ -2950,7 +3022,24 @@ export function CreatorSpace({
 
       {/* Nav mobile animée — MÊME composant que l'espace agence (ExpandableTabs).
           On tape une famille → ses pages se déploient en animé. Fixe en bas. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center md:hidden">
+      {iosPhone && (
+        <IosTabBar
+          items={[
+            ...ctabIds.map((id) => {
+              const t = TABS.find((x) => x.id === id);
+              return { id, label: t?.label ?? id, icon: id === "accueil" ? House : t?.icon ?? LayoutDashboard };
+            }),
+            { id: "__more", label: "Plus", icon: CircleEllipsis },
+          ]}
+          active={moreOpen || !ctabIds.includes(tab) ? "__more" : tab}
+          onSelect={(id) => (id === "__more" ? setMoreOpen(true) : goTab(id as Tab))}
+          onReselect={(id) => {
+            if (id === "__more" && !moreOpen) setMoreOpen(true);
+            else mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        />
+      )}
+      <div className={cn("pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center md:hidden", iosPhone && "hidden")}>
         <div className="pointer-events-auto">
           <ExpandableTabs
             items={navGroups.map((g) => ({ id: g.id, label: g.label, icon: g.icon, items: g.items.map((i) => i.id) })).map((f) => ({

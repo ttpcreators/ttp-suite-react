@@ -102,7 +102,10 @@ function PushRow() {
 export function Notifications({
   items = [],
   onDismiss,
+  variant = "default",
 }: {
+  /** « bar » : simple icône pour la barre de titre du mode iPhone. */
+  variant?: "default" | "bar";
   items?: NotificationItem[];
   /** Effacement PERSISTANT (mémorisé côté serveur) — sinon la notif revient au refresh. */
   onDismiss?: (ids: string[]) => void;
@@ -139,11 +142,13 @@ export function Notifications({
         <button
           type="button"
           aria-label="Notifications"
-          className="relative grid h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"
+          className={variant === "bar"
+            ? "relative grid h-11 w-11 place-items-center text-foreground"
+            : "relative grid h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"}
         >
-          <Bell className="h-4 w-4" />
+          <Bell className={variant === "bar" ? "h-[22px] w-[22px]" : "h-4 w-4"} strokeWidth={variant === "bar" ? 1.9 : 2} />
           {notifications.length > 0 && (
-            <span className="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+            <span className={(variant === "bar" ? "absolute right-1 top-1" : "absolute -right-1 -top-1") + " grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground"}>
               {notifications.length}
             </span>
           )}

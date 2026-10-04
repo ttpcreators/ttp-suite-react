@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 import { Users, Contact, ListChecks, Receipt, FileText, Search as SearchIcon, X, Trash2, type LucideIcon } from "lucide-react";
 import { useGlobalSearch, type SearchHit } from "@/lib/useGlobalSearch";
 import { titleCase } from "@/lib/utils";
@@ -44,6 +45,9 @@ export function GlobalSearch({
   onOpenCreator,
   onGoto,
   hidden = [],
+  inline = false,
+  autoFocus = false,
+  className,
 }: {
   query: string;
   setQuery: (q: string) => void;
@@ -51,6 +55,10 @@ export function GlobalSearch({
   onGoto: (id: ViewId) => void;
   /** Pages masquées pour ce profil (ex. Finance / Accès pour un membre). */
   hidden?: ViewId[];
+  /** Résultats affichés sous le champ, dans la page (écran de recherche plein écran sur téléphone). */
+  inline?: boolean;
+  autoFocus?: boolean;
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   // Texte d'aide court sur mobile (le long était tronqué au milieu d'un mot).
@@ -58,7 +66,7 @@ export function GlobalSearch({
   const { hits: rawHits, loading } = useGlobalSearch(query);
   // Résultats menant à une page masquée : retirés (jamais de page fondateur pour un membre).
   const hits = rawHits.filter((h) => { const v = KIND_META[h.kind].view; return !v || !hidden.includes(v); });
-  const show = open && query.trim().length >= 2;
+  const show = (inline || open) && query.trim().length >= 2;
 
   const q = norm(query.trim());
   const pageHits =
@@ -84,9 +92,13 @@ export function GlobalSearch({
   };
 
   return (
-    <div className="relative w-full max-w-[220px] sm:max-w-md md:max-w-xl">
-      {/* Champ contrôlé — langage de l’Aperçu : champ clair bordé, halo discret au focus */}
-      <div className="flex h-10 items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 text-foreground transition-shadow focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-foreground/10">
+    <div className={cn("relative w-full", !inline && "max-w-[220px] sm:max-w-md md:max-w-xl", className)}>
+      {/* Champ contrôlé — langage de l’Aperçu : champ clair bordé, halo discret au focus.
+          Écran plein (téléphone) : champ gris façon iOS. */}
+      <div className={cn(
+        "flex h-10 items-center gap-2.5 rounded-xl px-3.5 text-foreground transition-shadow",
+        inline ? "bg-foreground/[0.06]" : "border border-border bg-surface focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-foreground/10",
+      )}>
         <SearchIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
         <input
           type="text"
@@ -104,7 +116,9 @@ export function GlobalSearch({
               setOpen(false);
             }
           }}
-          placeholder={narrow ? "Rechercher…" : "Rechercher une page, un créateur, une facture…"}
+          autoFocus={autoFocus}
+          enterKeyHint="search"
+          placeholder={narrow && !inline ? "Rechercher…" : "Page, créatrice, contact, facture…"}
           className="h-full min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-faint"
         />
         {query && (
@@ -124,8 +138,11 @@ export function GlobalSearch({
 
       {show && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-[60vh] overflow-y-auto rounded-xl border border-border bg-surface p-1.5 shadow-xl">
+          {!inline && <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />}
+          <div className={cn(
+            "overflow-y-auto rounded-xl border border-border bg-surface p-1.5",
+            inline ? "mt-3" : "absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-[60vh] shadow-xl",
+          )}>
             {loading && hits.length === 0 && pageHits.length === 0 ? (
               <div className="px-3 py-4 text-xs text-muted-foreground">Recherche…</div>
             ) : hits.length === 0 && pageHits.length === 0 ? (

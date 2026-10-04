@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check, MessageCircle, History } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
+import { setIosUi, useIosUi } from "@/lib/iosUi";
 import { ACCENT_PRESETS, ACCENT_GRADIENTS, getAccent, setAccent, isHex, parseGradient, getDarkStyle, setDarkStyle, type DarkStyle } from "@/lib/accent";
 import { NOTIF_TEXTS_CREATOR, NOTIF_TEXTS_AGENCY, type NotifTextField } from "@/lib/notifTexts";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
@@ -175,6 +176,7 @@ export function Parametres() {
 
   // Style du thème sombre (propre à cet appareil) : Minuit (défaut) ou Classique.
   const [darkStyle, setDarkStyleState] = useState<DarkStyle>(() => getDarkStyle());
+  const iosUi = useIosUi();
   const chooseDarkStyle = (s: DarkStyle) => {
     setDarkStyle(s);
     setDarkStyleState(s);
@@ -282,6 +284,12 @@ export function Parametres() {
           hint="Bascule toute l'app en thème sombre."
           checked={dark}
           onChange={() => toggleTheme()}
+        />
+        <PrefRow
+          label="Mode iPhone (bêta)"
+          hint="Sur téléphone : affichage façon app iPhone (onglets en bas, grands titres, écran « Plus »). En essai sur cet appareil."
+          checked={iosUi}
+          onChange={(v) => setIosUi(v)}
         />
         <div className="flex flex-wrap items-center justify-between gap-3 py-2">
           <div className="min-w-0">
