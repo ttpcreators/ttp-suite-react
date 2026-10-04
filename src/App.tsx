@@ -1,9 +1,8 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronRight, Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus, LogOut, Pin, PinOff, Star, House, CircleEllipsis, Search, Trash2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus, LogOut, Pin, PinOff, Star, House, CircleEllipsis, Search, Trash2 } from "lucide-react";
+import { cn, titleCase } from "@/lib/utils";
 import { restoreTabs, navigateTab, addTab, closeTab as closeTabState } from "@/lib/tabs";
 import type { Session } from "@supabase/supabase-js";
-import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { Toaster } from "@/components/ui/toast";
 import { UndoSendBar } from "@/components/ui/undo-send";
@@ -24,7 +23,8 @@ import { supabase } from "@/lib/supabase";
 import { SearchContext } from "@/lib/search";
 import { ThemeContext } from "@/lib/theme";
 import { AgencyAvatar, MyName } from "@/components/ui/agency-avatar";
-import { useIosUi, useIsPhone } from "@/lib/iosUi";
+import { useIsPhone } from "@/lib/iosUi";
+import { NavActionSlotContext } from "@/lib/navAction";
 import { IosBackButton, IosBarIcon, IosNavBar, IosTabBar, type IosTab } from "@/components/mobile/ios-shell";
 import { MoreScreen } from "@/components/mobile/more-screen";
 import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
@@ -67,7 +67,6 @@ const Diagnostique = lazy(() => import("@/views/Diagnostique").then((m) => ({ de
 const EngagementSuivi = lazy(() => import("@/views/EngagementSuivi").then((m) => ({ default: m.EngagementSuivi })));
 const Engagement = lazy(() => import("@/views/Engagement").then((m) => ({ default: m.Engagement })));
 
-const BASE = import.meta.env.BASE_URL;
 
 const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   apercu: Apercu,
@@ -107,47 +106,6 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
 // `roster` est une vue valide gérée à part (pas dans VIEWS). hasOwn : `in`
 // traverserait la chaîne de prototypes ("constructor"… passerait).
 const isNavView = (id: string) => Object.hasOwn(VIEWS, id) || id === "roster";
-
-function MobileMenu({
-  items,
-  onSelect,
-}: {
-  items: NavItem[];
-  onSelect: (id: ViewId, sub?: string) => void;
-}) {
-  return (
-    <div className="flex max-h-[60dvh] w-[15rem] flex-col gap-0.5 overflow-y-auto">
-      {items.map((item) => (
-        <div key={item.id}>
-          <button
-            type="button"
-            onClick={() => onSelect(item.id)}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted"
-          >
-            <item.icon className="h-4 w-4 text-muted-foreground" />
-            <span className="flex-1">{item.label}</span>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </button>
-          {/* Sous-pages (ex. Prospection → Mails), comme dans le menu ordinateur */}
-          {item.children && item.children.length > 0 && (
-            <div className="mb-1 ml-[1.15rem] flex flex-col gap-0.5 border-l border-foreground/10 pl-2.5">
-              {item.children.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => onSelect(item.id, c.id)}
-                  className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function ViewContent({
   active,
@@ -307,9 +265,10 @@ export default function App() {
   // Thème mémorisé PAR APPAREIL (avant : jamais sauvegardé → l'app repartait
   // toujours en clair au rechargement). Classe déjà posée par initAccent().
   const [dark, setDark] = useState(() => getThemePref());
-  const [mobileTab, setMobileTab] = useState<string | null>(null);
   // Mode iPhone : écran « Plus » ou « Rechercher » affiché par-dessus la page courante.
   const [phoneScreen, setPhoneScreen] = useState<null | "more" | "search">(null);
+  // Emplacement du « + » de la page dans la barre de titre (iPhone).
+  const [navSlot, setNavSlot] = useState<HTMLElement | null>(null);
   const [query, setQuery] = useState("");
   const [detailCreator, setDetailCreator] = useState<string | null>(null);
   // Cache keep-alive : les vues déjà visitées restent MONTÉES (masquées) pour
@@ -415,7 +374,6 @@ export default function App() {
         navigateCurrentTab(id as ViewId);
         setDetailCreator(null);
         setSpace("agency");
-        setMobileTab(null);
       }
     };
     window.addEventListener("ttp-navigate", onNav);
@@ -488,7 +446,6 @@ export default function App() {
   const select = (id: ViewId, subId?: string) => {
     navigateCurrentTab(id);
     setSub(subId ?? null); // sous-page ciblée (ou reset si nav normale)
-    setMobileTab(null);
     setPhoneScreen(null);
     setQuery("");
     setDetailCreator(null);
@@ -499,7 +456,6 @@ export default function App() {
     setTabs((prev) => addTab(prev, id) as ViewId[]);
     setActive(id);
     setSub(null);
-    setMobileTab(null);
     setQuery("");
     setDetailCreator(null);
     setSpace("agency");
@@ -538,7 +494,6 @@ export default function App() {
     navigateCurrentTab(id);
     setDetailCreator(null);
     setSpace("agency");
-    setMobileTab(null);
     setPhoneScreen(null);
   };
   const openPortal = (name: string) => {
@@ -560,30 +515,19 @@ export default function App() {
   // localStorage ne doit jamais montrer une page fondateur à un membre).
   const splitShown = splitView && canSee(splitView) ? splitView : null;
 
-  // Famille « Raccourcis » (pages épinglées) ajoutée en tête de la nav mobile aussi.
+  // Raccourcis (pages épinglées), aussi en tête de l'écran « Plus » sur téléphone.
   const pinnedNavItems = pinned
     .filter(canSee)
     .map((id) => findPinnable(id))
     .filter((i): i is NavItem => !!i)
     .map((i) => ({ id: i.id, label: i.label, icon: i.icon, children: i.children }));
   const navFiltered = NAV.map((f) => ({ ...f, items: f.items.filter((i) => canSee(i.id)) })).filter((f) => f.items.length > 0);
-  const mobileFamilies = pinnedNavItems.length
-    ? [{ id: "__pins__", label: "Raccourcis", icon: Star, items: pinnedNavItems }, ...navFiltered]
-    : navFiltered;
-  const mobileItems = mobileFamilies.map((f) => ({
-    id: f.id,
-    label: f.label,
-    icon: <f.icon className="h-4 w-4" />,
-    content: <MobileMenu items={f.items} onSelect={select} />,
-  }));
 
   const { items: notifs, dismiss: dismissNotifs } = useNotifications();
   const title = viewTitle(active);
 
-  // ── Mode iPhone (bêta, téléphone seulement) ──
-  const iosOn = useIosUi();
-  const isPhone = useIsPhone();
-  const iosPhone = iosOn && isPhone;
+  // ── Affichage iPhone (téléphone) ──
+  const iosPhone = useIsPhone();
   const scrollRef = useRef<HTMLDivElement>(null);
   // Onglets du bas : Accueil + 3 pages (les Raccourcis d'abord, sinon les plus utiles) + Plus.
   const tabIds = [...new Set<ViewId>([
@@ -744,24 +688,10 @@ export default function App() {
   // Barre du haut (recherche + profil + notifs + thème) — partagée normal/split.
   const topBar = (
     <header className="flex items-center gap-4 px-4 pt-5 md:px-6">
-      {/* mobile logo */}
-      <div className="flex items-center gap-2 md:hidden">
-        <div className="h-8 w-8 overflow-hidden rounded-lg bg-[#14181E]">
-          <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
-        </div>
-      </div>
       {/* recherche globale (filtre + navigation) */}
       <GlobalSearch query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={hiddenIds} />
       {/* right cluster */}
       <div className="ml-auto flex shrink-0 items-center gap-2.5">
-        {/* Carte profil : tablette seulement (sur ordinateur, elle est en bas de la sidebar) */}
-        <div className="hidden items-center gap-2.5 rounded-lg bg-surface py-1.5 pl-2 pr-3.5 sm:flex md:hidden">
-          <AgencyAvatar userId={session.user.id} />
-          <div className="leading-tight">
-            <div className="whitespace-nowrap text-xs font-medium text-foreground"><MyName userId={session.user.id} fallback="Marc & Gianni" /></div>
-            <div className="whitespace-nowrap text-[10px] text-faint">Direction · TTP</div>
-          </div>
-        </div>
         <Notifications items={notifs} onDismiss={dismissNotifs} />
         {/* Thème : desktop uniquement (sur mobile → Paramètres → Apparence, gain de place) */}
         <button
@@ -798,7 +728,7 @@ export default function App() {
       </NavSubContext.Provider>
     );
   // (Le mode portail a déjà fait un return anticipé plus haut : ici space === "agency".)
-  const primaryTitle = detailCreator ?? (canSee(active) ? title : "Accès réservé");
+  const primaryTitle = detailCreator ? titleCase(detailCreator) : canSee(active) ? title : "Accès réservé";
   const showPrimaryH1 = !detailCreator && active !== "apercu";
   // Multi-pages actif dès qu'il y a ≥ 2 onglets ou un volet latéral.
   // (Mode iPhone : toujours une seule page à la fois, comme une app.)
@@ -848,6 +778,7 @@ export default function App() {
                 {iosPhone ? (
                   <IosNavBar
                     scrollRef={scrollRef}
+                    actionSlotRef={setNavSlot}
                     title={phoneScreen === "more" ? "Plus" : phoneScreen === "search" ? "Rechercher" : primaryTitle}
                     left={
                       phoneScreen ? null
@@ -870,6 +801,7 @@ export default function App() {
                   topBar
                 )}
                 <main className={cn("px-4 md:px-6", iosPhone ? "pt-1" : "pt-5")}>
+                  <NavActionSlotContext.Provider value={iosPhone && !phoneScreen ? navSlot : null}>
                   <ErrorBoundary variant="inline" label="Cette page" resetKey={`${space}:${detailCreator ?? ""}:${active}:${phoneScreen ?? ""}`}>
                     <Suspense fallback={PANE_FALLBACK}>
                       {iosPhone && phoneScreen === "more" ? (
@@ -903,6 +835,7 @@ export default function App() {
                       )}
                     </Suspense>
                   </ErrorBoundary>
+                  </NavActionSlotContext.Provider>
                 </main>
               </div>
             ) : (
@@ -997,16 +930,6 @@ export default function App() {
             }}
           />
         )}
-        {/* Mobile bottom nav */}
-        <div className={cn("pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center md:hidden", iosPhone && "hidden")}>
-          <div className="pointer-events-auto">
-            <ExpandableTabs
-              items={mobileItems}
-              value={mobileTab}
-              onValueChange={setMobileTab}
-            />
-          </div>
-        </div>
 
         {/* Menu contextuel (clic droit sur un élément du menu, desktop) */}
         {ctxMenu && (

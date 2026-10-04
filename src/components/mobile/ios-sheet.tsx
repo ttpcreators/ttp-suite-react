@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { motion, useDragControls, useReducedMotion } from "motion/react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useIosUi, useIsPhone } from "@/lib/iosUi";
+import { useIsPhone } from "@/lib/iosUi";
 
 /*
  * Feuilles façon iOS (mode iPhone, téléphone seulement) :
@@ -13,11 +13,9 @@ import { useIosUi, useIsPhone } from "@/lib/iosUi";
  *                      confirmations de suppression).
  */
 
-/** Mode iPhone actif ET écran de téléphone. */
+/** Affichage iPhone = écran de téléphone. */
 export function useIosPhone(): boolean {
-  const on = useIosUi();
-  const phone = useIsPhone();
-  return on && phone;
+  return useIsPhone();
 }
 
 const SPRING = { type: "spring" as const, damping: 34, stiffness: 380, mass: 0.9 };

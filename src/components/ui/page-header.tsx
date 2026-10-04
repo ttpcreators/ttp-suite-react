@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { InPageHeaderContext } from "@/lib/navAction";
 
 /**
  * En-tête de page dans le langage de l'Aperçu : le titre à gauche, les actions
@@ -38,6 +39,8 @@ export function PageFrame({ title, children }: { title: ReactNode; children: Rea
 
 export function PageHeaderRow({ children }: { children: ReactNode }) {
   const slot = useContext(PageSlotContext);
-  if (slot) return createPortal(children, slot);
-  return <div className="mb-4 flex flex-wrap items-center justify-between gap-3">{children}</div>;
+  // Contexte « en-tête de page » : sur iPhone, le bouton « + » qui s'y trouve monte dans la barre de titre.
+  const body = <InPageHeaderContext.Provider value>{children}</InPageHeaderContext.Provider>;
+  if (slot) return createPortal(body, slot);
+  return <div className="mb-4 flex flex-wrap items-center justify-between gap-3">{body}</div>;
 }

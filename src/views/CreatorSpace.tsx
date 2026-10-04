@@ -57,7 +57,6 @@ import { PlatformIcon } from "@/components/ui/platform-icon";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { ExpandableTabs } from "@/components/ui/be-ui-expandable-tabs";
 import { SidebarBrand, SidebarLogo, SidebarNav, SidebarUser, sbRailCls } from "@/components/ui/dashboard-sidebar";
 import { EventCalendar, type Ev as CalEv } from "@/components/ui/event-calendar";
 import { parseAmount, formatEuro } from "@/lib/appState";
@@ -74,7 +73,8 @@ import { AgentPlan, type PlanTask } from "@/components/ui/agent-plan";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, type Gift as GiftRow } from "@/lib/gifting";
 import { PageFrame, PageHeaderRow } from "@/components/ui/page-header";
-import { useIosUi, useIsPhone } from "@/lib/iosUi";
+import { useIsPhone } from "@/lib/iosUi";
+import { NavActionSlotContext } from "@/lib/navAction";
 import { IosBackButton, IosNavBar, IosTabBar } from "@/components/mobile/ios-shell";
 import { MoreScreen } from "@/components/mobile/more-screen";
 import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
@@ -82,7 +82,6 @@ import { OfflineBanner } from "@/components/mobile/offline-banner";
 import { Delta, DashPanel, DashSectionTitle, DashWideLink } from "@/components/ui/dash";
 import { Overlay } from "@/components/mobile/ios-sheet";
 
-const BASE = import.meta.env.BASE_URL;
 
 type Creator = {
   id: string;
@@ -275,29 +274,6 @@ function TabFrame({ title, children }: { title: string | null; children: ReactNo
   return title ? <PageFrame title={title}>{children}</PageFrame> : <>{children}</>;
 }
 
-/** Sous-menu déployé d'une famille (liste ses pages). */
-function CreatorMobileMenu({ ids, onSelect }: { ids: Tab[]; onSelect: (id: Tab) => void }) {
-  return (
-    <div className="flex w-[14rem] flex-col gap-0.5">
-      {ids.map((id) => {
-        const t = TABS.find((x) => x.id === id);
-        if (!t) return null;
-        return (
-          <button
-            key={id}
-            type="button"
-            onClick={() => onSelect(id)}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted"
-          >
-            <t.icon className="h-4 w-4 text-muted-foreground" />
-            <span className="flex-1">{t.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 /** Debrief (lecture seule côté créateur). */
 type DebriefLite = {
   brand: string; creator: string; period: string; deliverables?: string;
@@ -410,7 +386,6 @@ export function CreatorSpace({
       /* stockage indisponible */
     }
   };
-  const [mobileTab, setMobileTab] = useState<string | null>(null); // famille déployée (nav mobile)
   const [confirmDoneTodo, setConfirmDoneTodo] = useState<Todo | null>(null); // anti-missclick « fait »
   const [taskView, setTaskView] = useState<Todo | null>(null); // fiche tâche (texte complet)
   const [subInput, setSubInput] = useState(""); // saisie nouvelle sous-tâche
@@ -436,11 +411,10 @@ export function CreatorSpace({
   );
   const navTabs = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
 
-  // ── Mode iPhone (bêta, téléphone seulement) : onglets en bas + écran « Plus » ──
-  const iosOn = useIosUi();
-  const isPhone = useIsPhone();
-  const iosPhone = iosOn && isPhone;
+  // ── Affichage iPhone (téléphone) : onglets en bas + écran « Plus » ──
+  const iosPhone = useIsPhone();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [navSlot, setNavSlot] = useState<HTMLElement | null>(null); // « + » de l'onglet dans la barre de titre
   const mainRef = useRef<HTMLElement>(null);
   const ctabIds: Tab[] = ["accueil", "todo", "briefs", mailsOn ? "mails" : "planning"];
   const goTab = (t: Tab) => {
@@ -1554,31 +1528,11 @@ export function CreatorSpace({
             <IosNavBar
               className="-mx-4"
               scrollRef={mainRef}
+              actionSlotRef={setNavSlot}
               title={moreOpen ? "Plus" : tab === "accueil" ? "Accueil" : TABS.find((t) => t.id === tab)?.label ?? ""}
               left={!moreOpen && !ctabIds.includes(tab) ? <IosBackButton label="Plus" onClick={() => setMoreOpen(true)} /> : null}
             />
           )}
-          {/* Barre du haut (mobile) */}
-          <div className={cn("mb-5 flex items-center justify-between gap-3 md:hidden", iosPhone && "hidden")}>
-            <div className="flex items-center gap-2.5">
-              <div className="h-9 w-9 overflow-hidden rounded-lg bg-[#14181E]">
-                <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold leading-tight">Espace créateur</div>
-                <div className="text-[11px] text-faint">TTP Creators</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={onToggleTheme} className="grid h-9 w-9 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover" aria-label="Thème">
-                {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </button>
-              <button type="button" onClick={exitAction} className="grid h-9 w-9 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover" aria-label={exitTitle}>
-                {preview ? <ArrowLeft className="h-4 w-4" /> : <LogOut className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-
           {iosPhone && moreOpen && (
             <PageFrame title="Plus">
               <MoreScreen
@@ -1603,7 +1557,7 @@ export function CreatorSpace({
               />
             </PageFrame>
           )}
-          {!(iosPhone && moreOpen) && (<>
+          {!(iosPhone && moreOpen) && (<NavActionSlotContext.Provider value={iosPhone ? navSlot : null}>
           {/* En-tête de l'accueil (langage Aperçu) : salutation selon l'heure + photo.
               Les autres onglets affichent leur propre titre (TabFrame ci-dessous). */}
           {tab === "accueil" && (
@@ -2204,7 +2158,7 @@ export function CreatorSpace({
                     ]}
                   />
                 </div>
-                <AddButton label="Tâche" onClick={() => setTdOpen(true)} />
+                <AddButton navBar label="Tâche" onClick={() => setTdOpen(true)} />
               </PageHeaderRow>
               <InlineForm open={tdOpen} title="Nouvelle tâche" onClose={() => setTdOpen(false)} onSubmit={addTodo}>
                 <TextField label="Tâche" value={tdText} onChange={setTdText} />
@@ -2362,7 +2316,7 @@ export function CreatorSpace({
                       ]}
                     />
                   )}
-                  <AddButton label="Idée" onClick={() => setIdOpen(true)} />
+                  <AddButton navBar label="Idée" onClick={() => setIdOpen(true)} />
                 </div>
               </PageHeaderRow>
               <InlineForm open={idOpen} title="Nouvelle idée" onClose={() => setIdOpen(false)} onSubmit={addIdea}>
@@ -2406,7 +2360,7 @@ export function CreatorSpace({
                 <div className="text-sm text-muted-foreground">
                   {contacts.length} contact{contacts.length > 1 ? "s" : ""} · visibles par ton agence
                 </div>
-                <AddButton label="Contact" onClick={() => setCtOpen(true)} />
+                <AddButton navBar label="Contact" onClick={() => setCtOpen(true)} />
               </PageHeaderRow>
               <InlineForm open={ctOpen} title="Nouveau contact" onClose={() => setCtOpen(false)} onSubmit={addContact}>
                 <TextField label="Marque / société" value={ctBrand} onChange={setCtBrand} placeholder="ex Sephora" />
@@ -2609,7 +2563,7 @@ export function CreatorSpace({
                 <div className="text-xs text-muted-foreground">
                   <span className="font-semibold text-foreground">{gifts.length}</span> {gifts.length > 1 ? "cadeaux" : "cadeau"}
                 </div>
-                <AddButton label="Signaler un cadeau" onClick={() => setGiOpen(true)} />
+                <AddButton navBar label="Signaler un cadeau" onClick={() => setGiOpen(true)} />
               </PageHeaderRow>
 
               <InlineForm
@@ -3021,15 +2975,13 @@ export function CreatorSpace({
           )}
           </TabFrame>
           </ErrorBoundary>
-          </>)}
+          </NavActionSlotContext.Provider>)}
           {/* Espaceur mobile (plus fiable que le padding bas d'un conteneur flex défilant sur iOS) */}
           <div aria-hidden className="h-[calc(6rem+env(safe-area-inset-bottom))] md:hidden" />
         </main>
         </div>
       </div>
 
-      {/* Nav mobile animée — MÊME composant que l'espace agence (ExpandableTabs).
-          On tape une famille → ses pages se déploient en animé. Fixe en bas. */}
       <OfflineBanner />
       {iosPhone && <PullToRefresh scrollRef={mainRef} />}
       {iosPhone && (
@@ -3049,29 +3001,6 @@ export function CreatorSpace({
           }}
         />
       )}
-      <div className={cn("pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center md:hidden", iosPhone && "hidden")}>
-        <div className="pointer-events-auto">
-          <ExpandableTabs
-            items={navGroups.map((g) => ({ id: g.id, label: g.label, icon: g.icon, items: g.items.map((i) => i.id) })).map((f) => ({
-              id: f.id,
-              label: f.label,
-              icon: <f.icon className="h-4 w-4" />,
-              content: (
-                <CreatorMobileMenu
-                  ids={f.items}
-                  onSelect={(id) => {
-                    setTab(id);
-                    setMobileTab(null);
-                  }}
-                />
-              ),
-            }))}
-            value={mobileTab}
-            onValueChange={setMobileTab}
-          />
-        </div>
-      </div>
-
       {/* Envoi des stats : hors des onglets pour être ouvrable depuis l'Accueil ET le Guide */}
       <input ref={statsFileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => sendStatsFiles(e.target.files)} />
       <WelcomeModal

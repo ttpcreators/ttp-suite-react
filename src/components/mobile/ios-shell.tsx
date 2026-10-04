@@ -67,8 +67,10 @@ function useScrolledPast(scrollRef: RefObject<HTMLElement | null>, threshold = 4
  * elle est transparente (le grand titre de la page est visible dessous) ; dès que
  * le grand titre a défilé, elle devient floutée et affiche le titre au centre.
  */
-export function IosNavBar({ scrollRef, title, left, right, className }: {
+export function IosNavBar({ scrollRef, title, left, right, className, actionSlotRef }: {
   scrollRef: RefObject<HTMLElement | null>; title: string; left?: ReactNode; right?: ReactNode; className?: string;
+  /** Emplacement du « + » de la page (tout à droite), rempli par AddButton / AddMenuButton. */
+  actionSlotRef?: (el: HTMLElement | null) => void;
 }) {
   const collapsed = useScrolledPast(scrollRef, 40);
   return (
@@ -91,7 +93,10 @@ export function IosNavBar({ scrollRef, title, left, right, className }: {
         >
           {title}
         </div>
-        <div className="z-10 flex shrink-0 items-center justify-end gap-0.5">{right}</div>
+        <div className="z-10 flex shrink-0 items-center justify-end gap-0.5">
+          {right}
+          {actionSlotRef && <div ref={actionSlotRef} className="flex items-center empty:hidden" />}
+        </div>
       </div>
     </div>
   );

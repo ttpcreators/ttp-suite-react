@@ -121,7 +121,7 @@ export function AvatarUpload({
         />
       ) : (
         <div
-          className={"grid h-full w-full place-items-center bg-muted font-semibold text-muted-foreground " + rounded}
+          className={"grid h-full w-full place-items-center bg-foreground/[0.08] font-semibold text-muted-foreground " + rounded}
           style={px}
         >
           {initials(name)}

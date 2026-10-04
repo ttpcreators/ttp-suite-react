@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Plus, X, ChevronDown, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { IosActionSheet, IosSheet, useIosPhone } from "@/components/mobile/ios-sheet";
+import { useNavActionSlot } from "@/lib/navAction";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "./select";
 import { DateInput } from "./date-range-picker";
 
@@ -16,8 +17,23 @@ const shellTopCls =
 const bareCtrl =
   "min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-faint";
 
-/** Bouton vert « + Label » (déclenche l'ouverture d'un formulaire). */
-export function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
+/** « + » de la barre de titre (iPhone) : remplace le bouton « + Label » de la page. */
+function NavPlus({ slot, label, onClick, expanded }: { slot: HTMLElement; label: string; onClick: (e: React.MouseEvent) => void; expanded?: boolean }) {
+  return createPortal(
+    <button type="button" onClick={onClick} aria-label={`Ajouter : ${label}`} aria-expanded={expanded} className="grid h-11 w-11 place-items-center text-primary">
+      <Plus className="h-[25px] w-[25px]" strokeWidth={2} />
+    </button>,
+    slot,
+  );
+}
+
+/**
+ * Bouton vert « + Label » (déclenche l'ouverture d'un formulaire). Sur iPhone, dans
+ * l'en-tête d'une page (ou avec `navBar`), il devient un « + » en haut à droite.
+ */
+export function AddButton({ label, onClick, navBar }: { label: string; onClick: () => void; navBar?: boolean }) {
+  const slot = useNavActionSlot(navBar);
+  if (slot) return <NavPlus slot={slot} label={label} onClick={onClick} />;
   return (
     <button
       type="button"
@@ -37,9 +53,10 @@ export type AddMenuItem = { key: string; label: string; hint?: string; icon?: Lu
  * mobile). Menu rendu en portail et clampé dans le viewport (se retourne vers le haut
  * s'il manque de place en bas), même mécanique qu'ActionMenu.
  */
-export function AddMenuButton({ label, items }: { label: string; items: AddMenuItem[] }) {
+export function AddMenuButton({ label, items, navBar }: { label: string; items: AddMenuItem[]; navBar?: boolean }) {
   const [open, setOpen] = useState(false);
   const ios = useIosPhone();
+  const slot = useNavActionSlot(navBar);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -69,17 +86,21 @@ export function AddMenuButton({ label, items }: { label: string; items: AddMenuI
 
   return (
     <>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={toggle}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
-      >
-        <Plus className="h-3.5 w-3.5" /> {label}
-        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
-      </button>
+      {slot ? (
+        <NavPlus slot={slot} label={label} onClick={toggle} expanded={open} />
+      ) : (
+        <button
+          ref={btnRef}
+          type="button"
+          onClick={toggle}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+        >
+          <Plus className="h-3.5 w-3.5" /> {label}
+          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+        </button>
+      )}
 
       {open && ios && (
         <IosActionSheet

@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
-import { LogOut, Moon, Smartphone, type LucideIcon } from "lucide-react";
+import { LogOut, Moon, type LucideIcon } from "lucide-react";
 import { IosGroup, IosRow, IosSwitch } from "@/components/mobile/ios-shell";
-import { setIosUi } from "@/lib/iosUi";
 
 /*
  * Écran « Plus » du mode iPhone (agence et créatrices) : profil, raccourcis,
@@ -67,9 +66,8 @@ export function MoreScreen({
         </IosGroup>
       ))}
 
-      <IosGroup title="Affichage" footer="Propre à cet appareil. Coupe le mode iPhone pour revenir à l'ancien affichage.">
+      <IosGroup title="Affichage" footer="Propre à cet appareil.">
         <IosRow icon={Moon} label="Mode sombre" chevron={false} right={<IosSwitch label="Mode sombre" checked={dark} onChange={onToggleTheme} />} />
-        <IosRow icon={Smartphone} label="Mode iPhone" chevron={false} right={<IosSwitch label="Mode iPhone" checked onChange={() => setIosUi(false)} />} />
       </IosGroup>
 
       <IosGroup>

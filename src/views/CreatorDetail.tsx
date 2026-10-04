@@ -1,8 +1,10 @@
 import { fmtCompact } from "@/lib/timeSeries";
 import { useEffect, useRef, useState, lazy, Suspense, type ReactNode } from "react";
-import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X, ArrowUpRight, Share2, IdCard, ScrollText, Receipt, ListChecks, FileText, Lightbulb, type LucideIcon } from "lucide-react";
+import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X, ArrowUpRight, Share2, IdCard, ScrollText, Receipt, ListChecks, FileText, Lightbulb, Mail, TrendingUp, type LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { titleCase } from "@/lib/utils";
+import { cn, titleCase } from "@/lib/utils";
+import { useIosPhone } from "@/components/mobile/ios-sheet";
+import { Tabs } from "@/components/ui/animated-tabs";
 import { frDate, toISODate, todayISO } from "@/lib/dates";
 import { isMainPlatform } from "@/lib/platform";
 import { dbUpdate } from "@/lib/db";
@@ -174,6 +176,10 @@ export function CreatorDetail({
   onOpenPortal: (n: string) => void;
 }) {
   const [c, setC] = useState<Creator | null>(null);
+  // Téléphone : la fiche est découpée en sections (au lieu d'une très longue page).
+  const iosPhone = useIosPhone();
+  const [phoneSeg, setPhoneSeg] = useState<"suivi" | "infos" | "activite" | "mails">("suivi");
+  const segHide = (seg: typeof phoneSeg) => (iosPhone && phoneSeg !== seg ? "hidden" : "");
   const [inv, setInv] = useState<Inv[]>([]);
   const [td, setTd] = useState<Td[]>([]);
   const [br, setBr] = useState<Br[]>([]);
@@ -479,7 +485,53 @@ export function CreatorDetail({
         <ArrowLeft className="h-4 w-4" /> Retour au roster
       </button>
 
-      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
+      {iosPhone && (() => {
+        const profile = platCards.find((p) => p.url);
+        const mail = (c?.email_pro || c?.email || "").trim();
+        const actions: { key: string; label: string; icon: ReactNode; onClick?: () => void; href?: string }[] = [
+          { key: "portail", label: "Portail", icon: <ExternalLink className="h-[19px] w-[19px]" />, onClick: () => onOpenPortal(name) },
+          ...(mail ? [{ key: "mail", label: "E-mail", icon: <Mail className="h-[19px] w-[19px]" />, href: `mailto:${mail}` }] : []),
+          ...(profile?.url ? [{ key: "profil", label: profile.label, icon: platIcon(profile.key), href: profile.url }] : []),
+          { key: "evolution", label: "Évolution", icon: <TrendingUp className="h-[19px] w-[19px]" />, onClick: () => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "suivi" })) },
+        ];
+        const btn = "flex min-w-0 flex-1 flex-col items-center gap-1.5 rounded-xl bg-surface px-1 py-2.5 text-[12px] font-medium text-primary";
+        return (
+          <div className="mb-5 flex flex-col items-center text-center">
+            <AvatarUpload
+              creatorId={c?.id}
+              name={name}
+              photoUrl={c?.photo_url ?? null}
+              size={88}
+              onUploaded={(url) => setC((prev) => (prev ? { ...prev, photo_url: url } : prev))}
+            />
+            <h1 className="mt-3 text-[26px] font-bold leading-tight tracking-tight text-foreground">{titleCase(name)}</h1>
+            <div className="mt-1 text-[15px] text-muted-foreground">{[c?.handle, c?.niche, c?.platform].filter(Boolean).join(" · ") || "—"}</div>
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+              <AnimatedBadge status={statusBadge(c?.status ?? null)} size="sm">
+                {c?.status ? titleCase(c.status) : "Actif"}
+              </AnimatedBadge>
+              {exclusive && <span className="rounded-full border border-foreground/20 px-2.5 py-0.5 text-[11px] font-medium text-foreground">Exclusif</span>}
+            </div>
+            <div className="mt-4 flex w-full gap-2">
+              {actions.map((a) =>
+                a.href ? (
+                  <a key={a.key} href={a.href} target={a.key === "mail" ? undefined : "_blank"} rel="noreferrer" className={btn}>
+                    {a.icon}
+                    <span className="max-w-full truncate">{a.label}</span>
+                  </a>
+                ) : (
+                  <button key={a.key} type="button" onClick={a.onClick} className={btn}>
+                    {a.icon}
+                    <span className="max-w-full truncate">{a.label}</span>
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      <div className={cn("mb-5 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center", iosPhone && "hidden")}>
         <div className="flex min-w-0 flex-1 items-center gap-4">
           <AvatarUpload
             creatorId={c?.id}
@@ -513,7 +565,40 @@ export function CreatorDetail({
         </button>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-4">
+      {iosPhone && (
+        <>
+          <div className="mb-4 flex snap-x gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {([
+              ["Abonnés", totalFollowers > 0 ? fmtCompact(totalFollowers) : (c?.followers ?? null)],
+              ["Engagement", mainEntry ? mainEntry.er : (c?.er ?? null)],
+              ["CA · encaissé", caEncaisse > 0 ? formatEuro(caEncaisse) : null],
+              ["Reach", c?.reach ?? null],
+            ] as [string, string | null][]).map(([l, v]) => (
+              <div key={l} className="min-w-[118px] shrink-0 snap-start rounded-xl border border-border bg-surface px-3.5 py-2.5">
+                <div className="truncate text-[12px] text-muted-foreground">{l}</div>
+                <div className="mt-0.5 truncate text-[19px] font-semibold tabular-nums tracking-tight text-foreground">{v || "—"}</div>
+              </div>
+            ))}
+          </div>
+          {/* Sections : un seul bloc à la fois, sélecteur collé sous la barre de titre */}
+          <div className="ios-bar sticky z-30 -mx-4 mb-4 px-4 py-2" style={{ top: "calc(env(safe-area-inset-top) + 44px)" }}>
+            <Tabs
+              fullWidth
+              size="sm"
+              label="Section de la fiche"
+              value={phoneSeg}
+              onValueChange={(v) => setPhoneSeg(v as typeof phoneSeg)}
+              items={[
+                { value: "suivi", label: "Suivi" },
+                { value: "infos", label: "Infos" },
+                { value: "activite", label: "Activité" },
+                { value: "mails", label: "Mails" },
+              ]}
+            />
+          </div>
+        </>
+      )}
+      <div className={cn("mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-4", iosPhone && "hidden")}>
         {stat(
           "Abonnés",
           totalFollowers > 0 ? fmtCompact(totalFollowers) : (c?.followers ?? null),
@@ -534,7 +619,7 @@ export function CreatorDetail({
 
       {/* Tableau de bord (langage Aperçu) : suivi éditorial à gauche, synthèse à droite */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-      <div className="flex min-w-0 flex-col gap-4 xl:col-span-8">
+      <div className={cn("flex min-w-0 flex-col gap-4 xl:col-span-8", segHide("suivi"))}>
         <CreatorAlerts name={name} />
         <EditorialProfileCard name={name} />
         <MonthlyTracking name={name} />
@@ -545,7 +630,7 @@ export function CreatorDetail({
       {/* Plateformes — logo cliquable (ouvre le profil) + abonnés/taux de la
           dernière mesure d'engagement, datée automatiquement au jour du calcul */}
       {platCards.length > 0 && (
-        <div className="rounded-2xl border border-border bg-surface p-5">
+        <div className={cn("rounded-2xl border border-border bg-surface p-5", segHide("infos"))}>
           <div className="mb-4 flex items-center justify-between gap-3">
             {sectionTitle(Share2, "Plateformes")}
             <button
@@ -595,7 +680,7 @@ export function CreatorDetail({
         </div>
       )}
 
-      <div className="rounded-2xl border border-border bg-surface p-5">
+      <div className={cn("rounded-2xl border border-border bg-surface p-5", segHide("infos"))}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           {sectionTitle(IdCard, "Coordonnées")}
           <div className="flex items-center gap-2">
@@ -699,7 +784,7 @@ export function CreatorDetail({
       </div>
 
       {/* Contrat — date de fin, connecté à la page Échéances */}
-      <div className="rounded-2xl border border-border bg-surface p-5">
+      <div className={cn("rounded-2xl border border-border bg-surface p-5", segHide("infos"))}>
         <div className="mb-4 flex items-center justify-between gap-3">
           {sectionTitle(ScrollText, "Contrat")}
           {!ctEditing && (
@@ -805,7 +890,7 @@ export function CreatorDetail({
         )}
       </div>
 
-        <div className="rounded-2xl border border-border bg-surface p-5">
+        <div className={cn("rounded-2xl border border-border bg-surface p-5", segHide("activite"))}>
           <div className="mb-3">{sectionTitle(Receipt, "Facturation")}</div>
           {inv.length === 0 ? (
             <div className="text-xs text-muted-foreground">Aucune facture.</div>
@@ -824,7 +909,7 @@ export function CreatorDetail({
       </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className={cn("mt-4 grid grid-cols-1 gap-4 md:grid-cols-3", iosPhone && "mt-0", segHide("activite"))}>
         <div className="rounded-2xl border border-border bg-surface p-5">
           <div className="mb-3">{sectionTitle(ListChecks, "À faire")}</div>
           {td.length === 0 ? (
@@ -870,9 +955,11 @@ export function CreatorDetail({
       </div>
 
       {/* Mails : lien alias/libellé + boîte filtrée (statuts, messages de la créatrice) */}
-      <Suspense fallback={null}>
-        <CreatorMailsAgency creator={name} suggestedAlias={c?.email_pro} />
-      </Suspense>
+      <div className={segHide("mails")}>
+        <Suspense fallback={null}>
+          <CreatorMailsAgency creator={name} suggestedAlias={c?.email_pro} className={iosPhone ? "mt-0" : undefined} />
+        </Suspense>
+      </div>
     </div>
   );
 }

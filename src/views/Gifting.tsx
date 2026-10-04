@@ -249,7 +249,7 @@ export function Gifting() {
           )}
           {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} />}
           <span className="hidden sm:contents">
-            <AddButton label="Gifting" onClick={openCreate} />
+            <AddButton navBar={false} label="Gifting" onClick={openCreate} />
           </span>
         </div>
       </PageHeaderRow>
