@@ -3,19 +3,21 @@ import { useSyncExternalStore } from "react";
 /*
  * « Mode iPhone » : coque façon app iOS sur téléphone (barre d'onglets en bas,
  * barre de titre qui se replie, écran « Plus », pleine largeur…).
- * Réglage PROPRE À CET APPAREIL, en bêta : on l'active d'abord sur son téléphone
- * (Paramètres → Apparence, ou un lien `?ios=1`), puis pour tout le monde.
+ * Actif par défaut sur téléphone ; réglage PROPRE À CET APPAREIL pour revenir à
+ * l'ancien affichage (Paramètres → Apparence, écran Plus, ou un lien `?ios=0`).
  * La classe `ios-ui` sur <html> porte les règles CSS (index.css).
  */
 
 const KEY = "ttp:ios";
 const listeners = new Set<() => void>();
 
+// Actif par défaut (tant qu'on ne l'a pas coupé sur cet appareil) ; ne s'applique
+// de toute façon que sur un écran de téléphone (useIsPhone).
 function read(): boolean {
   try {
-    return localStorage.getItem(KEY) === "1";
+    return localStorage.getItem(KEY) !== "0";
   } catch {
-    return false;
+    return true;
   }
 }
 

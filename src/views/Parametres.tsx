@@ -286,8 +286,8 @@ export function Parametres() {
           onChange={() => toggleTheme()}
         />
         <PrefRow
-          label="Mode iPhone (bêta)"
-          hint="Sur téléphone : affichage façon app iPhone (onglets en bas, grands titres, écran « Plus »). En essai sur cet appareil."
+          label="Mode iPhone"
+          hint="Sur téléphone : affichage façon app iPhone (onglets en bas, grands titres, écran « Plus »). Désactive-le pour revenir à l'ancien affichage sur cet appareil."
           checked={iosUi}
           onChange={(v) => setIosUi(v)}
         />

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronRight, Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus, LogOut, Pin, PinOff, Star, House, CircleEllipsis, Search } from "lucide-react";
+import { ChevronRight, Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus, LogOut, Pin, PinOff, Star, House, CircleEllipsis, Search, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { restoreTabs, navigateTab, addTab, closeTab as closeTabState } from "@/lib/tabs";
 import type { Session } from "@supabase/supabase-js";
@@ -28,6 +28,7 @@ import { useIosUi, useIsPhone } from "@/lib/iosUi";
 import { IosBackButton, IosBarIcon, IosNavBar, IosTabBar, type IosTab } from "@/components/mobile/ios-shell";
 import { MoreScreen } from "@/components/mobile/more-screen";
 import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
+import { OfflineBanner } from "@/components/mobile/offline-banner";
 
 // Vues chargées à la demande (code-splitting → démarrage plus léger, mobile compris).
 const RosterTabs = lazy(() => import("@/views/RosterTabs").then((m) => ({ default: m.RosterTabs })));
@@ -881,7 +882,10 @@ export default function App() {
                               onClick: () => select("parametres"),
                             }}
                             pinned={pinnedNavItems}
-                            sections={navFiltered.map((f) => ({ id: f.id, label: f.label, items: f.items }))}
+                            sections={[
+                              ...navFiltered.map((f) => ({ id: f.id, label: f.label, items: f.items })),
+                              { id: "autres", label: "Autres", items: [{ id: "corbeille", label: "Corbeille", icon: Trash2 }] },
+                            ]}
                             onSelect={(id, subId) => select(id as ViewId, subId)}
                             dark={dark}
                             onToggleTheme={toggleTheme}
@@ -978,6 +982,7 @@ export default function App() {
         </div>
 
         {iosPhone && <PullToRefresh scrollRef={scrollRef} />}
+        <OfflineBanner />
         {/* Mode iPhone : barre d'onglets en bas */}
         {iosPhone && (
           <IosTabBar

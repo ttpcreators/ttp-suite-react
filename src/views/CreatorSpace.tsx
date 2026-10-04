@@ -78,6 +78,7 @@ import { useIosUi, useIsPhone } from "@/lib/iosUi";
 import { IosBackButton, IosNavBar, IosTabBar } from "@/components/mobile/ios-shell";
 import { MoreScreen } from "@/components/mobile/more-screen";
 import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
+import { OfflineBanner } from "@/components/mobile/offline-banner";
 import { Delta, DashPanel, DashSectionTitle, DashWideLink } from "@/components/ui/dash";
 import { Overlay } from "@/components/mobile/ios-sheet";
 
@@ -3029,6 +3030,7 @@ export function CreatorSpace({
 
       {/* Nav mobile animée — MÊME composant que l'espace agence (ExpandableTabs).
           On tape une famille → ses pages se déploient en animé. Fixe en bas. */}
+      <OfflineBanner />
       {iosPhone && <PullToRefresh scrollRef={mainRef} />}
       {iosPhone && (
         <IosTabBar

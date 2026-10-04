@@ -67,7 +67,7 @@ export function MoreScreen({
         </IosGroup>
       ))}
 
-      <IosGroup title="Affichage" footer="Propre à cet appareil. Le mode iPhone est en essai : tu peux revenir à l'ancien affichage ici.">
+      <IosGroup title="Affichage" footer="Propre à cet appareil. Coupe le mode iPhone pour revenir à l'ancien affichage.">
         <IosRow icon={Moon} label="Mode sombre" chevron={false} right={<IosSwitch label="Mode sombre" checked={dark} onChange={onToggleTheme} />} />
         <IosRow icon={Smartphone} label="Mode iPhone" chevron={false} right={<IosSwitch label="Mode iPhone" checked onChange={() => setIosUi(false)} />} />
       </IosGroup>

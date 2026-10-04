@@ -25,6 +25,14 @@ window.addEventListener('vite:preloadError', (e) => {
   reloadOnce()
 })
 
+// Service worker dès le démarrage (avant : seulement en activant les notifications) :
+// il garde les fichiers de l'app sur l'appareil → ouverture rapide, même sans réseau.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary variant="full">
