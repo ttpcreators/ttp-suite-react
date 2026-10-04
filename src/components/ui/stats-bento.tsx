@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useIosPhone } from "@/components/mobile/ios-sheet";
 
 /**
  * Bandeau de chiffres clés, dans le langage de l'Aperçu : UN panneau bordé,
@@ -37,6 +38,29 @@ export function StatsBento({ primary, bars, small, accent, className }: StatsBen
   const empty = !finite.some((n) => n > 0);
   const top = empty ? -1 : bars.series.indexOf(Math.max(...finite));
   const AccentIcon = accent.icon;
+  const ios = useIosPhone();
+  // Mode iPhone : bandeau compact qu'on fait défiler du doigt (la liste reste visible tout de suite).
+  if (ios) {
+    const chips: { label: string; value: string; icon?: LucideIcon }[] = [
+      { label: primary.eyebrow, value: primary.value },
+      { label: bars.label, value: bars.value },
+      { label: small.label, value: small.value },
+      { label: accent.label, value: accent.value, icon: AccentIcon },
+    ];
+    return (
+      <section className={cn("flex snap-x snap-mandatory gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", className)}>
+        {chips.map((c, i) => (
+          <div key={i} className="min-w-[128px] max-w-[70%] shrink-0 snap-start rounded-xl border border-border bg-surface px-3.5 py-2.5">
+            <div className="flex items-center gap-1 truncate text-[12px] text-muted-foreground">
+              {c.icon && <c.icon className="h-3 w-3 shrink-0" />}
+              <span className="truncate">{c.label}</span>
+            </div>
+            <div className="mt-0.5 truncate text-[19px] font-semibold tabular-nums tracking-tight text-foreground">{c.value}</div>
+          </div>
+        ))}
+      </section>
+    );
+  }
   return (
     <section className={cn("grid grid-cols-2 overflow-hidden rounded-2xl border border-border bg-surface lg:grid-cols-4", className)}>
       {/* Chiffre principal */}

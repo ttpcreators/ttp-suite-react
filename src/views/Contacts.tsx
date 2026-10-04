@@ -26,6 +26,8 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { RecipientPicker, type PickContact } from "@/components/ui/recipient-picker";
 import { FilterBar } from "@/components/ui/filter-bar";
+import { FilterPanel } from "@/components/ui/filter-panel";
+import { useIosPhone } from "@/components/mobile/ios-sheet";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
@@ -282,6 +284,7 @@ export function Contacts() {
   const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS);
   const [contactFilter, setContactFilter] = useState<"all" | "contacted" | "never" | "relancer">("all"); // déjà échangé ?
   const [cityFilter, setCityFilter] = useState<string>(""); // "" = toutes les villes
+  const iosPhone = useIosPhone(); // mode iPhone : filtres rangés dans une feuille « Filtres »
   const [touchDel, setTouchDel] = useState<string | null>(null); // suppression d'une touche en 2 temps
   const [importing, setImporting] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -878,6 +881,59 @@ export function Contacts() {
         );
       })()}
 
+      {/* Mode iPhone : les trois filtres dans une feuille « Filtres » */}
+      {iosPhone ? (
+        <FilterPanel
+          className="mb-4"
+          activeCount={(tagFilter !== ALL_TAGS ? 1 : 0) + (contactFilter !== "all" ? 1 : 0) + (cityFilter ? 1 : 0)}
+          onClear={() => {
+            setTagFilter(ALL_TAGS);
+            setContactFilter("all");
+            setCityFilter("");
+          }}
+          groups={[
+            {
+              id: "tag",
+              label: "Catégorie",
+              value: tagFilter,
+              onChange: setTagFilter,
+              options: [
+                { value: ALL_TAGS, label: "Tous" },
+                ...tagList.map((t) => ({ value: t, label: t })),
+                ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "Ajoutés par les créateurs" }] : []),
+              ],
+            },
+            {
+              id: "suivi",
+              label: "Suivi",
+              value: contactFilter,
+              onChange: (v) => setContactFilter(v as "all" | "contacted" | "never" | "relancer"),
+              options: [
+                { value: "all", label: "Tous" },
+                { value: "contacted", label: "Déjà contactés" },
+                { value: "never", label: "Jamais contactés" },
+                { value: "relancer", label: "À relancer" },
+              ],
+            },
+          ]}
+          extra={cityList.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <span className="px-1 text-[13px] font-medium uppercase tracking-[0.02em] text-muted-foreground">Ville</span>
+              <select
+                value={cityFilter}
+                onChange={(e) => setCityFilter(e.target.value)}
+                className="h-11 rounded-xl border border-border bg-surface px-3 text-foreground outline-none focus:border-primary"
+                aria-label="Filtrer par ville"
+              >
+                <option value="">Toutes les villes</option>
+                {cityList.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          ) : undefined}
+        />
+      ) : (<>
       {/* Barre de filtres par tag (pastilles desktop · sélecteur mobile) */}
       <FilterBar
         className="mb-4"
@@ -926,6 +982,7 @@ export function Contacts() {
           </div>
         )}
       </div>
+      </>)}
 
       <InlineForm
         open={formOpen}

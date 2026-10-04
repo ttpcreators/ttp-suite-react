@@ -264,7 +264,7 @@ export function ApercuView({
     <div>
       {/* En-tête : salutation + période */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[24px] font-semibold tracking-tight md:text-[28px]">{greeting()}</h1>
+        <h1 className="page-title text-[24px] font-semibold tracking-tight md:text-[28px]">{greeting()}</h1>
         <div className="flex flex-wrap items-center gap-2">
           <Tabs
             size="sm"
@@ -283,7 +283,7 @@ export function ApercuView({
       </div>
 
       {/* Raccourcis (mobile uniquement : sur ordinateur, la barre latérale suffit) */}
-      <div className="mb-4 grid grid-cols-3 gap-2 md:hidden">
+      <div className="ios-phone-hide mb-4 grid grid-cols-3 gap-2 md:hidden">
         {[
           { id: "roster", label: "Roster", Icon: Users },
           { id: "todo", label: "To-do", Icon: ListChecks },
@@ -304,11 +304,11 @@ export function ApercuView({
         {/* ── Colonne principale ── (flex : la dernière rangée s'étire jusqu'en bas) */}
         <Panel className="flex flex-col xl:col-span-8" i={0}>
           {/* KPI séparés par des filets */}
-          <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <div className="ios-kpis grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             {kpis.map((k) => (
               <div key={k.label} className="px-5 py-5">
                 <div className="text-[13px] text-muted-foreground">{k.label}</div>
-                <div className="mt-2 text-[28px] font-semibold leading-none tracking-tight tabular-nums">{k.value}</div>
+                <div className="ios-kpi-value mt-2 text-[28px] font-semibold leading-none tracking-tight tabular-nums">{k.value}</div>
                 <div className="mt-3">
                   <Delta value={k.delta} suffix={periodSuffix} />
                 </div>

@@ -5,6 +5,7 @@ import { ConfirmDialog } from "@/components/ui/action-menu";
 import { cn } from "@/lib/utils";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { getIosUi } from "@/lib/iosUi";
 
 export type Ev = {
   id: string;
@@ -210,7 +211,8 @@ export function EventCalendar({
     d.setHours(0, 0, 0, 0);
     return d;
   });
-  const [view, setView] = useState<View>("month");
+  // Mode iPhone : l'agenda en liste se lit mieux qu'une grille de mois sur un téléphone.
+  const [view, setView] = useState<View>(() => (getIosUi() && window.matchMedia("(max-width: 767px)").matches ? "list" : "month"));
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false); // enregistrement / suppression en cours
   // Filtres de catégorie (événements / briefs / to-do) — actifs par défaut.

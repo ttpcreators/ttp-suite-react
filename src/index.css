@@ -358,3 +358,35 @@ body {
     animation: none !important;
   }
 }
+
+/* Mode iPhone : textes à la taille de lecture iOS (l'app est réglée en 13 px pour
+   l'ordinateur). Seulement dans les pages et les feuilles, pas dans les barres. */
+@media (max-width: 767px) {
+  .ios-ui :is(main, .ios-sheet) .text-\[11px\] { font-size: 12px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[12px\] { font-size: 13px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[12\.5px\] { font-size: 14px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[13px\] { font-size: 15px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[13\.5px\] { font-size: 15.5px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[14px\] { font-size: 16px; }
+  .ios-ui :is(main, .ios-sheet) .text-xs { font-size: 13px; }
+  .ios-ui :is(main, .ios-sheet) .text-sm { font-size: 15px; }
+}
+@media (max-width: 767px) {
+  /* Aperçu : les trois chiffres côte à côte, compacts (au lieu d'un par ligne). */
+  .ios-ui .ios-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .ios-ui .ios-kpis > * {
+    padding: 0.9rem 0.75rem;
+    border-top-width: 0 !important;
+  }
+  .ios-ui .ios-kpis > * + * {
+    border-left: 1px solid var(--border);
+  }
+  .ios-ui .ios-kpis .ios-kpi-value {
+    font-size: 19px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

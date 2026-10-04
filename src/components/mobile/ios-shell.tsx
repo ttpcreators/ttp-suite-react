@@ -120,9 +120,9 @@ export function IosBarIcon({ icon: Icon, label, onClick }: { icon: LucideIcon; l
 export function IosGroup({ title, footer, children, className }: { title?: string; footer?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={cn("flex flex-col", className)}>
-      {title && <h2 className="px-4 pb-1.5 text-[13px] font-normal uppercase tracking-[0.02em] text-muted-foreground">{title}</h2>}
+      {title && <h2 className="px-4 pb-1.5 text-[0.8125rem] font-normal uppercase tracking-[0.02em] text-muted-foreground">{title}</h2>}
       <div className="overflow-hidden rounded-xl border border-border/60 bg-surface">{children}</div>
-      {footer && <p className="px-4 pt-1.5 text-[13px] leading-snug text-muted-foreground">{footer}</p>}
+      {footer && <p className="px-4 pt-1.5 text-[0.8125rem] leading-snug text-muted-foreground">{footer}</p>}
     </section>
   );
 }

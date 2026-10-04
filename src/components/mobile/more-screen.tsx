@@ -38,7 +38,7 @@ export function MoreScreen({
               {profile.avatar}
               <span className="min-w-0">
                 <span className="block truncate text-[19px] font-semibold leading-tight text-foreground">{profile.name}</span>
-                <span className="block truncate text-[14px] text-muted-foreground">{profile.sub}</span>
+                <span className="block truncate text-[0.9375rem] text-muted-foreground">{profile.sub}</span>
               </span>
             </span>
           }
