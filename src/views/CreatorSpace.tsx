@@ -77,7 +77,9 @@ import { PageFrame, PageHeaderRow } from "@/components/ui/page-header";
 import { useIosUi, useIsPhone } from "@/lib/iosUi";
 import { IosBackButton, IosNavBar, IosTabBar } from "@/components/mobile/ios-shell";
 import { MoreScreen } from "@/components/mobile/more-screen";
+import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
 import { Delta, DashPanel, DashSectionTitle, DashWideLink } from "@/components/ui/dash";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -1247,6 +1249,15 @@ export function CreatorSpace({
   };
 
   // Change le statut d'une tâche depuis la vue colonnes (done dérivé de « Fait »).
+  // Supprimer une tâche (menu ⋯, ou glisser la ligne en mode iPhone).
+  const deleteTodo = async (t: Todo) => {
+    if (await dbDelete("todos", t.id)) {
+      setTodos((prev) => prev.filter((x) => x.id !== t.id));
+      toast("Supprimé");
+    } else {
+      toast("Erreur — réessaie");
+    }
+  };
   const setTodoStatus = async (t: Todo, status: string) => {
     const done = status === "Fait";
     const prev = { status: t.status ?? null, done: t.done };
@@ -2281,14 +2292,7 @@ export function CreatorSpace({
                                 label: "Supprimer",
                                 icon: Trash2,
                                 danger: true,
-                                onClick: async () => {
-                                  if (await dbDelete("todos", t.id)) {
-                                    setTodos((prev) => prev.filter((x) => x.id !== t.id));
-                                    toast("Supprimé");
-                                  } else {
-                                    toast("Erreur — réessaie");
-                                  }
-                                },
+                                onClick: () => void deleteTodo(t),
                                 confirm: { title: "Supprimer la tâche", message: `Supprimer «\u00A0${t.text}\u00A0»\u00A0? Cette action est irréversible.` },
                               },
                             ]}
@@ -2311,6 +2315,9 @@ export function CreatorSpace({
                       const order = ["À faire", "En cours", "Fait"];
                       setTodoStatus(t, order[(order.indexOf(cStatus(t)) + 1) % order.length]);
                     }}
+                    onSetStatus={(id, status) => { const t = todos.find((x) => x.id === id); if (t) setTodoStatus(t, status); }}
+                    onDeleteTask={(id) => { const t = todos.find((x) => x.id === id); if (t) void deleteTodo(t); }}
+                    deleteMessage={(t) => `Supprimer « ${t.title} » ? Cette action est irréversible.`}
                     onToggleSubtask={(taskId, subId) => { const t = todos.find((x) => x.id === taskId); if (t) toggleSubtask(t, subId); }}
                     onAddSubtask={(taskId, text) => { patchTodo(taskId, (x) => ({ subtasks: [...(x.subtasks ?? []), { id: stid(), text, done: false }] })); }}
                     onDelSubtask={(taskId, subId) => { const t = todos.find((x) => x.id === taskId); if (t) delSubtask(t, subId); }}
@@ -2482,7 +2489,7 @@ export function CreatorSpace({
 
               {/* Fiche contact (voir + copier) */}
               {contactView && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setContactView(null)}>
+                <Overlay className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClose={() => setContactView(null)}>
                   <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
                     <div className="mb-4 flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
@@ -2508,7 +2515,7 @@ export function CreatorSpace({
                       )}
                     </div>
                   </div>
-                </div>
+                </Overlay>
               )}
             </>
           )}
@@ -3022,6 +3029,7 @@ export function CreatorSpace({
 
       {/* Nav mobile animée — MÊME composant que l'espace agence (ExpandableTabs).
           On tape une famille → ses pages se déploient en animé. Fixe en bas. */}
+      {iosPhone && <PullToRefresh scrollRef={mainRef} />}
       {iosPhone && (
         <IosTabBar
           items={[
@@ -3137,7 +3145,7 @@ export function CreatorSpace({
 
       {/* Fiche tâche — texte complet en grande carte */}
       {taskView && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setTaskView(null)}>
+        <Overlay className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClose={() => setTaskView(null)}>
           <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-start justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -3231,7 +3239,7 @@ export function CreatorSpace({
               </button>
             </div>
           </div>
-        </div>
+        </Overlay>
       )}
     </div>
   );

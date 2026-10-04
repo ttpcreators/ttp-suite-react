@@ -27,6 +27,7 @@ import { AgencyAvatar, MyName } from "@/components/ui/agency-avatar";
 import { useIosUi, useIsPhone } from "@/lib/iosUi";
 import { IosBackButton, IosBarIcon, IosNavBar, IosTabBar, type IosTab } from "@/components/mobile/ios-shell";
 import { MoreScreen } from "@/components/mobile/more-screen";
+import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
 
 // Vues chargées à la demande (code-splitting → démarrage plus léger, mobile compris).
 const RosterTabs = lazy(() => import("@/views/RosterTabs").then((m) => ({ default: m.RosterTabs })));
@@ -976,6 +977,7 @@ export default function App() {
           </div>
         </div>
 
+        {iosPhone && <PullToRefresh scrollRef={scrollRef} />}
         {/* Mode iPhone : barre d'onglets en bas */}
         {iosPhone && (
           <IosTabBar

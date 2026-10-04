@@ -4,6 +4,7 @@ import { TextField, TextAreaField, SelectField } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { cn } from "@/lib/utils";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 export type Ev = {
   id: string;
@@ -740,10 +741,7 @@ function EventModal({
   const [showConfirm, setShowConfirm] = useState(false);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
-    >
+    <Overlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClose={onClose}>
       <form
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
@@ -863,6 +861,6 @@ function EventModal({
           />
         )}
       </form>
-    </div>
+    </Overlay>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 /**
  * Modale « welcome » réutilisable (titre + description + contenu + action), bâtie
@@ -41,7 +42,7 @@ export function WelcomeModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <Overlay className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4" onClose={onClose}>
       <div
         className={cn("w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl", className)}
         onClick={(e) => e.stopPropagation()}
@@ -74,6 +75,6 @@ export function WelcomeModal({
           </div>
         )}
       </div>
-    </div>
+    </Overlay>
   );
 }

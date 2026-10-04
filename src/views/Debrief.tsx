@@ -25,6 +25,7 @@ import { pdfShell, pdfHeading, pdfMeta, pdfSection, pdfKpis, pdfTicks, pdfShots 
 import { totalsOf as engTotals, parseNum as engParse, fmtCompact, fmtPct } from "@/lib/engagement";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 /** Une petite statistique de campagne (label / valeur). */
 type Kpi = { l: string; v: string };
@@ -807,7 +808,7 @@ export function Debrief() {
 
       {/* Partager le debrief à la marque */}
       {shareD && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClick={() => !shareSending && setShareD(null)}>
+        <Overlay className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClose={() => !shareSending && setShareD(null)}>
           <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
               <div className="min-w-0">
@@ -852,7 +853,7 @@ export function Debrief() {
               </div>
             </div>
           </div>
-        </div>
+        </Overlay>
       )}
 
       {/* Fiche détail (clic sur une ligne / « Voir la fiche ») */}
@@ -902,7 +903,7 @@ function DebriefDetail({
   const er = t ? (calc!.basis === "followers" ? t.erFollowers : t.erReach) : null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-6" onClick={onClose}>
+    <Overlay className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-6" onClose={onClose}>
       <div className="my-2 w-full max-w-2xl rounded-2xl border border-border bg-surface shadow-xl" onClick={(e) => e.stopPropagation()}>
         {/* En-tête */}
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
@@ -1012,6 +1013,6 @@ function DebriefDetail({
           </button>
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 }

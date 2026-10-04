@@ -18,6 +18,7 @@ import {
   representationText,
   representationHTML,
 } from "@/lib/representationContract";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 type Cfg = Record<string, string>;
 type SavedCase = { id: string; name: string; config: Cfg };
@@ -54,7 +55,7 @@ function defaultConfig(variant: string): Cfg {
 
 function Modal({ title, onClose, children, footer, wide }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   return (
-    <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm sm:p-6" onClick={onClose}>
+    <Overlay className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm sm:p-6" onClose={onClose}>
       <div className={cn("my-2 w-full rounded-2xl border border-border bg-card shadow-2xl", wide ? "max-w-3xl" : "max-w-lg")} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
           <div className="text-sm font-semibold text-foreground">{title}</div>
@@ -63,7 +64,7 @@ function Modal({ title, onClose, children, footer, wide }: { title: string; onCl
         <div className="max-h-[72vh] overflow-y-auto px-5 py-4">{children}</div>
         {footer && <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">{footer}</div>}
       </div>
-    </div>
+    </Overlay>
   );
 }
 

@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
-import { CheckCircle2, Circle, CircleDotDashed, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, Circle, CircleDotDashed, ChevronRight, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { SwipeRow } from "@/components/mobile/swipe-row";
+import { ConfirmDialog } from "@/components/ui/action-menu";
 import { cn } from "@/lib/utils";
 
 /**
@@ -36,6 +38,9 @@ export function AgentPlan({
   onDelSubtask,
   onOpenTask,
   defaultExpandedId,
+  onSetStatus,
+  onDeleteTask,
+  deleteMessage,
 }: {
   tasks: PlanTask[];
   onCycleStatus: (id: string) => void;
@@ -45,9 +50,15 @@ export function AgentPlan({
   /** Clic sur le titre → ouvre la fiche détail (description, pièces jointes…). */
   onOpenTask?: (id: string) => void;
   defaultExpandedId?: string;
+  /** Mode iPhone : glisser une tâche vers la gauche → « Fait » / « Rouvrir ». */
+  onSetStatus?: (id: string, status: string) => void;
+  /** Mode iPhone : glisser une tâche vers la gauche → « Supprimer » (avec confirmation). */
+  onDeleteTask?: (id: string) => void;
+  deleteMessage?: (task: PlanTask) => string;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>(defaultExpandedId ? { [defaultExpandedId]: true } : {});
   const [input, setInput] = useState<Record<string, string>>({});
+  const [toDelete, setToDelete] = useState<PlanTask | null>(null);
 
   return (
     // Langage Aperçu : UNE liste dans un panneau, lignes séparées par des filets.
@@ -60,7 +71,17 @@ export function AgentPlan({
         const status = task.done ? "Fait" : task.status;
         return (
           <li key={task.id} className="transition-colors hover:bg-rowhover/50">
-            {/* Ligne tâche */}
+            {/* Ligne tâche (mode iPhone : glisser vers la gauche pour « Fait » / « Supprimer ») */}
+            <SwipeRow
+              actions={[
+                ...(onSetStatus
+                  ? [status === "Fait"
+                    ? { key: "reopen", label: "Rouvrir", icon: RotateCcw, tone: "gray" as const, onClick: () => onSetStatus(task.id, "À faire") }
+                    : { key: "done", label: "Fait", icon: CheckCircle2, tone: "green" as const, onClick: () => onSetStatus(task.id, "Fait") }]
+                  : []),
+                ...(onDeleteTask ? [{ key: "delete", label: "Supprimer", icon: Trash2, tone: "red" as const, onClick: () => setToDelete(task) }] : []),
+              ]}
+            >
             <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
               {/* Icône de statut (cycle au clic) */}
               <button
@@ -102,6 +123,7 @@ export function AgentPlan({
               {/* Zone droite (pilule priorité + menu) */}
               {task.right && <div className="flex shrink-0 items-center gap-1">{task.right}</div>}
             </div>
+            </SwipeRow>
 
             {/* Sous-tâches en ligne (trait de liaison pointillé) */}
             <div className={cn("grid transition-[grid-template-rows,opacity] duration-300 ease-in-out", open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")}>
@@ -148,6 +170,20 @@ export function AgentPlan({
           </li>
         );
       })}
+      {toDelete && onDeleteTask && (
+        <ConfirmDialog
+          title="Supprimer la tâche"
+          message={deleteMessage ? deleteMessage(toDelete) : `Supprimer « ${toDelete.title} » ?`}
+          confirmLabel="Supprimer"
+          danger
+          onCancel={() => setToDelete(null)}
+          onConfirm={() => {
+            const t = toDelete;
+            setToDelete(null);
+            onDeleteTask(t.id);
+          }}
+        />
+      )}
     </ul>
   );
 }

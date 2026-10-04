@@ -13,6 +13,7 @@ import { AttachButton, AttachChips } from "@/components/mail-attach";
 import { BoxChip, BoxPicker } from "@/components/mail-box-chip";
 import { cleanSignature } from "@/lib/mailSignature";
 import type { MailMessage } from "@/lib/creatorMail";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 /*
  * Outils d'écriture des mails (agence) : réglages (signature collée, délai
@@ -75,7 +76,7 @@ export function MailSettingsDialog({ open, onClose }: { open: boolean; onClose: 
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={onClose}>
+    <Overlay className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClose={onClose}>
       <div className="flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-border bg-surface shadow-xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 border-b border-border px-5 py-3.5">
           <Settings2 className="h-4 w-4 text-muted-foreground" />
@@ -137,7 +138,7 @@ export function MailSettingsDialog({ open, onClose }: { open: boolean; onClose: 
           </button>
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 }
 
@@ -362,7 +363,7 @@ export function ForwardDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={onClose}>
+    <Overlay className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClose={onClose}>
       <div className="flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-border bg-surface shadow-xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 border-b border-border px-5 py-3.5">
           <PenLine className="h-4 w-4 text-muted-foreground" />
@@ -407,7 +408,7 @@ export function ForwardDialog({
           </button>
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 }
 
@@ -463,7 +464,7 @@ export function NewMailDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={onClose}>
+    <Overlay className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClose={onClose}>
       <div className="flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-border bg-surface shadow-xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 border-b border-border px-5 py-3.5">
           <PenLine className="h-4 w-4 text-muted-foreground" />
@@ -505,6 +506,6 @@ export function NewMailDialog({
           </button>
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 }

@@ -14,6 +14,7 @@ import { isMainPlatform, type PlatformKey } from "@/lib/platform";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { cn, titleCase } from "@/lib/utils";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 /**
  * Calculateur de taux d'engagement — la formule ET les métriques DIFFÈRENT selon
@@ -656,7 +657,7 @@ function DetailModal({
   ];
   const isMoyen = entry.verdict === "Moyen";
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <Overlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClose={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -711,7 +712,7 @@ function DetailModal({
           </button>
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 }
 

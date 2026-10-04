@@ -17,6 +17,7 @@ import { readMediakitTemplates, MEDIAKIT_TEMPLATES_KEY } from "@/lib/mailTemplat
 import { AgencyTab } from "@/views/MediakitAgence";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
 import { Tabs, type TabItem } from "@/components/ui/animated-tabs";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 /**
  * Media kit = bibliothèque de fichiers. L'agence dépose les media kits qu'elle a
@@ -481,7 +482,7 @@ function MediakitFiles() {
 
       {/* Modale : ajout par lien */}
       {linkOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setLinkOpen(false)}>
+        <Overlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClose={() => setLinkOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <div className="text-sm font-semibold">Ajouter un media kit par lien</div>
@@ -513,12 +514,12 @@ function MediakitFiles() {
               </button>
             </div>
           </div>
-        </div>
+        </Overlay>
       )}
 
       {/* Modale : envoi par mail (multi-destinataires + template) */}
       {sendRow && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSendRow(null)}>
+        <Overlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClose={() => setSendRow(null)}>
           <div onClick={(e) => e.stopPropagation()} className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <div className="text-sm font-semibold">Envoyer le media kit de {titleCase(sendRow.creator ?? "")}</div>
@@ -613,12 +614,12 @@ function MediakitFiles() {
               </button>
             </div>
           </div>
-        </div>
+        </Overlay>
       )}
 
       {/* Modale : gérer les templates de mail */}
       {tplMgr && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setTplMgr(false)}>
+        <Overlay className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClose={() => setTplMgr(false)}>
           <div onClick={(e) => e.stopPropagation()} className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <div className="text-sm font-semibold">Templates de mail</div>
@@ -693,7 +694,7 @@ function MediakitFiles() {
               </div>
             )}
           </div>
-        </div>
+        </Overlay>
       )}
 
       {tplDelete && (

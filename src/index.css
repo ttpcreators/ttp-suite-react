@@ -299,3 +299,62 @@ body {
     box-shadow: none;
   }
 }
+
+/* ── Feuilles iOS (mode iPhone) ─────────────────────────────────────────── */
+/* Le panneau d'une fenêtre devient une feuille du bas : pleine largeur, coins hauts
+   arrondis, hauteur bornée (défile à l'intérieur), marge du bas de l'iPhone. */
+.ios-sheet-panel > :not([aria-hidden]) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  border-radius: 14px 14px 0 0 !important;
+  border-bottom-width: 0 !important;
+  max-height: calc(100dvh - 2.5rem - env(safe-area-inset-top)) !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: max(1.25rem, calc(env(safe-area-inset-bottom) + 0.75rem)) !important;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.12) !important;
+}
+/* Matière des feuilles d'actions (menus ⋯, confirmations). */
+.ios-actions {
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+}
+@media (max-width: 767px) {
+  /* Bulles flottantes (notifications, calendriers) → feuille du bas, fond assombri. */
+  .ios-ui [data-radix-popper-content-wrapper] {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    transform: none !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    z-index: 1150 !important;
+  }
+  .ios-ui [data-radix-popper-content-wrapper] > * {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 82dvh !important;
+    border-radius: 14px 14px 0 0 !important;
+    border-bottom-width: 0 !important;
+    padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.4) !important;
+    animation: ios-sheet-up 0.32s cubic-bezier(0.2, 0.9, 0.25, 1) !important;
+  }
+  .ios-ui [data-radix-popper-content-wrapper] > * > * {
+    width: 100% !important;
+  }
+}
+@keyframes ios-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ios-ui [data-radix-popper-content-wrapper] > * {
+    animation: none !important;
+  }
+}

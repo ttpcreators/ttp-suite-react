@@ -2,6 +2,7 @@ import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Plus, X, ChevronDown, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { IosActionSheet, IosSheet, useIosPhone } from "@/components/mobile/ios-sheet";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "./select";
 import { DateInput } from "./date-range-picker";
 
@@ -38,6 +39,7 @@ export type AddMenuItem = { key: string; label: string; hint?: string; icon?: Lu
  */
 export function AddMenuButton({ label, items }: { label: string; items: AddMenuItem[] }) {
   const [open, setOpen] = useState(false);
+  const ios = useIosPhone();
   const [rect, setRect] = useState<DOMRect | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -79,7 +81,15 @@ export function AddMenuButton({ label, items }: { label: string; items: AddMenuI
         <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
       </button>
 
+      {open && ios && (
+        <IosActionSheet
+          title={label}
+          actions={items.map((it) => ({ key: it.key, label: it.label, icon: it.icon, onClick: () => { setOpen(false); it.onClick(); } }))}
+          onCancel={() => setOpen(false)}
+        />
+      )}
       {open &&
+        !ios &&
         rect &&
         createPortal(
           <>
@@ -302,21 +312,38 @@ export function InlineForm({
   // Hooks AVANT le return conditionnel (leçon React #310).
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const ios = useIosPhone();
   if (!open) return null;
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await onSubmit();
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
+  // Mode iPhone : feuille de formulaire iOS (« Annuler » · titre · « Ajouter »).
+  if (ios) {
+    return (
+      <IosSheet onClose={onClose} label={title}>
+        <form onSubmit={submit} className="bg-panel">
+          <div className="ios-bar sticky top-0 z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-border/70 px-4 pb-3 pt-6">
+            <button type="button" onClick={onClose} className="justify-self-start text-[17px] text-primary">Annuler</button>
+            <div className="max-w-[190px] truncate text-center text-[17px] font-semibold text-foreground">{title}</div>
+            <button type="submit" disabled={busy} className="justify-self-end text-[17px] font-semibold text-primary disabled:opacity-40">{submitLabel}</button>
+          </div>
+          <div className="flex flex-col gap-3.5 px-4 pt-4">{children}</div>
+        </form>
+      </IosSheet>
+    );
+  }
   return (
     <form
-      onSubmit={async (e) => {
-        e.preventDefault();
-        if (busyRef.current) return;
-        busyRef.current = true;
-        setBusy(true);
-        try {
-          await onSubmit();
-        } finally {
-          busyRef.current = false;
-          setBusy(false);
-        }
-      }}
+      onSubmit={submit}
       className="mb-4 rounded-2xl border border-border bg-surface p-5 shadow-sm"
     >
       <div className="mb-3.5 flex items-center justify-between">

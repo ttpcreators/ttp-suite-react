@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, Trash2, BarChart3, ChevronLeft, type LucideIcon } from "lucide-react";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 type Row = {
   id: string;
@@ -492,10 +493,7 @@ export function Documents() {
       </div>
 
       {previewDoc && (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-          onClick={() => setPreviewDoc(null)}
-        >
+        <Overlay className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClose={() => setPreviewDoc(null)}>
           <div
             className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
             onClick={(e) => e.stopPropagation()}
@@ -565,7 +563,7 @@ export function Documents() {
               )}
             </div>
           </div>
-        </div>
+        </Overlay>
       )}
     </div>
   );

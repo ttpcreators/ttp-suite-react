@@ -32,6 +32,7 @@ import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { DEFAULT_TEMPLATES, mailtoHref, readProspectTemplates, suggestedMail, type MailTemplate } from "@/lib/mailTemplates";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 type Row = {
   id: string;
@@ -1085,10 +1086,7 @@ export function Contacts() {
 
       {/* Fiche détail contact */}
       {selected && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setSelected(null)}
-        >
+        <Overlay className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClose={() => setSelected(null)}>
           <div
             className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
@@ -1313,12 +1311,12 @@ export function Contacts() {
               </button>
             </div>
           </div>
-        </div>
+        </Overlay>
       )}
 
       {/* Composeur d'email (envoi direct via Resend) */}
       {mailOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClick={() => !sending && setMailOpen(false)}>
+        <Overlay className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClose={() => !sending && setMailOpen(false)}>
           <div
             className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
@@ -1458,7 +1456,7 @@ export function Contacts() {
               </div>
             </div>
           </div>
-        </div>
+        </Overlay>
       )}
 
       {confirmSend && (

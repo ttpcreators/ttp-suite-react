@@ -37,6 +37,7 @@ import { printHtml } from "@/lib/printPdf";
 import { ttpLogoImg } from "@/lib/pdfDoc";
 import { notifyCreator } from "@/lib/push";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -360,7 +361,7 @@ function Modal({
   wide?: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm sm:p-6" onClick={onClose}>
+    <Overlay className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm sm:p-6" onClose={onClose}>
       <div
         className={cn(
           "my-2 w-full rounded-2xl border border-border bg-card shadow-2xl",
@@ -377,7 +378,7 @@ function Modal({
         <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
         {footer && <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">{footer}</div>}
       </div>
-    </div>
+    </Overlay>
   );
 }
 

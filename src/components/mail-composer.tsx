@@ -26,6 +26,7 @@ import {
   type MailTemplateKind,
   type TemplateContact,
 } from "@/lib/mailTemplates";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 /**
  * Composeur de mails de prospection : choisit un modèle (prospection /
@@ -240,7 +241,7 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <Overlay className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClose={onClose}>
       <div
         className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
@@ -486,6 +487,6 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
           </>
         )}
       </div>
-    </div>
+    </Overlay>
   );
 }

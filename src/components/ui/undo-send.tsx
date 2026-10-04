@@ -28,7 +28,7 @@ export function UndoSendBar() {
 
   if (!items.length) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(10rem+env(safe-area-inset-bottom))] z-[201] flex flex-col items-center gap-2 px-4 md:bottom-24">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(10rem+env(safe-area-inset-bottom))] z-[1301] flex flex-col items-center gap-2 px-4 md:bottom-24">
       {items.map((p) => {
         const left = Math.max(0, Math.ceil((p.until - Date.now()) / 1000));
         return (

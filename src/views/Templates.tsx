@@ -9,6 +9,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn } from "@/lib/utils";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 /** `id` : présent sur les modèles perso (généré à l'écriture pour les anciens). */
 type Template = { id?: string; category: string; title: string; body: string };
@@ -463,10 +464,7 @@ export function Templates() {
 
       {/* Aperçu plein texte — le corps est tronqué dans les cartes/lignes. */}
       {preview && (
-        <div
-          className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-6"
-          onClick={() => setPreview(null)}
-        >
+        <Overlay className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-6" onClose={() => setPreview(null)}>
           <div
             className="my-2 w-full max-w-2xl rounded-2xl border border-border bg-surface shadow-xl"
             onClick={(e) => e.stopPropagation()}
@@ -497,7 +495,7 @@ export function Templates() {
               </button>
             </div>
           </div>
-        </div>
+        </Overlay>
       )}
     </div>
   );

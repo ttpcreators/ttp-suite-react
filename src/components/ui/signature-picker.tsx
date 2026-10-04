@@ -8,6 +8,7 @@ import {
   type MailSignature,
   type SigFields,
 } from "@/lib/useMailSignatures";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 /**
  * Choix de la signature d'un email : miniatures (image ou carte HTML), ajout
@@ -166,7 +167,7 @@ export function SignaturePicker({
 
       {/* Modale : créer / modifier une signature HTML */}
       {formOpen && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/50 p-4" onClick={() => setFormOpen(false)}>
+        <Overlay className="fixed inset-0 z-[130] flex items-center justify-center bg-black/50 p-4" onClose={() => setFormOpen(false)}>
           <div
             className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
@@ -231,7 +232,7 @@ export function SignaturePicker({
               </button>
             </div>
           </div>
-        </div>
+        </Overlay>
       )}
     </div>
   );

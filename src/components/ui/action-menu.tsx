@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MoreHorizontal, AlertTriangle, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { IosActionSheet, useIosPhone } from "@/components/mobile/ios-sheet";
 
 export type ActionItem = {
   key: string;
@@ -31,6 +32,19 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  // Mode iPhone : feuille d'actions iOS (bouton rouge si destructif, « Annuler » à part).
+  const ios = useIosPhone();
+  if (ios) {
+    return (
+      <IosActionSheet
+        title={title}
+        message={message}
+        actions={[{ key: "ok", label: confirmLabel, danger, onClick: onConfirm }]}
+        onCancel={onCancel}
+        cancelLabel={cancelLabel}
+      />
+    );
+  }
   return createPortal(
     <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onCancel}>
       <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -67,6 +81,7 @@ export function ActionMenu({ items, buttonClassName, align = "right" }: { items:
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [confirmItem, setConfirmItem] = useState<ActionItem | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const ios = useIosPhone();
 
   const toggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -78,11 +93,14 @@ export function ActionMenu({ items, buttonClassName, align = "right" }: { items:
     setOpen(true);
   };
 
-  const run = (item: ActionItem, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const runItem = (item: ActionItem) => {
     setOpen(false);
     if (item.confirm) setConfirmItem(item);
     else item.onClick();
+  };
+  const run = (item: ActionItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    runItem(item);
   };
 
   const W = 210;
@@ -107,7 +125,14 @@ export function ActionMenu({ items, buttonClassName, align = "right" }: { items:
         <MoreHorizontal className="h-4 w-4" />
       </button>
 
+      {open && ios && (
+        <IosActionSheet
+          actions={items.map((it) => ({ key: it.key, label: it.label, icon: it.icon, danger: it.danger, onClick: () => runItem(it) }))}
+          onCancel={() => setOpen(false)}
+        />
+      )}
       {open &&
+        !ios &&
         rect &&
         createPortal(
           <>

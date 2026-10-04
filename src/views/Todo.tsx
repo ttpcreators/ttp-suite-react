@@ -36,6 +36,7 @@ import { WeeklyRoutines } from "@/components/WeeklyRoutines";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
 import { AgentPlan, type PlanTask } from "@/components/ui/agent-plan";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 type Priority = "haute" | "moyenne" | "basse";
 type Source = "agency" | "creator";
@@ -498,6 +499,29 @@ export function Todo() {
     }).length,
   );
 
+  // Statut d'une tâche (icône qui cycle, ou glisser « Fait » / « Rouvrir » sur iPhone).
+  const setStatusTo = async (id: string, status: string) => {
+    const row = (rows ?? []).find((r) => r.id === id);
+    if (!row) return;
+    const saved = await writeStatus(id, status);
+    if (saved) {
+      setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, ...saved } : r)));
+      setSelectedTodo((prev) => (prev?.id === id ? { ...prev, ...saved } : prev));
+      notifyTaskDone(row, status);
+    } else {
+      toast("Statut non enregistré — la colonne « status » manque (lance le SQL)");
+    }
+  };
+  // Supprimer = corbeille (restaurable), depuis le menu ⋯ ou en glissant la ligne.
+  const trashTodo = async (row: Row) => {
+    if (await dbTrash("todos", row.id, row.text, row.creator ?? undefined)) {
+      removeRow(row.id);
+      toast("Déplacé dans la corbeille");
+    } else {
+      toast("Erreur — réessaie");
+    }
+  };
+
   return (
     <div>
       <PageHeaderRow>
@@ -793,14 +817,7 @@ export function Todo() {
                       label: "Supprimer",
                       icon: Trash2,
                       danger: true,
-                      onClick: async () => {
-                        if (await dbTrash("todos", row.id, row.text, row.creator ?? undefined)) {
-                          removeRow(row.id);
-                          toast("Déplacé dans la corbeille");
-                        } else {
-                          toast("Erreur — réessaie");
-                        }
-                      },
+                      onClick: () => void trashTodo(row),
                       confirm: { title: "Supprimer la tâche", message: `Supprimer « ${row.text} » ? Tu pourras la restaurer depuis la corbeille.` },
                     },
                   ]}
@@ -849,20 +866,15 @@ export function Todo() {
               </button>
             ),
           }))}
-          onCycleStatus={async (id) => {
+          onCycleStatus={(id) => {
             const row = (rows ?? []).find((r) => r.id === id);
             if (!row) return;
             const order = ["À faire", "En cours", "Fait"];
-            const status = order[(order.indexOf(todoStatus(row)) + 1) % order.length];
-            const saved = await writeStatus(id, status);
-            if (saved) {
-              setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, ...saved } : r)));
-              setSelectedTodo((prev) => (prev?.id === id ? { ...prev, ...saved } : prev));
-              notifyTaskDone(row, status);
-            } else {
-              toast("Statut non enregistré — la colonne « status » manque (lance le SQL)");
-            }
+            void setStatusTo(id, order[(order.indexOf(todoStatus(row)) + 1) % order.length]);
           }}
+          onSetStatus={(id, status) => void setStatusTo(id, status)}
+          onDeleteTask={(id) => { const row = (rows ?? []).find((r) => r.id === id); if (row) void trashTodo(row); }}
+          deleteMessage={(t) => `Supprimer « ${t.title} » ? Tu pourras la restaurer depuis la corbeille.`}
           onToggleSubtask={(taskId, subId) => { const row = (rows ?? []).find((r) => r.id === taskId); if (row) toggleSubtask(row, subId); }}
           onAddSubtask={(taskId, text) => { patchTodo(taskId, (r) => ({ subtasks: [...(r.subtasks ?? []), { id: stid(), text, done: false }] })); }}
           onDelSubtask={(taskId, subId) => { const row = (rows ?? []).find((r) => r.id === taskId); if (row) delSubtask(row, subId); }}
@@ -872,13 +884,10 @@ export function Todo() {
 
       {/* Panneau de détail */}
       {selectedTodo && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => {
+        <Overlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClose={() => {
             setSelectedTodo(null);
             setEditing(false);
-          }}
-        >
+          }}>
           <div
             className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-surface p-6 shadow-sm"
             onClick={(e) => e.stopPropagation()}
@@ -1112,7 +1121,7 @@ export function Todo() {
             </div>
             )}
           </div>
-        </div>
+        </Overlay>
       )}
 
       {/* Confirmation avant de retirer une pièce jointe (fichier supprimé du stockage) */}

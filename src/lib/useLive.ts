@@ -41,6 +41,12 @@ function fireAll() {
   });
 }
 
+/** Rafraîchit tout de suite toutes les vues (ex. « tirer pour actualiser » sur iPhone). */
+export function refreshNow() {
+  lastFire = 0;
+  fireAll();
+}
+
 function ensureStarted() {
   if (started || typeof window === "undefined") return;
   started = true;

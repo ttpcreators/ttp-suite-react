@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
 import { BarButton, RailButton, SearchField, Tip, ToolButton, mailRowCls, pillCls } from "@/components/mail-shell";
+import { SwipeRow } from "@/components/mobile/swipe-row";
 import { saveBase64, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
 import { toast } from "@/components/ui/toast";
 import { parseTouches, nextKind, touchId, type Touch } from "@/lib/touches";
@@ -374,22 +375,26 @@ export function Mails() {
         ? "Suppression depuis talent@ pas encore autorisée (admin.google.com, droit gmail.modify)."
         : "Reconnecte Google (Planning → Google Agenda) pour autoriser la suppression."
       : code === "introuvable" ? "Mail introuvable (déjà supprimé ?)" : "Suppression impossible, réessaie";
-  const trashThread = async () => {
-    if (!thread || trashBusy) return;
-    const t = thread;
-    setTrashBusy(true);
+  // Met un fil à la corbeille (fil ouvert, ou ligne glissée en mode iPhone).
+  const trashTarget = async (t: { threadId: string; box: MailBox; subject: string }): Promise<boolean> => {
     const res = await invokeJson<{ ok?: boolean; error?: string }>("gmail-trash", { threadId: t.threadId, box: t.box });
-    setTrashBusy(false);
-    setTrashAsk(false);
     if (!res?.ok) {
       toast(trashErrorText(res?.error, t.box));
-      return;
+      return false;
     }
     // Retiré tout de suite des listes affichées ; « Annuler » pendant 10 s.
     setInbox((l) => l?.filter((x) => x.threadId !== t.threadId) ?? l);
     setHistory((l) => l?.filter((x) => x.threadId !== t.threadId) ?? l);
-    setThread(null);
+    setThread((cur) => (cur && cur.threadId === t.threadId ? null : cur));
     setTrashed({ threadId: t.threadId, box: t.box, subject: t.subject });
+    return true;
+  };
+  const trashThread = async () => {
+    if (!thread || trashBusy) return;
+    setTrashBusy(true);
+    await trashTarget(thread);
+    setTrashBusy(false);
+    setTrashAsk(false);
   };
   const untrash = async () => {
     if (!trashed) return;
@@ -634,6 +639,7 @@ export function Mails() {
               const on = thread?.threadId === t.threadId && thread.box === t.box;
               return (
                 <li key={`${t.box}-${t.threadId}`}>
+                  <SwipeRow actions={[{ key: "trash", label: "Corbeille", icon: Trash2, tone: "red", onClick: () => void trashTarget(t) }]}>
                   <button
                     type="button"
                     aria-current={on || undefined}
@@ -661,6 +667,7 @@ export function Mails() {
                       </span>
                     </span>
                   </button>
+                  </SwipeRow>
                 </li>
               );
             })}
@@ -1062,7 +1069,7 @@ export function Mails() {
         />
       )}
       {trashed && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(10rem+env(safe-area-inset-bottom))] z-[201] flex justify-center px-4 md:bottom-24">
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(10rem+env(safe-area-inset-bottom))] z-[1301] flex justify-center px-4 md:bottom-24">
           <div role="status" className="pointer-events-auto flex w-full max-w-[440px] items-center gap-3 rounded-xl border border-border bg-surface px-4 py-2.5 shadow-lg shadow-black/5">
             <Trash2 className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">« {trashed.subject || "(sans objet)"} » mis à la corbeille</span>

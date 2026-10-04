@@ -18,6 +18,7 @@ import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { DateInput } from "@/components/ui/date-range-picker";
 import { todayISO } from "@/lib/dates";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 /**
  * VIVIER créateurs (hors roster) : répertoire de créateurs à SOLLICITER pour des
@@ -346,7 +347,7 @@ export function Vivier() {
 
       {/* Fiche créateur (détail) */}
       {selected && (
-        <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={() => setSelected(null)}>
+        <Overlay className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClose={() => setSelected(null)}>
           <div className="my-auto max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-start gap-3">
               <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-panel text-sm font-bold text-foreground">{initials(selected.name)}</div>
@@ -454,12 +455,12 @@ export function Vivier() {
               </button>
             </div>
           </div>
-        </div>
+        </Overlay>
       )}
 
       {/* Modale de sollicitation */}
       {mailRow && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={() => setMailRow(null)}>
+        <Overlay className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClose={() => setMailRow(null)}>
           <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="flex items-center gap-2 text-sm font-bold text-foreground"><Sparkles className="h-4 w-4 text-primary" /> Solliciter {mailRow.name}</div>
@@ -475,7 +476,7 @@ export function Vivier() {
               </button>
             </div>
           </div>
-        </div>
+        </Overlay>
       )}
     </>
   );

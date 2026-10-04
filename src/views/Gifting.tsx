@@ -18,6 +18,7 @@ import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, giftStatusMeta, type Gift as 
 import { PeriodFilter, periodsFrom, inPeriod } from "@/components/ui/period-filter";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { Overlay } from "@/components/mobile/ios-sheet";
 
 type GView = "cards" | "list";
 
@@ -454,7 +455,7 @@ function GiftDetail({ g, onClose, onEdit }: { g: GiftRow; onClose: () => void; o
     ["Contenu attendu", g.content_expected ? g.deliverables || "Oui" : "Non — sans contrepartie"],
   ];
   return (
-    <div className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-6" onClick={onClose}>
+    <Overlay className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-6" onClose={onClose}>
       <div className="my-2 w-full max-w-lg rounded-2xl border border-border bg-surface shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
           <div className="min-w-0">
@@ -499,6 +500,6 @@ function GiftDetail({ g, onClose, onEdit }: { g: GiftRow; onClose: () => void; o
           </button>
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 }
