@@ -470,7 +470,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
           <>
           {/* Couleurs du media kit (web + PDF, aussi la page UGC) */}
           <section className={`${CARD} xl:col-span-2`}>
-            <MediakitThemePicker value={mk.theme} onChange={(theme) => patch({ theme })} previewBase={publicUrl} />
+            <MediakitThemePicker kind="creator" value={mk.theme} onChange={(theme) => patch({ theme })} previewBase={publicUrl} />
           </section>
 
           {/* Colonne gauche : profil + photos (colonnes équilibrées, plus de vide sous « Profil ») */}

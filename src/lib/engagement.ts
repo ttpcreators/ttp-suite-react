@@ -134,14 +134,8 @@ export function totalsOf(stats: PostStat[], followers = 0, postsOverride?: numbe
   };
 }
 
-/** 480 000 → « 480 K » · 1 240 000 → « 1,24 M » · 9 200 → « 9 200 ». */
-export function fmtCompact(n: number): string {
-  if (!Number.isFinite(n)) return "0";
-  const abs = Math.abs(n);
-  if (abs >= 1e6) return trimZeros((n / 1e6).toFixed(2)) + " M";
-  if (abs >= 10e3) return Math.round(n / 1e3) + " K";
-  return Math.round(n).toLocaleString("fr-FR");
-}
+/** Grands nombres : même règle partout (« 1,3K », « 480K », « 1,2M », « 1Md »), voir timeSeries. */
+export { fmtCompact } from "./timeSeries";
 
 /** 6,42 → « 6,4 % ». */
 export function fmtPct(n: number | null, digits = 1): string {

@@ -50,16 +50,28 @@ export function monthLabel(key: string): string {
   return MONTHS_FR[m - 1] ?? key;
 }
 
-/** Nombre → format compact FRANÇAIS, partout pareil (axes, tuiles, tableaux) :
- *  « 19,5 k », « 1,2 M », « 850 ». Virgule décimale, k minuscule, espace fine
- *  insécable (U+202F) avant l'unité. */
+/**
+ * Grands nombres, format voulu par Marc (2026-10-05) : 1 300 → « 1,3K », 45 800 → « 45,8K »,
+ * 919 000 → « 919K », 1 000 000 → « 1M », 2 400 000 000 → « 2,4Md ». Une décimale sous 100,
+ * nombre rond au-delà, unité collée. Sous 1 000 : le nombre tel quel.
+ */
 export function fmtCompact(n: number): string {
   if (!Number.isFinite(n)) return "0";
   const sign = n < 0 ? "-" : "";
   const a = Math.abs(n);
-  const one = (v: number) => v.toFixed(1).replace(/\.0$/, "").replace(".", ",");
-  // 999 950 → « 1 M » (et non « 1000 k »).
-  if (a >= 1e6 || Math.round(a / 100) >= 10_000) return sign + one(a / 1e6) + "\u202FM";
-  if (a >= 1e3 || Math.round(a) >= 1000) return sign + one(a / 1e3) + "\u202Fk";
+  const units: [number, string][] = [[1e9, "Md"], [1e6, "M"], [1e3, "K"]];
+  for (let i = 0; i < units.length; i++) {
+    const [div, u] = units[i];
+    if (a < div && Math.round(a) < div) continue;
+    const x = a / div;
+    const r = x >= 100 ? Math.round(x) : Math.round(x * 10) / 10;
+    // 999 960 → « 1M » (et non « 1000K »).
+    if (r >= 1000 && i > 0) return sign + fmtUnit(a / units[i - 1][0]) + units[i - 1][1];
+    return sign + fmtUnit(x) + u;
+  }
   return sign + String(Math.round(a));
+}
+function fmtUnit(x: number): string {
+  const r = x >= 100 ? Math.round(x) : Math.round(x * 10) / 10;
+  return String(r).replace(".", ",");
 }

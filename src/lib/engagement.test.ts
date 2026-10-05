@@ -93,11 +93,9 @@ describe("totalsOf — taux d'engagement", () => {
 
 describe("formats", () => {
   it("fmtCompact", () => {
-    expect(fmtCompact(480_000)).toBe("480 K");
-    expect(fmtCompact(1_240_000)).toBe("1,24 M");
-    // Sous 10 K → chiffre exact, pas « 9 K ». Séparateur = espace fine insécable
-    // (U+202F), la typographie française rendue par toLocaleString('fr-FR').
-    expect(fmtCompact(9_200)).toBe("9 200");
+    expect(fmtCompact(480_000)).toBe("480K");
+    expect(fmtCompact(1_240_000)).toBe("1,2M");
+    expect(fmtCompact(9_200)).toBe("9,2K");
     expect(fmtCompact(0)).toBe("0");
   });
   it("fmtPct", () => {
