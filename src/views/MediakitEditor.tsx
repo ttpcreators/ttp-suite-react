@@ -86,6 +86,8 @@ type UgcKit = {
   followers?: string; // abonnés (indicatif)
 };
 
+/** Longueur de bio conseillée : au-delà, elle déborde de la couverture du media kit. */
+const BIO_MAX = 320;
 /** Nombre max de captures de stats sur un media kit. */
 const MAX_STATS_SHOTS = 6;
 /** Nombre max de visuels dans le portfolio UGC. */
@@ -493,7 +495,12 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 </div>
               </div>
               <div>
-                <label className={LBL}>Bio (2 phrases)</label>
+                <label className={cn(LBL, "flex items-baseline justify-between gap-2")}>
+                  <span>Bio (2 phrases)</span>
+                  <span className={cn("tabular-nums", (mk.bio ?? "").length > BIO_MAX ? "text-red-600 dark:text-red-400" : "text-faint")}>
+                    {(mk.bio ?? "").length} / {BIO_MAX}
+                  </span>
+                </label>
                 <textarea
                   value={mk.bio ?? ""}
                   onChange={(e) => patch({ bio: e.target.value })}
@@ -511,7 +518,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
             <SectionHead icon={ImageIcon} title="Photos" />
             <div className="flex flex-wrap gap-6">
               <ImageField
-                label="Portrait principal (page d'accueil)"
+                label="Portrait principal (couverture)"
                 slug={mk.slug ?? ""}
                 field="hero"
                 url={mk.photos?.hero}
@@ -519,7 +526,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 boxClass="h-44 w-36"
               />
               <ImageField
-                label="Portrait secondaire (page contact)"
+                label="Portrait secondaire (plateformes et contact)"
                 slug={mk.slug ?? ""}
                 field="contact"
                 url={mk.photos?.contact}
@@ -528,9 +535,9 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
               />
             </div>
             <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-              Portraits verticaux conseillés (ils remplissent toute la hauteur). Les captures de profil s'ajoutent dans
-              chaque bloc « Plateforme » ci-dessous. Les images sont optimisées automatiquement — après un upload, clique
-              « Enregistrer » en haut.
+              Portraits verticaux conseillés : le principal occupe toute la hauteur de la couverture, le secondaire sert
+              aux pages plateformes et contact (sans lui, le principal est repris). Les images sont optimisées
+              automatiquement. Après un upload, clique « Enregistrer » en haut.
             </p>
           </section>
 
@@ -627,8 +634,9 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
               )}
             </div>
             <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-              Jusqu'à {MAX_STATS_SHOTS} captures d'insights (portée, audience, vues…). Elles s'affichent sur le media kit
-              public et dans le PDF. Après un upload, clique « Enregistrer » en haut.
+              Jusqu'à {MAX_STATS_SHOTS} captures d'insights (portée, audience, vues…). Elles s'affichent sur la page
+              « En capture » du media kit (web et PDF), après les captures de profil. Après un upload, clique
+              « Enregistrer » en haut.
             </p>
           </section>
 
@@ -678,8 +686,8 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
               title="Tarifs"
               hint={
                 <>
-                  Prix HT par prestation. Ils s'affichent sur une page « Tarifs » du media kit (web + PDF) et le deck agence
-                  indique « à partir de ». Le media kit est une page publique : masque les prix si tu préfères les donner
+                  Prix HT par prestation. Ils s'affichent sur la page « Marques et tarifs » du media kit (web + PDF) et le
+                  deck agence indique « à partir de ». Le media kit est une page publique : masque les prix si tu préfères les donner
                   au cas par cas.
                 </>
               }
@@ -731,17 +739,6 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {(mk.brands ?? []).map((b, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <ImageField
-                    label=""
-                    slug={mk.slug ?? ""}
-                    field={`logo-${i}`}
-                    url={b.logo}
-                    kind="logo"
-                    onChange={forSel((u: string | null) =>
-                      setMk((m) => ({ ...m, brands: (m.brands ?? []).map((x, j) => (j === i ? { ...x, logo: u } : x)) })),
-                    )}
-                    boxClass="h-10 w-10 shrink-0"
-                  />
                   <input
                     value={b.name}
                     onChange={(e) => setBrands((mk.brands ?? []).map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
@@ -766,8 +763,8 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
               <Plus className="h-3.5 w-3.5" /> Ajouter une marque
             </button>
             <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-              Ajoute le logo de chaque marque (PNG à fond transparent idéal) — il s'affiche dans le mur de logos du media
-              kit ; sans logo, le nom s'affiche en toutes lettres.
+              Les noms s'affichent comme des crédits de magazine sur la page « Marques et tarifs » : écris-les avec leur
+              orthographe officielle (majuscules comprises, ex. « Sol de Janeiro », « air up »).
             </p>
           </section>
           </>
@@ -1200,7 +1197,10 @@ function PlatformEditor({
       <div className="mt-3">
         <ImageField label="Capture du profil" slug={slug} field={block.key} url={photo} onChange={onPhotoChange} boxClass="h-40 w-24" />
       </div>
-      <p className="mt-3 text-[12px] text-muted-foreground">Bloc « {platLabel(block.key)} », page « Plateforme » du media kit.</p>
+      <p className="mt-3 text-[12px] text-muted-foreground">
+        Chiffres affichés sur la page « Plateformes » du media kit ({platLabel(block.key)}) ; la capture du profil s'affiche
+        sur la page « En capture ». Les champs vides ne s'affichent pas.
+      </p>
     </div>
   );
 }
