@@ -1544,3 +1544,20 @@ begin
 end $$;
 revoke all on function public.set_agency_display_name(uuid, text) from public, anon;
 grant execute on function public.set_agency_display_name(uuid, text) to authenticated;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- Pastilles « pas encore vu » (2026-10-06) : dernière visite de chaque page du
+-- menu, par compte (sql/2026-10-06-nav-seen.sql). RLS : ses propres lignes seulement.
+-- ════════════════════════════════════════════════════════════════════════════
+create table if not exists public.nav_seen (
+  user_id  uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  page     text not null check (char_length(page) between 1 and 40),
+  seen_at  timestamptz not null default now(),
+  primary key (user_id, page)
+);
+alter table public.nav_seen enable row level security;
+drop policy if exists nav_seen_own on public.nav_seen;
+create policy nav_seen_own on public.nav_seen for all to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+revoke all on public.nav_seen from anon;
+grant select, insert, update on public.nav_seen to authenticated;

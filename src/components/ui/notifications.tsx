@@ -15,7 +15,7 @@ export interface NotificationItem {
   description: string;
   time: string;
   kind?: NotifKind;
-  /** Page concernée (id du menu) : la notification compte dans la pastille de cette page. */
+  /** Page concernée (id du menu). Les choses à traiter (briefs, factures, contrats, bugs) comptent dans sa pastille. */
   page?: string;
 }
 

@@ -57,6 +57,9 @@ type Row = {
 
 // Suivi du sur-contact : en-deçà de ce seuil (jours), on alerte de ne pas relancer.
 const RECENT_DAYS = 30;
+// Couleurs du suivi : rouge = trop tôt pour relancer, vert = on peut y aller.
+const TOO_SOON = "bg-red-500/10 text-red-600 dark:text-red-400";
+const GOOD_TO_GO = "bg-signalsoft text-signaltext";
 /** Nombre de jours depuis une date ISO (null si absente/invalide). */
 function daysSince(iso?: string | null): number | null {
   if (!iso) return null;
@@ -1085,7 +1088,7 @@ export function Contacts() {
                     title={lastContactLabel(d)}
                     className={cn(
                       "hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-medium sm:inline-flex",
-                      recent ? "bg-foreground/[0.06] text-amber" : "bg-rowhover text-faint",
+                      recent ? TOO_SOON : GOOD_TO_GO,
                     )}
                   >
                     <Clock className="h-2.5 w-2.5" /> {short}
@@ -1097,7 +1100,7 @@ export function Contacts() {
               {needsRelance(parseTouches(row.touches), row.last_contacted, relanceDays) && (
                 <span
                   title={`Dernier échange il y a ${relanceDays} jours ou plus : le cycle de recontact est écoulé`}
-                  className="hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary sm:inline-flex"
+                  className={cn("hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-medium sm:inline-flex", GOOD_TO_GO)}
                 >
                   <Send className="h-2.5 w-2.5" /> Relancer
                 </span>
@@ -1199,11 +1202,11 @@ export function Contacts() {
               const lastDays = lastMs ? Math.floor((Date.now() - lastMs) / 86400000) : null;
               const recent = lastDays != null && lastDays < RECENT_DAYS;
               return (
-                <div className={cn("mt-4 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[12px]", recent ? "border-border bg-foreground/[0.06] text-amber" : "border-border bg-panel text-muted-foreground")}>
-                  {recent ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <Clock className="h-4 w-4 shrink-0 text-faint" />}
+                <div className={cn("mt-4 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[12px]", recent ? cn("border-red-500/25", TOO_SOON) : cn("border-signal/25", GOOD_TO_GO))}>
+                  {recent ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <Check className="h-4 w-4 shrink-0" />}
                   <span>
                     <span className="font-semibold">{lastContactLabel(lastDays)}</span>
-                    {recent && " — évite de le relancer trop vite"}
+                    {recent ? " : évite de le relancer trop vite" : lastDays == null ? " : tu peux le contacter" : lastDays >= relanceDays ? " : à relancer" : ""}
                   </span>
                 </div>
               );

@@ -7,7 +7,9 @@ import { GlobalSearch } from "@/components/GlobalSearch";
 import { Toaster } from "@/components/ui/toast";
 import { UndoSendBar } from "@/components/ui/undo-send";
 import { Notifications } from "@/components/ui/notifications";
-import { countByPage, useNotifications } from "@/lib/useNotifications";
+import { useNotifications } from "@/lib/useNotifications";
+import { useNavBadges } from "@/lib/useNavBadges";
+import { markNavSeen } from "@/lib/navSeen";
 import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { maybeAutoRun } from "@/lib/diagnostics";
@@ -524,8 +526,27 @@ export default function App() {
   const navFiltered = NAV.map((f) => ({ ...f, items: f.items.filter((i) => canSee(i.id)) })).filter((f) => f.items.length > 0);
 
   const { items: notifs, dismiss: dismissNotifs } = useNotifications();
-  // Pastilles du menu, des onglets iPhone et de l'écran « Plus » : notifications par page.
-  const navBadges = useMemo(() => countByPage(notifs), [notifs]);
+  // Pastilles du menu, des onglets iPhone et de l'écran « Plus » : nouveautés pas encore
+  // vues + choses à traiter, par page. Une page ouverte compte comme vue (à l'ouverture,
+  // en la quittant et quand l'app passe en arrière-plan).
+  const seenUid = session?.user.id;
+  const pageKey = active === "whatsapp" && sub === "mails" ? "mails" : active;
+  const viewing = useMemo(() => [pageKey, splitShown].filter((x): x is ViewId => !!x), [pageKey, splitShown]);
+  const navBadges = useNavBadges(seenUid, notifs, viewing);
+  const viewingKey = viewing.join("|");
+  useEffect(() => {
+    if (!seenUid) return;
+    const pages = viewingKey.split("|");
+    markNavSeen(pages);
+    const onHide = () => {
+      if (document.visibilityState === "hidden") markNavSeen(pages);
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      markNavSeen(pages);
+    };
+  }, [seenUid, viewingKey]);
   const title = viewTitle(active);
 
   // ── Affichage iPhone (téléphone) ──

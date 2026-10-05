@@ -267,13 +267,3 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
 
   return { items, dismiss };
 }
-
-/**
- * Pastilles du menu : nombre de notifications (non effacées) par page. Les rappels
- * d'agenda (« Événement à venir ») n'en font pas partie : ce ne sont pas des nouveautés.
- */
-export function countByPage(items: NotificationItem[]): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const n of items) if (n.page) out[n.page] = (out[n.page] ?? 0) + 1;
-  return out;
-}
