@@ -731,7 +731,7 @@ function MediakitFiles() {
 
 type MkTab = "creatrices" | "agence" | "files";
 const MK_TABS: TabItem[] = [
-  { value: "creatrices", label: "Créatrices" },
+  { value: "creatrices", label: "Créateurs" },
   { value: "agence", label: "Agence" },
   { value: "files", label: "Fichiers" },
 ];
@@ -746,7 +746,7 @@ const MK_TABS: TabItem[] = [
  */
 export function Mediakit() {
   const [tab, setTab] = useState<MkTab>("creatrices");
-  // Sous-page demandée depuis la sidebar (Media kit → Créatrices / Agence / Fichiers).
+  // Sous-page demandée depuis la sidebar (Media kit → Créateurs / Agence / Fichiers).
   const sub = useNavSub();
   const setNavSub = useSetNavSub();
   useEffect(() => {

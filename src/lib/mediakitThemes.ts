@@ -21,7 +21,9 @@ export function mkTheme(id: string | null | undefined): MkThemeId {
 /**
  * Media kits CRÉATEURS (direction « Éditorial », kit-editorial.css côté site, 2026-10-05) :
  * page blanche + encre ; le thème change l'encre (nom en italique, grands chiffres) ou le
- * papier. « blanc » = défaut. Le deck agence garde MK_THEMES ci-dessus.
+ * papier. « blanc » = défaut. Le deck AGENCE utilise aussi ces thèmes depuis 2026-10-05
+ * (agence-editorial.js). MK_THEMES ci-dessus = ancienne palette « Minuit » des kits UGC (mêmes ids,
+ * la page UGC suit mediakit.theme) ; plus aucun sélecteur ne l'affiche.
  */
 export const CREATOR_THEMES: { id: MkThemeId; label: string; hint: string; paper: string; ink: string; accent: string }[] = [
   { id: "blanc", label: "Blanc", hint: "Page blanche, encre noire (défaut)", paper: "#fcfcfb", ink: "#121212", accent: "#121212" },

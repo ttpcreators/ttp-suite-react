@@ -217,7 +217,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
     const at = selId;
     return (...args: A) => {
       if (selIdRef.current !== at) {
-        toast("Image ignorée : la créatrice a changé pendant l'envoi");
+        toast("Image ignorée : le créateur a changé pendant l'envoi");
         return;
       }
       fn(...args);
@@ -237,7 +237,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
 
   const changeCreator = (id: string) => {
     if (id === selId) return;
-    if (dirty && !window.confirm("Des modifications ne sont pas enregistrées. Changer de créatrice et les perdre ?")) return;
+    if (dirty && !window.confirm("Des modifications ne sont pas enregistrées. Changer de créateur et les perdre ?")) return;
     setSelId(id);
   };
 
@@ -350,7 +350,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
     const hist = ((st["engagementHistory"] as HistLike[]) ?? []).filter(
       (h) => (h.creator || "").toLowerCase() === (selected.name || "").toLowerCase(),
     );
-    if (hist.length === 0) return toast("Aucune mesure dans le calculateur pour cette créatrice");
+    if (hist.length === 0) return toast("Aucune mesure dans le calculateur pour ce créateur");
     const latest = new Map<string, HistLike>();
     for (const h of hist) {
       if (!h.platform) continue;
@@ -397,7 +397,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
       {/* En-tête : créatrice + voir + enregistrer */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Select value={selId} onValueChange={changeCreator}>
-          <SelectTrigger className="h-9 w-auto min-w-[220px] rounded-lg bg-surface" placeholder="Choisir une créatrice" />
+          <SelectTrigger className="h-9 w-auto min-w-[220px] rounded-lg bg-surface" placeholder="Choisir un créateur" />
           <SelectContent>
             {creators.map((c, i) => (
               <SelectItem key={c.id} index={i} value={c.id}>
@@ -444,7 +444,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
       {!selId ? (
         <div className="rounded-2xl border border-border bg-surface p-10 text-center">
           <ImageIcon className="mx-auto h-8 w-8 text-faint" />
-          <div className="mt-3 text-sm font-medium text-foreground">Choisis une créatrice</div>
+          <div className="mt-3 text-sm font-medium text-foreground">Choisis un créateur</div>
           <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
             Remplis son media kit — il se met à jour en ligne sur ttpcreators.pro/mediakit/&lt;lien&gt;.
           </p>
@@ -724,7 +724,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
             <SectionHead
               icon={ListChecks}
               title="Profil casting"
-              hint="Alimente le tableau comparatif du deck agence (« qui fait quoi »). Coche ce que la créatrice traite, et précise si utile (ex : Quotidien, Peau sèche, 1 chien)."
+              hint="Alimente le tableau comparatif du deck agence (« qui fait quoi »). Coche ce que le créateur traite, et précise si utile (ex : Quotidien, Peau sèche, 1 chien)."
             />
             <CastingEditor value={mk.casting ?? {}} onChange={setCasting} />
           </section>

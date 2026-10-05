@@ -40,7 +40,7 @@ type FullAgencyKit = {
   kpis: Kpis;
   contact: { instagram: string; phone: string; email: string };
   photo: string | null;
-  theme: string; // thème de couleurs du deck (lib/mediakitThemes), « minuit » par défaut
+  theme: string; // thème du deck (CREATOR_THEMES, direction Éditorial), « blanc » par défaut
   concepts: Concept[];
 };
 // Forme partielle telle que stockée en base (tous les champs optionnels).
@@ -57,30 +57,40 @@ type AgencyKit = {
 const MAX_CONCEPT_PHOTOS = 4;
 
 // Valeurs par défaut = contenu ACTUEL du deck (miroir de AG_DEFAULTS côté site,
-// mediakit-agence.js) → l'éditeur pré-remplit ce qui est en ligne, on ajuste, on enregistre.
+// agence-editorial.js) → l'éditeur pré-remplit ce qui est en ligne, on ajuste, on enregistre.
 const DEF = {
   intro: {
     title: "Talent management\nstratégique",
-    lead: "TTP Creators accompagne une sélection de créatrices Sport & Lifestyle : stratégie de carrière, production de contenu et négociation, tout en interne. On construit des identités qui durent — pas des pics de vues.",
+    lead: "TTP Creators accompagne une sélection de créateurs Sport & Lifestyle : stratégie de carrière, production de contenu et négociation, tout en interne. On construit des identités qui durent, pas des pics de vues.",
   },
   pillars: [
-    { title: "Talent d'abord", text: "Une créatrice n'est pas une audience : c'est une marque. On construit une identité qui dure, pas des pics de vues." },
+    { title: "Talent d'abord", text: "Un créateur n'est pas une audience : c'est une marque. On construit une identité qui dure, pas des pics de vues." },
     { title: "Studio intégré", text: "Stratégie, production, négociation : tout se passe en interne. Une seule équipe, aucune perte en ligne." },
     { title: "Résultats mesurés", text: "Pas de feeling : des KPIs clairs et un reporting précis, à chaque collaboration." },
   ] as Pillar[],
-  kpis: { universes: "02", universesLabel: "Univers · Sport & Lifestyle", platforms: "05", platformsLabel: "Plateformes couvertes" },
+  kpis: { universes: "2", universesLabel: "Univers · Sport & Lifestyle", platforms: "5", platformsLabel: "Plateformes couvertes" },
   contact: { instagram: "ttp.creators", phone: "07 66 25 98 03", email: "partnerships@ttpcreators.pro" },
 };
 
+// Anciens textes PAR DÉFAUT (enregistrés tels quels) → nouvelle version (« créateurs », sans
+// tiret long). Même table que LEGACY côté site ; un texte modifié par l'agence n'est jamais touché.
+const norm = (s: string) => s.replace(/[\s\u00a0\u202f]+/g, " ").trim();
+const LEGACY: Record<string, string> = {
+  [norm("TTP Creators accompagne une sélection de créatrices Sport & Lifestyle : stratégie de carrière, production de contenu et négociation, tout en interne. On construit des identités qui durent — pas des pics de vues.")]: DEF.intro.lead,
+  [norm("Une créatrice n'est pas une audience : c'est une marque. On construit une identité qui dure, pas des pics de vues.")]: DEF.pillars[0].text,
+};
+const upgrade = (s: string | undefined) => (s ? LEGACY[norm(s)] ?? s : s);
+
 /** Pré-remplit les champs vides avec les valeurs par défaut (affichage). */
 function withDefaults(blob: AgencyKit): FullAgencyKit {
+  const intro = { ...DEF.intro, ...(blob.intro ?? {}) };
   return {
-    intro: { ...DEF.intro, ...(blob.intro ?? {}) },
-    pillars: blob.pillars && blob.pillars.length ? blob.pillars : DEF.pillars,
+    intro: { ...intro, lead: upgrade(intro.lead) ?? "" },
+    pillars: blob.pillars && blob.pillars.length ? blob.pillars.map((p) => ({ ...p, text: upgrade(p.text) ?? "" })) : DEF.pillars,
     kpis: { ...DEF.kpis, creatorsOverride: "", followersOverride: "", ...(blob.kpis ?? {}) },
     contact: { ...DEF.contact, ...(blob.contact ?? {}) },
     photo: blob.photo ?? null,
-    theme: blob.theme ?? "minuit",
+    theme: blob.theme ?? "blanc",
     concepts: blob.concepts ?? [],
   };
 }
@@ -191,7 +201,7 @@ export function AgencyTab() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-xl text-sm text-muted-foreground">
           Le contenu de cadrage du deck agence.{" "}
-          <span className="text-faint">Les créatrices se gèrent dans l'onglet « Créatrices » ; le mur de marques est géré sur le site.</span>
+          <span className="text-faint">Les créateurs se gèrent dans l'onglet « Créateurs » ; la liste des marques partenaires est gérée sur le site.</span>
         </p>
         <div className="flex items-center gap-2">
           <a
@@ -234,7 +244,7 @@ export function AgencyTab() {
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {/* Couleurs du deck agence (web + PDF) */}
           <section className={`${CARD} xl:col-span-2`}>
-            <MediakitThemePicker value={kit.theme} onChange={(theme) => setKit((k) => ({ ...k, theme }))} previewBase="https://ttpcreators.pro/mediakit/agence/" />
+            <MediakitThemePicker kind="creator" value={kit.theme} onChange={(theme) => setKit((k) => ({ ...k, theme }))} previewBase="https://ttpcreators.pro/mediakit/agence/" />
           </section>
 
           {/* ---------------- INTRO ---------------- */}
@@ -257,7 +267,7 @@ export function AgencyTab() {
                   value={kit.intro.lead}
                   onChange={(e) => patchIntro({ lead: e.target.value })}
                   rows={4}
-                  placeholder="TTP Creators accompagne une sélection de créatrices…"
+                  placeholder="TTP Creators accompagne une sélection de créateurs…"
                   className={`${IN} resize-y`}
                 />
               </div>
@@ -268,12 +278,12 @@ export function AgencyTab() {
           <section className={CARD}>
             <h3 className={H3}><BarChart3 className="h-4 w-4 text-muted-foreground" /> Chiffres clés</h3>
             <p className={`${HINT} mb-4`}>
-              Nombre de créatrices et followers cumulés = calculés automatiquement (laisse vide), ou force une valeur.
+              Nombre de créateurs et abonnés cumulés = calculés automatiquement (laisse vide), ou force une valeur.
             </p>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className={LBL}>Nb créatrices (auto si vide)</label>
+                  <label className={LBL}>Nb créateurs (auto si vide)</label>
                   <input
                     value={kit.kpis.creatorsOverride}
                     onChange={(e) => patchKpis({ creatorsOverride: e.target.value })}
@@ -282,7 +292,7 @@ export function AgencyTab() {
                   />
                 </div>
                 <div>
-                  <label className={LBL}>Followers cumulés (auto si vide)</label>
+                  <label className={LBL}>Abonnés cumulés (auto si vide)</label>
                   <input
                     value={kit.kpis.followersOverride}
                     onChange={(e) => patchKpis({ followersOverride: e.target.value })}
@@ -370,7 +380,7 @@ export function AgencyTab() {
               <CalendarHeart className="h-4 w-4 text-muted-foreground" /> Événements &amp; concepts <span className="font-normal text-muted-foreground">({kit.concepts.length})</span>
             </h3>
             <p className={`${HINT} mb-4`}>
-              Les formats portés par vos créatrices (club running, soirées, ateliers…). Une diapo par concept dans le deck,
+              Les formats portés par vos créateurs (club running, soirées, ateliers…). Une page par concept dans le deck,
               pour montrer aux marques qu'elles peuvent aller au-delà du placement de produit.
             </p>
             <div className="space-y-3">

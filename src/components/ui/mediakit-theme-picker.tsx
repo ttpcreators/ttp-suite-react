@@ -16,7 +16,7 @@ export function MediakitThemePicker({
   onChange: (id: MkThemeId) => void;
   /** URL publique du media kit (sans paramètre) ; absente = pas de lien d'aperçu. */
   previewBase?: string | null;
-  /** « creator » : media kit d'un créateur (direction Éditorial, page blanche par défaut). */
+  /** « creator » : direction Éditorial, page blanche par défaut (kits créateurs ET deck agence). « agency » : ancienne palette (plus utilisée). */
   kind?: "creator" | "agency";
 }) {
   if (kind === "creator") return <CreatorThemePicker value={value} onChange={onChange} previewBase={previewBase} />;
