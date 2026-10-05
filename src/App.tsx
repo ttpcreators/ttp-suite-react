@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
 import { Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus, LogOut, Pin, PinOff, Star, House, CircleEllipsis, Search, Trash2 } from "lucide-react";
 import { cn, titleCase } from "@/lib/utils";
 import { restoreTabs, navigateTab, addTab, closeTab as closeTabState } from "@/lib/tabs";
@@ -7,7 +7,7 @@ import { GlobalSearch } from "@/components/GlobalSearch";
 import { Toaster } from "@/components/ui/toast";
 import { UndoSendBar } from "@/components/ui/undo-send";
 import { Notifications } from "@/components/ui/notifications";
-import { useNotifications } from "@/lib/useNotifications";
+import { countByPage, useNotifications } from "@/lib/useNotifications";
 import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { maybeAutoRun } from "@/lib/diagnostics";
@@ -524,6 +524,8 @@ export default function App() {
   const navFiltered = NAV.map((f) => ({ ...f, items: f.items.filter((i) => canSee(i.id)) })).filter((f) => f.items.length > 0);
 
   const { items: notifs, dismiss: dismissNotifs } = useNotifications();
+  // Pastilles du menu, des onglets iPhone et de l'écran « Plus » : notifications par page.
+  const navBadges = useMemo(() => countByPage(notifs), [notifs]);
   const title = viewTitle(active);
 
   // ── Affichage iPhone (téléphone) ──
@@ -536,8 +538,9 @@ export default function App() {
     ...(["contacts", "roster", "planning", "mails", "todo"] as ViewId[]).filter(canSee),
   ])].slice(0, 4);
   const iosTabs: IosTab[] = [
-    ...tabIds.map((id) => ({ id, label: id === "apercu" ? "Accueil" : findPinnable(id)?.label ?? viewTitle(id), icon: id === "apercu" ? House : findPinnable(id)?.icon ?? Star })),
-    { id: "__more", label: "Plus", icon: CircleEllipsis },
+    ...tabIds.map((id) => ({ id, label: id === "apercu" ? "Accueil" : findPinnable(id)?.label ?? viewTitle(id), icon: id === "apercu" ? House : findPinnable(id)?.icon ?? Star, badge: navBadges[id] })),
+    // « Plus » : les notifications des pages qui n'ont pas leur onglet.
+    { id: "__more", label: "Plus", icon: CircleEllipsis, badge: Object.entries(navBadges).reduce((n, [id, c]) => (tabIds.includes(id as ViewId) || !canSee(id as ViewId) ? n : n + c), 0) },
   ];
   const iosActive = phoneScreen === "more" ? "__more" : phoneScreen === "search" ? "" : tabIds.includes(active) ? active : "__more";
   // Chaque écran garde sa position de défilement, comme les onglets d'une app iOS.
@@ -760,6 +763,7 @@ export default function App() {
               onTogglePin={togglePin}
               hidden={hiddenIds}
               userId={session.user.id}
+              badges={navBadges}
               onItemSplit={(id) => {
                 if (id !== active) setSplitView(id);
               }}
@@ -822,6 +826,7 @@ export default function App() {
                             dark={dark}
                             onToggleTheme={toggleTheme}
                             onExit={logout}
+                            badges={navBadges}
                           />
                         </PageFrame>
                       ) : iosPhone && phoneScreen === "search" ? (

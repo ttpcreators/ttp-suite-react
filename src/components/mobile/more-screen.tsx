@@ -11,8 +11,18 @@ import { IosGroup, IosRow, IosSwitch } from "@/components/mobile/ios-shell";
 export type MoreItem = { id: string; label: string; icon: LucideIcon; children?: { id: string; label: string }[] };
 export type MoreSection = { id: string; label: string; items: MoreItem[] };
 
+/** Pastille de nombre à droite d'une ligne (notifications de la page). */
+function Count({ n }: { n?: number }) {
+  if (!n) return null;
+  return (
+    <span className="grid h-[22px] min-w-[22px] shrink-0 place-items-center rounded-full bg-foreground px-1.5 text-[12px] font-semibold tabular-nums text-background">
+      {n > 99 ? "99+" : n}
+    </span>
+  );
+}
+
 export function MoreScreen({
-  profile, pinned, sections, onSelect, dark, onToggleTheme, exitLabel = "Se déconnecter", exitIcon = LogOut, onExit, before,
+  profile, pinned, sections, onSelect, dark, onToggleTheme, exitLabel = "Se déconnecter", exitIcon = LogOut, onExit, before, badges = {},
 }: {
   /** Carte du haut (photo, nom, rôle) : `onClick` ouvre les paramètres. */
   profile: { avatar: ReactNode; name: ReactNode; sub: string; onClick?: () => void };
@@ -26,6 +36,8 @@ export function MoreScreen({
   onExit: () => void;
   /** Contenu ajouté sous le profil (ex. recherche). */
   before?: ReactNode;
+  /** Notifications par page (id) → pastilles. */
+  badges?: Record<string, number>;
 }) {
   return (
     <div className="flex flex-col gap-7 pb-4">
@@ -50,7 +62,7 @@ export function MoreScreen({
       {pinned && pinned.length > 0 && (
         <IosGroup title="Raccourcis">
           {pinned.map((it) => (
-            <IosRow key={`pin-${it.id}`} icon={it.icon} label={it.label} onClick={() => onSelect(it.id)} />
+            <IosRow key={`pin-${it.id}`} icon={it.icon} label={it.label} right={<Count n={badges[it.id]} />} onClick={() => onSelect(it.id)} />
           ))}
         </IosGroup>
       )}
@@ -58,9 +70,9 @@ export function MoreScreen({
       {sections.map((sec) => (
         <IosGroup key={sec.id} title={sec.label}>
           {sec.items.flatMap((it) => [
-            <IosRow key={it.id} icon={it.icon} label={it.label} onClick={() => onSelect(it.id)} />,
+            <IosRow key={it.id} icon={it.icon} label={it.label} right={<Count n={badges[it.id]} />} onClick={() => onSelect(it.id)} />,
             ...(it.children ?? []).map((c) => (
-              <IosRow key={`${it.id}-${c.id}`} label={c.label} indent onClick={() => onSelect(it.id, c.id)} />
+              <IosRow key={`${it.id}-${c.id}`} label={c.label} indent right={<Count n={badges[c.id]} />} onClick={() => onSelect(it.id, c.id)} />
             )),
           ])}
         </IosGroup>

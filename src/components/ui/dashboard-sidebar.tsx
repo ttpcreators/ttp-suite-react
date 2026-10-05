@@ -6,8 +6,9 @@ import { cn } from "@/lib/utils";
 const BASE = import.meta.env.BASE_URL;
 
 /** Sous-page ; `pinnable` = aussi une vraie page, épinglable aux raccourcis (étoile, clic droit). */
-export type SbChild = { id: string; label: string; pinnable?: boolean };
-export type SbItem = { id: string; label: string; icon: LucideIcon; badge?: number | string; children?: SbChild[] };
+export type SbChild = { id: string; label: string; pinnable?: boolean; badge?: number };
+/** `badge` = nombre de notifications de la page (pastille ; 0 ou absent = rien). */
+export type SbItem = { id: string; label: string; icon: LucideIcon; badge?: number; children?: SbChild[] };
 export type SbGroup = { id: string; label: string; icon: LucideIcon; items: SbItem[] };
 
 /*
@@ -48,6 +49,17 @@ function AccentGradientDef() {
     </svg>
   );
 }
+/** Pastille de nombre (notifications) à droite d'une ligne du menu. */
+export function SbCount({ n, className }: { n: number; className?: string }) {
+  return (
+    <span className={cn("grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-foreground px-1 text-[10.5px] font-semibold tabular-nums text-background", className)}>
+      {n > 99 ? "99+" : n}
+    </span>
+  );
+}
+/** Total des pastilles d'un item (lui-même + ses sous-pages). */
+export const sbBadgeTotal = (item: SbItem) =>
+  (item.badge ?? 0) + (item.children ?? []).reduce((s, c) => s + (c.badge ?? 0), 0);
 /** Petit bouton d'action révélé dans une ligne (chevron, vue partagée, étoile). */
 const ghostBtn = "grid h-6 w-6 place-items-center rounded-md text-foreground/40 transition-colors hover:bg-foreground/[0.06] hover:text-foreground";
 
@@ -86,10 +98,9 @@ function Row({
       <button type="button" onClick={onClick} onContextMenu={onContext} className={cn(sbItemCls(active), pr)}>
         <item.icon className={sbIconCls(active)} strokeWidth={1.75} />
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
-        {item.badge != null && (
-          <span className={cn("flex h-5 min-w-[20px] items-center justify-center rounded-full bg-foreground/[0.08] px-1.5 text-[11px] font-medium tabular-nums text-foreground", (hasChildren || onSplit) && "mr-6")}>
-            {item.badge}
-          </span>
+        {/* Pastille : décalée pour ne pas passer sous le bouton « à côté » ni l'étoile. */}
+        {!!item.badge && (
+          <SbCount n={item.badge} className={cn(!hasChildren && (onSplit || onTogglePin) && "mr-6")} />
         )}
       </button>
 
@@ -198,10 +209,12 @@ function ItemBlock({
       return next;
     });
 
+  // Sous-pages repliées : leurs pastilles remontent sur la ligne parente.
+  const shown = hasChildren && !open ? { ...item, badge: sbBadgeTotal(item) || undefined } : item;
   return (
     <div className="flex flex-col">
       <Row
-        item={item}
+        item={shown}
         active={parentActive && !childActive}
         hasChildren={hasChildren}
         open={open}
@@ -237,7 +250,8 @@ function ItemBlock({
                       onContextMenu={c.pinnable && onItemContext ? (e) => onItemContext(c.id, e) : undefined}
                       className={cn(sbItemCls(on), "py-[5px]", pin && "pr-9")}
                     >
-                      <span className="truncate">{c.label}</span>
+                      <span className="min-w-0 flex-1 truncate">{c.label}</span>
+                      {!!c.badge && <SbCount n={c.badge} />}
                     </button>
                     {pin && (
                       <button
@@ -294,6 +308,7 @@ function Group({
   onTogglePin?: (id: string) => void;
 }) {
   const containsActive = group.items.some((i) => i.id === activeId);
+  const total = group.items.reduce((s, i) => s + sbBadgeTotal(i), 0);
   return (
     <div className="flex flex-col">
       <button
@@ -306,7 +321,12 @@ function Group({
         )}
       >
         <span className="min-w-0 flex-1 truncate">{group.label}</span>
-        {!open && containsActive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/60" aria-hidden />}
+        {/* Section repliée : total de ses pastilles (sinon le point « page active ici »). */}
+        {!open && total > 0 ? (
+          <SbCount n={total} />
+        ) : (
+          !open && containsActive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/60" aria-hidden />
+        )}
         <ChevronRight
           className={cn(
             "h-3.5 w-3.5 shrink-0 text-foreground/30 transition-[transform,color] duration-200 group-hover/h:text-foreground/60",

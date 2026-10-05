@@ -15,6 +15,8 @@ export interface NotificationItem {
   description: string;
   time: string;
   kind?: NotifKind;
+  /** Page concernée (id du menu) : la notification compte dans la pastille de cette page. */
+  page?: string;
 }
 
 /** Types de notifications (ordre d'affichage des filtres). */

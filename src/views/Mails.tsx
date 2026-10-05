@@ -20,6 +20,7 @@ import { ForwardDialog, MailSettingsDialog, NewMailDialog, ReplyBox } from "@/co
 import { Tabs } from "@/components/ui/animated-tabs";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useCreators } from "@/lib/useCreators";
+import { useCreatorMailCounts } from "@/lib/creatorMailCounts";
 
 // Espace mails d'une créatrice (statuts, remarques, suivi), chargé seulement à la demande.
 const CreatorMailsAgency = lazy(() => import("@/views/CreatorMails").then((m) => ({ default: m.CreatorMailsAgency })));
@@ -92,6 +93,14 @@ const BOXES: { id: "all" | MailBox; label: string; short: string; hint: string }
   { id: "partnerships", label: BOX_LABEL.partnerships, short: BOX_LABEL.partnerships, hint: "Prospection et contacts agence" },
   { id: "talent", label: BOX_LABEL.talent, short: BOX_LABEL.talent, hint: "Échanges créatrices (leurs alias)" },
 ];
+/** Pastille de nombre posée sur une icône ou un avatar (même style que les pastilles du rail). */
+function CountDot({ n }: { n: number }) {
+  return (
+    <span aria-hidden className="pointer-events-none absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-foreground px-1 text-center text-[10px] font-semibold leading-[18px] tabular-nums text-background ring-2 ring-surface">
+      {n > 99 ? "99+" : n}
+    </span>
+  );
+}
 function readPref<T extends string>(key: string, allowed: readonly T[], def: T): T {
   try {
     const v = localStorage.getItem(key) as T | null;
@@ -184,6 +193,9 @@ export function Mails() {
     }
     return names;
   }, [linked, allCreators]);
+  // Pastilles : échanges à traiter par créateur relié (nouvelles demandes + messages non lus).
+  const mailCount = useCreatorMailCounts(linked.map((l) => l.creator));
+  const mailTotal = linked.reduce((sum, l) => sum + mailCount(l.creator), 0);
 
   // Dossier affiché dans la barre d'icônes (retenu sur cet appareil).
   const [mode, setModeState] = useState<Mode>(() => readPref("ttp:mails-mode", MODES.map((m) => m.id), "inbox"));
@@ -556,7 +568,7 @@ export function Mails() {
         <Tip>Nouveau mail</Tip>
       </button>
       {MODES.map((m) => (
-        <RailButton key={m.id} label={m.label} active={mode === m.id} badge={m.id === "inbox" ? unread : null} onClick={() => goMode(m.id)}>
+        <RailButton key={m.id} label={m.label} active={mode === m.id} badge={m.id === "inbox" ? unread : m.id === "creators" ? mailTotal || null : null} onClick={() => goMode(m.id)}>
           <m.icon className="h-[18px] w-[18px]" />
         </RailButton>
       ))}
@@ -586,6 +598,7 @@ export function Mails() {
             className={cn(pillCls, on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
             <m.icon className="h-3.5 w-3.5" /> {m.short}
             {m.id === "inbox" && unread ? <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{unread}</span> : null}
+            {m.id === "creators" && mailTotal ? <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{mailTotal}</span> : null}
           </button>
         );
       })}
@@ -951,6 +964,7 @@ export function Mails() {
             items={creatorChoices.map((n) => ({
               value: n,
               label: titleCase(n),
+              count: mailCount(n) || undefined,
               icon: <CreatorAvatar name={n} photoUrl={photoOf(n)} className="h-4 w-4 rounded-full text-[7px]" />,
             }))}
           />
@@ -988,6 +1002,11 @@ export function Mails() {
                       {l ? l.alias ?? "Libellé Gmail" : "Pas encore reliée"}
                     </span>
                   </span>
+                  {mailCount(n) > 0 && (
+                    <span className="shrink-0 rounded-full bg-foreground px-2 py-0.5 text-[11px] font-semibold tabular-nums text-background">
+                      {mailCount(n)} à traiter
+                    </span>
+                  )}
                   <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
                 </button>
               );
@@ -1005,30 +1024,34 @@ export function Mails() {
         <button
           type="button"
           onClick={() => { goMode("creators"); setCreatorView(null); }}
-          title="Par créatrice"
-          aria-label="Par créatrice"
+          title={mailTotal ? `Par créatrice · ${mailTotal} à traiter` : "Par créatrice"}
+          aria-label={mailTotal ? `Par créatrice, ${mailTotal} à traiter` : "Par créatrice"}
           className={cn(
-            "grid h-9 w-9 place-items-center rounded-lg transition-colors",
+            "relative grid h-9 w-9 place-items-center rounded-lg transition-colors",
             mode === "creators" && !creatorView ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
           )}
         >
           <UsersRound className="h-[17px] w-[17px]" />
+          {mailTotal > 0 && <CountDot n={mailTotal} />}
         </button>
       </div>
       <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-2.5 overflow-y-auto py-3 [scrollbar-width:none]">
         {creatorChoices.map((n) => {
           const on = mode === "creators" && !!creatorView && sameName(creatorView.name, n);
+          const todo = mailCount(n);
+          const who = `Mails de ${titleCase(n)}${todo ? ` · ${todo} à traiter` : ""}`;
           return (
             <button
               key={n}
               type="button"
               onClick={() => openCreator(n)}
-              title={`Mails de ${titleCase(n)}`}
-              aria-label={`Mails de ${titleCase(n)}`}
+              title={who}
+              aria-label={who}
               aria-pressed={on}
-              className={cn("shrink-0 rounded-full p-0.5 ring-2 transition-shadow", on ? "ring-foreground" : "ring-transparent hover:ring-border")}
+              className={cn("relative shrink-0 rounded-full p-0.5 ring-2 transition-shadow", on ? "ring-foreground" : "ring-transparent hover:ring-border")}
             >
               <CreatorAvatar name={n} photoUrl={photoOf(n)} className="h-8 w-8 rounded-full text-[10px]" />
+              {todo > 0 && <CountDot n={todo} />}
             </button>
           );
         })}

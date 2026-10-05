@@ -100,6 +100,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
             description: `${(openBugs[0].message ?? "").slice(0, 90)} · Réglages → Diagnostique`,
             time: agoLabel(openBugs[0].created_at),
             kind: "bug",
+            page: "diagnostique",
           });
         }
       }
@@ -110,7 +111,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
         for (const a of (team.data ?? []) as { id: string; actor_id: string | null; actor_name: string | null; verb: string; entity: string; label: string; detail: string | null; created_at: string }[]) {
           const t = activityText(a);
           const who = (a.actor_id && names.get(a.actor_id)) || a.actor_name || "L'équipe";
-          out.push({ id: `team:${a.id}`, title: `${who} ${t.action}`, description: t.what, time: agoLabel(a.created_at), kind: "team" });
+          out.push({ id: `team:${a.id}`, title: `${who} ${t.action}`, description: t.what, time: agoLabel(a.created_at), kind: "team", page: "activite" });
         }
       }
       const bellCreator = prefs.bellCreatorActivity !== false;
@@ -119,6 +120,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           out.push({
             id: `ctd:${t.created_at}:${t.text.slice(0, 40)}`,
             title: "Nouvelle tâche d'un créateur",
+            page: "todo",
             description: `${t.creator ? titleCase(t.creator) : "Créateur"} · ${t.text}`,
             time: agoLabel(t.created_at),
             kind: "creator",
@@ -130,6 +132,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           out.push({
             id: `cid:${i.created_at}:${i.text.slice(0, 40)}`,
             title: "Nouvelle idée d'un créateur",
+            page: "ideas",
             description: `${i.creator ? titleCase(i.creator) : "Créateur"} · ${i.text}`,
             time: agoLabel(i.created_at),
             kind: "creator",
@@ -141,6 +144,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           out.push({
             id: `cev:${e.created_at}:${e.title.slice(0, 40)}`,
             title: "Nouvel évènement d'un créateur",
+            page: "planning",
             description: `${e.who ? titleCase(e.who) : "Créateur"} · ${e.title}`,
             time: agoLabel(e.created_at),
             kind: "creator",
@@ -153,6 +157,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           out.push({
             id: `cma:${a.id}`,
             title: "Avis sur un mail",
+            page: "mails",
             description: `${titleCase(a.creator)} · ${AVIS[a.status] ?? a.status}${a.comment ? ` · « ${a.comment.slice(0, 80)} »` : ""}`,
             time: agoLabel(a.created_at),
             kind: "creator",
@@ -164,6 +169,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           out.push({
             id: `cmn:${n.id}`,
             title: "Message sur un mail",
+            page: "mails",
             description: `${titleCase(n.creator)} · ${n.body.slice(0, 100)}`,
             time: agoLabel(n.created_at),
             kind: "creator",
@@ -177,6 +183,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           out.push({
             id: `mail:${e.gmail_message_id ?? e.created_at}`,
             title: "Nouvel email reçu",
+            page: "mails",
             description: `${e.contact_name || e.contact_email || "Contact"} · ${e.subject || "(sans objet)"}`,
             time: agoLabel(e.created_at),
             kind: "email",
@@ -187,6 +194,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
         out.push({
           id: `inv:${i.id}`,
           title: "Facture en retard",
+          page: "relances",
           description: `${i.party} · ${i.amount}`,
           time: "à relancer",
           kind: "facture",
@@ -196,6 +204,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
         out.push({
           id: `br:${b.id}`,
           title: "Brief à valider",
+          page: "briefs",
           description: `${b.brand}${b.creator ? ` × ${titleCase(b.creator)}` : ""}`,
           time: "en attente",
           kind: "brief",
@@ -219,6 +228,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
         out.push({
           id: `ct:${d.creator}:${d.type}:${d.start}`,
           title: left < 0 ? "Contrat expiré" : "Contrat à renouveler",
+          page: "echeances",
           description: `${titleCase(d.creator)} · ${d.type}`,
           time: left < 0 ? `expiré depuis ${-left} j` : `expire dans ${left} j`,
           kind: "contrat",
@@ -256,4 +266,14 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
   };
 
   return { items, dismiss };
+}
+
+/**
+ * Pastilles du menu : nombre de notifications (non effacées) par page. Les rappels
+ * d'agenda (« Événement à venir ») n'en font pas partie : ce ne sont pas des nouveautés.
+ */
+export function countByPage(items: NotificationItem[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const n of items) if (n.page) out[n.page] = (out[n.page] ?? 0) + 1;
+  return out;
 }

@@ -9,6 +9,7 @@ import { toast } from "@/components/ui/toast";
 import { DashPanel, DashSectionTitle } from "@/components/ui/dash";
 import { notifyAgency, notifyCreator } from "@/lib/push";
 import { myDisplayName } from "@/lib/team";
+import { markCreatorNotesRead, reportCreatorThreads } from "@/lib/creatorMailCounts";
 import { SHARED_BOXES, emailOf } from "@/lib/mailAvatar";
 import {
   statusMeta, listMails, getMailThread, sendManagerNote, sendDecision, listGmailLabels, getStatusHistory,
@@ -374,6 +375,11 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     void load();
   }, [load]);
 
+  // Agence : la pastille du créateur (page Mails) suit cette liste (statuts compris).
+  useEffect(() => {
+    if (asAgency && threads) reportCreatorThreads(creator, threads);
+  }, [asAgency, creator, threads]);
+
   useEffect(() => {
     if (!openId) return;
     let alive = true;
@@ -391,6 +397,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           void supabase.from("creator_mail_notes").update({ agency_read_at: new Date().toISOString() })
             .eq("creator", creator).eq("thread_id", t.id).is("agency_read_at", null);
         }
+        if (mode === "agency") markCreatorNotesRead(creator, t.id);
       })
       .catch((e) => alive && setThreadErr((e as Error).message));
     getStatusHistory(creator, openId).then((events) => alive && setHistory({ id: openId, events }));

@@ -13,6 +13,7 @@ import {
   sbIconCls,
   sbItemCls,
   sbRailCls,
+  sbBadgeTotal,
   type SbGroup,
 } from "@/components/ui/dashboard-sidebar";
 
@@ -36,6 +37,7 @@ export function Sidebar({
   onTogglePin,
   hidden,
   userId,
+  badges,
 }: {
   active: ViewId;
   activeSub?: string | null;
@@ -53,6 +55,8 @@ export function Sidebar({
   hidden?: ViewId[];
   /** Compte connecté (photo de profil de la carte utilisateur). */
   userId?: string;
+  /** Notifications par page (id du menu) → pastilles. */
+  badges?: Record<string, number>;
 }) {
   const { dark, toggle: toggleTheme } = useTheme();
   // Nom de la personne connectée (chacun le sien), à la place de « Marc & Gianni ».
@@ -63,17 +67,23 @@ export function Sidebar({
   // (un raccourci = lien direct). Clic droit sur une page → Épingler / Détacher.
   const GROUPS = useMemo<SbGroup[]>(() => {
     // Familles filtrées (on retire les pages masquées, puis les familles vides).
+    const b = badges ?? {};
     const base = NAV_GROUPS
-      .map((g) => ({ ...g, items: g.items.filter((i) => !isHidden(i.id)) }))
+      .map((g) => ({
+        ...g,
+        items: g.items
+          .filter((i) => !isHidden(i.id))
+          .map((i) => ({ ...i, badge: b[i.id], children: i.children?.map((c) => ({ ...c, badge: b[c.id] })) })),
+      }))
       .filter((g) => g.items.length > 0);
     const items = (pinned ?? [])
       .filter((id) => !isHidden(id))
       .map((id) => findPinnable(id))
       .filter((i): i is NonNullable<typeof i> => !!i)
-      .map((i) => ({ id: i.id, label: i.label, icon: i.icon }));
+      .map((i) => ({ id: i.id, label: i.label, icon: i.icon, badge: b[i.id] }));
     return items.length ? [{ id: "__pins__", label: "Raccourcis", icon: Star, items }, ...base] : base;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pinned, hidden]);
+  }, [pinned, hidden, badges]);
   // Sidebar repliable en rail d'icônes (mémorisé).
   // try/catch : localStorage lève une exception quand le stockage est bloqué.
   const [collapsed, setCollapsed] = useState(() => {
@@ -109,18 +119,26 @@ export function Sidebar({
           {GROUPS.map((g, gi) => (
             <div key={g.id} className="flex w-full flex-col items-center gap-1">
               {gi > 0 && <div className="my-1 h-px w-6 bg-foreground/10" />}
-              {g.items.map((it) => (
-                <button
-                  key={it.id}
-                  type="button"
-                  onClick={() => onSelect(it.id as ViewId)}
-                  onContextMenu={onItemContext ? (e) => onItemContext(it.id as ViewId, e) : undefined}
-                  title={it.label}
-                  className={sbRailCls(active === it.id)}
-                >
-                  <it.icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
-                </button>
-              ))}
+              {g.items.map((it) => {
+                const n = sbBadgeTotal(it);
+                return (
+                  <button
+                    key={it.id}
+                    type="button"
+                    onClick={() => onSelect(it.id as ViewId)}
+                    onContextMenu={onItemContext ? (e) => onItemContext(it.id as ViewId, e) : undefined}
+                    title={n ? `${it.label} · ${n}` : it.label}
+                    className={cn("relative", sbRailCls(active === it.id))}
+                  >
+                    <it.icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                    {n > 0 && (
+                      <span aria-hidden className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-foreground px-1 text-[9.5px] font-semibold tabular-nums text-background">
+                        {n > 99 ? "99+" : n}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           ))}
         </nav>
