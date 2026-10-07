@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Save, ExternalLink, Building2, CalendarHeart, FileText, BarChart3, Columns3 } from "lucide-react";
+import { Plus, Trash2, Save, ExternalLink, Building2, CalendarHeart, FileText, BarChart3, Columns3, Languages } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import { ImageField } from "@/components/ui/image-field";
@@ -24,6 +24,8 @@ type Kpis = {
   platformsLabel: string;
   creatorsOverride: string; // vide = nombre de créatrices calculé automatiquement
   followersOverride: string; // vide = followers cumulés calculés automatiquement
+  universesLabelEn?: string; // libellés anglais (deck /en/) ; vide = traduction par défaut
+  platformsLabelEn?: string;
 };
 /** Un événement / concept porté par une créatrice (ex. club running, soirées, ateliers). */
 type Concept = {
@@ -33,7 +35,13 @@ type Concept = {
   highlights: string[]; // chiffres / points forts, un par ligne
   brands: string; // « Déjà accompagné par … »
   photos: string[];
+  // Version anglaise (deck /en/) ; vide = texte français repris tel quel.
+  titleEn?: string;
+  textEn?: string;
+  highlightsEn?: string[];
 };
+/** Textes anglais du deck (/mediakit/agence/en/). Vides = traduction par défaut du site. */
+type IntroEn = { title?: string; lead?: string };
 type FullAgencyKit = {
   intro: { title: string; lead: string };
   pillars: Pillar[];
@@ -42,6 +50,8 @@ type FullAgencyKit = {
   photo: string | null;
   theme: string; // thème du deck (CREATOR_THEMES, direction Éditorial), « blanc » par défaut
   concepts: Concept[];
+  introEn: IntroEn;
+  pillarsEn: Pillar[]; // même position que `pillars`
 };
 // Forme partielle telle que stockée en base (tous les champs optionnels).
 type AgencyKit = {
@@ -52,6 +62,8 @@ type AgencyKit = {
   photo?: string | null;
   theme?: string;
   concepts?: Concept[];
+  introEn?: IntroEn;
+  pillarsEn?: Pillar[];
 };
 
 const MAX_CONCEPT_PHOTOS = 4;
@@ -92,8 +104,24 @@ function withDefaults(blob: AgencyKit): FullAgencyKit {
     photo: blob.photo ?? null,
     theme: blob.theme ?? "blanc",
     concepts: blob.concepts ?? [],
+    introEn: blob.introEn ?? {},
+    pillarsEn: blob.pillarsEn ?? [],
   };
 }
+
+// Traductions anglaises par défaut (miroir de AG_EN dans agence-editorial.js) : affichées
+// en gris dans les champs vides, c'est ce que le deck anglais montre tant qu'on n'écrit rien.
+const EN_DEF = {
+  title: "Strategic\ntalent management",
+  lead: "TTP Creators represents a hand-picked roster of Sport & Lifestyle creators: career strategy, content production and negotiation, all in-house. We build identities that last, not spikes in views.",
+  pillars: [
+    { title: "Talent first", text: "A creator isn’t an audience: they’re a brand. We build an identity that lasts, not spikes in views." },
+    { title: "In-house studio", text: "Strategy, production, negotiation: everything happens in-house. One team, nothing lost along the way." },
+    { title: "Measured results", text: "No guesswork: clear KPIs and precise reporting, on every collaboration." },
+  ] as Pillar[],
+  universesLabel: "Worlds · Sport & Lifestyle",
+  platformsLabel: "Platforms covered",
+};
 
 const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none placeholder:text-faint focus:border-primary focus:ring-2 focus:ring-primary/15";
 const LBL = "mb-1 block text-[12px] font-medium text-muted-foreground";
@@ -155,6 +183,14 @@ export function AgencyTab() {
   const setConcepts = (concepts: Concept[]) => setKit((k) => ({ ...k, concepts }));
   const patchConcept = (i: number, p: Partial<Concept>) =>
     setKit((k) => ({ ...k, concepts: k.concepts.map((c, j) => (j === i ? { ...c, ...p } : c)) }));
+  const patchIntroEn = (p: IntroEn) => setKit((k) => ({ ...k, introEn: { ...k.introEn, ...p } }));
+  const patchPillarEn = (i: number, p: Partial<Pillar>) =>
+    setKit((k) => {
+      const next = [...k.pillarsEn];
+      while (next.length <= i) next.push({ title: "", text: "" });
+      next[i] = { ...next[i], ...p };
+      return { ...k, pillarsEn: next };
+    });
 
   const save = async () => {
     if (saving || loading || loadError || !loaded) return;
@@ -181,7 +217,16 @@ export function AgencyTab() {
         .from("agency_mediakit")
         .upsert({
           id: 1,
-          data: { ...kit, concepts: kit.concepts.map((c) => ({ ...c, highlights: c.highlights.map((h) => h.trim()).filter(Boolean) })) },
+          data: {
+            ...kit,
+            concepts: kit.concepts.map((c) => ({
+              ...c,
+              highlights: c.highlights.map((h) => h.trim()).filter(Boolean),
+              highlightsEn: (c.highlightsEn ?? []).map((h) => h.trim()).filter(Boolean),
+            })),
+            // Traductions alignées sur les piliers restants (un pilier supprimé emporte la sienne).
+            pillarsEn: kit.pillars.map((_, i) => kit.pillarsEn[i] ?? { title: "", text: "" }),
+          },
           updated_at: new Date().toISOString(),
         })
         .select("id, updated_at");
@@ -211,6 +256,15 @@ export function AgencyTab() {
             className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
           >
             <ExternalLink className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Voir le deck</span>
+          </a>
+          <a
+            href={`${PUBLIC_URL}en/`}
+            target="_blank"
+            rel="noreferrer"
+            title="Version anglaise, pour les marques étrangères"
+            className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+          >
+            <Languages className="h-3.5 w-3.5" /> <span className="hidden sm:inline">En anglais</span>
           </a>
           <button
             type="button"
@@ -477,6 +531,81 @@ export function AgencyTab() {
             >
               <Plus className="h-3.5 w-3.5" /> Ajouter un concept
             </button>
+          </section>
+
+          {/* ---------------- VERSION ANGLAISE ---------------- */}
+          <section className={`${CARD} xl:col-span-2`}>
+            <h3 className={H3}><Languages className="h-4 w-4 text-muted-foreground" /> Version anglaise du deck</h3>
+            <p className={`${HINT} mb-4`}>
+              Pour les marques étrangères : <span className="text-foreground">ttpcreators.pro/mediakit/agence/en/</span>. Le texte
+              en gris est la traduction utilisée tant que le champ est vide ; si tu modifies un texte français, mets aussi
+              sa version anglaise ici. Les chiffres, les titres de pages et le contact sont traduits automatiquement.
+            </p>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="space-y-3">
+                <div>
+                  <label className={LBL}>Titre (une ligne par saut de ligne)</label>
+                  <textarea value={kit.introEn.title ?? ""} onChange={(e) => patchIntroEn({ title: e.target.value })} rows={2} lang="en" placeholder={EN_DEF.title} className={`${IN} resize-y`} />
+                </div>
+                <div>
+                  <label className={LBL}>Accroche</label>
+                  <textarea value={kit.introEn.lead ?? ""} onChange={(e) => patchIntroEn({ lead: e.target.value })} rows={4} lang="en" placeholder={EN_DEF.lead} className={`${IN} resize-y`} />
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div>
+                    <label className={LBL}>Libellé « {kit.kpis.universes} univers »</label>
+                    <input value={kit.kpis.universesLabelEn ?? ""} onChange={(e) => patchKpis({ universesLabelEn: e.target.value })} lang="en" placeholder={EN_DEF.universesLabel} className={IN} />
+                  </div>
+                  <div>
+                    <label className={LBL}>Libellé « {kit.kpis.platforms} plateformes »</label>
+                    <input value={kit.kpis.platformsLabelEn ?? ""} onChange={(e) => patchKpis({ platformsLabelEn: e.target.value })} lang="en" placeholder={EN_DEF.platformsLabel} className={IN} />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {kit.pillars.map((p, i) => (
+                  <div key={i} className="rounded-xl border border-border bg-card p-3">
+                    <div className="mb-2 truncate text-[12px] text-muted-foreground">Pilier « {p.title || `n° ${i + 1}`} »</div>
+                    <input
+                      value={kit.pillarsEn[i]?.title ?? ""}
+                      onChange={(e) => patchPillarEn(i, { title: e.target.value })}
+                      lang="en"
+                      placeholder={EN_DEF.pillars[i]?.title ?? "Pillar title"}
+                      className={`${IN} mb-2 font-semibold`}
+                    />
+                    <textarea
+                      value={kit.pillarsEn[i]?.text ?? ""}
+                      onChange={(e) => patchPillarEn(i, { text: e.target.value })}
+                      rows={2}
+                      lang="en"
+                      placeholder={EN_DEF.pillars[i]?.text ?? "One sentence explaining this pillar."}
+                      className={`${IN} resize-y`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            {kit.concepts.length > 0 && (
+              <div className="mt-4 space-y-3">
+                {kit.concepts.map((c, i) => (
+                  <div key={i} className="rounded-xl border border-border bg-card p-3">
+                    <div className="mb-2 truncate text-[12px] text-muted-foreground">Concept « {c.title || `n° ${i + 1}`} »</div>
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                      <input value={c.titleEn ?? ""} onChange={(e) => patchConcept(i, { titleEn: e.target.value })} lang="en" placeholder={c.title || "Concept name"} className={`${IN} font-semibold md:col-span-2`} />
+                      <textarea value={c.textEn ?? ""} onChange={(e) => patchConcept(i, { textEn: e.target.value })} rows={4} lang="en" placeholder="Presentation in English" className={`${IN} resize-y`} />
+                      <textarea
+                        value={(c.highlightsEn ?? []).join("\n")}
+                        onChange={(e) => patchConcept(i, { highlightsEn: e.target.value.split("\n") })}
+                        rows={4}
+                        lang="en"
+                        placeholder={"Key figures, one per line\n800K accounts reached"}
+                        className={`${IN} resize-y`}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* ---------------- CONTACT + PHOTO ---------------- */}

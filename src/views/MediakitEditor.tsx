@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon, Check, Sparkles, Euro, UserRound, Users, BarChart3, Share2, ListChecks, Store, type LucideIcon } from "lucide-react";
+import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon, Check, Sparkles, Euro, UserRound, Users, BarChart3, Share2, ListChecks, Store, Languages, type LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { ImageField } from "@/components/ui/image-field";
 import { dbUpdate } from "@/lib/db";
@@ -10,6 +10,7 @@ import { titleCase, cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { MediakitThemePicker } from "@/components/ui/mediakit-theme-picker";
+import { knownBioEn } from "@/lib/mediakitBiosEn";
 
 /**
  * Éditeur du MEDIA KIT EN LIGNE (par créatrice). Tout est écrit dans la colonne
@@ -43,6 +44,8 @@ type BrandRow = { name: string; logo?: string | null };
 type MediaKit = {
   slug?: string;
   bio?: string;
+  /** Bio anglaise (page /en/ pour les marques étrangères). Vide = pas de bio en anglais. */
+  bioEn?: string;
   tags?: string[];
   audience?: {
     age?: PctRow[];
@@ -60,6 +63,8 @@ type MediaKit = {
   rates?: RateRow[];
   /** Mention sous la grille (packages, dispositifs…). */
   ratesNote?: string;
+  /** Mention sous la grille, en anglais (vide = mention anglaise par défaut). */
+  ratesNoteEn?: string;
   /** Masque les tarifs sur le media kit public (ils restent saisis ici). */
   hideRates?: boolean;
   /** Thème de couleurs du media kit public (ids : lib/mediakitThemes). Absent = « minuit ». */
@@ -271,6 +276,12 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
         const blob = (data?.[0]?.mediakit as MediaKit | null) ?? {};
         // slug par défaut = prénom de la créatrice
         if (!blob.slug && selected) blob.slug = slugify((selected.name || "").split(/\s+/)[0]);
+        // Bio anglaise vide : on reprend la traduction déjà préparée (le site l'affiche
+        // aussi en repli), sans la compter comme une modification non enregistrée.
+        if (!blob.bioEn?.trim()) {
+          const known = knownBioEn(blob.bio);
+          if (known) blob.bioEn = known;
+        }
         setMk(blob);
         setSavedSnap(JSON.stringify(blob));
         setLoadedId(selId);
@@ -419,6 +430,17 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 <ExternalLink className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Voir le media kit</span>
               </a>
             )}
+            {publicUrl && (
+              <a
+                href={`${publicUrl}en/`}
+                target="_blank"
+                rel="noreferrer"
+                title="Version anglaise, pour les marques étrangères"
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+              >
+                <Languages className="h-3.5 w-3.5" /> <span className="hidden sm:inline">En anglais</span>
+              </a>
+            )}
             {publicUrl && mk.ugc?.enabled && (
               <a
                 href={`${publicUrl}ugc/`}
@@ -508,6 +530,26 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                   placeholder="Candice est une créatrice lifestyle & blogging basée à Paris…"
                   className={`${IN} min-h-[140px] resize-y leading-relaxed`}
                 />
+              </div>
+              <div>
+                <label className={cn(LBL, "flex items-baseline justify-between gap-2")}>
+                  <span>Bio en anglais (version pour les marques étrangères)</span>
+                  <span className={cn("tabular-nums", (mk.bioEn ?? "").length > BIO_MAX ? "text-red-600 dark:text-red-400" : "text-faint")}>
+                    {(mk.bioEn ?? "").length} / {BIO_MAX}
+                  </span>
+                </label>
+                <textarea
+                  value={mk.bioEn ?? ""}
+                  onChange={(e) => patch({ bioEn: e.target.value })}
+                  rows={6}
+                  lang="en"
+                  placeholder="Candice is a Paris-based lifestyle & blogging creator…"
+                  className={`${IN} min-h-[140px] resize-y leading-relaxed`}
+                />
+                <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                  Les chiffres, l'audience, les étiquettes et les tarifs sont traduits automatiquement. Sans bio anglaise, la
+                  page anglaise s'affiche sans bio (jamais en français).
+                </p>
               </div>
               <TagEditor tags={mk.tags ?? []} onChange={setTags} />
             </div>
@@ -714,6 +756,16 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 value={mk.ratesNote ?? ""}
                 onChange={(e) => patch({ ratesNote: e.target.value })}
                 placeholder={DEFAULT_RATES_NOTE}
+                className={IN}
+              />
+            </div>
+            <div className="mt-3">
+              <label className={LBL}>Mention en anglais</label>
+              <input
+                value={mk.ratesNoteEn ?? ""}
+                onChange={(e) => patch({ ratesNoteEn: e.target.value })}
+                lang="en"
+                placeholder="Indicative rates, excluding VAT. Custom packages are available depending on the campaign."
                 className={IN}
               />
             </div>
