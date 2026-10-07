@@ -163,9 +163,9 @@ function debriefHTML(d: Debrief, shotUrls: Record<string, string> = {}): string 
  */
 function debriefPdfHTML(d: Debrief, shotUrls: Record<string, string> = {}): string {
   const money =
-    `<div class="money"><span>Budget <b>${escHtml(d.budget)}</b></span>` +
-    `<span class="arrow">→</span><span>CA généré <b>${escHtml(d.revenue)}</b></span>` +
-    (d.roi && d.roi !== "—" ? `<span class="roi">ROI ${escHtml(d.roi)}</span>` : "") +
+    `<div class="money"><span><span class="k">Budget</span><b>${escHtml(d.budget)}</b></span>` +
+    `<span class="arrow">→</span><span><span class="k">CA généré</span><b>${escHtml(d.revenue)}</b></span>` +
+    (d.roi && d.roi !== "—" ? `<span class="roi"><span class="k">Retour sur investissement</span><b>${escHtml(d.roi)}</b></span>` : "") +
     `</div>`;
   const shots = (d.calc?.shots ?? []).map((s) => shotUrls[s.path]).filter(Boolean);
   const body =
@@ -175,7 +175,7 @@ function debriefPdfHTML(d: Debrief, shotUrls: Record<string, string> = {}): stri
       ["Période", d.period],
       ["Livrables", d.deliverables],
     ]) +
-    (d.summary && d.summary !== "—" ? pdfSection("Synthèse", `<p class="pre">${escHtml(d.summary)}</p>`) : "") +
+    (d.summary && d.summary !== "—" ? pdfSection("Synthèse", `<p class="lede">${escHtml(d.summary)}</p>`) : "") +
     (d.kpis.length ? pdfSection("Indicateurs", pdfKpis(d.kpis)) : "") +
     (d.highlights.length ? pdfSection("Points forts", pdfTicks(d.highlights)) : "") +
     (shots.length ? pdfSection("Captures des statistiques", pdfShots(shots)) : "");

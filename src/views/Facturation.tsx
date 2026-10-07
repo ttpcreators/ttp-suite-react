@@ -34,7 +34,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { totalsOf, type LineItem, type Totals } from "@/lib/invoice";
 import { printHtml } from "@/lib/printPdf";
-import { ttpLogoImg } from "@/lib/pdfDoc";
+import { docHead, ttpLogoImg } from "@/lib/pdfDoc";
 import { notifyCreator } from "@/lib/push";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Overlay } from "@/components/mobile/ios-sheet";
@@ -253,83 +253,77 @@ function invoiceHTML(o: {
       })
       .join("") || `<tr><td colspan="4" class="muted">Aucune ligne</td></tr>`;
 
+  const line = (l: string, v: string, cls = "") =>
+    `<div class="tr${cls}"><span>${l}</span><span class="lead"></span><span class="v">${v}</span></div>`;
   const vatBlock = d.franchise
-    ? `<div class="tr muted">TVA non applicable, art. 293 B du CGI</div>`
-    : `<div class="tr"><span>TVA (${fmtRate(d.vatRate)} %)</span><span>${euro2(totals.tva)}</span></div>`;
+    ? `<div class="tr note">TVA non applicable, art. 293 B du CGI</div>`
+    : line(`TVA (${fmtRate(d.vatRate)} %)`, euro2(totals.tva));
 
   const bankBlock = bank
-    ? `<div class="block"><div class="block-t">Coordonnées bancaires</div>
-       <div class="muted">${esc(bank.holder || issuer.name)}${bank.bank ? " · " + esc(bank.bank) : ""}</div>
-       <div class="muted">IBAN ${esc(bank.iban)}${bank.bic ? " · BIC " + esc(bank.bic) : ""}</div></div>`
+    ? `<section class="sec"><h2>Coordonnées bancaires</h2>
+       <div>${esc(bank.holder || issuer.name)}${bank.bank ? " · " + esc(bank.bank) : ""}</div>
+       <div class="iban">IBAN ${esc(bank.iban)}${bank.bic ? " · BIC " + esc(bank.bic) : ""}</div></section>`
     : "";
 
   const notesBlock =
     d.notes && d.notes.trim()
-      ? `<div class="block"><div class="block-t">Notes</div><div class="muted">${esc(d.notes)}</div></div>`
+      ? `<section class="sec"><h2>Notes</h2><div class="pre">${esc(d.notes)}</div></section>`
       : "";
 
-  return `<!doctype html><html lang="fr"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Facture ${esc(ref)}</title>
-<style>
-*{box-sizing:border-box}
-body{font-family:'Inter',-apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#18181b;max-width:820px;margin:0 auto;padding:44px 40px;background:#fff;font-size:13px;line-height:1.5}
-h1{font-size:26px;letter-spacing:-.5px;margin:0}
-.top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:28px}
-.brand{font-size:16px;font-weight:700;margin-bottom:4px}
-.muted{color:#71717a}
-.faint{color:#a1a1aa;font-size:11px}
-.tporef{margin-top:7px;font-size:11px;font-weight:700;color:#18181b}
-.tporef span{color:#a1a1aa;font-weight:600}
-.right{text-align:right}
-.ref{margin-top:6px;font-size:12px}
-.badge{display:inline-block;margin-top:8px;padding:4px 11px;border-radius:20px;background:#eef2ff;color:#4338ca;font-size:11px;font-weight:700}
-.cols{display:flex;gap:24px;margin:18px 0 8px}
-.col{flex:1}
-.col-t{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;font-weight:700;margin-bottom:6px}
-.name{font-weight:600;font-size:14px;margin-bottom:2px}
-table{width:100%;border-collapse:collapse;margin-top:20px}
-th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;border-bottom:2px solid #18181b;padding:8px 6px}
-td{padding:10px 6px;border-bottom:1px solid #ececef;font-size:13px}
-.num{text-align:right;white-space:nowrap}
-.totals{margin-top:16px;margin-left:auto;width:280px}
-.tr{display:flex;justify-content:space-between;padding:6px 0;font-size:13px}
-.tr.total{border-top:2px solid #18181b;margin-top:6px;padding-top:10px;font-size:17px;font-weight:700}
-.block{margin-top:22px}
-.block-t{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;font-weight:700;margin-bottom:5px}
-.idblock{display:flex;align-items:center;gap:10px}
-.legal{margin-top:34px;border-top:1px solid #ececef;padding-top:14px;font-size:10.5px;color:#a1a1aa;line-height:1.6}
-@page{size:A4;margin:16mm 14mm}
-@media print{body{padding:0}}
-</style></head><body>
-<div class="top">
-  <div class="idblock">${ttpLogoImg(34)}<div><div class="brand">${esc(issuer.name)}</div><div class="faint">${issuerLegal}</div></div></div>
-  <div class="right"><h1>FACTURE</h1><div class="ref muted">N° ${esc(ref)}</div>
-  <div class="ref muted">Émise le ${frDate(d.issueDate)}</div>
-  <div class="ref muted">Échéance : ${frDate(d.dueDate)}</div>
-  <span class="badge">${esc(statusLabel)}</span></div>
+  const css = `
+.parties{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6mm;margin-top:10mm}
+.parties h3{margin:0 0 2.5mm;font-size:7pt;font-weight:600;letter-spacing:.24em;text-transform:uppercase;color:var(--grey)}
+.parties .name{font-family:var(--serif);font-size:14pt;line-height:1.15;margin-bottom:1.5mm}
+.parties .addr{font-size:8.2pt;line-height:1.55;color:var(--grey)}
+.parties .tpo{margin-top:2mm;font-size:8.2pt}
+.parties .tpo span{color:var(--grey)}
+table.lines{width:100%;border-collapse:collapse;margin-top:10mm}
+table.lines th{text-align:left;font-size:7pt;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--grey);
+  padding:0 0 2.5mm;border-bottom:.8pt solid var(--ink)}
+table.lines td{padding:3mm 0;border-bottom:.5pt solid var(--soft);font-size:9.6pt;vertical-align:top}
+table.lines td+td,table.lines th+th{padding-left:5mm}
+table.lines .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+table.lines tr{break-inside:avoid}
+.totals{margin:6mm 0 0 auto;width:86mm;break-inside:avoid}
+.tr{display:flex;align-items:baseline;gap:3mm;padding:1.6mm 0;font-size:9.6pt}
+.tr .lead{flex:1;border-bottom:.7pt dotted var(--faint);transform:translateY(-.9mm)}
+.tr .v{font-variant-numeric:tabular-nums;white-space:nowrap}
+.tr.note{display:block;font-size:8.2pt;color:var(--grey)}
+.tr.total{margin-top:2mm;padding-top:3mm;border-top:.8pt solid var(--ink);align-items:flex-end}
+.tr.total span:first-child{font-size:7pt;font-weight:600;letter-spacing:.24em;text-transform:uppercase}
+.tr.total .v{font-family:var(--serif);font-size:24pt;line-height:1;color:var(--accent)}
+.iban{margin-top:1mm;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.legal{margin-top:10mm;padding-top:3.5mm;border-top:.5pt solid var(--soft);font-size:7.6pt;line-height:1.6;color:var(--faint)}
+`;
+
+  return `${docHead(`Facture ${ref}`, css)}<body><div class="wrap">
+<header class="mast"><span class="id">${ttpLogoImg(30)}<span><span class="wm">${esc(issuer.name)}</span></span></span>
+<span class="r"><b>N° ${esc(ref)}</b><br>${esc(statusLabel)}</span></header>
+<p class="kicker">Facture</p>
+<h1>N° <i>${esc(ref)}</i></h1>
+<dl class="meta">
+  <div class="row"><dt>Émise le</dt><span class="lead"></span><dd>${frDate(d.issueDate)}</dd></div>
+  <div class="row"><dt>Échéance</dt><span class="lead"></span><dd>${frDate(d.dueDate)}</dd></div>
+  <div class="row"><dt>Statut</dt><span class="lead"></span><dd>${esc(statusLabel)}</dd></div>
+</dl>
+
+<div class="parties">
+  <div><h3>Émetteur</h3><div class="name">${esc(issuer.name)}</div><div class="addr">${issuerLegal}</div></div>
+  <div><h3>Facturé à</h3><div class="name">${esc(d.clientName || brand)}</div><div class="addr">${clientLegal}</div>
+    ${d.tpoRef && d.tpoRef.trim() ? `<div class="tpo"><span>Réf. TPO</span> ${esc(d.tpoRef)}</div>` : ""}</div>
+  <div><h3>Prestation</h3><div class="name">${esc(brand)}</div>
+    ${creator ? `<div class="addr">Créateur : ${esc(titleCase(creator))}</div>` : ""}</div>
 </div>
 
-<div class="cols">
-  <div class="col"><div class="col-t">Facturé à</div>
-    <div class="name">${esc(d.clientName || brand)}</div>
-    <div class="faint">${clientLegal}</div>
-    ${d.tpoRef && d.tpoRef.trim() ? `<div class="tporef"><span>Réf. TPO</span> ${esc(d.tpoRef)}</div>` : ""}
-  </div>
-  <div class="col"><div class="col-t">Prestation</div>
-    <div class="name">${esc(brand)}</div>
-    ${creator ? `<div class="muted">Créateur : ${esc(titleCase(creator))}</div>` : ""}
-  </div>
-</div>
-
-<table>
+<table class="lines">
   <thead><tr><th>Désignation</th><th class="num">Qté</th><th class="num">PU HT</th><th class="num">Total HT</th></tr></thead>
   <tbody>${itemRows}</tbody>
 </table>
 
 <div class="totals">
-  <div class="tr"><span>Total HT</span><span>${euro2(totals.ht)}</span></div>
+  ${line("Total HT", euro2(totals.ht))}
   ${vatBlock}
-  <div class="tr total"><span>Total TTC</span><span>${euro2(totals.ttc)}</span></div>
+  ${line("Total TTC", euro2(totals.ttc), " total")}
 </div>
 
 ${bankBlock}
@@ -342,7 +336,7 @@ ${notesBlock}
   Pas d'escompte pour paiement anticipé.${d.franchise ? " TVA non applicable, art. 293 B du CGI." : ""}
   <br>Document généré par TTP Suite.
 </div>
-</body></html>`;
+</div></body></html>`;
 }
 
 // ─── Petits composants ───────────────────────────────────────────────────────

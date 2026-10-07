@@ -32,6 +32,15 @@ types + build). Un `git push origin main` déclenche le déploiement GitHub Page
 - **Edge Functions** (`supabase/functions/*`) : **PAS déployées par la CI** → déploiement
   MANUEL via `supabase functions deploy <noms> --project-ref zizvggziggswhrbuyhuo`.
 
+## Documents PDF (brief, bilan, facture, contrats)
+
+Tous les PDF de l'app partagent UNE identité, celle des media kits du site (direction
+« Éditorial », 2026-10-07) : `src/lib/pdfDoc.ts` (style commun, `docHead`/`docMast`/`docFoot`,
+`pdfShell` pour brief et bilan, `CONTRACT_CSS` pour les deux contrats) + polices Instrument
+Serif/Sans dans `public/fonts/`. Impression via `printHtml` (`src/lib/printPdf.ts`), qui attend
+polices et images. Tout nouveau PDF réutilise ces briques : pas de nouvelle feuille de style.
+Le corps d'EMAIL du bilan (`debriefHTML`) reste à part (styles en ligne).
+
 ## Supabase — projet `zizvggziggswhrbuyhuo`
 
 - **Schéma = source de vérité : [`supabase/SETUP.sql`](supabase/SETUP.sql)** (tables,

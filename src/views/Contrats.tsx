@@ -25,7 +25,7 @@ import { ConfirmDialog } from "@/components/ui/action-menu";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { RepresentationContract } from "@/views/RepresentationContract";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
-import { ttpLogoImg } from "@/lib/pdfDoc";
+import { CONTRACT_CSS, docHead, docMast, docTitleLastWord, docToday } from "@/lib/pdfDoc";
 import { nbspFr } from "@/lib/representationContract";
 import { Overlay } from "@/components/mobile/ios-sheet";
 
@@ -289,74 +289,30 @@ function contractHTML(o: {
   clauses: Term[];
 }): string {
   const { ref, meta, ctName, brand, parties, terms, clauses } = o;
-  const today = new Date().toLocaleDateString("fr-FR");
   const termRows = terms
-    .map((t) => `<div class="row"><dt>${esc(t.l)}</dt><dd>${esc(t.v)}</dd></div>`)
+    .map((t) => `<div class="row"><dt>${esc(t.l)}</dt><span class="lead"></span><dd>${esc(t.v)}</dd></div>`)
     .join("");
   const clauseBlocks = clauses
     .map(
       (c, i) =>
-        `<section class="art"><h3><span class="n">${String(i + 1).padStart(2, "0")}</span>${esc(c.l)}</h3><p class="muted">${esc(c.v)}</p></section>`,
+        // « Art. 3 — Droits d'auteur » → « Droits d'auteur » : le numéro est déjà affiché à gauche.
+        `<section class="art"><h3><span class="n">${String(i + 1).padStart(2, "0")}</span>${esc(c.l.replace(/^Art(?:icle)?\.?\s*\d+\s*[—–-]\s*/i, ""))}</h3><p>${esc(c.v)}</p></section>`,
     )
     .join("");
-  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Contrat ${esc(ref)}</title>
-<style>
-*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-:root{
-  --ink:#1b1a18;--muted:#6c6864;--faint:#a7a29c;--line:#e7e3dd;
-  --serif:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,'Times New Roman',serif;
-  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
-}
-html,body{margin:0;background:#fff}
-body{font-family:var(--sans);color:var(--ink);font-size:10.5pt;line-height:1.62;
-  max-width:180mm;margin:0 auto;padding:16mm 15mm;-webkit-font-smoothing:antialiased}
-.mast{display:flex;justify-content:space-between;align-items:flex-start;gap:10mm;
-  padding-bottom:4mm;border-bottom:.5pt solid var(--ink)}
-.mast .id{display:flex;align-items:center;gap:3mm}
-.mast .wm{font-weight:700;font-size:9pt;letter-spacing:.16em;text-transform:uppercase}
-.mast .tl{font-size:8pt;color:var(--muted);margin-top:.6mm}
-.mast .r{text-align:right;font-size:8pt;color:var(--faint);letter-spacing:.04em;line-height:1.55}
-.conf{text-align:right;font-size:7pt;letter-spacing:.24em;text-transform:uppercase;color:var(--faint);margin-top:2mm}
-.kind{font-size:7.5pt;letter-spacing:.26em;text-transform:uppercase;color:var(--muted);margin:13mm 0 2.5mm}
-h1{font-family:var(--serif);font-weight:600;font-size:23pt;line-height:1.12;letter-spacing:-.01em;margin:0;text-wrap:balance}
-.parties{margin-top:5mm;color:var(--muted);font-size:9.5pt;line-height:1.55}
-.parties .p1{color:var(--ink);font-weight:500}
-.terms{margin:9mm 0 0;padding:0}
-.terms .row{display:flex;justify-content:space-between;align-items:baseline;gap:8mm;
-  padding:2.9mm 0;border-bottom:.5pt solid var(--line);break-inside:avoid}
-.terms dt{font-size:7.5pt;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0;flex:none}
-.terms dd{margin:0;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
-.arts{margin-top:11mm}
-.art{margin:0 0 6mm;break-inside:avoid}
-.art h3{font-size:10.5pt;font-weight:600;margin:0 0 1.6mm;display:flex;gap:3mm;align-items:baseline}
-.art h3 .n{font-family:var(--serif);font-size:10pt;color:var(--faint);font-variant-numeric:tabular-nums}
-.art .muted{color:var(--muted);margin:0;line-height:1.6}
-.sign{display:flex;gap:14mm;margin-top:15mm;break-inside:avoid}
-.sign>div{flex:1}
-.sign .line{height:15mm;border-bottom:.6pt solid var(--ink)}
-.sign .cap{margin-top:2mm;font-size:7.5pt;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.legal{margin-top:12mm;padding-top:4mm;border-top:.5pt solid var(--line);
-  font-size:7.5pt;letter-spacing:.03em;color:var(--faint);line-height:1.6}
-@page{size:A4;margin:16mm 15mm}
-@media print{body{max-width:none;padding:0}}
-</style></head><body>
-<div class="mast">
-  <div class="id">${ttpLogoImg(28)}<div><div class="wm">TTP Creators</div><div class="tl">Lyon · France · partnerships@ttpcreators.pro</div></div></div>
-  <div class="r">Réf. ${esc(ref)}<br>${esc(today)}</div>
-</div>
-<div class="conf">Confidentiel</div>
-<div class="kind">${esc(meta.label)}</div>
-<h1>${esc(meta.title)}</h1>
-<div class="parties"><div class="p1">Parties : TTP Creators &amp; ${esc(ctName)} × ${esc(brand || "[Marque]")}</div>${esc(parties)}</div>
-<dl class="terms">${termRows}</dl>
+  const kind = meta.label.charAt(0) + meta.label.slice(1).toLowerCase().replace("× créateur", "× Créateur").replace("ugc", "UGC");
+  return `${docHead(`Contrat ${ref}`, CONTRACT_CSS)}<body><div class="wrap">
+${docMast([`<b>${esc(kind)}</b>`, `Réf. ${esc(ref)}`, esc(docToday()), "Confidentiel"])}
+<p class="kicker">${esc(kind)}</p>
+<h1>${docTitleLastWord(meta.title)}</h1>
+<div class="parties"><div class="p1">TTP Creators &amp; ${esc(ctName)} <i>×</i> ${esc(brand || "[Marque]")}</div>${esc(parties)}</div>
+<dl class="meta">${termRows}</dl>
 <div class="arts">${clauseBlocks}</div>
 <div class="sign">
-  <div><div class="line"></div><div class="cap">Pour TTP Creators</div></div>
-  <div><div class="line"></div><div class="cap">Pour ${esc(ctName)}</div></div>
+  <div><div class="who">Pour TTP Creators</div><div class="line"></div><div class="cap">Date et signature, précédées de « Lu et approuvé »</div></div>
+  <div><div class="who">Pour ${esc(ctName)}</div><div class="line"></div><div class="cap">Date et signature, précédées de « Lu et approuvé »</div></div>
 </div>
 <div class="legal">Contrat régi par le droit français · Conforme RGPD (UE 2016/679) · Directive 2011/83/UE · Fait à Lyon. Document généré par TTP Suite.</div>
-</body></html>`;
+</div></body></html>`;
 }
 
 function SelectField({ label, value, onChange, opts, className }: { label: string; value: string; onChange: (v: string) => void; opts: Opt[]; className?: string }) {

@@ -30,14 +30,24 @@ export function printHtml(html: string): void {
       iframe.remove();
       return;
     }
-    try {
-      win.focus();
-      win.addEventListener("afterprint", cleanup);
-      win.print();
-      setTimeout(cleanup, 60000); // filet si afterprint ne se déclenche pas
-    } catch {
-      iframe.remove();
-    }
+    // Attendre les polices du document (Instrument Serif/Sans) et ses images, sinon la
+    // boîte d'impression peut figer une police de repli ou un logo absent. 3 s au plus.
+    const doc = win.document;
+    const images = Array.from(doc.images).map((img) =>
+      img.complete ? Promise.resolve() : new Promise<void>((r) => { img.onload = img.onerror = () => r(); }),
+    );
+    const ready = Promise.all([doc.fonts ? doc.fonts.ready.then(() => undefined) : Promise.resolve(), ...images]);
+    const timeout = new Promise<void>((r) => setTimeout(r, 3000));
+    void Promise.race([ready, timeout]).then(() => {
+      try {
+        win.focus();
+        win.addEventListener("afterprint", cleanup);
+        win.print();
+        setTimeout(cleanup, 60000); // filet si afterprint ne se déclenche pas
+      } catch {
+        iframe.remove();
+      }
+    });
   };
 
   document.body.appendChild(iframe);
