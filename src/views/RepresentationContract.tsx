@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Copy, Check, FileText, Eye, X, Save, ChevronDown } from "lucide-react";
+import { Copy, Check, FileText, FileDown, Eye, X, Save, Maximize2, Link2, PenLine, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
@@ -8,17 +8,16 @@ import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type App
 import { TextField, SelectField } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
-import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import {
   RC_FIELDS,
   RC_GROUPS,
   RC_VARIANTS,
-  buildRepresentation,
   representationText,
   representationHTML,
 } from "@/lib/representationContract";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { CasesBar, ContractDocument, FoldSection, HistoryPanel, PanelSection, SettingsPanel, SwitchRow, docBtn, docIconBtn, docPrimaryBtn } from "@/components/contracts/contract-ui";
 
 type Cfg = Record<string, string>;
 type SavedCase = { id: string; name: string; config: Cfg };
@@ -68,27 +67,6 @@ function Modal({ title, onClose, children, footer, wide }: { title: string; onCl
   );
 }
 
-function renderBody(body: string): ReactNode[] {
-  const lines = body.split("\n");
-  const out: ReactNode[] = [];
-  let bullets: string[] = [];
-  const flush = (k: number) => {
-    if (bullets.length) {
-      out.push(<ul key={`u${k}`} className="my-1 list-disc space-y-0.5 pl-5">{bullets.map((b, i) => <li key={i}>{b}</li>)}</ul>);
-      bullets = [];
-    }
-  };
-  lines.forEach((l, i) => {
-    if (l.startsWith("• ")) bullets.push(l.slice(2));
-    else {
-      flush(i);
-      if (l.trim()) out.push(<p key={`p${i}`} className="my-1">{l}</p>);
-    }
-  });
-  flush(lines.length);
-  return out;
-}
-
 export function RepresentationContract() {
   const creators = useCreators();
   const { data: cfgData } = useAppState<Configs>((s: AppState) => (s["representationConfigs"] as Configs) ?? {});
@@ -103,7 +81,7 @@ export function RepresentationContract() {
   const skipPrefillRef = useRef(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Général: true, Talent: true, Durée: true, Commission: true });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Général: true, Talent: true });
 
   // Historique des contrats enregistrés (blob agence ; le fichier va aussi dans documents).
   const { data: histData } = useAppState<ContractHist[]>((s: AppState) => (s["contractHistory"] as ContractHist[]) ?? []);
@@ -112,12 +90,11 @@ export function RepresentationContract() {
   // des entrées d'un autre format — cf. fix collision brandContractHistory).
   const hist = (localHist ?? histData ?? []).filter((e): e is ContractHist => !!e && typeof e.path === "string" && !!e.config);
   const [saving, setSaving] = useState(false);
-  const [showHist, setShowHist] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const ctName = creatorName || creators[0]?.name || "";
   const cases = configs[ctName] ?? [];
   const isExternal = ctName === EXT;
-  const ctLabel = isExternal ? "Externe" : titleCase(ctName);
 
   // Au changement de créateur : préremplit les infos Talent + charge le 1er cas enregistré.
   useEffect(() => {
@@ -173,7 +150,6 @@ export function RepresentationContract() {
   const set = (k: string, v: string) => setConfig((c) => ({ ...c, [k]: v }));
   const changeVariant = (variant: string) => setConfig((c) => ({ ...c, ...RC_VARIANTS.find((x) => x.key === variant)?.defaults, variante: variant }));
 
-  const built = buildRepresentation(config);
   const variantMeta = RC_VARIANTS.find((x) => x.key === config.variante) ?? RC_VARIANTS[0];
 
   const copy = async () => {
@@ -316,8 +292,8 @@ export function RepresentationContract() {
     if ((e.creator ?? EXT) !== ctName) skipPrefillRef.current = true;
     setCreatorName(e.creator ?? EXT);
     setCaseName("Modifié");
-    setShowHist(false);
-    toast("Contrat chargé — modifie puis ré-enregistre");
+    rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    toast("Contrat chargé : modifie-le puis enregistre-le à nouveau");
   };
   const shareContract = async (e: ContractHist) => {
     const { data, error } = await supabase.storage.from("documents").createSignedUrl(e.path, 60 * 60 * 24 * 7);
@@ -357,217 +333,201 @@ export function RepresentationContract() {
     toast(docErr ? "Contrat retiré de l'historique, mais toujours visible dans Documents. Supprime-le là-bas" : "Contrat supprimé");
   };
 
+  // Champs courts (nombre, date, petit menu) côte à côte par deux ; un champ court sans
+  // voisin court prend toute la ligne (pas de demi-ligne vide).
+  const isShort = (f?: (typeof RC_FIELDS)[number]) =>
+    !!f && (f.type === "number" || f.type === "date" || (f.type === "select" && !(f.options ?? []).some((o) => o.label.length > 26))) && f.label.length <= 34;
+  const halfKeys = new Set<string>();
+  for (const g of RC_GROUPS) {
+    const list = RC_FIELDS.filter((f) => f.group === g);
+    for (let k = 0; k < list.length; k++) {
+      if (isShort(list[k]) && isShort(list[k + 1])) {
+        halfKeys.add(list[k].key);
+        halfKeys.add(list[k + 1].key);
+        k++;
+      }
+    }
+  }
+  const fieldWide = (f: (typeof RC_FIELDS)[number]) => !halfKeys.has(f.key);
+
   const renderField = (key: string) => {
     const f = RC_FIELDS.find((x) => x.key === key);
     if (!f) return null;
     const val = config[f.key] ?? f.default;
     if (f.type === "bool") {
-      const on = val === "true";
       return (
-        <button key={f.key} type="button" onClick={() => set(f.key, on ? "false" : "true")} className={cn("flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[11px] font-medium transition-colors", on ? "border-primary/40 bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:bg-rowhover")}>
-          <span className="flex-1">{f.label}</span>
-          <span className={cn("grid h-4 w-4 shrink-0 place-items-center rounded", on ? "bg-primary text-primary-foreground" : "border border-border")}>{on && <Check className="h-3 w-3" />}</span>
-        </button>
+        <div key={f.key} className="sm:col-span-2">
+          <SwitchRow label={f.label} help={f.help} checked={val === "true"} onChange={(on) => set(f.key, on ? "true" : "false")} />
+        </div>
       );
     }
-    if (f.type === "select") {
-      return <SelectField key={f.key} label={f.label} value={val} onChange={(v) => set(f.key, v)} options={f.options ?? []} />;
-    }
-    return <TextField key={f.key} label={f.label} value={val} onChange={(v) => set(f.key, v)} type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"} />;
+    const field =
+      f.type === "select" ? (
+        <SelectField label={f.label} value={val} onChange={(v) => set(f.key, v)} options={f.options ?? []} />
+      ) : (
+        <TextField label={f.label} value={val} onChange={(v) => set(f.key, v)} type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"} />
+      );
+    return (
+      <div key={f.key} className={cn("min-w-0", fieldWide(f) && "sm:col-span-2")}>
+        {field}
+        {f.help && <p className="mt-1 text-[11.5px] text-faint">{f.help}</p>}
+      </div>
+    );
   };
 
+  // Résumé affiché sur une section repliée.
+  const optLabel = (key: string) => {
+    const f = RC_FIELDS.find((x) => x.key === key);
+    const v = config[key] ?? f?.default ?? "";
+    return f?.options?.find((o) => o.value === v)?.label ?? v;
+  };
+  const groupSummary = (g: string): string => {
+    if (g === "Talent") return config.talentNom?.trim() || "À compléter";
+    if (g === "Général") return [optLabel("variante"), config.lieuSignature].filter(Boolean).join(" · ");
+    if (g === "Durée") return [config.dureeMois ? `${config.dureeMois} mois` : "", optLabel("modeDuree")].filter(Boolean).join(" · ");
+    if (g === "Commission") return optLabel("modeCommission");
+    const bools = RC_FIELDS.filter((f) => f.group === g && f.type === "bool");
+    if (!bools.length) return "";
+    const on = bools.filter((f) => (config[f.key] ?? f.default) === "true").length;
+    return `${on} sur ${bools.length} activé${on > 1 ? "s" : ""}`;
+  };
+  const [variantName, ...variantRest] = variantMeta.label.split(/\s+—\s+/);
+  const html = representationHTML(config);
+
   return (
-    <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_1.15fr]">
-      {/* ── Config ── */}
-      <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-        {/* Variante */}
-        <div className="mb-2 text-[11px] font-medium text-muted-foreground">Variante</div>
-        <div className="flex flex-wrap gap-2">
-          {RC_VARIANTS.map((v) => (
-            <button key={v.key} type="button" onClick={() => changeVariant(v.key)} className={cn("rounded-xl px-3.5 py-2.5 text-left text-[10px] font-semibold transition-colors", config.variante === v.key ? "bg-foreground text-background" : "border border-border text-muted-foreground hover:bg-rowhover")}>
-              {v.label}
-            </button>
-          ))}
-        </div>
-        <p className="mt-2 text-[11px] leading-relaxed text-faint">{variantMeta.commissionSummary}</p>
-
-        {/* Créateur */}
-        <div className="mb-2 mt-5 text-[11px] font-medium text-muted-foreground">Créateur</div>
-        <Select value={ctName} onValueChange={setCreatorName}>
-          <SelectTrigger className="h-9 w-auto min-w-[190px] rounded-full bg-surface" placeholder="Choisir un créateur" />
-          <SelectContent>
-            {creators.map((c, i) => (
-              <SelectItem key={c.id} index={i} value={c.name} img={c.photo_url}>{titleCase(c.name)}</SelectItem>
-            ))}
-            <SelectItem index={creators.length} value={EXT}>✎ Externe (hors roster)</SelectItem>
-          </SelectContent>
-        </Select>
-        {isExternal && (
-          <p className="mt-2 text-[11px] text-faint">
-            Créateur hors roster : renseigne son nom et ses infos dans la section <span className="font-medium text-foreground">Talent</span> ci-dessous.
-          </p>
-        )}
-
-        {/* Cas de configuration */}
-        <div className="mt-5 rounded-xl border border-border bg-panel p-3.5">
-          <div className="mb-2 text-[11px] font-medium text-muted-foreground">Cas enregistrés · {ctName ? ctLabel : "—"}</div>
-          {cases.length > 0 ? (
-            <div className="mb-2.5 flex flex-wrap gap-1.5">
-              {cases.map((cs) => (
-                <span key={cs.id} className={cn("flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium", cs.name === caseName ? "border-primary bg-primary/10 text-primary" : "border-border bg-surface text-muted-foreground")}>
-                  <button type="button" onClick={() => loadCase(cs)} className="transition-colors hover:text-foreground">{cs.name}</button>
-                  <button type="button" onClick={() => setPendingDel({ message: `Supprimer le cas « ${cs.name} » ? Cette action est irréversible.`, run: () => deleteCase(cs.id) })} className="text-faint transition-colors hover:text-rose-500" title="Supprimer"><X className="h-3 w-3" /></button>
-                </span>
-              ))}
+    <div ref={rootRef} className="scroll-mt-4">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)]">
+        {/* ── Réglages ── */}
+        <SettingsPanel>
+          <PanelSection title="Formule">
+            <div role="radiogroup" aria-label="Formule du contrat" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {RC_VARIANTS.map((v) => {
+                const on = config.variante === v.key;
+                const [name, ...rest] = v.label.split(/\s+—\s+/);
+                return (
+                  <button
+                    key={v.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => changeVariant(v.key)}
+                    className={cn("rounded-xl border px-3.5 py-3 text-left transition-colors", on ? "border-foreground bg-foreground text-background" : "border-border text-foreground hover:bg-rowhover")}
+                  >
+                    <span className="block text-[13px] font-semibold">{name}</span>
+                    {rest.length > 0 && <span className={cn("mt-0.5 block text-[12px]", on ? "text-background/70" : "text-muted-foreground")}>{rest.join(" · ")}</span>}
+                  </button>
+                );
+              })}
             </div>
-          ) : (
-            <div className="mb-2.5 text-[11px] text-faint">Aucun cas pour ce créateur.</div>
-          )}
-          <div className="flex items-end gap-2">
-            <div className="flex-1"><TextField label="Nom du cas" value={caseName} onChange={setCaseName} placeholder="ex Standard, Exclusif test…" /></div>
-            <button type="button" onClick={saveCase} className={cn(primaryBtn, "flex h-[42px] shrink-0 items-center gap-1.5")}><Save className="h-3.5 w-3.5" /> Enregistrer</button>
-          </div>
-        </div>
+            <p className="mt-2.5 text-[12px] leading-relaxed text-muted-foreground">{variantMeta.commissionSummary}</p>
+          </PanelSection>
 
-        {/* Champs groupés */}
-        <div className="mt-4 flex flex-col gap-2">
+          <PanelSection title="Créateur" hint={isExternal ? "Créateur hors roster : son nom et ses coordonnées se remplissent dans la section Talent." : "Ses coordonnées sont reprises de sa fiche."}>
+            <Select value={ctName} onValueChange={setCreatorName}>
+              <SelectTrigger className="h-[42px] w-full rounded-lg bg-surface" placeholder="Choisir un créateur" />
+              <SelectContent>
+                {creators.map((c, i) => (
+                  <SelectItem key={c.id} index={i} value={c.name} img={c.photo_url}>{titleCase(c.name)}</SelectItem>
+                ))}
+                <SelectItem index={creators.length} value={EXT}>Externe (hors roster)</SelectItem>
+              </SelectContent>
+            </Select>
+            <CasesBar
+              cases={cases}
+              active={caseName}
+              onLoad={(id) => {
+                const cs = cases.find((c) => c.id === id);
+                if (cs) loadCase(cs);
+              }}
+              onDelete={(id) => {
+                const cs = cases.find((c) => c.id === id);
+                if (cs) setPendingDel({ message: `Supprimer le cas « ${cs.name} » ? Cette action est irréversible.`, run: () => deleteCase(cs.id) });
+              }}
+              name={caseName}
+              onName={setCaseName}
+              onSave={saveCase}
+            />
+          </PanelSection>
+
           {RC_GROUPS.map((g) => {
             const fields = RC_FIELDS.filter((f) => f.group === g);
             if (fields.length === 0) return null;
             const open = openGroups[g] ?? false;
             return (
-              <div key={g} className="rounded-xl border border-border">
-                <button type="button" onClick={() => setOpenGroups((o) => ({ ...o, [g]: !open }))} className="flex w-full items-center justify-between px-3.5 py-2.5 text-left">
-                  <span className="text-[12px] font-mediumr text-muted-foreground">{g}</span>
-                  <ChevronDown className={cn("h-4 w-4 text-faint transition-transform", open && "rotate-180")} />
-                </button>
-                {open && <div className="flex flex-col gap-3 border-t border-border p-3.5">{fields.map((f) => renderField(f.key))}</div>}
-              </div>
+              <FoldSection key={g} title={g} summary={groupSummary(g)} open={open} onToggle={() => setOpenGroups((o) => ({ ...o, [g]: !open }))}>
+                <div className="grid grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-2">{fields.map((f) => renderField(f.key))}</div>
+              </FoldSection>
             );
           })}
+        </SettingsPanel>
+
+        {/* ── Document (le vrai PDF, en direct) ── */}
+        <div className="lg:sticky lg:top-4">
+          <ContractDocument
+            html={html}
+            title="Contrat de représentation"
+            meta={[variantName, ...variantRest].join(" · ") + (config.talentNom?.trim() ? ` · ${config.talentNom.trim()}` : "")}
+            actions={
+              <>
+                <button type="button" onClick={copy} className={docIconBtn} title="Copier le texte du contrat" aria-label="Copier le texte du contrat">
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </button>
+                <button type="button" onClick={() => setPreview(html)} className={docIconBtn} title="Ouvrir en grand" aria-label="Ouvrir en grand">
+                  <Maximize2 className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={saveContract} disabled={saving} className={docBtn} title="Le contrat est rangé ici et envoyé sur l'espace du créateur">
+                  <Save className="h-4 w-4" /> {saving ? "Enregistrement…" : "Enregistrer"}
+                </button>
+                <button type="button" onClick={downloadPDF} className={docPrimaryBtn}>
+                  <FileDown className="h-4 w-4" /> PDF
+                </button>
+              </>
+            }
+          />
         </div>
       </div>
 
-      {/* ── Aperçu ── */}
-      <div className="flex flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm md:p-7">
-        <div className="border-b-2 border-[#b8933f] pb-3 text-center">
-          <div className="text-lg font-extrabold tracking-wide text-foreground">TTP AGENCY</div>
-          <div className="text-[11px] font-medium text-[#b8933f]">Talent Management &amp; Influence Commerciale</div>
-        </div>
-        <div className="mt-1 text-right text-[10px] font-mediumst text-faint">Confidentiel</div>
-
-        <h1 className="mt-4 text-center text-base font-semibold tracking-tight text-foreground">{built.title}</h1>
-        {built.subtitle && <div className="mt-1 text-center text-xs font-semibold text-[#b8933f]">{built.subtitle}</div>}
-
-        <div className="mt-4 self-center">
-          <AnimatedBadge status="info" size="sm">Conforme RGPD · Loi 2023-451 · Droit FR</AnimatedBadge>
-        </div>
-
-        <div className="mt-4 text-[12px] leading-relaxed text-muted-foreground">
-          <div className="text-[12px] font-medium text-foreground">Préambule</div>
-          {renderBody(built.preambule)}
-        </div>
-
-        <div className="mt-3 space-y-3">
-          {built.articles.map((a, i) => (
-            <div key={i}>
-              <div className="text-[11px] font-bold text-foreground">{[a.number, a.title].filter(Boolean).join(" — ")}</div>
-              <div className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{renderBody(a.body)}</div>
+      {/* ── Contrats enregistrés ── */}
+      <div className="mt-4">
+        <HistoryPanel title="Contrats enregistrés" count={hist.length} empty="Aucun contrat enregistré. « Enregistrer » le range ici et l'envoie sur l'espace du créateur concerné.">
+          {hist.map((e) => (
+            <div key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-3 transition-colors hover:bg-rowhover/50 sm:px-5">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><FileText className="h-4 w-4" /></span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-semibold text-foreground">{e.title}</div>
+                <div className="truncate text-[12px] text-muted-foreground">
+                  {e.creator ? titleCase(e.creator) : "Externe"} · {new Date(e.createdAt).toLocaleDateString("fr-FR")}
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => setPreview(representationHTML(e.config))} title="Ouvrir" aria-label="Ouvrir" className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"><Eye className="h-4 w-4" /></button>
+                <button type="button" onClick={() => loadContract(e)} title="Modifier" aria-label="Modifier" className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"><PenLine className="h-4 w-4" /></button>
+                <button type="button" onClick={() => shareContract(e)} title="Copier un lien de partage (7 jours)" aria-label="Partager" className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"><Link2 className="h-4 w-4" /></button>
+                <button
+                  type="button"
+                  onClick={() => setPendingDel({ title: "Supprimer le contrat", message: `Supprimer « ${e.title} » ?${e.creator ? " Il sera aussi retiré de l'espace du créateur." : ""}`, run: () => deleteContract(e) })}
+                  title="Supprimer"
+                  aria-label="Supprimer"
+                  className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-rose-500"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           ))}
-        </div>
-
-        <div className="mt-4 whitespace-pre-line border-t border-border pt-3 text-[11px] leading-relaxed text-muted-foreground">
-          <div className="mb-1 text-[12px] font-medium text-foreground">Signatures</div>
-          {built.signatures}
-        </div>
-
-        {/* Actions */}
-        <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <button type="button" onClick={copy} className="flex items-center justify-center gap-2 rounded-xl border border-border py-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} {copied ? "Copié ✓" : "Copier"}
-          </button>
-          <button type="button" onClick={() => setPreview(representationHTML(config))} className="flex items-center justify-center gap-2 rounded-xl border border-border py-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-            <Eye className="h-3.5 w-3.5" /> Aperçu
-          </button>
-          <button type="button" onClick={downloadPDF} className="flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
-            <FileText className="h-3.5 w-3.5" /> PDF
-          </button>
-        </div>
-        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={saveContract}
-            disabled={saving}
-            className="flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/5 py-3 text-[12px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
-          >
-            <Save className="h-3.5 w-3.5" /> {saving ? "Enregistrement…" : "Enregistrer le contrat"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowHist(true)}
-            className="flex items-center justify-center gap-2 rounded-xl border border-border py-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-          >
-            <FileText className="h-3.5 w-3.5" /> Historique{hist.length ? ` (${hist.length})` : ""}
-          </button>
-        </div>
+        </HistoryPanel>
       </div>
 
       {preview && (
-        <Modal title="Aperçu du contrat" onClose={() => setPreview(null)} wide footer={
+        <Modal title="Contrat de représentation" onClose={() => setPreview(null)} wide footer={
           <>
             <button type="button" className={ghostBtn} onClick={() => setPreview(null)}>Fermer</button>
-            <button type="button" className={cn(ghostBtn, "flex items-center gap-1.5")} onClick={() => printHtml(preview)}>
-              <FileText className="h-3.5 w-3.5" /> Enregistrer en PDF
+            <button type="button" className={cn(primaryBtn, "flex items-center gap-1.5")} onClick={() => printHtml(preview)}>
+              <FileDown className="h-3.5 w-3.5" /> Enregistrer en PDF
             </button>
           </>
         }>
-          <iframe title="Contrat de représentation" srcDoc={preview} sandbox="" className="h-[64vh] w-full rounded-lg border border-border bg-white" />
-        </Modal>
-      )}
-
-      {showHist && (
-        <Modal
-          title="Historique des contrats"
-          onClose={() => setShowHist(false)}
-          wide
-          footer={<button type="button" className={ghostBtn} onClick={() => setShowHist(false)}>Fermer</button>}
-        >
-          {hist.length === 0 ? (
-            <div className="py-8 text-center text-sm text-faint">
-              Aucun contrat enregistré. Clique « Enregistrer le contrat » — il sera stocké ici et poussé sur le portail du créateur concerné.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {hist.map((e) => (
-                <div key={e.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2.5">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-semibold text-foreground">{e.title}</div>
-                    <div className="truncate text-[11px] text-faint">
-                      {e.creator ? titleCase(e.creator) : "Externe"} · {new Date(e.createdAt).toLocaleDateString("fr-FR")}
-                    </div>
-                  </div>
-                  <button type="button" onClick={() => setPreview(representationHTML(e.config))} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                    <Eye className="h-3.5 w-3.5" /> Aperçu
-                  </button>
-                  <button type="button" onClick={() => loadContract(e)} className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                    Modifier
-                  </button>
-                  <button type="button" onClick={() => shareContract(e)} className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                    Partager
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPendingDel({ title: "Supprimer le contrat", message: `Supprimer « ${e.title} » ?${e.creator ? " (retiré aussi du portail du créateur)" : ""}`, run: () => deleteContract(e) })}
-                    className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-rose-500"
-                    title="Supprimer"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          <iframe title="Contrat de représentation" srcDoc={preview} sandbox="allow-same-origin" className="h-[70vh] w-full rounded-lg border border-border bg-white" />
         </Modal>
       )}
       {pendingDel && (
