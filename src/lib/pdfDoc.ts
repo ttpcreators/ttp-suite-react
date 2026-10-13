@@ -190,29 +190,73 @@ export function docTitleLastWord(title: string): string {
 }
 
 /**
- * Règles propres aux CONTRATS (Marque × Créateur, UGC, représentation), à ajouter après
- * le style commun : parties, articles numérotés, signatures, mentions légales.
+ * CONTRATS (Marque × Créateur, UGC, représentation) : mise en page de vrai document
+ * juridique, plus sobre que les autres documents (demande de Marc, 2026-10-07 : « mal
+ * alignés, trop de pages, ça fait trop IA »). Encre seule, titre centré, articles
+ * « Article 1. Titre » alignés à gauche, texte justifié et coupé proprement, conditions
+ * en grille sur deux colonnes, signatures côte à côte, paraphes et « Page n sur N » en
+ * bas de chaque page. Les articles peuvent passer d'une page à l'autre (plus de fins de
+ * page vides) ; seuls le titre d'un article et le bloc de signatures restent groupés.
+ * Classes préfixées `ct-` : rien ne déborde sur la facture, le brief ou le bilan.
  */
 export const CONTRACT_CSS = `
-.parties{margin-top:6mm;font-size:9.2pt;line-height:1.6;color:var(--grey);max-width:150mm}
-.parties .p1{color:var(--ink);font-family:var(--serif);font-size:13pt;line-height:1.3;margin-bottom:1.5mm}
-.arts{margin-top:9mm;padding-top:4.5mm;border-top:.5pt solid var(--soft)}
-.art{margin:0 0 5.5mm;break-inside:avoid}
-.art h3,.art h2{display:flex;gap:3mm;align-items:baseline;margin:0 0 1.6mm;font-size:9.8pt;font-weight:600;
-  letter-spacing:0;text-transform:none;color:var(--ink);break-after:avoid}
-.art .n{font-family:var(--serif);font-style:italic;font-weight:400;font-size:13pt;color:var(--accent);
-  font-variant-numeric:tabular-nums;min-width:7mm}
-.art p{margin:0 0 1.8mm;color:#2c2c2a;line-height:1.66}
-.art ul{margin:1.5mm 0 2mm;padding-left:5mm}
-.art li{margin:.8mm 0;color:#2c2c2a}
-.sign{display:grid;grid-template-columns:1fr 1fr;gap:14mm;margin-top:12mm;break-inside:avoid}
-.sign .who{font-size:7pt;font-weight:600;letter-spacing:.24em;text-transform:uppercase;color:var(--grey)}
-.sign .name{margin-top:1.2mm;font-family:var(--serif);font-size:13pt}
-.sign .line{height:17mm;border-bottom:.6pt solid var(--ink)}
-.sign .cap{margin-top:1.8mm;font-size:7.6pt;color:var(--faint)}
-.signtext{margin-top:12mm;padding-top:4.5mm;border-top:.5pt solid var(--soft);white-space:pre-line;line-height:1.75;break-inside:avoid}
-.legal{margin-top:10mm;padding-top:3.5mm;border-top:.5pt solid var(--soft);font-size:7.6pt;line-height:1.6;color:var(--faint)}
+@page{margin:16mm 17mm 18mm;
+  @bottom-left{content:"Paraphes\\00a0:\\00a0\\00a0\\00a0_______________\\00a0\\00a0\\00a0_______________";font-family:"Instrument Sans",Helvetica,Arial,sans-serif;
+    font-size:7.4pt;letter-spacing:0;color:#8a8a85}
+  @bottom-right{content:"Page " counter(page) " sur " counter(pages);font-family:"Instrument Sans",Helvetica,Arial,sans-serif;
+    font-size:7.4pt;letter-spacing:0;color:#8a8a85}}
+.ct{font-size:9.3pt;line-height:1.5;color:#1d1d1b}
+.ct-head{display:flex;align-items:center;justify-content:space-between;gap:8mm;padding-bottom:3.2mm;border-bottom:.6pt solid var(--ink)}
+.ct-head .id{display:flex;align-items:center;gap:2.6mm}
+.ct-head .wm{display:block;font-family:var(--serif);font-size:14pt;line-height:1;color:var(--ink)}
+.ct-head .tl{display:block;margin-top:.9mm;font-size:7.6pt;color:var(--grey)}
+.ct-head .r{text-align:right;font-size:7.8pt;line-height:1.55;color:var(--grey)}
+.ct-head .r b{color:var(--ink);font-weight:600}
+.ct-title{margin:11mm 0 0;text-align:center}
+.ct-title h1{font-family:var(--serif);font-weight:400;font-size:24pt;line-height:1.08;letter-spacing:-.005em;margin:0;text-wrap:balance}
+.ct-title p{margin:2.2mm 0 0;font-size:9pt;color:var(--grey)}
+.ct-intro{margin:9mm 0 0;text-align:justify;hyphens:auto;-webkit-hyphens:auto}
+.ct-art{margin-top:5mm}
+.ct-art>h2{margin:0 0 1.5mm;font-family:var(--sans);font-size:9.6pt;font-weight:600;line-height:1.35;letter-spacing:0;
+  text-transform:none;color:var(--ink);break-after:avoid;page-break-after:avoid}
+.ct-art>h3{margin:2.6mm 0 1mm;font-size:9.3pt;font-weight:600;color:var(--ink);break-after:avoid;page-break-after:avoid}
+.ct-art p{margin:0 0 1.5mm;text-align:justify;hyphens:auto;-webkit-hyphens:auto;orphans:3;widows:3}
+.ct-art ul{margin:.6mm 0 1.8mm;padding:0;list-style:none}
+.ct-art li{position:relative;margin:0 0 .9mm;padding-left:5mm;text-align:justify;hyphens:auto;-webkit-hyphens:auto}
+.ct-art li::before{content:"–";position:absolute;left:1.2mm;color:var(--grey)}
+.ct-terms{display:grid;grid-template-columns:1fr 1fr;column-gap:9mm;margin:2mm 0 0;padding:0;border-bottom:.5pt solid var(--soft)}
+.ct-terms>div{display:grid;grid-template-columns:30mm 1fr;gap:3mm;padding:1.6mm 0;border-top:.5pt solid var(--soft);break-inside:avoid}
+.ct-terms dt{margin:0;font-size:8.4pt;color:var(--grey)}
+.ct-terms dd{margin:0;font-size:9pt;color:var(--ink)}
+.ct-sign{margin-top:9mm;break-inside:avoid;page-break-inside:avoid}
+.ct-sign .place{margin:0 0 5mm}
+.ct-sign .cols{display:grid;grid-template-columns:1fr 1fr;gap:12mm}
+.ct-sign .who{font-weight:600;color:var(--ink)}
+.ct-sign .det{margin-top:.6mm;min-height:9.6mm;font-size:8.8pt;line-height:1.45;color:var(--grey);white-space:pre-line}
+.ct-sign .box{margin-top:3mm;height:25mm;border:.5pt solid #cfcfca;border-radius:1mm}
+.ct-sign .cap{margin-top:1.6mm;font-size:7.8pt;line-height:1.4;color:var(--grey)}
+.ct-signtext{margin-top:9mm;white-space:pre-line;break-inside:avoid}
+.ct-legal{margin-top:8mm;padding-top:3mm;border-top:.5pt solid var(--soft);font-size:7.6pt;line-height:1.5;color:var(--faint)}
 `;
+
+/** En-tête de contrat : monogramme + nom à gauche, nature du document à droite (lignes déjà échappées). */
+export function contractHead(name: string, tagline: string, right: string[]): string {
+  const nice = name
+    .trim()
+    .split(/\s+/)
+    .map((w, k) => (k > 0 && w === w.toUpperCase() ? w.charAt(0) + w.slice(1).toLowerCase() : w))
+    .join(" ");
+  return (
+    `<header class="ct-head"><span class="id">${ttpLogoImg(26)}<span><span class="wm">${esc(nice)}</span>` +
+    `<span class="tl">${esc(tagline)}</span></span></span>` +
+    `<span class="r">${right.filter(Boolean).join("<br>")}</span></header>`
+  );
+}
+
+/** Titre de contrat centré, avec une ligne de précisions en dessous. */
+export function contractTitle(title: string, sub?: string): string {
+  return `<div class="ct-title"><h1>${esc(title)}</h1>${sub ? `<p>${esc(sub)}</p>` : ""}</div>`;
+}
 
 /** Enveloppe complète d'un document simple (brief, bilan). `title` = nom de fichier proposé. */
 export function pdfShell(o: {

@@ -1,31 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Copy, Check, Plus, Trash2, Save, FileText, Eye, X, History, UserRound, Bookmark, PenLine, SlidersHorizontal, ListPlus, type LucideIcon } from "lucide-react";
-
-const BASE = import.meta.env.BASE_URL;
-
-/** Titre de section façon Aperçu : icône grise + intitulé 14 px. */
-function SecTitle({ icon: Icon, children, right }: { icon: LucideIcon; children: ReactNode; right?: ReactNode }) {
-  return (
-    <div className="mb-3 flex items-center gap-2">
-      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <span className="text-[14px] font-semibold text-foreground">{children}</span>
-      {right && <div className="ml-auto">{right}</div>}
-    </div>
-  );
-}
+import { Copy, Check, Plus, Trash2, FileText, FileDown, Eye, X, Maximize2 } from "lucide-react";
 import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { printHtml } from "@/lib/printPdf";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, parseAmount, type AppState } from "@/lib/appState";
-import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { TextField } from "@/components/ui/form";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { PageHeaderRow } from "@/components/ui/page-header";
+import { CasesBar, ContractDocument, FoldSection, HistoryPanel, PanelSection, SettingsPanel, SwitchRow, docIconBtn, docPrimaryBtn } from "@/components/contracts/contract-ui";
 import { RepresentationContract } from "@/views/RepresentationContract";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
-import { CONTRACT_CSS, docHead, docMast, docTitleLastWord, docToday } from "@/lib/pdfDoc";
+import { CONTRACT_CSS, contractHead, contractTitle, docHead, docToday } from "@/lib/pdfDoc";
 import { nbspFr } from "@/lib/representationContract";
 import { Overlay } from "@/components/mobile/ios-sheet";
 
@@ -289,38 +277,35 @@ function contractHTML(o: {
   clauses: Term[];
 }): string {
   const { ref, meta, ctName, brand, parties, terms, clauses } = o;
-  const termRows = terms
-    .map((t) => `<div class="row"><dt>${esc(t.l)}</dt><span class="lead"></span><dd>${esc(t.v)}</dd></div>`)
-    .join("");
+  const termRows = terms.map((t) => `<div><dt>${esc(t.l)}</dt><dd>${esc(t.v)}</dd></div>`).join("");
   const clauseBlocks = clauses
     .map(
       (c, i) =>
-        // « Art. 3 — Droits d'auteur » → « Droits d'auteur » : le numéro est déjà affiché à gauche.
-        `<section class="art"><h3><span class="n">${String(i + 1).padStart(2, "0")}</span>${esc(c.l.replace(/^Art(?:icle)?\.?\s*\d+\s*[—–-]\s*/i, ""))}</h3><p>${esc(c.v)}</p></section>`,
+        // « Art. 3 — Droits d'auteur » → « Article 3. Droits d'auteur » (numérotation recalculée dans l'ordre).
+        `<section class="ct-art"><h2>Article ${i + 1}. ${esc(c.l.replace(/^Art(?:icle)?\.?\s*\d+\s*[—–-]\s*/i, ""))}</h2><p>${esc(c.v)}</p></section>`,
     )
     .join("");
   const kind = meta.label.charAt(0) + meta.label.slice(1).toLowerCase().replace("× créateur", "× Créateur").replace("ugc", "UGC");
-  return `${docHead(`Contrat ${ref}`, CONTRACT_CSS)}<body><div class="wrap">
-${docMast([`<b>${esc(kind)}</b>`, `Réf. ${esc(ref)}`, esc(docToday()), "Confidentiel"])}
-<p class="kicker">${esc(kind)}</p>
-<h1>${docTitleLastWord(meta.title)}</h1>
-<div class="parties"><div class="p1">TTP Creators &amp; ${esc(ctName)} <i>×</i> ${esc(brand || "[Marque]")}</div>${esc(parties)}</div>
-<dl class="meta">${termRows}</dl>
-<div class="arts">${clauseBlocks}</div>
-<div class="sign">
-  <div><div class="who">Pour TTP Creators</div><div class="line"></div><div class="cap">Date et signature, précédées de « Lu et approuvé »</div></div>
-  <div><div class="who">Pour ${esc(ctName)}</div><div class="line"></div><div class="cap">Date et signature, précédées de « Lu et approuvé »</div></div>
-</div>
-<div class="legal">Contrat régi par le droit français · Conforme RGPD (UE 2016/679) · Directive 2011/83/UE · Fait à Lyon. Document généré par TTP Suite.</div>
+  return `${docHead(`Contrat ${ref}`, CONTRACT_CSS)}<body><div class="wrap ct">
+${contractHead("TTP Creators", "Talent management · Lyon et Genève", [`<b>${esc(kind)}</b>`, `Réf. ${esc(ref)} · ${esc(docToday())}`, "Confidentiel"])}
+${contractTitle(meta.title, `${ctName} × ${brand || "[Marque]"}`)}
+<p class="ct-intro">${esc(parties)}</p>
+<section class="ct-art"><h2>Conditions particulières</h2><dl class="ct-terms">${termRows}</dl></section>
+${clauseBlocks}
+<div class="ct-sign"><div class="cols">
+  <div><div class="who">Pour TTP Creators</div><div class="box"></div><div class="cap">Date et signature, précédées de « Lu et approuvé »</div></div>
+  <div><div class="who">Pour ${esc(ctName)}</div><div class="box"></div><div class="cap">Date et signature, précédées de « Lu et approuvé »</div></div>
+</div></div>
+<div class="ct-legal">Contrat régi par le droit français · Conforme RGPD (UE 2016/679) · Directive 2011/83/UE · Fait à Lyon. Document généré par TTP Suite.</div>
 </div></body></html>`;
 }
 
 function SelectField({ label, value, onChange, opts, className }: { label: string; value: string; onChange: (v: string) => void; opts: Opt[]; className?: string }) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
-      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
+      <span className="text-[12px] font-medium text-muted-foreground">{label}</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="h-9 w-full rounded-lg bg-surface" placeholder={label} />
+        <SelectTrigger className="h-[42px] w-full rounded-lg bg-surface" placeholder={label} />
         <SelectContent>
           {opts.map((o, i) => (
             <SelectItem key={o.v} index={i} value={o.v}>{o.label}</SelectItem>
@@ -628,244 +613,192 @@ export function Contrats() {
   };
   const deleteHistory = (id: string) => mutateHistory((fresh) => fresh.filter((h) => h.id !== id));
 
-  const typeToggle = (
-    <>
-      <SecTitle icon={FileText}>Type de contrat</SecTitle>
+  const [openSec, setOpenSec] = useState<Record<string, boolean>>({ conditions: true, figure: true, clauses: false });
+  const toggleSec = (k: string) => setOpenSec((o) => ({ ...o, [k]: !o[k] }));
+
+  // Type de contrat : dans l'en-tête de page, à droite du titre (comme les autres pages).
+  const typeTabs = (
+    <PageHeaderRow>
       <Tabs
         label="Type de contrat"
         items={(Object.keys(TYPE_META) as CtType[]).map((k) => ({ value: k, label: TYPE_META[k].chip }))}
         value={ctType}
         onValueChange={(v) => { setCtType(v as CtType); setNavSub(v as CtType); }}
       />
-    </>
+    </PageHeaderRow>
   );
 
   if (ctType === "repr") {
     return (
-      <div className="flex flex-col gap-4">
-        <div>{typeToggle}</div>
+      <>
+        {typeTabs}
         <RepresentationContract />
-      </div>
+      </>
     );
   }
 
+  const html = buildHTML();
+  const figureSummary = [labelOf(RIGHTS_OPTS, rights), territory, exclLabel].filter(Boolean).join(" · ");
+
   return (
-    <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_1.15fr]">
-      {/* ============ FORMULAIRE ============ */}
-      <div className="rounded-2xl border border-border bg-surface p-5">
-        {typeToggle}
+    <>
+      {typeTabs}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)]">
+        {/* ============ RÉGLAGES ============ */}
+        <SettingsPanel>
+          <PanelSection title="Créateur" hint={meta.chip === "Contrat UGC" ? "Le créateur qui produit les contenus." : "Le créateur représenté par TTP dans ce contrat."}>
+            {creators.length === 0 ? (
+              <div className="text-[12px] text-muted-foreground">Aucun créateur dans le roster : le contrat utilisera « [Créateur] ».</div>
+            ) : (
+              <Select value={ctName} onValueChange={setCreatorName}>
+                <SelectTrigger className="h-[42px] w-full rounded-lg bg-surface" placeholder="Choisir un créateur" />
+                <SelectContent>
+                  {creators.map((c, i) => (
+                    <SelectItem key={c.id} index={i} value={c.name} img={c.photo_url}>{titleCase(c.name)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <CasesBar
+              cases={cases}
+              active={caseName}
+              onLoad={(id) => {
+                const cs = cases.find((c) => c.id === id);
+                if (cs) applyCase(cs);
+              }}
+              onDelete={(id) => {
+                const cs = cases.find((c) => c.id === id);
+                if (cs) setPendingDel({ message: `Supprimer le cas « ${cs.name} » ? Cette action est irréversible.`, run: () => deleteCase(cs.id) });
+              }}
+              name={caseName}
+              onName={setCaseName}
+              onSave={saveCase}
+            />
+          </PanelSection>
 
-        {/* Créateur */}
-        <div className="mt-5 border-t border-border pt-5">
-        <SecTitle icon={UserRound}>Créateur</SecTitle>
-        {creators.length === 0 ? (
-          <div className="text-[12px] text-muted-foreground">Aucun créateur dans le roster : le contrat utilisera « [Créateur] ».</div>
-        ) : (
-          <Select value={ctName} onValueChange={setCreatorName}>
-            <SelectTrigger className="h-[42px] w-full rounded-lg bg-surface sm:w-auto sm:min-w-[240px]" placeholder="Choisir un créateur" />
-            <SelectContent>
-              {creators.map((c, i) => (
-                <SelectItem key={c.id} index={i} value={c.name} img={c.photo_url}>{titleCase(c.name)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
-        </div>
-
-        {/* Cas de configuration */}
-        <div className="mt-5 border-t border-border pt-5">
-          <SecTitle icon={Bookmark}>Cas enregistrés</SecTitle>
-          {cases.length > 0 ? (
-            <div className="mb-2.5 flex flex-wrap gap-1.5">
-              {cases.map((cs) => (
-                <span key={cs.id} className={cn("flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium", cs.name === caseName ? "border-primary bg-primary/10 text-primary" : "border-border bg-surface text-muted-foreground")}>
-                  <button type="button" onClick={() => applyCase(cs)} className="transition-colors hover:text-foreground">{cs.name}</button>
-                  <button type="button" onClick={() => setPendingDel({ message: `Supprimer le cas « ${cs.name} » ? Cette action est irréversible.`, run: () => deleteCase(cs.id) })} className="text-faint transition-colors hover:text-rose-500" title="Supprimer le cas"><X className="h-3 w-3" /></button>
-                </span>
-              ))}
+          <FoldSection title="Conditions" summary={[isBrand ? brand : "", isBrand ? value : "", duration].filter(Boolean).join(" · ")} open={!!openSec.conditions} onToggle={() => toggleSec("conditions")}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {isBrand && (
+                <>
+                  <TextField label="Marque" value={brand} onChange={setBrand} placeholder="ex Sephora" />
+                  <TextField label="Valeur" value={value} onChange={setValue} placeholder="ex 32 000 €" />
+                  <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" className="sm:col-span-2" />
+                </>
+              )}
+              <TextField label="Commission (%)" value={commission} onChange={setCommission} type="number" placeholder="ex 20" />
+              <TextField label="Durée" value={duration} onChange={setDuration} placeholder="ex 12 mois" />
             </div>
-          ) : (
-            <div className="mb-3 text-[12px] text-muted-foreground">Aucun cas enregistré pour ce créateur. Configure le contrat puis enregistre-le comme cas.</div>
-          )}
-          <div className="flex flex-wrap items-end gap-2 sm:flex-nowrap">
-            <div className="min-w-0 flex-1">
-              <TextField label="Nom du cas" value={caseName} onChange={setCaseName} placeholder="ex : Standard, Exclusif, UGC…" />
-            </div>
-            <button type="button" onClick={saveCase} className={cn(primaryBtn, "flex h-[42px] shrink-0 items-center gap-1.5")}>
-              <Save className="h-3.5 w-3.5" /> Enregistrer
-            </button>
-          </div>
-        </div>
+          </FoldSection>
 
-        {/* Champs */}
-        <div className="mt-5 border-t border-border pt-5">
-        <SecTitle icon={PenLine}>Conditions</SecTitle>
-        {isBrand && (
-          <>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <TextField label="Marque" value={brand} onChange={setBrand} placeholder="ex Sephora" />
-              <TextField label="Valeur" value={value} onChange={setValue} placeholder="ex 32 000 €" />
+          <FoldSection title="Cas de figure" summary={figureSummary} open={!!openSec.figure} onToggle={() => toggleSec("figure")}>
+            <p className="-mt-1 mb-3 text-[12px] text-muted-foreground">Chaque choix réécrit les clauses du contrat.</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {ctType === "marque" && <SelectField label="Type de collab" value={collab} onChange={setCollab} opts={COLLAB_OPTS} className="sm:col-span-2" />}
+              <SelectField label="Cession de droits" value={rights} onChange={setRights} opts={RIGHTS_OPTS} className="sm:col-span-2" />
+              {rights !== "organic" && <SelectField label="Durée de cession" value={rightsDuration} onChange={setRightsDuration} opts={DUR_OPTS} />}
+              <SelectField label="Territoire" value={territory} onChange={setTerritory} opts={TERRITORY_OPTS} />
+              <SelectField label="Exclusivité" value={exclScope} onChange={setExclScope} opts={EXCL_OPTS} />
+              <SelectField label="Paiement" value={payment} onChange={setPayment} opts={PAYMENT_OPTS} />
+              <SelectField label="TVA" value={tva} onChange={setTva} opts={TVA_OPTS} />
             </div>
-            <div className="mt-3">
-              <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />
+            <div className="mt-3 border-t border-border pt-2">
+              <SwitchRow label="Frais et produits pris en charge (défraiement)" checked={defraiement} onChange={setDefraiement} />
             </div>
-          </>
-        )}
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <TextField label="Commission (%)" value={commission} onChange={setCommission} type="number" placeholder="ex 20" />
-          <TextField label="Durée" value={duration} onChange={setDuration} placeholder="ex 12 mois" />
-        </div>
-        </div>
+          </FoldSection>
 
-        {/* ── Cas de figure : sélecteurs qui adaptent le contrat ── */}
-        <div className="mt-5 border-t border-border pt-5">
-          <SecTitle icon={SlidersHorizontal} right={<span className="text-[12px] text-muted-foreground">le contrat s'adapte tout seul</span>}>Cas de figure</SecTitle>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {ctType === "marque" && <SelectField label="Type de collab" value={collab} onChange={setCollab} opts={COLLAB_OPTS} />}
-            <SelectField label="Cession de droits" value={rights} onChange={setRights} opts={RIGHTS_OPTS} className="sm:col-span-2" />
-            {rights !== "organic" && <SelectField label="Durée de cession" value={rightsDuration} onChange={setRightsDuration} opts={DUR_OPTS} />}
-            <SelectField label="Territoire" value={territory} onChange={setTerritory} opts={TERRITORY_OPTS} />
-            <SelectField label="Exclusivité" value={exclScope} onChange={setExclScope} opts={EXCL_OPTS} />
-            <SelectField label="Paiement" value={payment} onChange={setPayment} opts={PAYMENT_OPTS} />
-            <SelectField label="TVA" value={tva} onChange={setTva} opts={TVA_OPTS} />
-          </div>
-          <button
-            type="button"
-            onClick={() => setDefraiement((v) => !v)}
-            className={cn("mt-3 flex w-full items-start gap-2 rounded-lg border border-border px-3.5 py-2.5 text-left text-[13px] transition-colors sm:items-center", defraiement ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover")}
-          >
-            <span className={cn("mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded sm:mt-0", defraiement ? "bg-foreground text-background" : "border border-border")}>{defraiement && <Check className="h-3 w-3" />}</span>
-            <span className="min-w-0">Frais &amp; produits pris en charge (défraiement)</span>
-          </button>
-        </div>
-
-        {/* Clauses additionnelles */}
-        <div className="mt-5 border-t border-border pt-5">
-          <SecTitle
-            icon={ListPlus}
+          <FoldSection
+            title="Clauses additionnelles"
+            summary={extra.length ? `${extra.length} clause${extra.length > 1 ? "s" : ""}` : "Aucune"}
+            open={!!openSec.clauses}
+            onToggle={() => toggleSec("clauses")}
             right={
-              <button type="button" onClick={() => setExtra([...extra, { id: uid(), l: `Art. ${nextClauseNo} — Clause`, v: "" }])} className="flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+              <button
+                type="button"
+                onClick={() => {
+                  setExtra([...extra, { id: uid(), l: `Art. ${nextClauseNo} — Clause`, v: "" }]);
+                  setOpenSec((o) => ({ ...o, clauses: true }));
+                }}
+                className="flex h-8 shrink-0 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              >
                 <Plus className="h-3.5 w-3.5" /> Ajouter
               </button>
             }
           >
-            Clauses additionnelles
-          </SecTitle>
-          {extra.length === 0 ? (
-            <div className="text-[12px] text-muted-foreground">Ajoute des clauses spécifiques pour un contrat sur mesure.</div>
-          ) : (
-            <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-              {extra.map((e) => (
-                <div key={e.id} className="p-3">
-                  <div className="flex items-center gap-2">
-                    <input value={e.l} onChange={(ev) => setExtra(extra.map((x) => (x.id === e.id ? { ...x, l: ev.target.value } : x)))} placeholder="Titre de la clause" className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm font-medium outline-none focus:border-primary" />
-                    <button type="button" onClick={() => setExtra(extra.filter((x) => x.id !== e.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-rose-500" title="Supprimer"><Trash2 className="h-4 w-4" /></button>
+            {extra.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">Ajoute une clause sur mesure : elle s'insère à la suite des articles du contrat.</p>
+            ) : (
+              <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+                {extra.map((e) => (
+                  <div key={e.id} className="p-3">
+                    <div className="flex items-center gap-2">
+                      <input value={e.l} onChange={(ev) => setExtra(extra.map((x) => (x.id === e.id ? { ...x, l: ev.target.value } : x)))} placeholder="Titre de la clause" aria-label="Titre de la clause" className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-[13px] font-medium outline-none focus:border-primary" />
+                      <button type="button" onClick={() => setExtra(extra.filter((x) => x.id !== e.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-rose-500" title="Supprimer la clause" aria-label="Supprimer la clause"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                    <textarea value={e.v} onChange={(ev) => setExtra(extra.map((x) => (x.id === e.id ? { ...x, v: ev.target.value } : x)))} rows={3} placeholder="Contenu de la clause…" aria-label="Contenu de la clause" className="mt-2 w-full resize-y rounded-md border border-border bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-primary" />
                   </div>
-                  <textarea value={e.v} onChange={(ev) => setExtra(extra.map((x) => (x.id === e.id ? { ...x, v: ev.target.value } : x)))} rows={2} placeholder="Contenu de la clause…" className="mt-2 w-full resize-y rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary" />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+                ))}
+              </div>
+            )}
+          </FoldSection>
+        </SettingsPanel>
 
-      {/* ============ APERÇU ============ */}
-      <div className="flex flex-col rounded-2xl border border-border bg-surface p-6 md:p-7">
-        <div className="flex items-center justify-between border-b border-border pb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 overflow-hidden rounded-lg bg-[#14181E]"><img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" /></div>
-            <div>
-              <div className="text-[13px] font-semibold text-foreground">TTP Creators</div>
-              <div className="text-[11px] text-muted-foreground">Lyon · France</div>
-            </div>
-          </div>
-          <div className="text-[11px] tabular-nums text-muted-foreground">Réf. {ref}</div>
-        </div>
-
-        <div className="mt-5 text-[12px] text-muted-foreground">{meta.chip} · contrat de collaboration</div>
-        <div className="mt-1.5 text-[22px] font-semibold leading-tight tracking-tight text-foreground">{meta.title}</div>
-
-        <div className="mt-3 text-[13px] leading-relaxed text-muted-foreground">Parties : TTP Creators &amp; {ctDisplay} × {brand || "[Marque]"}</div>
-        <div className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{parties}</div>
-
-        <div className="my-4 h-px bg-border" />
-
-        <div>
-          {terms.map((t, i) => (
-            <div key={i} className="flex justify-between gap-4 border-b border-border py-2.5 last:border-0">
-              <span className="text-[13px] text-muted-foreground">{t.l}</span>
-              <span className="text-right text-[13px] font-medium text-foreground">{t.v}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-4 self-start">
-          <AnimatedBadge status="info" size="sm">Conforme RGPD · Dir. 2011/83/UE · Droit FR</AnimatedBadge>
-        </div>
-
-        <div className="mt-4 space-y-2.5">
-          {allClauses.map((c, i) => (
-            <div key={i}>
-              <div className="text-[12px] font-semibold text-foreground">{c.l}</div>
-              <div className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">{c.v || "—"}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-5 flex gap-4">
-          <div className="flex-1"><div className="h-8 border-b border-border" /><div className="mt-1.5 text-[11px] text-muted-foreground">Pour TTP Creators</div></div>
-          <div className="flex-1"><div className="h-8 border-b border-border" /><div className="mt-1.5 text-[11px] text-muted-foreground">Pour {ctDisplay}</div></div>
-        </div>
-
-        {/* Actions */}
-        <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <button type="button" onClick={copyContract} className="flex items-center justify-center gap-2 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
-            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} {copied ? "Copié ✓" : "Copier"}
-          </button>
-          <button type="button" onClick={() => setPreview({ html: buildHTML(), hist: false })} className="flex items-center justify-center gap-2 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
-            <Eye className="h-3.5 w-3.5" /> Aperçu
-          </button>
-          <button type="button" onClick={downloadPDF} className="flex items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
-            <FileText className="h-3.5 w-3.5" /> PDF
-          </button>
+        {/* ============ DOCUMENT (le vrai PDF, en direct) ============ */}
+        <div className="lg:sticky lg:top-4">
+          <ContractDocument
+            html={html}
+            title={`Contrat ${ref}`}
+            meta={`${meta.chip} · ${ctDisplay}${isBrand && brand ? ` × ${brand}` : ""} · Réf. ${ref}`}
+            actions={
+              <>
+                <button type="button" onClick={copyContract} className={docIconBtn} title="Copier le texte du contrat" aria-label="Copier le texte du contrat">
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </button>
+                <button type="button" onClick={() => setPreview({ html, hist: false })} className={docIconBtn} title="Ouvrir en grand" aria-label="Ouvrir en grand">
+                  <Maximize2 className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={downloadPDF} className={docPrimaryBtn}>
+                  <FileDown className="h-4 w-4" /> PDF
+                </button>
+              </>
+            }
+          />
         </div>
       </div>
 
       {/* ============ HISTORIQUE ============ */}
       {history.length > 0 && (
-        <div className="rounded-2xl border border-border bg-surface p-5 lg:col-span-2">
-          <SecTitle icon={History} right={<span className="text-[12px] tabular-nums text-muted-foreground">{history.length} contrat{history.length > 1 ? "s" : ""}</span>}>Historique des contrats</SecTitle>
-          <div className="max-h-[380px] divide-y divide-border overflow-y-auto border-t border-border">
+        <div className="mt-4">
+          <HistoryPanel title="Historique des contrats" count={history.length}>
             {history.map((h) => (
-              <div key={h.id} className="flex items-center gap-3 py-3 transition-colors hover:bg-rowhover/50">
+              <div key={h.id} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-rowhover/50 sm:px-5">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><FileText className="h-4 w-4" /></span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-[13px] font-semibold text-foreground">{h.title}</span>
-                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{TYPE_META[h.ctType]?.label ?? h.ctType}</span>
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{TYPE_META[h.ctType]?.chip ?? h.ctType}</span>
                   </div>
                   <div className="mt-0.5 truncate text-[12px] text-muted-foreground">
                     {titleCase(h.ctName)}{h.brand ? ` × ${h.brand}` : ""} · {h.ref} · {new Date(h.ts).toLocaleDateString("fr-FR")}
                   </div>
                 </div>
-                <button type="button" onClick={() => setPreview({ html: h.html, hist: true })} title="Aperçu" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                <button type="button" onClick={() => setPreview({ html: h.html, hist: true })} title="Ouvrir" aria-label="Ouvrir" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                   <Eye className="h-4 w-4" />
                 </button>
-                <button type="button" onClick={() => printHtml(h.html)} title="Enregistrer en PDF" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-primary">
-                  <FileText className="h-4 w-4" />
+                <button type="button" onClick={() => printHtml(h.html)} title="Enregistrer en PDF" aria-label="Enregistrer en PDF" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                  <FileDown className="h-4 w-4" />
                 </button>
-                <button type="button" onClick={() => setPendingDel({ title: "Retirer de l'historique", message: `Retirer « ${h.title} » (${h.ref}) de l'historique ? Cette action est irréversible.`, run: () => deleteHistory(h.id) })} title="Supprimer" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-rose-500">
+                <button type="button" onClick={() => setPendingDel({ title: "Retirer de l'historique", message: `Retirer « ${h.title} » (${h.ref}) de l'historique ? Cette action est irréversible.`, run: () => deleteHistory(h.id) })} title="Supprimer" aria-label="Supprimer" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-rose-500">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             ))}
-          </div>
+          </HistoryPanel>
         </div>
       )}
 
       {preview && (
         <Modal
-          title={`Aperçu · ${ref}`}
+          title={`Contrat · ${ref}`}
           onClose={() => setPreview(null)}
           wide
           footer={
@@ -873,19 +806,19 @@ export function Contrats() {
               <button type="button" className={ghostBtn} onClick={() => setPreview(null)}>Fermer</button>
               <button
                 type="button"
-                className={cn(ghostBtn, "flex items-center gap-1.5")}
+                className={cn(primaryBtn, "flex items-center gap-1.5")}
                 onClick={() => {
                   // Contrat de l'historique : simple réimpression, sans ré-archiver ni toucher aux Échéances
                   if (!preview.hist) void archiveContract(preview.html);
                   printHtml(preview.html);
                 }}
               >
-                <FileText className="h-3.5 w-3.5" /> Enregistrer en PDF
+                <FileDown className="h-3.5 w-3.5" /> Enregistrer en PDF
               </button>
             </>
           }
         >
-          <iframe title={`Contrat ${ref}`} srcDoc={preview.html} sandbox="" className="h-[64vh] w-full rounded-lg border border-border bg-white" />
+          <iframe title={`Contrat ${ref}`} srcDoc={preview.html} sandbox="allow-same-origin" className="h-[70vh] w-full rounded-lg border border-border bg-white" />
         </Modal>
       )}
       {pendingDel && (
@@ -901,6 +834,6 @@ export function Contrats() {
           }}
         />
       )}
-    </div>
+    </>
   );
 }
