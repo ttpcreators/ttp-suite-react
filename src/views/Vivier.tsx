@@ -56,22 +56,34 @@ const igUrl = (handle?: string | null) => {
 };
 
 /**
- * Photo du créateur ajoutée à la main (clic sur le rond dans sa fiche), sinon ses
- * initiales. Pas de photo Instagram automatique : les services gratuits ne la
- * donnent plus, et deviner via un autre réseau risquerait d'afficher quelqu'un d'autre.
+ * Photo du créateur : celle ajoutée à la main (clic sur le rond dans sa fiche),
+ * sinon sa photo Instagram, sinon ses initiales. Une image qui ne charge pas
+ * passe à la suivante.
  */
-function ScoutAvatar({ name, photo, size, className }: { name: string; photo?: string; size: number; className?: string }) {
-  const [broken, setBroken] = useState(false);
-  useEffect(() => setBroken(false), [photo]);
+function ScoutAvatar({ name, photos, size, className }: { name: string; photos: (string | null | undefined)[]; size: number; className?: string }) {
+  const list = photos.filter(Boolean) as string[];
+  const [failed, setFailed] = useState(0);
+  const sig = list.join("|");
+  useEffect(() => setFailed(0), [sig]);
+  const src = list[failed];
   return (
     <div className={cn("relative grid shrink-0 place-items-center overflow-hidden bg-panel font-bold text-foreground", className)} style={{ width: size, height: size }}>
       {initials(name)}
-      {photo && !broken && (
-        <img src={photo} alt="" loading="lazy" onError={() => setBroken(true)} className="absolute inset-0 h-full w-full bg-panel object-cover" />
+      {src && (
+        <img src={src} alt="" loading="lazy" onError={() => setFailed((n) => n + 1)} className="absolute inset-0 h-full w-full bg-panel object-cover" />
       )}
     </div>
   );
 }
+
+/** Une photo Instagram trouvée est revérifiée après 30 jours, une introuvable après 7. */
+const igStale = (t: Track | undefined, handle: string) => {
+  if (!t?.igAt || t.igFor !== handle) return true;
+  const days = (Date.now() - new Date(t.igAt + "T00:00:00").getTime()) / 86400000;
+  return days > (t.igPhoto ? 30 : 7);
+};
+/** @ déjà demandés pendant cette visite (évite de redemander en boucle). */
+const igAsked = new Set<string>();
 
 // ── Scouting : statut de pipeline + suivi d'abonnés dans le temps ──
 type ScoutStatus = "observation" | "contacter" | "discussion" | "signe" | "ecarte";
@@ -85,7 +97,9 @@ const STATUSES: { v: ScoutStatus; label: string; dot: string; pill: string }[] =
 const statusMeta = (v: ScoutStatus) => STATUSES.find((s) => s.v === v) ?? STATUSES[0];
 
 type Snap = { date: string; value: number }; // date = ISO « AAAA-MM-JJ »
-type Track = { status?: ScoutStatus; snaps?: Snap[]; photo?: string };
+/** photo = ajoutée à la main ; igPhoto = photo Instagram copiée par la fonction ig-avatar
+ *  (igFor = le @ pour lequel elle a été cherchée, igAt = quand ; null = introuvable). */
+type Track = { status?: ScoutStatus; snaps?: Snap[]; photo?: string; igPhoto?: string | null; igFor?: string; igAt?: string };
 type Tracking = Record<string, Track>;
 
 /** ISO « 2026-08-12 » → « 12 août ». */
@@ -140,7 +154,35 @@ export function Vivier() {
   const [snapVal, setSnapVal] = useState("");
 
   const statusOf = (id: string): ScoutStatus => tracking[id]?.status ?? "observation";
-  const photoOf = (id: string): string | undefined => tracking[id]?.photo;
+  const photosOf = (id: string) => [tracking[id]?.photo, tracking[id]?.igPhoto];
+
+  // Photos Instagram : demandées à la fonction ig-avatar pour les @ sans photo à jour,
+  // puis gardées avec le suivi du scouting. Si la fonction n'est pas en ligne : initiales.
+  useEffect(() => {
+    if (!rows || trackData === null) return;
+    const want = rows
+      .map((r) => ({ id: r.id, h: igName(r.handle) }))
+      .filter((x) => x.h && !igAsked.has(x.h) && igStale(tracking[x.id], x.h))
+      .slice(0, 20);
+    if (!want.length) return;
+    want.forEach((x) => igAsked.add(x.h));
+    void supabase.functions.invoke("ig-avatar", { body: { handles: want.map((x) => x.h) } }).then(async ({ data, error: fnErr }) => {
+      const photos = (data as { photos?: Record<string, string | null> } | null)?.photos;
+      if (fnErr || !photos) return;
+      try {
+        invalidateAppState();
+        const fresh = ((await getAppState())["poolTracking"] as Tracking) ?? {};
+        const next = { ...fresh };
+        const at = todayISO();
+        for (const x of want) if (x.h in photos) next[x.id] = { ...(fresh[x.id] ?? {}), igPhoto: photos[x.h], igFor: x.h, igAt: at };
+        setLocalTrack(next);
+        await saveAppStateKey("poolTracking", next);
+      } catch {
+        /* les initiales restent */
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, trackData]);
   const [photoBusy, setPhotoBusy] = useState(false);
   // Photo ajoutée à la main (bucket public « avatars »), gardée avec le suivi du scouting.
   const uploadPhoto = async (r: Row, file: File | undefined) => {
@@ -347,7 +389,7 @@ export function Vivier() {
         <div className="overflow-hidden rounded-2xl border border-border bg-surface divide-y divide-border">
           {filtered.map((r) => (
             <div key={r.id} onClick={() => setSelected(r)} className="flex cursor-pointer items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-rowhover">
-              <ScoutAvatar name={r.name} photo={photoOf(r.id)} size={38} className="rounded-full text-[11px]" />
+              <ScoutAvatar name={r.name} photos={photosOf(r.id)} size={38} className="rounded-full text-[11px]" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-[13px] font-semibold text-foreground">{r.name}</span>
@@ -403,7 +445,7 @@ export function Vivier() {
           <div className="my-auto max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-start gap-3">
               <label className="group relative shrink-0 cursor-pointer" title="Changer la photo">
-                <ScoutAvatar name={selected.name} photo={photoOf(selected.id)} size={56} className="rounded-full text-sm" />
+                <ScoutAvatar name={selected.name} photos={photosOf(selected.id)} size={56} className="rounded-full text-sm" />
                 <span className={cn("absolute inset-0 grid place-items-center rounded-full bg-black/45 text-white transition-opacity", photoBusy ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
                   {photoBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
                 </span>
