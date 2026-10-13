@@ -18,6 +18,8 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { BrandIgInline } from "@/components/BrandInstagram";
+import { useIgColumn, type IgBrand } from "@/lib/instagram";
 
 type Row = {
   id: string;
@@ -58,6 +60,8 @@ export function Prospection() {
   const [value, setValue] = useState("");
   const [stage, setStage] = useState(STAGE_ORDER[0]);
   const [stageFilter, setStageFilter] = useState("Tous");
+  // Chiffres Instagram de la marque (fiche contact du même nom, mis à jour par ig-sync).
+  const [igByBrand] = useIgColumn<IgBrand>("contacts", "brand");
 
   useEffect(() => {
     let active = true;
@@ -336,6 +340,7 @@ export function Prospection() {
                         {card.contact}
                       </p>
                     )}
+                    <BrandIgInline ig={igByBrand[card.brand.trim().toLowerCase()]} className="mt-1 block truncate pl-[15px] text-[10px] text-faint" />
                     <p className="mt-2 pl-[15px] text-[13px] font-semibold text-foreground">
                       {card.value ?? "—"}
                     </p>

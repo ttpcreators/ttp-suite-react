@@ -101,3 +101,28 @@ verify_jwt = true
 # (verify_jwt) + rôle agence vérifié dans le code ; envoie aux AUTRES comptes agence.
 [functions.team-notify]
 verify_jwt = true
+
+# --- Instagram (API officielle de Meta) -------------------------------------
+# ig-avatar : photos + chiffres du Scouting. JWT requis + rôle agence dans le code.
+[functions.ig-avatar]
+verify_jwt = true
+
+# ig-sync : chiffres Instagram du roster, des collabs et des marques. Appelé par
+# pg_cron (CRON_SECRET, pas un JWT) → verify_jwt=false ; auth dans le code
+# (CRON_SECRET OU rôle agence).
+[functions.ig-sync]
+verify_jwt = false
+
+# ig-connect : une créatrice connecte son Instagram (JWT ; créatrice = elle-même,
+# agence = la créatrice nommée).
+[functions.ig-connect]
+verify_jwt = true
+
+# ig-callback : retour d'Instagram (redirection du navigateur, sans JWT) →
+# verify_jwt=false ; l'authenticité tient au state signé.
+[functions.ig-callback]
+verify_jwt = false
+
+# ig-hashtag : recherche par hashtag (Scouting). JWT requis + rôle agence.
+[functions.ig-hashtag]
+verify_jwt = true

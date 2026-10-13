@@ -13,7 +13,9 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import GlassStatChart from "@/components/ui/glass-stat-chart";
-import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus, Tag, Camera, Loader2 } from "lucide-react";
+import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus, Tag, Camera, Loader2, Hash, Globe } from "lucide-react";
+import { igWhyText, fmtEr, fmtPerWeek } from "@/lib/instagram";
+import { HashtagSearch } from "@/components/HashtagSearch";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -82,25 +84,11 @@ const IG_RETRY_NOW = new Set(["page_429", "pause", "meta_non_configure", "meta_l
 const igStale = (t: Track | undefined, handle: string) => {
   if (!t?.igAt || t.igFor !== handle) return true;
   if (!t.igPhoto && t.igV !== IG_V) return true;
+  if (t.igV !== IG_V && t.igEr === undefined) return true; // chiffres (engagement, rythme…) jamais demandés
   if (!t.igPhoto && IG_RETRY_NOW.has(t.igWhy ?? "")) return true;
   const days = (Date.now() - new Date(t.igAt + "T00:00:00").getTime()) / 86400000;
   return days > (t.igPhoto || t.igWhy === "compte_perso" ? 30 : 1);
 };
-/** Raison (renvoyée par ig-avatar) → phrase pour la fiche. */
-const IG_WHY: Record<string, string> = {
-  compte_perso: "compte personnel (Meta ne donne la photo que des comptes pro)",
-  sans_photo: "pas de photo sur ce compte",
-  meta_non_configure: "pas encore relié à Meta",
-  meta_jeton: "le lien avec Meta a expiré, à refaire",
-  meta_limite: "Meta freine les demandes, nouvel essai à la prochaine visite",
-  page_429: "Instagram freine les demandes, nouvel essai à la prochaine visite",
-  pause: "en attente, nouvel essai à la prochaine visite",
-  profil_introuvable: "ce @ n'existe pas sur Instagram",
-  page_sans_photo: "Instagram n'a pas donné la photo",
-  nom_invalide: "le @ n'est pas valide",
-  stockage: "la photo n'a pas pu être enregistrée",
-};
-const igWhyText = (why?: string) => (why ? IG_WHY[why] ?? `Instagram a refusé (${why})` : "");
 /** @ déjà demandés pendant cette visite (évite de redemander en boucle). */
 const igAsked = new Set<string>();
 
@@ -117,10 +105,16 @@ const statusMeta = (v: ScoutStatus) => STATUSES.find((s) => s.v === v) ?? STATUS
 
 type Snap = { date: string; value: number }; // date = ISO « AAAA-MM-JJ »
 /** photo = ajoutée à la main ; igPhoto = photo Instagram copiée par la fonction ig-avatar
- *  (igFor = le @ pour lequel elle a été cherchée, igAt = quand ; null = introuvable). */
-type Track = { status?: ScoutStatus; snaps?: Snap[]; photo?: string; igPhoto?: string | null; igFor?: string; igAt?: string; igWhy?: string; igV?: number };
-/** Version de la recherche Instagram : la monter refait toutes les recherches ratées. */
-const IG_V = 3;
+ *  (igFor = le @ pour lequel elle a été cherchée, igAt = quand ; null = introuvable).
+ *  igEr / igPw / igBio / igSite / igPosts = chiffres publics donnés par Meta au même moment. */
+type Track = {
+  status?: ScoutStatus; snaps?: Snap[]; photo?: string;
+  igPhoto?: string | null; igFor?: string; igAt?: string; igWhy?: string; igV?: number;
+  igEr?: number | null; igPw?: number | null; igBio?: string; igSite?: string; igPosts?: number;
+};
+type IgStats = { er: number | null; perWeek: number | null; posts: number; bio: string; website: string };
+/** Version de la recherche Instagram : la monter refait les recherches ratées (et sans chiffres). */
+const IG_V = 4;
 type Tracking = Record<string, Track>;
 
 /** ISO « 2026-08-12 » → « 12 août ». */
@@ -188,7 +182,7 @@ export function Vivier() {
     if (!want.length) return;
     want.forEach((x) => igAsked.add(x.h));
     void supabase.functions.invoke("ig-avatar", { body: { handles: want.map((x) => x.h) } }).then(async ({ data, error: fnErr }) => {
-      const res = data as { photos?: Record<string, string | null>; followers?: Record<string, number>; why?: Record<string, string> } | null;
+      const res = data as { photos?: Record<string, string | null>; followers?: Record<string, number>; stats?: Record<string, IgStats>; why?: Record<string, string> } | null;
       const photos = res?.photos;
       if (fnErr || !photos) return;
       try {
@@ -202,7 +196,9 @@ export function Vivier() {
           // Abonnés donnés par Meta : relevé du jour ajouté, sans écraser un relevé saisi à la main.
           const n = res?.followers?.[x.h];
           const snaps = typeof n === "number" && !(cur.snaps ?? []).some((sn) => sn.date === at) ? [...(cur.snaps ?? []), { date: at, value: n }] : cur.snaps;
-          next[x.id] = { ...cur, snaps, igPhoto: photos[x.h], igFor: x.h, igAt: at, igWhy: res?.why?.[x.h], igV: IG_V };
+          const st = res?.stats?.[x.h];
+          const figures = st ? { igEr: st.er, igPw: st.perWeek, igBio: st.bio, igSite: st.website, igPosts: st.posts } : {};
+          next[x.id] = { ...cur, ...figures, snaps, igPhoto: photos[x.h], igFor: x.h, igAt: at, igWhy: res?.why?.[x.h], igV: IG_V };
         }
         setLocalTrack(next);
         await saveAppStateKey("poolTracking", next);
@@ -213,6 +209,7 @@ export function Vivier() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, trackData]);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [hashOpen, setHashOpen] = useState(false);
   // Photo ajoutée à la main (bucket public « avatars »), gardée avec le suivi du scouting.
   const uploadPhoto = async (r: Row, file: File | undefined) => {
     if (!file) return;
@@ -361,8 +358,14 @@ export function Vivier() {
           {filtered.length} créateur{filtered.length > 1 ? "s" : ""}
           {(tagFilter !== ALL || contactFilter !== "all" || statusFilter !== "__all__" || query.trim()) && <span className="text-faint"> / {rows.length}</span>}
         </div>
-        <AddButton label="Créateur" onClick={openAdd} />
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setHashOpen((o) => !o)} className={cn("flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[12px] font-medium transition-colors", hashOpen ? "border-primary text-primary" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+            <Hash className="h-3.5 w-3.5" /> Hashtag
+          </button>
+          <AddButton label="Créateur" onClick={openAdd} />
+        </div>
       </PageHeaderRow>
+      {hashOpen && <HashtagSearch onClose={() => setHashOpen(false)} />}
 
       {/* Filtre par catégorie (menu déroulant, avec le nombre de créateurs) */}
       {tagList.length > 0 && (
@@ -445,6 +448,7 @@ export function Vivier() {
                       {growthOf(r.id) >= 0 ? "+" : "−"}{fmtCompact(Math.abs(growthOf(r.id)))}
                     </div>
                   )}
+                  {tracking[r.id]?.igEr != null && <div className="text-[10px] text-faint" title="Engagement public (12 derniers posts)">ER {fmtEr(tracking[r.id]?.igEr)}</div>}
                 </div>
               )}
               <span className={cn("hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-medium sm:inline-flex", statusMeta(statusOf(r.id)).pill)}>
@@ -511,6 +515,39 @@ export function Vivier() {
               {selected.note && (
                 <div className="rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[12px] leading-relaxed text-muted-foreground">{selected.note}</div>
               )}
+              {(() => {
+                // Chiffres publics donnés par Meta (comptes pro) : engagement, rythme, bio, site.
+                const t = tracking[selected.id];
+                if (!t || t.igEr === undefined) return null;
+                const site = t.igSite?.trim() ?? "";
+                const siteHref = site ? (/^https?:\/\//i.test(site) ? site : `https://${site}`) : "";
+                const fol = latestFollowers(selected.id);
+                return (
+                  <>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([
+                        ["Abonnés", fol != null ? fmtCompact(fol) : "—"],
+                        ["Engagement", fmtEr(t.igEr)],
+                        ["Rythme", fmtPerWeek(t.igPw)],
+                      ] as const).map(([l, v]) => (
+                        <div key={l} className="rounded-xl border border-border bg-panel/50 px-3 py-2">
+                          <div className="text-[10px] font-medium text-faint">{l}</div>
+                          <div className="mt-0.5 truncate text-[14px] font-bold tabular-nums text-foreground">{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {t.igBio?.trim() && <div className="whitespace-pre-line rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[12px] leading-relaxed text-foreground">{t.igBio.trim()}</div>}
+                    {siteHref && (
+                      <a href={siteHref} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[12px] font-medium text-primary transition-colors hover:bg-primary/5">
+                        <Globe className="h-4 w-4 shrink-0" /><span className="truncate">{site.replace(/^https?:\/\//i, "").replace(/\/$/, "")}</span>
+                      </a>
+                    )}
+                    <div className="px-1 text-[10px] leading-relaxed text-faint">
+                      Engagement public : likes + commentaires moyens des 12 derniers posts ÷ abonnés{t.igPosts ? ` · ${t.igPosts.toLocaleString("fr-FR")} posts au total` : ""}{t.igAt ? ` · relevé le ${frShort(t.igAt)}` : ""}.
+                    </div>
+                  </>
+                );
+              })()}
               {selected.last_contacted && (
                 <div className="px-1 text-[11px] text-faint">Dernier contact : {new Date(selected.last_contacted).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</div>
               )}

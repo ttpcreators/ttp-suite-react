@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Plus, Trash2, Camera, Loader2, Calculator, ArrowUp, Rows3, Layers } from "lucide-react";
+import { PlatformIcon } from "@/components/ui/platform-icon";
+import { postKind, type IgCollab, type IgCreator, type IgPostLite } from "@/lib/instagram";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import { downscaleImage } from "@/components/ui/image-field";
@@ -186,10 +188,13 @@ export function DebriefCalculator({
   state,
   onChange,
   onApply,
+  igFor,
 }: {
   slug: string;
   state: CalcState;
   onChange: (s: CalcState) => void;
+  /** Marque + créatrice du debrief : pour reprendre les posts repérés sur Instagram (Collabs). */
+  igFor?: { brand: string; creator: string };
   /** Renvoie couverture + taux formatés vers les indicateurs du debrief. */
   onApply: (v: { reach: string; engagement: string }) => void;
 }) {
@@ -197,6 +202,7 @@ export function DebriefCalculator({
     state.stats.length ? state.stats.map(statToRow) : [blankRow()],
   );
   const [busy, setBusy] = useState(false);
+  const [igBusy, setIgBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const shotUrls = useShotUrls(state.shots);
   // Dernier état connu : l'upload est long, on ne repart pas d'une fermeture périmée
@@ -235,6 +241,43 @@ export function DebriefCalculator({
     }
     onApply({ reach: t.reach > 0 ? fmtCompact(t.reach) : "", engagement: fmtPct(er) });
     toast("Indicateurs mis à jour ✓");
+  };
+
+  // Reprend les publications repérées sur Instagram pour la collab (marque + créatrice) :
+  // une ligne par post (likes, commentaires ; + couverture, enregistrements, partages et
+  // vues si la créatrice a connecté son compte) et ses abonnés du jour.
+  const fillFromInstagram = async () => {
+    const brand = igFor?.brand.trim() ?? "";
+    const creator = igFor?.creator.trim() ?? "";
+    if (!brand || !creator) return toast("Renseigne d'abord la marque et la créatrice");
+    setIgBusy(true);
+    const [cols, cr] = await Promise.all([
+      supabase.from("collabs").select("ig").ilike("brand", brand).ilike("creator", creator),
+      supabase.from("creators").select("ig").ilike("name", creator).limit(1),
+    ]);
+    setIgBusy(false);
+    if (cols.error) return toast("Pas encore disponible (Instagram pas encore activé)");
+    const byId = new Map<string, IgPostLite>();
+    for (const c of (cols.data as { ig: IgCollab | null }[] | null) ?? []) for (const p of c.ig?.posts ?? []) byId.set(p.id, p);
+    const posts = [...byId.values()].sort((a, b) => a.at.localeCompare(b.at));
+    if (!posts.length) return toast("Aucune publication repérée pour cette collab (Collabs → Vérifier)");
+    const n = (v?: number | null) => (v ? String(v) : "");
+    const next: Row[] = posts.map((p) => ({
+      id: rid(),
+      kind: postKind(p) === "Vidéo" ? "Reel" : postKind(p),
+      reach: n(p.reach), likes: n(p.likes), comments: n(p.comments), saves: n(p.saves), shares: n(p.shares), views: n(p.views),
+    }));
+    const live = ((cr.data as { ig: IgCreator | null }[] | null) ?? [])[0]?.ig?.followers;
+    setRows(next);
+    onChange({
+      ...state,
+      mode: "detail",
+      stats: next.map(rowToStat),
+      followers: live ? String(live) : state.followers,
+      // Couverture manquante sur un post (compte non connecté) : seul le taux sur les abonnés est juste.
+      basis: next.every((r) => r.reach) ? state.basis : "followers",
+    });
+    toast(`${posts.length} publication${posts.length > 1 ? "s" : ""} reprise${posts.length > 1 ? "s" : ""} d'Instagram ✓`);
   };
 
   const onFiles = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -302,6 +345,18 @@ export function DebriefCalculator({
           ]}
         />
       </div>
+
+      {igFor && (
+        <button
+          type="button"
+          onClick={() => void fillFromInstagram()}
+          disabled={igBusy}
+          className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+          title="Reprend les posts de la marque repérés sur Instagram (page Collabs)"
+        >
+          {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} Remplir depuis Instagram
+        </button>
+      )}
 
       {/* Base de compte */}
       <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">

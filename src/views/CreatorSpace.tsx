@@ -42,6 +42,7 @@ import {
   HelpCircle,
   Eye,
   ArrowLeft,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
@@ -51,6 +52,7 @@ import { PushCard } from "@/components/ui/push-card";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
+import { consumeIgReturn, igConnect, igDisconnect, type IgCreator } from "@/lib/instagram";
 import { AddButton, InlineForm, TextField, SelectField, AutoGrowTextField } from "@/components/ui/form";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PlatformIcon } from "@/components/ui/platform-icon";
@@ -105,6 +107,7 @@ type Creator = {
   tiktok: string | null;
   email_pro: string | null;
   mediakit: { slug?: string; ugc?: { enabled?: boolean } } | null; // blob media kit (slug + activation UGC)
+  ig?: IgCreator | null; // chiffres Instagram (ig-sync) + lien « Instagram connecté »
 };
 type Subtask = { id: string; text: string; done: boolean };
 type Attachment = { name: string; size: string; path: string };
@@ -787,6 +790,26 @@ export function CreatorSpace({
   const statsFileRef = useRef<HTMLInputElement>(null);
   const [statsUploading, setStatsUploading] = useState(false);
   const [statsModalOpen, setStatsModalOpen] = useState(false);
+  // Connexion Instagram : ses stats arrivent toutes seules (plus de captures pour Instagram).
+  const [igBusy, setIgBusy] = useState(false);
+  useEffect(() => {
+    const back = consumeIgReturn();
+    if (back === "connected") toast("Instagram connecté ✓ Tes stats arrivent toutes seules");
+    else if (back === "error") toast("Connexion Instagram annulée");
+  }, []);
+  const connectIg = async () => {
+    setIgBusy(true);
+    const err = await igConnect();
+    setIgBusy(false);
+    if (err) toast(err);
+  };
+  const disconnectIg = async () => {
+    setIgBusy(true);
+    const ok = await igDisconnect();
+    setIgBusy(false);
+    if (ok) setCreator((c) => (c ? { ...c, ig: { ...(c.ig ?? {}), link: null, insights: null } } : c));
+    toast(ok ? "Instagram déconnecté" : "Erreur, réessaie");
+  };
   const sendStatsFiles = async (files: FileList | null) => {
     const list = Array.from(files ?? []).slice(0, 6); // 6 captures max
     if (list.length === 0) return;
@@ -3013,6 +3036,44 @@ export function CreatorSpace({
         onPrimary={() => statsFileRef.current?.click()}
         primaryDisabled={statsUploading}
       >
+        {/* Le plus simple : connecter son Instagram (stats automatiques) */}
+        <div className="mb-3 rounded-xl border border-border bg-surface p-3.5">
+          {creator?.ig?.link ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] leading-relaxed text-foreground">
+              <span className="flex items-start gap-1.5">
+                <PlatformIcon platform="instagram" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
+                <span>
+                  <span className="font-semibold">Instagram connecté</span>
+                  {creator.ig.link.username ? ` (@${creator.ig.link.username})` : ""} : tes stats Instagram arrivent toutes seules. Les captures ne servent plus que pour tes autres réseaux.
+                </span>
+              </span>
+              {!preview && (
+                <button type="button" onClick={() => void disconnectIg()} disabled={igBusy} className="text-[11px] text-faint transition-colors hover:text-rose-500 disabled:opacity-50">
+                  Déconnecter
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
+                <PlatformIcon platform="instagram" className="h-3.5 w-3.5" /> Encore plus simple : connecte ton Instagram
+              </div>
+              <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                Tes stats Instagram (vues, comptes touchés, audience) arrivent toutes seules chaque jour, sans capture. Il faut un compte pro ou créateur. Tu peux déconnecter quand tu veux.
+              </div>
+              <button
+                type="button"
+                onClick={() => void connectIg()}
+                disabled={igBusy || !!preview}
+                title={preview ? "La créatrice le fait depuis son espace" : undefined}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground py-2.5 text-[12px] font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} Connecter mon Instagram
+              </button>
+            </>
+          )}
+        </div>
+
         <div className="mb-3 flex items-start gap-2 rounded-xl bg-primary/5 px-3.5 py-2.5 text-[12px] leading-relaxed text-foreground">
           <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <span>À envoyer <span className="font-semibold">en début de chaque mois</span> (statistiques des 30 derniers jours).</span>

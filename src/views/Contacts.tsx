@@ -35,6 +35,8 @@ import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { DEFAULT_TEMPLATES, mailtoHref, readProspectTemplates, suggestedMail, type MailTemplate } from "@/lib/mailTemplates";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { BrandIgInline, BrandIgPanel } from "@/components/BrandInstagram";
+import type { IgBrand } from "@/lib/instagram";
 
 type Row = {
   id: string;
@@ -53,6 +55,7 @@ type Row = {
   creator?: string | null; // renseigné = contact ajouté par ce créateur
   last_contacted?: string | null; // dernier email SORTANT vers ce contact (ISO)
   touches?: unknown; // journal de contact multi-canal (jsonb, cf. src/lib/touches.ts)
+  ig?: IgBrand | null; // chiffres Instagram de la marque (ig-sync, migration 2026-10-13)
 };
 
 // Suivi du sur-contact : en-deçà de ce seuil (jours), on alerte de ne pas relancer.
@@ -1054,6 +1057,7 @@ export function Contacts() {
                 <div className="mt-0.5 truncate text-[11px] font-normal text-faint">
                   {row.person} · {row.role}
                 </div>
+                <BrandIgInline ig={row.ig} className="mt-0.5 block truncate text-[10px] text-faint" />
                 {/* Mobile : le tag passe sous le nom pour libérer la largeur du sous-titre */}
                 {row.tag && (
                   <span className="mt-1 inline-block max-w-full truncate rounded-full bg-rowhover px-2 py-0.5 align-top text-[10px] font-medium text-muted-foreground sm:hidden">
@@ -1195,6 +1199,17 @@ export function Contacts() {
               {selected.instagram && <CopyField label="Instagram" value={selected.instagram} />}
               {selected.city && <CopyField label="Ville" value={selected.city} />}
             </div>
+
+            {selected.instagram?.trim() && !selected.creator && (
+              <BrandIgPanel
+                contactId={selected.id}
+                ig={selected.ig}
+                onChange={(ig) => {
+                  setSelected((s) => (s && s.id === selected.id ? { ...s, ig } : s));
+                  setRows((prev) => (prev ? prev.map((r) => (r.id === selected.id ? { ...r, ig } : r)) : prev));
+                }}
+              />
+            )}
 
             {selected.email && (() => {
               const histOut = (history ?? []).filter((m) => m.direction === "out").map((m) => new Date(m.date).getTime()).filter((t) => Number.isFinite(t));

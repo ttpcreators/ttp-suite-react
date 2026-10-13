@@ -16,6 +16,7 @@ import { Trash2, Check, RefreshCw, ChevronUp, ChevronDown } from "lucide-react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { useIgColumn, type IgCreator } from "@/lib/instagram";
 
 type CreatorRow = {
   id: string;
@@ -121,6 +122,8 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
 
   // Abonnés CUMULÉS par créateur = somme du DERNIER relevé de chaque plateforme
   // (mesures d'engagement, blob `engagementHistory`). Clé = nom en minuscules.
+  // Instagram : le chiffre du jour donné par Meta (ig-sync) remplace la mesure.
+  const [igByName] = useIgColumn<IgCreator>("creators", "name");
   const { data: engHist } = useAppState<{ creator?: string; platform?: string; followers?: string; date?: string }[]>(
     (s: AppState) => (s["engagementHistory"] as { creator?: string; platform?: string; followers?: string; date?: string }[]) ?? [],
   );
@@ -136,20 +139,20 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
       byCreator.set(k, arr);
     }
     const out: Record<string, number> = {};
-    for (const [k, list] of byCreator) {
-      const ordered = [...list].sort((a, b) => ts(b.date) - ts(a.date));
-      const seen = new Set<string>();
-      let sum = 0;
+    for (const k of new Set([...byCreator.keys(), ...Object.keys(igByName)])) {
+      const ordered = [...(byCreator.get(k) ?? [])].sort((a, b) => ts(b.date) - ts(a.date));
+      const latest = new Map<string, number>();
       for (const h of ordered) {
         const pf = (h.platform ?? "").toLowerCase();
-        if (!pf || seen.has(pf)) continue;
-        seen.add(pf);
-        sum += num(h.followers);
+        if (pf && !latest.has(pf)) latest.set(pf, num(h.followers));
       }
+      const live = igByName[k]?.followers;
+      if (live && live > 0) latest.set("instagram", live);
+      const sum = [...latest.values()].reduce((a, n) => a + n, 0);
       if (sum > 0) out[k] = sum;
     }
     return out;
-  }, [engHist]);
+  }, [engHist, igByName]);
 
   if (error) {
     return (

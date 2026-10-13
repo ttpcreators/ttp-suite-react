@@ -4,7 +4,8 @@ import { cn, titleCase } from "@/lib/utils";
 import { restoreTabs, navigateTab, addTab, closeTab as closeTabState } from "@/lib/tabs";
 import type { Session } from "@supabase/supabase-js";
 import { GlobalSearch } from "@/components/GlobalSearch";
-import { Toaster } from "@/components/ui/toast";
+import { Toaster, toast } from "@/components/ui/toast";
+import { consumeIgReturn } from "@/lib/instagram";
 import { UndoSendBar } from "@/components/ui/undo-send";
 import { Notifications } from "@/components/ui/notifications";
 import { useNotifications } from "@/lib/useNotifications";
@@ -315,6 +316,12 @@ export default function App() {
     document.documentElement.classList.toggle("dark", dark);
     setThemePref(dark);
   }, [dark]);
+
+  // Retour de la connexion Instagram d'une créatrice faite depuis sa fiche (ig-callback).
+  useEffect(() => {
+    const back = consumeIgReturn();
+    if (back) toast(back === "connected" ? "Instagram connecté ✓ Ses stats arrivent toutes seules" : "Connexion Instagram annulée");
+  }, []);
 
   // Mémorise la page courante pour la rouvrir au prochain refresh.
   useEffect(() => {

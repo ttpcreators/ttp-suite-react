@@ -7,8 +7,8 @@
 // exposé au front). Format : base64url(payloadJson) + "." + base64url(hmac).
 // Payload : { origin, nonce, iat }. TTL 10 min. Comparaison à temps constant.
 //
-// signState() est appelé par google-connect-url (serveur) ; verifyState() par
-// google-oauth-callback. Le front ne signe RIEN : il reçoit l'URL déjà signée.
+// signState() est appelé par google-connect-url / ig-connect (serveur) ;
+// verifyState() par google-oauth-callback / ig-callback. Le front ne signe RIEN : il reçoit l'URL déjà signée.
 // ============================================================================
 
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
@@ -17,6 +17,7 @@ export interface StatePayload {
   origin: string;
   nonce: string;
   iat: number; // ms epoch
+  sub?: string; // facultatif : pour qui (ex. id créatrice, connexion Instagram)
 }
 
 function requireSecret(): string {
@@ -100,6 +101,7 @@ export async function signState(
     origin: payload.origin,
     nonce: payload.nonce,
     iat: payload.iat ?? Date.now(),
+    ...(payload.sub ? { sub: payload.sub } : {}),
   };
   const p = strToB64Url(JSON.stringify(full));
   const sig = bytesToB64Url(await hmac(p));

@@ -4,6 +4,7 @@ import { cn, titleCase } from "@/lib/utils";
 import {
   ArrowRight, Pencil, Trash2, X, UserRound, Package, Wallet, Clock, Trophy,
   XCircle, Archive, CircleDot, Check, ListChecks, ChevronDown, RotateCcw, StickyNote, LayoutGrid, List as ListIcon,
+  RefreshCw, Loader2, Heart, MessageCircle, ExternalLink,
 } from "lucide-react";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
@@ -22,6 +23,9 @@ import { frDate } from "@/lib/dates";
 import { getCache, setCache } from "@/lib/viewCache";
 import { STEPS, STEP_COUNT, PHASES, stepDef, phaseOf, isDone, type PhaseKey } from "@/lib/collabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { PlatformIcon } from "@/components/ui/platform-icon";
+import { fmtCompact } from "@/lib/timeSeries";
+import { igRefresh, igWhyText, postKind, useIgColumn, type IgCollab } from "@/lib/instagram";
 
 type Row = {
   id: string;
@@ -57,6 +61,13 @@ const PHASE_DOT: Record<PhaseKey, string> = {
   cloture: "bg-signal",
 };
 
+/** Nombre de publications attendues d'après les livrables (« 3 posts · 1 reel » → 4 ; stories exclues). */
+function expectedPosts(d?: string | null): number {
+  let n = 0;
+  for (const m of (d ?? "").matchAll(/(\d+)\s*(posts?|reels?|carrousels?|carousels?|publications?|vid[ée]os?)/gi)) n += Number(m[1]);
+  return n;
+}
+
 function daysSince(iso?: string | null): number | null {
   if (!iso) return null;
   const t = new Date(iso).getTime();
@@ -68,6 +79,9 @@ export function Collabs() {
   const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("collabs"));
   const [steps, setSteps] = useState<Record<string, StepRow[]>>({});
   const [missing, setMissing] = useState(false); // table pas encore créée (migration à lancer)
+  // Publications de la marque repérées sur Instagram (ig-sync, chaque nuit dès l'étape 4).
+  const [igCollabs, putIgCollab] = useIgColumn<IgCollab>("collabs", "id");
+  const [igBusy, setIgBusy] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const { query } = useSearch();
   const creators = useCreators();
@@ -145,6 +159,67 @@ export function Collabs() {
       active = false;
     };
   }, [live]);
+
+  const checkIg = async (row: Row) => {
+    setIgBusy(row.id);
+    const r = await igRefresh<IgCollab>("collab", row.id);
+    setIgBusy(null);
+    if (!r.ig) return toast(r.error === "meta_non_configure" ? "Instagram n'est pas encore relié à Meta" : "Vérification impossible, réessaie");
+    putIgCollab(row.id, r.ig);
+    const n = r.ig.posts?.length ?? 0;
+    toast(r.ig.why ? `Instagram : ${igWhyText(r.ig.why)}` : n ? `${n} publication${n > 1 ? "s" : ""} repérée${n > 1 ? "s" : ""} ✓` : "Rien de publié qui cite la marque pour l'instant");
+  };
+  /** Bloc « Publications repérées » (dès l'étape Tournage). */
+  const igBlockFor = (row: Row) => {
+    if (row.step < 4) return null;
+    const ig = igCollabs[row.id];
+    const posts = ig?.posts ?? [];
+    const expected = expectedPosts(row.deliverables);
+    return (
+      <div className="mt-2 rounded-xl bg-panel px-3 py-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+            <PlatformIcon platform="instagram" className="h-3 w-3" /> Publications repérées
+            {(expected > 0 || posts.length > 0) && (
+              <span className={cn("font-semibold", expected > 0 && posts.length >= expected ? "text-emerald-600 dark:text-emerald-400" : "text-foreground")}>
+                · {posts.length}{expected > 0 ? ` / ${expected}` : ""}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => void checkIg(row)}
+            disabled={igBusy === row.id}
+            title="Chercher maintenant les posts qui citent la marque"
+            className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+          >
+            {igBusy === row.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Vérifier
+          </button>
+        </div>
+        {posts.length > 0 ? (
+          <div className="mt-1.5 flex flex-col gap-1">
+            {posts.map((p) => (
+              <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg bg-surface px-2 py-1.5 text-[11px] transition-colors hover:bg-rowhover">
+                <span className="shrink-0 font-semibold text-foreground">{postKind(p)}</span>
+                <span className="shrink-0 text-faint">{frDate(p.at)}</span>
+                <span className="ml-auto flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
+                  {p.likes != null && <span className="flex items-center gap-0.5"><Heart className="h-3 w-3" />{fmtCompact(p.likes)}</span>}
+                  <span className="flex items-center gap-0.5"><MessageCircle className="h-3 w-3" />{fmtCompact(p.comments)}</span>
+                  {p.reach != null && <span title="Comptes touchés">{fmtCompact(p.reach)} touchés</span>}
+                  <ExternalLink className="h-3 w-3 text-faint" />
+                </span>
+              </a>
+            ))}
+            {row.step < 6 && <div className="mt-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">C'est en ligne : tu peux passer à l'étape « Publication ».</div>}
+          </div>
+        ) : (
+          <div className="mt-1 text-[11px] text-faint">
+            {ig?.why ? igWhyText(ig.why) : ig?.at ? "Rien de publié qui cite la marque pour l'instant." : "Vérifié chaque nuit : posts et reels qui citent la marque (@, # ou nom). Les stories ne sont pas visibles."}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const photoOf = (name?: string | null) =>
     name ? creators.find((c) => c.name.toLowerCase() === name.toLowerCase())?.photo_url ?? null : null;
@@ -482,6 +557,8 @@ export function Collabs() {
           </div>
         )}
 
+        {igBlockFor(row)}
+
         {/* Action : faire avancer d'une étape */}
         <div className="mt-3 flex items-center gap-2">{actionsFor(row)}</div>
 
@@ -543,6 +620,11 @@ export function Collabs() {
             </div>
             <div className="mt-1.5">{progressFor(row)}</div>
             {reached && <div className="mt-1 text-[10px] text-faint">Depuis le {frDate(reached)}</div>}
+            {(igCollabs[row.id]?.posts?.length ?? 0) > 0 && (
+              <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                <PlatformIcon platform="instagram" className="h-3 w-3" /> {igCollabs[row.id]?.posts?.length} publication{(igCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""} repérée{(igCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""}
+              </div>
+            )}
           </div>
 
           {/* Statut + actions */}

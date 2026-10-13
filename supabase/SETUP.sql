@@ -52,6 +52,7 @@ alter table public.creators add column if not exists instagram text;
 alter table public.creators add column if not exists tiktok text;
 alter table public.creators add column if not exists stats_month text;   -- sql/11 : mois de dernière MAJ des datas
 alter table public.creators add column if not exists mediakit jsonb;     -- sql/14 : contenu du media kit (bio, audience, stats par plateforme, marques, photos)
+alter table public.creators add column if not exists ig jsonb;           -- chiffres Instagram (Meta), écrits par ig-sync (sql/2026-10-13-instagram-api)
 
 create table if not exists public.invoices (
   id uuid primary key default gen_random_uuid(),
@@ -73,6 +74,7 @@ alter table public.contacts add column if not exists creator text;       -- sql/
 alter table public.contacts add column if not exists instagram text;     -- @ de la marque (sql/2026-09-08-contacts-instagram-city)
 alter table public.contacts add column if not exists city text;          -- ville de la marque
 alter table public.contacts add column if not exists touches jsonb;      -- journal de contact multi-canal (sql/2026-09-28-contacts-touches)
+alter table public.contacts add column if not exists ig jsonb;           -- chiffres Instagram de la marque, écrits par ig-sync (sql/2026-10-13-instagram-api)
 
 create table if not exists public.prospects (
   id uuid primary key default gen_random_uuid(),
@@ -113,6 +115,7 @@ create table if not exists public.collabs (
 create index if not exists collabs_sort_idx    on public.collabs (sort_order);
 create index if not exists collabs_creator_idx on public.collabs (creator);
 create index if not exists collabs_step_idx     on public.collabs (step);
+alter table public.collabs add column if not exists ig jsonb;            -- publications de la marque repérées par ig-sync (sql/2026-10-13-instagram-api)
 create table if not exists public.collab_steps (
   id uuid primary key default gen_random_uuid(),
   collab_id uuid not null references public.collabs(id) on delete cascade,
@@ -321,6 +324,46 @@ end $$;
 drop trigger if exists creators_guard_upd on public.creators;
 create trigger creators_guard_upd before update on public.creators
   for each row execute function public.creators_guard();
+
+-- Chiffres Instagram (colonne `ig`) : écrits par l'agence et le serveur (ig-sync)
+-- seulement ; une créatrice ne peut pas les gonfler par un appel direct à l'API.
+-- (sql/2026-10-13-instagram-api ; collabs : écriture déjà réservée à l'agence.)
+create or replace function public.ig_guard() returns trigger
+  language plpgsql set search_path = public as $$
+begin
+  if public.is_agency()
+     or coalesce(auth.role(), '') = 'service_role'
+     or current_user in ('postgres', 'service_role', 'supabase_admin') then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    new.ig := null;
+  else
+    new.ig := old.ig;
+  end if;
+  return new;
+end $$;
+drop trigger if exists creators_ig_guard on public.creators;
+create trigger creators_ig_guard before insert or update on public.creators
+  for each row execute function public.ig_guard();
+drop trigger if exists contacts_ig_guard on public.contacts;
+create trigger contacts_ig_guard before insert or update on public.contacts
+  for each row execute function public.ig_guard();
+
+-- Jetons Instagram des créatrices qui ont connecté leur compte (ig-connect /
+-- ig-callback). AUCUNE politique : illisible depuis l'app, serveur seulement.
+create table if not exists public.ig_accounts (
+  creator_id   uuid primary key references public.creators(id) on delete cascade,
+  ig_user_id   text not null,
+  username     text,
+  token        text not null,
+  expires_at   timestamptz,
+  scopes       text,
+  connected_at timestamptz default now(),
+  refreshed_at timestamptz
+);
+alter table public.ig_accounts enable row level security;
+revoke all on public.ig_accounts from anon, authenticated;
 
 -- DONNÉES AGENCE PURES : agence seulement
 -- contacts : partagés — l'agence voit/gère tout ; le créateur voit ceux de l'agence

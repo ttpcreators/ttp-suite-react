@@ -600,6 +600,7 @@ export function Debrief() {
           slug={safeName(creator || brand)}
           state={calc}
           onChange={setCalc}
+          igFor={{ brand, creator }}
           onApply={({ reach: r, engagement: e }) => {
             if (r) setReach(r);
             setEngagement(e);

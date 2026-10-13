@@ -56,6 +56,8 @@ import { AvatarUpload } from "@/components/ui/avatar-upload";
 import { EditorialProfileCard, MonthlyTracking, JournalCard, CreatorAlerts } from "@/views/CreatorTracking";
 import { DateInput } from "@/components/ui/date-range-picker";
 import { SelectField } from "@/components/ui/form";
+import { InstagramCard } from "@/components/InstagramCard";
+import { fmtAgo, type IgCreator } from "@/lib/instagram";
 
 type Creator = {
   id: string;
@@ -78,6 +80,7 @@ type Creator = {
   commission: string | null;
   instagram: string | null;
   tiktok: string | null;
+  ig?: IgCreator | null; // chiffres Instagram du jour (ig-sync, après la migration 2026-10-13)
   email_pro: string | null;
 };
 type Inv = { ref: string; party: string; amount: string; date: string; status?: string | null };
@@ -466,10 +469,19 @@ export function CreatorDetail({
   // Cartes du haut CONNECTÉES aux dernières mesures :
   // Abonnés = cumul des dernières mesures de chaque plateforme (comme le portail) ;
   // Engagement = dernière mesure de la plateforme principale (sinon la plus récente).
-  const totalFollowers = perPlatform.reduce((a, p) => a + numOf(p.followers), 0);
+  // Instagram : le chiffre du jour donné par Meta remplace la dernière mesure.
+  const liveIg = c?.ig?.followers ?? 0;
+  const totalFollowers = perPlatform.reduce((a, p) => a + (p.platform === "instagram" && liveIg > 0 ? 0 : numOf(p.followers)), 0) + liveIg;
   // CA encaissé = somme des factures payées de ce créateur (auto, plus de saisie manuelle).
   const caEncaisse = inv.filter((i) => i.status === "payee").reduce((a, i) => a + parseAmount(i.amount), 0);
   const latestMeasure = perPlatform.slice().sort((a, b) => frTime(b.date) - frTime(a.date))[0] ?? null;
+  const nPlatforms = new Set([...perPlatform.map((p) => p.platform), ...(liveIg > 0 ? ["instagram"] : [])]).size;
+  const followersSub =
+    nPlatforms > 1
+      ? `cumul ${nPlatforms} plateformes${latestMeasure ? ` · au ${latestMeasure.date}` : ""}`
+      : liveIg > 0
+        ? `Instagram · donné par Meta ${fmtAgo(c?.ig?.ok)}`
+        : `${perPlatform[0]?.platformLabel ?? ""} · au ${latestMeasure?.date ?? "—"}`;
   const mainEntry =
     perPlatform.length === 0
       ? null
@@ -602,11 +614,7 @@ export function CreatorDetail({
         {stat(
           "Abonnés",
           totalFollowers > 0 ? fmtCompact(totalFollowers) : (c?.followers ?? null),
-          totalFollowers > 0
-            ? perPlatform.length > 1
-              ? `cumul ${perPlatform.length} plateformes · au ${latestMeasure?.date}`
-              : `${perPlatform[0]?.platformLabel} · au ${latestMeasure?.date}`
-            : undefined,
+          totalFollowers > 0 ? followersSub : undefined,
         )}
         {stat(
           "Engagement",
@@ -664,11 +672,17 @@ export function CreatorDetail({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-[12px] font-medium text-muted-foreground">{p.label}</span>
-                    {p.entry && <span className="shrink-0 text-[9px] text-faint">au {p.entry.date}</span>}
+                    {p.key === "instagram" && liveIg > 0 ? (
+                      <span className="shrink-0 text-[9px] text-faint">Meta · {fmtAgo(c?.ig?.ok)}</span>
+                    ) : (
+                      p.entry && <span className="shrink-0 text-[9px] text-faint">au {p.entry.date}</span>
+                    )}
                   </div>
                   <div className="mt-0.5 flex items-baseline gap-3">
                     <span className="whitespace-nowrap text-lg font-bold tracking-tight">
-                      {p.entry && numOf(p.entry.followers) > 0 ? fmtCompact(numOf(p.entry.followers)) : "—"}
+                      {p.key === "instagram" && liveIg > 0
+                        ? fmtCompact(liveIg)
+                        : p.entry && numOf(p.entry.followers) > 0 ? fmtCompact(numOf(p.entry.followers)) : "—"}
                       <span className="ml-1 text-[10px] font-medium text-faint">abonnés</span>
                     </span>
                     {p.entry && <span className="text-[12px] font-medium text-muted-foreground">{p.entry.er}</span>}
@@ -678,6 +692,16 @@ export function CreatorDetail({
             ))}
           </div>
         </div>
+      )}
+
+      {c?.id && (c.ig || socialLinks.some((l) => l.label === "Instagram")) && (
+        <InstagramCard
+          creatorId={c.id}
+          name={c.name}
+          ig={c.ig}
+          onChange={(ig) => setC((prev) => (prev ? { ...prev, ig } : prev))}
+          className={segHide("infos")}
+        />
       )}
 
       <div className={cn("rounded-2xl border border-border bg-surface p-5", segHide("infos"))}>
