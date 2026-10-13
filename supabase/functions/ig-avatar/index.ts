@@ -20,8 +20,10 @@
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 
-const META_TOKEN = Deno.env.get("META_TOKEN") ?? "";
-const META_IG_ID = Deno.env.get("META_IG_ID") ?? "";
+// Collés à la main dans le Terminal : on enlève espaces et guillemets éventuels.
+const tidySecret = (v: string | undefined) => (v ?? "").trim().replace(/^["']+|["',]+$/g, "").trim();
+const META_TOKEN = tidySecret(Deno.env.get("META_TOKEN"));
+const META_IG_ID = tidySecret(Deno.env.get("META_IG_ID"));
 const GRAPH = `https://graph.facebook.com/${Deno.env.get("META_GRAPH_VERSION") ?? "v26.0"}`;
 const USERNAME = /^[A-Za-z0-9._]{1,30}$/;
 
