@@ -13,7 +13,8 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import GlassStatChart from "@/components/ui/glass-stat-chart";
-import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus } from "lucide-react";
+import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus, Tag } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { DateInput } from "@/components/ui/date-range-picker";
@@ -46,6 +47,8 @@ const esc = (s: unknown) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&l
 /** @handle → nom d'utilisateur nettoyé (sans @, sans URL). */
 const igName = (handle?: string | null) =>
   (handle ?? "").trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/[/?].*$/, "").replace(/\s/g, "");
+/** Clé de catégorie : sans espaces ni majuscules (« Mode » = « mode »). */
+const tagKey = (t: string) => t.trim().toLocaleLowerCase("fr");
 /** URL du profil Instagram, ou "" si pas de handle. */
 const igUrl = (handle?: string | null) => {
   const h = igName(handle);
@@ -158,10 +161,19 @@ export function Vivier() {
     return () => { alive = false; };
   }, [live]);
 
-  const tagList = useMemo(
-    () => [...new Set((rows ?? []).map((r) => (r.tag ?? "").trim()).filter(Boolean))],
-    [rows],
-  );
+  // Catégories (niche) : « Mode » et « mode » comptent pour une seule, la plus fréquente d'abord.
+  const tagList = useMemo(() => {
+    const m = new Map<string, { key: string; label: string; count: number }>();
+    for (const r of rows ?? []) {
+      const label = (r.tag ?? "").trim();
+      if (!label) continue;
+      const key = tagKey(label);
+      const cur = m.get(key);
+      if (cur) cur.count++;
+      else m.set(key, { key, label, count: 1 });
+    }
+    return [...m.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "fr"));
+  }, [rows]);
 
   const openAdd = () => { setEditId(null); setFName(""); setFHandle(""); setFEmail(""); setFTag(""); setFNote(""); setFormOpen(true); };
   const openEdit = (r: Row) => { setEditId(r.id); setFName(r.name); setFHandle(r.handle ?? ""); setFEmail(r.email ?? ""); setFTag(r.tag ?? ""); setFNote(r.note ?? ""); setFormOpen(true); };
@@ -227,7 +239,7 @@ export function Vivier() {
   if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement du vivier…</AnimatedBadge>;
 
   const filtered = rows.filter((r) => {
-    if (tagFilter !== ALL && (r.tag ?? "").trim() !== tagFilter) return false;
+    if (tagFilter !== ALL && tagKey(r.tag ?? "") !== tagFilter) return false;
     if (statusFilter !== "__all__" && statusOf(r.id) !== statusFilter) return false;
     if (contactFilter === "contacted" && !r.last_contacted) return false;
     if (contactFilter === "never" && r.last_contacted) return false;
@@ -244,17 +256,19 @@ export function Vivier() {
         <AddButton label="Créateur" onClick={openAdd} />
       </PageHeaderRow>
 
-      {/* Filtre par niche */}
+      {/* Filtre par catégorie (menu déroulant, avec le nombre de créateurs) */}
       {tagList.length > 0 && (
-        <Tabs
-          className="mb-2"
-          size="md"
-          label="Filtrer par niche"
-          wrap
-          value={tagFilter}
-          onValueChange={setTagFilter}
-          items={[{ value: ALL, label: "Tous" }, ...tagList.map((t) => ({ value: t, label: t }))]}
-        />
+        <div className="mb-2">
+          <Select value={tagFilter} onValueChange={setTagFilter}>
+            <SelectTrigger icon={Tag} className="h-10 w-auto min-w-[220px] rounded-lg bg-surface text-[12px]" placeholder="Toutes les catégories" />
+            <SelectContent>
+              <SelectItem index={0} value={ALL}>{`Toutes les catégories · ${rows.length}`}</SelectItem>
+              {tagList.map((t, i) => (
+                <SelectItem key={t.key} index={i + 1} value={t.key}>{`${t.label} · ${t.count}`}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       )}
       {/* Filtre par statut de scouting (segmenté, cohérent avec « déjà contactés ») */}
       <Tabs
@@ -284,7 +298,7 @@ export function Vivier() {
         <TextField label="Nom" value={fName} onChange={setFName} placeholder="Ex : Léna Marchand" className="min-w-[200px] flex-[2]" />
         <TextField label="Handle / @" value={fHandle} onChange={setFHandle} placeholder="@lena.mrchd" className="min-w-[150px] flex-1" />
         <TextField label="Email" value={fEmail} onChange={setFEmail} type="email" placeholder="lena@email.com" className="min-w-[180px] flex-1" />
-        <TextField label="Niche / tag" value={fTag} onChange={setFTag} placeholder="Ex : Mode, Sport, Beauté" className="min-w-[150px] flex-1" />
+        <TextField label="Catégorie" value={fTag} onChange={setFTag} placeholder="Ex : Mode, Sport, Beauté" className="min-w-[150px] flex-1" />
         <AutoGrowTextField label="Note (tarif, dispo, remarques…)" value={fNote} onChange={setFNote} className="min-w-full" />
       </InlineForm>
 
@@ -301,6 +315,7 @@ export function Vivier() {
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-[13px] font-semibold text-foreground">{r.name}</span>
                   {r.last_contacted && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà contacté" />}
+                  {r.tag?.trim() && <span className="shrink-0 rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{r.tag.trim()}</span>}
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-faint">
                   {r.handle && (igUrl(r.handle) ? (
