@@ -1,15 +1,15 @@
 /* TTP Suite — service worker.
    1. Web Push : reçoit les notifications et les affiche, même app fermée.
    2. Ouverture rapide / hors ligne : les fichiers de l'app (JS, CSS, images) sont
-      gardés sur l'appareil ; la page d'accueil est demandée au réseau d'abord
-      (toujours la dernière version), avec repli sur la copie gardée si le réseau
-      est absent ou trop lent. Les données (Supabase, Google…) ne passent JAMAIS
+      gardés sur l'appareil ; la page d'accueil est toujours redemandée au réseau
+      (dernière version, jamais une copie périmée du navigateur), avec repli sur la
+      copie gardée seulement hors ligne. Une page d'accueil périmée pointe vers des
+      fichiers supprimés par la mise en ligne suivante : écran « Mise à jour de l'app ». Les données (Supabase, Google…) ne passent JAMAIS
       par ce cache : seules les requêtes vers app.ttpcreators.pro sont concernées. */
 
-const SHELL = "ttp-shell-v1"; // page d'accueil (navigations)
-const ASSETS = "ttp-assets-v1"; // fichiers versionnés /assets/* + images
+const SHELL = "ttp-shell-v2"; // page d'accueil (navigations)
+const ASSETS = "ttp-assets-v2"; // fichiers versionnés /assets/* + images
 const KEEP = [SHELL, ASSETS];
-const NAV_TIMEOUT_MS = 3500;
 const MAX_ASSETS = 400;
 
 self.addEventListener("install", (event) => {
@@ -33,7 +33,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // Supabase, Google, avatars… : jamais touchés
   if (req.mode === "navigate") {
-    event.respondWith(networkFirst(req, event));
+    event.respondWith(networkFirst(req));
     return;
   }
   if (url.pathname.startsWith("/assets/") || /\.(png|svg|webp|jpe?g|ico|woff2?)$/.test(url.pathname)) {
@@ -41,23 +41,17 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
-// Page d'accueil : réseau d'abord ; si rien après 3,5 s (ou hors ligne), la copie gardée.
-async function networkFirst(req, event) {
+// Page d'accueil : le réseau, revalidé auprès du serveur (pas le cache du navigateur,
+// gardé 10 min par GitHub Pages) ; la copie gardée ne sert que hors ligne.
+async function networkFirst(req) {
   const cache = await caches.open(SHELL);
-  const network = fetch(req).then((res) => {
+  try {
+    const res = await fetch(req.url, { cache: "no-cache", credentials: "same-origin" });
     if (res.ok) cache.put("/", res.clone()).catch(() => {});
     return res;
-  });
-  event.waitUntil(network.catch(() => {}));
-  const timeout = new Promise((resolve) => setTimeout(() => resolve(null), NAV_TIMEOUT_MS));
-  try {
-    const res = await Promise.race([network, timeout]);
-    if (res) return res;
   } catch {
-    /* hors ligne : on prend la copie */
+    return (await cache.match("/")) || Response.error();
   }
-  const hit = await cache.match("/");
-  return hit || network;
 }
 
 // Fichiers versionnés (le nom change à chaque mise en ligne) : la copie gardée d'abord.

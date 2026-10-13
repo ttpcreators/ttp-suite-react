@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import { ErrorBoundary, reloadOnce } from './components/ErrorBoundary.tsx'
+import { ErrorBoundary, recoverStaleApp } from './components/ErrorBoundary.tsx'
 import { initAccent } from './lib/accent'
 import { initIosUi } from './lib/iosUi'
 import { installGlobalErrorReporting } from './lib/errorReport'
@@ -18,11 +18,10 @@ document.addEventListener('touchstart', () => {}, { passive: true })
 installGlobalErrorReporting()
 
 // Après un déploiement, l'app restée ouverte peut demander un ancien chunk (hash
-// remplacé) → Vite émet `vite:preloadError`. On recharge automatiquement (1×)
-// pour récupérer le nouveau bundle au lieu de casser la navigation.
+// remplacé) → Vite émet `vite:preloadError`. On remet l'app à jour automatiquement ;
+// si ça ne suffit pas, l'erreur suit son cours et l'écran propose un bouton.
 window.addEventListener('vite:preloadError', (e) => {
-  e.preventDefault()
-  reloadOnce()
+  if (recoverStaleApp()) e.preventDefault()
 })
 
 // Service worker dès le démarrage (avant : seulement en activant les notifications) :

@@ -12,18 +12,52 @@ export function isChunkError(err: unknown): boolean {
   return /dynamically imported module|Importing a module script failed|module script failed|Failed to fetch|ChunkLoadError|error loading dynamically|_result\.default|\._result\b/i.test(m);
 }
 
-/** Recharge la page au plus une fois par ~20 s (évite toute boucle si vraiment cassé). */
-export function reloadOnce(): boolean {
+const RELOAD_KEY = "ttp:chunk-reload";
+
+/**
+ * Remet à jour une app restée sur une ancienne version (fichiers remplacés par une
+ * mise en ligne). 1er essai : simple rechargement. 2e essai : on vide d'abord les
+ * fichiers gardés sur l'appareil (caches du service worker ; jamais la session ni
+ * les notifications). Au-delà (dans la minute), on s'arrête et on renvoie false :
+ * l'écran propose alors un bouton au lieu de rester bloqué sur « Mise à jour… ».
+ */
+export function recoverStaleApp(): boolean {
+  let tries = 0;
   try {
-    const KEY = "ttp:chunk-reload";
-    const last = Number(sessionStorage.getItem(KEY) || "0");
-    if (Date.now() - last < 20000) return false; // déjà rechargé récemment → stop
-    sessionStorage.setItem(KEY, String(Date.now()));
+    const saved = JSON.parse(sessionStorage.getItem(RELOAD_KEY) || "null") as { n?: number; at?: number } | null;
+    if (saved?.n && saved.at && Date.now() - saved.at < 60000) tries = saved.n;
+    if (tries >= 2) return false;
+    sessionStorage.setItem(RELOAD_KEY, JSON.stringify({ n: tries + 1, at: Date.now() }));
   } catch {
     /* pas de sessionStorage → on tente quand même un reload */
   }
-  location.reload();
+  if (tries === 0) location.reload();
+  else void clearAppCaches().finally(() => location.reload());
   return true;
+}
+
+/** Vide les fichiers de l'app gardés sur l'appareil et redemande le service worker à jour. */
+async function clearAppCaches() {
+  try {
+    if ("caches" in window) {
+      const names = await caches.keys();
+      await Promise.all(names.filter((n) => n.startsWith("ttp-")).map((n) => caches.delete(n)));
+    }
+    const reg = await navigator.serviceWorker?.getRegistration();
+    await reg?.update();
+  } catch {
+    /* on recharge quand même */
+  }
+}
+
+/** Bouton « Recharger l'app » de l'écran de mise à jour : repart de zéro. */
+function forceUpdate() {
+  try {
+    sessionStorage.removeItem(RELOAD_KEY);
+  } catch {
+    /* rien à effacer */
+  }
+  void clearAppCaches().finally(() => location.reload());
 }
 
 // Clés d'UI (non critiques) qu'on peut effacer sans danger pour se ré-parer.
@@ -51,25 +85,28 @@ type Props = {
   resetKey?: unknown;
 };
 
-type State = { error: Error | null };
+type State = { error: Error | null; stuck: boolean };
 
 /**
  * Barrière d'erreur : empêche qu'un crash de rendu (une vue, une fonctionnalité)
  * fasse tomber toute l'app en page blanche. Affiche un écran de récupération.
  */
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, stuck: false };
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { error };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     // Trace pour le débogage (visible dans la console navigateur).
     console.error("[ErrorBoundary]", error, info.componentStack);
-    // Chunk introuvable après un déploiement → recharge auto (1×), pas un bug de
+    // Chunk introuvable après un déploiement → remise à jour auto, pas un bug de
     // code : on NE le remonte PAS au journal (sinon spam après chaque déploiement).
-    if (isChunkError(error) && reloadOnce()) return;
+    if (isChunkError(error)) {
+      if (!recoverStaleApp()) this.setState({ stuck: true });
+      return;
+    }
     // + remontée serveur : journal + notif push à l'agence.
     report(error, { componentStack: info.componentStack ?? "", page: String(this.props.resetKey ?? this.props.label ?? "") || undefined, source: "écran" });
   }
@@ -77,20 +114,35 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidUpdate(prev: Props) {
     // Quand on change de vue/onglet, on retente le rendu (efface l'erreur).
     if (this.state.error && prev.resetKey !== this.props.resetKey) {
-      this.setState({ error: null });
+      this.setState({ error: null, stuck: false });
     }
   }
 
   render() {
-    const { error } = this.state;
+    const { error, stuck } = this.state;
     if (!error) return this.props.children;
 
     // Chunk manquant (déploiement) : on est en train de recharger → écran neutre,
-    // pas de message d'erreur alarmant.
+    // pas de message d'erreur alarmant. Si les rechargements n'ont pas suffi, un
+    // bouton plutôt qu'un écran bloqué pour toujours.
     if (isChunkError(error)) {
       return (
-        <div className="grid min-h-[40vh] place-items-center">
-          <div className="text-sm text-muted-foreground">Mise à jour de l'app…</div>
+        <div className="grid min-h-[40vh] place-items-center p-6">
+          {stuck ? (
+            <div className="max-w-sm text-center">
+              <div className="text-sm font-semibold text-foreground">L'app n'a pas pu se mettre à jour</div>
+              <div className="mt-1 text-xs text-muted-foreground">Vérifie ta connexion internet, puis recharge.</div>
+              <button
+                type="button"
+                onClick={forceUpdate}
+                className="mt-4 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:opacity-90"
+              >
+                Recharger l'app
+              </button>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">Mise à jour de l'app…</div>
+          )}
         </div>
       );
     }
