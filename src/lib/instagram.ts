@@ -140,6 +140,7 @@ export function useIgColumn<T extends object>(table: "creators" | "collabs" | "c
 export async function igRefresh<T>(scope: "creator" | "collab" | "contact", id: string): Promise<{ ig?: T; error?: string }> {
   const { data, error } = await supabase.functions.invoke("ig-sync", { body: { scope, id } });
   if (error) return { error: "reseau" };
+  noteQuota(data);
   return (data as { ig?: T; error?: string }) ?? { error: "reseau" };
 }
 
@@ -202,4 +203,58 @@ export function postKind(p: { type?: string; product?: string }): string {
   if (p.type === "CAROUSEL_ALBUM") return "Carrousel";
   if (p.type === "VIDEO") return "Vidéo";
   return "Post";
+}
+
+// ── Compteur de demandes à Meta (table ig_quota, écrite par les fonctions) ──────
+export type MetaQuota = {
+  hourStart?: string;
+  hourCalls?: number;
+  dayCalls?: number;
+  appPct?: number | null;
+  bucPct?: number | null;
+  blockedUntil?: string | null;
+  lastAt?: string;
+};
+const QUOTA_EVENT = "ttp-ig-quota";
+/** À appeler avec la réponse d'une fonction Instagram : met le compteur à jour partout. */
+export function noteQuota(res: unknown) {
+  const q = (res as { quota?: MetaQuota } | null)?.quota;
+  if (q) window.dispatchEvent(new CustomEvent(QUOTA_EVENT, { detail: q }));
+}
+/** Dernier relevé du quota (null tant que la table n'existe pas ou qu'aucune demande n'a été faite). */
+export function useMetaQuota(): MetaQuota | null {
+  const [q, setQ] = useState<MetaQuota | null>(() => getCache<MetaQuota>("ig:quota"));
+  const live = useLiveKey();
+  useEffect(() => {
+    let alive = true;
+    void supabase.from("ig_quota").select("data").eq("id", 1).maybeSingle().then(({ data, error }) => {
+      if (!alive || error || !data) return;
+      setCache("ig:quota", data.data as MetaQuota);
+      setQ(data.data as MetaQuota);
+    });
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<MetaQuota>).detail;
+      setCache("ig:quota", d);
+      setQ(d);
+    };
+    window.addEventListener(QUOTA_EVENT, on);
+    return () => {
+      alive = false;
+      window.removeEventListener(QUOTA_EVENT, on);
+    };
+  }, [live]);
+  return q;
+}
+/** Lecture du relevé : % utilisé, pause en cours, demandes restantes estimées. */
+export function readQuota(q: MetaQuota | null, now = Date.now()) {
+  const pct = Math.max(q?.appPct ?? 0, q?.bucPct ?? 0);
+  const blockedMs = q?.blockedUntil ? Date.parse(q.blockedUntil) - now : 0;
+  const blockedMin = blockedMs > 0 ? Math.ceil(blockedMs / 60000) : 0;
+  const hourFresh = !!q?.hourStart && now - Date.parse(q.hourStart) < 3600000;
+  const hourCalls = hourFresh ? q?.hourCalls ?? 0 : 0;
+  // Estimation : si N demandes ont utilisé p %, il en reste environ N × (100 − p) / p.
+  const left = pct > 0 && hourCalls > 0 ? Math.max(0, Math.round((hourCalls * (100 - pct)) / pct)) : null;
+  // Minutes avant que la fenêtre d'une heure se vide (approximation).
+  const resetMin = hourFresh && q?.hourStart ? Math.max(1, Math.ceil((Date.parse(q.hourStart) + 3600000 - now) / 60000)) : null;
+  return { pct, blockedMin, hourCalls, dayCalls: q?.dayCalls ?? 0, left, resetMin };
 }

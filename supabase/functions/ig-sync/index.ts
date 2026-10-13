@@ -23,7 +23,7 @@
 // ============================================================================
 
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
-import { discover, engagementRate, igUser, metaReady, postsPerWeek, type IgPost, type IgResult } from "../_shared/instagram.ts";
+import { discover, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, type IgPost, type IgResult } from "../_shared/instagram.ts";
 import { accountTotals, audience, freshToken, loginReady, postInsights, type IgAccount, type Split } from "../_shared/instagram-login.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -344,19 +344,20 @@ Deno.serve(async (req: Request) => {
     const ig = await syncCreator(ctx, c);
     const { data: cols } = await sb.from("collabs").select(COLLAB_COLS).in("status", ["active", "gagnee"]).gte("step", 4);
     for (const col of ((cols as CollabRow[] | null) ?? []).filter((x) => sameName(x.creator, c.name))) await syncCollab(ctx, col, c);
-    return res({ ig, stopped: ctx.stop || undefined });
+    return res({ ig, stopped: ctx.stop || undefined, quota: await saveUsage(sb) });
   }
   if (body.scope === "collab" && id) {
     const { data: col, error } = await sb.from("collabs").select(COLLAB_COLS).eq("id", id).maybeSingle<CollabRow>();
     if (error || !col) return res({ error: error ? "migration_manquante" : "introuvable" }, error ? 500 : 404);
     const { data: cs } = await sb.from("creators").select(CREATOR_COLS).ilike("name", (col.creator ?? "").trim() || "∅");
     const ig = await syncCollab(ctx, col, ((cs as CreatorRow[] | null) ?? [])[0]);
-    return res({ ig, stopped: ctx.stop || undefined });
+    return res({ ig, stopped: ctx.stop || undefined, quota: await saveUsage(sb) });
   }
   if (body.scope === "contact" && id) {
     const { data: ct, error } = await sb.from("contacts").select("id, brand, instagram, ig").eq("id", id).maybeSingle<ContactRow>();
     if (error || !ct) return res({ error: error ? "migration_manquante" : "introuvable" }, error ? 500 : 404);
-    return res({ ig: await syncContact(ctx, ct), stopped: ctx.stop || undefined });
+    const ig = await syncContact(ctx, ct);
+    return res({ ig, stopped: ctx.stop || undefined, quota: await saveUsage(sb) });
   }
 
   // ── Passage complet (cron) ──
@@ -379,5 +380,5 @@ Deno.serve(async (req: Request) => {
 
   const out = { creators: nCreators, collabs: nCollabs, contacts: nContacts, stopped: ctx.stop || undefined, ms: Date.now() - ctx.t0 };
   console.log("ig-sync", JSON.stringify(out));
-  return res(out);
+  return res({ ...out, quota: await saveUsage(sb) });
 });

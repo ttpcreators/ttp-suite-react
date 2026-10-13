@@ -15,7 +15,7 @@
 // ============================================================================
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
-import { discover, engagementRate, igUser, metaReady, postsPerWeek, storePicture } from "../_shared/instagram.ts";
+import { discover, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, storePicture } from "../_shared/instagram.ts";
 
 type Stats = { er: number | null; perWeek: number | null; posts: number; bio: string; website: string; name: string };
 
@@ -77,5 +77,5 @@ Deno.serve(async (req: Request) => {
     if (pic.why) why[h] = pic.why;
   }
   console.log("ig-avatar", JSON.stringify({ demandes: list.length, trouvees: Object.values(photos).filter(Boolean).length, why }));
-  return res({ photos, followers, stats, why });
+  return res({ photos, followers, stats, why, quota: await saveUsage(sb) });
 });

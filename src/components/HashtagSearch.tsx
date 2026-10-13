@@ -3,7 +3,7 @@ import { Hash, Heart, MessageCircle, ExternalLink, Loader2, Search, X } from "lu
 import { supabase } from "@/lib/supabase";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { fmtCompact } from "@/lib/timeSeries";
-import { fmtAgo, igWhyText, postKind, type IgPostLite } from "@/lib/instagram";
+import { fmtAgo, igWhyText, noteQuota, postKind, type IgPostLite } from "@/lib/instagram";
 
 /**
  * Scouting : posts Instagram d'un hashtag (fonction ig-hashtag, outil officiel de
@@ -25,6 +25,7 @@ export function HashtagSearch({ onClose }: { onClose: () => void }) {
     setWhy("");
     const { data, error } = await supabase.functions.invoke("ig-hashtag", { body: { tag: q, kind: k } });
     setBusy(false);
+    noteQuota(data);
     const res = data as { posts?: IgPostLite[]; why?: string } | null;
     if (error || !res) {
       setPosts(null);

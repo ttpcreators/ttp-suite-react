@@ -12,7 +12,7 @@
 // ============================================================================
 
 import { corsHeaders, getServiceClient } from "../_shared/google.ts";
-import { hashtagPosts } from "../_shared/instagram.ts";
+import { hashtagPosts, saveUsage } from "../_shared/instagram.ts";
 
 Deno.serve(async (req: Request) => {
   const cors = corsHeaders(req.headers.get("Origin"));
@@ -38,5 +38,6 @@ Deno.serve(async (req: Request) => {
   }
   const r = await hashtagPosts(String(body.tag ?? ""), body.kind === "recent" ? "recent" : "top");
   console.log("ig-hashtag", JSON.stringify({ tag: body.tag, ok: r.ok, why: r.ok ? undefined : r.why }));
-  return res(r.ok ? { posts: r.posts } : { why: r.why });
+  const quota = await saveUsage(sb);
+  return res(r.ok ? { posts: r.posts, quota } : { why: r.why, quota });
 });

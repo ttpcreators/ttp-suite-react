@@ -14,7 +14,8 @@ import { getCache, setCache } from "@/lib/viewCache";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import GlassStatChart from "@/components/ui/glass-stat-chart";
 import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus, Tag, Camera, Loader2, Hash, Globe } from "lucide-react";
-import { igWhyText, fmtEr, fmtPerWeek } from "@/lib/instagram";
+import { igWhyText, fmtEr, fmtPerWeek, noteQuota } from "@/lib/instagram";
+import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
 import { HashtagSearch } from "@/components/HashtagSearch";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { PageHeaderRow } from "@/components/ui/page-header";
@@ -182,6 +183,7 @@ export function Vivier() {
     if (!want.length) return;
     want.forEach((x) => igAsked.add(x.h));
     void supabase.functions.invoke("ig-avatar", { body: { handles: want.map((x) => x.h) } }).then(async ({ data, error: fnErr }) => {
+      noteQuota(data);
       const res = data as { photos?: Record<string, string | null>; followers?: Record<string, number>; stats?: Record<string, IgStats>; why?: Record<string, string> } | null;
       const photos = res?.photos;
       if (fnErr || !photos) return;
@@ -358,7 +360,8 @@ export function Vivier() {
           {filtered.length} créateur{filtered.length > 1 ? "s" : ""}
           {(tagFilter !== ALL || contactFilter !== "all" || statusFilter !== "__all__" || query.trim()) && <span className="text-faint"> / {rows.length}</span>}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <MetaQuotaBadge className="max-sm:hidden" />
           <button type="button" onClick={() => setHashOpen((o) => !o)} className={cn("flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[12px] font-medium transition-colors", hashOpen ? "border-primary text-primary" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
             <Hash className="h-3.5 w-3.5" /> Hashtag
           </button>

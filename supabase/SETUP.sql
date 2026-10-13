@@ -394,6 +394,18 @@ drop policy if exists ig_radar_agency_update on public.ig_radar;
 create policy ig_radar_agency_update on public.ig_radar for update to authenticated
   using (public.is_agency()) with check (public.is_agency());
 
+-- Compteur de demandes à Meta (sql/2026-10-13-instagram-quota) : une ligne, écrite
+-- par les fonctions Instagram, lue par l'agence (Sourcing, Scouting).
+create table if not exists public.ig_quota (
+  id   int primary key default 1 check (id = 1),
+  data jsonb not null default '{}'::jsonb,
+  at   timestamptz not null default now()
+);
+alter table public.ig_quota enable row level security;
+revoke all on public.ig_quota from anon;
+drop policy if exists ig_quota_agency_read on public.ig_quota;
+create policy ig_quota_agency_read on public.ig_quota for select to authenticated using (public.is_agency());
+
 -- DONNÉES AGENCE PURES : agence seulement
 -- contacts : partagés — l'agence voit/gère tout ; le créateur voit ceux de l'agence
 -- (creator NULL) + ajoute/gère les siens (creator = son nom). (sql/12)

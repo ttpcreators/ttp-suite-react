@@ -5,6 +5,11 @@
 //   { mode: "brand", brand: "@gymshark" } → les @ cités dans les 50 derniers posts
 //      de la marque (les créatrices avec qui elle travaille), avec leurs chiffres.
 //   { mode: "list", handles: [...] } → chiffres d'une liste de @ (30 max par appel).
+//   { mode: "similar", creator: "@lea" } → les créatrices qui travaillent avec les
+//      mêmes marques qu'elle (« Comme une créatrice »).
+// Pour chaque profil : email (bio, sinon page du lien en bio), indice « déjà en
+// agence », marques déjà citées en partenariat payé. Chaque réponse inclut le
+// relevé du quota Meta (quota), aussi gardé dans ig_quota.
 //   { mode: "scan" } (cron chaque nuit, ou bouton « Lancer le radar ») : lit les
 //      derniers posts des créatrices du roster et du Scouting, note les marques
 //      qu'elles citent (payé ou non), puis lit le profil de ces marques → ig_radar.
@@ -14,7 +19,7 @@
 // ============================================================================
 
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
-import { discover, engagementRate, igUser, metaReady, postsPerWeek, type IgProfile } from "../_shared/instagram.ts";
+import { discover, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, type IgProfile } from "../_shared/instagram.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 type Json = Record<string, unknown>;
@@ -41,7 +46,6 @@ function mentions(caption: string): string[] {
   return [...out];
 }
 
-const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const LINK_IN_BIO = /(linktr\.ee|beacons\.ai|linkin\.bio|lnk\.bio|solo\.to|campsite\.bio|bio\.site|tap\.bio|msha\.ke|hoo\.be|snipfeed|stan\.store|allmylinks|linkbio|later\.com|flowcode|komi\.io|direct\.me|instabio)/i;
 const BRANDISH = /(shop|store|boutique|officiel|official|marque|brand|livraison|delivery|e-?shop|collection|®|™|since \d{4}|depuis \d{4}|made in|fabriqué|cosm[eé]ti|skincare|nutrition|restaurant|hôtel|hotel|studio|maison|atelier|paris \d|\.com|\.fr)/i;
 const PERSONISH = /(she\/her|il\/lui|elle\/she|maman|mum|mom|ugc|influenc|créatrice|creatrice|content creator|créateur de contenu|collab ?(dm|📩)|contact pro|management|📍)/i;
@@ -56,16 +60,107 @@ function brandScore(p: IgProfile): number {
   return s;
 }
 
-/** Chiffres utiles d'un profil (gardés dans ig_profiles.data). */
-function toData(p: IgProfile): Json {
+// ── Email et agence : dans la bio, puis sur le lien du profil (Linktree, site) ──
+const DATA_V = 3; // version des données gardées : la monter fait relire les profils
+const FREE_MAIL = /@(gmail|googlemail|hotmail|outlook|live|icloud|me|yahoo|orange|free|sfr|laposte|wanadoo|proton|protonmail|gmx)\./i;
+const AGENCY = /(management|mgmt|managed by|g[ée]r[ée]e? par|repr[ée]sent[ée]e? par|represented by|\bagence\b|\bagency\b|\bagent\s*:|booking|talent manager|@[a-z0-9._]*(agency|agence|mgmt|management|talents?)\b)/i;
+/** Indice « déjà en agence » (le passage trouvé), ou null. */
+function agencyHint(text: string, email: string): string | null {
+  const m = AGENCY.exec(text);
+  if (m) return text.slice(Math.max(0, m.index - 25), m.index + m[0].length + 25).replace(/\s+/g, " ").trim();
+  const domain = email.split("@")[1] ?? "";
+  if (email && !FREE_MAIL.test(email) && /(agency|agence|mgmt|management|talent|booking)/i.test(domain)) return email;
+  return null;
+}
+/** Emails d'un texte, les plus « pro » d'abord (collab, contact, booking…). */
+function emailsIn(text: string): string[] {
+  const all = [...text.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)].map((m) => m[0].toLowerCase())
+    .filter((e) => !/\.(png|jpe?g|gif|webp|svg|css|js)$/.test(e) && !/(example|sentry|wixpress|domain|email)\./.test(e));
+  const uniq = [...new Set(all)];
+  return uniq.sort((a, b) => Number(/(collab|contact|booking|partenariat|business|hello|pr)/.test(b)) - Number(/(collab|contact|booking|partenariat|business|hello|pr)/.test(a)));
+}
+/** Pas d'adresse interne (anti-rebond vers le réseau du serveur). */
+function safeHost(h: string): boolean {
+  const host = h.toLowerCase();
+  if (host === "localhost" || /\.(local|internal|localhost)$/.test(host)) return false;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":") || host.startsWith("[")) return false;
+  return host.includes(".");
+}
+/** Texte de la page du lien en bio (6 s max, 2 Mo max, 3 redirections). */
+async function siteText(raw: string): Promise<string> {
+  let u: URL;
+  try {
+    u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    return "";
+  }
+  for (let hop = 0; hop < 4; hop++) {
+    if (!/^https?:$/.test(u.protocol) || !safeHost(u.hostname)) return "";
+    let r: Response;
+    try {
+      r = await fetch(u, { redirect: "manual", signal: AbortSignal.timeout(6000), headers: { "User-Agent": "Mozilla/5.0 (compatible; TTPCreators/1.0)", Accept: "text/html" } });
+    } catch {
+      return "";
+    }
+    if (r.status >= 300 && r.status < 400) {
+      const loc = r.headers.get("location");
+      await r.body?.cancel();
+      if (!loc) return "";
+      try {
+        u = new URL(loc, u);
+      } catch {
+        return "";
+      }
+      continue;
+    }
+    const type = r.headers.get("content-type") ?? "";
+    if (!r.ok || !type.includes("text/html") || Number(r.headers.get("content-length") ?? 0) > 2_000_000) {
+      await r.body?.cancel();
+      return "";
+    }
+    const html = new TextDecoder().decode((await r.arrayBuffer()).slice(0, 2_000_000));
+    const mailtos = [...html.matchAll(/mailto:([^"'?>\s]+)/gi)].map((m) => decodeURIComponent(m[1]));
+    return `${mailtos.join(" ")} ${html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;/g, " ")}`;
+  }
+  return "";
+}
+
+/** Chiffres utiles d'un profil (gardés dans ig_profiles.data), + email et indice d'agence. */
+async function toData(p: IgProfile): Promise<Json> {
   const last12 = p.media.slice(0, 12);
   const score = brandScore(p);
+  let email = emailsIn(p.bio)[0] ?? "";
+  let emailFrom = email ? "bio" : "";
+  let agency = agencyHint(`${p.name} ${p.bio}`, email);
+  if (p.website && (!email || !agency)) {
+    const text = await siteText(p.website);
+    if (text) {
+      const siteEmail = emailsIn(text)[0] ?? "";
+      if (!email && siteEmail) {
+        email = siteEmail;
+        emailFrom = "lien";
+      }
+      agency = agency ?? agencyHint(text.slice(0, 20000), siteEmail);
+    }
+  }
+  // Marques citées dans ses posts : « payé » (#ad, code promo…) = elle a déjà fait des partenariats.
+  const me = p.username.toLowerCase();
+  const deals = new Set<string>();
+  const cites = new Set<string>();
+  for (const m of p.media) {
+    for (const u of mentions(m.caption)) {
+      if (u === me) continue;
+      cites.add(u);
+      if (isPaid(m.caption)) deals.add(u);
+    }
+  }
   return {
-    name: p.name, followers: p.followers, following: p.following, posts: p.posts,
+    v: DATA_V, name: p.name, followers: p.followers, following: p.following, posts: p.posts,
+    deals: [...deals].slice(0, 8), cites: [...cites].slice(0, 15),
     er: last12.length ? engagementRate(last12, p.followers) : null,
     perWeek: last12.length ? postsPerWeek(last12) : null,
     lastPost: p.media[0]?.at ?? null,
-    bio: p.bio.slice(0, 300), website: p.website, email: (p.bio.match(EMAIL)?.[0] ?? "").toLowerCase(),
+    bio: p.bio.slice(0, 300), website: p.website, email, emailFrom, agency,
     picture: p.picture, brandScore: score, isBrand: score >= 2,
   };
 }
@@ -78,7 +173,8 @@ async function profile(ctx: Ctx, user: string, mediaLimit: number, force = false
   const u = user.toLowerCase();
   const known = ctx.cache.get(u);
   const freshDays = known?.why === "compte_perso" ? 30 : FRESH_DAYS;
-  if (!force && known && age(known.at) < freshDays * DAY) return { row: known };
+  const current = !!known && (!!known.why || known.data?.v === DATA_V);
+  if (!force && known && current && age(known.at) < freshDays * DAY) return { row: known };
   if (ctx.stop) return { row: known ?? { username: u, data: null, why: ctx.stop, scanned_at: null, at: new Date().toISOString() } };
   const r = await discover(u, mediaLimit);
   const now = new Date().toISOString();
@@ -91,7 +187,7 @@ async function profile(ctx: Ctx, user: string, mediaLimit: number, force = false
     }
     return { row };
   }
-  const row: ProfileRow = { username: u, data: toData(r.profile), why: null, scanned_at: known?.scanned_at ?? null, at: now };
+  const row: ProfileRow = { username: u, data: await toData(r.profile), why: null, scanned_at: known?.scanned_at ?? null, at: now };
   ctx.cache.set(u, row);
   await ctx.sb.from("ig_profiles").upsert({ username: u, data: row.data, why: null, at: now });
   return { row, media: r.profile.media };
@@ -129,7 +225,8 @@ async function fromBrand(ctx: Ctx, brand: string) {
   const r = await discover(b, 50);
   if (!r.ok) return { error: r.why };
   const now = new Date().toISOString();
-  await ctx.sb.from("ig_profiles").upsert({ username: b, data: toData(r.profile), why: null, at: now });
+  const brandData = await toData(r.profile);
+  await ctx.sb.from("ig_profiles").upsert({ username: b, data: brandData, why: null, at: now });
   // Qui la marque cite, combien de fois, et quand pour la dernière fois.
   const seen = new Map<string, { count: number; lastAt: string; url: string }>();
   for (const p of r.profile.media) {
@@ -144,7 +241,7 @@ async function fromBrand(ctx: Ctx, brand: string) {
   await loadCache(ctx, users);
   await each(ctx, users, (u) => profile(ctx, u, 12));
   return {
-    brand: { username: b, ...toData(r.profile) },
+    brand: { username: b, ...brandData },
     candidates: users.map((u) => ({ username: u, ...seen.get(u), data: ctx.cache.get(u)?.data ?? null, why: ctx.cache.get(u)?.why ?? (ctx.stop || null) })),
     stopped: ctx.stop || undefined,
   };
@@ -156,6 +253,47 @@ async function fromList(ctx: Ctx, handles: unknown[]) {
   await each(ctx, users, (u) => profile(ctx, u, 12));
   return {
     candidates: users.map((u) => ({ username: u, data: ctx.cache.get(u)?.data ?? null, why: ctx.cache.get(u)?.why ?? (ctx.stop || null) })),
+    stopped: ctx.stop || undefined,
+  };
+}
+
+/**
+ * « Comme une créatrice » : les marques qu'elle cite (payées d'abord), puis les
+ * créatrices que ces marques citent. Plus une créatrice partage de marques avec
+ * elle, plus elle lui ressemble (même niche, mêmes clients).
+ */
+async function similar(ctx: Ctx, creator: string) {
+  const c = igUser(creator).toLowerCase();
+  if (!c) return { error: "nom_invalide" };
+  await loadCache(ctx, [c]);
+  const { row, media } = await profile(ctx, c, 25, true);
+  if (!media) return { error: row.why ?? "erreur" };
+  const weight = new Map<string, number>();
+  for (const p of media) for (const m of mentions(p.caption)) if (m !== c) weight.set(m, (weight.get(m) ?? 0) + (isPaid(p.caption) ? 3 : 1));
+  const brands = [...weight.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([b]) => b);
+  const via = new Map<string, Set<string>>();
+  await each(ctx, brands, async (b) => {
+    const r = await discover(b, 50);
+    if (!r.ok) {
+      if (r.stop) ctx.stop = r.why;
+      return;
+    }
+    for (const p of r.profile.media) {
+      for (const m of mentions(p.caption)) {
+        if (m === b || m === c) continue;
+        const set = via.get(m) ?? new Set<string>();
+        set.add(b);
+        via.set(m, set);
+      }
+    }
+  });
+  const users = [...via.entries()].sort((a, b) => b[1].size - a[1].size).slice(0, 40).map(([u]) => u);
+  await loadCache(ctx, users);
+  await each(ctx, users, (u) => profile(ctx, u, 12));
+  return {
+    creator: { username: c, ...(row.data ?? {}) },
+    brands,
+    candidates: users.map((u) => ({ username: u, count: via.get(u)?.size ?? 0, via: [...(via.get(u) ?? [])], data: ctx.cache.get(u)?.data ?? null, why: ctx.cache.get(u)?.why ?? (ctx.stop || null) })),
     stopped: ctx.stop || undefined,
   };
 }
@@ -247,7 +385,7 @@ Deno.serve(async (req: Request) => {
 
   const sb = getServiceClient();
   if (!(await caller(req, sb))) return res({ error: "non_autorise" }, 401);
-  let body: { mode?: string; brand?: string; handles?: unknown } = {};
+  let body: { mode?: string; brand?: string; creator?: string; handles?: unknown } = {};
   try {
     body = (await req.json()) ?? {};
   } catch {
@@ -259,9 +397,11 @@ Deno.serve(async (req: Request) => {
   const probe = await sb.from("ig_profiles").select("username").limit(1);
   if (probe.error) return res({ error: "migration_manquante" });
 
-  if (body.mode === "brand") return res(await fromBrand(ctx, String(body.brand ?? "")));
-  if (body.mode === "list") return res(await fromList(ctx, Array.isArray(body.handles) ? body.handles : []));
+  const done = async (b: Record<string, unknown>) => res({ ...b, quota: await saveUsage(sb) });
+  if (body.mode === "brand") return done(await fromBrand(ctx, String(body.brand ?? "")));
+  if (body.mode === "list") return done(await fromList(ctx, Array.isArray(body.handles) ? body.handles : []));
+  if (body.mode === "similar") return done(await similar(ctx, String(body.creator ?? "")));
   const out = await scan(ctx);
   console.log("ig-sourcing scan", JSON.stringify({ ...out, ms: Date.now() - ctx.t0 }));
-  return res(out);
+  return done(out);
 });

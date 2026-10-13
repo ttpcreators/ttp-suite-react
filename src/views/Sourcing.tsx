@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  AtSign, Check, Copy, ExternalLink, Globe, Loader2, Mail, Plus, Radar, RefreshCw, Search, Users, X, EyeOff, RotateCcw,
+  AtSign, Check, Globe, Loader2, Mail, Plus, Radar, RefreshCw, Search, Send, Users, EyeOff, RotateCcw,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
@@ -8,11 +8,12 @@ import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { Overlay } from "@/components/mobile/ios-sheet";
 import { HelpTip } from "@/components/ui/help-tip";
-import { dbInsert } from "@/lib/db";
+import { dbInsert, dbUpdate } from "@/lib/db";
 import { fmtCompact } from "@/lib/timeSeries";
-import { fmtAgo, fmtEr, fmtPerWeek, igWhyText } from "@/lib/instagram";
+import { fmtAgo, fmtEr, fmtPerWeek, igWhyText, noteQuota } from "@/lib/instagram";
+import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
+import { OutreachComposer } from "@/components/OutreachComposer";
 
 /**
  * SOURCING (agence) — deux outils, toujours via l'outil officiel de Meta (comptes pro) :
@@ -26,9 +27,10 @@ import { fmtAgo, fmtEr, fmtPerWeek, igWhyText } from "@/lib/instagram";
 
 type Prof = {
   name?: string; followers?: number; following?: number; posts?: number; er?: number | null; perWeek?: number | null;
-  lastPost?: string | null; bio?: string; website?: string; email?: string; picture?: string; brandScore?: number; isBrand?: boolean;
+  lastPost?: string | null; bio?: string; website?: string; email?: string; emailFrom?: "bio" | "lien" | "";
+  agency?: string | null; deals?: string[]; cites?: string[]; picture?: string; brandScore?: number; isBrand?: boolean;
 };
-type Candidate = { username: string; count?: number; lastAt?: string; url?: string; data: Prof | null; why: string | null };
+type Candidate = { username: string; count?: number; via?: string[]; lastAt?: string; url?: string; data: Prof | null; why: string | null };
 type RadarPost = { c: string; roster: boolean; url: string; at: string; paid: boolean; likes: number | null; comments: number; cap: string };
 type RadarRow = { brand: string; posts: RadarPost[]; status: "nouveau" | "ignore" | "pipeline"; first_seen: string; last_seen: string };
 
@@ -50,6 +52,7 @@ const safeHref = (url?: string) => (!url ? "" : /^https?:\/\//i.test(url) ? url 
 async function invokeSourcing<T>(body: Record<string, unknown>): Promise<T & { error?: string }> {
   const { data, error } = await supabase.functions.invoke("ig-sourcing", { body });
   if (error) return { error: "reseau" } as T & { error?: string };
+  noteQuota(data);
   return (data ?? { error: "reseau" }) as T & { error?: string };
 }
 const errorText = (e?: string) =>
@@ -105,7 +108,7 @@ function Check2({ label, checked, onChange, help }: { label: string; checked: bo
 const TOOLS = [
   {
     v: "createurs" as const, icon: Users, title: "Trouver des créatrices", goal: "Pour recruter",
-    text: "Tu tapes le @ d'une marque : l'app te montre les créatrices avec qui elle travaille, avec leurs abonnés et leur engagement.",
+    text: "Pars d'une marque, d'une créatrice que tu aimes ou d'une liste de @ : l'app trouve des profils avec leurs chiffres, un score, leur email, et te dit si elles ont déjà une agence.",
   },
   {
     v: "radar" as const, icon: Radar, title: "Radar à marques", goal: "Pour trouver des clients",
@@ -141,6 +144,7 @@ export function Sourcing() {
             <p>Meta limite le nombre de demandes par heure : si l'app dit « Meta a freiné », réessaie un peu plus tard.</p>
           </HelpTip>
         </div>
+        <MetaQuotaBadge />
       </PageHeaderRow>
       <div role="tablist" aria-label="Outil de sourcing" className="mb-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         {TOOLS.map((t) => {
@@ -175,17 +179,50 @@ export function Sourcing() {
 }
 
 // ═════════════════════════ Trouver des créatrices ═════════════════════════
-type LastSearch = { label: string; at: string; brand?: Prof & { username: string }; results: Candidate[] };
+type LastSearch = {
+  label: string; at: string; mode: "marque" | "similaire" | "liste";
+  brand?: Prof & { username: string }; creator?: Prof & { username: string }; brands?: string[]; results: Candidate[];
+};
 const LAST_KEY = "ttp:sourcing-last";
+type PoolInfo = { id: string; last_contacted: string | null };
+
+/** Taux d'engagement « normal » selon la taille du compte (repère public). */
+const erRef = (f: number) => (f < 10_000 ? 5 : f < 50_000 ? 3.5 : f < 200_000 ? 2.5 : f < 1_000_000 ? 1.8 : 1.2);
+/**
+ * Score « Potentiel » sur 100 : engagement par rapport à sa taille (40), rythme (15),
+ * déjà payée par des marques (15), email trouvé (10), pas d'agence (10), active (10),
+ * moins 15 par signal d'alerte. Une aide au tri, pas un verdict.
+ */
+function potential(d: Prof): { score: number; flags: string[] } {
+  const f = d.followers ?? 0;
+  const ref = erRef(f);
+  const flags: string[] = [];
+  let s = 0;
+  if (d.er != null) s += Math.min(40, (d.er / ref) * 30);
+  s += Math.min(15, (d.perWeek ?? 0) * 5);
+  if (d.deals?.length) s += 15;
+  if (d.email) s += 10;
+  if (!d.agency) s += 10;
+  const quiet = d.lastPost ? (Date.now() - Date.parse(d.lastPost)) / 86400000 : 999;
+  if (quiet < 14) s += 10;
+  if (d.er != null && d.er < ref * 0.25) flags.push("Engagement très bas pour sa taille");
+  if ((d.following ?? 0) > f && f < 50_000) flags.push("Suit plus de comptes qu'elle n'a d'abonnés");
+  if (quiet > 60 && quiet < 999) flags.push("Rien publié depuis 2 mois");
+  s -= flags.length * 15;
+  return { score: Math.max(0, Math.min(100, Math.round(s))), flags };
+}
+const firstName = (d: Prof | null, user: string) => (d?.name?.trim().split(/\s+/)[0] ?? "") || user;
 
 function CreatorFinder() {
-  const [source, setSource] = useState<"marque" | "liste">("marque");
+  const [source, setSource] = useState<"marque" | "similaire" | "liste">("marque");
   const [brandIn, setBrandIn] = useState("");
+  const [creatorIn, setCreatorIn] = useState("");
   const [listIn, setListIn] = useState("");
   const [busy, setBusy] = useState("");
   const [last, setLast] = useState<LastSearch | null>(() => {
     try {
-      return JSON.parse(localStorage.getItem(LAST_KEY) ?? "null") as LastSearch | null;
+      const v = JSON.parse(localStorage.getItem(LAST_KEY) ?? "null") as LastSearch | null;
+      return v?.mode ? v : null;
     } catch {
       return null;
     }
@@ -204,43 +241,64 @@ function CreatorFinder() {
   const [maxF, setMaxF] = useState("");
   const [minEr, setMinEr] = useState("");
   const [bioWord, setBioWord] = useState("");
-  const [withEmail, setWithEmail] = useState(false);
-  const [showPerso, setShowPerso] = useState(false);
-  const [sort, setSort] = useState<"followers" | "er" | "count">("followers");
+  const [emailF, setEmailF] = useState<"tous" | "avec" | "sans">("tous");
+  const [agencyF, setAgencyF] = useState<"toutes" | "sans" | "avec">("toutes");
+  const [showOthers, setShowOthers] = useState(false);
+  const [sort, setSort] = useState<"score" | "followers" | "er" | "count">("score");
 
-  // Déjà connues : Scouting + roster (pour ne pas les ajouter deux fois).
-  const [known, setKnown] = useState<{ pool: Set<string>; roster: Set<string>; maxOrder: number }>({ pool: new Set(), roster: new Set(), maxOrder: 0 });
+  // Déjà connues : Scouting (avec date de contact) + roster.
+  const [pool, setPool] = useState<Map<string, PoolInfo>>(new Map());
+  const [roster, setRoster] = useState<{ user: string; name: string }[]>([]);
+  const [maxOrder, setMaxOrder] = useState(0);
   useEffect(() => {
     let alive = true;
     void Promise.all([
-      supabase.from("creator_pool").select("handle, sort_order"),
-      supabase.from("creators").select("handle, instagram"),
+      supabase.from("creator_pool").select("id, handle, sort_order, last_contacted"),
+      supabase.from("creators").select("name, handle, platform, instagram, status"),
     ]).then(([p, c]) => {
       if (!alive) return;
-      const pr = (p.data as { handle: string | null; sort_order: number | null }[] | null) ?? [];
-      const cr = (c.data as { handle: string | null; instagram: string | null }[] | null) ?? [];
-      setKnown({
-        pool: new Set(pr.map((r) => cleanUser(r.handle ?? "")).filter(Boolean)),
-        roster: new Set(cr.flatMap((r) => [cleanUser(r.instagram ?? ""), cleanUser(r.handle ?? "")]).filter(Boolean)),
-        maxOrder: pr.reduce((m, r) => Math.max(m, r.sort_order ?? 0), 0),
-      });
+      const pr = (p.data as { id: string; handle: string | null; sort_order: number | null; last_contacted: string | null }[] | null) ?? [];
+      const cr = (c.data as { name: string; handle: string | null; platform: string | null; instagram: string | null; status: string | null }[] | null) ?? [];
+      setPool(new Map(pr.filter((r) => cleanUser(r.handle ?? "")).map((r) => [cleanUser(r.handle ?? ""), { id: r.id, last_contacted: r.last_contacted }])));
+      setMaxOrder(pr.reduce((m, r) => Math.max(m, r.sort_order ?? 0), 0));
+      setRoster(
+        cr
+          .filter((r) => (r.status ?? "actif").toLowerCase() !== "inactif")
+          .map((r) => ({ user: cleanUser(r.instagram || ((r.platform ?? "").toLowerCase().includes("insta") ? r.handle ?? "" : "")), name: r.name }))
+          .filter((r) => r.user),
+      );
     });
     return () => {
       alive = false;
     };
   }, []);
+  const rosterUsers = useMemo(() => new Set(roster.map((r) => r.user)), [roster]);
 
+  const finish = (r: { stopped?: string }) => {
+    if (r.stopped) toast(`Meta a freiné : ${igWhyText(r.stopped)}. Le compteur en haut dit quand reprendre.`);
+  };
   const runBrand = async () => {
     const b = cleanUser(brandIn);
     if (!b) return toast("Tape le @ d'une marque");
-    setBusy("Lecture des posts de la marque…");
+    setBusy("Lecture des posts de la marque, puis des profils cités (environ 30 s)…");
     const r = await invokeSourcing<{ brand?: Prof & { username: string }; candidates?: Candidate[]; stopped?: string }>({ mode: "brand", brand: b });
     setBusy("");
     if (r.error || !r.candidates) return toast(errorText(r.error));
-    keep({ label: `Créatrices citées par @${b}`, at: new Date().toISOString(), brand: r.brand, results: r.candidates });
-    setSort("count");
+    keep({ mode: "marque", label: `Créatrices citées par @${b}`, at: new Date().toISOString(), brand: r.brand, results: r.candidates });
     if (!r.candidates.length) toast(`@${b} ne cite personne dans ses derniers posts`);
-    else if (r.stopped) toast(`Meta a freiné : ${igWhyText(r.stopped)}`);
+    finish(r);
+  };
+  const runSimilar = async (who?: string) => {
+    const c = cleanUser(who ?? creatorIn);
+    if (!c) return toast("Tape le @ d'une créatrice, ou choisis-en une de ton roster");
+    setCreatorIn(c);
+    setBusy(`Marques de @${c}, puis les créatrices qui travaillent avec elles (30 à 60 s)…`);
+    const r = await invokeSourcing<{ creator?: Prof & { username: string }; brands?: string[]; candidates?: Candidate[]; stopped?: string }>({ mode: "similar", creator: c });
+    setBusy("");
+    if (r.error || !r.candidates) return toast(errorText(r.error));
+    keep({ mode: "similaire", label: `Créatrices proches de @${c}`, at: new Date().toISOString(), creator: r.creator, brands: r.brands, results: r.candidates.filter((x) => !rosterUsers.has(x.username)) });
+    if (!r.brands?.length) toast(`@${c} ne cite aucune marque dans ses derniers posts : impossible de trouver des profils proches`);
+    finish(r);
   };
   const runList = async () => {
     const users = [...new Set(listIn.split(/[\s,;]+/).map(cleanUser).filter((u) => /^[a-z0-9._]{1,30}$/.test(u)))];
@@ -255,94 +313,133 @@ function CreatorFinder() {
       }
       results.push(...r.candidates);
       if (r.stopped) {
-        toast(`Meta a freiné : ${igWhyText(r.stopped)}`);
+        finish(r);
         break;
       }
     }
     setBusy("");
-    if (results.length) {
-      keep({ label: `Liste de ${users.length} @`, at: new Date().toISOString(), results });
-      setSort("followers");
-    }
+    if (results.length) keep({ mode: "liste", label: `Liste de ${users.length} @`, at: new Date().toISOString(), results });
   };
 
+  // Scouting : ajout (et date de contact quand on vient d'écrire).
   const [adding, setAdding] = useState<string | null>(null);
-  const addToScouting = async (c: Candidate) => {
-    setAdding(c.username);
+  const toScouting = async (c: Candidate, contacted?: boolean): Promise<boolean> => {
+    const now = new Date().toISOString();
+    const known = pool.get(c.username);
+    if (known) {
+      if (!contacted) return true;
+      const ok = await dbUpdate("creator_pool", known.id, { last_contacted: now });
+      if (ok) setPool((m) => new Map(m).set(c.username, { ...known, last_contacted: now }));
+      return ok;
+    }
+    const origin = last?.mode === "marque" && last.brand ? ` (citée par @${last.brand.username})` : last?.mode === "similaire" && last.creator ? ` (proche de @${last.creator.username})` : "";
     const created = await dbInsert("creator_pool", {
       name: c.data?.name?.trim() || `@${c.username}`,
       handle: `@${c.username}`,
       email: c.data?.email || null,
       tag: null,
-      note: last?.brand ? `Trouvée via le Sourcing (citée par @${last.brand.username})` : "Trouvée via le Sourcing",
-      sort_order: known.maxOrder + 1,
+      note: `Trouvée via le Sourcing${origin}`,
+      sort_order: maxOrder + 1,
+      ...(contacted ? { last_contacted: now } : {}),
     });
-    setAdding(null);
-    if (!created) return toast("Erreur, réessaie");
-    setKnown((k) => ({ ...k, pool: new Set([...k.pool, c.username]), maxOrder: k.maxOrder + 1 }));
-    toast(`@${c.username} ajoutée au Scouting ✓`);
+    if (!created) return false;
+    setMaxOrder((n) => n + 1);
+    setPool((m) => new Map(m).set(c.username, { id: String(created.id), last_contacted: contacted ? now : null }));
+    return true;
   };
+  const addToScouting = async (c: Candidate) => {
+    setAdding(c.username);
+    const ok = await toScouting(c);
+    setAdding(null);
+    toast(ok ? `@${c.username} ajoutée au Scouting ✓` : "Erreur, réessaie");
+  };
+  const [contact, setContact] = useState<Candidate | null>(null);
 
+  const scored = useMemo(() => (last?.results ?? []).map((c) => ({ c, p: c.data ? potential(c.data) : { score: 0, flags: [] as string[] } })), [last]);
   const shown = useMemo(() => {
     const lo = parseCount(minF);
     const hi = parseCount(maxF);
     const er = Number(minEr.replace(",", ".")) || 0;
     const word = norm(bioWord.trim());
-    const list = (last?.results ?? []).filter((c) => {
+    const list = scored.filter(({ c }) => {
       const d = c.data;
-      if (!d || c.why) return showPerso;
+      if (!d || c.why || d.isBrand) return showOthers;
       const f = d.followers ?? 0;
       if (lo && f < lo) return false;
       if (hi && f > hi) return false;
       if (er && (d.er ?? 0) < er) return false;
       if (word && !norm(`${d.bio ?? ""} ${d.name ?? ""}`).includes(word)) return false;
-      if (withEmail && !d.email) return false;
+      if (emailF === "avec" && !d.email) return false;
+      if (emailF === "sans" && d.email) return false;
+      if (agencyF === "sans" && d.agency) return false;
+      if (agencyF === "avec" && !d.agency) return false;
       return true;
     });
-    const key = (c: Candidate) => (sort === "er" ? c.data?.er ?? -1 : sort === "count" ? c.count ?? 0 : c.data?.followers ?? -1);
+    const key = ({ c, p }: (typeof scored)[number]) =>
+      sort === "er" ? c.data?.er ?? -1 : sort === "count" ? c.count ?? 0 : sort === "followers" ? c.data?.followers ?? -1 : p.score;
     return list.sort((a, b) => key(b) - key(a));
-  }, [last, minF, maxF, minEr, bioWord, withEmail, showPerso, sort]);
+  }, [scored, minF, maxF, minEr, bioWord, emailF, agencyF, showOthers, sort]);
   const hidden = (last?.results.length ?? 0) - shown.length;
+
+  const SOURCES = [
+    { value: "marque", label: "Depuis une marque" },
+    { value: "similaire", label: "Comme une créatrice" },
+    { value: "liste", label: "Liste de @" },
+  ];
+  const runBtn = (label: string, onClick: () => void) => (
+    <button type="button" onClick={onClick} disabled={!!busy} className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />} {label}
+    </button>
+  );
 
   return (
     <div>
       {/* Point de départ */}
       <div className="mb-3 rounded-2xl border border-border bg-surface p-4">
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <Tabs
-            size="sm"
-            label="Point de départ"
-            value={source}
-            onValueChange={(v) => setSource(v === "liste" ? "liste" : "marque")}
-            items={[
-              { value: "marque", label: "Depuis une marque" },
-              { value: "liste", label: "Liste de @" },
-            ]}
-          />
+          <Tabs size="sm" wrap label="Point de départ" value={source} onValueChange={(v) => setSource(v as typeof source)} items={SOURCES} />
           <HelpTip title="Quelle différence ?">
-            <p><span className="font-medium text-foreground">Depuis une marque</span> : l'app lit les 50 derniers posts de la marque et liste les @ qu'elle cite. Ce sont souvent les créatrices avec qui elle a travaillé, donc des profils déjà « validés » par des marques de ta niche.</p>
-            <p><span className="font-medium text-foreground">Liste de @</span> : tu colles des @ trouvés ailleurs (concurrents, commentaires, tes recherches) pour voir tous leurs chiffres d'un coup.</p>
+            <p><span className="font-medium text-foreground">Depuis une marque</span> : l'app lit les 50 derniers posts de la marque et liste les @ qu'elle cite. Ce sont souvent les créatrices avec qui elle a travaillé.</p>
+            <p><span className="font-medium text-foreground">Comme une créatrice</span> : tu choisis une créatrice (une des tiennes, par exemple). L'app regarde avec quelles marques elle travaille, puis quelles autres créatrices travaillent avec ces mêmes marques. Plus elles en partagent, plus elles lui ressemblent.</p>
+            <p><span className="font-medium text-foreground">Liste de @</span> : tu colles des @ trouvés ailleurs pour voir tous leurs chiffres d'un coup.</p>
           </HelpTip>
         </div>
-        {source === "marque" ? (
+        {source === "marque" && (
           <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void runBrand(); }}>
             <div className="flex min-w-[200px] flex-1 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 focus-within:border-primary">
               <AtSign className="h-3.5 w-3.5 shrink-0 text-faint" />
-              <input value={brandIn} onChange={(e) => setBrandIn(e.target.value)} placeholder="gymshark" className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none" />
+              <input aria-label="@ de la marque" value={brandIn} onChange={(e) => setBrandIn(e.target.value)} placeholder="gymshark" className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none" />
             </div>
-            <button type="submit" disabled={!!busy} className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
-              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />} Trouver ses créatrices
-            </button>
-            <p className="w-full text-[11px] text-faint">L'app lit les 50 derniers posts de la marque et récupère toutes les personnes citées : souvent les créatrices avec qui elle travaille.</p>
+            {runBtn("Trouver ses créatrices", () => void runBrand())}
           </form>
-        ) : (
+        )}
+        {source === "similaire" && (
+          <div className="flex flex-col gap-2.5">
+            <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void runSimilar(); }}>
+              <div className="flex min-w-[200px] flex-1 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 focus-within:border-primary">
+                <AtSign className="h-3.5 w-3.5 shrink-0 text-faint" />
+                <input aria-label="@ de la créatrice" value={creatorIn} onChange={(e) => setCreatorIn(e.target.value)} placeholder="une créatrice que tu aimes" className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none" />
+              </div>
+              {runBtn("Trouver des profils proches", () => void runSimilar())}
+            </form>
+            {roster.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-faint">
+                Tes créatrices :
+                {roster.slice(0, 12).map((r) => (
+                  <button key={r.user} type="button" disabled={!!busy} onClick={() => void runSimilar(r.user)} className="rounded-full border border-border px-2.5 py-1 font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
+                    {titleCase(r.name)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {source === "liste" && (
           <div className="flex flex-col gap-2">
-            <textarea value={listIn} onChange={(e) => setListIn(e.target.value)} rows={4} placeholder={"@lea.fit\n@ines.run\ninstagram.com/camille.yoga"} className={cn(IN, "resize-y text-[13px]")} />
+            <textarea aria-label="Liste de @" value={listIn} onChange={(e) => setListIn(e.target.value)} rows={4} placeholder={"@lea.fit\n@ines.run\ninstagram.com/camille.yoga"} className={cn(IN, "resize-y text-[13px]")} />
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] text-faint">Un @ par ligne (ou des liens Instagram). 30 profils prennent environ 20 secondes.</span>
-              <button type="button" onClick={() => void runList()} disabled={!!busy} className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
-                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />} Analyser
-              </button>
+              <span className="text-[11px] text-faint">Un @ par ligne (ou des liens Instagram). 1 demande Meta par @.</span>
+              {runBtn("Analyser", () => void runList())}
             </div>
           </div>
         )}
@@ -355,68 +452,112 @@ function CreatorFinder() {
           <div className="mb-3 flex flex-wrap items-end gap-2 rounded-2xl border border-border bg-surface p-3">
             <Field label="Abonnés min" help={<p>Tu peux écrire 10k, 10 000 ou 1,2M.</p>}><input aria-label="Abonnés minimum" value={minF} onChange={(e) => setMinF(e.target.value)} placeholder="10k" className={cn(IN, "w-24")} /></Field>
             <Field label="Abonnés max"><input aria-label="Abonnés maximum" value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-24")} /></Field>
-            <Field label="Engagement min (%)" help={<><p>Likes + commentaires moyens de ses 12 derniers posts, divisés par ses abonnés.</p><p>Repère : de 1 à 3 % c'est la moyenne, au-dessus de 3 % c'est bon. Les petits comptes ont souvent un taux plus haut.</p></>}><input aria-label="Engagement minimum" value={minEr} onChange={(e) => setMinEr(e.target.value)} placeholder="2" inputMode="decimal" className={cn(IN, "w-28")} /></Field>
+            <Field label="Engagement min (%)" help={<><p>Likes + commentaires moyens de ses 12 derniers posts, divisés par ses abonnés.</p><p>Repère : de 1 à 3 % c'est la moyenne, au-dessus de 3 % c'est bon. Les petits comptes ont souvent un taux plus haut.</p></>}><input aria-label="Engagement minimum" value={minEr} onChange={(e) => setMinEr(e.target.value)} placeholder="2" inputMode="decimal" className={cn(IN, "w-24")} /></Field>
             <Field label="Mot dans la bio" className="min-w-[140px] flex-1" help={<p>Pour cibler une ville (Lyon), une niche (running, maman, vegan) ou une langue. L'app cherche le mot dans la bio et le nom.</p>}><input aria-label="Mot dans la bio" value={bioWord} onChange={(e) => setBioWord(e.target.value)} placeholder="Lyon, running, maman…" className={IN} /></Field>
-            <label className="flex flex-col gap-1 text-[10px] font-medium text-faint">Trier par
-              <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className={cn(IN, "w-36")}>
+            <Field label="Email" help={<p>L'app cherche un email dans la bio, puis sur le lien de la créatrice (Linktree, son site). « Avec email » : tu peux lui écrire tout de suite depuis l'app.</p>}>
+              <select aria-label="Email" value={emailF} onChange={(e) => setEmailF(e.target.value as typeof emailF)} className={cn(IN, "w-28")}>
+                <option value="tous">Tous</option><option value="avec">Avec email</option><option value="sans">Sans email</option>
+              </select>
+            </Field>
+            <Field label="Agence" help={<><p>L'app cherche dans la bio et sur le lien des indices comme « management », « agence », « représentée par », « booking », ou un email d'agence.</p><p>C'est un indice, pas une certitude : vérifie avant d'écrire.</p></>}>
+              <select aria-label="Agence" value={agencyF} onChange={(e) => setAgencyF(e.target.value as typeof agencyF)} className={cn(IN, "w-32")}>
+                <option value="toutes">Toutes</option><option value="sans">Sans agence</option><option value="avec">Déjà en agence</option>
+              </select>
+            </Field>
+            <Field label="Trier par">
+              <select aria-label="Trier par" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className={cn(IN, "w-36")}>
+                <option value="score">Potentiel</option>
                 <option value="followers">Abonnés</option>
                 <option value="er">Engagement</option>
-                {last.brand && <option value="count">Nombre de citations</option>}
+                {last.mode !== "liste" && <option value="count">{last.mode === "similaire" ? "Marques en commun" : "Citations"}</option>}
               </select>
-            </label>
-            <div className="flex flex-wrap items-center gap-3 pb-2 text-[12px] text-muted-foreground">
-              <Check2 label="Avec email" checked={withEmail} onChange={setWithEmail} help={<p>Seulement les créatrices qui ont écrit un email dans leur bio : tu peux leur écrire tout de suite.</p>} />
-              <Check2 label="Comptes perso / introuvables" checked={showPerso} onChange={setShowPerso} help={<p>Meta ne donne pas les chiffres des comptes personnels. Coche pour les voir quand même (grisés), par exemple pour les ajouter au Scouting à la main.</p>} />
+            </Field>
+            <div className="pb-2 text-[12px] text-muted-foreground">
+              <Check2 label="Comptes perso, marques, introuvables" checked={showOthers} onChange={setShowOthers} help={<p>Cachés par défaut : les comptes perso (Meta ne donne pas leurs chiffres), les marques citées, et les @ introuvables. Coche pour les voir.</p>} />
             </div>
           </div>
 
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[12px] text-muted-foreground">
-            <span>
+            <span className="flex flex-wrap items-center gap-1.5">
               <span className="font-medium text-foreground">{last.label}</span> · {shown.length} profil{shown.length > 1 ? "s" : ""}
-              {hidden > 0 && <span className="text-faint"> ({hidden} masqué{hidden > 1 ? "s" : ""} par les filtres)</span>}
+              {hidden > 0 && <span className="text-faint">({hidden} masqué{hidden > 1 ? "s" : ""})</span>}
+              {last.mode === "similaire" && !!last.brands?.length && <span className="text-faint">· via {last.brands.slice(0, 4).map((b) => `@${b}`).join(", ")}</span>}
             </span>
-            <span className="text-[11px] text-faint">{fmtAgo(last.at)}</span>
+            <span className="flex items-center gap-1.5 text-[11px] text-faint">
+              {fmtAgo(last.at)}
+              <HelpTip title="Le score « Potentiel »" align="end">
+                <p>Une note sur 100 pour trier vite : engagement par rapport à sa taille (40), rythme de publication (15), déjà payée par des marques (15), email trouvé (10), pas d'agence (10), active ces 2 dernières semaines (10).</p>
+                <p>Chaque signal d'alerte retire 15 points : engagement très bas pour sa taille, compte qui suit plus de monde qu'il n'a d'abonnés, rien publié depuis 2 mois.</p>
+                <p>70 et plus : pépite. C'est une aide, pas un verdict.</p>
+              </HelpTip>
+            </span>
           </div>
 
           {shown.length === 0 ? (
             <div className="rounded-2xl border border-border bg-surface px-6 py-10 text-center text-sm text-muted-foreground">Aucun profil pour ces filtres.</div>
           ) : (
             <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
-              {shown.map((c) => {
+              {shown.map(({ c, p }) => {
                 const d = c.data;
-                const inPool = known.pool.has(c.username);
-                const inRoster = known.roster.has(c.username);
+                const inPool = pool.get(c.username);
+                const inRoster = rosterUsers.has(c.username);
+                const ok = !!d && !c.why;
                 return (
-                  <div key={c.username} className={cn("flex flex-col gap-2.5 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4", (!d || c.why) && "opacity-60")}>
+                  <div key={c.username} className={cn("flex flex-col gap-2.5 px-4 py-3.5 lg:flex-row lg:items-center lg:gap-4", !ok && "opacity-60")}>
                     <div className="flex min-w-0 flex-1 items-start gap-3">
-                      <Pic src={d?.picture} name={d?.name || c.username} />
+                      <div className="relative">
+                        <Pic src={d?.picture} name={d?.name || c.username} />
+                        {ok && (
+                          <span title={`Potentiel ${p.score} / 100`} className={cn("absolute -bottom-1 -right-1.5 rounded-full border-2 border-surface px-1 text-[9px] font-bold tabular-nums leading-[14px]", p.score >= 70 ? "bg-emerald-500 text-white" : p.score >= 45 ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground")}>
+                            {p.score}
+                          </span>
+                        )}
+                      </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <a href={igLink(c.username)} target="_blank" rel="noreferrer" className="truncate text-[13px] font-semibold text-foreground hover:underline">@{c.username}</a>
                           {d?.name && <span className="truncate text-[12px] text-muted-foreground">{d.name}</span>}
-                          {c.count ? <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">citée {c.count}×</span> : null}
+                          {ok && p.score >= 70 && <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Pépite</span>}
+                          {c.count ? <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{last.mode === "similaire" ? `${c.count} marque${c.count > 1 ? "s" : ""} en commun` : `citée ${c.count}×`}</span> : null}
+                          {d?.agency && <span title={`Indice : « ${d.agency} »`} className="rounded-full bg-amber/15 px-2 py-0.5 text-[10px] font-medium text-amber">En agence ?</span>}
                           {d?.email && (
-                            <button type="button" onClick={() => { void navigator.clipboard?.writeText(d.email ?? ""); toast("Email copié ✓"); }} className="flex items-center gap-1 rounded-full bg-signalsoft px-2 py-0.5 text-[10px] font-medium text-signaltext" title="Copier l'email">
-                              <Mail className="h-3 w-3" /> {d.email}
+                            <button type="button" onClick={() => { void navigator.clipboard?.writeText(d.email ?? ""); toast("Email copié ✓"); }} className="flex items-center gap-1 rounded-full bg-signalsoft px-2 py-0.5 text-[10px] font-medium text-signaltext" title={d.emailFrom === "lien" ? "Trouvé sur son lien en bio · copier" : "Trouvé dans sa bio · copier"}>
+                              <Mail className="h-3 w-3" /> {d.email}{d.emailFrom === "lien" ? " (lien)" : ""}
                             </button>
                           )}
                         </div>
                         {d?.bio ? <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">{d.bio}</div> : null}
+                        {!!d?.deals?.length && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-faint">
+                            A déjà bossé avec
+                            {d.deals.slice(0, 5).map((b) => <a key={b} href={igLink(b)} target="_blank" rel="noreferrer" className="rounded bg-primary/10 px-1.5 py-0.5 font-medium text-primary hover:underline">@{b}</a>)}
+                          </div>
+                        )}
+                        {!!c.via?.length && (
+                          <div className="mt-1 text-[10px] text-faint">Marques en commun : {c.via.map((b) => `@${b}`).join(", ")}</div>
+                        )}
+                        {p.flags.length > 0 && <div className="mt-1 text-[10px] font-medium text-rose-500">⚠︎ {p.flags.join(" · ")}</div>}
                         {c.why && <div className="mt-0.5 text-[11px] text-faint">{igWhyText(c.why)}</div>}
                       </div>
                     </div>
-                    {d && !c.why && (
-                      <div className="flex shrink-0 items-center gap-4 pl-[52px] sm:pl-0">
+                    {ok && (
+                      <div className="flex shrink-0 items-center gap-4 pl-[52px] lg:pl-0">
                         <Stat label="Abonnés" value={d.followers != null ? fmtCompact(d.followers) : "—"} />
                         <Stat label="Engagement" value={fmtEr(d.er)} />
                         <Stat label="Rythme" value={fmtPerWeek(d.perWeek)} />
                       </div>
                     )}
-                    <div className="flex shrink-0 items-center gap-2 pl-[52px] sm:pl-0">
+                    <div className="flex shrink-0 flex-wrap items-center gap-2 pl-[52px] lg:pl-0">
+                      {inPool?.last_contacted && <span className="text-[10px] text-faint">Contactée {fmtAgo(inPool.last_contacted)}</span>}
+                      {!inRoster && (
+                        <button type="button" onClick={() => setContact(c)} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+                          <Send className="h-3.5 w-3.5" /> Contacter
+                        </button>
+                      )}
                       {inRoster ? (
                         <span className="rounded-full bg-panel px-2.5 py-1 text-[11px] font-medium text-muted-foreground">Au roster</span>
                       ) : inPool ? (
-                        <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"><Check className="h-3 w-3" /> Au Scouting</span>
+                        <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"><Check className="h-3 w-3" /> Scouting</span>
                       ) : (
                         <button type="button" onClick={() => void addToScouting(c)} disabled={adding === c.username} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
                           {adding === c.username ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Scouting
@@ -433,19 +574,33 @@ function CreatorFinder() {
       {!last && !busy && (
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
           {[
-            ["1", "Tape le @ d'une marque", "Une marque de ta niche, par exemple aloyoga ou sezane."],
-            ["2", "Filtre", "Abonnés, engagement, ville ou niche dans la bio, avec email."],
-            ["3", "Ajoute au Scouting", "Un clic : la créatrice rejoint ton Scouting, avec sa photo et ses chiffres."],
-          ].map(([n, t, d]) => (
+            ["1", "Choisis un point de départ", "Une marque de ta niche, une créatrice que tu aimes, ou une liste de @."],
+            ["2", "Filtre", "Abonnés, engagement, ville dans la bio, avec email, sans agence. Tri par score « Potentiel »."],
+            ["3", "Contacte ou garde", "Un mail depuis ta boîte Gmail ou un message Instagram, ou « + Scouting » pour plus tard."],
+          ].map(([n, t, dsc]) => (
             <div key={n} className="rounded-2xl border border-dashed border-border px-4 py-4">
               <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
                 <span className="grid h-5 w-5 place-items-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">{n}</span>
                 {t}
               </div>
-              <div className="mt-1 text-[12px] leading-snug text-muted-foreground">{d}</div>
+              <div className="mt-1 text-[12px] leading-snug text-muted-foreground">{dsc}</div>
             </div>
           ))}
         </div>
+      )}
+
+      {contact && (
+        <OutreachComposer
+          title={`Contacter @${contact.username}`}
+          to={contact.data?.email}
+          box="talent"
+          instagram={contact.username}
+          contactName={contact.data?.name || `@${contact.username}`}
+          subject={`TTP Creators × ${firstName(contact.data, contact.username)}`}
+          body={`Bonjour ${firstName(contact.data, contact.username)},\n\nJe te contacte de la part de TTP Creators, une agence qui accompagne des créatrices de contenu dans leurs partenariats avec les marques.\n\nJ'aime beaucoup ton contenu${contact.data?.deals?.length ? ` et tes collaborations (${contact.data.deals.slice(0, 2).map((b) => `@${b}`).join(", ")})` : ""} : je pense qu'on pourrait faire de belles choses ensemble.\n\nTu serais partante pour qu'on en parle ?\n\nBelle journée,`}
+          onSent={() => void toScouting(contact, true).then((ok) => ok && toast("Notée « contactée » dans le Scouting ✓"))}
+          onClose={() => setContact(null)}
+        />
       )}
     </div>
   );
@@ -737,43 +892,27 @@ function BrandRadar() {
         </div>
       )}
 
-      {mailFor && <MailDraft row={mailFor.row} post={mailFor.post} prof={profiles[mailFor.row.brand]} rosterName={rosterNames[mailFor.post.c]} onClose={() => setMailFor(null)} />}
+      {mailFor && (() => {
+        const { row, post } = mailFor;
+        const prof = profiles[row.brand];
+        const brandName = prof?.name?.trim() || `@${row.brand}`;
+        const rn = rosterNames[post.c];
+        const who = rn ? `${titleCase(rn)} (@${post.c})` : `@${post.c}`;
+        return (
+          <OutreachComposer
+            title={`Contacter ${brandName}`}
+            to={prof?.email}
+            box="partnerships"
+            instagram={row.brand}
+            contactName={brandName}
+            subject={`TTP Creators × ${brandName}`}
+            body={post.roster && !post.paid
+              ? `Bonjour,\n\n${who}, que nous représentons chez TTP Creators, parle déjà de ${brandName} spontanément : ${post.url}\n\nUne collaboration officielle aurait du sens : sa communauté connaît et apprécie déjà votre marque.\n\nJe vous envoie son media kit ?\n\nBelle journée,`
+              : `Bonjour,\n\nJ'ai vu votre collaboration avec @${post.c} : ${post.url}\n\nChez TTP Creators, nous représentons des créatrices qui correspondent à votre univers et pourraient porter vos prochaines campagnes.\n\nJe vous envoie notre sélection ?\n\nBelle journée,`}
+            onClose={() => setMailFor(null)}
+          />
+        );
+      })()}
     </div>
-  );
-}
-
-/** Mail d'approche prêt à envoyer : modifiable, copiable, ouvrable dans la messagerie. */
-function MailDraft({ row, post, prof, rosterName, onClose }: { row: RadarRow; post: RadarPost; prof?: Prof; rosterName?: string; onClose: () => void }) {
-  const brandName = prof?.name?.trim() || `@${row.brand}`;
-  const [to, setTo] = useState(prof?.email ?? "");
-  const [subject, setSubject] = useState(`TTP Creators × ${brandName}`);
-  const [body, setBody] = useState(() =>
-    post.roster && !post.paid
-      ? `Bonjour,\n\n${rosterName ? `${titleCase(rosterName)} (@${post.c})` : `@${post.c}`}, que nous représentons chez TTP Creators, parle déjà de ${brandName} spontanément : ${post.url}\n\nUne collaboration officielle aurait du sens : sa communauté connaît et apprécie déjà votre marque.\n\nJe vous envoie son media kit ?\n\nBelle journée,\nTTP Creators`
-      : `Bonjour,\n\nJ'ai vu votre collaboration avec @${post.c} : ${post.url}\n\nChez TTP Creators, nous représentons des créatrices qui correspondent à votre univers et pourraient porter vos prochaines campagnes.\n\nJe vous envoie notre sélection ?\n\nBelle journée,\nTTP Creators`,
-  );
-  const mailto = `mailto:${encodeURIComponent(to.trim())}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  return (
-    <Overlay className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClose={onClose} label="Mail d'approche">
-      <div className="my-auto w-full max-w-lg rounded-2xl border border-border bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="text-[15px] font-semibold text-foreground">Mail pour {brandName}</div>
-          <button type="button" onClick={onClose} className="text-faint transition-colors hover:text-foreground"><X className="h-5 w-5" /></button>
-        </div>
-        <div className="flex flex-col gap-2">
-          <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="Email de la marque (absent de sa bio : à trouver)" className={IN} />
-          <input value={subject} onChange={(e) => setSubject(e.target.value)} className={IN} />
-          <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={11} className={cn(IN, "resize-y text-[13px] leading-relaxed")} />
-        </div>
-        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-          <button type="button" onClick={() => { void navigator.clipboard?.writeText(`${subject}\n\n${body}`); toast("Mail copié ✓"); }} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
-            <Copy className="h-3.5 w-3.5" /> Copier
-          </button>
-          <a href={mailto} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
-            <ExternalLink className="h-3.5 w-3.5" /> Ouvrir dans ma messagerie
-          </a>
-        </div>
-      </div>
-    </Overlay>
   );
 }

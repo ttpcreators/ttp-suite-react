@@ -59,13 +59,79 @@ export function graphWhy(e: GraphError): { why: string; stop?: boolean } {
   return { why: `meta_${e.code ?? "erreur"}` };
 }
 
+// ── Compteur de demandes à Meta ──────────────────────────────────────────────
+// Meta renvoie à chaque réponse la part de son quota déjà utilisée (en %), et en
+// cas de blocage le temps estimé avant de pouvoir redemander. On le note pour
+// l'afficher dans l'app (table ig_quota, via saveUsage en fin de fonction).
+type Usage = { calls: number; appPct: number | null; bucPct: number | null; regainMin: number | null; limited: boolean };
+const usage: Usage = { calls: 0, appPct: null, bucPct: null, regainMin: null, limited: false };
+const pctOf = (o: Record<string, unknown> | undefined) =>
+  o ? Math.max(Number(o.call_count ?? 0), Number(o.total_time ?? 0), Number(o.total_cputime ?? 0)) : null;
+function readUsage(h: Headers) {
+  try {
+    const app = h.get("x-app-usage");
+    if (app) usage.appPct = pctOf(JSON.parse(app));
+    const buc = h.get("x-business-use-case-usage");
+    if (buc) {
+      const all = Object.values(JSON.parse(buc) as Record<string, Record<string, unknown>[]>).flat();
+      if (all.length) {
+        usage.bucPct = Math.max(...all.map((x) => pctOf(x) ?? 0));
+        const wait = Math.max(...all.map((x) => Number(x.estimated_time_to_regain_access ?? 0)));
+        usage.regainMin = wait > 0 ? wait : null;
+      }
+    }
+  } catch {
+    /* en-tête illisible : on garde l'ancien relevé */
+  }
+}
+
 /** GET JSON avec délai max (Meta peut traîner) ; erreur réseau → { error }. */
 export async function getJson(url: string, ms = 15_000): Promise<Record<string, unknown>> {
   try {
+    usage.calls++;
     const r = await fetch(url, { signal: AbortSignal.timeout(ms) });
-    return await r.json().catch(() => ({ error: { message: `http_${r.status}` } }));
+    readUsage(r.headers);
+    const body = await r.json().catch(() => ({ error: { message: `http_${r.status}` } }));
+    const code = (body as { error?: { code?: number } }).error?.code;
+    if (code === 4 || code === 17 || code === 32 || code === 613) usage.limited = true;
+    return body;
   } catch {
     return { error: { message: "reseau" } };
+  }
+}
+
+/**
+ * Enregistre le relevé du quota dans ig_quota (une seule ligne) : demandes de
+ * l'heure et du jour (fenêtres glissantes simples), % utilisé, heure de reprise.
+ * Renvoie le relevé pour l'inclure dans la réponse à l'app.
+ */
+export async function saveUsage(sb: SupabaseClient): Promise<Record<string, unknown> | null> {
+  if (!usage.calls) return null;
+  try {
+    const { data: cur } = await sb.from("ig_quota").select("data").eq("id", 1).maybeSingle<{ data: Record<string, unknown> }>();
+    const prev = cur?.data ?? {};
+    const now = Date.now();
+    const iso = new Date(now).toISOString();
+    const keep = (start: unknown, ms: number) => typeof start === "string" && now - Date.parse(start) < ms;
+    const hourStart = keep(prev.hourStart, 3600000) ? (prev.hourStart as string) : iso;
+    const dayStart = keep(prev.dayStart, 86400000) ? (prev.dayStart as string) : iso;
+    const prevBlocked = typeof prev.blockedUntil === "string" && Date.parse(prev.blockedUntil) > now ? prev.blockedUntil : null;
+    const data = {
+      hourStart, hourCalls: (hourStart === prev.hourStart ? Number(prev.hourCalls ?? 0) : 0) + usage.calls,
+      dayStart, dayCalls: (dayStart === prev.dayStart ? Number(prev.dayCalls ?? 0) : 0) + usage.calls,
+      appPct: usage.appPct ?? prev.appPct ?? null,
+      bucPct: usage.bucPct ?? prev.bucPct ?? null,
+      // Bloqué : heure de reprise donnée par Meta, sinon 1 h par prudence.
+      blockedUntil: usage.regainMin ? new Date(now + usage.regainMin * 60000).toISOString()
+        : usage.limited ? new Date(now + 3600000).toISOString() : prevBlocked,
+      lastAt: iso,
+    };
+    usage.calls = 0;
+    usage.limited = false;
+    await sb.from("ig_quota").upsert({ id: 1, data, at: iso });
+    return data;
+  } catch {
+    return null;
   }
 }
 
