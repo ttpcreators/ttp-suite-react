@@ -76,17 +76,23 @@ function ScoutAvatar({ name, photos, size, className }: { name: string; photos: 
   );
 }
 
-/** Une photo Instagram trouvée est revérifiée après 30 jours, une introuvable le lendemain. */
+/** Raisons « pas maintenant » : on retente à la visite suivante. */
+const IG_RETRY_NOW = new Set(["page_429", "pause", "meta_non_configure", "meta_limite", "meta_jeton", "erreur"]);
+/** Une photo trouvée (ou un compte perso) est revérifiée après 30 jours, une introuvable le lendemain. */
 const igStale = (t: Track | undefined, handle: string) => {
   if (!t?.igAt || t.igFor !== handle) return true;
   if (!t.igPhoto && t.igV !== IG_V) return true;
-  // Instagram freinait : on retente à la prochaine visite, petit à petit.
-  if (!t.igPhoto && (t.igWhy === "page_429" || t.igWhy === "pause")) return true;
+  if (!t.igPhoto && IG_RETRY_NOW.has(t.igWhy ?? "")) return true;
   const days = (Date.now() - new Date(t.igAt + "T00:00:00").getTime()) / 86400000;
-  return days > (t.igPhoto ? 30 : 1);
+  return days > (t.igPhoto || t.igWhy === "compte_perso" ? 30 : 1);
 };
 /** Raison (renvoyée par ig-avatar) → phrase pour la fiche. */
 const IG_WHY: Record<string, string> = {
+  compte_perso: "compte personnel (Meta ne donne la photo que des comptes pro)",
+  sans_photo: "pas de photo sur ce compte",
+  meta_non_configure: "pas encore relié à Meta",
+  meta_jeton: "le lien avec Meta a expiré, à refaire",
+  meta_limite: "Meta freine les demandes, nouvel essai à la prochaine visite",
   page_429: "Instagram freine les demandes, nouvel essai à la prochaine visite",
   pause: "en attente, nouvel essai à la prochaine visite",
   profil_introuvable: "ce @ n'existe pas sur Instagram",
@@ -114,7 +120,7 @@ type Snap = { date: string; value: number }; // date = ISO « AAAA-MM-JJ »
  *  (igFor = le @ pour lequel elle a été cherchée, igAt = quand ; null = introuvable). */
 type Track = { status?: ScoutStatus; snaps?: Snap[]; photo?: string; igPhoto?: string | null; igFor?: string; igAt?: string; igWhy?: string; igV?: number };
 /** Version de la recherche Instagram : la monter refait toutes les recherches ratées. */
-const IG_V = 2;
+const IG_V = 3;
 type Tracking = Record<string, Track>;
 
 /** ISO « 2026-08-12 » → « 12 août ». */
@@ -178,11 +184,11 @@ export function Vivier() {
     const want = rows
       .map((r) => ({ id: r.id, h: igName(r.handle) }))
       .filter((x) => x.h && !igAsked.has(x.h) && igStale(tracking[x.id], x.h))
-      .slice(0, 6);
+      .slice(0, 20);
     if (!want.length) return;
     want.forEach((x) => igAsked.add(x.h));
     void supabase.functions.invoke("ig-avatar", { body: { handles: want.map((x) => x.h) } }).then(async ({ data, error: fnErr }) => {
-      const res = data as { photos?: Record<string, string | null>; why?: Record<string, string> } | null;
+      const res = data as { photos?: Record<string, string | null>; followers?: Record<string, number>; why?: Record<string, string> } | null;
       const photos = res?.photos;
       if (fnErr || !photos) return;
       try {
@@ -190,7 +196,14 @@ export function Vivier() {
         const fresh = ((await getAppState())["poolTracking"] as Tracking) ?? {};
         const next = { ...fresh };
         const at = todayISO();
-        for (const x of want) if (x.h in photos) next[x.id] = { ...(fresh[x.id] ?? {}), igPhoto: photos[x.h], igFor: x.h, igAt: at, igWhy: res?.why?.[x.h], igV: IG_V };
+        for (const x of want) {
+          if (!(x.h in photos)) continue;
+          const cur = fresh[x.id] ?? {};
+          // Abonnés donnés par Meta : relevé du jour ajouté, sans écraser un relevé saisi à la main.
+          const n = res?.followers?.[x.h];
+          const snaps = typeof n === "number" && !(cur.snaps ?? []).some((sn) => sn.date === at) ? [...(cur.snaps ?? []), { date: at, value: n }] : cur.snaps;
+          next[x.id] = { ...cur, snaps, igPhoto: photos[x.h], igFor: x.h, igAt: at, igWhy: res?.why?.[x.h], igV: IG_V };
+        }
         setLocalTrack(next);
         await saveAppStateKey("poolTracking", next);
       } catch {

@@ -1,27 +1,28 @@
 // ============================================================================
-// ig-avatar/index.ts : photo de profil Instagram des créateurs du Scouting.
+// ig-avatar/index.ts : photo de profil Instagram (+ abonnés) des créateurs du Scouting.
 // ----------------------------------------------------------------------------
-// Entrée (POST JSON) : { handles: string[] } (6 traités par appel, un par un).
-// Pour chaque @ : lit la page publique du profil (comme un aperçu de lien),
-// récupère l'image « og:image » (photo de profil 100×100), la copie dans le bucket
-// public « avatars » (instagram/<nom>.jpg : les liens d'Instagram expirent) et
-// renvoie son adresse. Profil privé, inexistant ou Instagram qui refuse → null.
-// Sortie : { photos: { [handle]: string | null }, why: { [handle]: raison si null } }
+// Entrée (POST JSON) : { handles: string[] } (20 max par appel).
+// Passe par l'outil officiel de Meta (« business discovery » de l'API Graph), au
+// nom du compte pro de l'agence : pour chaque @ PRO (créateur ou entreprise),
+// Meta donne la photo de profil et le nombre d'abonnés. La photo est copiée dans
+// le bucket public « avatars » (instagram/<nom>.jpg : les liens de Meta expirent).
+// Les comptes personnels ne sont pas visibles par cet outil → null « compte_perso ».
+// (Lire la page Instagram directement ne marche pas : Instagram bloque les
+// serveurs de Supabase, réponse 429.)
+// Sortie : { photos: { [handle]: url | null }, followers: { [handle]: n }, why: { [handle]: raison } }
 //
+// Secrets (supabase secrets set) : META_TOKEN (jeton de page longue durée, jamais
+// dans le dépôt), META_IG_ID (id du compte Instagram pro de l'agence),
+// META_GRAPH_VERSION facultatif (défaut v23.0).
 // Sécurité : JWT requis (verify_jwt) + rôle agence vérifié dans profiles.
 // Seuls des noms d'utilisateur Instagram valides sont demandés (pas d'URL libre).
 // ============================================================================
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 
-// Robots d'aperçu de lien : Instagram leur donne la page avec la photo (og:image).
-// Plusieurs essais, car Instagram en refuse parfois un selon le serveur qui demande.
-const UAS = [
-  "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
-  "WhatsApp/2.23.20.0",
-  "Twitterbot/1.0",
-  "Googlebot/2.1 (+http://www.google.com/bot.html)",
-];
+const META_TOKEN = Deno.env.get("META_TOKEN") ?? "";
+const META_IG_ID = Deno.env.get("META_IG_ID") ?? "";
+const GRAPH = `https://graph.facebook.com/${Deno.env.get("META_GRAPH_VERSION") ?? "v23.0"}`;
 const USERNAME = /^[A-Za-z0-9._]{1,30}$/;
 
 /** « @lea.fit », « instagram.com/lea.fit/ » → « lea.fit » (ou "" si invalide). */
@@ -30,45 +31,37 @@ function clean(handle: string): string {
   return USERNAME.test(u) ? u : "";
 }
 
-const decode = (s: string) => s.replace(/&amp;/g, "&").replace(/&#x2F;/gi, "/").replace(/&quot;/g, '"');
+type Found = { url: string | null; followers?: number; why?: string; stop?: boolean };
+type GraphError = { code?: number; error_subcode?: number; message?: string };
 
-type Found = { url: string | null; why?: string };
-
-/** Adresse de la photo (og:image) trouvée sur la page du profil, en essayant chaque robot. */
-async function findImage(user: string): Promise<{ src?: string; why: string }> {
-  let why = "aucune_page";
-  for (const ua of UAS) {
-    try {
-      const page = await fetch(`https://www.instagram.com/${user}/`, { headers: { "User-Agent": ua, "Accept-Language": "fr-FR,fr;q=0.9" }, redirect: "follow" });
-      if (page.status === 404) return { why: "profil_introuvable" };
-      // Instagram freine (trop de demandes) : on s'arrête là, réessayer aggraverait.
-      if (page.status === 429) return { why: "page_429" };
-      if (!page.ok) { why = `page_${page.status}`; continue; }
-      const m = (await page.text()).match(/<meta property="og:image" content="([^"]+)"/);
-      if (!m) { why = "page_sans_photo"; continue; }
-      const src = decode(m[1]);
-      if (!/(\.|^)(cdninstagram\.com|fbcdn\.net)$/.test(new URL(src).hostname)) { why = "adresse_inattendue"; continue; }
-      return { src, why: "" };
-    } catch {
-      why = "reseau";
-    }
-  }
-  return { why };
+/** Erreur Meta → raison lisible ; stop = inutile de continuer cet appel (jeton, limite). */
+function graphWhy(e: GraphError): { why: string; stop?: boolean } {
+  if (e.code === 190) return { why: "meta_jeton", stop: true };
+  if (e.code === 4 || e.code === 17 || e.code === 32 || e.code === 613) return { why: "meta_limite", stop: true };
+  if (e.code === 110 || e.error_subcode === 2207013 || /Invalid user id|cannot be found/i.test(e.message ?? "")) return { why: "compte_perso" };
+  return { why: `meta_${e.code ?? "erreur"}` };
 }
 
 async function photoOf(sb: ReturnType<typeof getServiceClient>, user: string): Promise<Found> {
-  const { src, why } = await findImage(user);
-  if (!src) return { url: null, why };
-  const img = await fetch(src, { headers: { "User-Agent": UAS[0] } });
+  const fields = `business_discovery.username(${user}){username,profile_picture_url,followers_count}`;
+  const r = await fetch(`${GRAPH}/${META_IG_ID}?fields=${encodeURIComponent(fields)}&access_token=${encodeURIComponent(META_TOKEN)}`);
+  const body = await r.json().catch(() => ({}));
+  if (body?.error) return { url: null, ...graphWhy(body.error as GraphError) };
+  const bd = body?.business_discovery as { profile_picture_url?: string; followers_count?: number } | undefined;
+  const followers = typeof bd?.followers_count === "number" ? bd.followers_count : undefined;
+  const src = bd?.profile_picture_url;
+  if (!src) return { url: null, followers, why: "sans_photo" };
+  if (!/(\.|^)(cdninstagram\.com|fbcdn\.net)$/.test(new URL(src).hostname)) return { url: null, followers, why: "adresse_inattendue" };
+  const img = await fetch(src);
   const type = img.headers.get("content-type") ?? "";
-  if (!img.ok || !type.startsWith("image/")) return { url: null, why: `image_${img.status}` };
+  if (!img.ok || !type.startsWith("image/")) return { url: null, followers, why: `image_${img.status}` };
   const bytes = new Uint8Array(await img.arrayBuffer());
-  if (!bytes.length || bytes.length > 2_000_000) return { url: null, why: "image_taille" };
+  if (!bytes.length || bytes.length > 2_000_000) return { url: null, followers, why: "image_taille" };
   const path = `instagram/${user.toLowerCase()}.jpg`;
   const { error } = await sb.storage.from("avatars").upload(path, bytes, { upsert: true, contentType: type, cacheControl: "86400" });
-  if (error) return { url: null, why: "stockage" };
+  if (error) return { url: null, followers, why: "stockage" };
   // ?v= : la nouvelle photo remplace l'ancienne sans attendre le cache.
-  return { url: `${sb.storage.from("avatars").getPublicUrl(path).data.publicUrl}?v=${Date.now()}` };
+  return { url: `${sb.storage.from("avatars").getPublicUrl(path).data.publicUrl}?v=${Date.now()}`, followers };
 }
 
 Deno.serve(async (req: Request) => {
@@ -94,26 +87,33 @@ Deno.serve(async (req: Request) => {
     return res({ error: "json" }, 400);
   }
   if (!Array.isArray(handles)) return res({ error: "handles" }, 400);
-  const list = [...new Set(handles.filter((h): h is string => typeof h === "string"))].slice(0, 6);
+  const list = [...new Set(handles.filter((h): h is string => typeof h === "string"))].slice(0, 20);
 
-  // Un par un, avec une pause : Instagram freine vite les rafales venant d'un serveur.
-  // Au premier « trop de demandes », les suivants sont laissés pour la prochaine fois.
   const photos: Record<string, string | null> = {};
+  const followers: Record<string, number> = {};
   const why: Record<string, string> = {};
-  let blocked = false;
-  for (const h of list) {
-    if (blocked) {
+  // Pas encore configuré chez Meta : on le dit, l'app retentera plus tard.
+  if (!META_TOKEN || !META_IG_ID) {
+    for (const h of list) {
       photos[h] = null;
-      why[h] = "pause";
+      why[h] = "meta_non_configure";
+    }
+    return res({ photos, followers, why });
+  }
+  let stopped = "";
+  for (const h of list) {
+    if (stopped) {
+      photos[h] = null;
+      why[h] = stopped;
       continue;
     }
     const user = clean(h);
     const f: Found = user ? await photoOf(sb, user).catch(() => ({ url: null, why: "erreur" })) : { url: null, why: "nom_invalide" };
     photos[h] = f.url;
+    if (f.followers !== undefined) followers[h] = f.followers;
     if (f.why) why[h] = f.why;
-    if (f.why === "page_429") blocked = true;
-    else await new Promise((r) => setTimeout(r, 1500));
+    if (f.stop) stopped = f.why ?? "erreur";
   }
   console.log("ig-avatar", JSON.stringify({ demandes: list.length, trouvees: Object.values(photos).filter(Boolean).length, why }));
-  return res({ photos, why });
+  return res({ photos, followers, why });
 });
