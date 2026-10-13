@@ -14,7 +14,7 @@
 //      collabs.ig.posts (lien, date, likes, commentaires ; + couverture,
 //      enregistrements, partages, vues si elle a connecté son compte).
 //   3. Marques (contacts avec un @Instagram) : abonnés, rythme, dernier post →
-//      contacts.ig (une fois par semaine, 40 marques par passage).
+//      contacts.ig (une fois par semaine, 20 marques par passage).
 //
 // Entrée (POST JSON) : {} = tout (cron quotidien) ; { scope: "creator" |
 // "collab" | "contact", id } = une seule fiche (bouton « Actualiser » de l'app),
@@ -35,7 +35,7 @@ type ContactRow = { id: string; brand: string; instagram: string | null; ig: Jso
 const DAY = 86400000;
 const CREATOR_COLS = "id, name, handle, platform, instagram, status, mediakit, ig";
 const COLLAB_COLS = "id, brand, creator, step, status, created_at, ig";
-const BRANDS_PER_RUN = 40;
+const BRANDS_PER_RUN = 20; // Meta limite les demandes par heure
 
 const today = () => new Date().toISOString().slice(0, 10);
 const fmtInt = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");

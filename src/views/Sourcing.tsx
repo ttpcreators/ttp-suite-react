@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AtSign, Check, Copy, ExternalLink, Globe, Loader2, Mail, Plus, Radar, RefreshCw, Search, Users, X, EyeOff, RotateCcw,
 } from "lucide-react";
@@ -9,6 +9,7 @@ import { Tabs } from "@/components/ui/animated-tabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { HelpTip } from "@/components/ui/help-tip";
 import { dbInsert } from "@/lib/db";
 import { fmtCompact } from "@/lib/timeSeries";
 import { fmtAgo, fmtEr, fmtPerWeek, igWhyText } from "@/lib/instagram";
@@ -77,6 +78,41 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Champ de filtre : petit titre (+ « ? » d'explication) au-dessus du champ. */
+function Field({ label, help, className, children }: { label: string; help?: ReactNode; className?: string; children: ReactNode }) {
+  return (
+    <div className={cn("flex flex-col gap-1", className)}>
+      <span className="flex items-center gap-1 text-[10px] font-medium text-faint">
+        {label}
+        {help && <HelpTip title={label}>{help}</HelpTip>}
+      </span>
+      {children}
+    </div>
+  );
+}
+/** Case à cocher avec son « ? ». */
+function Check2({ label, checked, onChange, help }: { label: string; checked: boolean; onChange: (v: boolean) => void; help?: ReactNode }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <label className="flex items-center gap-1.5">
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} /> {label}
+      </label>
+      {help && <HelpTip title={label}>{help}</HelpTip>}
+    </span>
+  );
+}
+
+const TOOLS = [
+  {
+    v: "createurs" as const, icon: Users, title: "Trouver des créatrices", goal: "Pour recruter",
+    text: "Tu tapes le @ d'une marque : l'app te montre les créatrices avec qui elle travaille, avec leurs abonnés et leur engagement.",
+  },
+  {
+    v: "radar" as const, icon: Radar, title: "Radar à marques", goal: "Pour trouver des clients",
+    text: "Chaque nuit, l'app lit les posts de tes créatrices et te montre les marques qui paient des créatrices, ou que tes créatrices citent déjà.",
+  },
+];
+
 export function Sourcing() {
   const [tab, setTab] = useState<"createurs" | "radar">(() => {
     try {
@@ -97,18 +133,42 @@ export function Sourcing() {
   return (
     <>
       <PageHeaderRow>
-        <div className="text-sm text-muted-foreground">Trouve des créatrices à recruter et des marques à démarcher, depuis Instagram.</div>
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          Deux outils, à partir d'Instagram
+          <HelpTip title="D'où viennent les chiffres ?" align="end">
+            <p>De l'outil officiel de Meta (Instagram), le même que pour le Roster et le Scouting.</p>
+            <p>Seuls les comptes <span className="font-medium text-foreground">pro ou créateur</span> sont visibles. Les comptes perso apparaissent grisés.</p>
+            <p>Meta limite le nombre de demandes par heure : si l'app dit « Meta a freiné », réessaie un peu plus tard.</p>
+          </HelpTip>
+        </div>
       </PageHeaderRow>
-      <Tabs
-        className="mb-4"
-        label="Outil de sourcing"
-        value={tab}
-        onValueChange={pick}
-        items={[
-          { value: "createurs", label: "Créatrices", icon: <Users className="h-3.5 w-3.5" /> },
-          { value: "radar", label: "Radar à marques", icon: <Radar className="h-3.5 w-3.5" /> },
-        ]}
-      />
+      <div role="tablist" aria-label="Outil de sourcing" className="mb-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        {TOOLS.map((t) => {
+          const on = tab === t.v;
+          const Icon = t.icon;
+          return (
+            <button
+              key={t.v}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              onClick={() => pick(t.v)}
+              className={cn("flex items-start gap-3 rounded-2xl border p-4 text-left transition-colors", on ? "border-primary bg-primary/[0.04]" : "border-border bg-surface hover:bg-rowhover")}
+            >
+              <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl", on ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground")}>
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-[14px] font-semibold text-foreground">{t.title}</span>
+                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", on ? "bg-primary/10 text-primary" : "bg-panel text-muted-foreground")}>{t.goal}</span>
+                </span>
+                <span className={cn("mt-1 text-[12px] leading-snug text-muted-foreground", on ? "block" : "hidden sm:block")}>{t.text}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
       {tab === "createurs" ? <CreatorFinder /> : <BrandRadar />}
     </>
   );
@@ -248,17 +308,22 @@ function CreatorFinder() {
     <div>
       {/* Point de départ */}
       <div className="mb-3 rounded-2xl border border-border bg-surface p-4">
-        <Tabs
-          size="sm"
-          className="mb-3"
-          label="Point de départ"
-          value={source}
-          onValueChange={(v) => setSource(v === "liste" ? "liste" : "marque")}
-          items={[
-            { value: "marque", label: "Depuis une marque" },
-            { value: "liste", label: "Liste de @" },
-          ]}
-        />
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Tabs
+            size="sm"
+            label="Point de départ"
+            value={source}
+            onValueChange={(v) => setSource(v === "liste" ? "liste" : "marque")}
+            items={[
+              { value: "marque", label: "Depuis une marque" },
+              { value: "liste", label: "Liste de @" },
+            ]}
+          />
+          <HelpTip title="Quelle différence ?">
+            <p><span className="font-medium text-foreground">Depuis une marque</span> : l'app lit les 50 derniers posts de la marque et liste les @ qu'elle cite. Ce sont souvent les créatrices avec qui elle a travaillé, donc des profils déjà « validés » par des marques de ta niche.</p>
+            <p><span className="font-medium text-foreground">Liste de @</span> : tu colles des @ trouvés ailleurs (concurrents, commentaires, tes recherches) pour voir tous leurs chiffres d'un coup.</p>
+          </HelpTip>
+        </div>
         {source === "marque" ? (
           <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void runBrand(); }}>
             <div className="flex min-w-[200px] flex-1 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 focus-within:border-primary">
@@ -288,10 +353,10 @@ function CreatorFinder() {
         <>
           {/* Filtres */}
           <div className="mb-3 flex flex-wrap items-end gap-2 rounded-2xl border border-border bg-surface p-3">
-            <label className="flex flex-col gap-1 text-[10px] font-medium text-faint">Abonnés min<input value={minF} onChange={(e) => setMinF(e.target.value)} placeholder="10k" className={cn(IN, "w-24")} /></label>
-            <label className="flex flex-col gap-1 text-[10px] font-medium text-faint">Abonnés max<input value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-24")} /></label>
-            <label className="flex flex-col gap-1 text-[10px] font-medium text-faint">Engagement min (%)<input value={minEr} onChange={(e) => setMinEr(e.target.value)} placeholder="2" inputMode="decimal" className={cn(IN, "w-28")} /></label>
-            <label className="flex min-w-[140px] flex-1 flex-col gap-1 text-[10px] font-medium text-faint">Mot dans la bio<input value={bioWord} onChange={(e) => setBioWord(e.target.value)} placeholder="Lyon, running, maman…" className={IN} /></label>
+            <Field label="Abonnés min" help={<p>Tu peux écrire 10k, 10 000 ou 1,2M.</p>}><input aria-label="Abonnés minimum" value={minF} onChange={(e) => setMinF(e.target.value)} placeholder="10k" className={cn(IN, "w-24")} /></Field>
+            <Field label="Abonnés max"><input aria-label="Abonnés maximum" value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-24")} /></Field>
+            <Field label="Engagement min (%)" help={<><p>Likes + commentaires moyens de ses 12 derniers posts, divisés par ses abonnés.</p><p>Repère : de 1 à 3 % c'est la moyenne, au-dessus de 3 % c'est bon. Les petits comptes ont souvent un taux plus haut.</p></>}><input aria-label="Engagement minimum" value={minEr} onChange={(e) => setMinEr(e.target.value)} placeholder="2" inputMode="decimal" className={cn(IN, "w-28")} /></Field>
+            <Field label="Mot dans la bio" className="min-w-[140px] flex-1" help={<p>Pour cibler une ville (Lyon), une niche (running, maman, vegan) ou une langue. L'app cherche le mot dans la bio et le nom.</p>}><input aria-label="Mot dans la bio" value={bioWord} onChange={(e) => setBioWord(e.target.value)} placeholder="Lyon, running, maman…" className={IN} /></Field>
             <label className="flex flex-col gap-1 text-[10px] font-medium text-faint">Trier par
               <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className={cn(IN, "w-36")}>
                 <option value="followers">Abonnés</option>
@@ -300,8 +365,8 @@ function CreatorFinder() {
               </select>
             </label>
             <div className="flex flex-wrap items-center gap-3 pb-2 text-[12px] text-muted-foreground">
-              <label className="flex items-center gap-1.5"><input type="checkbox" checked={withEmail} onChange={(e) => setWithEmail(e.target.checked)} /> Avec email</label>
-              <label className="flex items-center gap-1.5"><input type="checkbox" checked={showPerso} onChange={(e) => setShowPerso(e.target.checked)} /> Comptes perso / introuvables</label>
+              <Check2 label="Avec email" checked={withEmail} onChange={setWithEmail} help={<p>Seulement les créatrices qui ont écrit un email dans leur bio : tu peux leur écrire tout de suite.</p>} />
+              <Check2 label="Comptes perso / introuvables" checked={showPerso} onChange={setShowPerso} help={<p>Meta ne donne pas les chiffres des comptes personnels. Coche pour les voir quand même (grisés), par exemple pour les ajouter au Scouting à la main.</p>} />
             </div>
           </div>
 
@@ -366,8 +431,20 @@ function CreatorFinder() {
         </>
       )}
       {!last && !busy && (
-        <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center text-[13px] text-muted-foreground">
-          Tape le @ d'une marque de ta niche : l'app te montre les créatrices avec qui elle travaille, avec leurs abonnés et leur engagement.
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+          {[
+            ["1", "Tape le @ d'une marque", "Une marque de ta niche, par exemple aloyoga ou sezane."],
+            ["2", "Filtre", "Abonnés, engagement, ville ou niche dans la bio, avec email."],
+            ["3", "Ajoute au Scouting", "Un clic : la créatrice rejoint ton Scouting, avec sa photo et ses chiffres."],
+          ].map(([n, t, d]) => (
+            <div key={n} className="rounded-2xl border border-dashed border-border px-4 py-4">
+              <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
+                <span className="grid h-5 w-5 place-items-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">{n}</span>
+                {t}
+              </div>
+              <div className="mt-1 text-[12px] leading-snug text-muted-foreground">{d}</div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -444,10 +521,15 @@ function BrandRadar() {
 
   const runScan = async () => {
     setScanning(true);
-    const r = await invokeSourcing<{ creators?: number; brands?: number; stopped?: string }>({ mode: "scan" });
+    const r = await invokeSourcing<{ creators?: number; brands?: number; stopped?: string; diag?: { posts: number; withText: number; withAt: number } }>({ mode: "scan" });
     setScanning(false);
     if (r.error) return toast(errorText(r.error));
-    toast(`${r.creators ?? 0} créatrices lues · ${r.brands ?? 0} marques citées${r.stopped ? ` · Meta a freiné` : ""}`);
+    const d = r.diag;
+    toast(
+      `${r.creators ?? 0} créatrices lues · ${r.brands ?? 0} marques citées` +
+        (d && !r.brands ? ` · ${d.posts} posts reçus, ${d.withText} avec texte, ${d.withAt} avec un @` : "") +
+        (r.stopped ? " · Meta a freiné, la suite passera plus tard" : ""),
+    );
     setReload((n) => n + 1);
   };
 
@@ -519,35 +601,49 @@ function BrandRadar() {
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <Tabs
-          size="sm"
-          wrap
-          label="Quelles marques"
-          value={kind}
-          onValueChange={(v) => setKind(v as typeof kind)}
-          items={[
-            { value: "payes", label: "Partenariats payés" },
-            { value: "gratuits", label: "Citées gratuitement" },
-            { value: "tous", label: "Toutes" },
-          ]}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Tabs
+            size="sm"
+            wrap
+            label="Quelles marques"
+            value={kind}
+            onValueChange={(v) => setKind(v as typeof kind)}
+            items={[
+              { value: "payes", label: "Partenariats payés" },
+              { value: "gratuits", label: "Citées gratuitement" },
+              { value: "tous", label: "Toutes" },
+            ]}
+          />
+          <HelpTip title="Quelle différence ?">
+            <p><span className="font-medium text-foreground">Partenariats payés</span> : des créatrices de ta niche ont fait un post payé pour la marque (#ad, #sponsorisé, #partenariat, code promo…). Elle a un budget influence : c'est un <span className="font-medium text-foreground">client potentiel</span>.</p>
+            <p><span className="font-medium text-foreground">Citées gratuitement</span> : une de TES créatrices parle de la marque sans être payée. C'est un <span className="font-medium text-foreground">contact chaud</span> : tu as la preuve qu'elle aime la marque, à mettre dans ton mail.</p>
+            <p><span className="font-medium text-foreground">Toutes</span> : tout ce que le radar a vu.</p>
+          </HelpTip>
+        </div>
+        <div className="flex items-center gap-2">
         <button type="button" onClick={() => void runScan()} disabled={scanning} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" title="Le radar passe tout seul chaque nuit">
           {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} {scanning ? "Lecture des posts (1 à 2 min)…" : "Lancer le radar"}
         </button>
+          <HelpTip title="Comment marche le radar ?" align="end">
+            <p>Chaque nuit, l'app lit les 25 derniers posts des créatrices de ton roster et de 20 créatrices de ton Scouting, et note les marques qu'elles citent avec un @.</p>
+            <p>Elle regarde ensuite le profil de chaque @ pour deviner si c'est une marque (site web, bio, abonnés).</p>
+            <p>« Lancer le radar » le fait tout de suite (1 à 2 minutes).</p>
+          </HelpTip>
+        </div>
       </div>
 
       {/* Filtres */}
       <div className="mb-3 flex flex-wrap items-end gap-2 rounded-2xl border border-border bg-surface p-3">
-        <label className="flex min-w-[180px] flex-1 flex-col gap-1 text-[10px] font-medium text-faint"># ou mots dans le post<input value={words} onChange={(e) => setWords(e.target.value)} placeholder="#running #ad" className={IN} /></label>
+        <Field label="# ou mots dans le post" className="min-w-[180px] flex-1" help={<><p>Ne garde que les posts qui contiennent TOUS ces mots ou hashtags.</p><p>Exemple : « #running #ad » = les partenariats payés dans le running. « lyon » = les posts qui parlent de Lyon.</p><p>L'app lit le texte sous le post : les # mis en commentaire ne sont pas visibles.</p></>}><input aria-label="Hashtags ou mots" value={words} onChange={(e) => setWords(e.target.value)} placeholder="#running #ad" className={IN} /></Field>
         <label className="flex flex-col gap-1 text-[10px] font-medium text-faint">Période
           <select value={period} onChange={(e) => setPeriod(e.target.value)} className={cn(IN, "w-28")}>
             {PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-[10px] font-medium text-faint">Créatrice : abonnés min<input value={minF} onChange={(e) => setMinF(e.target.value)} placeholder="10k" className={cn(IN, "w-28")} /></label>
-        <label className="flex flex-col gap-1 text-[10px] font-medium text-faint">max<input value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-24")} /></label>
-        <label className="flex flex-col gap-1 text-[10px] font-medium text-faint">Ville de la créatrice<input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Lyon" className={cn(IN, "w-28")} /></label>
-        <label className="flex flex-col gap-1 text-[10px] font-medium text-faint">Statut
+        <Field label="Créatrice : abonnés min" help={<p>La taille de la créatrice qui a fait le post. Utile pour trouver les marques qui travaillent avec des comptes de la taille des tiens.</p>}><input aria-label="Abonnés minimum de la créatrice" value={minF} onChange={(e) => setMinF(e.target.value)} placeholder="10k" className={cn(IN, "w-28")} /></Field>
+        <Field label="max"><input aria-label="Abonnés maximum de la créatrice" value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-24")} /></Field>
+        <Field label="Ville de la créatrice" help={<p>Cherche le mot dans la bio de la créatrice qui a fait le post (par exemple Lyon).</p>}><input aria-label="Ville de la créatrice" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Lyon" className={cn(IN, "w-28")} /></Field>
+        <label className="flex flex-col gap-1 text-[10px] font-medium text-faint" title="À traiter = pas encore triées ; Au Pipeline = déjà ajoutées ; Ignorées = mises de côté">Statut
           <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className={cn(IN, "w-32")}>
             <option value="nouveau">À traiter</option>
             <option value="pipeline">Au Pipeline</option>
@@ -555,8 +651,8 @@ function BrandRadar() {
           </select>
         </label>
         <div className="flex flex-wrap items-center gap-3 pb-2 text-[12px] text-muted-foreground">
-          <label className="flex items-center gap-1.5"><input type="checkbox" checked={showKnown} onChange={(e) => setShowKnown(e.target.checked)} /> Déjà dans mes contacts</label>
-          <label className="flex items-center gap-1.5"><input type="checkbox" checked={showUnsure} onChange={(e) => setShowUnsure(e.target.checked)} /> Comptes incertains</label>
+          <Check2 label="Déjà dans mes contacts" checked={showKnown} onChange={setShowKnown} help={<p>Les marques déjà dans tes Contacts sont cachées, pour ne garder que les nouvelles. Coche pour les voir aussi.</p>} />
+          <Check2 label="Comptes incertains" checked={showUnsure} onChange={setShowUnsure} help={<p>L'app devine si un @ est une marque (site web, bio, abonnés). Quand elle n'est pas sûre (ami tagué, autre créatrice, profil pas encore lu), le compte est caché. Coche pour le voir.</p>} />
         </div>
       </div>
 
@@ -608,7 +704,7 @@ function BrandRadar() {
                       {rosterNames[p.c] && <span className="rounded bg-foreground/[0.06] px-1.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">roster</span>}
                       {profiles[p.c]?.followers != null && <span className="text-faint">{fmtCompact(profiles[p.c]?.followers ?? 0)}</span>}
                       <span className="text-faint">{fmtAgo(p.at)}</span>
-                      <span className={cn("ml-auto shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold", p.paid ? "bg-primary/10 text-primary" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400")}>{p.paid ? "PAYÉ" : "GRATUIT"}</span>
+                      <span title={p.paid ? "Le post contient #ad, #sponsorisé, #partenariat, un code promo…" : "Aucun signe de partenariat payé dans le texte du post"} className={cn("ml-auto shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold", p.paid ? "bg-primary/10 text-primary" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400")}>{p.paid ? "PAYÉ" : "GRATUIT"}</span>
                     </div>
                     <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">{p.cap || "Sans légende"}</div>
                   </a>

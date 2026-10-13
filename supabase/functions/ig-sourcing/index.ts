@@ -23,8 +23,8 @@ type RadarPost = { c: string; roster: boolean; url: string; at: string; paid: bo
 
 const DAY = 86400000;
 const FRESH_DAYS = 7;
-const POOL_PER_SCAN = 30; // créatrices du Scouting lues par nuit (les plus anciennes d'abord)
-const BRANDS_PER_SCAN = 40; // profils de marques lus par nuit
+const POOL_PER_SCAN = 20; // créatrices du Scouting lues par nuit (les plus anciennes d'abord)
+const BRANDS_PER_SCAN = 25; // profils de marques lus par nuit (Meta limite les demandes par heure)
 const age = (iso: string | null | undefined) => (iso ? Date.now() - Date.parse(iso) : Infinity);
 
 /** Mots qui signalent un partenariat payé dans une légende. */
@@ -181,11 +181,16 @@ async function scan(ctx: Ctx) {
 
   const found = new Map<string, RadarPost[]>();
   const scanned: string[] = [];
+  // Compteurs pour comprendre un radar vide : posts reçus, avec texte, avec un @.
+  const diag = { posts: 0, withText: 0, withAt: 0 };
   await each(ctx, [...new Set(roster), ...poolTodo], async (u) => {
     const { media } = await profile(ctx, u, 25, true);
     if (!media) return;
     scanned.push(u);
     for (const p of media) {
+      diag.posts++;
+      if (p.caption.trim()) diag.withText++;
+      if (p.caption.includes("@")) diag.withAt++;
       for (const m of mentions(p.caption)) {
         if (ours.has(m) || m === u) continue;
         const list = found.get(m) ?? [];
@@ -219,7 +224,7 @@ async function scan(ctx: Ctx) {
     .sort((a, b) => (found.get(b)?.length ?? 0) - (found.get(a)?.length ?? 0))
     .slice(0, BRANDS_PER_SCAN);
   await each(ctx, todo, (b) => profile(ctx, b, 0));
-  return { creators: scanned.length, brands: brands.length, profiles: todo.length, stopped: ctx.stop || undefined };
+  return { creators: scanned.length, brands: brands.length, profiles: todo.length, diag, stopped: ctx.stop || undefined };
 }
 
 async function caller(req: Request, sb: SupabaseClient): Promise<"cron" | "agency" | null> {
