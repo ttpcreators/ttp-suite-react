@@ -126,3 +126,9 @@ verify_jwt = false
 # ig-hashtag : recherche par hashtag (Scouting). JWT requis + rôle agence.
 [functions.ig-hashtag]
 verify_jwt = true
+
+# ig-sourcing : page Sourcing (créatrices citées par une marque, liste de @) et
+# Radar à marques (scan de nuit par pg_cron avec CRON_SECRET) → verify_jwt=false ;
+# auth dans le code (CRON_SECRET OU rôle agence).
+[functions.ig-sourcing]
+verify_jwt = false

@@ -1,0 +1,262 @@
+// ============================================================================
+// ig-sourcing/index.ts : Sourcing de créatrices + Radar à marques (page Sourcing).
+// ----------------------------------------------------------------------------
+// Toujours via l'outil officiel de Meta (_shared/instagram.ts, comptes PRO) :
+//   { mode: "brand", brand: "@gymshark" } → les @ cités dans les 50 derniers posts
+//      de la marque (les créatrices avec qui elle travaille), avec leurs chiffres.
+//   { mode: "list", handles: [...] } → chiffres d'une liste de @ (30 max par appel).
+//   { mode: "scan" } (cron chaque nuit, ou bouton « Lancer le radar ») : lit les
+//      derniers posts des créatrices du roster et du Scouting, note les marques
+//      qu'elles citent (payé ou non), puis lit le profil de ces marques → ig_radar.
+// Profils lus gardés dans ig_profiles (7 jours) : on ne redemande pas à Meta.
+//
+// AUTH : verify_jwt = false (config.toml) ; Bearer CRON_SECRET (cron) OU JWT agence.
+// ============================================================================
+
+import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
+import { discover, engagementRate, igUser, metaReady, postsPerWeek, type IgProfile } from "../_shared/instagram.ts";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+
+type Json = Record<string, unknown>;
+type ProfileRow = { username: string; data: Json | null; why: string | null; scanned_at: string | null; at: string };
+type RadarPost = { c: string; roster: boolean; url: string; at: string; paid: boolean; likes: number | null; comments: number; cap: string };
+
+const DAY = 86400000;
+const FRESH_DAYS = 7;
+const POOL_PER_SCAN = 30; // créatrices du Scouting lues par nuit (les plus anciennes d'abord)
+const BRANDS_PER_SCAN = 40; // profils de marques lus par nuit
+const age = (iso: string | null | undefined) => (iso ? Date.now() - Date.parse(iso) : Infinity);
+
+/** Mots qui signalent un partenariat payé dans une légende. */
+const PAID = /#(ad|ads|pub|publicite|publicité|sponsor|sponsorise|sponsorisé|sponsored|partenariat|partenariatremunere|partenariatrémunéré|partnership|collab|collaboration|gifted|ambassador|ambassadrice)(?![\p{L}\p{N}_])|code promo|avec le code|code\s*:|-\s?\d{1,2}\s?%|en partenariat|partenariat r[ée]mun[ée]r[ée]|paid partnership|sponsoris[ée] par|offert par/iu;
+const isPaid = (caption: string) => PAID.test(caption);
+
+/** @ cités dans une légende (minuscules, sans point final). */
+function mentions(caption: string): string[] {
+  const out = new Set<string>();
+  for (const m of caption.matchAll(/@([A-Za-z0-9._]{2,30})/g)) {
+    const u = igUser(m[1].replace(/\.+$/, ""));
+    if (u) out.add(u.toLowerCase());
+  }
+  return [...out];
+}
+
+const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+const LINK_IN_BIO = /(linktr\.ee|beacons\.ai|linkin\.bio|lnk\.bio|solo\.to|campsite\.bio|bio\.site|tap\.bio|msha\.ke|hoo\.be|snipfeed|stan\.store|allmylinks|linkbio|later\.com|flowcode|komi\.io|direct\.me|instabio)/i;
+const BRANDISH = /(shop|store|boutique|officiel|official|marque|brand|livraison|delivery|e-?shop|collection|®|™|since \d{4}|depuis \d{4}|made in|fabriqué|cosm[eé]ti|skincare|nutrition|restaurant|hôtel|hotel|studio|maison|atelier|paris \d|\.com|\.fr)/i;
+const PERSONISH = /(she\/her|il\/lui|elle\/she|maman|mum|mom|ugc|influenc|créatrice|creatrice|content creator|créateur de contenu|collab ?(dm|📩)|contact pro|management|📍)/i;
+
+/** Devine si un compte est une marque (score ≥ 2) : site, bio, ratio abonnés/abonnements. */
+function brandScore(p: IgProfile): number {
+  let s = 0;
+  if (p.website && !LINK_IN_BIO.test(p.website)) s += 2;
+  if (BRANDISH.test(`${p.name} ${p.bio}`)) s += 1;
+  if (p.followers >= 3000 && p.following * 5 < p.followers) s += 1;
+  if (PERSONISH.test(p.bio)) s -= 2;
+  return s;
+}
+
+/** Chiffres utiles d'un profil (gardés dans ig_profiles.data). */
+function toData(p: IgProfile): Json {
+  const last12 = p.media.slice(0, 12);
+  const score = brandScore(p);
+  return {
+    name: p.name, followers: p.followers, following: p.following, posts: p.posts,
+    er: last12.length ? engagementRate(last12, p.followers) : null,
+    perWeek: last12.length ? postsPerWeek(last12) : null,
+    lastPost: p.media[0]?.at ?? null,
+    bio: p.bio.slice(0, 300), website: p.website, email: (p.bio.match(EMAIL)?.[0] ?? "").toLowerCase(),
+    picture: p.picture, brandScore: score, isBrand: score >= 2,
+  };
+}
+
+type Ctx = { sb: SupabaseClient; stop: string; t0: number; cache: Map<string, ProfileRow> };
+const inBudget = (ctx: Ctx) => !ctx.stop && Date.now() - ctx.t0 < 110_000;
+
+/** Profil d'un @ : depuis ig_profiles s'il est frais, sinon demandé à Meta (et gardé). */
+async function profile(ctx: Ctx, user: string, mediaLimit: number, force = false): Promise<{ row: ProfileRow; media?: IgProfile["media"] }> {
+  const u = user.toLowerCase();
+  const known = ctx.cache.get(u);
+  const freshDays = known?.why === "compte_perso" ? 30 : FRESH_DAYS;
+  if (!force && known && age(known.at) < freshDays * DAY) return { row: known };
+  if (ctx.stop) return { row: known ?? { username: u, data: null, why: ctx.stop, scanned_at: null, at: new Date().toISOString() } };
+  const r = await discover(u, mediaLimit);
+  const now = new Date().toISOString();
+  if (!r.ok) {
+    if (r.stop) ctx.stop = r.why;
+    const row: ProfileRow = { username: u, data: known?.data ?? null, why: r.why, scanned_at: known?.scanned_at ?? null, at: now };
+    if (!r.stop && r.why !== "reseau") {
+      ctx.cache.set(u, row);
+      await ctx.sb.from("ig_profiles").upsert({ username: u, data: row.data, why: row.why, at: now });
+    }
+    return { row };
+  }
+  const row: ProfileRow = { username: u, data: toData(r.profile), why: null, scanned_at: known?.scanned_at ?? null, at: now };
+  ctx.cache.set(u, row);
+  await ctx.sb.from("ig_profiles").upsert({ username: u, data: row.data, why: null, at: now });
+  return { row, media: r.profile.media };
+}
+
+/** Applique `fn` à chaque élément, 4 à la fois, tant qu'il reste du temps. */
+async function each<T>(ctx: Ctx, items: T[], fn: (t: T) => Promise<unknown>) {
+  let i = 0;
+  const worker = async () => {
+    while (i < items.length && inBudget(ctx)) {
+      const t = items[i++];
+      try {
+        await fn(t);
+      } catch (e) {
+        console.error("ig-sourcing", e);
+      }
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+}
+
+async function loadCache(ctx: Ctx, users: string[]) {
+  const list = [...new Set(users.map((u) => u.toLowerCase()))].filter((u) => !ctx.cache.has(u));
+  for (let i = 0; i < list.length; i += 200) {
+    const { data } = await ctx.sb.from("ig_profiles").select("username, data, why, scanned_at, at").in("username", list.slice(i, i + 200));
+    for (const r of (data as ProfileRow[] | null) ?? []) ctx.cache.set(r.username, r);
+  }
+}
+
+// ── Sourcing : depuis une marque, ou une liste de @ ──────────────────────────
+async function fromBrand(ctx: Ctx, brand: string) {
+  const b = igUser(brand).toLowerCase();
+  if (!b) return { error: "nom_invalide" };
+  await loadCache(ctx, [b]);
+  const r = await discover(b, 50);
+  if (!r.ok) return { error: r.why };
+  const now = new Date().toISOString();
+  await ctx.sb.from("ig_profiles").upsert({ username: b, data: toData(r.profile), why: null, at: now });
+  // Qui la marque cite, combien de fois, et quand pour la dernière fois.
+  const seen = new Map<string, { count: number; lastAt: string; url: string }>();
+  for (const p of r.profile.media) {
+    for (const m of mentions(p.caption)) {
+      if (m === b) continue;
+      const cur = seen.get(m);
+      if (cur) cur.count++;
+      else seen.set(m, { count: 1, lastAt: p.at, url: p.url });
+    }
+  }
+  const users = [...seen.entries()].sort((x, y) => y[1].count - x[1].count).slice(0, 40).map(([u]) => u);
+  await loadCache(ctx, users);
+  await each(ctx, users, (u) => profile(ctx, u, 12));
+  return {
+    brand: { username: b, ...toData(r.profile) },
+    candidates: users.map((u) => ({ username: u, ...seen.get(u), data: ctx.cache.get(u)?.data ?? null, why: ctx.cache.get(u)?.why ?? (ctx.stop || null) })),
+    stopped: ctx.stop || undefined,
+  };
+}
+
+async function fromList(ctx: Ctx, handles: unknown[]) {
+  const users = [...new Set(handles.map((h) => igUser(String(h ?? "")).toLowerCase()).filter(Boolean))].slice(0, 30);
+  await loadCache(ctx, users);
+  await each(ctx, users, (u) => profile(ctx, u, 12));
+  return {
+    candidates: users.map((u) => ({ username: u, data: ctx.cache.get(u)?.data ?? null, why: ctx.cache.get(u)?.why ?? (ctx.stop || null) })),
+    stopped: ctx.stop || undefined,
+  };
+}
+
+// ── Radar : marques citées par les créatrices ────────────────────────────────
+async function scan(ctx: Ctx) {
+  const [cr, pool] = await Promise.all([
+    ctx.sb.from("creators").select("name, handle, platform, instagram, status"),
+    ctx.sb.from("creator_pool").select("handle"),
+  ]);
+  type C = { name: string; handle: string | null; platform: string | null; instagram: string | null; status: string | null };
+  const roster = ((cr.data as C[] | null) ?? [])
+    .filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif")
+    .map((c) => igUser(c.instagram) || ((c.platform ?? "").toLowerCase().includes("insta") ? igUser(c.handle) : ""))
+    .filter(Boolean).map((u) => u.toLowerCase());
+  const poolUsers = ((pool.data as { handle: string | null }[] | null) ?? []).map((p) => igUser(p.handle).toLowerCase()).filter(Boolean);
+  const ours = new Set([...roster, ...poolUsers, "ttp.creators"]);
+  await loadCache(ctx, [...ours]);
+  // Scouting : les moins récemment lues d'abord, 30 par nuit.
+  const poolTodo = [...new Set(poolUsers)].filter((u) => !roster.includes(u))
+    .sort((a, b) => age(ctx.cache.get(b)?.scanned_at) - age(ctx.cache.get(a)?.scanned_at)).slice(0, POOL_PER_SCAN);
+  const rosterSet = new Set(roster);
+
+  const found = new Map<string, RadarPost[]>();
+  const scanned: string[] = [];
+  await each(ctx, [...new Set(roster), ...poolTodo], async (u) => {
+    const { media } = await profile(ctx, u, 25, true);
+    if (!media) return;
+    scanned.push(u);
+    for (const p of media) {
+      for (const m of mentions(p.caption)) {
+        if (ours.has(m) || m === u) continue;
+        const list = found.get(m) ?? [];
+        list.push({ c: u, roster: rosterSet.has(u), url: p.url, at: p.at, paid: isPaid(p.caption), likes: p.likes, comments: p.comments, cap: p.caption.slice(0, 300) });
+        found.set(m, list);
+      }
+    }
+  });
+  const now = new Date().toISOString();
+  if (scanned.length) await ctx.sb.from("ig_profiles").update({ scanned_at: now }).in("username", scanned);
+
+  // Fusion avec le radar existant (un post n'est compté qu'une fois).
+  const brands = [...found.keys()];
+  const existing = new Map<string, { posts: RadarPost[] }>();
+  for (let i = 0; i < brands.length; i += 200) {
+    const { data } = await ctx.sb.from("ig_radar").select("brand, posts").in("brand", brands.slice(i, i + 200));
+    for (const r of (data as { brand: string; posts: RadarPost[] }[] | null) ?? []) existing.set(r.brand, r);
+  }
+  const rows = brands.map((b) => {
+    const byUrl = new Map<string, RadarPost>();
+    for (const p of [...(existing.get(b)?.posts ?? []), ...(found.get(b) ?? [])]) byUrl.set(p.url || `${p.c}:${p.at}`, p);
+    const posts = [...byUrl.values()].sort((x, y) => y.at.localeCompare(x.at)).slice(0, 40);
+    return { brand: b, posts, last_seen: now };
+  });
+  for (let i = 0; i < rows.length; i += 200) await ctx.sb.from("ig_radar").upsert(rows.slice(i, i + 200));
+
+  // Profil des marques (est-ce vraiment une marque ?), les plus citées d'abord.
+  await loadCache(ctx, brands);
+  const todo = brands
+    .filter((b) => { const k = ctx.cache.get(b); return !k || age(k.at) > (k.why === "compte_perso" ? 30 : FRESH_DAYS) * DAY; })
+    .sort((a, b) => (found.get(b)?.length ?? 0) - (found.get(a)?.length ?? 0))
+    .slice(0, BRANDS_PER_SCAN);
+  await each(ctx, todo, (b) => profile(ctx, b, 0));
+  return { creators: scanned.length, brands: brands.length, profiles: todo.length, stopped: ctx.stop || undefined };
+}
+
+async function caller(req: Request, sb: SupabaseClient): Promise<"cron" | "agency" | null> {
+  const authz = req.headers.get("Authorization") ?? "";
+  const bearer = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
+  if (!bearer) return null;
+  if (CRON_SECRET && timingSafeEqualStr(bearer, CRON_SECRET)) return "cron";
+  const { data, error } = await sb.auth.getUser(bearer);
+  if (error || !data?.user) return null;
+  const { data: prof } = await sb.from("profiles").select("role").eq("user_id", data.user.id).maybeSingle<{ role: string }>();
+  return prof?.role === "agency" ? "agency" : null;
+}
+
+Deno.serve(async (req: Request) => {
+  const cors = corsHeaders(req.headers.get("Origin"));
+  const res = (b: unknown, status = 200) =>
+    new Response(JSON.stringify(b), { status, headers: { ...cors, "Content-Type": "application/json" } });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method !== "POST") return res({ error: "methode" }, 405);
+
+  const sb = getServiceClient();
+  if (!(await caller(req, sb))) return res({ error: "non_autorise" }, 401);
+  let body: { mode?: string; brand?: string; handles?: unknown } = {};
+  try {
+    body = (await req.json()) ?? {};
+  } catch {
+    body = {};
+  }
+  if (!metaReady()) return res({ error: "meta_non_configure" });
+  const ctx: Ctx = { sb, stop: "", t0: Date.now(), cache: new Map() };
+  // Table absente (SQL pas encore lancé) : on le dit clairement.
+  const probe = await sb.from("ig_profiles").select("username").limit(1);
+  if (probe.error) return res({ error: "migration_manquante" });
+
+  if (body.mode === "brand") return res(await fromBrand(ctx, String(body.brand ?? "")));
+  if (body.mode === "list") return res(await fromList(ctx, Array.isArray(body.handles) ? body.handles : []));
+  const out = await scan(ctx);
+  console.log("ig-sourcing scan", JSON.stringify({ ...out, ms: Date.now() - ctx.t0 }));
+  return res(out);
+});

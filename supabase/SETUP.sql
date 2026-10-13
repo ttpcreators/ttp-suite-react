@@ -365,6 +365,35 @@ create table if not exists public.ig_accounts (
 alter table public.ig_accounts enable row level security;
 revoke all on public.ig_accounts from anon, authenticated;
 
+-- Sourcing + Radar à marques (sql/2026-10-13-instagram-sourcing) : profils Instagram
+-- lus par ig-sourcing (gardés 7 j) et marques citées par les créatrices. Écriture
+-- serveur seulement ; l'agence lit, et change le statut d'une marque du radar.
+create table if not exists public.ig_profiles (
+  username   text primary key,
+  data       jsonb,
+  why        text,
+  scanned_at timestamptz,
+  at         timestamptz not null default now()
+);
+create table if not exists public.ig_radar (
+  brand      text primary key,
+  posts      jsonb not null default '[]'::jsonb,
+  status     text not null default 'nouveau' check (status in ('nouveau', 'ignore', 'pipeline')),
+  first_seen timestamptz default now(),
+  last_seen  timestamptz default now()
+);
+alter table public.ig_profiles enable row level security;
+alter table public.ig_radar    enable row level security;
+revoke all on public.ig_profiles from anon;
+revoke all on public.ig_radar    from anon;
+drop policy if exists ig_profiles_agency_read on public.ig_profiles;
+create policy ig_profiles_agency_read on public.ig_profiles for select to authenticated using (public.is_agency());
+drop policy if exists ig_radar_agency_read on public.ig_radar;
+create policy ig_radar_agency_read on public.ig_radar for select to authenticated using (public.is_agency());
+drop policy if exists ig_radar_agency_update on public.ig_radar;
+create policy ig_radar_agency_update on public.ig_radar for update to authenticated
+  using (public.is_agency()) with check (public.is_agency());
+
 -- DONNÉES AGENCE PURES : agence seulement
 -- contacts : partagés — l'agence voit/gère tout ; le créateur voit ceux de l'agence
 -- (creator NULL) + ajoute/gère les siens (creator = son nom). (sql/12)

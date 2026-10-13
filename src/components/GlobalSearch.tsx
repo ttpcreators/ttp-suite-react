@@ -30,6 +30,7 @@ const PAGE_ALIASES: Partial<Record<ViewId, string[]>> = {
   mediakit: ["media kit", "kit"],
   contrats: ["contrat"],
   prospection: ["prospect", "deal", "pipeline"],
+  sourcing: ["sourcing", "radar", "trouver", "recruter", "marques instagram"],
   roster: ["createurs", "talents"],
   objectifs: ["objectif", "goal"],
   stats: ["statistiques", "analytics"],

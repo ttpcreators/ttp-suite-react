@@ -36,6 +36,7 @@ import {
   CreditCard,
   FolderOpen,
   History,
+  Radar,
   type LucideIcon,
   Mail,
 } from "lucide-react";
@@ -53,6 +54,7 @@ export type ViewId =
   | "roster"
   | "engagement"
   | "vivier"
+  | "sourcing"
   | "collabs"
   | "mediakit"
   | "briefs"
@@ -161,6 +163,7 @@ export const NAV: NavFamily[] = [
       },
       { id: "prospection", label: "Pipeline", icon: Search },
       { id: "vivier", label: "Scouting", icon: UserPlus },
+      { id: "sourcing", label: "Sourcing", icon: Radar },
       {
         id: "contrats",
         label: "Contrats",
