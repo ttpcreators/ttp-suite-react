@@ -13,7 +13,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import GlassStatChart from "@/components/ui/glass-stat-chart";
-import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus, Tag } from "lucide-react";
+import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus, Tag, Camera, Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -55,6 +55,24 @@ const igUrl = (handle?: string | null) => {
   return h ? `https://www.instagram.com/${h}/` : "";
 };
 
+/**
+ * Photo du créateur ajoutée à la main (clic sur le rond dans sa fiche), sinon ses
+ * initiales. Pas de photo Instagram automatique : les services gratuits ne la
+ * donnent plus, et deviner via un autre réseau risquerait d'afficher quelqu'un d'autre.
+ */
+function ScoutAvatar({ name, photo, size, className }: { name: string; photo?: string; size: number; className?: string }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [photo]);
+  return (
+    <div className={cn("relative grid shrink-0 place-items-center overflow-hidden bg-panel font-bold text-foreground", className)} style={{ width: size, height: size }}>
+      {initials(name)}
+      {photo && !broken && (
+        <img src={photo} alt="" loading="lazy" onError={() => setBroken(true)} className="absolute inset-0 h-full w-full bg-panel object-cover" />
+      )}
+    </div>
+  );
+}
+
 // ── Scouting : statut de pipeline + suivi d'abonnés dans le temps ──
 type ScoutStatus = "observation" | "contacter" | "discussion" | "signe" | "ecarte";
 const STATUSES: { v: ScoutStatus; label: string; dot: string; pill: string }[] = [
@@ -67,7 +85,7 @@ const STATUSES: { v: ScoutStatus; label: string; dot: string; pill: string }[] =
 const statusMeta = (v: ScoutStatus) => STATUSES.find((s) => s.v === v) ?? STATUSES[0];
 
 type Snap = { date: string; value: number }; // date = ISO « AAAA-MM-JJ »
-type Track = { status?: ScoutStatus; snaps?: Snap[] };
+type Track = { status?: ScoutStatus; snaps?: Snap[]; photo?: string };
 type Tracking = Record<string, Track>;
 
 /** ISO « 2026-08-12 » → « 12 août ». */
@@ -122,6 +140,25 @@ export function Vivier() {
   const [snapVal, setSnapVal] = useState("");
 
   const statusOf = (id: string): ScoutStatus => tracking[id]?.status ?? "observation";
+  const photoOf = (id: string): string | undefined => tracking[id]?.photo;
+  const [photoBusy, setPhotoBusy] = useState(false);
+  // Photo ajoutée à la main (bucket public « avatars »), gardée avec le suivi du scouting.
+  const uploadPhoto = async (r: Row, file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return toast("Choisis une image");
+    if (file.size > 5 * 1024 * 1024) return toast("Image trop lourde (max 5 Mo)");
+    setPhotoBusy(true);
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const path = `scouting/${r.id}/${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("avatars").upload(path, file, { upsert: false, cacheControl: "3600", contentType: file.type });
+    if (upErr) {
+      setPhotoBusy(false);
+      return toast("Photo non envoyée, réessaie");
+    }
+    const url = supabase.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+    await mutateTracking(r.id, (t) => ({ ...t, photo: url }), "Photo enregistrée ✓");
+    setPhotoBusy(false);
+  };
   const snapsOf = (id: string): Snap[] => [...(tracking[id]?.snaps ?? [])].sort((a, b) => a.date.localeCompare(b.date));
   const latestFollowers = (id: string): number | null => { const s = snapsOf(id); return s.length ? s[s.length - 1].value : null; };
   const growthOf = (id: string): number => { const s = snapsOf(id); return s.length >= 2 ? s[s.length - 1].value - s[s.length - 2].value : 0; };
@@ -258,7 +295,7 @@ export function Vivier() {
 
       {/* Filtre par catégorie (menu déroulant, avec le nombre de créateurs) */}
       {tagList.length > 0 && (
-        <div className="mb-2">
+        <div className="mb-2 w-full sm:max-w-[300px]">
           <Select value={tagFilter} onValueChange={setTagFilter}>
             <SelectTrigger icon={Tag} className="h-10 w-auto min-w-[220px] rounded-lg bg-surface text-[12px]" placeholder="Toutes les catégories" />
             <SelectContent>
@@ -310,7 +347,7 @@ export function Vivier() {
         <div className="overflow-hidden rounded-2xl border border-border bg-surface divide-y divide-border">
           {filtered.map((r) => (
             <div key={r.id} onClick={() => setSelected(r)} className="flex cursor-pointer items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-rowhover">
-              <div className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[9px] bg-panel text-[11px] font-bold text-foreground">{initials(r.name)}</div>
+              <ScoutAvatar name={r.name} photo={photoOf(r.id)} size={38} className="rounded-full text-[11px]" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-[13px] font-semibold text-foreground">{r.name}</span>
@@ -365,7 +402,16 @@ export function Vivier() {
         <Overlay className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClose={() => setSelected(null)}>
           <div className="my-auto max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-start gap-3">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-panel text-sm font-bold text-foreground">{initials(selected.name)}</div>
+              <label className="group relative shrink-0 cursor-pointer" title="Changer la photo">
+                <ScoutAvatar name={selected.name} photo={photoOf(selected.id)} size={56} className="rounded-full text-sm" />
+                <span className={cn("absolute inset-0 grid place-items-center rounded-full bg-black/45 text-white transition-opacity", photoBusy ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
+                  {photoBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                </span>
+                {/* Pastille appareil photo toujours visible (pas de survol sur téléphone). */}
+                <span className="absolute -bottom-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full border-2 border-card bg-primary text-primary-foreground"><Camera className="h-2.5 w-2.5" /></span>
+                <input type="file" accept="image/*" className="hidden" disabled={photoBusy}
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void uploadPhoto(selected, f); }} />
+              </label>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-base font-bold text-foreground">{selected.name}</span>
