@@ -76,12 +76,21 @@ function ScoutAvatar({ name, photos, size, className }: { name: string; photos: 
   );
 }
 
-/** Une photo Instagram trouvée est revérifiée après 30 jours, une introuvable après 7. */
+/** Une photo Instagram trouvée est revérifiée après 30 jours, une introuvable le lendemain. */
 const igStale = (t: Track | undefined, handle: string) => {
   if (!t?.igAt || t.igFor !== handle) return true;
+  if (!t.igPhoto && t.igV !== IG_V) return true;
   const days = (Date.now() - new Date(t.igAt + "T00:00:00").getTime()) / 86400000;
-  return days > (t.igPhoto ? 30 : 7);
+  return days > (t.igPhoto ? 30 : 1);
 };
+/** Raison (renvoyée par ig-avatar) → phrase pour la fiche. */
+const IG_WHY: Record<string, string> = {
+  profil_introuvable: "ce @ n'existe pas sur Instagram",
+  page_sans_photo: "Instagram n'a pas donné la photo",
+  nom_invalide: "le @ n'est pas valide",
+  stockage: "la photo n'a pas pu être enregistrée",
+};
+const igWhyText = (why?: string) => (why ? IG_WHY[why] ?? `Instagram a refusé (${why})` : "");
 /** @ déjà demandés pendant cette visite (évite de redemander en boucle). */
 const igAsked = new Set<string>();
 
@@ -99,7 +108,9 @@ const statusMeta = (v: ScoutStatus) => STATUSES.find((s) => s.v === v) ?? STATUS
 type Snap = { date: string; value: number }; // date = ISO « AAAA-MM-JJ »
 /** photo = ajoutée à la main ; igPhoto = photo Instagram copiée par la fonction ig-avatar
  *  (igFor = le @ pour lequel elle a été cherchée, igAt = quand ; null = introuvable). */
-type Track = { status?: ScoutStatus; snaps?: Snap[]; photo?: string; igPhoto?: string | null; igFor?: string; igAt?: string };
+type Track = { status?: ScoutStatus; snaps?: Snap[]; photo?: string; igPhoto?: string | null; igFor?: string; igAt?: string; igWhy?: string; igV?: number };
+/** Version de la recherche Instagram : la monter refait toutes les recherches ratées. */
+const IG_V = 2;
 type Tracking = Record<string, Track>;
 
 /** ISO « 2026-08-12 » → « 12 août ». */
@@ -167,14 +178,15 @@ export function Vivier() {
     if (!want.length) return;
     want.forEach((x) => igAsked.add(x.h));
     void supabase.functions.invoke("ig-avatar", { body: { handles: want.map((x) => x.h) } }).then(async ({ data, error: fnErr }) => {
-      const photos = (data as { photos?: Record<string, string | null> } | null)?.photos;
+      const res = data as { photos?: Record<string, string | null>; why?: Record<string, string> } | null;
+      const photos = res?.photos;
       if (fnErr || !photos) return;
       try {
         invalidateAppState();
         const fresh = ((await getAppState())["poolTracking"] as Tracking) ?? {};
         const next = { ...fresh };
         const at = todayISO();
-        for (const x of want) if (x.h in photos) next[x.id] = { ...(fresh[x.id] ?? {}), igPhoto: photos[x.h], igFor: x.h, igAt: at };
+        for (const x of want) if (x.h in photos) next[x.id] = { ...(fresh[x.id] ?? {}), igPhoto: photos[x.h], igFor: x.h, igAt: at, igWhy: res?.why?.[x.h], igV: IG_V };
         setLocalTrack(next);
         await saveAppStateKey("poolTracking", next);
       } catch {
@@ -460,6 +472,9 @@ export function Vivier() {
                   {selected.last_contacted && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà contacté" />}
                 </div>
                 {selected.tag && <div className="mt-0.5 text-[12px] font-medium text-muted-foreground">{selected.tag}</div>}
+                {!tracking[selected.id]?.photo && !tracking[selected.id]?.igPhoto && tracking[selected.id]?.igWhy && (
+                  <div className="mt-0.5 text-[11px] text-faint">Photo Instagram : {igWhyText(tracking[selected.id]?.igWhy)}. Touche le rond pour en ajouter une.</div>
+                )}
               </div>
               <button type="button" onClick={() => setSelected(null)} className="shrink-0 text-faint transition-colors hover:text-foreground"><X className="h-5 w-5" /></button>
             </div>
