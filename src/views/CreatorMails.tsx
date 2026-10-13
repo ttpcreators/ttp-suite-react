@@ -769,7 +769,9 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
                 />
                 <div className="flex items-center gap-3 border-t border-border px-3.5 py-2 text-[12px]">
                   <span className="min-w-0 flex-1 truncate text-faint">
-                    {asAgency ? (creatorSees ? `${creatorName} la voit dans son espace` : "Sa section Mails n'est pas encore activée") : "Ton manager est prévenu ; la marque ne la voit jamais"}
+                    {mode === "preview"
+                      ? `Aperçu : envoyée à ton nom (agence), pas au nom de ${creatorName}`
+                      : asAgency ? (creatorSees ? `${creatorName} la voit dans son espace` : "Sa section Mails n'est pas encore activée") : "Ton manager est prévenu ; la marque ne la voit jamais"}
                   </span>
                   <button
                     type="button"
