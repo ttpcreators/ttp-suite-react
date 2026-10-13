@@ -13,7 +13,7 @@
 //
 // Secrets (supabase secrets set) : META_TOKEN (jeton de page longue durée, jamais
 // dans le dépôt), META_IG_ID (id du compte Instagram pro de l'agence),
-// META_GRAPH_VERSION facultatif (défaut v23.0).
+// META_GRAPH_VERSION facultatif (défaut v26.0).
 // Sécurité : JWT requis (verify_jwt) + rôle agence vérifié dans profiles.
 // Seuls des noms d'utilisateur Instagram valides sont demandés (pas d'URL libre).
 // ============================================================================
@@ -22,7 +22,7 @@ import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 
 const META_TOKEN = Deno.env.get("META_TOKEN") ?? "";
 const META_IG_ID = Deno.env.get("META_IG_ID") ?? "";
-const GRAPH = `https://graph.facebook.com/${Deno.env.get("META_GRAPH_VERSION") ?? "v23.0"}`;
+const GRAPH = `https://graph.facebook.com/${Deno.env.get("META_GRAPH_VERSION") ?? "v26.0"}`;
 const USERNAME = /^[A-Za-z0-9._]{1,30}$/;
 
 /** « @lea.fit », « instagram.com/lea.fit/ » → « lea.fit » (ou "" si invalide). */
