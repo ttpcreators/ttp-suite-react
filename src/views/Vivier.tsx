@@ -80,11 +80,15 @@ function ScoutAvatar({ name, photos, size, className }: { name: string; photos: 
 const igStale = (t: Track | undefined, handle: string) => {
   if (!t?.igAt || t.igFor !== handle) return true;
   if (!t.igPhoto && t.igV !== IG_V) return true;
+  // Instagram freinait : on retente à la prochaine visite, petit à petit.
+  if (!t.igPhoto && (t.igWhy === "page_429" || t.igWhy === "pause")) return true;
   const days = (Date.now() - new Date(t.igAt + "T00:00:00").getTime()) / 86400000;
   return days > (t.igPhoto ? 30 : 1);
 };
 /** Raison (renvoyée par ig-avatar) → phrase pour la fiche. */
 const IG_WHY: Record<string, string> = {
+  page_429: "Instagram freine les demandes, nouvel essai à la prochaine visite",
+  pause: "en attente, nouvel essai à la prochaine visite",
   profil_introuvable: "ce @ n'existe pas sur Instagram",
   page_sans_photo: "Instagram n'a pas donné la photo",
   nom_invalide: "le @ n'est pas valide",
@@ -174,7 +178,7 @@ export function Vivier() {
     const want = rows
       .map((r) => ({ id: r.id, h: igName(r.handle) }))
       .filter((x) => x.h && !igAsked.has(x.h) && igStale(tracking[x.id], x.h))
-      .slice(0, 20);
+      .slice(0, 6);
     if (!want.length) return;
     want.forEach((x) => igAsked.add(x.h));
     void supabase.functions.invoke("ig-avatar", { body: { handles: want.map((x) => x.h) } }).then(async ({ data, error: fnErr }) => {

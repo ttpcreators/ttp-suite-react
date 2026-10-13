@@ -1,7 +1,7 @@
 // ============================================================================
 // ig-avatar/index.ts : photo de profil Instagram des créateurs du Scouting.
 // ----------------------------------------------------------------------------
-// Entrée (POST JSON) : { handles: string[] } (20 max).
+// Entrée (POST JSON) : { handles: string[] } (6 traités par appel, un par un).
 // Pour chaque @ : lit la page publique du profil (comme un aperçu de lien),
 // récupère l'image « og:image » (photo de profil 100×100), la copie dans le bucket
 // public « avatars » (instagram/<nom>.jpg : les liens d'Instagram expirent) et
@@ -41,6 +41,8 @@ async function findImage(user: string): Promise<{ src?: string; why: string }> {
     try {
       const page = await fetch(`https://www.instagram.com/${user}/`, { headers: { "User-Agent": ua, "Accept-Language": "fr-FR,fr;q=0.9" }, redirect: "follow" });
       if (page.status === 404) return { why: "profil_introuvable" };
+      // Instagram freine (trop de demandes) : on s'arrête là, réessayer aggraverait.
+      if (page.status === 429) return { why: "page_429" };
       if (!page.ok) { why = `page_${page.status}`; continue; }
       const m = (await page.text()).match(/<meta property="og:image" content="([^"]+)"/);
       if (!m) { why = "page_sans_photo"; continue; }
@@ -92,18 +94,25 @@ Deno.serve(async (req: Request) => {
     return res({ error: "json" }, 400);
   }
   if (!Array.isArray(handles)) return res({ error: "handles" }, 400);
-  const list = [...new Set(handles.filter((h): h is string => typeof h === "string"))].slice(0, 20);
+  const list = [...new Set(handles.filter((h): h is string => typeof h === "string"))].slice(0, 6);
 
-  // Par petits groupes : Instagram n'aime pas les rafales.
+  // Un par un, avec une pause : Instagram freine vite les rafales venant d'un serveur.
+  // Au premier « trop de demandes », les suivants sont laissés pour la prochaine fois.
   const photos: Record<string, string | null> = {};
   const why: Record<string, string> = {};
-  for (let i = 0; i < list.length; i += 4) {
-    await Promise.all(list.slice(i, i + 4).map(async (h) => {
-      const user = clean(h);
-      const f: Found = user ? await photoOf(sb, user).catch(() => ({ url: null, why: "erreur" })) : { url: null, why: "nom_invalide" };
-      photos[h] = f.url;
-      if (f.why) why[h] = f.why;
-    }));
+  let blocked = false;
+  for (const h of list) {
+    if (blocked) {
+      photos[h] = null;
+      why[h] = "pause";
+      continue;
+    }
+    const user = clean(h);
+    const f: Found = user ? await photoOf(sb, user).catch(() => ({ url: null, why: "erreur" })) : { url: null, why: "nom_invalide" };
+    photos[h] = f.url;
+    if (f.why) why[h] = f.why;
+    if (f.why === "page_429") blocked = true;
+    else await new Promise((r) => setTimeout(r, 1500));
   }
   console.log("ig-avatar", JSON.stringify({ demandes: list.length, trouvees: Object.values(photos).filter(Boolean).length, why }));
   return res({ photos, why });
