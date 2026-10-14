@@ -23,9 +23,10 @@ import { dmTouches, NO_TEXT, type DmMsg, type Touch } from "../_shared/inbox.ts"
 import { emailsIn } from "../_shared/signals.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-const PAGE_SIZE = 25; // conversations par demande
+const PAGE_SIZE = 25; // conversations par demande (liste seule : rapide)
 const MAX_PAGES = 6; // 150 conversations max par passage
 const PROFILES_PER_RUN = 20; // fiches (nom, photo, abonnés) lues par passage
+const BUDGET_MS = 100_000; // au-delà, la suite au passage suivant (les fonctions sont coupées à 150 s)
 const MSG_FIELDS = "id,created_time,from,to,message";
 
 type GraphError = { code?: number; error_subcode?: number; message?: string };
@@ -60,6 +61,7 @@ Deno.serve(async (req: Request) => {
   if (!metaReady()) return res({ error: "meta_non_configure" });
   const t0 = Date.now();
   const fail = async (why: string, detail?: string) => {
+    console.log("ig-inbox échec", why, detail ?? "");
     await saveState(sb, "inbox", { ok: false, why, detail: detail ?? null });
     return res({ error: why, detail, quota: await saveUsage(sb) });
   };
@@ -71,17 +73,17 @@ Deno.serve(async (req: Request) => {
   const meUser = me?.username ?? "";
   const isMe = (p?: Person) => !!p && (p.id === META_IG_ID || (!!meUser && (p.username ?? "").toLowerCase() === meUser));
 
-  // 2. Conversations récentes : on s'arrête dès qu'une page entière n'a rien de neuf.
+  // 2. Conversations récentes (liste seule, sans les messages : Meta met trop de temps
+  //    à tout renvoyer d'un coup). On s'arrête dès qu'une page entière n'a rien de neuf.
   const { data: knownRaw } = await sb.from("ig_threads").select("id, username, contact_id, emails, picture, updated_at");
   const known = new Map(((knownRaw as ThreadRow[] | null) ?? []).map((t) => [t.id, t]));
-  const fields = `id,updated_time,participants,messages.limit(20){${MSG_FIELDS}}`;
-  let url: string | null = `${GRAPH}/${page.pageId}/conversations?platform=instagram&limit=${PAGE_SIZE}&fields=${enc(fields)}&access_token=${enc(page.token)}`;
-  const changed: { conv: Conv; other: Person; msgs: DmMsg[] }[] = [];
-  for (let n = 0; url && n < MAX_PAGES && Date.now() - t0 < 60_000; n++) {
-    const body = await getJson(url, 25_000);
+  let url: string | null = `${GRAPH}/${page.pageId}/conversations?platform=instagram&limit=${PAGE_SIZE}&fields=${enc("id,updated_time,participants")}&access_token=${enc(page.token)}`;
+  const todo: Conv[] = [];
+  for (let n = 0; url && n < MAX_PAGES && Date.now() - t0 < 40_000; n++) {
+    const body = await getJson(url, 30_000);
     if (body.error) {
       const e = body.error as GraphError;
-      if (n === 0) return fail(e.message === "reseau" ? "reseau" : graphWhy(e).why, e.message);
+      if (n === 0) return fail(e.message === "reseau" ? "reseau" : graphWhy(e).why, `liste des conversations : ${e.message === "reseau" ? "pas de réponse de Meta en 30 s" : e.message ?? ""}`);
       break;
     }
     const list = (body.data as Conv[] | undefined) ?? [];
@@ -90,21 +92,46 @@ Deno.serve(async (req: Request) => {
       const prev = known.get(conv.id);
       if (prev?.updated_at && conv.updated_time && Date.parse(prev.updated_at) >= Date.parse(conv.updated_time)) continue;
       fresh++;
-      const other = (conv.participants?.data ?? []).find((p) => !isMe(p)) ?? {};
-      let raw = conv.messages?.data ?? [];
-      // Si Meta ne détaille pas les messages dans la liste, on les lit un par un.
-      if (raw.length && raw.every((m) => m.message === undefined && !m.from)) {
-        const full = await Promise.all(raw.slice(0, 20).map((m) => getJson(`${GRAPH}/${m.id}?fields=${MSG_FIELDS}&access_token=${enc(page.token)}`)));
-        raw = full.filter((m) => !m.error) as typeof raw;
-      }
-      const msgs: DmMsg[] = raw
-        .filter((m) => m.id && m.created_time)
-        .map((m) => ({ id: String(m.id), at: new Date(String(m.created_time)).toISOString(), me: isMe(m.from), text: String(m.message ?? "").trim() || NO_TEXT }));
-      changed.push({ conv, other, msgs });
+      todo.push(conv);
     }
     if (!fresh) break;
     url = ((body.paging as { next?: string } | undefined)?.next) ?? null;
   }
+
+  //    Puis les 20 derniers messages de chaque conversation nouvelle ou modifiée, 3 à la
+  //    fois, les plus récentes d'abord. Ce qui ne tient pas dans le temps : au passage suivant.
+  const changed: { conv: Conv; other: Person; msgs: DmMsg[] }[] = [];
+  let skipped = 0;
+  const readOne = async (conv: Conv) => {
+    const body = await getJson(`${GRAPH}/${conv.id}?fields=${enc(`messages.limit(20){${MSG_FIELDS}}`)}&access_token=${enc(page.token)}`, 25_000);
+    if (body.error) {
+      skipped++;
+      return;
+    }
+    let raw = ((body.messages as Conv["messages"]) ?? {}).data ?? [];
+    // Si Meta ne détaille pas les messages, on les lit un par un.
+    if (raw.length && raw.every((m) => m.message === undefined && !m.from)) {
+      const full = await Promise.all(raw.slice(0, 20).map((m) => getJson(`${GRAPH}/${m.id}?fields=${MSG_FIELDS}&access_token=${enc(page.token)}`)));
+      raw = full.filter((m) => !m.error) as typeof raw;
+    }
+    const other = (conv.participants?.data ?? []).find((p) => !isMe(p)) ?? {};
+    const msgs: DmMsg[] = raw
+      .filter((m) => m.id && m.created_time)
+      .map((m) => ({ id: String(m.id), at: new Date(String(m.created_time)).toISOString(), me: isMe(m.from), text: String(m.message ?? "").trim() || NO_TEXT }));
+    changed.push({ conv, other, msgs });
+  };
+  let next = 0;
+  const worker = async () => {
+    while (next < todo.length) {
+      if (Date.now() - t0 > BUDGET_MS - 30_000) {
+        skipped += todo.length - next;
+        next = todo.length;
+        return;
+      }
+      await readOne(todo[next++]);
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
 
   // 3. Enregistre conversations et messages.
   const now = new Date().toISOString();
@@ -197,7 +224,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const out = { ok: true, threads: changed.length, saved, linked, touches: touchesAdded, emails: emailsAdded, me: meUser || null, ms: Date.now() - t0 };
+  const out = { ok: true, threads: changed.length, left: skipped, saved, linked, touches: touchesAdded, emails: emailsAdded, me: meUser || null, ms: Date.now() - t0 };
   await saveState(sb, "inbox", out);
   console.log("ig-inbox", JSON.stringify(out));
   return res({ ...out, quota: await saveUsage(sb) });

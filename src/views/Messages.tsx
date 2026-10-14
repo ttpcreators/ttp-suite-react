@@ -26,7 +26,7 @@ type Thread = {
   contact_id: string | null; hidden: boolean;
 };
 type Msg = { id: string; at: string; me: boolean; text: string };
-type SyncState = { ok?: boolean; why?: string; detail?: string | null; threads?: number; touches?: number; emails?: number; me?: string | null };
+type SyncState = { ok?: boolean; why?: string; detail?: string | null; threads?: number; left?: number; touches?: number; emails?: number; me?: string | null };
 type Filter = "toutes" | "fiches" | "emails" | "sans" | "masquees";
 
 const FILTERS: { v: Filter; label: string }[] = [
@@ -152,7 +152,7 @@ export function Messages() {
       setState({ data: { ok: false, why: r.error ?? "reseau", detail: (r as { detail?: string }).detail ?? null }, at: new Date().toISOString() });
       return toast(r.error === "migration_manquante" ? "La page sera active après le SQL" : "Lecture des messages impossible : voir le message en haut");
     }
-    toast(`${r.threads ?? 0} conversation${(r.threads ?? 0) > 1 ? "s" : ""} à jour${r.touches ? ` · ${r.touches} échange${r.touches > 1 ? "s" : ""} noté${r.touches > 1 ? "s" : ""} en prospection` : ""}${r.emails ? ` · ${r.emails} email${r.emails > 1 ? "s" : ""} ajouté${r.emails > 1 ? "s" : ""} aux fiches` : ""}`);
+    toast(`${r.threads ?? 0} conversation${(r.threads ?? 0) > 1 ? "s" : ""} à jour${r.touches ? ` · ${r.touches} échange${r.touches > 1 ? "s" : ""} noté${r.touches > 1 ? "s" : ""} en prospection` : ""}${r.emails ? ` · ${r.emails} email${r.emails > 1 ? "s" : ""} ajouté${r.emails > 1 ? "s" : ""} aux fiches` : ""}${r.left ? ` · ${r.left} à lire au prochain passage` : ""}`);
     setReload((n) => n + 1);
   };
 
