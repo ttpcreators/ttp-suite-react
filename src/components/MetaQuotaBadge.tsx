@@ -55,7 +55,7 @@ export function MetaQuotaBadge({ className }: { className?: string }) {
             <p className="text-faint">Meta compte sur une heure glissante : le pourcentage redescend tout seul.</p>
             <div className="mt-1 rounded-lg bg-panel px-3 py-2 text-[11px]">
               <div className="mb-0.5 font-medium text-foreground">Ce que coûte chaque outil (environ)</div>
-              <div>Depuis une marque : 40 demandes · Comme une créatrice : 50</div>
+              <div>Depuis une marque : 40 demandes · Comme un créateur : 50</div>
               <div>Liste de @ : 1 par @ · Radar : jusqu'à 80 % du quota · Actualiser une fiche : 1 à 2</div>
             </div>
           </div>

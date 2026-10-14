@@ -527,7 +527,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                   value={mk.bio ?? ""}
                   onChange={(e) => patch({ bio: e.target.value })}
                   rows={6}
-                  placeholder="Candice est une créatrice lifestyle & blogging basée à Paris…"
+                  placeholder="Lucas est un créateur lifestyle & blogging basé à Paris…"
                   className={`${IN} min-h-[140px] resize-y leading-relaxed`}
                 />
               </div>

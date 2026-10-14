@@ -144,10 +144,10 @@ export function RivalWatch() {
   const toScouting = async (c: RivalCreator, agency: string) => {
     const { data: top } = await supabase.from("creator_pool").select("sort_order").order("sort_order", { ascending: false }).limit(1);
     const order = (((top as { sort_order: number | null }[] | null) ?? [])[0]?.sort_order ?? 0) + 1;
-    const ok = await dbInsert("creator_pool", { name: c.name?.trim() || `@${c.u}`, handle: `@${c.u}`, email: null, tag: null, note: `Repérée chez l'agence @${agency} (Sourcing → Concurrents)`, sort_order: order });
+    const ok = await dbInsert("creator_pool", { name: c.name?.trim() || `@${c.u}`, handle: `@${c.u}`, email: null, tag: null, note: `Repéré chez l'agence @${agency} (Sourcing → Concurrents)`, sort_order: order });
     if (!ok) return toast("Erreur, réessaie");
     setPool((cur) => new Set([...cur, c.u]));
-    toast(`@${c.u} ajoutée au Scouting ✓`);
+    toast(`@${c.u} ajouté au Scouting ✓`);
   };
   const toPipeline = async (b: RivalBrand, agency: string) => {
     const name = b.name?.trim() || `@${b.u}`;
@@ -187,15 +187,15 @@ export function RivalWatch() {
         {suggestions.length > 0 && (
           <div className="mt-3">
             <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-              Agences repérées chez les créatrices du Sourcing
+              Agences repérées chez les créateurs du Sourcing
               <HelpTip title="D'où viennent ces agences ?">
-                <p>Quand l'app lit un profil de créatrice, elle note si sa bio ou son site cite une agence (« mgmt @… », « géré par… »). Voici les plus citées.</p>
+                <p>Quand l'app lit un profil de créateur, elle note si sa bio ou son site cite une agence (« mgmt @… », « géré par… »). Voici les plus citées.</p>
               </HelpTip>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {suggestions.map((s) => (
                 <button key={s.u} type="button" disabled={adding} onClick={() => void follow(s.u)} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-50">
-                  <Plus className="h-3 w-3" /> @{s.u}<span className="text-faint">· {s.n} créatrice{s.n > 1 ? "s" : ""}</span>
+                  <Plus className="h-3 w-3" /> @{s.u}<span className="text-faint">· {s.n} créateur{s.n > 1 ? "s" : ""}</span>
                 </button>
               ))}
             </div>
@@ -220,7 +220,7 @@ export function RivalWatch() {
         <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center">
           <Binoculars className="mx-auto h-8 w-8 text-faint" />
           <p className="mt-2 text-[14px] font-semibold text-foreground">Aucune agence suivie pour l'instant</p>
-          <p className="mx-auto mt-1 max-w-md text-[12px] text-muted-foreground">Ajoute le @ Instagram d'une agence concurrente : l'app suit sa croissance chaque jour, repère les créatrices qu'elle met en avant et les marques avec qui elle travaille.</p>
+          <p className="mx-auto mt-1 max-w-md text-[12px] text-muted-foreground">Ajoute le @ Instagram d'une agence concurrente : l'app suit sa croissance chaque jour, repère les créateurs qu'elle met en avant et les marques avec qui elle travaille.</p>
         </div>
       ) : (
         rivals.map((r) => (
@@ -307,10 +307,10 @@ function RivalCard({ r, busy, pool, roster, known, onRefresh, onRemove, onScouti
         <div className="grid gap-4 p-4 lg:grid-cols-2">
           <div>
             <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
-              <Users className="h-3.5 w-3.5 text-primary" /> Créatrices mises en avant <span className="text-faint">{creators.length}</span>
-              <HelpTip title="Créatrices mises en avant">
-                <p>Les créatrices citées dans les derniers posts de l'agence, et celles qui la nomment dans leur bio (« gérée par… »).</p>
-                <p>Ajoute-les au Scouting pour les suivre : certaines cherchent peut-être une autre agence.</p>
+              <Users className="h-3.5 w-3.5 text-primary" /> Créateurs mis en avant <span className="text-faint">{creators.length}</span>
+              <HelpTip title="Créateurs mis en avant">
+                <p>Les créateurs cités dans les derniers posts de l'agence, et ceux qui la nomment dans leur bio (« géré par… »).</p>
+                <p>Ajoute-les au Scouting pour les suivre : certains cherchent peut-être une autre agence.</p>
               </HelpTip>
             </div>
             {creators.length ? (
@@ -324,7 +324,7 @@ function RivalCard({ r, busy, pool, roster, known, onRefresh, onRemove, onScouti
                       <div className="min-w-0 flex-1">
                         <a href={c.url || igLink(c.u)} target="_blank" rel="noreferrer" className="block truncate text-[12px] font-semibold text-foreground hover:text-primary">{c.name || `@${c.u}`}</a>
                         <div className="truncate text-[11px] text-muted-foreground">
-                          @{c.u}{c.followers != null ? ` · ${fmtCompact(c.followers)}` : ""}{c.er != null ? ` · ${fmtEr(c.er)}` : ""} · {c.src === "bio" ? "la nomme dans sa bio" : `citée ${c.n}×`}
+                          @{c.u}{c.followers != null ? ` · ${fmtCompact(c.followers)}` : ""}{c.er != null ? ` · ${fmtEr(c.er)}` : ""} · {c.src === "bio" ? "la nomme dans sa bio" : `cité ${c.n}×`}
                         </div>
                       </div>
                       {ours ? (
@@ -340,14 +340,14 @@ function RivalCard({ r, busy, pool, roster, known, onRefresh, onRemove, onScouti
                 {creators.length > 6 && <button type="button" onClick={() => setAllC(!allC)} className="px-2 text-[11px] font-medium text-primary">{allC ? "Voir moins" : `Voir les ${creators.length}`}</button>}
               </div>
             ) : (
-              <p className="rounded-xl bg-panel/60 px-3 py-3 text-[12px] text-muted-foreground">Aucune créatrice repérée dans ses derniers posts.</p>
+              <p className="rounded-xl bg-panel/60 px-3 py-3 text-[12px] text-muted-foreground">Aucun créateur repéré dans ses derniers posts.</p>
             )}
           </div>
           <div>
             <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
               <Wallet className="h-3.5 w-3.5 text-primary" /> Marques avec qui elle travaille <span className="text-faint">{brands.length}</span>
               <HelpTip title="Marques de l'agence">
-                <p>Les marques citées dans les posts de l'agence, et celles qui paient ou offrent des produits à ses créatrices (#ad, code promo…).</p>
+                <p>Les marques citées dans les posts de l'agence, et celles qui paient ou offrent des produits à ses créateurs (#ad, code promo…).</p>
                 <p>Ce sont des clientes qui ont déjà un budget influence : à démarcher.</p>
               </HelpTip>
             </div>

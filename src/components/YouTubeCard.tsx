@@ -127,11 +127,11 @@ export function YouTubeCard({ creatorId, name, yt, onChange, className }: {
         </div>
       ) : yt?.why === "jeton" ? (
         <div className="rounded-xl border border-dashed border-border px-3 py-3 text-[12px] leading-snug text-muted-foreground">
-          L'accès à sa chaîne a été retiré ou a expiré : ses données YouTube ont été effacées. Elle doit reconnecter sa chaîne.
+          L'accès à sa chaîne a été retiré ou a expiré : ses données YouTube ont été effacées. Il doit reconnecter sa chaîne.
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-border px-3 py-3 text-[12px] leading-snug text-muted-foreground">
-          En connectant sa chaîne, la créatrice nous donne ses stats YouTube Studio (lecture seule) : vues sur 30 jours, heures regardées, abonnés gagnés, âge, sexe et pays de son audience, et les vues de chacune de ses vidéos (collabs comprises).
+          En connectant sa chaîne, le créateur nous donne ses stats YouTube Studio (lecture seule) : vues sur 30 jours, heures regardées, abonnés gagnés, âge, sexe et pays de son audience, et les vues de chacune de ses vidéos (collabs comprises).
         </div>
       )}
 
@@ -147,7 +147,7 @@ export function YouTubeCard({ creatorId, name, yt, onChange, className }: {
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] leading-snug text-muted-foreground">Elle connecte sa chaîne depuis son espace (« Envoyer mes stats »), ou ici avec elle.</span>
+            <span className="text-[11px] leading-snug text-muted-foreground">Il connecte sa chaîne depuis son espace (« Envoyer mes stats »), ou ici avec lui.</span>
             <button type="button" onClick={connect} disabled={!!busy} className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
               {busy === "link" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />} Connecter
             </button>

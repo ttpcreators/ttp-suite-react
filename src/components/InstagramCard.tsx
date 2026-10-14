@@ -110,14 +110,14 @@ export function InstagramCard({ creatorId, name, ig, onChange, className }: {
               </div>
             ) : (
               <div className="mt-1.5 text-[11px] text-faint">
-                {ig.insightsWhy === "jeton" ? "Le lien a expiré : elle doit reconnecter son Instagram." : "Ses statistiques privées arrivent au prochain passage."}
+                {ig.insightsWhy === "jeton" ? "Le lien a expiré : il doit reconnecter son Instagram." : "Ses statistiques privées arrivent au prochain passage."}
               </div>
             )}
             {ins && <div className="mt-2 text-[10px] text-faint">Reportées dans son media kit (vues, âge, villes, pays) · {fmtAgo(ins.at)}</div>}
           </>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] leading-snug text-muted-foreground">Couverture, vues et audience : elle connecte son Instagram (depuis son espace, ou ici avec elle).</span>
+            <span className="text-[11px] leading-snug text-muted-foreground">Couverture, vues et audience : il connecte son Instagram (depuis son espace, ou ici avec lui).</span>
             <button
               type="button"
               onClick={connect}

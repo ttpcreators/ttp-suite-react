@@ -287,11 +287,11 @@ export function Idees() {
             onClear={() => { setStatusFilter(ALL_STATUS); setCreatorFilter(""); }}
             extra={creators.length > 0 ? (
               <div className="flex flex-col gap-2">
-                <span className="text-[12px] font-medium text-muted-foreground">Créatrice</span>
+                <span className="text-[12px] font-medium text-muted-foreground">Créateur</span>
                 <Select value={creatorFilter} onValueChange={setCreatorFilter}>
-                  <SelectTrigger icon={UserRound} className="h-10 w-full min-w-[220px] rounded-xl bg-surface sm:w-auto" placeholder="Toutes les créatrices" />
+                  <SelectTrigger icon={UserRound} className="h-10 w-full min-w-[220px] rounded-xl bg-surface sm:w-auto" placeholder="Tous les créateurs" />
                   <SelectContent>
-                    <SelectItem index={0} value="">Toutes les créatrices</SelectItem>
+                    <SelectItem index={0} value="">Tous les créateurs</SelectItem>
                     <SelectItem index={1} value="__general__">Idées générales (non assignées)</SelectItem>
                     {creatorOptions.map((o, i) => (
                       <SelectItem key={o.value} index={i + 2} value={o.value} img={o.img}>{o.label}</SelectItem>
@@ -312,10 +312,10 @@ export function Idees() {
       >
         <AutoGrowTextField label="Idée" value={text} onChange={setText} placeholder="Décris ton idée — le champ s'agrandit tout seul…" className="min-w-full" />
         <SelectField
-          label="Pour quelle créatrice ? (apparaît dans son espace)"
+          label="Pour quel créateur ? (apparaît dans son espace)"
           value={formCreator}
           onChange={setFormCreator}
-          options={[{ value: "", label: "Idée générale (aucune créatrice)" }, ...creatorOptions]}
+          options={[{ value: "", label: "Idée générale (aucun créateur)" }, ...creatorOptions]}
         />
         <TextField label="Commentaire (optionnel)" value={note} onChange={setNote} placeholder="Infos, rappel, lien…" />
       </InlineForm>
@@ -375,7 +375,7 @@ export function Idees() {
                     <div className="whitespace-pre-wrap text-sm font-medium leading-relaxed text-foreground">{row.text}</div>
                     <div className="mt-0.5 text-xs text-muted-foreground">
                       {row.creator ? titleCase(row.creator) : "Idée générale"} ·{" "}
-                      {row.source === "creator" ? "Proposée par la créatrice" : "Ajoutée par l'agence"}
+                      {row.source === "creator" ? "Proposée par le créateur" : "Ajoutée par l'agence"}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 sm:shrink-0">

@@ -542,7 +542,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
       <DashPanel className="flex flex-col items-center gap-2 px-6 py-10 text-center">
         <Inbox className="h-6 w-6 text-faint" />
         <p className="text-[13px] text-muted-foreground">
-          {asAgency ? "Aucun alias ni libellé n'est lié à cette créatrice." : "Ta boîte mail n'est pas encore activée. Ton agence s'en occupe."}
+          {asAgency ? "Aucun alias ni libellé n'est lié à ce créateur." : "Ta boîte mail n'est pas encore activée. Ton agence s'en occupe."}
         </p>
       </DashPanel>
     );
@@ -890,7 +890,7 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
     }
     // Sinon elle verrait TOUS les mails de cette boîte, pas seulement les siens.
     if (a && SHARED_BOXES.test(a)) {
-      toast("C'est une boîte commune : mets son alias à elle (ex. prenom@ttpcreators.pro)");
+      toast("C'est une boîte commune : mets son alias à lui (ex. prenom@ttpcreators.pro)");
       return;
     }
     const lbl = labels?.find((l) => l.id === labelId);
@@ -949,7 +949,7 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
               </label>
             </div>
             <p className="text-[12px] text-muted-foreground">
-              Elle verra uniquement les échanges où cet alias apparaît (expéditeur, destinataire ou copie) et ceux qui portent ce libellé. Lecture seule : elle ne peut ni répondre ni supprimer.
+              Il verra uniquement les échanges où cet alias apparaît (expéditeur, destinataire ou copie) et ceux qui portent ce libellé. Lecture seule : il ne peut ni répondre ni supprimer.
             </p>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setEditing(false)} className="h-9 rounded-lg px-3 text-[13px] text-muted-foreground hover:text-foreground">Annuler</button>

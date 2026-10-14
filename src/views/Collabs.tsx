@@ -511,7 +511,7 @@ export function Collabs() {
           </div>
           <div className="flex flex-col gap-3">
             <TextField label="Marque" value={eBrand} onChange={setEBrand} />
-            <SelectField label="Créatrice" value={eCreator} onChange={setECreator} options={creatorOptions} />
+            <SelectField label="Créateur" value={eCreator} onChange={setECreator} options={creatorOptions} />
             <TextField label="Libellé de la collab" value={eTitle} onChange={setETitle} placeholder="ex Campagne été" />
             <TextField label="Contact marque" value={eContact} onChange={setEContact} />
             <TextField label="Livrables" value={eDeliverables} onChange={setEDeliverables} placeholder="ex 3 posts · 1 reel" />
@@ -557,7 +557,7 @@ export function Collabs() {
               {titleCase(row.creator)}
             </span>
           ) : (
-            <span className="flex items-center gap-1.5"><UserRound className="h-3.5 w-3.5 text-faint" /> Aucune créatrice</span>
+            <span className="flex items-center gap-1.5"><UserRound className="h-3.5 w-3.5 text-faint" /> Aucun créateur</span>
           )}
           {row.contact && <span className="truncate">Contact · {row.contact}</span>}
         </div>
@@ -653,7 +653,7 @@ export function Collabs() {
                 <span className="truncate">{titleCase(row.creator)}</span>
               </span>
             ) : (
-              <span className="flex items-center gap-1.5"><UserRound className="h-3.5 w-3.5 text-faint" /> Aucune créatrice</span>
+              <span className="flex items-center gap-1.5"><UserRound className="h-3.5 w-3.5 text-faint" /> Aucun créateur</span>
             )}
             {row.contact && <span className="mt-0.5 block truncate text-[11px]">Contact · {row.contact}</span>}
           </div>
@@ -805,7 +805,7 @@ export function Collabs() {
             }
             extra={creators.length > 0 ? (
               <div className="flex flex-col gap-2">
-                <span className="text-[12px] font-medium text-muted-foreground">Créatrice</span>
+                <span className="text-[12px] font-medium text-muted-foreground">Créateur</span>
                 <div className="flex items-center gap-2">
                   <UserRound className="h-4 w-4 shrink-0 text-faint" />
                   <select
@@ -813,7 +813,7 @@ export function Collabs() {
                     onChange={(e) => setCreatorFilter(e.target.value)}
                     className="rounded-md border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
                   >
-                    <option value="">Toutes les créatrices</option>
+                    <option value="">Tous les créateurs</option>
                     {creators.map((c) => (
                       <option key={c.id} value={c.name}>{titleCase(c.name)}</option>
                     ))}
@@ -827,7 +827,7 @@ export function Collabs() {
 
       <InlineForm open={formOpen} title="Nouvelle collab" onClose={() => setFormOpen(false)} onSubmit={submit}>
         <TextField label="Marque" value={brand} onChange={setBrand} />
-        <SelectField label="Créatrice" value={creator} onChange={setCreator} options={creatorOptions} />
+        <SelectField label="Créateur" value={creator} onChange={setCreator} options={creatorOptions} />
         <TextField label="Libellé de la collab" value={title} onChange={setTitle} placeholder="ex Campagne été" />
         <TextField label="Contact marque" value={contact} onChange={setContact} />
         <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />

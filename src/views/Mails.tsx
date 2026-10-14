@@ -86,12 +86,12 @@ const MODES: { id: Mode; label: string; short: string; icon: LucideIcon }[] = [
   { id: "inbox", label: "Boîte de réception", short: "Reçus", icon: Inbox },
   { id: "sent", label: "Envoyés", short: "Envoyés", icon: Send },
   { id: "contacts", label: "Contacts", short: "Contacts", icon: BookUser },
-  { id: "creators", label: "Par créatrice", short: "Créatrices", icon: UsersRound },
+  { id: "creators", label: "Par créateur", short: "Créateurs", icon: UsersRound },
 ];
 const BOXES: { id: "all" | MailBox; label: string; short: string; hint: string }[] = [
   { id: "all", label: "Les deux boîtes", short: "Les deux", hint: "Les deux boîtes réunies" },
   { id: "partnerships", label: BOX_LABEL.partnerships, short: BOX_LABEL.partnerships, hint: "Prospection et contacts agence" },
-  { id: "talent", label: BOX_LABEL.talent, short: BOX_LABEL.talent, hint: "Échanges créatrices (leurs alias)" },
+  { id: "talent", label: BOX_LABEL.talent, short: BOX_LABEL.talent, hint: "Échanges créateurs (leurs alias)" },
 ];
 /** Pastille de nombre posée sur une icône ou un avatar (même style que les pastilles du rail). */
 function CountDot({ n }: { n: number }) {
@@ -947,18 +947,18 @@ export function Mails() {
     <section className="min-h-0 min-w-0 overflow-y-auto">
       <div className="px-4 pt-4 sm:px-6 sm:pt-5">
         <div className="flex items-center gap-1">
-          {creatorView && <ToolButton icon={ArrowLeft} label="Toutes les créatrices" className="-ml-2" onClick={() => setCreatorView(null)} />}
-          <h2 className="min-w-0 flex-1 truncate text-[20px] font-semibold tracking-tight text-foreground sm:text-[22px]">Par créatrice</h2>
+          {creatorView && <ToolButton icon={ArrowLeft} label="Tous les créateurs" className="-ml-2" onClick={() => setCreatorView(null)} />}
+          <h2 className="min-w-0 flex-1 truncate text-[20px] font-semibold tracking-tight text-foreground sm:text-[22px]">Par créateur</h2>
         </div>
         <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-          Ses échanges (talent@, son alias), rangés par statut, avec les remarques qu'elle voit dans son espace.
+          Ses échanges (talent@, son alias), rangés par statut, avec les remarques qu'il voit dans son espace.
         </p>
         {creatorView && creatorChoices.length > 1 && (
           <Tabs
             className="mt-3 xl:hidden"
             size="sm"
             wrap
-            label="Créatrice"
+            label="Créateur"
             value={creatorView.name}
             onValueChange={(v) => openCreator(v)}
             items={creatorChoices.map((n) => ({
@@ -983,7 +983,7 @@ export function Mails() {
             />
           </Suspense>
         ) : creatorChoices.length === 0 ? (
-          <p className="py-10 text-center text-[13px] text-muted-foreground">Aucune créatrice active dans le Roster.</p>
+          <p className="py-10 text-center text-[13px] text-muted-foreground">Aucun créateur actif dans le Roster.</p>
         ) : (
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 2xl:grid-cols-3">
             {creatorChoices.map((n) => {
@@ -999,7 +999,7 @@ export function Mails() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-semibold text-foreground">{titleCase(n)}</span>
                     <span className={cn("block truncate text-[12px]", l ? "text-muted-foreground" : "text-faint")}>
-                      {l ? l.alias ?? "Libellé Gmail" : "Pas encore reliée"}
+                      {l ? l.alias ?? "Libellé Gmail" : "Pas encore relié"}
                     </span>
                   </span>
                   {mailCount(n) > 0 && (
@@ -1019,13 +1019,13 @@ export function Mails() {
 
   // ── Colonne de droite (grand écran) : les créatrices en un clic ─────────
   const rightRail = (
-    <aside aria-label="Créatrices" className="hidden min-h-0 flex-col items-center border-l border-border xl:flex">
+    <aside aria-label="Créateurs" className="hidden min-h-0 flex-col items-center border-l border-border xl:flex">
       <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-border">
         <button
           type="button"
           onClick={() => { goMode("creators"); setCreatorView(null); }}
-          title={mailTotal ? `Par créatrice · ${mailTotal} à traiter` : "Par créatrice"}
-          aria-label={mailTotal ? `Par créatrice, ${mailTotal} à traiter` : "Par créatrice"}
+          title={mailTotal ? `Par créateur · ${mailTotal} à traiter` : "Par créateur"}
+          aria-label={mailTotal ? `Par créateur, ${mailTotal} à traiter` : "Par créateur"}
           className={cn(
             "relative grid h-9 w-9 place-items-center rounded-full transition-colors",
             mode === "creators" && !creatorView ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",

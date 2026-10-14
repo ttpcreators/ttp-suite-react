@@ -118,7 +118,7 @@ export function signatureCaption(name: string, handle: string): string {
     "",
     "Hâte de vous montrer tout ce qu'on va construire ensemble 🤍",
     "",
-    "#TTPCreators #NouvelleCréatrice #Influence",
+    "#TTPCreators #NouveauCréateur #Influence",
   ].join("\n");
 }
 
@@ -133,7 +133,7 @@ export function collabCaption(creatorName: string, creatorHandle: string, brandN
     "",
     `Merci à ${brandName || b} pour sa confiance, et bravo à ${first(creatorName) || c} pour ce contenu ✨`,
     "",
-    "Envie de travailler avec nos créatrices ? Écris-nous en message privé ou à partnerships@ttpcreators.pro",
+    "Envie de travailler avec nos créateurs ? Écris-nous en message privé ou à partnerships@ttpcreators.pro",
     "",
     "#TTPCreators #Collaboration #MarketingDInfluence",
   ].join("\n");

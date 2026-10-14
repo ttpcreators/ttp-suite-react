@@ -123,10 +123,10 @@ export function Ugc() {
           {filtered.length} créateur{filtered.length > 1 ? "s" : ""} UGC
           {(platFilter !== ALL || query.trim()) && <span className="text-faint"> / {list.length}</span>}
         </div>
-        <AddButton label="Créatrice UGC" onClick={openAdd} />
+        <AddButton label="Créateur UGC" onClick={openAdd} />
       </PageHeaderRow>
 
-      <p className="mb-4 text-[13px] text-muted-foreground">Créatrices UGC suivies à part : elles n'ont pas de compte sur l'app.</p>
+      <p className="mb-4 text-[13px] text-muted-foreground">Créateurs UGC suivis à part : ils n'ont pas de compte sur l'app.</p>
 
       {platList.length > 0 && (
         <Tabs
@@ -164,7 +164,7 @@ export function Ugc() {
 
       {filtered.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-6 text-[13px] text-muted-foreground">
-          {list.length === 0 ? "Aucun créateur UGC pour l'instant. Ajoute le premier avec le bouton « Créatrice UGC »." : "Aucun résultat pour ces filtres."}
+          {list.length === 0 ? "Aucun créateur UGC pour l'instant. Ajoute le premier avec le bouton « Créateur UGC »." : "Aucun résultat pour ces filtres."}
         </div>
       ) : (
         /* Liste dans UN panneau, lignes séparées par des filets (langage Aperçu) */

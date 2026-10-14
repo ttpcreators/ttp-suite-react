@@ -132,10 +132,10 @@ export function TikTokRadar() {
   const toScouting = async (u: string, brand: string) => {
     const { data: top } = await supabase.from("creator_pool").select("sort_order").order("sort_order", { ascending: false }).limit(1);
     const order = (((top as { sort_order: number | null }[] | null) ?? [])[0]?.sort_order ?? 0) + 1;
-    const ok = await dbInsert("creator_pool", { name: `@${u}`, handle: ttLink(u), email: null, tag: "TikTok", note: `Repérée via le Radar TikTok (partenariat payé avec ${brand})`, sort_order: order });
+    const ok = await dbInsert("creator_pool", { name: `@${u}`, handle: ttLink(u), email: null, tag: "TikTok", note: `Repéré via le Radar TikTok (partenariat payé avec ${brand})`, sort_order: order });
     if (!ok) return toast("Erreur, réessaie");
     setPool((cur) => new Set([...cur, u]));
-    toast(`@${u} ajoutée au Scouting ✓`);
+    toast(`@${u} ajouté au Scouting ✓`);
   };
 
   if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement du radar TikTok…</AnimatedBadge>;
@@ -148,9 +148,9 @@ export function TikTokRadar() {
   }
   const problem = state?.data && !state.data.ok ? stateText(state.data) : "";
   const TILES = [
-    { icon: Wallet, n: brands.length, title: "Marques qui paient", text: "Marques qui ont payé au moins une créatrice en France sur la période." },
-    { icon: Users, n: counts.creators.size, title: "Créatrices payées", text: "Créatrices en France qui ont publié un partenariat rémunéré." },
-    { icon: Plus, n: counts.mine, title: "Chez tes créatrices", text: "Marques qui ont déjà payé une créatrice de ton roster sur TikTok." },
+    { icon: Wallet, n: brands.length, title: "Marques qui paient", text: "Marques qui ont payé au moins un créateur en France sur la période." },
+    { icon: Users, n: counts.creators.size, title: "Créateurs payés", text: "Créateurs en France qui ont publié un partenariat rémunéré." },
+    { icon: Plus, n: counts.mine, title: "Chez tes créateurs", text: "Marques qui ont déjà payé un créateur de ton roster sur TikTok." },
   ];
 
   return (
@@ -181,19 +181,19 @@ export function TikTokRadar() {
         <Tabs size="sm" label="Période" value={period} onValueChange={setPeriod} items={PERIODS} />
         <div className="relative min-w-[180px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher une marque ou une @créatrice" className="w-full rounded-md border border-border bg-surface py-2 pl-8 pr-3 text-[12px] outline-none focus:border-primary" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher une marque ou un @créateur" className="w-full rounded-md border border-border bg-surface py-2 pl-8 pr-3 text-[12px] outline-none focus:border-primary" />
         </div>
         <label className="inline-flex items-center gap-1.5 text-[12px] text-foreground">
-          <input type="checkbox" checked={onlyMany} onChange={(e) => setOnlyMany(e.target.checked)} /> 2 créatrices et plus
+          <input type="checkbox" checked={onlyMany} onChange={(e) => setOnlyMany(e.target.checked)} /> 2 créateurs et plus
         </label>
         <button type="button" onClick={() => void run()} disabled={running} className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
           {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Lancer le radar
         </button>
         <HelpTip title="D'où viennent ces données ?" align="end">
-          <p>De la bibliothèque officielle de TikTok sur les contenus commerciaux en Europe : chaque vidéo marquée « partenariat rémunéré » par une créatrice en France, avec la marque qui paie.</p>
+          <p>De la bibliothèque officielle de TikTok sur les contenus commerciaux en Europe : chaque vidéo marquée « partenariat rémunéré » par un créateur en France, avec la marque qui paie.</p>
           <p>Mis à jour chaque matin. {state?.at ? `Dernier passage ${fmtAgo(state.at)}.` : ""}</p>
-          <p>« Contenus de mes créatrices » lit les partenariats TikTok des créatrices du roster et du Scouting qui ont un @ TikTok.</p>
-          <button type="button" onClick={() => void run("creators")} disabled={running} className="mt-1 text-[12px] font-medium text-primary">Lire les contenus de mes créatrices</button>
+          <p>« Contenus de mes créateurs » lit les partenariats TikTok des créateurs du roster et du Scouting qui ont un @ TikTok.</p>
+          <button type="button" onClick={() => void run("creators")} disabled={running} className="mt-1 text-[12px] font-medium text-primary">Lire les contenus de mes créateurs</button>
         </HelpTip>
       </div>
 
@@ -225,11 +225,11 @@ export function TikTokRadar() {
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="truncate text-[14px] font-semibold text-foreground">{b.name}</span>
                         <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">Payé</span>
-                        {mine.length > 0 && <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">Chez {mine.length} de tes créatrices</span>}
+                        {mine.length > 0 && <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">Chez {mine.length} de tes créateurs</span>}
                         {isKnown && <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Déjà en contact</span>}
                       </div>
                       <div className="mt-0.5 text-[11px] text-muted-foreground">
-                        {b.creators.length} créatrice{b.creators.length > 1 ? "s" : ""} · {b.contents.length} vidéo{b.contents.length > 1 ? "s" : ""} · dernière le {frDay(b.last)}
+                        {b.creators.length} créateur{b.creators.length > 1 ? "s" : ""} · {b.contents.length} vidéo{b.contents.length > 1 ? "s" : ""} · dernière le {frDay(b.last)}
                         {" · "}
                         {b.creators.slice(0, 3).map((c, i) => (
                           <span key={c}>{i > 0 && ", "}<a href={ttLink(c)} target="_blank" rel="noreferrer" className="text-primary hover:underline">@{c}</a></span>

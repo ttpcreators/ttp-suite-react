@@ -825,7 +825,7 @@ export function Facturation() {
             { label: "Facturé HT", value: euro2(finBilled.ht), foot: `${euro2(finBilled.ttc)} TTC · TVA ${euro2(finBilled.tva)}` },
             { label: "Commission TTP (HT)", value: euro2(finBilled.commission), foot: `${fmtRate(Math.round(margePct * 10) / 10)} % du HT en moyenne`, strong: true },
             { label: "Commission encaissée", value: euro2(finPaid.commission), foot: `sur ${euro2(finPaid.ht)} HT payés` },
-            { label: "Part créatrices", value: euro2(finBilled.reversal), foot: "HT moins la commission" },
+            { label: "Part créateurs", value: euro2(finBilled.reversal), foot: "HT moins la commission" },
           ].map((k) => (
             <div key={k.label} className="flex min-w-0 flex-col bg-surface px-4 py-4 sm:px-5">
               <span className="line-clamp-2 min-h-[2lh] text-[12px] leading-snug text-muted-foreground sm:text-[13px] lg:min-h-0">{k.label}</span>
@@ -1146,7 +1146,7 @@ export function Facturation() {
             </div>
             <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-muted/40 px-4">
               {line(`Commission TTP · ${fmtRate(f.rate)} % du HT`, euro2(f.commission), { strong: true, accent: true })}
-              {line("Part créatrice (HT − commission)", euro2(f.reversal))}
+              {line("Part créateur (HT − commission)", euro2(f.reversal))}
             </div>
             <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
               {underFloor

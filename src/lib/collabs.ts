@@ -23,7 +23,7 @@ export type CollabStepDef = {
 
 export const STEPS: CollabStepDef[] = [
   { n: 1, label: "Signature", short: "Signature", phase: "negociation" },
-  { n: 2, label: "Brief transmis à la créatrice", short: "Brief transmis", phase: "negociation" },
+  { n: 2, label: "Brief transmis au créateur", short: "Brief transmis", phase: "negociation" },
   { n: 3, label: "Concept validé", short: "Concept validé", phase: "negociation" },
   { n: 4, label: "Tournage", short: "Tournage", phase: "production" },
   { n: 5, label: "Validation marque", short: "Validation marque", phase: "production" },
@@ -31,7 +31,7 @@ export const STEPS: CollabStepDef[] = [
   { n: 7, label: "Statistiques à sept jours", short: "Stats à 7 jours", phase: "mesure" },
   { n: 8, label: "Facture envoyée", short: "Facture envoyée", phase: "facturation" },
   { n: 9, label: "Paiement marque reçu", short: "Paiement marque", phase: "facturation" },
-  { n: 10, label: "Créatrice payée", short: "Créatrice payée", phase: "facturation" },
+  { n: 10, label: "Créateur payé", short: "Créateur payé", phase: "facturation" },
   { n: 11, label: "Bilan et renouvellement", short: "Bilan", phase: "cloture" },
 ];
 

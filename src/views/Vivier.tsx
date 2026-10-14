@@ -108,7 +108,7 @@ const STATUSES: { v: ScoutStatus; label: string; dot: string; pill: string }[] =
   { v: "contacter", label: "À contacter", dot: "bg-amber", pill: "bg-foreground/[0.06] text-amber" },
   { v: "discussion", label: "En discussion", dot: "bg-primary", pill: "bg-primary/10 text-primary" },
   { v: "signe", label: "Signé", dot: "bg-emerald-500", pill: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
-  { v: "ecarte", label: "Écarté", dot: "bg-neutral-400", pill: "bg-panel text-faint" },
+  { v: "ecarte", label: "Pas intéressé", dot: "bg-neutral-400", pill: "bg-panel text-faint" },
 ];
 const statusMeta = (v: ScoutStatus) => STATUSES.find((s) => s.v === v) ?? STATUSES[0];
 
@@ -417,7 +417,7 @@ export function Vivier() {
         ]}
       />
 
-      <InlineForm open={formOpen} title={editId ? "Modifier le créateur" : "Nouvelle créatrice à suivre"} onClose={() => setFormOpen(false)} onSubmit={submit} submitLabel={editId ? "Enregistrer" : "Ajouter"}>
+      <InlineForm open={formOpen} title={editId ? "Modifier le créateur" : "Nouveau créateur à suivre"} onClose={() => setFormOpen(false)} onSubmit={submit} submitLabel={editId ? "Enregistrer" : "Ajouter"}>
         <TextField label="Nom" value={fName} onChange={setFName} placeholder="Ex : Léna Marchand" className="min-w-[200px] flex-[2]" />
         <TextField label="Compte Instagram ou YouTube" value={fHandle} onChange={setFHandle} placeholder="@lena.mrchd" className="min-w-[150px] flex-1" />
         <TextField label="Email" value={fEmail} onChange={setFEmail} type="email" placeholder="lena@email.com" className="min-w-[180px] flex-1" />

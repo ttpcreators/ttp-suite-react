@@ -478,7 +478,7 @@ export function Acces() {
         label="Sous-pages des accès"
         items={[
           { value: "comptes", label: "Comptes app" },
-          { value: "emails", label: "Identifiants des créatrices" },
+          { value: "emails", label: "Identifiants des créateurs" },
         ]}
         value={section}
         onValueChange={(v) => {

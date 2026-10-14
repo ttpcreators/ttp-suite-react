@@ -258,8 +258,8 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
   const avgEr = ers.length ? ers.reduce((a, n) => a + n, 0) / ers.length : 0;
   const totalCa = Object.values(caByCreator).reduce((a, n) => a + n, 0);
   const kpis = [
-    { label: "Créatrices actives", value: String(actives.length), foot: `sur ${rows.length} au roster` },
-    { label: "Abonnés cumulés", value: totalFollowers ? fmtCompact(totalFollowers) : "—", foot: "tous réseaux, créatrices actives" },
+    { label: "Créateurs actifs", value: String(actives.length), foot: `sur ${rows.length} au roster` },
+    { label: "Abonnés cumulés", value: totalFollowers ? fmtCompact(totalFollowers) : "—", foot: "tous réseaux, créateurs actifs" },
     { label: "Engagement moyen", value: avgEr ? `${avgEr.toFixed(2).replace(".", ",")} %` : "—", foot: `sur ${ers.length} mesure${ers.length > 1 ? "s" : ""}` },
     { label: "CA encaissé", value: formatEuro(totalCa), foot: "factures payées" },
   ];
@@ -296,7 +296,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
         <div className="mb-4 flex items-center gap-2.5 rounded-2xl border border-border bg-surface px-5 py-3.5 text-[13px] text-muted-foreground">
           <RefreshCw className="h-4 w-4 shrink-0" />
           <span>
-            <span className="font-semibold text-foreground">{staleCount} créatrice{staleCount > 1 ? "s" : ""}</span>{" "}
+            <span className="font-semibold text-foreground">{staleCount} créateur{staleCount > 1 ? "s" : ""}</span>{" "}
             {staleCount > 1 ? "n'ont pas encore leurs chiffres" : "n'a pas encore ses chiffres"}{" "}
             {MONTH_PREP}<span className="font-semibold">{MONTH_LABEL}</span>.
             {" "}Clique « Marquer à jour » sur {staleCount > 1 ? "leur" : "sa"} ligne une fois saisis.

@@ -359,7 +359,7 @@ function Empty({ onNew }: { onNew: () => void }) {
     <div className="rounded-2xl border border-dashed border-border px-5 py-8 text-center">
       <CalendarClock className="mx-auto h-7 w-7 text-faint" />
       <p className="mt-2 text-[13px] font-medium text-foreground">Rien de programmé pour l'instant</p>
-      <p className="mx-auto mt-1 max-w-sm text-[12px] text-muted-foreground">Une créatrice vient de signer, une collab a cartonné ? Prépare le post maintenant et choisis l'heure : l'app le publie toute seule.</p>
+      <p className="mx-auto mt-1 max-w-sm text-[12px] text-muted-foreground">Un créateur vient de signer, une collab a cartonné ? Prépare le post maintenant et choisis l'heure : l'app le publie toute seule.</p>
       <button type="button" onClick={onNew} className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
         <Sparkles className="h-3.5 w-3.5 text-primary" /> Préparer un post
       </button>
@@ -715,12 +715,12 @@ function PlanEditor({ initial, account, onClose, onSaved }: { initial: Planned |
             {!isStory && (
               <Step n={2} title="Un modèle pour aller vite ?" optional>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => setTpl(tpl === "signature" ? null : "signature")} className={cn(CHIP, tpl === "signature" && CHIP_ON)}><UserPlus className="h-3.5 w-3.5" /> Nouvelle créatrice signée</button>
+                  <button type="button" onClick={() => setTpl(tpl === "signature" ? null : "signature")} className={cn(CHIP, tpl === "signature" && CHIP_ON)}><UserPlus className="h-3.5 w-3.5" /> Nouveau créateur signé</button>
                   <button type="button" onClick={() => setTpl(tpl === "collab" ? null : "collab")} className={cn(CHIP, tpl === "collab" && CHIP_ON)}><Handshake className="h-3.5 w-3.5" /> Collab réussie</button>
                 </div>
                 {tpl === "signature" && (
                   <select className={cn(IN, "mt-2")} defaultValue="" onChange={(e) => pickCreator(e.target.value)}>
-                    <option value="" disabled>Quelle créatrice ?</option>
+                    <option value="" disabled>Quel créateur ?</option>
                     {creators.map((c) => <option key={c.id} value={c.id}>{c.name}{c.handle ? ` (@${c.handle})` : ""}</option>)}
                   </select>
                 )}
@@ -808,8 +808,8 @@ function PlanEditor({ initial, account, onClose, onSaved }: { initial: Planned |
                   <div className="mb-1 flex items-center gap-1.5 text-[12px] font-medium text-foreground">
                     Collaborateurs (3 max)
                     <HelpTip title="Post en collaboration">
-                      <p>Chaque @ reçoit une invitation sur Instagram. Si elle accepte, le post s'affiche aussi sur son profil, avec ses abonnés en plus.</p>
-                      <p>Idéal pour une nouvelle créatrice ou une collab : la créatrice et la marque.</p>
+                      <p>Chaque @ reçoit une invitation sur Instagram. S'il accepte, le post s'affiche aussi sur son profil, avec ses abonnés en plus.</p>
+                      <p>Idéal pour un nouveau créateur ou une collab : le créateur et la marque.</p>
                     </HelpTip>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">

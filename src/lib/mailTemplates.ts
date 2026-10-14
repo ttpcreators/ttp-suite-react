@@ -131,9 +131,9 @@ export const DEFAULT_TEMPLATES: MailTemplate[] = [
 
 Je suis Marc, co-fondateur de TTP Creators, agence de talent management Sport & Lifestyle entre Lyon et Genève.
 
-On accompagne des créatrices dont l'audience correspond bien à l'univers de {{marque}}, et je pense qu'il y a une vraie collaboration à construire ensemble : contenus incarnés, campagnes mesurées, zéro friction pour vos équipes.
+On accompagne des créateurs dont l'audience correspond bien à l'univers de {{marque}}, et je pense qu'il y a une vraie collaboration à construire ensemble : contenus incarnés, campagnes mesurées, zéro friction pour vos équipes.
 
-Est-ce que vous auriez 15 minutes cette semaine ou la suivante pour en parler ? Je peux aussi vous envoyer directement le media kit de la créatrice qui matcherait le mieux.
+Est-ce que vous auriez 15 minutes cette semaine ou la suivante pour en parler ? Je peux aussi vous envoyer directement le media kit du créateur qui matcherait le mieux.
 
 Bien à vous,
 Marc — TTP Creators
@@ -143,12 +143,12 @@ ttpcreators.pro`,
     id: "tpl-prospection-mediakit",
     name: "Premier contact — avec media kit",
     kind: "prospection",
-    subject: "Une créatrice pour {{marque}} — media kit inclus",
+    subject: "Un créateur pour {{marque}} — media kit inclus",
     body: `Bonjour {{destinataire}},
 
 Marc, de TTP Creators (talent management Sport & Lifestyle, Lyon · Genève).
 
-En regardant ce que fait {{marque}} en ce moment, une de nos créatrices s'impose comme une évidence — audience alignée, formats qui performent, historique de campagnes propre. Son media kit complet (chiffres à jour) est ici : ttpcreators.pro/mediakit/
+En regardant ce que fait {{marque}} en ce moment, un de nos créateurs s'impose comme une évidence — audience alignée, formats qui performent, historique de campagnes propre. Son media kit complet (chiffres à jour) est ici : ttpcreators.pro/mediakit/
 
 Si le profil vous parle, je vous propose un échange rapide pour cadrer une première collaboration simple.
 
@@ -164,7 +164,7 @@ Marc — TTP Creators`,
 
 Je me permets de revenir vers vous — mon précédent message a pu passer entre deux priorités.
 
-L'idée reste simple : connecter {{marque}} avec la bonne créatrice de notre roster, sur un format court et mesurable pour commencer. Si le timing n'est pas bon, dites-le-moi franchement et je reviendrai au bon moment.
+L'idée reste simple : connecter {{marque}} avec le bon créateur de notre roster, sur un format court et mesurable pour commencer. Si le timing n'est pas bon, dites-le-moi franchement et je reviendrai au bon moment.
 
 Bien à vous,
 Marc — TTP Creators
@@ -177,7 +177,7 @@ ttpcreators.pro`,
     subject: "On cale {{marque}} sur ce trimestre ?",
     body: `Bonjour {{destinataire}},
 
-Dernier message de ma part, promis : on finalise en ce moment les collaborations de nos créatrices pour le trimestre, et j'aimerais savoir si {{marque}} souhaite en faire partie avant qu'on referme le planning.
+Dernier message de ma part, promis : on finalise en ce moment les collaborations de nos créateurs pour le trimestre, et j'aimerais savoir si {{marque}} souhaite en faire partie avant qu'on referme le planning.
 
 Un simple « oui, parlons-en » ou « pas cette fois » me suffit.
 

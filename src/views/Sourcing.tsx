@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  AtSign, Binoculars, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Loader2, Mail, Plus, Radar, RefreshCw, Search, Send, SlidersHorizontal, Users, Wallet, EyeOff, RotateCcw,
+  AtSign, Binoculars, Bookmark, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Loader2, Mail, PhoneOutgoing, Plus, Radar, RefreshCw, Search, Send, SlidersHorizontal, Users, Wallet, EyeOff, RotateCcw, X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
@@ -11,6 +11,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { HelpTip } from "@/components/ui/help-tip";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { dbInsert, dbUpdate } from "@/lib/db";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { fmtCompact } from "@/lib/timeSeries";
 import { fmtAgo, fmtEr, fmtPerWeek, igWhyText, noteQuota } from "@/lib/instagram";
 import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
@@ -116,16 +117,16 @@ function Check2({ label, checked, onChange, help }: { label: string; checked: bo
 
 const TOOLS = [
   {
-    v: "createurs" as const, icon: Users, title: "Trouver des créatrices", goal: "Pour recruter",
+    v: "createurs" as const, icon: Users, title: "Trouver des créateurs", goal: "Pour recruter",
     text: "Des profils à recruter, avec chiffres et email.",
   },
   {
     v: "radar" as const, icon: Radar, title: "Radar à marques", goal: "Pour trouver des clients",
-    text: "Les marques qui paient des créatrices : tes futurs clients.",
+    text: "Les marques qui paient des créateurs : tes futurs clients.",
   },
   {
     v: "concurrents" as const, icon: Binoculars, title: "Agences concurrentes", goal: "Pour garder une longueur d'avance",
-    text: "Leur croissance, leurs créatrices, leurs marques.",
+    text: "Leur croissance, leurs créateurs, leurs marques.",
   },
 ];
 type ToolId = (typeof TOOLS)[number]["v"];
@@ -214,6 +215,18 @@ type LastSearch = {
 };
 const LAST_KEY = "ttp:sourcing-last";
 type PoolInfo = { id: string; last_contacted: string | null };
+
+// ── Tri des comptes trouvés ──────────────────────────────────────────────────
+// Chaque compte trouvé se range dans une section : « À trier » (pas encore vu), « Scouting »
+// (gardé pour plus tard), « À contacter », « Pas intéressés ». Scouting et À contacter =
+// une fiche du Scouting (creator_pool) avec son statut (clé d'état `poolTracking`, la même
+// que la page Scouting). « Pas intéressé » sur un compte hors Scouting = clé `sourcingRejects`
+// (il ne revient plus dans « À trier » aux recherches suivantes, on peut le remettre).
+type ScoutStatus = "observation" | "contacter" | "discussion" | "signe" | "ecarte";
+type PoolTracking = Record<string, { status?: ScoutStatus } & Record<string, unknown>>;
+type Rejects = Record<string, { at: string; name?: string }>;
+type Section = "trier" | "scouting" | "contacter" | "pas" | "roster";
+const SCOUT_LABEL: Record<ScoutStatus, string> = { observation: "En observation", contacter: "À contacter", discussion: "En discussion", signe: "Signé", ecarte: "Pas intéressé" };
 
 /** Taux d'engagement « normal » selon la taille du compte (repère public). */
 const erRef = (f: number) => (f < 10_000 ? 5 : f < 50_000 ? 3.5 : f < 200_000 ? 2.5 : f < 1_000_000 ? 1.8 : 1.2);
@@ -313,6 +326,7 @@ function CreatorFinder() {
   const keep = (s: LastSearch) => {
     const p = s.platform === "youtube" ? "youtube" : "instagram";
     setLastBy((m) => ({ ...m, [p]: s }));
+    setSection("trier"); // nouvelle recherche : on repart des comptes à trier
     try {
       localStorage.setItem(lastKey(p), JSON.stringify(s));
     } catch {
@@ -380,19 +394,19 @@ function CreatorFinder() {
     const r = await invokeSourcing<{ brand?: Prof & { username: string }; candidates?: Candidate[]; stopped?: string }>({ mode: "brand", brand: b });
     setBusy("");
     if (r.error || !r.candidates) return toast(errorText(r.error));
-    keep({ mode: "marque", label: `Créatrices citées par @${b}`, at: new Date().toISOString(), brand: r.brand, results: r.candidates });
+    keep({ mode: "marque", label: `Créateurs cités par @${b}`, at: new Date().toISOString(), brand: r.brand, results: r.candidates });
     if (!r.candidates.length) toast(`@${b} ne cite personne dans ses derniers posts`);
     finish(r);
   };
   const runSimilar = async (who?: string) => {
     const c = cleanUser(who ?? creatorIn);
-    if (!c) return toast("Tape le @ d'une créatrice, ou choisis-en une de ton roster");
+    if (!c) return toast("Tape le @ d'un créateur, ou choisis-en un de ton roster");
     setCreatorIn(c);
-    setBusy(`Marques de @${c}, puis les créatrices qui travaillent avec elles (30 à 60 s)…`);
+    setBusy(`Marques de @${c}, puis les créateurs qui travaillent avec elles (30 à 60 s)…`);
     const r = await invokeSourcing<{ creator?: Prof & { username: string }; brands?: string[]; candidates?: Candidate[]; stopped?: string }>({ mode: "similar", creator: c });
     setBusy("");
     if (r.error || !r.candidates) return toast(errorText(r.error));
-    keep({ mode: "similaire", label: `Créatrices proches de @${c}`, at: new Date().toISOString(), creator: r.creator, brands: r.brands, results: r.candidates.filter((x) => !rosterUsers.has(x.username)) });
+    keep({ mode: "similaire", label: `Créateurs proches de @${c}`, at: new Date().toISOString(), creator: r.creator, brands: r.brands, results: r.candidates.filter((x) => !rosterUsers.has(x.username)) });
     if (!r.brands?.length) toast(`@${c} ne cite aucune marque dans ses derniers posts : impossible de trouver des profils proches`);
     finish(r);
   };
@@ -438,15 +452,16 @@ function CreatorFinder() {
 
   // Scouting : ajout (et date de contact quand on vient d'écrire).
   const [adding, setAdding] = useState<string | null>(null);
-  const toScouting = async (c: Candidate, contacted?: boolean): Promise<boolean> => {
+  /** Fiche Scouting du compte (créée au besoin) : son id, ou null en cas d'erreur. */
+  const ensurePool = async (c: Candidate, contacted?: boolean): Promise<string | null> => {
     const now = new Date().toISOString();
     const yt = c.data?.platform === "youtube";
     const known = pool.get(keyOf(c));
     if (known) {
-      if (!contacted) return true;
+      if (!contacted) return known.id;
       const ok = await dbUpdate("creator_pool", known.id, { last_contacted: now });
       if (ok) setPool((m) => new Map(m).set(keyOf(c), { ...known, last_contacted: now }));
-      return ok;
+      return ok ? known.id : null;
     }
     const origin = last?.mode === "marque" && last.brand ? ` (citée par @${last.brand.username})` : last?.mode === "similaire" && last.creator ? ` (proche de @${last.creator.username})` : "";
     const created = await dbInsert("creator_pool", {
@@ -458,18 +473,69 @@ function CreatorFinder() {
       sort_order: maxOrder + 1,
       ...(contacted ? { last_contacted: now } : {}),
     });
-    if (!created) return false;
+    if (!created) return null;
     setMaxOrder((n) => n + 1);
     setPool((m) => new Map(m).set(keyOf(c), { id: String(created.id), last_contacted: contacted ? now : null }));
-    return true;
+    return String(created.id);
   };
-  const addToScouting = async (c: Candidate) => {
-    setAdding(c.username);
-    const ok = await toScouting(c);
-    setAdding(null);
-    toast(ok ? `@${c.username} ajoutée au Scouting ✓` : "Erreur, réessaie");
-  };
+  const toScouting = async (c: Candidate, contacted?: boolean): Promise<boolean> => !!(await ensurePool(c, contacted));
   const [contact, setContact] = useState<Candidate | null>(null);
+
+  // Tri : statuts du Scouting + comptes écartés (partagés par l'équipe, état de l'app).
+  const { data: trackData } = useAppState<PoolTracking>((st: AppState) => (st["poolTracking"] as PoolTracking) ?? {});
+  const [trackLocal, setTrackLocal] = useState<PoolTracking | null>(null);
+  const tracking = trackLocal ?? trackData ?? {};
+  const { data: rejData } = useAppState<Rejects>((st: AppState) => (st["sourcingRejects"] as Rejects) ?? {});
+  const [rejLocal, setRejLocal] = useState<Rejects | null>(null);
+  const rejects = rejLocal ?? rejData ?? {};
+  /** Lit la valeur fraîche, applique `fn`, affiche tout de suite, puis enregistre. */
+  const saveKey = async <T,>(key: string, fn: (cur: T) => T, setLocal: (v: T) => void): Promise<boolean> => {
+    try {
+      invalidateAppState();
+      const next = fn(((await getAppState())[key] as T) ?? ({} as T));
+      setLocal(next);
+      return await saveAppStateKey(key, next);
+    } catch {
+      return false;
+    }
+  };
+  const sectionOf = (c: Candidate): Section => {
+    const k = keyOf(c);
+    if (rosterUsers.has(k)) return "roster";
+    const inPool = pool.get(k);
+    if (inPool) {
+      const st = tracking[inPool.id]?.status ?? "observation";
+      return st === "contacter" ? "contacter" : st === "ecarte" ? "pas" : "scouting";
+    }
+    return rejects[k] ? "pas" : "trier";
+  };
+  const [section, setSection] = useState<Section>("trier");
+  /** Range un compte : Scouting (en observation), À contacter, ou Pas intéressé. */
+  const triage = async (c: Candidate, to: "scouting" | "contacter" | "pas") => {
+    const k = keyOf(c);
+    const who = c.data?.platform === "youtube" ? c.data?.name || `@${c.username}` : `@${c.username}`;
+    setAdding(c.username);
+    let ok: boolean;
+    if (to === "pas" && !pool.get(k)) {
+      ok = await saveKey<Rejects>("sourcingRejects", (cur) => ({ ...cur, [k]: { at: new Date().toISOString(), name: who } }), setRejLocal);
+    } else {
+      const id = await ensurePool(c);
+      ok = !!id;
+      if (id) {
+        const status: ScoutStatus = to === "contacter" ? "contacter" : to === "pas" ? "ecarte" : "observation";
+        ok = await saveKey<PoolTracking>("poolTracking", (cur) => ({ ...cur, [id]: { ...(cur[id] ?? {}), status } }), setTrackLocal);
+        if (ok && rejects[k]) await saveKey<Rejects>("sourcingRejects", (cur) => Object.fromEntries(Object.entries(cur).filter(([x]) => x !== k)), setRejLocal);
+      }
+    }
+    setAdding(null);
+    toast(ok ? `${who} → ${to === "scouting" ? "Scouting" : to === "contacter" ? "À contacter" : "Pas intéressés"} ✓` : "Erreur, réessaie");
+  };
+  /** Remet un compte écarté (hors Scouting) dans « À trier ». */
+  const untriage = async (c: Candidate) => {
+    const k = keyOf(c);
+    const ok = await saveKey<Rejects>("sourcingRejects", (cur) => Object.fromEntries(Object.entries(cur).filter(([x]) => x !== k)), setRejLocal);
+    toast(ok ? "Remis dans « À trier »" : "Erreur, réessaie");
+  };
 
   const scored = useMemo(() => (last?.results ?? []).map((c) => ({ c, p: c.data ? scoreOf(c.data) : { score: 0, flags: [] as string[] } })), [last]);
   const shown = useMemo(() => {
@@ -496,10 +562,13 @@ function CreatorFinder() {
     return list.sort((a, b) => key(b) - key(a));
   }, [scored, minF, maxF, minEr, bioWord, emailF, agencyF, showOthers, sort]);
   const hidden = (last?.results.length ?? 0) - shown.length;
+  const bySection = { trier: 0, scouting: 0, contacter: 0, pas: 0, roster: 0 } as Record<Section, number>;
+  for (const x of shown) bySection[sectionOf(x.c)]++;
+  const visible = shown.filter((x) => sectionOf(x.c) === section);
 
   const SOURCES = [
     { value: "marque", label: "Depuis une marque" },
-    { value: "similaire", label: "Comme une créatrice" },
+    { value: "similaire", label: "Comme un créateur" },
     { value: "liste", label: "Liste de @" },
   ];
   const runBtn = (label: string, onClick: () => void) => (
@@ -565,7 +634,7 @@ function CreatorFinder() {
                 <select aria-label="Pays" value={ytRegion} onChange={(e) => setYtRegion(e.target.value)} className={cn(IN, "w-36")}>
                   {REGIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
-                {runBtn(ytSource === "search" ? "Trouver des chaînes" : "Trouver ses créatrices", () => void runYt())}
+                {runBtn(ytSource === "search" ? "Trouver des chaînes" : "Trouver ses créateurs", () => void runYt())}
               </form>
             )}
           </div>
@@ -574,8 +643,8 @@ function CreatorFinder() {
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <Tabs size="sm" wrap label="Point de départ" value={source} onValueChange={(v) => setSource(v as typeof source)} items={SOURCES} />
           <HelpTip title="Quelle différence ?">
-            <p><span className="font-medium text-foreground">Depuis une marque</span> : l'app lit les 50 derniers posts de la marque et liste les @ qu'elle cite. Ce sont souvent les créatrices avec qui elle a travaillé.</p>
-            <p><span className="font-medium text-foreground">Comme une créatrice</span> : tu choisis une créatrice (une des tiennes, par exemple). L'app regarde avec quelles marques elle travaille, puis quelles autres créatrices travaillent avec ces mêmes marques. Plus elles en partagent, plus elles lui ressemblent.</p>
+            <p><span className="font-medium text-foreground">Depuis une marque</span> : l'app lit les 50 derniers posts de la marque et liste les @ qu'elle cite. Ce sont souvent les créateurs avec qui elle a travaillé.</p>
+            <p><span className="font-medium text-foreground">Comme un créateur</span> : tu choisis un créateur (un des tiens, par exemple). L'app regarde avec quelles marques il travaille, puis quels autres créateurs travaillent avec ces mêmes marques. Plus ils en partagent, plus ils lui ressemblent.</p>
             <p><span className="font-medium text-foreground">Liste de @</span> : tu colles des @ trouvés ailleurs pour voir tous leurs chiffres d'un coup.</p>
           </HelpTip>
         </div>
@@ -585,7 +654,7 @@ function CreatorFinder() {
               <AtSign className="h-3.5 w-3.5 shrink-0 text-faint" />
               <input aria-label="@ de la marque" value={brandIn} onChange={(e) => setBrandIn(e.target.value)} placeholder="gymshark" className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none" />
             </div>
-            {runBtn("Trouver ses créatrices", () => void runBrand())}
+            {runBtn("Trouver ses créateurs", () => void runBrand())}
           </form>
         )}
         {source === "similaire" && (
@@ -593,13 +662,13 @@ function CreatorFinder() {
             <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void runSimilar(); }}>
               <div className="flex min-w-[200px] flex-1 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 focus-within:border-primary">
                 <AtSign className="h-3.5 w-3.5 shrink-0 text-faint" />
-                <input aria-label="@ de la créatrice" value={creatorIn} onChange={(e) => setCreatorIn(e.target.value)} placeholder="une créatrice que tu aimes" className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none" />
+                <input aria-label="@ du créateur" value={creatorIn} onChange={(e) => setCreatorIn(e.target.value)} placeholder="un créateur que tu aimes" className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none" />
               </div>
               {runBtn("Trouver des profils proches", () => void runSimilar())}
             </form>
             {roster.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-faint">
-                Tes créatrices :
+                Tes créateurs :
                 {roster.slice(0, 12).map((r) => (
                   <button key={r.user} type="button" disabled={!!busy} onClick={() => void runSimilar(r.user)} className="rounded-full border border-border px-2.5 py-1 font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
                     {titleCase(r.name)}
@@ -631,7 +700,7 @@ function CreatorFinder() {
             <Field label="Abonnés max"><input aria-label="Abonnés maximum" value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-24")} /></Field>
             <Field label="Engagement min (%)" help={<><p>Likes + commentaires moyens de ses 12 derniers posts, divisés par ses abonnés.</p><p>Repère : de 1 à 3 % c'est la moyenne, au-dessus de 3 % c'est bon. Les petits comptes ont souvent un taux plus haut.</p></>}><input aria-label="Engagement minimum" value={minEr} onChange={(e) => setMinEr(e.target.value)} placeholder="2" inputMode="decimal" className={cn(IN, "w-24")} /></Field>
             <Field label="Mot dans la bio" className="min-w-[140px] flex-1" help={<p>Pour cibler une ville (Lyon), une niche (running, maman, vegan) ou une langue. L'app cherche le mot dans la bio et le nom.</p>}><input aria-label="Mot dans la bio" value={bioWord} onChange={(e) => setBioWord(e.target.value)} placeholder="Lyon, running, maman…" className={IN} /></Field>
-            <Field label="Email" help={<p>L'app cherche un email dans la bio, puis sur le lien de la créatrice (Linktree, son site). « Avec email » : tu peux lui écrire tout de suite depuis l'app.</p>}>
+            <Field label="Email" help={<p>L'app cherche un email dans la bio, puis sur le lien du créateur (Linktree, son site). « Avec email » : tu peux lui écrire tout de suite depuis l'app.</p>}>
               <select aria-label="Email" value={emailF} onChange={(e) => setEmailF(e.target.value as typeof emailF)} className={cn(IN, "w-28")}>
                 <option value="tous">Tous</option><option value="avec">Avec email</option><option value="sans">Sans email</option>
               </select>
@@ -675,15 +744,46 @@ function CreatorFinder() {
             </span>
           </div>
 
+          {/* Sections du tri : chaque compte trouvé passe de « À trier » à sa section. */}
+          {shown.length > 0 && (
+            <Tabs
+              className="mb-3"
+              size="sm"
+              label="Sections du tri"
+              value={section}
+              onValueChange={(v) => setSection(v as Section)}
+              items={[
+                { value: "trier", label: "À trier", count: bySection.trier },
+                { value: "scouting", label: "Scouting", count: bySection.scouting },
+                { value: "contacter", label: "À contacter", count: bySection.contacter },
+                { value: "pas", label: "Pas intéressés", count: bySection.pas },
+                ...(bySection.roster ? [{ value: "roster", label: "Déjà au roster", count: bySection.roster }] : []),
+              ]}
+            />
+          )}
+
           {shown.length === 0 ? (
             <div className="rounded-2xl border border-border bg-surface px-6 py-10 text-center text-sm text-muted-foreground">Aucun profil pour ces filtres.</div>
+          ) : visible.length === 0 ? (
+            <div className="rounded-2xl bg-surface px-6 py-10 text-center text-sm text-muted-foreground">
+              {section === "trier"
+                ? "Tout est trié ✓ Retrouve chaque compte dans sa section."
+                : section === "scouting"
+                  ? "Aucun compte gardé dans le Scouting pour cette recherche."
+                  : section === "contacter"
+                    ? "Aucun compte à contacter pour cette recherche."
+                    : section === "pas"
+                      ? "Aucun compte écarté pour cette recherche."
+                      : "Aucun compte déjà au roster."}
+            </div>
           ) : (
             <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
-              {shown.map(({ c, p }) => {
+              {visible.map(({ c, p }) => {
                 const d = c.data;
                 const yt = d?.platform === "youtube";
                 const inPool = pool.get(keyOf(c));
-                const inRoster = rosterUsers.has(keyOf(c));
+                const sec = sectionOf(c);
+                const scoutSt: ScoutStatus | null = inPool ? tracking[inPool.id]?.status ?? "observation" : null;
                 const ok = !!d && !c.why;
                 return (
                   <div key={c.username} className={cn("flex flex-col gap-2.5 px-4 py-3.5 lg:flex-row lg:items-center lg:gap-4", !ok && "opacity-60")}>
@@ -705,7 +805,7 @@ function CreatorFinder() {
                           {ok && p.score >= 70 && <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Pépite</span>}
                           {c.count && last.mode !== "yt-search" ? (
                             <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                              {last.mode === "similaire" ? `${c.count} marque${c.count > 1 ? "s" : ""} en commun` : last.mode === "yt-brand" ? `${c.count} vidéo${c.count > 1 ? "s" : ""} sur la marque` : `citée ${c.count}×`}
+                              {last.mode === "similaire" ? `${c.count} marque${c.count > 1 ? "s" : ""} en commun` : last.mode === "yt-brand" ? `${c.count} vidéo${c.count > 1 ? "s" : ""} sur la marque` : `cité ${c.count}×`}
                             </span>
                           ) : null}
                           {d?.agency && <span title={`Indice : « ${d.agency} »`} className="rounded-full bg-amber/15 px-2 py-0.5 text-[10px] font-medium text-amber">En agence ?</span>}
@@ -740,19 +840,51 @@ function CreatorFinder() {
                       </div>
                     )}
                     <div className="flex shrink-0 flex-wrap items-center gap-2 pl-[52px] lg:pl-0">
-                      {inPool?.last_contacted && <span className="text-[10px] text-faint">Contactée {fmtAgo(inPool.last_contacted)}</span>}
-                      {!inRoster && (
-                        <button type="button" onClick={() => setContact(c)} className="flex items-center gap-1 rounded-full bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
-                          <Send className="h-3.5 w-3.5" /> Contacter
-                        </button>
-                      )}
-                      {inRoster ? (
+                      {inPool?.last_contacted && <span className="text-[10px] text-faint">Contacté {fmtAgo(inPool.last_contacted)}</span>}
+                      {sec === "roster" ? (
                         <span className="rounded-full bg-panel px-2.5 py-1 text-[11px] font-medium text-muted-foreground">Au roster</span>
-                      ) : inPool ? (
-                        <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"><Check className="h-3 w-3" /> Scouting</span>
+                      ) : sec === "trier" ? (
+                        /* Tri en un clic : garder, à contacter, ou pas intéressé. */
+                        <>
+                          <button type="button" onClick={() => void triage(c, "scouting")} disabled={adding === c.username} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
+                            {adding === c.username ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bookmark className="h-3.5 w-3.5" />} Scouting
+                          </button>
+                          <button type="button" onClick={() => void triage(c, "contacter")} disabled={adding === c.username} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
+                            <PhoneOutgoing className="h-3.5 w-3.5" /> À contacter
+                          </button>
+                          <button type="button" onClick={() => void triage(c, "pas")} disabled={adding === c.username} className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
+                            <X className="h-3.5 w-3.5" /> Pas intéressé
+                          </button>
+                        </>
                       ) : (
-                        <button type="button" onClick={() => void addToScouting(c)} disabled={adding === c.username} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
-                          {adding === c.username ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Scouting
+                        /* Déjà trié : son statut, et de quoi le changer de section. */
+                        <>
+                          <span className={cn("flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium", sec === "pas" ? "bg-panel text-muted-foreground" : sec === "contacter" ? "bg-primary/10 text-primary" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400")}>
+                            {sec === "pas" ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
+                            {scoutSt ? SCOUT_LABEL[scoutSt] : "Pas intéressé"}
+                          </span>
+                          <select
+                            aria-label={`Changer de section ${c.username}`}
+                            value=""
+                            disabled={adding === c.username}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v === "trier") void untriage(c);
+                              else if (v === "scouting" || v === "contacter" || v === "pas") void triage(c, v);
+                            }}
+                            className="h-7 rounded-full border border-border bg-surface px-2.5 text-[11px] text-muted-foreground outline-none hover:bg-rowhover"
+                          >
+                            <option value="" disabled>Déplacer…</option>
+                            {sec !== "scouting" && <option value="scouting">Scouting</option>}
+                            {sec !== "contacter" && <option value="contacter">À contacter</option>}
+                            {sec !== "pas" && <option value="pas">Pas intéressé</option>}
+                            {sec === "pas" && !inPool && <option value="trier">Remettre à trier</option>}
+                          </select>
+                        </>
+                      )}
+                      {sec !== "roster" && sec !== "pas" && (
+                        <button type="button" onClick={() => setContact(c)} title="Écrire un mail ou un message Instagram" className="flex items-center gap-1 rounded-full bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+                          <Send className="h-3.5 w-3.5" /> Écrire
                         </button>
                       )}
                     </div>
@@ -766,9 +898,9 @@ function CreatorFinder() {
       {!last && !busy && (
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
           {[
-            ["1", "Choisis un point de départ", "Une marque de ta niche, une créatrice que tu aimes, ou une liste de @."],
+            ["1", "Choisis un point de départ", "Une marque de ta niche, un créateur que tu aimes, ou une liste de @."],
             ["2", "Filtre", "Abonnés, engagement, ville dans la bio, avec email, sans agence. Tri par score « Potentiel »."],
-            ["3", "Contacte ou garde", "Un mail depuis ta boîte Gmail ou un message Instagram, ou « + Scouting » pour plus tard."],
+            ["3", "Trie et contacte", "Range chaque compte : Scouting, À contacter ou Pas intéressé. Écris-lui depuis ta boîte Gmail ou Instagram."],
           ].map(([n, t, dsc]) => (
             <div key={n} className="rounded-2xl border border-dashed border-border px-4 py-4">
               <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
@@ -789,8 +921,8 @@ function CreatorFinder() {
           instagram={contact.data?.platform === "youtube" ? undefined : contact.username}
           contactName={contact.data?.name || `@${contact.username}`}
           subject={`TTP Creators × ${firstName(contact.data, contact.username)}`}
-          body={`Bonjour ${firstName(contact.data, contact.username)},\n\nJe te contacte de la part de TTP Creators, une agence qui accompagne des créatrices de contenu dans leurs partenariats avec les marques.\n\nJ'aime beaucoup ton contenu${contact.data?.deals?.length ? ` et tes collaborations (${contact.data.deals.slice(0, 2).map((b) => `@${b}`).join(", ")})` : ""} : je pense qu'on pourrait faire de belles choses ensemble.\n\nTu serais partante pour qu'on en parle ?\n\nBelle journée,`}
-          onSent={() => void toScouting(contact, true).then((ok) => ok && toast("Notée « contactée » dans le Scouting ✓"))}
+          body={`Bonjour ${firstName(contact.data, contact.username)},\n\nJe te contacte de la part de TTP Creators, une agence qui accompagne des créateurs de contenu dans leurs partenariats avec les marques.\n\nJ'aime beaucoup ton contenu${contact.data?.deals?.length ? ` et tes collaborations (${contact.data.deals.slice(0, 2).map((b) => `@${b}`).join(", ")})` : ""} : je pense qu'on pourrait faire de belles choses ensemble.\n\nÇa te dirait qu'on en parle ?\n\nBelle journée,`}
+          onSent={() => void toScouting(contact, true).then((ok) => ok && toast("Noté « contacté » dans le Scouting ✓"))}
           onClose={() => setContact(null)}
         />
       )}
@@ -980,7 +1112,7 @@ function BrandRadar() {
     if (r.error) return toast(errorText(r.error));
     const d = r.diag;
     toast(
-      `${r.creators ?? 0} créatrices lues${r.discovered ? ` (dont ${r.discovered} hors agence)` : ""} · ${r.brands ?? 0} marques citées` +
+      `${r.creators ?? 0} créateurs lus${r.discovered ? ` (dont ${r.discovered} hors agence)` : ""} · ${r.brands ?? 0} marques citées` +
         (d && !r.brands ? ` · ${d.posts} posts reçus, ${d.withName ?? 0} citent un compte` : "") +
         (r.stopped ? ` · ${igWhyText(r.stopped)}` : ""),
     );
@@ -1100,8 +1232,8 @@ function BrandRadar() {
   }
 
   const TILES = [
-    { v: "clients" as const, icon: Wallet, title: "Clients potentiels", short: "Clients", n: counts.clients, text: "Elles paient ou offrent des produits à des créatrices de ta niche.", on: "border-primary bg-primary/[0.04]", dot: "bg-primary text-primary-foreground" },
-    { v: "chauds" as const, icon: Flame, title: "Contacts chauds", short: "Chauds", n: counts.chauds, text: "Tes créatrices en parlent déjà, sans être payées.", on: "border-emerald-500 bg-emerald-500/[0.05]", dot: "bg-emerald-500 text-white" },
+    { v: "clients" as const, icon: Wallet, title: "Clients potentiels", short: "Clients", n: counts.clients, text: "Elles paient ou offrent des produits à des créateurs de ta niche.", on: "border-primary bg-primary/[0.04]", dot: "bg-primary text-primary-foreground" },
+    { v: "chauds" as const, icon: Flame, title: "Contacts chauds", short: "Chauds", n: counts.chauds, text: "Tes créateurs en parlent déjà, sans être payés.", on: "border-emerald-500 bg-emerald-500/[0.05]", dot: "bg-emerald-500 text-white" },
     { v: "tous" as const, icon: Radar, title: "Toutes les marques", short: "Toutes", n: counts.tous, text: "Tout ce que le radar a repéré.", on: "border-foreground/40 bg-panel/60", dot: "bg-foreground text-background" },
   ];
   const toggleRow = (b: string) => setOpenRows((cur) => { const n = new Set(cur); if (n.has(b)) n.delete(b); else n.add(b); return n; });
@@ -1117,7 +1249,7 @@ function BrandRadar() {
     setAdding(null);
     if (!created) return toast("Erreur, réessaie");
     setPoolUsers((cur) => new Set([...cur, handle]));
-    toast(`@${handle} ajoutée au Scouting ✓`);
+    toast(`@${handle} ajouté au Scouting ✓`);
   };
   const srcTag = (p: RadarPost) =>
     rosterNames[p.c] || p.roster ? { t: "Roster", c: "bg-foreground/[0.07] text-foreground" } : poolUsers.has(p.c) ? { t: "Scouting", c: "bg-indigo/10 text-indigo" } : { t: "Hors agence", c: "bg-panel text-faint" };
@@ -1150,22 +1282,22 @@ function BrandRadar() {
         <Tabs
           size="sm"
           wrap
-          label="Vu chez quelles créatrices"
+          label="Vu chez quels créateurs"
           value={srcF}
           onValueChange={(v) => setSrcF(v as typeof srcF)}
           items={[
             { value: "toutes", label: "Toutes" },
-            { value: "miennes", label: "Mes créatrices" },
+            { value: "miennes", label: "Mes créateurs" },
             { value: "scouting", label: "Scouting" },
             { value: "hors", label: "Hors agence" },
           ]}
         />
         <HelpTip title="Hors agence ?">
-          <p>Des créatrices que tu ne connais pas encore : celles trouvées par le Sourcing, et celles que citent les marques du radar. Le radar lit leurs posts petit à petit et ajoute leurs marques.</p>
-          <p>Double intérêt : de nouvelles marques à démarcher, et de nouvelles créatrices à recruter (bouton « + Scouting » sur leurs posts).</p>
+          <p>Des créateurs que tu ne connais pas encore : ceux trouvés par le Sourcing, et ceux que citent les marques du radar. Le radar lit leurs posts petit à petit et ajoute leurs marques.</p>
+          <p>Double intérêt : de nouvelles marques à démarcher, et de nouveaux créateurs à recruter (bouton « + Scouting » sur leurs posts).</p>
         </HelpTip>
         {queue && (queue.read > 0 || queue.waiting > 0) && (
-          <span className="text-[11px] text-faint" title="Créatrices hors agence : lues par le radar, et en file pour les prochains passages (toutes les 2 heures)">
+          <span className="text-[11px] text-faint" title="Créateurs hors agence : lus par le radar, et en file pour les prochains passages (toutes les 2 heures)">
             Hors agence : {queue.read} lue{queue.read > 1 ? "s" : ""}{queue.waiting > 0 ? ` · ${queue.waiting} en attente` : ""}
           </span>
         )}
@@ -1181,7 +1313,7 @@ function BrandRadar() {
             {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} {scanning ? "Lecture des posts (1 à 2 min)…" : "Lancer le radar"}
           </button>
           <HelpTip title="Comment marche le radar ?" align="end">
-            <p>Toutes les 2 heures, l'app lit les derniers posts de tes créatrices, de celles de ton Scouting, et de créatrices hors agence découvertes au fil des recherches (celles que citent les marques du radar). Elle note les marques citées.</p>
+            <p>Toutes les 2 heures, l'app lit les derniers posts de tes créateurs, de ceux de ton Scouting, et de créateurs hors agence découverts au fil des recherches (ceux que citent les marques du radar). Elle note les marques citées.</p>
             <p>Elle vérifie ensuite chaque nom auprès de Meta pour savoir si c'est bien une marque. Chaque passage s'arrête à 60 % du quota Meta, pour te laisser de la marge.</p>
             <p>« Lancer le radar » le fait tout de suite (1 à 2 minutes).</p>
           </HelpTip>
@@ -1196,9 +1328,9 @@ function BrandRadar() {
             {PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
         </label>
-        <Field label="Créatrice : abonnés min" help={<p>La taille de la créatrice qui a fait le post. Utile pour trouver les marques qui travaillent avec des comptes de la taille des tiens.</p>}><input aria-label="Abonnés minimum de la créatrice" value={minF} onChange={(e) => setMinF(e.target.value)} placeholder="10k" className={cn(IN, "w-28")} /></Field>
-        <Field label="max"><input aria-label="Abonnés maximum de la créatrice" value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-24")} /></Field>
-        <Field label="Ville de la créatrice" help={<p>Cherche le mot dans la bio de la créatrice qui a fait le post (par exemple Lyon).</p>}><input aria-label="Ville de la créatrice" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Lyon" className={cn(IN, "w-28")} /></Field>
+        <Field label="Créateur : abonnés min" help={<p>La taille du créateur qui a fait le post. Utile pour trouver les marques qui travaillent avec des comptes de la taille des tiens.</p>}><input aria-label="Abonnés minimum du créateur" value={minF} onChange={(e) => setMinF(e.target.value)} placeholder="10k" className={cn(IN, "w-28")} /></Field>
+        <Field label="max"><input aria-label="Abonnés maximum du créateur" value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-24")} /></Field>
+        <Field label="Ville du créateur" help={<p>Cherche le mot dans la bio du créateur qui a fait le post (par exemple Lyon).</p>}><input aria-label="Ville du créateur" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Lyon" className={cn(IN, "w-28")} /></Field>
         <label className="flex flex-col gap-1 text-[10px] font-medium text-faint" title="À traiter = pas encore triées ; Au Pipeline = déjà ajoutées ; Pas pertinentes = mises de côté">Statut
           <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className={cn(IN, "w-32")}>
             <option value="nouveau">À traiter</option>
@@ -1208,7 +1340,7 @@ function BrandRadar() {
         </label>
         <div className="flex flex-wrap items-center gap-3 pb-2 text-[12px] text-muted-foreground">
           <Check2 label="Déjà en contact" checked={showKnown} onChange={setShowKnown} help={<p>Les marques déjà dans tes Contacts, ou avec qui TTP a déjà une conversation en message privé Instagram, sont cachées pour ne garder que les nouvelles. Coche pour les voir aussi.</p>} />
-          <Check2 label="Comptes incertains" checked={showUnsure} onChange={setShowUnsure} help={<p>L'app devine si un @ est une marque (site web, bio, abonnés). Quand elle n'est pas sûre (ami tagué, autre créatrice, profil pas encore lu), le compte est caché. Coche pour le voir.</p>} />
+          <Check2 label="Comptes incertains" checked={showUnsure} onChange={setShowUnsure} help={<p>L'app devine si un @ est une marque (site web, bio, abonnés). Quand elle n'est pas sûre (ami tagué, autre créateur, profil pas encore lu), le compte est caché. Coche pour le voir.</p>} />
         </div>
         </div>
       )}
@@ -1241,8 +1373,8 @@ function BrandRadar() {
             : pendingNow > 0
               ? "Les marques apparaissent ici au fur et à mesure qu'elles sont vérifiées."
               : srcF === "hors"
-                ? "Aucune marque vue chez des créatrices hors agence pour l'instant : le radar en lit de nouvelles toutes les 2 heures."
-                : kind === "chauds" ? "Aucune marque citée spontanément par tes créatrices pour l'instant." : "Aucune marque avec ces réglages."}
+                ? "Aucune marque vue chez des créateurs hors agence pour l'instant : le radar en lit de nouvelles toutes les 2 heures."
+                : kind === "chauds" ? "Aucune marque citée spontanément par tes créateurs pour l'instant." : "Aucune marque avec ces réglages."}
         </div>
       ) : (
         <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
@@ -1254,7 +1386,7 @@ function BrandRadar() {
             const summary = [
               types.paye ? `${types.paye} payé${types.paye > 1 ? "s" : ""}` : "",
               types.offert ? `${types.offert} offert${types.offert > 1 ? "s" : ""} / code` : "",
-              warm ? `${warm} spontané${warm > 1 ? "s" : ""} chez tes créatrices` : "",
+              warm ? `${warm} spontané${warm > 1 ? "s" : ""} chez tes créateurs` : "",
             ].filter(Boolean).join(" · ");
             return (
               <div key={row.brand} className="px-4 py-3.5">
@@ -1369,7 +1501,7 @@ function BrandRadar() {
             subject={`TTP Creators × ${brandName}`}
             body={post.roster && !post.paid
               ? `Bonjour,\n\n${who}, que nous représentons chez TTP Creators, parle déjà de ${brandName} spontanément : ${post.url}\n\nUne collaboration officielle aurait du sens : sa communauté connaît et apprécie déjà votre marque.\n\nJe vous envoie son media kit ?\n\nBelle journée,`
-              : `Bonjour,\n\nJ'ai vu votre collaboration avec @${post.c} : ${post.url}\n\nChez TTP Creators, nous représentons des créatrices qui correspondent à votre univers et pourraient porter vos prochaines campagnes.\n\nJe vous envoie notre sélection ?\n\nBelle journée,`}
+              : `Bonjour,\n\nJ'ai vu votre collaboration avec @${post.c} : ${post.url}\n\nChez TTP Creators, nous représentons des créateurs qui correspondent à votre univers et pourraient porter vos prochaines campagnes.\n\nJe vous envoie notre sélection ?\n\nBelle journée,`}
             onSent={() => void toPipeline(row, { stage: "Contact", silent: true }).then((ok) => ok && toast("La marque passe au Pipeline (étape Contact) : personne ne la recontactera"))}
             onClose={() => setMailFor(null)}
           />

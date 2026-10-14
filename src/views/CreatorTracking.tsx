@@ -828,7 +828,7 @@ export function RosterTracking({ onOpen }: { onOpen?: (name: string) => void }) 
             <tbody className="divide-y divide-border">
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-[13px] text-muted-foreground">Aucune créatrice au roster.</td>
+                  <td colSpan={5} className="px-5 py-10 text-center text-[13px] text-muted-foreground">Aucun créateur au roster.</td>
                 </tr>
               )}
               {rows.map((r) => (

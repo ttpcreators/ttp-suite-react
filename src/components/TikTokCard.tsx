@@ -96,7 +96,7 @@ export function TikTokCard({ creatorId, name, tt, onChange, className }: {
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-border px-3 py-3 text-[12px] leading-snug text-muted-foreground">
-          TikTok ne donne les chiffres que si la créatrice connecte son compte : abonnés, j'aime, et les vues de chacune de ses vidéos (y compris celles des collabs).
+          TikTok ne donne les chiffres que si le créateur connecte son compte : abonnés, j'aime, et les vues de chacune de ses vidéos (y compris celles des collabs).
         </div>
       )}
 
@@ -112,7 +112,7 @@ export function TikTokCard({ creatorId, name, tt, onChange, className }: {
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] leading-snug text-muted-foreground">Elle connecte son TikTok depuis son espace (« Envoyer mes stats »), ou ici avec elle.</span>
+            <span className="text-[11px] leading-snug text-muted-foreground">Il connecte son TikTok depuis son espace (« Envoyer mes stats »), ou ici avec lui.</span>
             <button type="button" onClick={connect} disabled={!!busy} className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
               {busy === "link" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />} Connecter
             </button>

@@ -337,7 +337,7 @@ export function AgencyTab() {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className={LBL}>Nombre de créatrices</label>
+                  <label className={LBL}>Nombre de créateurs</label>
                   <input
                     value={kit.kpis.creatorsOverride}
                     onChange={(e) => patchKpis({ creatorsOverride: e.target.value })}

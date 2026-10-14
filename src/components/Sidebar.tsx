@@ -161,7 +161,7 @@ export function Sidebar({
       onCollapse={() => setCollapsed(true)}
       options={[
         { id: "agency", label: "Agence", hint: "Gestion de l'agence", icon: Building2, active: space === "agency", onSelect: () => onSpaceChange("agency") },
-        { id: "portal", label: "Créateurs", hint: "Espaces des créatrices", icon: Sparkles, active: space === "portal", onSelect: () => onSpaceChange("portal") },
+        { id: "portal", label: "Créateurs", hint: "Espaces des créateurs", icon: Sparkles, active: space === "portal", onSelect: () => onSpaceChange("portal") },
       ]}
     />
   );
