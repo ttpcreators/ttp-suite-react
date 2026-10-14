@@ -6,7 +6,8 @@ conversations avec des comptes sans rôle sur l'app). Constaté le 2026-10-14.
 L'accès avancé demande : **1) la vérification de l'entreprise**, **2) la validation de l'app**.
 
 App Meta : « TTP Suite Scouting », ID `1085983370893343`, type Entreprise, portefeuille
-« The Insider's Private Society » (ID `1226405722196594`), mode Développement.
+« TTP Creators » (ex « The Insider's Private Society », ID `1226405722196594`), entreprise vérifiée,
+**mode Live depuis le 2026-10-15**.
 
 ## Étapes, dans l'ordre
 
