@@ -23,7 +23,9 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4
 
 type Json = Record<string, unknown>;
 type Src = "roster" | "scouting" | "hors";
-type Post = { v: string; url: string; at: string; title: string; thumb: string; views: number | null; likes: number | null; flag: boolean; ch: string; c: string; h: string; subs: number | null; src: Src; fr?: boolean };
+type Post = { v: string; url: string; at: string; title: string; thumb: string; views: number | null; likes: number | null; flag: boolean; ch: string; c: string; h: string; subs: number | null; src: Src; fr?: boolean; seen?: string };
+// Règle YouTube (Developer Policies) : une donnée de l'API non relue depuis 30 jours est effacée.
+const KEEP_DAYS = 30;
 type Info = { subs: number | null; handle: string; uploads: string; country: string };
 
 const QUERIES = ["code promo", "partenariat rémunéré", "sponsorisé", "collaboration commerciale", "lien affilié réduction", "en partenariat avec"];
@@ -200,34 +202,38 @@ Deno.serve(async (req: Request) => {
   }
 
   // 3. Une ligne par marque ; vidéos fusionnées (40 dernières), statut gardé.
+  const now = new Date().toISOString();
+  const cutoff = new Date(Date.now() - KEEP_DAYS * 86400000).toISOString();
   const byBrand = new Map<string, { name: string; posts: Post[] }>();
   for (const f of found) {
     for (const b of f.brands) {
       const e = byBrand.get(b.key) ?? { name: b.name, posts: [] };
-      if (!e.posts.some((p) => p.v === f.post.v)) e.posts.push(f.post);
+      if (!e.posts.some((p) => p.v === f.post.v)) e.posts.push({ ...f.post, seen: now });
       byBrand.set(b.key, e);
     }
   }
-  // Avant le filtre France, des chaînes étrangères avaient été gardées : on retire leurs
-  // vidéos (hors agence sans la marque « fr ») et les marques « à traiter » restées vides.
-  const { data: oldRows } = await sb.from("yt_radar").select("brand, name, posts, status");
-  for (const r of (oldRows as { brand: string; name: string; posts: Post[]; status: string }[] | null) ?? []) {
-    const kept = (r.posts ?? []).filter((p) => p.src !== "hors" || p.fr === true);
-    if (kept.length === (r.posts ?? []).length) continue;
+  // On retire les vidéos non relues depuis 30 jours (règle YouTube) et celles des chaînes
+  // étrangères gardées avant le filtre France ; les marques « à traiter » restées vides partent.
+  const keep = (p: Post, rowSeen: string | null) => (p.src !== "hors" || p.fr === true) && (p.seen ?? rowSeen ?? "") >= cutoff;
+  const { data: oldRows } = await sb.from("yt_radar").select("brand, name, posts, status, last_seen");
+  for (const r of (oldRows as { brand: string; name: string; posts: Post[]; status: string; last_seen: string | null }[] | null) ?? []) {
+    // (vidéos d'avant ce champ : datées du dernier passage de leur marque, une fois pour toutes)
+    const kept = (r.posts ?? []).filter((p) => keep(p, r.last_seen)).map((p) => (p.seen ? p : { ...p, seen: r.last_seen ?? now }));
+    if (kept.length === (r.posts ?? []).length && (r.posts ?? []).every((p) => p.seen)) continue;
     if (!kept.length && r.status === "nouveau" && !byBrand.has(r.brand)) await sb.from("yt_radar").delete().eq("brand", r.brand);
     else await sb.from("yt_radar").update({ posts: kept }).eq("brand", r.brand);
   }
   const keys = [...byBrand.keys()];
-  const existing = new Map<string, { name: string; posts: Post[] }>();
+  const existing = new Map<string, { name: string; posts: Post[]; last_seen: string | null }>();
   for (let i = 0; i < keys.length; i += 200) {
-    const { data } = await sb.from("yt_radar").select("brand, name, posts").in("brand", keys.slice(i, i + 200));
-    for (const r of (data as { brand: string; name: string; posts: Post[] }[] | null) ?? []) existing.set(r.brand, r);
+    const { data } = await sb.from("yt_radar").select("brand, name, posts, last_seen").in("brand", keys.slice(i, i + 200));
+    for (const r of (data as { brand: string; name: string; posts: Post[]; last_seen: string | null }[] | null) ?? []) existing.set(r.brand, r);
   }
-  const now = new Date().toISOString();
   const rows = keys.map((k) => {
     const cur = existing.get(k);
     const map = new Map<string, Post>();
-    for (const p of [...(cur?.posts ?? []).filter((x) => x.src !== "hors" || x.fr === true), ...(byBrand.get(k)?.posts ?? [])]) map.set(p.v, p);
+    const old = (cur?.posts ?? []).filter((x) => keep(x, cur?.last_seen ?? null)).map((x) => (x.seen ? x : { ...x, seen: cur?.last_seen ?? now }));
+    for (const p of [...old, ...(byBrand.get(k)?.posts ?? [])]) map.set(p.v, p);
     const posts = [...map.values()].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 40);
     const name = (byBrand.get(k)?.name ?? "").startsWith("@") && cur?.name ? cur.name : byBrand.get(k)?.name ?? cur?.name ?? k;
     return { brand: k, name, posts, last_seen: now };

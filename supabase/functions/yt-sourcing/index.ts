@@ -128,6 +128,8 @@ async function channels(sb: SupabaseClient, ids: string[]): Promise<Channel[]> {
   const todo = uniq.filter((id) => !fresh.has(id));
   const read = todo.length && !quotaHit ? await readChannels(todo) : [];
   if (read.length) await sb.from("yt_channels").upsert(read.map((c) => ({ id: c.id, data: c.data, at: new Date().toISOString() })));
+  // Règle YouTube : rien de plus de 30 jours sans être relu (le cache n'en sert que 7).
+  await sb.from("yt_channels").delete().lt("at", new Date(Date.now() - 30 * DAY).toISOString());
   const byId = new Map<string, Json>([...fresh, ...read.map((c) => [c.id, c.data] as [string, Json])]);
   return uniq.filter((id) => byId.has(id)).map((id) => ({ id, data: byId.get(id) as Json }));
 }

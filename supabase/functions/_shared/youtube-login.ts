@@ -12,6 +12,8 @@
 // projet Google Cloud dédié aux créatrices), YT_REDIRECT_URI facultatif.
 // Le retour passe par une page de l'app (public/yt-callback/) : Google exige, pour
 // valider l'app, des adresses de retour sur un domaine qui nous appartient.
+// Règles YouTube (Developer Policies) : les données d'une chaîne sont EFFACÉES quand la
+// créatrice se déconnecte ou retire l'accès chez Google (ytForget), pas seulement le lien.
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -59,12 +61,13 @@ export const ytExchangeCode = (code: string) => tokenCall({ code, grant_type: "a
 
 export type YtAccount = { creator_id: string; channel_id: string; title: string | null; token: string | null; expires_at: string | null; refresh_token: string; scopes: string | null };
 
-/** Jeton valable (renouvelé s'il expire dans moins de 5 min) ; met `acc` à jour. { error } = à reconnecter ou à réessayer. */
+/** Jeton valable (renouvelé s'il expire dans moins de 5 min) ; met `acc` à jour. { error: "jeton" } = accès retiré ou expiré. */
 export async function ytFreshToken(sb: SupabaseClient, acc: YtAccount): Promise<string | { error: string }> {
   const left = acc.expires_at ? Date.parse(acc.expires_at) - Date.now() : 0;
   if (acc.token && left > 300_000) return acc.token;
   const r = await tokenCall({ grant_type: "refresh_token", refresh_token: acc.refresh_token });
-  if ("error" in r) return { error: r.error === "reseau" ? "reseau" : "jeton" }; // invalid_grant : accès retiré ou expiré
+  // invalid_grant = accès retiré par la créatrice (ou expiré) ; le reste = réglage côté Google (clé, secret).
+  if ("error" in r) return { error: r.error === "invalid_grant" ? "jeton" : r.error === "reseau" ? "reseau" : `google_${r.error}` };
   const now = Date.now();
   acc.token = r.token;
   acc.expires_at = new Date(now + r.expiresIn * 1000).toISOString();
@@ -262,4 +265,16 @@ export async function ytAnalytics(token: string, now = Date.now()): Promise<{ a3
     if (total > 0) audience.countries = geo.rows.map((r) => ({ k: String(r[0]), pct: Math.round(((num(r[1]) ?? 0) / total) * 1000) / 10 }));
   }
   return { a30, audience };
+}
+
+/**
+ * Efface tout ce qui vient de la chaîne d'une créatrice : jetons (yt_accounts), chiffres et
+ * audience (creators.yt), vidéos repérées dans ses collabs (collabs.yt). `why` reste affiché
+ * (« jeton » = accès retiré ou expiré chez Google, à reconnecter).
+ */
+export async function ytForget(sb: SupabaseClient, creatorId: string, why: string | null = null): Promise<void> {
+  await sb.from("yt_accounts").delete().eq("creator_id", creatorId);
+  const { data: c } = await sb.from("creators").select("name").eq("id", creatorId).maybeSingle<{ name: string }>();
+  await sb.from("creators").update({ yt: why ? { link: null, why, at: new Date().toISOString() } : null }).eq("id", creatorId);
+  if (c?.name) await sb.from("collabs").update({ yt: null }).ilike("creator", c.name).not("yt", "is", null);
 }

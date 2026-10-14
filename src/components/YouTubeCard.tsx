@@ -52,8 +52,8 @@ export function YouTubeCard({ creatorId, name, yt, onChange, className }: {
     setBusy("link");
     const ok = await ytDisconnect(name);
     setBusy("");
-    if (ok && yt) onChange({ ...yt, link: null });
-    toast(ok ? "YouTube déconnecté" : "Erreur, réessaie");
+    if (ok) onChange({ link: null }); // tout ce qui venait de sa chaîne est effacé côté serveur
+    toast(ok ? "YouTube déconnecté, ses données YouTube sont effacées" : "Erreur, réessaie");
   };
 
   const delta = followersDelta(yt?.history, 30);
@@ -124,6 +124,10 @@ export function YouTubeCard({ creatorId, name, yt, onChange, className }: {
       ) : linked ? (
         <div className="rounded-xl border border-dashed border-border px-3 py-3 text-[12px] text-muted-foreground">
           {yt?.why ? `Pas de chiffres : ${ytWhyText(yt.why)}.` : "Ses chiffres arrivent dans quelques instants (ou touche « Actualiser »)."}
+        </div>
+      ) : yt?.why === "jeton" ? (
+        <div className="rounded-xl border border-dashed border-border px-3 py-3 text-[12px] leading-snug text-muted-foreground">
+          L'accès à sa chaîne a été retiré ou a expiré : ses données YouTube ont été effacées. Elle doit reconnecter sa chaîne.
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-border px-3 py-3 text-[12px] leading-snug text-muted-foreground">

@@ -12,6 +12,7 @@
 //      YouTube du media kit : abonnés, vues 30 j, vues moyennes, heures, abonnés gagnés) ;
 //   4. collabs (étape 4 et plus) : vidéos publiées depuis le début de la collab qui
 //      citent la marque (titre ou description) → collabs.yt (avec leurs vues).
+// Accès retiré chez Google (ou expiré) : tout ce qui vient de sa chaîne est effacé (ytForget).
 // Entrée (POST JSON) : {} = toutes (cron quotidien) ; { scope: "creator", id } =
 // une créatrice (bouton « Actualiser », ou juste après la connexion) → { yt }.
 // AUTH : verify_jwt = false (config.toml) ; Bearer CRON_SECRET (cron) OU JWT agence.
@@ -21,7 +22,7 @@ import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "
 import { igUser } from "../_shared/instagram.ts";
 import { brandMatcher, norm } from "../_shared/brandmatch.ts";
 import { brandKey, domainLabel } from "../_shared/youtube.ts";
-import { ytAnalytics, ytFreshToken, ytLoginReady, ytMyChannel, ytMyVideos, ytStats, type YtAccount, type YtVideo } from "../_shared/youtube-login.ts";
+import { ytAnalytics, ytForget, ytFreshToken, ytLoginReady, ytMyChannel, ytMyVideos, ytStats, type YtAccount, type YtVideo } from "../_shared/youtube-login.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 type Json = Record<string, unknown>;
@@ -92,6 +93,11 @@ async function syncCreator(sb: SupabaseClient, acc: YtAccount, brandHandles: Map
   let next: Json;
   let videos: YtVideo[] = [];
   const token = await ytFreshToken(sb, acc);
+  if (typeof token !== "string" && token.error === "jeton") {
+    // Accès retiré par la créatrice chez Google (ou expiré) : ses données YouTube sont effacées.
+    await ytForget(sb, c.id, "jeton");
+    return { link: null, why: "jeton", at: now };
+  }
   if (typeof token !== "string") next = { ...prev, at: now, why: token.error };
   else {
     const ch = await ytMyChannel(token);

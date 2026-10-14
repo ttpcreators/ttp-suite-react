@@ -833,8 +833,8 @@ export function CreatorSpace({
     setYtBusy(true);
     const ok = await ytDisconnect();
     setYtBusy(false);
-    if (ok) setCreator((c) => (c ? { ...c, yt: { ...(c.yt ?? {}), link: null } } : c));
-    toast(ok ? "YouTube déconnecté" : "Erreur, réessaie");
+    if (ok) setCreator((c) => (c ? { ...c, yt: null } : c)); // ses données YouTube sont effacées côté serveur
+    toast(ok ? "YouTube déconnecté, tes données YouTube sont effacées" : "Erreur, réessaie");
   };
   const connectIg = async () => {
     setIgBusy(true);
@@ -3174,7 +3174,7 @@ export function CreatorSpace({
                 <PlatformIcon platform="youtube" className="h-3.5 w-3.5" /> Tu as une chaîne YouTube ?
               </div>
               <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                Connecte-la : tes stats YouTube Studio (vues, heures regardées, abonnés gagnés, audience) arrivent toutes seules. Lecture seule, on ne peut rien publier ni modifier. Tu peux déconnecter quand tu veux.
+                Connecte-la : tes stats YouTube Studio (vues, heures regardées, abonnés gagnés, audience) arrivent toutes seules. Lecture seule, on ne peut rien publier ni modifier. Tu peux déconnecter quand tu veux : tes données YouTube sont alors effacées.
               </div>
               <button
                 type="button"

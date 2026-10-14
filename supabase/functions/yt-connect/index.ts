@@ -5,8 +5,9 @@
 //   seule : chaîne, vidéos, statistiques YouTube Studio), avec un `state` signé
 //   (anti-CSRF, 10 min) qui porte l'id de la créatrice ; Google renvoie ensuite vers
 //   app.ttpcreators.pro/yt-callback/, qui passe la main à yt-callback.
-// POST { action: "disconnect" } → retire l'accès chez Google, efface les jetons
-//   (yt_accounts) et le lien affiché.
+// POST { action: "disconnect" } → retire l'accès chez Google et efface TOUT ce qui vient
+//   de sa chaîne : jetons (yt_accounts), chiffres et audience (creators.yt), vidéos
+//   repérées dans ses collabs (collabs.yt). Règle YouTube.
 // L'agence peut agir pour une créatrice : { creator: "<nom>" }.
 // AUTH : verify_jwt = true + rôle vérifié dans profiles (créatrice = elle-même ;
 // agence = la créatrice nommée). Même schéma que tt-connect.
@@ -14,7 +15,7 @@
 
 import { corsHeaders, getServiceClient } from "../_shared/google.ts";
 import { genNonce, signState } from "../_shared/state.ts";
-import { ytAuthorizeUrl, ytLoginReady, ytRevoke } from "../_shared/youtube-login.ts";
+import { ytAuthorizeUrl, ytForget, ytLoginReady, ytRevoke } from "../_shared/youtube-login.ts";
 
 function allowedOrigin(raw: string): boolean {
   const allowed = (Deno.env.get("APP_ALLOWED_ORIGINS") ?? "").split(",").map((o) => o.trim()).filter(Boolean);
@@ -47,14 +48,13 @@ Deno.serve(async (req: Request) => {
   }
   const name = prof?.role === "agency" ? String(body.creator ?? "").trim() : prof?.role === "creator" ? (prof.creator_name ?? "").trim() : "";
   if (!name) return res({ error: "non_autorise" }, 403);
-  const { data: creator } = await sb.from("creators").select("id, name, yt").ilike("name", name).maybeSingle<{ id: string; name: string; yt: Record<string, unknown> | null }>();
+  const { data: creator } = await sb.from("creators").select("id, name").ilike("name", name).maybeSingle<{ id: string; name: string }>();
   if (!creator) return res({ error: "createur_introuvable" }, 404);
 
   if (body.action === "disconnect") {
     const { data: acc } = await sb.from("yt_accounts").select("refresh_token").eq("creator_id", creator.id).maybeSingle<{ refresh_token: string }>();
     if (acc?.refresh_token) await ytRevoke(acc.refresh_token);
-    await sb.from("yt_accounts").delete().eq("creator_id", creator.id);
-    await sb.from("creators").update({ yt: { ...(creator.yt ?? {}), link: null } }).eq("id", creator.id);
+    await ytForget(sb, creator.id); // jetons, chiffres, audience et vidéos repérées : tout est effacé
     return res({ ok: true });
   }
 
