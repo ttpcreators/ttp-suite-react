@@ -23,9 +23,13 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4
 
 type Json = Record<string, unknown>;
 type Src = "roster" | "scouting" | "hors";
-type Post = { v: string; url: string; at: string; title: string; thumb: string; views: number | null; likes: number | null; flag: boolean; ch: string; c: string; h: string; subs: number | null; src: Src };
+type Post = { v: string; url: string; at: string; title: string; thumb: string; views: number | null; likes: number | null; flag: boolean; ch: string; c: string; h: string; subs: number | null; src: Src; fr?: boolean };
+type Info = { subs: number | null; handle: string; uploads: string; country: string };
 
-const QUERIES = ["code promo", "partenariat rémunéré", "sponsorisé", "collaboration commerciale", "lien affilié réduction", "#ad"];
+const QUERIES = ["code promo", "partenariat rémunéré", "sponsorisé", "collaboration commerciale", "lien affilié réduction", "en partenariat avec"];
+// Hors agence : on ne garde que les chaînes francophones (langue de la vidéo) ou basées
+// en France, Belgique, Suisse, Luxembourg ou Monaco (YouTube renvoie aussi de l'étranger).
+const FR_COUNTRIES = new Set(["FR", "BE", "CH", "LU", "MC"]);
 const DISCOVERY_IF_UNDER = 6000; // unités déjà utilisées aujourd'hui au-delà desquelles on ne cherche plus
 const BUDGET_MS = 110_000;
 
@@ -50,7 +54,7 @@ function parseChannel(raw: string): { id?: string; handle?: string } | null {
 }
 
 /** Chiffres de vidéos (50 par appel, 1 unité) → posts sponsorisés avec leurs marques. */
-async function sponsoredPosts(ids: string[], src: (channelId: string) => Src, subsOf: Map<string, { subs: number | null; handle: string }>) {
+async function sponsoredPosts(ids: string[], src: (channelId: string) => Src, subsOf: Map<string, Info>) {
   const out: { post: Post; brands: { key: string; name: string }[] }[] = [];
   for (let i = 0; i < ids.length; i += 50) {
     const r = await yt("videos", { part: "snippet,statistics,paidProductPlacementDetails", id: ids.slice(i, i + 50).join(",") });
@@ -64,6 +68,10 @@ async function sponsoredPosts(ids: string[], src: (channelId: string) => Src, su
       if (!brands.length) continue;
       const ch = String(s.channelId ?? "");
       const info = subsOf.get(ch);
+      const where = src(ch);
+      const lang = String(s.defaultAudioLanguage ?? s.defaultLanguage ?? "").toLowerCase();
+      const fr = lang.startsWith("fr") || FR_COUNTRIES.has(info?.country ?? "");
+      if (where === "hors" && !fr) continue;
       const thumbs = (s.thumbnails ?? {}) as Record<string, { url?: string }>;
       out.push({
         brands,
@@ -71,7 +79,7 @@ async function sponsoredPosts(ids: string[], src: (channelId: string) => Src, su
           v: String(x.id ?? ""), url: `https://www.youtube.com/watch?v=${x.id}`, at: String(s.publishedAt ?? ""), title: String(s.title ?? "").slice(0, 200),
           thumb: thumbs.medium?.url ?? thumbs.default?.url ?? "", views: t.viewCount != null ? Number(t.viewCount) : null,
           likes: t.likeCount != null ? Number(t.likeCount) : null, flag, ch, c: String(s.channelTitle ?? ""), h: info?.handle ?? "",
-          subs: info?.subs ?? null, src: src(ch),
+          subs: info?.subs ?? null, src: where, fr,
         },
       });
     }
@@ -80,7 +88,7 @@ async function sponsoredPosts(ids: string[], src: (channelId: string) => Src, su
 }
 
 /** Abonnés et @ de chaînes (50 par appel, 1 unité). */
-async function channelInfo(ids: string[], into: Map<string, { subs: number | null; handle: string; uploads: string }>) {
+async function channelInfo(ids: string[], into: Map<string, Info>) {
   const todo = [...new Set(ids)].filter((id) => id && !into.has(id));
   for (let i = 0; i < todo.length; i += 50) {
     const r = await yt("channels", { part: "snippet,statistics,contentDetails", id: todo.slice(i, i + 50).join(","), maxResults: "50" });
@@ -90,6 +98,7 @@ async function channelInfo(ids: string[], into: Map<string, { subs: number | nul
         subs: st.hiddenSubscriberCount ? null : Number(st.subscriberCount ?? 0) || 0,
         handle: String(((c.snippet ?? {}) as Json).customUrl ?? "").replace(/^@/, ""),
         uploads: String((((c.contentDetails ?? {}) as Json).relatedPlaylists as Json | undefined)?.uploads ?? ""),
+        country: String(((c.snippet ?? {}) as Json).country ?? "").toUpperCase(),
       });
     }
   }
@@ -147,7 +156,7 @@ Deno.serve(async (req: Request) => {
     }
     if (id && (!srcOf.has(id) || m.src === "roster")) srcOf.set(id, m.src);
   }
-  const info = new Map<string, { subs: number | null; handle: string; uploads: string }>();
+  const info = new Map<string, Info>();
   await channelInfo([...srcOf.keys()], info);
   const videoIds: string[] = [];
   for (const id of srcOf.keys()) {
@@ -179,8 +188,12 @@ Deno.serve(async (req: Request) => {
     }
     if (disc.size) {
       // Chaînes de ces vidéos (pour les abonnés), puis les vidéos elles-mêmes.
-      const first = await yt("videos", { part: "snippet", id: [...disc].slice(0, 50).join(",") });
-      const chans = ((first.items as Json[] | undefined) ?? []).map((x) => String(((x.snippet ?? {}) as Json).channelId ?? ""));
+      const chans: string[] = [];
+      const ids = [...disc];
+      for (let i = 0; i < ids.length; i += 50) {
+        const first = await yt("videos", { part: "snippet", id: ids.slice(i, i + 50).join(",") });
+        chans.push(...((first.items as Json[] | undefined) ?? []).map((x) => String(((x.snippet ?? {}) as Json).channelId ?? "")));
+      }
       await channelInfo(chans, info);
       found.push(...(await sponsoredPosts([...disc], (ch) => srcOf.get(ch) ?? "hors", info)));
     }
@@ -195,6 +208,15 @@ Deno.serve(async (req: Request) => {
       byBrand.set(b.key, e);
     }
   }
+  // Avant le filtre France, des chaînes étrangères avaient été gardées : on retire leurs
+  // vidéos (hors agence sans la marque « fr ») et les marques « à traiter » restées vides.
+  const { data: oldRows } = await sb.from("yt_radar").select("brand, name, posts, status");
+  for (const r of (oldRows as { brand: string; name: string; posts: Post[]; status: string }[] | null) ?? []) {
+    const kept = (r.posts ?? []).filter((p) => p.src !== "hors" || p.fr === true);
+    if (kept.length === (r.posts ?? []).length) continue;
+    if (!kept.length && r.status === "nouveau" && !byBrand.has(r.brand)) await sb.from("yt_radar").delete().eq("brand", r.brand);
+    else await sb.from("yt_radar").update({ posts: kept }).eq("brand", r.brand);
+  }
   const keys = [...byBrand.keys()];
   const existing = new Map<string, { name: string; posts: Post[] }>();
   for (let i = 0; i < keys.length; i += 200) {
@@ -205,7 +227,7 @@ Deno.serve(async (req: Request) => {
   const rows = keys.map((k) => {
     const cur = existing.get(k);
     const map = new Map<string, Post>();
-    for (const p of [...(cur?.posts ?? []), ...(byBrand.get(k)?.posts ?? [])]) map.set(p.v, p);
+    for (const p of [...(cur?.posts ?? []).filter((x) => x.src !== "hors" || x.fr === true), ...(byBrand.get(k)?.posts ?? [])]) map.set(p.v, p);
     const posts = [...map.values()].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 40);
     const name = (byBrand.get(k)?.name ?? "").startsWith("@") && cur?.name ? cur.name : byBrand.get(k)?.name ?? cur?.name ?? k;
     return { brand: k, name, posts, last_seen: now };

@@ -44,7 +44,7 @@ export async function ytSaveQuota(sb: SupabaseClient) {
 
 // ── Marques d'une vidéo sponsorisée ──────────────────────────────────────────
 // Domaines qui ne sont pas une marque (réseaux, liens courts, outils, cagnottes).
-const NOT_BRAND = /(^|\.)(youtube|youtu|instagram|tiktok|facebook|fb|twitter|x|threads|snapchat|pinterest|linkedin|twitch|discord|spotify|deezer|apple|google|goo|bit|tinyurl|linktr|beacons|linkin|lnk|campsite|bio|hoo|stan|patreon|paypal|tipeee|gofundme|wikipedia|gmail|outlook|t|wa|whatsapp|telegram|amzn|amazon-adsystem|utip|ko-fi|buymeacoffee|streamlabs|discordapp|reddit|vimeo|dailymotion|soundcloud|canva|notion)\.[a-z.]+$/i;
+const NOT_BRAND = /(^|\.)(youtube|youtu|instagram|tiktok|facebook|fb|twitter|x|threads|snapchat|pinterest|linkedin|twitch|discord|spotify|deezer|apple|google|goo|bit|tinyurl|linktr|beacons|linkin|lnk|campsite|bio|hoo|stan|patreon|paypal|tipeee|gofundme|wikipedia|gmail|outlook|t|wa|whatsapp|telegram|amzn|amazon-adsystem|utip|ko-fi|buymeacoffee|streamlabs|streamelements|discordapp|reddit|vimeo|dailymotion|soundcloud|canva|notion|amazon|amzn|aliexpress|ebay|fourthwall|teespring|spring|spreadshirt|redbubble|myshopify|gumroad|geni|howl|rstyle|liketk|shopmy|ltk|lnk|smarturl|ffm|distrokid|epidemicsound|artlist|mailchi|substack|skool|calendly|typeform|tally|forms)\.[a-z.]+$/i;
 const PREFIX = /^(www|shop|store|boutique|fr|eu|uk|us|en|m|go|click|lien|links?|get|try|app|offer|offre|promo|deals?)\./;
 const SECOND_LEVEL = new Set(["co", "com", "org", "net", "gouv"]);
 
