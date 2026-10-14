@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  AtSign, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Loader2, Mail, Plus, Radar, RefreshCw, Search, Send, SlidersHorizontal, Users, Wallet, EyeOff, RotateCcw,
+  AtSign, Binoculars, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Loader2, Mail, Plus, Radar, RefreshCw, Search, Send, SlidersHorizontal, Users, Wallet, EyeOff, RotateCcw,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
@@ -16,6 +16,7 @@ import { fmtAgo, fmtEr, fmtPerWeek, igWhyText, noteQuota } from "@/lib/instagram
 import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
 import { OutreachComposer } from "@/components/OutreachComposer";
 import { SourcingGuide } from "@/components/SourcingGuide";
+import { RivalWatch } from "@/components/RivalWatch";
 
 /**
  * SOURCING (agence) — deux outils, toujours via l'outil officiel de Meta (comptes pro) :
@@ -25,6 +26,8 @@ import { SourcingGuide } from "@/components/SourcingGuide";
  *  • « Radar à marques » : chaque nuit (fonction ig-sourcing), les marques citées par
  *    les créatrices du roster et du Scouting. Partenariats payés = clients potentiels ;
  *    citées gratuitement par tes créatrices = contacts chauds. → Pipeline / mail.
+ *  • « Agences concurrentes » : croissance, créatrices mises en avant et marques des
+ *    agences suivies (components/RivalWatch.tsx).
  */
 
 type Prof = {
@@ -118,12 +121,18 @@ const TOOLS = [
     v: "radar" as const, icon: Radar, title: "Radar à marques", goal: "Pour trouver des clients",
     text: "Toutes les 2 heures, l'app lit des posts de créatrices (les tiennes et d'autres) et te montre les marques qui paient des créatrices, ou que tes créatrices citent déjà.",
   },
+  {
+    v: "concurrents" as const, icon: Binoculars, title: "Agences concurrentes", goal: "Pour garder une longueur d'avance",
+    text: "Suis les agences concurrentes : leur croissance jour par jour, les créatrices qu'elles mettent en avant et les marques avec qui elles travaillent.",
+  },
 ];
+type ToolId = (typeof TOOLS)[number]["v"];
+const toolOf = (v: string | null): ToolId => (v === "radar" || v === "concurrents" ? v : "createurs");
 
 export function Sourcing() {
-  const [tab, setTab] = useState<"createurs" | "radar">(() => {
+  const [tab, setTab] = useState<ToolId>(() => {
     try {
-      return localStorage.getItem("ttp:sourcing-tab") === "radar" ? "radar" : "createurs";
+      return toolOf(localStorage.getItem("ttp:sourcing-tab"));
     } catch {
       return "createurs";
     }
@@ -145,7 +154,7 @@ export function Sourcing() {
     }
   };
   const pick = (v: string) => {
-    const t = v === "radar" ? "radar" : "createurs";
+    const t = toolOf(v);
     setTab(t);
     try {
       localStorage.setItem("ttp:sourcing-tab", t);
@@ -173,7 +182,7 @@ export function Sourcing() {
         </div>
       </PageHeaderRow>
       {guide && <SourcingGuide onClose={closeGuide} />}
-      <div role="tablist" aria-label="Outil de sourcing" className="mb-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+      <div role="tablist" aria-label="Outil de sourcing" className="mb-4 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
         {TOOLS.map((t) => {
           const on = tab === t.v;
           const Icon = t.icon;
@@ -200,7 +209,7 @@ export function Sourcing() {
           );
         })}
       </div>
-      {tab === "createurs" ? <CreatorFinder /> : <BrandRadar />}
+      {tab === "createurs" ? <CreatorFinder /> : tab === "radar" ? <BrandRadar /> : <RivalWatch />}
     </>
   );
 }
@@ -879,6 +888,7 @@ function BrandRadar() {
   const [adding, setAdding] = useState<string | null>(null);
   const [showUnsure, setShowUnsure] = useState(false);
   const [showKnown, setShowKnown] = useState(false);
+  const [dmHandles, setDmHandles] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let alive = true;
@@ -899,11 +909,14 @@ function BrandRadar() {
         const { data } = await supabase.from("ig_profiles").select("username, data, why").in("username", users.slice(i, i + 150));
         for (const p of (data as { username: string; data: Prof | null; why: string | null }[] | null) ?? []) prof[p.username] = { ...(p.data ?? {}), why: p.why };
       }
-      const [ct, cr, pl] = await Promise.all([
+      const [ct, cr, pl, dm] = await Promise.all([
         supabase.from("contacts").select("brand, instagram"),
         supabase.from("creators").select("name, handle, instagram"),
         supabase.from("creator_pool").select("handle"),
+        supabase.from("ig_threads").select("username").not("username", "is", null),
       ]);
+      // Déjà en conversation privée avec TTP (page DM Instagram) : mise de côté aussi.
+      setDmHandles(new Set(((dm.data as { username: string }[] | null) ?? []).map((x) => x.username)));
       setPoolUsers(new Set(((pl.data as { handle: string | null }[] | null) ?? []).map((x) => cleanUser(x.handle ?? "")).filter(Boolean)));
       const [qw, qr] = await Promise.all([
         supabase.from("ig_profiles").select("username", { count: "exact", head: true }).eq("data->>pending", "true"),
@@ -992,7 +1005,7 @@ function BrandRadar() {
         else hid.notBrand++;
         continue;
       }
-      const known = knownBrands.handles.has(row.brand) || (!!prof?.name && knownBrands.names.has(norm(prof.name).trim()));
+      const known = knownBrands.handles.has(row.brand) || dmHandles.has(row.brand) || (!!prof?.name && knownBrands.names.has(norm(prof.name).trim()));
       if (known && !showKnown) {
         hid.known++;
         continue;
@@ -1033,7 +1046,7 @@ function BrandRadar() {
     const rank = (x: Item) => (x.types.paye * 3 + x.types.offert * 2 + x.warm * 2) * 10 + x.creators.length;
     return { list: out.sort((a, b) => rank(b) - rank(a)), hid, counts, prog };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, profiles, knownBrands, kind, period, words, minF, maxF, city, status, showUnsure, showKnown, srcF, rosterNames, poolUsers]);
+  }, [rows, profiles, knownBrands, dmHandles, kind, period, words, minF, maxF, city, status, showUnsure, showKnown, srcF, rosterNames, poolUsers]);
   const activeFilters = [words.trim(), minF.trim(), maxF.trim(), city.trim()].filter(Boolean).length + (period !== "90" ? 1 : 0) + (status !== "nouveau" ? 1 : 0);
   const runVerify = async () => {
     setVerifying(true);
@@ -1162,7 +1175,7 @@ function BrandRadar() {
           </select>
         </label>
         <div className="flex flex-wrap items-center gap-3 pb-2 text-[12px] text-muted-foreground">
-          <Check2 label="Déjà dans mes contacts" checked={showKnown} onChange={setShowKnown} help={<p>Les marques déjà dans tes Contacts sont cachées, pour ne garder que les nouvelles. Coche pour les voir aussi.</p>} />
+          <Check2 label="Déjà en contact" checked={showKnown} onChange={setShowKnown} help={<p>Les marques déjà dans tes Contacts, ou avec qui TTP a déjà une conversation en message privé Instagram, sont cachées pour ne garder que les nouvelles. Coche pour les voir aussi.</p>} />
           <Check2 label="Comptes incertains" checked={showUnsure} onChange={setShowUnsure} help={<p>L'app devine si un @ est une marque (site web, bio, abonnés). Quand elle n'est pas sûre (ami tagué, autre créatrice, profil pas encore lu), le compte est caché. Coche pour le voir.</p>} />
         </div>
         </div>
@@ -1221,7 +1234,7 @@ function BrandRadar() {
                         <span className="truncate text-[14px] font-semibold text-foreground">{prof?.name || `@${row.brand}`}</span>
                         <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", verdict.c)}>{verdict.t}</span>
                         {unsure && <span title="L'app n'est pas sûre que ce compte soit une marque : vérifie avant d'écrire" className="rounded-full bg-amber/15 px-2 py-0.5 text-[10px] font-semibold text-amber">À confirmer</span>}
-                        {known && <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Déjà en contact</span>}
+                        {known && <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{dmHandles.has(row.brand) ? "Déjà en DM" : "Déjà en contact"}</span>}
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
                         <a href={igLink(row.brand)} target="_blank" rel="noreferrer" className="text-primary hover:underline">@{row.brand}</a>
@@ -1301,7 +1314,7 @@ function BrandRadar() {
             </button>
           ) : (
             <button type="button" onClick={() => { setShowUnsure(true); setShowKnown(true); }} className="hover:text-foreground">
-              {hid.notBrand + hid.known} autre{hid.notBrand + hid.known > 1 ? "s" : ""} masquée{hid.notBrand + hid.known > 1 ? "s" : ""} (pas sûres d'être des marques, ou déjà dans tes contacts) · <span className="font-medium text-primary">Afficher</span>
+              {hid.notBrand + hid.known} autre{hid.notBrand + hid.known > 1 ? "s" : ""} masquée{hid.notBrand + hid.known > 1 ? "s" : ""} (pas sûres d'être des marques, ou déjà en contact) · <span className="font-medium text-primary">Afficher</span>
             </button>
           )}
           {hid.filters > 0 && <span> · {hid.filters} hors de tes filtres</span>}

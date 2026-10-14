@@ -17,10 +17,10 @@ export type Ev = {
   description?: string | null;
   /** Catégorie de la puce. Par défaut "event" (vrai rendez-vous, modifiable).
    *  "brief" / "todo" / "facture" = échéances superposées en LECTURE SEULE (clic = navigation). */
-  kind?: "event" | "brief" | "todo" | "facture";
+  kind?: "event" | "brief" | "todo" | "facture" | "post";
 };
 
-type Kind = "event" | "brief" | "todo" | "facture";
+type Kind = "event" | "brief" | "todo" | "facture" | "post";
 
 type View = "month" | "week" | "list";
 
@@ -75,6 +75,7 @@ function chipBg(e: Ev) {
   if (e.kind === "brief") return "bg-amber";
   if (e.kind === "todo") return "bg-indigo";
   if (e.kind === "facture") return "bg-emerald-500";
+  if (e.kind === "post") return "bg-pink-500";
   return typeBg(e.type);
 }
 /** Texte d'une puce pleine : sur le primaire (blanc en sombre Minuit) il faut
@@ -91,12 +92,14 @@ function chipText(e: Ev) {
   if (e.kind === "brief") return "text-amber";
   if (e.kind === "todo") return "text-indigo";
   if (e.kind === "facture") return "text-emerald-500";
+  if (e.kind === "post") return "text-pink-500";
   return typeText(e.type);
 }
 function chipLabel(e: Ev) {
   if (e.kind === "brief") return "Brief";
   if (e.kind === "todo") return "To-do";
   if (e.kind === "facture") return "Facture";
+  if (e.kind === "post") return "Post Instagram";
   return typeLabel(e.type);
 }
 
@@ -105,6 +108,7 @@ const KIND_META: { id: Kind; label: string; dot: string }[] = [
   { id: "brief", label: "Briefs", dot: "bg-amber" },
   { id: "todo", label: "To-do", dot: "bg-indigo" },
   { id: "facture", label: "Factures", dot: "bg-emerald-500" },
+  { id: "post", label: "Posts Instagram", dot: "bg-pink-500" },
 ];
 
 // ─── Helpers de date (locaux, sans dépendance) ───────────────────────────────
@@ -202,7 +206,7 @@ export function EventCalendar({
   /** « Avec qui » imposé (champ masqué, jamais vidé) : ex. espace créateur. */
   fixedWho?: string;
   /** Clic sur une échéance brief/to-do/facture (lecture seule) → navigation vers sa page. */
-  onNavigate?: (kind: "brief" | "todo" | "facture") => void;
+  onNavigate?: (kind: "brief" | "todo" | "facture" | "post", ev: Ev) => void;
   creators?: { name: string }[];
 }) {
   const [cursor, setCursor] = useState(() => {
@@ -216,7 +220,7 @@ export function EventCalendar({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false); // enregistrement / suppression en cours
   // Filtres de catégorie (événements / briefs / to-do) — actifs par défaut.
-  const [kinds, setKinds] = useState<Record<Kind, boolean>>({ event: true, brief: true, todo: true, facture: true });
+  const [kinds, setKinds] = useState<Record<Kind, boolean>>({ event: true, brief: true, todo: true, facture: true, post: true });
 
   const tKey = todayKey();
 
@@ -277,8 +281,8 @@ export function EventCalendar({
   }
   // Un vrai événement s'édite ; une échéance brief/to-do renvoie vers sa page.
   function handleEventClick(e: Ev) {
-    if (e.kind === "brief" || e.kind === "todo" || e.kind === "facture") {
-      onNavigate?.(e.kind);
+    if (e.kind === "brief" || e.kind === "todo" || e.kind === "facture" || e.kind === "post") {
+      onNavigate?.(e.kind, e);
       return;
     }
     openEdit(e);
@@ -378,6 +382,8 @@ export function EventCalendar({
         {KIND_META.map((k) => {
           const on = kinds[k.id];
           const count = events.filter((e) => evKind(e) === k.id).length;
+          // Posts Instagram : seulement là où il y en a (agenda agence), pas dans l'espace créateur.
+          if (k.id === "post" && !count) return null;
           return (
             <button
               key={k.id}

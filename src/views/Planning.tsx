@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { CalendarDays, Send } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { EventCalendar, type Ev } from "@/components/ui/event-calendar";
 import { GoogleConnect } from "@/components/ui/google-connect";
@@ -10,8 +11,63 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { toISODate, todayISO } from "@/lib/dates";
 import { notifyCreator } from "@/lib/push";
+import { Tabs } from "@/components/ui/animated-tabs";
+import { useNavSub, useSetNavSub } from "@/lib/navSub";
+import { IgPlanner } from "@/components/IgPlanner";
+import { KIND_LABEL, type PlanKind } from "@/lib/igPlanner";
 
+/**
+ * PLANNING = 2 onglets : l'AGENDA (rendez-vous, échéances de briefs / to-do /
+ * factures, posts Instagram programmés) et les POSTS INSTAGRAM du compte TTP
+ * (programmation, publiés tout seuls à l'heure). Un clic sur un post de l'agenda
+ * ouvre ce post dans l'onglet Posts Instagram.
+ */
 export function Planning() {
+  const [tab, setTab] = useState<"agenda" | "instagram">("agenda");
+  const [focus, setFocus] = useState<string | null>(null);
+  const sub = useNavSub();
+  const setNavSub = useSetNavSub();
+  useEffect(() => {
+    if (sub === "agenda" || sub === "instagram") setTab(sub);
+  }, [sub]);
+  const go = (v: "agenda" | "instagram") => {
+    setTab(v);
+    setNavSub(v);
+  };
+  return (
+    <div className="space-y-4">
+      <Tabs
+        label="Sous-pages Planning"
+        items={[
+          { value: "agenda", label: "Agenda", icon: <CalendarDays className="h-3.5 w-3.5" /> },
+          { value: "instagram", label: "Posts Instagram", icon: <Send className="h-3.5 w-3.5" /> },
+        ]}
+        value={tab}
+        onValueChange={(v) => go(v === "instagram" ? "instagram" : "agenda")}
+      />
+      {tab === "agenda" ? (
+        <Agenda
+          onOpenPost={(id) => {
+            setFocus(id);
+            go("instagram");
+          }}
+        />
+      ) : (
+        <IgPlanner focusId={focus} onFocused={() => setFocus(null)} />
+      )}
+    </div>
+  );
+}
+
+/** Date locale « YYYY-MM-DD » et heure « HH:mm » d'un horodatage. */
+function localDay(iso: string): { date: string; time: string } | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return { date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, time: `${p(d.getHours())}:${p(d.getMinutes())}` };
+}
+
+function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
   const [rows, setRows] = useState<Ev[] | null>(() => getCache<Ev[]>("events"));
   // Échéances briefs + to-do datées, superposées en lecture seule.
   const [overlays, setOverlays] = useState<Ev[]>([]);
@@ -57,7 +113,8 @@ export function Planning() {
       supabase.from("briefs").select("id,brand,creator,due"),
       supabase.from("todos").select("id,text,creator,due,done"),
       supabase.from("invoices").select("id,ref,party,date,status"),
-    ]).then(([b, t, iv]) => {
+      supabase.from("ig_planned").select("id,kind,caption,scheduled_at,status").not("scheduled_at", "is", null),
+    ]).then(([b, t, iv, ig]) => {
       if (!alive) return;
       const out: Ev[] = [];
       for (const r of (b.data as Record<string, unknown>[] | null) ?? []) {
@@ -102,6 +159,14 @@ export function Planning() {
           who: null,
           kind: "facture",
         });
+      }
+      // Posts Instagram programmés (table absente avant le SQL : rien, sans erreur).
+      for (const r of (ig.data as { id: string; kind: PlanKind; caption: string; scheduled_at: string; status: string }[] | null) ?? []) {
+        const at = localDay(r.scheduled_at);
+        if (!at) continue;
+        const what = r.caption.trim().split("\n")[0].slice(0, 40) || KIND_LABEL[r.kind] || "Post";
+        const tag = r.status === "brouillon" ? "Brouillon · " : r.status === "erreur" ? "À corriger · " : r.status === "publie" ? "Publié · " : "";
+        out.push({ id: `post:${r.id}`, date: at.date, time: at.time, title: `${tag}${what}`, type: "deadline", who: null, kind: "post" });
       }
       setOverlays(out);
     });
@@ -186,10 +251,12 @@ export function Planning() {
         onCreate={onCreate}
         onUpdate={onUpdate}
         onDelete={onDelete}
-        onNavigate={(kind) =>
-          window.dispatchEvent(
-            new CustomEvent("ttp-navigate", { detail: kind === "brief" ? "briefs" : kind === "facture" ? "facturation" : "todo" }),
-          )
+        onNavigate={(kind, ev) =>
+          kind === "post"
+            ? onOpenPost(ev.id.replace(/^post:/, ""))
+            : window.dispatchEvent(
+                new CustomEvent("ttp-navigate", { detail: kind === "brief" ? "briefs" : kind === "facture" ? "facturation" : "todo" }),
+              )
         }
         creators={creators}
       />

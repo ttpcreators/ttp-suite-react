@@ -16,7 +16,7 @@ export const tidySecret = (v: string | undefined) => (v ?? "").trim().replace(/^
 export const META_TOKEN = tidySecret(Deno.env.get("META_TOKEN"));
 export const META_IG_ID = tidySecret(Deno.env.get("META_IG_ID"));
 export const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v26.0";
-const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
+export const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
 export const metaReady = () => !!META_TOKEN && !!META_IG_ID;
 
 const USERNAME = /^[A-Za-z0-9._]{1,30}$/;
@@ -56,6 +56,8 @@ export function graphWhy(e: GraphError): { why: string; stop?: boolean } {
   if (e.code === 4 || e.code === 17 || e.code === 32 || e.code === 613) return { why: "meta_limite", stop: true };
   if (e.code === 110 || e.error_subcode === 2207013 || /Invalid user id|cannot be found/i.test(e.message ?? "")) return { why: "compte_perso" };
   if (e.code === 10 || e.code === 200) return { why: "meta_autorisation", stop: true };
+  // « Application does not have the capability » : il faut l'accès avancé (validation Meta).
+  if (e.code === 3) return { why: "meta_validation", stop: true };
   return { why: `meta_${e.code ?? "erreur"}` };
 }
 
@@ -243,4 +245,77 @@ export async function hashtagPosts(tag: string, kind: "top" | "recent"): Promise
   const media = await getJson(`${GRAPH}/${id}/${edge}?fields=${POST_FIELDS}&limit=50&${auth}`);
   if (media.error) return { ok: false, why: graphWhy(media.error as GraphError).why };
   return { ok: true, posts: ((media.data as Record<string, unknown>[] | undefined) ?? []).map(toPost) };
+}
+
+// ── Page Facebook liée au compte TTP ─────────────────────────────────────────
+// Les DM (ig-inbox) et la publication (ig-publish) passent par le jeton de la Page
+// Facebook reliée au compte Instagram de l'agence. On le demande avec le jeton de
+// l'utilisateur système (la Page doit lui être attribuée dans le Business Manager).
+// META_PAGE_ID facultatif si plusieurs Pages portent le même compte.
+
+export type PageAccess = { ok: true; pageId: string; token: string } | { ok: false; why: string; detail?: string };
+let pageCache: PageAccess | null = null;
+
+export async function pageAccess(): Promise<PageAccess> {
+  if (pageCache) return pageCache;
+  if (!metaReady()) return { ok: false, why: "meta_non_configure" };
+  const forced = tidySecret(Deno.env.get("META_PAGE_ID"));
+  const body = await getJson(`${GRAPH}/me/accounts?fields=id,name,access_token,instagram_business_account&limit=100&access_token=${encodeURIComponent(META_TOKEN)}`);
+  if (body.error) {
+    const e = body.error as GraphError;
+    return { ok: false, why: e.message === "reseau" ? "reseau" : graphWhy(e).why, detail: e.message };
+  }
+  type P = { id: string; access_token?: string; instagram_business_account?: { id?: string } };
+  const pages = (body.data as P[] | undefined) ?? [];
+  const page = pages.find((p) => (forced ? p.id === forced : p.instagram_business_account?.id === META_IG_ID));
+  if (!page?.access_token) return { ok: false, why: "page_introuvable", detail: `${pages.length} page(s) visibles` };
+  pageCache = { ok: true, pageId: page.id, token: page.access_token };
+  return pageCache;
+}
+
+/** Jeton pour les appels sur le compte TTP : celui de la Page si possible, sinon l'utilisateur système. */
+export async function accountToken(): Promise<string> {
+  const p = await pageAccess();
+  return p.ok ? p.token : META_TOKEN;
+}
+
+/** POST vers l'API Graph (paramètres en formulaire : légendes longues, emojis). */
+export async function postGraph(path: string, params: Record<string, string>, token: string, ms = 30_000): Promise<Record<string, unknown>> {
+  try {
+    usage.calls++;
+    const r = await fetch(`${GRAPH}/${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ ...params, access_token: token }),
+      signal: AbortSignal.timeout(ms),
+    });
+    readUsage(r.headers);
+    return await r.json().catch(() => ({ error: { message: `http_${r.status}` } }));
+  } catch {
+    return { error: { message: "reseau" } };
+  }
+}
+
+export type OwnAccount = { username: string; name: string; picture: string; followers: number; posts: number };
+/** Le compte Instagram de l'agence (nom, photo, abonnés). */
+export async function ownAccount(token = META_TOKEN): Promise<OwnAccount | null> {
+  if (!metaReady()) return null;
+  const b = await getJson(`${GRAPH}/${META_IG_ID}?fields=username,name,profile_picture_url,followers_count,media_count&access_token=${encodeURIComponent(token)}`);
+  if (b.error || !b.username) return null;
+  return {
+    username: String(b.username).toLowerCase(),
+    name: String(b.name ?? ""),
+    picture: String(b.profile_picture_url ?? ""),
+    followers: Number(b.followers_count ?? 0) || 0,
+    posts: Number(b.media_count ?? 0) || 0,
+  };
+}
+
+/** Dernier passage d'une fonction (ig_sync_state), affiché dans l'app. */
+export async function saveState(sb: SupabaseClient, key: string, data: Record<string, unknown>) {
+  try {
+    await sb.from("ig_sync_state").upsert({ key, data, at: new Date().toISOString() });
+  } catch {
+    /* table absente : sans gravité */
+  }
 }

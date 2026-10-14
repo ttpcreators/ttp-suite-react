@@ -54,6 +54,7 @@ const Contrats = lazy(() => import("@/views/Contrats").then((m) => ({ default: m
 const Prospection = lazy(() => import("@/views/Prospection").then((m) => ({ default: m.Prospection })));
 const Vivier = lazy(() => import("@/views/Vivier").then((m) => ({ default: m.Vivier })));
 const Sourcing = lazy(() => import("@/views/Sourcing").then((m) => ({ default: m.Sourcing })));
+const Messages = lazy(() => import("@/views/Messages").then((m) => ({ default: m.Messages })));
 const Acces = lazy(() => import("@/views/Acces").then((m) => ({ default: m.Acces })));
 const Objectifs = lazy(() => import("@/views/Objectifs").then((m) => ({ default: m.Objectifs })));
 const Debrief = lazy(() => import("@/views/Debrief").then((m) => ({ default: m.Debrief })));
@@ -95,6 +96,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   prospection: Prospection,
   vivier: Vivier,
   sourcing: Sourcing,
+  messages: Messages,
   acces: Acces,
   objectifs: Objectifs,
   debrief: Debrief,

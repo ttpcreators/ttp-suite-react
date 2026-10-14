@@ -14,12 +14,17 @@
 //      derniers posts des créatrices du roster et du Scouting, note les marques
 //      qu'elles citent (payé ou non), puis lit le profil de ces marques → ig_radar.
 // Profils lus gardés dans ig_profiles (7 jours) : on ne redemande pas à Meta.
+//   { mode: "rivals", handle? } (bouton de l'onglet Concurrents, et une fois par jour
+//      au début du scan) : agences concurrentes (ig_rivals) : abonnés jour par jour,
+//      créatrices qu'elles citent ou qui les nomment dans leur bio, marques citées
+//      par l'agence ou dans les posts payés de ses créatrices. Le compte TTP est
+//      relu aussi, pour comparer.
 //
 // AUTH : verify_jwt = false (config.toml) ; Bearer CRON_SECRET (cron) OU JWT agence.
 // ============================================================================
 
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
-import { discover, engagementRate, igUser, metaReady, postsPerWeek, quotaPct, saveUsage, type IgProfile } from "../_shared/instagram.ts";
+import { discover, engagementRate, igUser, metaReady, ownAccount, postsPerWeek, quotaPct, saveUsage, type IgProfile } from "../_shared/instagram.ts";
 import { handleCandidates, isCommonWord } from "../_shared/mentions.ts";
 import { agencyHint, emailsIn, isPaid } from "../_shared/signals.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -361,6 +366,129 @@ async function verify(ctx: Ctx) {
   return { verified, left: Math.max(0, todo.length - verified), stopped: ctx.stop || undefined };
 }
 
+// ── Agences concurrentes ─────────────────────────────────────────────────────
+type Pt = { d: string; f: number; p?: number };
+const RIVAL_EVERY_H = 20; // relue au plus une fois par jour par le scan
+
+/** Relevé du jour (un point par jour, 400 max). */
+function pushDay(hist: unknown, f: number, p: number): Pt[] {
+  const d = new Date().toISOString().slice(0, 10);
+  const list = Array.isArray(hist) ? (hist as Pt[]).filter((x) => x?.d && x.d !== d) : [];
+  return [...list, { d, f, p }].slice(-400);
+}
+
+/** Lit une agence : chiffres, créatrices mises en avant, marques. ~1 à 30 demandes Meta (profils gardés 7 j). */
+async function refreshRival(ctx: Ctx, u: string, self: boolean) {
+  const r = await discover(u, 50);
+  const now = new Date().toISOString();
+  if (!r.ok) {
+    if (r.stop) ctx.stop = r.why;
+    else await ctx.sb.from("ig_rivals").update({ why: r.why, read_at: now }).eq("username", u);
+    return;
+  }
+  const p = r.profile;
+  const data = await toData(p);
+  ctx.cache.set(u, { username: u, data, why: null, scanned_at: null, at: now });
+  await ctx.sb.from("ig_profiles").upsert({ username: u, data, why: null, at: now });
+  const { data: cur } = await ctx.sb.from("ig_rivals").select("history").eq("username", u).maybeSingle<{ history: unknown }>();
+  const history = pushDay(cur?.history, p.followers, p.posts);
+  const paidOf = new Map<string, number>();
+  for (const m of p.media) if (isPaid(m.caption)) for (const [x] of citedAll(m.caption)) paidOf.set(x, (paidOf.get(x) ?? 0) + 1);
+  // Comptes cités dans ses posts (sans @ : voir cited), les plus cités d'abord.
+  const seen = tally(p.media.map((m) => ({ text: m.caption, at: m.at, url: m.url })), new Set([u]));
+  const users = [...seen.entries()].sort((a, b) => b[1].weight - a[1].weight || b[1].count - a[1].count).slice(0, self ? 0 : 30).map(([x]) => x);
+  await loadCache(ctx, users);
+  await each(ctx, users, (x) => profile(ctx, x, 12));
+  // Créatrices qui nomment l'agence dans leur bio ou leur site (« géré par … »).
+  const nameKey = p.name.toLowerCase().replace(/\b(agency|agence|management|mgmt|talents?|group|paris)\b/g, "").replace(/[^a-z0-9 ]/g, "").trim();
+  const ors = [`data->>agency.ilike."*${u}*"`];
+  if (nameKey.length >= 5) ors.push(`data->>agency.ilike."*${nameKey}*"`);
+  const { data: bioRows } = self ? { data: [] } : await ctx.sb.from("ig_profiles").select("username, data, why, scanned_at, at").or(ors.join(",")).limit(80);
+  for (const b of (bioRows as ProfileRow[] | null) ?? []) if (!ctx.cache.has(b.username)) ctx.cache.set(b.username, b);
+
+  type C = { u: string; n: number; src: "posts" | "bio"; last: string; url: string; name: string; followers: number | null; er: number | null; picture: string; deals: string[] };
+  const creators: C[] = [];
+  const brandMap = new Map<string, { u: string; n: number; paid: number; via: Set<string>; last: string; url: string }>();
+  const asCreator = (x: string, src: C["src"]): C | null => {
+    const row = ctx.cache.get(x);
+    const d = row?.data;
+    if (!d || row?.why || d.isBrand || d.pending || x === u) return null;
+    const s = seen.get(x);
+    return {
+      u: x, n: s?.count ?? 0, src, last: s?.lastAt ?? "", url: s?.url ?? "", name: String(d.name ?? ""),
+      followers: typeof d.followers === "number" ? d.followers : null, er: typeof d.er === "number" ? d.er : null,
+      picture: String(d.picture ?? ""), deals: Array.isArray(d.deals) ? (d.deals as string[]) : [],
+    };
+  };
+  for (const x of users) {
+    const row = ctx.cache.get(x);
+    if (row?.data?.isBrand) {
+      const s = seen.get(x)!;
+      brandMap.set(x, { u: x, n: s.count, paid: paidOf.get(x) ?? 0, via: new Set(), last: s.lastAt, url: s.url });
+      continue;
+    }
+    const c = asCreator(x, "posts");
+    if (c) creators.push(c);
+  }
+  for (const b of (bioRows as ProfileRow[] | null) ?? []) {
+    if (creators.some((c) => c.u === b.username)) continue;
+    const c = asCreator(b.username, "bio");
+    if (c) creators.push(c);
+  }
+  // Marques payées par ses créatrices (posts #ad, codes promo…) : ses clients probables.
+  for (const c of creators) {
+    for (const b of c.deals) {
+      if (b === u || creators.some((x) => x.u === b)) continue;
+      const e = brandMap.get(b) ?? { u: b, n: 0, paid: 0, via: new Set<string>(), last: "", url: "" };
+      e.via.add(c.u);
+      brandMap.set(b, e);
+    }
+  }
+  await loadCache(ctx, [...brandMap.keys()]);
+  const brands = [...brandMap.values()]
+    .map((b) => {
+      const d = ctx.cache.get(b.u)?.data;
+      return { u: b.u, n: b.n, paid: b.paid, via: [...b.via].slice(0, 6), last: b.last, url: b.url, sure: !!d?.isBrand, name: String(d?.name ?? ""), followers: typeof d?.followers === "number" ? d.followers : null, picture: String(d?.picture ?? "") };
+    })
+    .sort((a, b) => Number(b.sure) - Number(a.sure) || (b.n + b.paid + b.via.length) - (a.n + a.paid + a.via.length))
+    .slice(0, 60);
+  await ctx.sb.from("ig_rivals").upsert({
+    username: u, self, data: { ...data, picture: p.picture }, history,
+    creators: creators.sort((a, b) => (b.src === "bio" ? 1 : 0) - (a.src === "bio" ? 1 : 0) || b.n - a.n || (b.followers ?? 0) - (a.followers ?? 0)).slice(0, 60).map(({ deals: _d, ...c }) => c),
+    brands, why: null, read_at: now,
+  });
+}
+
+/**
+ * Agences suivies : celle demandée (bouton), sinon celles pas relues depuis 20 h.
+ * Le compte TTP est ajouté tout seul (ligne « self ») pour comparer la croissance.
+ */
+async function rivals(ctx: Ctx, handle?: string) {
+  const want = handle ? igUser(handle).toLowerCase() : "";
+  let { data, error } = await ctx.sb.from("ig_rivals").select("username, self, read_at");
+  if (error) return { read: 0, left: 0, error: "migration_manquante" }; // SQL pas encore lancé
+  let rows = (data as { username: string; self: boolean; read_at: string | null }[] | null) ?? [];
+  if (!rows.some((r) => r.self)) {
+    const own = await ownAccount();
+    if (own) {
+      await ctx.sb.from("ig_rivals").upsert({ username: own.username, self: true });
+      ({ data, error } = await ctx.sb.from("ig_rivals").select("username, self, read_at"));
+      rows = (data as typeof rows | null) ?? rows;
+    }
+  }
+  const todo = rows
+    .filter((r) => (want ? r.username === want || (r.self && age(r.read_at) > RIVAL_EVERY_H * 3600e3) : age(r.read_at) > RIVAL_EVERY_H * 3600e3))
+    .sort((a, b) => Number(b.username === want) - Number(a.username === want) || age(b.read_at) - age(a.read_at));
+  await loadKnown(ctx);
+  let read = 0;
+  for (const r of todo) {
+    if (!inBudget(ctx)) break;
+    await refreshRival(ctx, r.username, r.self);
+    read++;
+  }
+  return { read, left: todo.length - read, stopped: ctx.stop || undefined };
+}
+
 // ── Radar : marques citées par les créatrices ────────────────────────────────
 async function scan(ctx: Ctx) {
   const [cr, pool] = await Promise.all([
@@ -375,6 +503,8 @@ async function scan(ctx: Ctx) {
   const poolUsers = ((pool.data as { handle: string | null }[] | null) ?? []).map((p) => igUser(p.handle).toLowerCase()).filter(Boolean);
   const ours = new Set([...roster, ...poolUsers, "ttp.creators"]);
   await loadKnown(ctx);
+  // Agences concurrentes : une fois par jour, avant le reste (quelques demandes).
+  const rivalsRead = await rivals(ctx).then((r) => r.read).catch(() => 0);
   await loadCache(ctx, [...ours]);
   // Scouting : les moins récemment lues d'abord, 30 par nuit.
   const poolTodo = [...new Set(poolUsers)].filter((u) => !roster.includes(u))
@@ -448,7 +578,7 @@ async function scan(ctx: Ctx) {
   await each(ctx, todo, (b) => verifyBrand(ctx, b));
   // Puis les marques en attente des passages précédents, avec le quota qui reste.
   const backlog = inBudget(ctx) ? await verify(ctx) : null;
-  return { creators: scanned.length, discovered: discoveredRead, brands: brands.length, profiles: todo.length + (backlog?.verified ?? 0), diag, stopped: ctx.stop || undefined };
+  return { creators: scanned.length, discovered: discoveredRead, brands: brands.length, profiles: todo.length + (backlog?.verified ?? 0), rivals: rivalsRead, diag, stopped: ctx.stop || undefined };
 }
 
 async function caller(req: Request, sb: SupabaseClient): Promise<"cron" | "agency" | null> {
@@ -471,7 +601,7 @@ Deno.serve(async (req: Request) => {
 
   const sb = getServiceClient();
   if (!(await caller(req, sb))) return res({ error: "non_autorise" }, 401);
-  let body: { mode?: string; brand?: string; creator?: string; handles?: unknown; quota?: number } = {};
+  let body: { mode?: string; brand?: string; creator?: string; handles?: unknown; handle?: string; quota?: number } = {};
   try {
     body = (await req.json()) ?? {};
   } catch {
@@ -491,6 +621,7 @@ Deno.serve(async (req: Request) => {
   if (body.mode === "list") return done(await fromList(ctx, Array.isArray(body.handles) ? body.handles : []));
   if (body.mode === "similar") return done(await similar(ctx, String(body.creator ?? "")));
   if (body.mode === "verify") return done(await verify(ctx));
+  if (body.mode === "rivals") return done(await rivals(ctx, body.handle ? String(body.handle) : undefined));
   const out = await scan(ctx);
   console.log("ig-sourcing scan", JSON.stringify({ ...out, ms: Date.now() - ctx.t0 }));
   return done(out);

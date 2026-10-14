@@ -37,6 +37,7 @@ import {
   FolderOpen,
   History,
   Radar,
+  MessagesSquare,
   type LucideIcon,
   Mail,
 } from "lucide-react";
@@ -65,6 +66,7 @@ export type ViewId =
   | "documents"
   | "contacts"
   | "whatsapp"
+  | "messages"
   | "mails"
   | "prospection"
   | "contrats"
@@ -135,7 +137,15 @@ export const NAV: NavFamily[] = [
       { id: "gifting", label: "Gifting", icon: Gift },
       { id: "ideas", label: "Idées", icon: Lightbulb },
       { id: "todo", label: "To-do", icon: ListChecks },
-      { id: "planning", label: "Planning", icon: CalendarDays },
+      {
+        id: "planning",
+        label: "Planning",
+        icon: CalendarDays,
+        children: [
+          { id: "agenda", label: "Agenda" },
+          { id: "instagram", label: "Posts Instagram" },
+        ],
+      },
     ],
   },
   {
@@ -161,6 +171,7 @@ export const NAV: NavFamily[] = [
         icon: MessageCircle,
         children: [{ id: "mails", label: "Mails", icon: Mail, pinnable: true }],
       },
+      { id: "messages", label: "DM Instagram", icon: MessagesSquare },
       { id: "prospection", label: "Pipeline", icon: Search },
       { id: "vivier", label: "Scouting", icon: UserPlus },
       { id: "sourcing", label: "Sourcing", icon: Radar },

@@ -35,7 +35,7 @@ export function SourcingGuide({ onClose }: { onClose: () => void }) {
           <div className="flex items-center gap-2 text-[17px] font-semibold text-foreground"><BookOpen className="h-5 w-5 text-primary" /> Mode d'emploi du Sourcing</div>
           <button type="button" onClick={onClose} aria-label="Fermer" className="text-faint transition-colors hover:text-foreground"><X className="h-5 w-5" /></button>
         </div>
-        <p className="mb-5 text-[13px] text-muted-foreground">Deux outils, à partir d'Instagram (comptes pro) et de YouTube. Tout ce que tu fais ici est partagé avec l'équipe.</p>
+        <p className="mb-5 text-[13px] text-muted-foreground">Trois outils, à partir d'Instagram (comptes pro) et de YouTube. Tout ce que tu fais ici est partagé avec l'équipe.</p>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <section className="rounded-xl border border-border p-4">
@@ -57,6 +57,16 @@ export function SourcingGuide({ onClose }: { onClose: () => void }) {
               ["Agis.", "« Contacter » (mail depuis ta boîte Gmail, ou message Instagram) ou « + Scouting » pour la suivre plus tard."],
             ]} />
             <p className="mt-3 text-[11px] leading-snug text-faint">Ouvre toujours son profil (clic sur son nom) avant d'écrire : le score aide à trier, il ne remplace pas ton œil.</p>
+          </section>
+          <section className="rounded-xl border border-border p-4 md:col-span-2">
+            <div className="mb-0.5 text-[14px] font-semibold text-foreground">Agences concurrentes</div>
+            <div className="mb-3 text-[12px] text-primary">Pour garder une longueur d'avance</div>
+            <Steps items={[
+              ["Ajoute une agence.", "Tape son @ Instagram, ou clique une agence repérée dans les bios des créatrices."],
+              ["Regarde.", "Sa croissance sur 7 et 30 jours (à côté de la tienne), les créatrices qu'elle met en avant et les marques qui la paient ou paient ses créatrices."],
+              ["Agis.", "« + Scouting » sur une créatrice à suivre, « + Pipeline » sur une marque qui a déjà un budget influence."],
+            ]} />
+            <p className="mt-3 text-[11px] leading-snug text-faint">Relu tout seul une fois par jour. La courbe des abonnés se dessine au fil des jours.</p>
           </section>
         </div>
 
