@@ -20,7 +20,7 @@
 
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { discover, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, type IgProfile } from "../_shared/instagram.ts";
-import { handleCandidates } from "../_shared/mentions.ts";
+import { handleCandidates, isCommonWord } from "../_shared/mentions.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 type Json = Record<string, unknown>;
@@ -34,7 +34,7 @@ const BRANDS_PER_SCAN = 25; // profils de marques lus par nuit (Meta limite les 
 const age = (iso: string | null | undefined) => (iso ? Date.now() - Date.parse(iso) : Infinity);
 
 /** Mots qui signalent un partenariat payé dans une légende. */
-const PAID = /#(ad|ads|pub|publicite|publicité|sponsor|sponsorise|sponsorisé|sponsored|partenariat|partenariatremunere|partenariatrémunéré|partnership|collab|collaboration|gifted|ambassador|ambassadrice)(?![\p{L}\p{N}_])|code promo|avec le code|code\s*:|-\s?\d{1,2}\s?%|en partenariat|partenariat r[ée]mun[ée]r[ée]|paid partnership|sponsoris[ée] par|offert par/iu;
+const PAID = /#(ad|ads|pub|publicite|publicité|sponsor|sponsorise|sponsorisé|sponsored|partenariat|partenariatremunere|partenariatrémunéré|partnership|collab|collaboration|gifted|ambassador|ambassadrice)(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}])publicit[ée](?![\p{L}\p{N}])|collaboration commerciale|partenariat commercial|code promo|avec le code|code\s*:|-\s?\d{1,2}\s?%|en partenariat|partenariat r[ée]mun[ée]r[ée]|paid partnership|sponsoris[ée] par|offert par/iu;
 const isPaid = (caption: string) => PAID.test(caption);
 
 /** Comptes cités dans un texte (Meta retire les @ : voir _shared/mentions.ts), poids ≥ `min`. */
@@ -218,18 +218,26 @@ async function loadCache(ctx: Ctx, users: string[]) {
   }
 }
 
-/** Marques déjà connues (contacts avec un @, radar) : reconnues même sans @ dans un texte. */
+/**
+ * Marques déjà connues, reconnues même sans @ dans un texte : contacts avec un @ et
+ * marques que l'agence a mises au Pipeline depuis le radar (validées à la main, pour
+ * qu'une erreur du radar ne s'auto-entretienne pas). Nettoie au passage le radar des
+ * mots courants pris à tort pour une marque (« notre » → @notre).
+ */
 async function loadKnown(ctx: Ctx) {
   if (KNOWN.size) return;
   const [ct, rd] = await Promise.all([
     ctx.sb.from("contacts").select("instagram").not("instagram", "is", null),
-    ctx.sb.from("ig_radar").select("brand").neq("status", "ignore").limit(2000),
+    ctx.sb.from("ig_radar").select("brand, status").limit(5000),
   ]);
   for (const c of (ct.data as { instagram: string | null }[] | null) ?? []) {
     const u = igUser(c.instagram).toLowerCase();
-    if (u) KNOWN.add(u);
+    if (u && !isCommonWord(u)) KNOWN.add(u);
   }
-  for (const r of (rd.data as { brand: string }[] | null) ?? []) KNOWN.add(r.brand);
+  const rows = (rd.data as { brand: string; status: string }[] | null) ?? [];
+  for (const r of rows) if (r.status === "pipeline" && !isCommonWord(r.brand)) KNOWN.add(r.brand);
+  const junk = rows.filter((r) => r.status === "nouveau" && isCommonWord(r.brand)).map((r) => r.brand);
+  if (junk.length) await ctx.sb.from("ig_radar").delete().in("brand", junk);
 }
 
 /** Additionne les poids d'un compte sur plusieurs textes : garde ceux qui atteignent 2. */

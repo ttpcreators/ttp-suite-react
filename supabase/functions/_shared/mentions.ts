@@ -10,7 +10,7 @@
 //   - un point, un tiret bas ou un chiffre dans le mot             : poids 3
 //   - juste après « avec, by, x, merci, chez, photo, wearing… »    : poids 3
 //   - hashtag d'un post payé (#aloyoga)                            : poids 2
-//   - après « for, sur, robe… », ou mot long (9 lettres et plus)    : poids 1
+//   - mot long (9 lettres et plus) qui n'est pas un mot courant    : poids 1
 // Un nom n'est gardé que si son poids total (tous posts confondus) atteint 2.
 // Un nom de compte Instagram est toujours en minuscules, sans accent ni apostrophe :
 // ça élimine déjà la plupart des mots d'une phrase.
@@ -22,7 +22,7 @@ const CUE = new Set([
   "📸", "🎥", "📷", "wearing", "porte", "shot", "styled", "styling", "mua", "collab", "collaboration", "partenariat",
   "code", "narrated", "explorer", "athlete", "athlète", "w", "w/", "credit", "credits", "crédit",
 ]);
-// Indices faibles : seuls, ils ne suffisent pas (il faut un autre indice ou une répétition).
+// Mots qui ne sont jamais un nom de compte (et ne comptent pas comme indice).
 const WEAK_CUE = new Set(["for", "pour", "on", "sur", "from", "de", "du", "tenue", "outfit", "look", "dress", "robe", "makeup", "hair"]);
 const STOP = new Set([
   "the", "and", "you", "your", "for", "with", "this", "that", "these", "those", "les", "des", "une", "mon", "ton", "son",
@@ -44,7 +44,14 @@ const STOP = new Set([
   "dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "sunday", "monday", "tuesday", "wednesday",
   "thursday", "friday", "saturday", "instagram", "tiktok", "youtube", "facebook", "website", "available", "disponible",
   "ad", "ads", "pub", "the", "a", "an", "of", "in", "to", "is", "it", "at", "be", "as", "or", "if", "so", "do", "my",
+  // Mots courants qui sont AUSSI des comptes de marque (@notre…) : jamais pris pour un compte.
+  "notre", "votre", "cette", "chose", "petit", "petite", "grand", "grande", "jolie", "belle", "super", "depuis",
+  "pendant", "avant", "apres", "maison", "boutique", "atelier", "studio", "mariage", "wedding", "voyage", "recette",
+  "conseil", "conseils", "astuce", "astuces", "cadeau", "cadeaux", "noel", "christmas", "rentree", "soldes", "sale",
+  "basics", "basic", "classic", "essentials", "natural", "nature", "organic", "vintage", "local", "simple", "minimal",
 ]);
+/** Mot courant (jamais pris pour un nom de compte). */
+export const isCommonWord = (u: string) => STOP.has(u.toLowerCase());
 // Hashtags qui ne désignent pas une marque.
 const GENERIC_TAG = /^(ad|ads|pub|publicite|publicité|sponsor|sponsorise|sponsorisé|sponsored|partenariat|partenariatremunere|partenariatrémunéré|partnership|collab|collaboration|gifted|ambassador|ambassadrice|promo|code|giveaway|concours|reels?|fyp|explore|instagood|photooftheday|love|fitness|running|yoga|gym|sport|mode|fashion|beauty|skincare|makeup|food|travel|ootd|lifestyle|paris|lyon|france|summer|winter)$/i;
 const TLD = /\.(com|fr|co|io|net|org|be|ch|uk|de|es|it|shop|store|app)$/;
@@ -70,7 +77,7 @@ export function handleCandidates(caption: string, known: Set<string>, paid = fal
     }
     if (raw.startsWith("#")) {
       const tag = raw.slice(1).replace(/[.:]+$/, "").toLowerCase();
-      if (!/^[a-z0-9_]{3,30}$/.test(tag) || GENERIC_TAG.test(tag)) continue;
+      if (!/^[a-z0-9_]{3,30}$/.test(tag) || GENERIC_TAG.test(tag) || STOP.has(tag)) continue;
       if (known.has(tag)) add(tag, 6);
       else if (paid) add(tag, 2);
       continue;
@@ -82,7 +89,7 @@ export function handleCandidates(caption: string, known: Set<string>, paid = fal
     if (known.has(u)) w = 6;
     if (/[._\d]/.test(u)) w = Math.max(w, 3);
     if (CUE.has(prev)) w = Math.max(w, 3);
-    if (!w && (WEAK_CUE.has(prev) || u.length >= 9)) w = 1;
+    if (!w && u.length >= 9) w = 1;
     if (w) add(u, w);
   }
   return [...out.entries()].map(([u, w]) => ({ u, w }));
