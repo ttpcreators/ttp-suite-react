@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  AtSign, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Loader2, Mail, Plus, Radar, RefreshCw, Search, Send, SlidersHorizontal, Users, Wallet, EyeOff, RotateCcw,
+  AtSign, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Loader2, Mail, Plus, Radar, RefreshCw, Search, Send, SlidersHorizontal, Users, Wallet, EyeOff, RotateCcw,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
@@ -14,6 +14,7 @@ import { fmtCompact } from "@/lib/timeSeries";
 import { fmtAgo, fmtEr, fmtPerWeek, igWhyText, noteQuota } from "@/lib/instagram";
 import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
 import { OutreachComposer } from "@/components/OutreachComposer";
+import { SourcingGuide } from "@/components/SourcingGuide";
 
 /**
  * SOURCING (agence) — deux outils, toujours via l'outil officiel de Meta (comptes pro) :
@@ -124,6 +125,22 @@ export function Sourcing() {
       return "createurs";
     }
   });
+  // Mode d'emploi : ouvert tout seul à la première visite (sur cet appareil).
+  const [guide, setGuide] = useState(() => {
+    try {
+      return !localStorage.getItem("ttp:sourcing-guide-v1");
+    } catch {
+      return false;
+    }
+  });
+  const closeGuide = () => {
+    setGuide(false);
+    try {
+      localStorage.setItem("ttp:sourcing-guide-v1", "1");
+    } catch {
+      /* stockage indisponible */
+    }
+  };
   const pick = (v: string) => {
     const t = v === "radar" ? "radar" : "createurs";
     setTab(t);
@@ -144,8 +161,14 @@ export function Sourcing() {
             <p>Meta limite le nombre de demandes par heure : si l'app dit « Meta a freiné », réessaie un peu plus tard.</p>
           </HelpTip>
         </div>
-        <MetaQuotaBadge />
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setGuide(true)} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
+            <BookOpen className="h-3.5 w-3.5 text-primary" /> Mode d'emploi
+          </button>
+          <MetaQuotaBadge />
+        </div>
       </PageHeaderRow>
+      {guide && <SourcingGuide onClose={closeGuide} />}
       <div role="tablist" aria-label="Outil de sourcing" className="mb-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         {TOOLS.map((t) => {
           const on = tab === t.v;
@@ -480,6 +503,11 @@ function CreatorFinder() {
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[12px] text-muted-foreground">
             <span className="flex flex-wrap items-center gap-1.5">
               <span className="font-medium text-foreground">{last.label}</span> · {shown.length} profil{shown.length > 1 ? "s" : ""}
+              {shown.length > 0 && (
+                <span className="text-muted-foreground">
+                  {" "}· {shown.filter((x) => x.p.score >= 70).length} pépite{shown.filter((x) => x.p.score >= 70).length > 1 ? "s" : ""} · {shown.filter((x) => x.c.data?.email).length} avec email · {shown.filter((x) => !x.c.data?.agency).length} sans agence
+                </span>
+              )}
               {hidden > 0 && <span className="text-faint">({hidden} masqué{hidden > 1 ? "s" : ""})</span>}
               {last.mode === "similaire" && !!last.brands?.length && <span className="text-faint">· via {last.brands.slice(0, 4).map((b) => `@${b}`).join(", ")}</span>}
             </span>
@@ -757,14 +785,23 @@ function BrandRadar() {
     if (error) return toast("Erreur, réessaie");
     setRows((prev) => (prev ? prev.map((r) => (r.brand === brand ? { ...r, status: s } : r)) : prev));
   };
-  const toPipeline = async (r: RadarRow) => {
+  /** Ajoute la marque au Pipeline (une seule fois, même à plusieurs) et la sort des « à traiter ». */
+  const toPipeline = async (r: RadarRow, opts: { stage?: string; silent?: boolean } = {}): Promise<boolean> => {
     const p = profiles[r.brand];
-    const { data: top } = await supabase.from("prospects").select("sort_order").order("sort_order", { ascending: false }).limit(1);
-    const order = (((top as { sort_order: number | null }[] | null) ?? [])[0]?.sort_order ?? 0) + 1;
-    const created = await dbInsert("prospects", { brand: p?.name?.trim() || `@${r.brand}`, contact: `@${r.brand}`, value: "—", stage: "Prospection", tone: "neutral", sort_order: order });
-    if (!created) return toast("Erreur, réessaie");
+    const name = p?.name?.trim() || `@${r.brand}`;
+    const { data: same } = await supabase.from("prospects").select("id").or(`contact.eq."@${r.brand}",brand.ilike."${name.replace(/["\\,()%]/g, " ")}"`).limit(1);
+    if (!(same as unknown[] | null)?.length) {
+      const { data: top } = await supabase.from("prospects").select("sort_order").order("sort_order", { ascending: false }).limit(1);
+      const order = (((top as { sort_order: number | null }[] | null) ?? [])[0]?.sort_order ?? 0) + 1;
+      const created = await dbInsert("prospects", { brand: name, contact: `@${r.brand}`, value: "—", stage: opts.stage ?? "Prospection", tone: "neutral", sort_order: order });
+      if (!created) {
+        toast("Erreur, réessaie");
+        return false;
+      }
+    }
     await setRowStatus(r.brand, "pipeline");
-    toast("Ajoutée au Pipeline ✓");
+    if (!opts.silent) toast((same as unknown[] | null)?.length ? "Déjà au Pipeline : retirée des marques à traiter" : "Ajoutée au Pipeline ✓ (page Pipeline)");
+    return true;
   };
 
   const [mailFor, setMailFor] = useState<{ row: RadarRow; post: RadarPost } | null>(null);
@@ -1006,6 +1043,7 @@ function BrandRadar() {
             const open = openRows.has(row.brand);
             const list = dedupe(posts);
             const verdict = types.paye || types.offert ? { t: "Client potentiel", c: "bg-primary/10 text-primary" } : warm ? { t: "Contact chaud", c: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" } : { t: "Citée", c: "bg-panel text-muted-foreground" };
+            const unsure = !prof?.isBrand;
             const summary = [
               types.paye ? `${types.paye} payé${types.paye > 1 ? "s" : ""}` : "",
               types.offert ? `${types.offert} offert${types.offert > 1 ? "s" : ""} / code` : "",
@@ -1020,6 +1058,7 @@ function BrandRadar() {
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="truncate text-[14px] font-semibold text-foreground">{prof?.name || `@${row.brand}`}</span>
                         <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", verdict.c)}>{verdict.t}</span>
+                        {unsure && <span title="L'app n'est pas sûre que ce compte soit une marque : vérifie avant d'écrire" className="rounded-full bg-amber/15 px-2 py-0.5 text-[10px] font-semibold text-amber">À confirmer</span>}
                         {known && <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Déjà en contact</span>}
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
@@ -1036,23 +1075,25 @@ function BrandRadar() {
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2 pl-[54px] lg:pl-0">
                     <button type="button" onClick={() => toggleRow(row.brand)} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground" aria-expanded={open}>
-                      {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />} {list.length} post{list.length > 1 ? "s" : ""}
+                      {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />} {open ? "Masquer les preuves" : `Voir les preuves (${list.length})`}
                     </button>
-                    {row.status !== "pipeline" && (
+                    {row.status !== "pipeline" ? (
                       <button type="button" onClick={() => void toPipeline(row)} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
                         <Plus className="h-3.5 w-3.5" /> Pipeline
                       </button>
+                    ) : (
+                      <span className="flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"><Check className="h-3.5 w-3.5" /> Au Pipeline</span>
                     )}
                     <button type="button" onClick={() => setMailFor({ row, post: posts.find((p) => p.roster && postType(p) === "spontane") ?? posts[0] })} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover">
-                      <Mail className="h-3.5 w-3.5" /> Mail
+                      <Send className="h-3.5 w-3.5" /> Contacter
                     </button>
                     {row.status === "nouveau" ? (
-                      <button type="button" onClick={() => void setRowStatus(row.brand, "ignore")} title="Ignorer cette marque" aria-label="Ignorer" className="grid h-7 w-7 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground">
-                        <EyeOff className="h-3.5 w-3.5" />
+                      <button type="button" onClick={() => void setRowStatus(row.brand, "ignore").then(() => toast("Retirée · retrouve-la dans Filtres → Statut → Ignorées"))} className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                        <EyeOff className="h-3.5 w-3.5" /> Pas pertinent
                       </button>
                     ) : (
-                      <button type="button" onClick={() => void setRowStatus(row.brand, "nouveau")} title="Remettre à traiter" aria-label="Remettre à traiter" className="grid h-7 w-7 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground">
-                        <RotateCcw className="h-3.5 w-3.5" />
+                      <button type="button" onClick={() => void setRowStatus(row.brand, "nouveau")} className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                        <RotateCcw className="h-3.5 w-3.5" /> Remettre à traiter
                       </button>
                     )}
                   </div>
@@ -1122,6 +1163,7 @@ function BrandRadar() {
             body={post.roster && !post.paid
               ? `Bonjour,\n\n${who}, que nous représentons chez TTP Creators, parle déjà de ${brandName} spontanément : ${post.url}\n\nUne collaboration officielle aurait du sens : sa communauté connaît et apprécie déjà votre marque.\n\nJe vous envoie son media kit ?\n\nBelle journée,`
               : `Bonjour,\n\nJ'ai vu votre collaboration avec @${post.c} : ${post.url}\n\nChez TTP Creators, nous représentons des créatrices qui correspondent à votre univers et pourraient porter vos prochaines campagnes.\n\nJe vous envoie notre sélection ?\n\nBelle journée,`}
+            onSent={() => void toPipeline(row, { stage: "Contact", silent: true }).then((ok) => ok && toast("La marque passe au Pipeline (étape Contact) : personne ne la recontactera"))}
             onClose={() => setMailFor(null)}
           />
         );
