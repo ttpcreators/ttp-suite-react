@@ -676,13 +676,13 @@ function BrandRadar() {
 
   const runScan = async () => {
     setScanning(true);
-    const r = await invokeSourcing<{ creators?: number; brands?: number; stopped?: string; diag?: { posts: number; withText: number; withAt: number } }>({ mode: "scan" });
+    const r = await invokeSourcing<{ creators?: number; brands?: number; stopped?: string; diag?: { posts: number; withText: number; withAt: number; withName?: number } }>({ mode: "scan" });
     setScanning(false);
     if (r.error) return toast(errorText(r.error));
     const d = r.diag;
     toast(
       `${r.creators ?? 0} créatrices lues · ${r.brands ?? 0} marques citées` +
-        (d && !r.brands ? ` · ${d.posts} posts reçus, ${d.withText} avec texte, ${d.withAt} avec un @` : "") +
+        (d && !r.brands ? ` · ${d.posts} posts reçus, ${d.withName ?? 0} citent un compte` : "") +
         (r.stopped ? " · Meta a freiné, la suite passera plus tard" : ""),
     );
     setReload((n) => n + 1);

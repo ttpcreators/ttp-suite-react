@@ -20,6 +20,7 @@
 
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { discover, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, type IgProfile } from "../_shared/instagram.ts";
+import { handleCandidates } from "../_shared/mentions.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 type Json = Record<string, unknown>;
@@ -36,14 +37,14 @@ const age = (iso: string | null | undefined) => (iso ? Date.now() - Date.parse(i
 const PAID = /#(ad|ads|pub|publicite|publicité|sponsor|sponsorise|sponsorisé|sponsored|partenariat|partenariatremunere|partenariatrémunéré|partnership|collab|collaboration|gifted|ambassador|ambassadrice)(?![\p{L}\p{N}_])|code promo|avec le code|code\s*:|-\s?\d{1,2}\s?%|en partenariat|partenariat r[ée]mun[ée]r[ée]|paid partnership|sponsoris[ée] par|offert par/iu;
 const isPaid = (caption: string) => PAID.test(caption);
 
-/** @ cités dans une légende (minuscules, sans point final). */
-function mentions(caption: string): string[] {
-  const out = new Set<string>();
-  for (const m of caption.matchAll(/@([A-Za-z0-9._]{2,30})/g)) {
-    const u = igUser(m[1].replace(/\.+$/, ""));
-    if (u) out.add(u.toLowerCase());
-  }
-  return [...out];
+/** Comptes cités dans un texte (Meta retire les @ : voir _shared/mentions.ts), poids ≥ `min`. */
+const KNOWN = new Set<string>(); // marques déjà connues : contacts, radar (rempli par loadKnown)
+function cited(caption: string, min = 2): { u: string; w: number }[] {
+  return handleCandidates(caption, KNOWN, isPaid(caption)).filter((c) => c.w >= min);
+}
+/** Poids d'un compte dans un texte (0 = pas cité). */
+function citedAll(caption: string): Map<string, number> {
+  return new Map(handleCandidates(caption, KNOWN, isPaid(caption)).map((c) => [c.u, c.w]));
 }
 
 const LINK_IN_BIO = /(linktr\.ee|beacons\.ai|linkin\.bio|lnk\.bio|solo\.to|campsite\.bio|bio\.site|tap\.bio|msha\.ke|hoo\.be|snipfeed|stan\.store|allmylinks|linkbio|later\.com|flowcode|komi\.io|direct\.me|instabio)/i;
@@ -148,7 +149,7 @@ async function toData(p: IgProfile): Promise<Json> {
   const deals = new Set<string>();
   const cites = new Set<string>();
   for (const m of p.media) {
-    for (const u of mentions(m.caption)) {
+    for (const { u } of cited(m.caption, 3)) {
       if (u === me) continue;
       cites.add(u);
       if (isPaid(m.caption)) deals.add(u);
@@ -217,32 +218,55 @@ async function loadCache(ctx: Ctx, users: string[]) {
   }
 }
 
+/** Marques déjà connues (contacts avec un @, radar) : reconnues même sans @ dans un texte. */
+async function loadKnown(ctx: Ctx) {
+  if (KNOWN.size) return;
+  const [ct, rd] = await Promise.all([
+    ctx.sb.from("contacts").select("instagram").not("instagram", "is", null),
+    ctx.sb.from("ig_radar").select("brand").neq("status", "ignore").limit(2000),
+  ]);
+  for (const c of (ct.data as { instagram: string | null }[] | null) ?? []) {
+    const u = igUser(c.instagram).toLowerCase();
+    if (u) KNOWN.add(u);
+  }
+  for (const r of (rd.data as { brand: string }[] | null) ?? []) KNOWN.add(r.brand);
+}
+
+/** Additionne les poids d'un compte sur plusieurs textes : garde ceux qui atteignent 2. */
+function tally(captions: { text: string; at?: string; url?: string }[], skip: Set<string>) {
+  const seen = new Map<string, { count: number; weight: number; lastAt: string; url: string }>();
+  for (const p of captions) {
+    for (const [u, w] of citedAll(p.text)) {
+      if (skip.has(u)) continue;
+      const cur = seen.get(u);
+      if (cur) {
+        cur.count++;
+        cur.weight += w;
+      } else seen.set(u, { count: 1, weight: w, lastAt: p.at ?? "", url: p.url ?? "" });
+    }
+  }
+  return new Map([...seen.entries()].filter(([, v]) => v.weight >= 2));
+}
+
 // ── Sourcing : depuis une marque, ou une liste de @ ──────────────────────────
 async function fromBrand(ctx: Ctx, brand: string) {
   const b = igUser(brand).toLowerCase();
   if (!b) return { error: "nom_invalide" };
+  await loadKnown(ctx);
   await loadCache(ctx, [b]);
   const r = await discover(b, 50);
   if (!r.ok) return { error: r.why };
   const now = new Date().toISOString();
   const brandData = await toData(r.profile);
   await ctx.sb.from("ig_profiles").upsert({ username: b, data: brandData, why: null, at: now });
-  // Qui la marque cite, combien de fois, et quand pour la dernière fois.
-  const seen = new Map<string, { count: number; lastAt: string; url: string }>();
-  for (const p of r.profile.media) {
-    for (const m of mentions(p.caption)) {
-      if (m === b) continue;
-      const cur = seen.get(m);
-      if (cur) cur.count++;
-      else seen.set(m, { count: 1, lastAt: p.at, url: p.url });
-    }
-  }
-  const users = [...seen.entries()].sort((x, y) => y[1].count - x[1].count).slice(0, 40).map(([u]) => u);
+  // Qui la marque cite (sans @ : voir cited), combien de fois, et quand pour la dernière fois.
+  const seen = tally(r.profile.media.map((p) => ({ text: p.caption, at: p.at, url: p.url })), new Set([b]));
+  const users = [...seen.entries()].sort((x, y) => y[1].weight - x[1].weight || y[1].count - x[1].count).slice(0, 30).map(([u]) => u);
   await loadCache(ctx, users);
   await each(ctx, users, (u) => profile(ctx, u, 12));
   return {
     brand: { username: b, ...brandData },
-    candidates: users.map((u) => ({ username: u, ...seen.get(u), data: ctx.cache.get(u)?.data ?? null, why: ctx.cache.get(u)?.why ?? (ctx.stop || null) })),
+    candidates: users.map((u) => ({ username: u, count: seen.get(u)?.count, lastAt: seen.get(u)?.lastAt, url: seen.get(u)?.url, data: ctx.cache.get(u)?.data ?? null, why: ctx.cache.get(u)?.why ?? (ctx.stop || null) })),
     stopped: ctx.stop || undefined,
   };
 }
@@ -265,12 +289,16 @@ async function fromList(ctx: Ctx, handles: unknown[]) {
 async function similar(ctx: Ctx, creator: string) {
   const c = igUser(creator).toLowerCase();
   if (!c) return { error: "nom_invalide" };
+  await loadKnown(ctx);
   await loadCache(ctx, [c]);
   const { row, media } = await profile(ctx, c, 25, true);
   if (!media) return { error: row.why ?? "erreur" };
+  // Ses marques : citées dans ses posts (les posts payés comptent double).
   const weight = new Map<string, number>();
-  for (const p of media) for (const m of mentions(p.caption)) if (m !== c) weight.set(m, (weight.get(m) ?? 0) + (isPaid(p.caption) ? 3 : 1));
-  const brands = [...weight.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([b]) => b);
+  for (const p of media) {
+    for (const [m, w] of citedAll(p.caption)) if (m !== c) weight.set(m, (weight.get(m) ?? 0) + w * (isPaid(p.caption) ? 2 : 1));
+  }
+  const brands = [...weight.entries()].filter(([, w]) => w >= 2).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([b]) => b);
   const via = new Map<string, Set<string>>();
   await each(ctx, brands, async (b) => {
     const r = await discover(b, 50);
@@ -278,16 +306,14 @@ async function similar(ctx: Ctx, creator: string) {
       if (r.stop) ctx.stop = r.why;
       return;
     }
-    for (const p of r.profile.media) {
-      for (const m of mentions(p.caption)) {
-        if (m === b || m === c) continue;
-        const set = via.get(m) ?? new Set<string>();
-        set.add(b);
-        via.set(m, set);
-      }
+    const seen = tally(r.profile.media.map((p) => ({ text: p.caption })), new Set([b, c]));
+    for (const m of seen.keys()) {
+      const set = via.get(m) ?? new Set<string>();
+      set.add(b);
+      via.set(m, set);
     }
   });
-  const users = [...via.entries()].sort((a, b) => b[1].size - a[1].size).slice(0, 40).map(([u]) => u);
+  const users = [...via.entries()].sort((a, b) => b[1].size - a[1].size).slice(0, 30).map(([u]) => u);
   await loadCache(ctx, users);
   await each(ctx, users, (u) => profile(ctx, u, 12));
   return {
@@ -311,6 +337,7 @@ async function scan(ctx: Ctx) {
     .filter(Boolean).map((u) => u.toLowerCase());
   const poolUsers = ((pool.data as { handle: string | null }[] | null) ?? []).map((p) => igUser(p.handle).toLowerCase()).filter(Boolean);
   const ours = new Set([...roster, ...poolUsers, "ttp.creators"]);
+  await loadKnown(ctx);
   await loadCache(ctx, [...ours]);
   // Scouting : les moins récemment lues d'abord, 30 par nuit.
   const poolTodo = [...new Set(poolUsers)].filter((u) => !roster.includes(u))
@@ -320,7 +347,8 @@ async function scan(ctx: Ctx) {
   const found = new Map<string, RadarPost[]>();
   const scanned: string[] = [];
   // Compteurs pour comprendre un radar vide : posts reçus, avec texte, avec un @.
-  const diag = { posts: 0, withText: 0, withAt: 0 };
+  const diag = { posts: 0, withText: 0, withAt: 0, withName: 0 };
+  const weightOf = new Map<string, number>();
   await each(ctx, [...new Set(roster), ...poolTodo], async (u) => {
     const { media } = await profile(ctx, u, 25, true);
     if (!media) return;
@@ -329,8 +357,11 @@ async function scan(ctx: Ctx) {
       diag.posts++;
       if (p.caption.trim()) diag.withText++;
       if (p.caption.includes("@")) diag.withAt++;
-      for (const m of mentions(p.caption)) {
+      const names = citedAll(p.caption);
+      if ([...names.values()].some((w) => w >= 2)) diag.withName++;
+      for (const [m, w] of names) {
         if (ours.has(m) || m === u) continue;
+        weightOf.set(m, (weightOf.get(m) ?? 0) + w);
         const list = found.get(m) ?? [];
         list.push({ c: u, roster: rosterSet.has(u), url: p.url, at: p.at, paid: isPaid(p.caption), likes: p.likes, comments: p.comments, cap: p.caption.slice(0, 300) });
         found.set(m, list);
@@ -340,8 +371,9 @@ async function scan(ctx: Ctx) {
   const now = new Date().toISOString();
   if (scanned.length) await ctx.sb.from("ig_profiles").update({ scanned_at: now }).in("username", scanned);
 
-  // Fusion avec le radar existant (un post n'est compté qu'une fois).
-  const brands = [...found.keys()];
+  // Fusion avec le radar existant (un post n'est compté qu'une fois). Un nom vu une
+  // seule fois avec un indice faible (poids < 2) n'est pas gardé, sauf s'il est déjà au radar.
+  const brands = [...found.keys()].filter((b) => (weightOf.get(b) ?? 0) >= 2 || KNOWN.has(b));
   const existing = new Map<string, { posts: RadarPost[] }>();
   for (let i = 0; i < brands.length; i += 200) {
     const { data } = await ctx.sb.from("ig_radar").select("brand, posts").in("brand", brands.slice(i, i + 200));
@@ -359,7 +391,7 @@ async function scan(ctx: Ctx) {
   await loadCache(ctx, brands);
   const todo = brands
     .filter((b) => { const k = ctx.cache.get(b); return !k || age(k.at) > (k.why === "compte_perso" ? 30 : FRESH_DAYS) * DAY; })
-    .sort((a, b) => (found.get(b)?.length ?? 0) - (found.get(a)?.length ?? 0))
+    .sort((a, b) => (weightOf.get(b) ?? 0) - (weightOf.get(a) ?? 0))
     .slice(0, BRANDS_PER_SCAN);
   await each(ctx, todo, (b) => profile(ctx, b, 0));
   return { creators: scanned.length, brands: brands.length, profiles: todo.length, diag, stopped: ctx.stop || undefined };

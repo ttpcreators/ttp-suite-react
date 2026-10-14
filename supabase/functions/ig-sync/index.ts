@@ -25,6 +25,7 @@
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { discover, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, type IgPost, type IgResult } from "../_shared/instagram.ts";
 import { accountTotals, audience, freshToken, loginReady, postInsights, type IgAccount, type Split } from "../_shared/instagram-login.ts";
+import { citesHandle } from "../_shared/mentions.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 type Json = Record<string, unknown>;
@@ -187,31 +188,20 @@ async function syncCreator(ctx: Ctx, c: CreatorRow): Promise<Json> {
 }
 
 // ── 2. Collabs : publications de la marque ───────────────────────────────────
-/** Le texte cite-t-il `t` (« @marque », « #marque ») comme mot entier ? */
-function hasToken(text: string, t: string): boolean {
-  let i = text.indexOf(t);
-  while (i !== -1) {
-    if (!/[a-z0-9._]/.test(text[i + t.length] ?? "")) return true;
-    i = text.indexOf(t, i + 1);
-  }
-  return false;
-}
+/** Le post cite-t-il la marque ? @ ou # du compte, nom du compte seul (Meta retire les @), ou nom de la marque. */
 function brandMatcher(brand: string, handles: string[]): (caption: string) => boolean {
-  const tokens = new Set<string>();
+  const words = new Set<string>();
   for (const h of handles) {
-    tokens.add("@" + h.toLowerCase());
-    tokens.add("#" + h.toLowerCase().replace(/[._]/g, ""));
+    words.add(h.toLowerCase());
+    words.add(h.toLowerCase().replace(/[._]/g, ""));
   }
   const flat = norm(brand).replace(/[^a-z0-9]/g, "");
-  if (flat.length >= 3) {
-    tokens.add("@" + flat);
-    tokens.add("#" + flat);
-  }
+  if (flat.length >= 3) words.add(flat);
   const word = norm(brand).trim();
   const re = word.length >= 4 ? new RegExp(`(^|[^a-z0-9@#])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z0-9])`) : null;
   return (caption) => {
     const c = norm(caption);
-    for (const t of tokens) if (hasToken(c, t)) return true;
+    for (const w of words) if (citesHandle(c, w)) return true;
     return re ? re.test(c) : false;
   };
 }
