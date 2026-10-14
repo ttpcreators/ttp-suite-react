@@ -55,10 +55,16 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return res({ error: "methode" }, 405);
 
   const sb = getServiceClient();
-  if (!(await caller(req, sb))) return res({ error: "non_autorise" }, 401);
+  const who = await caller(req, sb);
+  if (!who) return res({ error: "non_autorise" }, 401);
   const probe = await sb.from("ig_threads").select("id").limit(1);
   if (probe.error) return res({ error: "migration_manquante" });
   if (!metaReady()) return res({ error: "meta_non_configure" });
+  // En attente de la validation Meta : le cron ne réessaie qu'une fois par jour (le bouton, toujours).
+  if (who === "cron") {
+    const { data: st } = await sb.from("ig_sync_state").select("data, at").eq("key", "inbox").maybeSingle<{ data: { why?: string }; at: string }>();
+    if (st?.data?.why === "meta_validation" && Date.now() - Date.parse(st.at) < 24 * 3600e3) return res({ ok: false, skipped: "meta_validation" });
+  }
   const t0 = Date.now();
   const fail = async (why: string, detail?: string) => {
     console.log("ig-inbox échec", why, detail ?? "");
@@ -83,7 +89,10 @@ Deno.serve(async (req: Request) => {
     const body = await getJson(url, 30_000);
     if (body.error) {
       const e = body.error as GraphError;
-      if (n === 0) return fail(e.message === "reseau" ? "reseau" : graphWhy(e).why, `liste des conversations : ${e.message === "reseau" ? "pas de réponse de Meta en 30 s" : e.message ?? ""}`);
+      // Code -2 « Timeout » (sous-code 2534084) : trop de conversations avec des comptes sans rôle
+      // sur l'app → Meta exige l'accès avancé à instagram_manage_messages (App Review).
+      const why = e.message === "reseau" ? "reseau" : e.code === -2 || e.error_subcode === 2534084 ? "meta_validation" : graphWhy(e).why;
+      if (n === 0) return fail(why, `liste des conversations : ${e.message === "reseau" ? "pas de réponse de Meta en 30 s" : `${e.message ?? ""} (code ${e.code ?? "?"}${e.error_subcode ? `/${e.error_subcode}` : ""})`}`);
       break;
     }
     const list = (body.data as Conv[] | undefined) ?? [];

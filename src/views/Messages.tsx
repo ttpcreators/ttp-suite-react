@@ -46,7 +46,9 @@ function inboxWhy(s: SyncState | null): string {
   if (!s || s.ok !== false) return "";
   if (s.why === "page_introuvable") return "Le robot Meta ne voit pas encore la Page Facebook liée au compte Instagram de TTP : attribue-la au robot « scoutingapi » dans le Business Manager.";
   if (s.why === "meta_autorisation") return "Permission manquante : ajoute instagram_manage_messages et pages_manage_metadata au jeton du robot « scoutingapi », et active « Autoriser l'accès aux messages » dans l'app Instagram de TTP.";
-  if (s.why === "meta_validation") return "Meta demande de valider l'app (accès avancé à instagram_manage_messages) pour lire les messages des comptes extérieurs.";
+  // « meta_-2 » / Timeout : ancienne réponse de la fonction pour le même blocage.
+  if (s.why === "meta_validation" || s.why === "meta_-2" || /timeout/i.test(s.detail ?? ""))
+    return "Meta bloque la lecture des conversations avec des comptes extérieurs (marques, créatrices) tant que l'app n'a pas l'accès avancé à instagram_manage_messages. Il s'obtient par une validation de l'app chez Meta (App Review). La publication et le reste fonctionnent déjà.";
   return igWhyText(s.why) || "Lecture des messages impossible pour l'instant.";
 }
 
