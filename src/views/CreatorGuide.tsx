@@ -36,7 +36,7 @@ type Tab = string;
 function InfoRow({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-3 py-3.5">
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted">
         <Icon className="h-4 w-4 text-muted-foreground" />
       </span>
       <div className="min-w-0">

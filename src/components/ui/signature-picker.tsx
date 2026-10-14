@@ -71,7 +71,7 @@ export function SignaturePicker({
           type="button"
           onClick={() => onChange(null)}
           className={cn(
-            "grid h-14 min-w-[56px] place-items-center rounded-lg border px-3 text-[11px] font-medium transition-colors",
+            "grid h-14 min-w-[56px] place-items-center rounded-full border px-3 text-[11px] font-medium transition-colors",
             value === null ? "border-primary text-foreground ring-1 ring-primary" : "border-border text-muted-foreground hover:bg-rowhover",
           )}
         >
@@ -107,7 +107,7 @@ export function SignaturePicker({
           onClick={() => imgRef.current?.click()}
           disabled={busy}
           title="Ajouter une image (PNG/JPEG)"
-          className="grid h-14 w-14 place-items-center rounded-lg border border-dashed border-border text-faint transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+          className="grid h-14 w-14 place-items-center rounded-full border border-dashed border-border text-faint transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
         >
           {busy ? "…" : <Plus className="h-4 w-4" />}
         </button>
@@ -115,7 +115,7 @@ export function SignaturePicker({
           type="button"
           onClick={() => openForm()}
           title="Créer une signature HTML cliquable"
-          className="grid h-14 w-14 place-items-center gap-0.5 rounded-lg border border-dashed border-border text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+          className="grid h-14 w-14 place-items-center gap-0.5 rounded-full border border-dashed border-border text-faint transition-colors hover:bg-rowhover hover:text-foreground"
         >
           <Code2 className="h-4 w-4" />
           <span className="text-[8px] font-semibold uppercase">HTML</span>
@@ -174,7 +174,7 @@ export function SignaturePicker({
           >
             <div className="mb-4 flex items-center justify-between">
               <div className="text-sm font-semibold">{editId ? "Modifier la signature" : "Nouvelle signature HTML"}</div>
-              <button type="button" onClick={() => setFormOpen(false)} className="grid h-9 w-9 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground">
+              <button type="button" onClick={() => setFormOpen(false)} className="grid h-9 w-9 place-items-center rounded-full text-faint hover:bg-rowhover hover:text-foreground">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -188,7 +188,7 @@ export function SignaturePicker({
                   type="button"
                   onClick={() => photoRef.current?.click()}
                   disabled={busy}
-                  className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
                 >
                   <Upload className="h-3.5 w-3.5" /> {busy ? "Envoi…" : fields.photoUrl ? "Changer la photo" : "Photo (PNG/JPEG)"}
                 </button>
@@ -219,7 +219,7 @@ export function SignaturePicker({
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setFormOpen(false)} className="rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground hover:bg-rowhover">
+              <button type="button" onClick={() => setFormOpen(false)} className="rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground hover:bg-rowhover">
                 Annuler
               </button>
               <button
@@ -245,7 +245,7 @@ function SigField({ label, v, set }: { label: string; v: string; set: (v: string
       <input
         value={v}
         onChange={(e) => set(e.target.value)}
-        className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+        className="rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
       />
     </label>
   );

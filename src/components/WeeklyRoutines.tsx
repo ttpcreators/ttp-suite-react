@@ -30,7 +30,7 @@ function DaySelect({ value, onChange }: { value: number | null; onChange: (v: nu
     <select
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
-      className="h-9 rounded-lg border border-border bg-surface px-2.5 text-[13px] text-foreground outline-none focus:border-primary"
+      className="h-9 rounded-md border border-border bg-surface px-2.5 text-[13px] text-foreground outline-none focus:border-primary"
       aria-label="Jour"
     >
       <option value="">N'importe quel jour</option>
@@ -138,7 +138,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
           </button>
           {!missing && (
             <button type="button" onClick={() => { setOpen(true); setAdding((v) => !v); }}
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover">
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover">
               <Plus className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Ajouter</span>
             </button>
           )}
@@ -160,7 +160,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                       onChange={(e) => setText(e.target.value.slice(0, 300))}
                       onKeyDown={(e) => e.key === "Enter" && void add()}
                       placeholder="Ex. Mettre à jour les stats des créatrices"
-                      className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
+                      className="h-9 min-w-0 flex-1 rounded-md border border-border bg-surface px-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
                     />
                     <div className="flex gap-2">
                       <DaySelect value={day} onChange={setDay} />
@@ -187,11 +187,11 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                         return (
                           <li key={r.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:px-5">
                             <input value={editText} onChange={(e) => setEditText(e.target.value.slice(0, 300))} onKeyDown={(e) => e.key === "Enter" && void saveEdit(r)}
-                              className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 text-[13px] text-foreground outline-none focus:border-primary" />
+                              className="h-9 min-w-0 flex-1 rounded-md border border-border bg-surface px-3 text-[13px] text-foreground outline-none focus:border-primary" />
                             <div className="flex gap-2">
                               <DaySelect value={editDay} onChange={setEditDay} />
                               <button type="button" onClick={() => void saveEdit(r)} className="h-9 rounded-full bg-primary px-3 text-[13px] font-medium text-primary-foreground">Enregistrer</button>
-                              <button type="button" onClick={() => setEditId(null)} aria-label="Annuler" className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground hover:bg-rowhover"><X className="h-4 w-4" /></button>
+                              <button type="button" onClick={() => setEditId(null)} aria-label="Annuler" className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-rowhover"><X className="h-4 w-4" /></button>
                             </div>
                           </li>
                         );
@@ -232,7 +232,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                               )}
                             </div>
                             <button type="button" onClick={() => setHistory((h) => (h === r.id ? null : r.id))}
-                              className={cn("inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors hover:bg-rowhover", history === r.id ? "text-foreground" : "text-muted-foreground")}
+                              className={cn("inline-flex h-7 shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-medium transition-colors hover:bg-rowhover", history === r.id ? "text-foreground" : "text-muted-foreground")}
                               title="Historique des « Fait »">
                               <Clock className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Historique</span> {log.length > 0 && <span className="tabular-nums text-faint">{log.length}</span>}
                             </button>

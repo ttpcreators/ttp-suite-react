@@ -261,7 +261,7 @@ export function Pricing() {
                       </select>
                       <input type="number" min={1} value={r.qty} onChange={(e) => setInf(r.id, { qty: Math.max(1, parseInt(e.target.value, 10) || 1) })} title="Quantité" className="w-14 rounded-md border border-border bg-surface px-2 py-1.5 text-center text-[13px] tabular-nums outline-none focus:border-primary" />
                       {infRows.length > 1 && (
-                        <button type="button" onClick={() => setInfRows((rows) => rows.filter((x) => x.id !== r.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                        <button type="button" onClick={() => setInfRows((rows) => rows.filter((x) => x.id !== r.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       )}
@@ -345,14 +345,14 @@ export function Pricing() {
                   </select>
                   <input type="number" min={1} value={r.qty} onChange={(e) => setUgcRows((rows) => rows.map((x) => (x.id === r.id ? { ...x, qty: Math.max(1, parseInt(e.target.value, 10) || 1) } : x)))} title="Quantité" className="w-14 rounded-md border border-border bg-surface px-2 py-1.5 text-center text-[13px] tabular-nums outline-none focus:border-primary" />
                   {ugcRows.length > 1 && (
-                    <button type="button" onClick={() => setUgcRows((rows) => rows.filter((x) => x.id !== r.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                    <button type="button" onClick={() => setUgcRows((rows) => rows.filter((x) => x.id !== r.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}
                 </div>
               ))}
             </div>
-            <button type="button" onClick={() => setUgcRows((rows) => [...rows, { id: rid(), type: "video_court", qty: 1 }])} className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <button type="button" onClick={() => setUgcRows((rows) => [...rows, { id: rid(), type: "video_court", qty: 1 }])} className="mt-2 flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
               <Plus className="h-3.5 w-3.5" /> Ajouter un livrable
             </button>
 
@@ -448,7 +448,7 @@ export function Pricing() {
           ratesOpen ? (
             <RatesEditor rates={rates ?? {}} onClose={() => setRatesOpen(false)} />
           ) : (
-            <button type="button" onClick={() => setRatesOpen(true)} className="mt-4 flex items-center gap-1.5 self-start rounded-lg border border-border px-2.5 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <button type="button" onClick={() => setRatesOpen(true)} className="mt-4 flex items-center gap-1.5 self-start rounded-full border border-border px-2.5 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
               <SlidersHorizontal className="h-3.5 w-3.5" /> Barème (CPM){rates && Object.keys(rates).length ? " · personnalisé" : ""}
             </button>
           )
@@ -497,7 +497,7 @@ function RatesEditor({ rates, onClose }: { rates: RateOverrides; onClose: () => 
         <span /> <span className="text-center">€ min</span> <span className="text-center">€ max</span> <span className="text-center">% vues</span>
       </div>
       <div className="mt-3 flex flex-wrap justify-end gap-2">
-        <button type="button" onClick={() => void save({})} disabled={saving} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover"><RotateCcw className="h-3 w-3" /> Barème par défaut</button>
+        <button type="button" onClick={() => void save({})} disabled={saving} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover"><RotateCcw className="h-3 w-3" /> Barème par défaut</button>
         <button type="button" onClick={onClose} className="rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover">Annuler</button>
         <button type="button" onClick={() => void save(draft)} disabled={saving} className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">Enregistrer</button>
       </div>

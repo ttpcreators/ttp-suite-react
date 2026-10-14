@@ -219,7 +219,7 @@ export function Collabs() {
             onClick={() => void checkIg(row)}
             disabled={igBusy === row.id}
             title="Chercher maintenant les posts qui citent la marque"
-            className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+            className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
           >
             {igBusy === row.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Vérifier
           </button>
@@ -487,7 +487,7 @@ export function Collabs() {
         <button
           type="button"
           onClick={() => toggleExpand(row.id)}
-          className={cn("flex shrink-0 items-center gap-1 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground", h)}
+          className={cn("flex shrink-0 items-center gap-1 rounded-full border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground", h)}
           title="Voir toutes les étapes"
           aria-expanded={isOpen}
         >
@@ -813,7 +813,7 @@ export function Collabs() {
                   <select
                     value={creatorFilter}
                     onChange={(e) => setCreatorFilter(e.target.value)}
-                    className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
+                    className="rounded-md border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
                   >
                     <option value="">Toutes les créatrices</option>
                     {creators.map((c) => (

@@ -332,7 +332,7 @@ function RivalCard({ r, busy, pool, roster, known, onRefresh, onRemove, onScouti
                       ) : inPool ? (
                         <span className="inline-flex items-center gap-0.5 rounded-full bg-indigo/10 px-2 py-0.5 text-[10px] font-semibold text-indigo"><Check className="h-2.5 w-2.5" />SCOUTING</span>
                       ) : (
-                        <button type="button" onClick={() => onScouting(c)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover"><Plus className="h-3 w-3" /> Scouting</button>
+                        <button type="button" onClick={() => onScouting(c)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover"><Plus className="h-3 w-3" /> Scouting</button>
                       )}
                     </div>
                   );
@@ -368,7 +368,7 @@ function RivalCard({ r, busy, pool, roster, known, onRefresh, onRemove, onScouti
                       {isKnown ? (
                         <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Déjà en contact</span>
                       ) : (
-                        <button type="button" onClick={() => onPipeline(b)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover"><Plus className="h-3 w-3" /> Pipeline</button>
+                        <button type="button" onClick={() => onPipeline(b)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover"><Plus className="h-3 w-3" /> Pipeline</button>
                       )}
                     </div>
                   );

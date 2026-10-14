@@ -47,7 +47,7 @@ export function CredentialVault() {
     <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><KeyRound className="h-4 w-4" /></span>
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground"><KeyRound className="h-4 w-4" /></span>
           <div>
             <div className="text-sm font-semibold text-foreground">Coffre identifiants créateurs</div>
             <div className="text-[11px] text-faint">Boîtes e-mail que tu gères. Agence uniquement — ⚠️ stocké en clair, n'ajoute que ce que tu acceptes.</div>
@@ -76,11 +76,11 @@ export function CredentialVault() {
                   <input value={r.label} onChange={(e) => edit(r.id, { label: e.target.value })} placeholder="Créateur / libellé (ex : Carla — boîte pro)" className={CIN + " font-semibold"} />
                   {confirmDel === r.id ? (
                     <div className="flex shrink-0 items-center gap-1">
-                      <button type="button" onClick={() => del(r.id)} className="rounded-lg bg-[#E5484D] px-2.5 py-2 text-[11px] font-semibold text-white">Supprimer</button>
-                      <button type="button" onClick={() => setConfirmDel(null)} className="rounded-lg border border-border px-2.5 py-2 text-[11px] font-semibold text-muted-foreground hover:bg-rowhover">Non</button>
+                      <button type="button" onClick={() => del(r.id)} className="rounded-full bg-[#E5484D] px-2.5 py-2 text-[11px] font-semibold text-white">Supprimer</button>
+                      <button type="button" onClick={() => setConfirmDel(null)} className="rounded-full border border-border px-2.5 py-2 text-[11px] font-semibold text-muted-foreground hover:bg-rowhover">Non</button>
                     </div>
                   ) : (
-                    <button type="button" onClick={() => setConfirmDel(r.id)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                    <button type="button" onClick={() => setConfirmDel(r.id)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}
@@ -90,7 +90,7 @@ export function CredentialVault() {
                 <label className="mb-1 block text-[12px] font-medium text-muted-foreground">Adresse e-mail</label>
                 <div className="mb-2 flex items-center gap-2">
                   <input value={r.email} onChange={(e) => edit(r.id, { email: e.target.value })} placeholder="prenom@domaine.com" autoComplete="off" spellCheck={false} className={CIN} />
-                  <button type="button" onClick={() => copy(r.email, "E-mail")} title="Copier l'e-mail" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                  <button type="button" onClick={() => copy(r.email, "E-mail")} title="Copier l'e-mail" className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                     <Copy className="h-4 w-4" />
                   </button>
                 </div>
@@ -99,10 +99,10 @@ export function CredentialVault() {
                 <label className="mb-1 block text-[12px] font-medium text-muted-foreground">Mot de passe</label>
                 <div className="flex items-center gap-2">
                   <input type={reveal[r.id] ? "text" : "password"} value={r.password} onChange={(e) => edit(r.id, { password: e.target.value })} placeholder="••••••••" autoComplete="new-password" spellCheck={false} className={CIN + " font-mono"} />
-                  <button type="button" onClick={() => setReveal((s) => ({ ...s, [r.id]: !s[r.id] }))} title={reveal[r.id] ? "Masquer" : "Afficher"} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                  <button type="button" onClick={() => setReveal((s) => ({ ...s, [r.id]: !s[r.id] }))} title={reveal[r.id] ? "Masquer" : "Afficher"} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                     {reveal[r.id] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
-                  <button type="button" onClick={() => copy(r.password, "Mot de passe")} title="Copier le mot de passe" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                  <button type="button" onClick={() => copy(r.password, "Mot de passe")} title="Copier le mot de passe" className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                     <Copy className="h-4 w-4" />
                   </button>
                 </div>

@@ -89,7 +89,7 @@ export function StatCard({
         {hasDelta && (
           <span
             className={cn(
-              "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium",
+              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
               up
                 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
                 : "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400",

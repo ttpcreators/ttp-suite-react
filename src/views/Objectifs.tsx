@@ -357,7 +357,7 @@ export function Objectifs() {
                     <button
                       type="button"
                       onClick={() => startEdit(o)}
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                       title="Modifier l'avancement"
                     >
                       <Pencil className="h-4 w-4" />

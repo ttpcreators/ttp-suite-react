@@ -37,7 +37,7 @@ export function MediakitThemePicker({
             href={`${previewBase}?theme=${cur}`}
             target="_blank"
             rel="noreferrer"
-            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
           >
             <ExternalLink className="h-3.5 w-3.5" /> Aperçu en {MK_THEMES.find((t) => t.id === cur)?.label}
           </a>
@@ -99,7 +99,7 @@ function CreatorThemePicker({ value, onChange, previewBase }: { value: string | 
             href={`${previewBase}?theme=${cur}`}
             target="_blank"
             rel="noreferrer"
-            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
           >
             <ExternalLink className="h-3.5 w-3.5" /> Aperçu en {CREATOR_THEMES.find((t) => t.id === cur)?.label}
           </a>

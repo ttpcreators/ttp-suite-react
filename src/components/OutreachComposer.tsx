@@ -103,7 +103,7 @@ export function OutreachComposer({ title, to: toInit, subject: subjectInit, body
             <textarea aria-label="Message" value={body} onChange={(e) => setBody(e.target.value)} rows={10} className={cn(IN, "resize-y text-[13px] leading-relaxed")} />
             <div className="text-[11px] text-faint">{signature ? "Ta signature mail sera ajoutée en dessous." : "Pas de signature enregistrée (Mails → réglages)."} Le mail part de ta vraie boîte Gmail.</div>
             <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
-              <button type="button" onClick={() => { void navigator.clipboard?.writeText(`${subject}\n\n${body}`); toast("Mail copié ✓"); }} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
+              <button type="button" onClick={() => { void navigator.clipboard?.writeText(`${subject}\n\n${body}`); toast("Mail copié ✓"); }} className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
                 <Copy className="h-3.5 w-3.5" /> Copier
               </button>
               <button type="button" onClick={() => void send()} disabled={sending} className="flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
@@ -119,7 +119,7 @@ export function OutreachComposer({ title, to: toInit, subject: subjectInit, body
             </div>
             <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
               {dmOpened && (
-                <button type="button" onClick={() => { onSent?.("instagram"); onClose(); }} className="rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
+                <button type="button" onClick={() => { onSent?.("instagram"); onClose(); }} className="rounded-full border border-border px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
                   C'est envoyé : noter le contact
                 </button>
               )}

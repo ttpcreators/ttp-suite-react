@@ -91,7 +91,7 @@ export function SubtaskChecklist({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ajouter une sous-tâche…"
-              className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary"
+              className="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary"
             />
             <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90" aria-label="Ajouter">
               <Plus className="h-4 w-4" />

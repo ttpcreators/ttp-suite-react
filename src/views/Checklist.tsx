@@ -417,7 +417,7 @@ export function Checklist() {
                   if (e.key === "Escape") cancelEdit();
                 }}
                 onBlur={() => saveEdit(selected.id, true)}
-                className="w-full rounded-lg border border-border bg-panel px-2 py-1 text-sm font-semibold text-foreground outline-none focus:border-primary"
+                className="w-full rounded-md border border-border bg-panel px-2 py-1 text-sm font-semibold text-foreground outline-none focus:border-primary"
               />
             ) : (
               <div className="flex items-center gap-1.5">

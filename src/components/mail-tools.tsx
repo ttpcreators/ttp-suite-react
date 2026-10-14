@@ -383,7 +383,7 @@ export function ForwardDialog({
             onChange={(e) => setNote(e.target.value)}
             rows={4}
             placeholder="Ajoute un mot (facultatif)…"
-            className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
+            className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
           />
           <div className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-[12px] text-muted-foreground">
             Message transféré : <span className="font-medium text-foreground">{message.from}</span>, {new Date(message.ts).toLocaleDateString("fr-FR")}
@@ -492,7 +492,7 @@ export function NewMailDialog({
             }}
             rows={10}
             placeholder="Ton message…"
-            className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2.5 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-faint focus:border-primary"
+            className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2.5 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-faint focus:border-primary"
           />
           <AttachChips files={att.files} onRemove={att.remove} />
         </div>

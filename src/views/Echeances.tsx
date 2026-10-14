@@ -253,7 +253,7 @@ export function Echeances() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-sm font-semibold text-foreground">{titleCase(d.creator)}</span>
-                    <span className="rounded-md bg-rowhover px-2 py-0.5 text-[12px] font-medium text-muted-foreground">{d.type}</span>
+                    <span className="rounded-full bg-rowhover px-2 py-0.5 text-[12px] font-medium text-muted-foreground">{d.type}</span>
                   </div>
                   <div className="mt-1 text-[11px] text-faint">
                     {frDate(new Date(d.start.replace(/-/g, "/")))} → {end ? frDate(end) : "—"} · {d.months} mois
@@ -265,7 +265,7 @@ export function Echeances() {
                   <button
                     type="button"
                     onClick={() => openEdit(d)}
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                     title="Modifier"
                   >
                     <Pencil className="h-4 w-4" />

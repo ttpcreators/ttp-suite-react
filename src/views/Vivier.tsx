@@ -371,7 +371,7 @@ export function Vivier() {
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <MetaQuotaBadge className="max-sm:hidden" />
-          <button type="button" onClick={() => setHashOpen((o) => !o)} className={cn("flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[12px] font-medium transition-colors", hashOpen ? "border-primary text-primary" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+          <button type="button" onClick={() => setHashOpen((o) => !o)} className={cn("flex h-9 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors", hashOpen ? "border-primary text-primary" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
             <Hash className="h-3.5 w-3.5" /> Hashtag
           </button>
           <AddButton label="Créateur" onClick={openAdd} />
@@ -467,7 +467,7 @@ export function Vivier() {
                 <span className={cn("h-1.5 w-1.5 rounded-full", statusMeta(statusOf(r.id)).dot)} />{statusMeta(statusOf(r.id)).label}
               </span>
               {r.email && (
-                <button type="button" onClick={(e) => { e.stopPropagation(); openMail(r); }} title="Solliciter par email" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground transition-colors hover:bg-primary/20">
+                <button type="button" onClick={(e) => { e.stopPropagation(); openMail(r); }} title="Solliciter par email" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-primary/20">
                   <Mail className="h-4 w-4" />
                 </button>
               )}
@@ -514,7 +514,7 @@ export function Vivier() {
 
             <div className="flex flex-col gap-2">
               {selected.handle && (igUrl(selected.handle) ? (
-                <a href={igUrl(selected.handle)} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[13px] font-semibold text-primary transition-colors hover:bg-primary/5">
+                <a href={igUrl(selected.handle)} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 rounded-full border border-border bg-panel/50 px-3.5 py-2.5 text-[13px] font-semibold text-primary transition-colors hover:bg-primary/5">
                   <AtSign className="h-4 w-4 shrink-0" /><span className="truncate">{igName(selected.handle)}</span>
                   <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] font-medium text-faint">{isYtHandle(selected.handle) ? "YouTube" : "Instagram"} <ExternalLink className="h-3.5 w-3.5" /></span>
                 </a>
@@ -522,7 +522,7 @@ export function Vivier() {
                 <div className="flex items-center gap-2.5 rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[13px] font-medium text-foreground"><AtSign className="h-4 w-4 shrink-0 text-faint" /><span className="truncate">{selected.handle.replace(/^@/, "")}</span></div>
               ))}
               {selected.email && (
-                <a href={`mailto:${selected.email}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-2.5 rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover"><Mail className="h-4 w-4 shrink-0 text-faint" /><span className="truncate">{selected.email}</span></a>
+                <a href={`mailto:${selected.email}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-2.5 rounded-full border border-border bg-panel/50 px-3.5 py-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover"><Mail className="h-4 w-4 shrink-0 text-faint" /><span className="truncate">{selected.email}</span></a>
               )}
               {selected.note && (
                 <div className="rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[12px] leading-relaxed text-muted-foreground">{selected.note}</div>
@@ -550,7 +550,7 @@ export function Vivier() {
                     </div>
                     {t.igBio?.trim() && <div className="whitespace-pre-line rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[12px] leading-relaxed text-foreground">{t.igBio.trim()}</div>}
                     {siteHref && (
-                      <a href={siteHref} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[12px] font-medium text-primary transition-colors hover:bg-primary/5">
+                      <a href={siteHref} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 rounded-full border border-border bg-panel/50 px-3.5 py-2.5 text-[12px] font-medium text-primary transition-colors hover:bg-primary/5">
                         <Globe className="h-4 w-4 shrink-0" /><span className="truncate">{site.replace(/^https?:\/\//i, "").replace(/\/$/, "")}</span>
                       </a>
                     )}
@@ -585,7 +585,7 @@ export function Vivier() {
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[12px] font-medium text-muted-foreground">Évolution des abonnés</span>
                 {growthOf(selected.id) !== 0 && (
-                  <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-semibold", growthOf(selected.id) >= 0 ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/12 text-rose-500")}>
+                  <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-semibold", growthOf(selected.id) >= 0 ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/12 text-rose-500")}>
                     {growthOf(selected.id) >= 0 ? "+" : "−"}{fmtCompact(Math.abs(growthOf(selected.id)))} depuis le relevé précédent
                   </span>
                 )}
@@ -610,7 +610,7 @@ export function Vivier() {
               {/* Ajouter un relevé */}
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <DateInput value={snapDate} onChange={setSnapDate} clearable={false} className="rounded-lg border border-border bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-primary" />
-                <input value={snapVal} onChange={(e) => setSnapVal(e.target.value)} inputMode="numeric" placeholder="Abonnés (ex : 225909 · 226K)" className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] outline-none focus:border-primary" />
+                <input value={snapVal} onChange={(e) => setSnapVal(e.target.value)} inputMode="numeric" placeholder="Abonnés (ex : 225909 · 226K)" className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-2 text-[12px] outline-none focus:border-primary" />
                 <button type="button" onClick={() => { const v = parseFol(snapVal); if (!v) { toast("Renseigne un nombre d'abonnés"); return; } void addSnap(selected.id, snapDate, v); setSnapVal(""); }} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90" title="Ajouter le relevé">
                   <Plus className="h-4 w-4" />
                 </button>
@@ -634,7 +634,7 @@ export function Vivier() {
                   <Send className="h-3.5 w-3.5" /> Solliciter
                 </button>
               )}
-              <button type="button" onClick={() => { const r = selected; setSelected(null); openEdit(r); }} className={cn("flex items-center justify-center gap-1.5 rounded-lg border border-border px-4 py-2.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover", !selected.email && "flex-1")}>
+              <button type="button" onClick={() => { const r = selected; setSelected(null); openEdit(r); }} className={cn("flex items-center justify-center gap-1.5 rounded-full border border-border px-4 py-2.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover", !selected.email && "flex-1")}>
                 <Pencil className="h-3.5 w-3.5" /> Modifier
               </button>
             </div>
@@ -651,10 +651,10 @@ export function Vivier() {
               <button type="button" onClick={() => setMailRow(null)} className="shrink-0 text-faint transition-colors hover:text-foreground"><X className="h-5 w-5" /></button>
             </div>
             <div className="mb-2 text-[11px] text-faint">À : {mailRow.email}</div>
-            <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Objet" className="mb-2 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary" />
-            <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={7} placeholder="Ton message…" className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary" />
+            <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Objet" className="mb-2 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary" />
+            <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={7} placeholder="Ton message…" className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary" />
             <div className="mt-3 flex justify-end gap-2">
-              <button type="button" onClick={() => setMailRow(null)} className="rounded-lg border border-border px-3.5 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover">Annuler</button>
+              <button type="button" onClick={() => setMailRow(null)} className="rounded-full border border-border px-3.5 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover">Annuler</button>
               <button type="button" onClick={sendSolicit} disabled={sending} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
                 <Send className="h-3.5 w-3.5" /> {sending ? "Envoi…" : "Envoyer"}
               </button>

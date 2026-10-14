@@ -80,7 +80,7 @@ export function Diagnostique() {
       <div className={cn("rounded-2xl border p-5 shadow-sm", overall === "ok" ? "border-emerald-500/25 bg-emerald-500/[0.06]" : overall === "warn" ? "border-border bg-foreground/[0.06]" : "border-rose-500/25 bg-rose-500/[0.06]")}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface", META[overall].cls)}>
+            <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface", META[overall].cls)}>
               <OverallIcon className="h-5 w-5" />
             </span>
             <div>
@@ -107,7 +107,7 @@ export function Diagnostique() {
       {/* Détail par composant */}
       <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <div className="mb-3 flex items-center gap-2">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><HeartPulse className="h-4 w-4" /></span>
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground"><HeartPulse className="h-4 w-4" /></span>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold text-foreground">État des composants</div>
             <div className="text-[11px] text-faint">Audit automatique matin & soir (à l'ouverture de l'app) + à la demande.</div>

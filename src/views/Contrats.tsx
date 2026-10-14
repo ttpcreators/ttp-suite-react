@@ -718,7 +718,7 @@ export function Contrats() {
                   setExtra([...extra, { id: uid(), l: `Art. ${nextClauseNo} — Clause`, v: "" }]);
                   setOpenSec((o) => ({ ...o, clauses: true }));
                 }}
-                className="flex h-8 shrink-0 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                className="flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
               >
                 <Plus className="h-3.5 w-3.5" /> Ajouter
               </button>
@@ -732,7 +732,7 @@ export function Contrats() {
                   <div key={e.id} className="p-3">
                     <div className="flex items-center gap-2">
                       <input value={e.l} onChange={(ev) => setExtra(extra.map((x) => (x.id === e.id ? { ...x, l: ev.target.value } : x)))} placeholder="Titre de la clause" aria-label="Titre de la clause" className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-[13px] font-medium outline-none focus:border-primary" />
-                      <button type="button" onClick={() => setExtra(extra.filter((x) => x.id !== e.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-rose-500" title="Supprimer la clause" aria-label="Supprimer la clause"><Trash2 className="h-4 w-4" /></button>
+                      <button type="button" onClick={() => setExtra(extra.filter((x) => x.id !== e.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-rose-500" title="Supprimer la clause" aria-label="Supprimer la clause"><Trash2 className="h-4 w-4" /></button>
                     </div>
                     <textarea value={e.v} onChange={(ev) => setExtra(extra.map((x) => (x.id === e.id ? { ...x, v: ev.target.value } : x)))} rows={3} placeholder="Contenu de la clause…" aria-label="Contenu de la clause" className="mt-2 w-full resize-y rounded-md border border-border bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-primary" />
                   </div>
@@ -771,7 +771,7 @@ export function Contrats() {
           <HistoryPanel title="Historique des contrats" count={history.length}>
             {history.map((h) => (
               <div key={h.id} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-rowhover/50 sm:px-5">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><FileText className="h-4 w-4" /></span>
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground"><FileText className="h-4 w-4" /></span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-[13px] font-semibold text-foreground">{h.title}</span>
@@ -781,13 +781,13 @@ export function Contrats() {
                     {titleCase(h.ctName)}{h.brand ? ` × ${h.brand}` : ""} · {h.ref} · {new Date(h.ts).toLocaleDateString("fr-FR")}
                   </div>
                 </div>
-                <button type="button" onClick={() => setPreview({ html: h.html, hist: true })} title="Ouvrir" aria-label="Ouvrir" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                <button type="button" onClick={() => setPreview({ html: h.html, hist: true })} title="Ouvrir" aria-label="Ouvrir" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                   <Eye className="h-4 w-4" />
                 </button>
-                <button type="button" onClick={() => printHtml(h.html)} title="Enregistrer en PDF" aria-label="Enregistrer en PDF" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                <button type="button" onClick={() => printHtml(h.html)} title="Enregistrer en PDF" aria-label="Enregistrer en PDF" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                   <FileDown className="h-4 w-4" />
                 </button>
-                <button type="button" onClick={() => setPendingDel({ title: "Retirer de l'historique", message: `Retirer « ${h.title} » (${h.ref}) de l'historique ? Cette action est irréversible.`, run: () => deleteHistory(h.id) })} title="Supprimer" aria-label="Supprimer" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-rose-500">
+                <button type="button" onClick={() => setPendingDel({ title: "Retirer de l'historique", message: `Retirer « ${h.title} » (${h.ref}) de l'historique ? Cette action est irréversible.`, run: () => deleteHistory(h.id) })} title="Supprimer" aria-label="Supprimer" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-rose-500">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>

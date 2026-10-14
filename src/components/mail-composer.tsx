@@ -252,7 +252,7 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
             <button
               type="button"
               onClick={() => setManage(false)}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
               title="Retour au mail"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -279,7 +279,7 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
             <button
               type="button"
               onClick={() => setManage(true)}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
               <Settings2 className="h-3.5 w-3.5" /> Modèles
             </button>
@@ -323,28 +323,28 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
                   onChange={(e) => setCc(e.target.value)}
                   placeholder="Cc (facultatif)"
                   inputMode="email"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                 />
                 <input
                   value={bcc}
                   onChange={(e) => setBcc(e.target.value)}
                   placeholder="Cci (facultatif)"
                   inputMode="email"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                 />
               </div>
               <input
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 placeholder="Objet"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               />
               <textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 rows={12}
                 placeholder="Ton message…"
-                className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2.5 text-[13px] leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2.5 text-[13px] leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               />
               <AttachChips files={att.files} onRemove={att.remove} />
             </div>
@@ -404,7 +404,7 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
                     <button
                       type="button"
                       onClick={() => removeTemplate(t.id)}
-                      className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-signal"
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-signal"
                       title="Supprimer ce modèle"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -428,12 +428,12 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
                       value={editing.name}
                       onChange={(e) => patchEditing({ name: e.target.value })}
                       placeholder="Nom du modèle"
-                      className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                      className="rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                     />
                     <select
                       value={editing.kind}
                       onChange={(e) => patchEditing({ kind: e.target.value as MailTemplateKind })}
-                      className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
+                      className="rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
                     >
                       <option value="prospection">Prospection</option>
                       <option value="relance">Relance</option>
@@ -443,14 +443,14 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
                     value={editing.subject}
                     onChange={(e) => patchEditing({ subject: e.target.value })}
                     placeholder="Objet (variables acceptées)"
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                    className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                   />
                   <textarea
                     ref={bodyRef}
                     value={editing.body}
                     onChange={(e) => patchEditing({ body: e.target.value })}
                     rows={9}
-                    className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2.5 text-[13px] leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                    className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2.5 text-[13px] leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                   />
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-[12px] font-medium text-muted-foreground">Insérer :</span>

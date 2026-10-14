@@ -201,7 +201,7 @@ export function Relances() {
                     {/* Réf. toujours sur sa propre ligne sous le titre : mise en page identique quelle que soit la longueur du nom */}
                     <div className="truncate text-sm font-semibold text-foreground">{iv.party || "—"}</div>
                     <div className="mt-1">
-                      <span className="inline-block rounded-md bg-rowhover px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">#{iv.ref}</span>
+                      <span className="inline-block rounded-full bg-rowhover px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">#{iv.ref}</span>
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-col items-end text-right">
@@ -226,10 +226,10 @@ export function Relances() {
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={() => copyEmail(iv)} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                  <button type="button" onClick={() => copyEmail(iv)} className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                     <Copy className="h-3.5 w-3.5" /> Copier l'email
                   </button>
-                  <button type="button" onClick={() => openMail(iv)} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                  <button type="button" onClick={() => openMail(iv)} className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                     <Mail className="h-3.5 w-3.5" /> Ouvrir le mail
                   </button>
                   <button type="button" onClick={() => markReminded(iv.id)} className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">

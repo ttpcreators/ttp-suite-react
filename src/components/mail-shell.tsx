@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 /** Bulle au survol, à droite d'un bouton de la barre d'icônes. */
 export function Tip({ children }: { children: ReactNode }) {
   return (
-    <span role="tooltip" className="pointer-events-none absolute left-full top-1/2 z-30 ml-2.5 -translate-y-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[11px] font-medium text-background opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
+    <span role="tooltip" className="pointer-events-none absolute left-full top-1/2 z-30 ml-2.5 -translate-y-1/2 whitespace-nowrap rounded-full bg-foreground px-2 py-1 text-[11px] font-medium text-background opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
       {children}
     </span>
   );
@@ -107,7 +107,7 @@ export function SearchField({ value, onChange, placeholder }: { value: string; o
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-9 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
+        className="h-9 w-full rounded-md border border-border bg-surface pl-9 pr-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
       />
     </div>
   );

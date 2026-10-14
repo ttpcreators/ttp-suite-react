@@ -285,7 +285,7 @@ export function IgPlanner({ focusId, onFocused }: { focusId?: string | null; onF
             </div>
           </div>
         </div>
-        <button type="button" onClick={() => void loadStatus()} disabled={statusBusy} className="grid h-9 w-9 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" aria-label="Actualiser le compte">
+        <button type="button" onClick={() => void loadStatus()} disabled={statusBusy} className="grid h-9 w-9 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" aria-label="Actualiser le compte">
           <RefreshCw className={cn("h-4 w-4", statusBusy && "animate-spin")} />
         </button>
         <button type="button" onClick={() => setEditing("new")} className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
@@ -704,7 +704,7 @@ function PlanEditor({ initial, account, onClose, onSaved }: { initial: Planned |
                   const Icon = KIND_ICON[k];
                   const on = d.kind === k;
                   return (
-                    <button key={k} type="button" onClick={() => changeKind(k)} className={cn("flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2.5 text-[12px] font-semibold transition-colors", on ? "border-primary bg-primary/[0.06] text-primary" : "border-border text-foreground hover:bg-rowhover")}>
+                    <button key={k} type="button" onClick={() => changeKind(k)} className={cn("flex items-center justify-center gap-1.5 rounded-full border px-2 py-2.5 text-[12px] font-semibold transition-colors", on ? "border-primary bg-primary/[0.06] text-primary" : "border-border text-foreground hover:bg-rowhover")}>
                       <Icon className="h-4 w-4" /> {KIND_LABEL[k]}
                     </button>
                   );
@@ -833,7 +833,7 @@ function PlanEditor({ initial, account, onClose, onSaved }: { initial: Planned |
                         }}
                         onBlur={() => collabInput.trim() && addCollab()}
                         placeholder="@compte puis Entrée"
-                        className="min-w-[140px] flex-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[12px] outline-none focus:border-primary"
+                        className="min-w-[140px] flex-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-[12px] outline-none focus:border-primary"
                       />
                     )}
                   </div>
@@ -889,8 +889,8 @@ function PlanEditor({ initial, account, onClose, onSaved }: { initial: Planned |
             {problems.length > 0 ? <span className="flex items-start gap-1 font-medium text-rose-500"><AlertTriangle className="mt-px h-3 w-3 shrink-0" />{problems[0]}</span> : <span className="text-emerald-600">Prêt à partir ✓</span>}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <button type="button" disabled={saving || uploading > 0} onClick={() => void save("draft")} className="h-9 rounded-lg border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">Brouillon</button>
-            <button type="button" disabled={saving || uploading > 0 || problems.length > 0} onClick={() => setConfirmNow(true)} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"><Send className="h-3.5 w-3.5" /> Publier maintenant</button>
+            <button type="button" disabled={saving || uploading > 0} onClick={() => void save("draft")} className="h-9 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">Brouillon</button>
+            <button type="button" disabled={saving || uploading > 0 || problems.length > 0} onClick={() => setConfirmNow(true)} className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"><Send className="h-3.5 w-3.5" /> Publier maintenant</button>
             <button type="button" disabled={saving || uploading > 0 || problems.length > 0} onClick={() => void save("schedule")} className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarClock className="h-3.5 w-3.5" />} Programmer
             </button>

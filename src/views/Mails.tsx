@@ -613,7 +613,7 @@ export function Mails() {
         );
       })}
       <button type="button" onClick={() => setSettingsOpen(true)} aria-label="Signature et délai"
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
         <Settings2 className="h-4 w-4" />
       </button>
     </nav>
@@ -935,7 +935,7 @@ export function Mails() {
       <button
         type="button"
         onClick={() => setNewMailOpen(true)}
-        className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 text-[13px] font-semibold text-foreground transition-colors hover:bg-rowhover"
+        className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 text-[13px] font-semibold text-foreground transition-colors hover:bg-rowhover"
       >
         <PenLine className="h-3.5 w-3.5" /> Nouveau mail
       </button>
@@ -1027,7 +1027,7 @@ export function Mails() {
           title={mailTotal ? `Par créatrice · ${mailTotal} à traiter` : "Par créatrice"}
           aria-label={mailTotal ? `Par créatrice, ${mailTotal} à traiter` : "Par créatrice"}
           className={cn(
-            "relative grid h-9 w-9 place-items-center rounded-lg transition-colors",
+            "relative grid h-9 w-9 place-items-center rounded-full transition-colors",
             mode === "creators" && !creatorView ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
           )}
         >
@@ -1097,7 +1097,7 @@ export function Mails() {
             <Trash2 className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">« {trashed.subject || "(sans objet)"} » mis à la corbeille</span>
             <button type="button" onClick={() => void untrash()}
-              className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover">
+              className="flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover">
               <Undo2 className="h-3.5 w-3.5" /> Annuler
             </button>
           </div>

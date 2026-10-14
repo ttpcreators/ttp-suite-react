@@ -164,7 +164,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <button
                 type="button"
                 onClick={() => this.setState({ error: null })}
-                className="rounded-lg bg-surface px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
+                className="rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
               >
                 Réessayer
               </button>

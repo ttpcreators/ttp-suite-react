@@ -981,7 +981,7 @@ export function Facturation() {
                 <button
                   type="button"
                   onClick={() => setDraft({ ...draft, items: [...draft.items, { id: uid(), label: "", qty: 1, unit: 0 }] })}
-                  className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover"
+                  className="flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover"
                 >
                   <Plus className="h-3.5 w-3.5" /> Ajouter une ligne
                 </button>
@@ -993,27 +993,27 @@ export function Facturation() {
                       value={it.label}
                       onChange={(e) => setDraft({ ...draft, items: draft.items.map((x) => (x.id === it.id ? { ...x, label: e.target.value } : x)) })}
                       placeholder="Désignation (ex : Reel Instagram)"
-                      className="min-w-0 basis-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:basis-0 sm:flex-[3]"
+                      className="min-w-0 basis-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:basis-0 sm:flex-[3]"
                     />
                     <input
                       value={draft.raw?.[`${it.id}:qty`] ?? fmtQty(it.qty)}
                       onChange={(e) => setDraft({ ...draft, raw: { ...draft.raw, [`${it.id}:qty`]: e.target.value }, items: draft.items.map((x) => (x.id === it.id ? { ...x, qty: num(e.target.value) } : x)) })}
                       inputMode="decimal"
                       placeholder="Qté"
-                      className="w-14 shrink-0 rounded-lg border border-border bg-surface px-2 py-2 text-center text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:w-16"
+                      className="w-14 shrink-0 rounded-md border border-border bg-surface px-2 py-2 text-center text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:w-16"
                     />
                     <input
                       value={draft.raw?.[`${it.id}:unit`] ?? fmtQty(it.unit)}
                       onChange={(e) => setDraft({ ...draft, raw: { ...draft.raw, [`${it.id}:unit`]: e.target.value }, items: draft.items.map((x) => (x.id === it.id ? { ...x, unit: num(e.target.value) } : x)) })}
                       inputMode="decimal"
                       placeholder="PU HT"
-                      className="w-20 shrink-0 rounded-lg border border-border bg-surface px-2 py-2 text-right text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:w-24"
+                      className="w-20 shrink-0 rounded-md border border-border bg-surface px-2 py-2 text-right text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:w-24"
                     />
                     <span className="flex-1 text-right text-sm font-semibold text-foreground sm:w-24 sm:flex-none">{euro2((it.qty || 0) * (it.unit || 0))}</span>
                     <button
                       type="button"
                       onClick={() => setDraft({ ...draft, items: draft.items.length > 1 ? draft.items.filter((x) => x.id !== it.id) : draft.items })}
-                      className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-rose-500"
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-rose-500"
                       title="Supprimer la ligne"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -1040,7 +1040,7 @@ export function Facturation() {
                     value={draft.raw?.commission ?? fmtRate(draft.commissionRate)}
                     onChange={(e) => setDraft({ ...draft, raw: { ...draft.raw, commission: e.target.value }, commissionRate: num(e.target.value) })}
                     inputMode="decimal"
-                    className="h-[42px] w-full rounded-lg border border-border bg-surface px-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                    className="h-[42px] w-full rounded-md border border-border bg-surface px-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                   />
                 </label>
               </div>
@@ -1053,7 +1053,7 @@ export function Facturation() {
                 value={draft.notes}
                 onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
                 rows={2}
-                className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               />
             </label>
 

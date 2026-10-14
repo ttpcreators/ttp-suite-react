@@ -333,7 +333,7 @@ export function EventCalendar({
           <button
             type="button"
             onClick={() => shift(-1)}
-            className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-surface text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="grid h-8 w-8 place-items-center rounded-full border border-border bg-surface text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             aria-label="Précédent"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -341,7 +341,7 @@ export function EventCalendar({
           <button
             type="button"
             onClick={() => shift(1)}
-            className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-surface text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="grid h-8 w-8 place-items-center rounded-full border border-border bg-surface text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             aria-label="Suivant"
           >
             <ChevronRight className="h-4 w-4" />
@@ -390,7 +390,7 @@ export function EventCalendar({
               type="button"
               onClick={() => setKinds((s) => ({ ...s, [k.id]: !s[k.id] }))}
               className={cn(
-                "flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold transition-colors hover:bg-rowhover",
+                "flex items-center gap-1.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold transition-colors hover:bg-rowhover",
                 on ? "text-foreground" : "text-faint",
               )}
               title={on ? `Masquer : ${k.label}` : `Afficher : ${k.label}`}
@@ -547,7 +547,7 @@ function MonthView({
                       }
                     }}
                     className={cn(
-                      "flex items-center gap-1 truncate rounded-md px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-90",
+                      "flex items-center gap-1 truncate rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-90",
                       chipBg(e),
                       chipFg(e),
                     )}
@@ -829,7 +829,7 @@ function EventModal({
               type="button"
               disabled={busy}
               onClick={() => setShowConfirm(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-[#E5484D] transition-colors hover:bg-rowhover"
+              className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-[#E5484D] transition-colors hover:bg-rowhover"
             >
               <Trash2 className="h-3.5 w-3.5" /> Supprimer
             </button>

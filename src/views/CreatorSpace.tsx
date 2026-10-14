@@ -1019,7 +1019,7 @@ export function CreatorSpace({
           rows={3}
           autoFocus
           placeholder="Ton idée de contenu…"
-          className="w-full resize-y rounded-lg border border-border bg-panel px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+          className="w-full resize-y rounded-md border border-border bg-panel px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
         />
         <div className="flex items-center gap-2">
           <button
@@ -1032,7 +1032,7 @@ export function CreatorSpace({
           <button
             type="button"
             onClick={() => setIdeaEditId(null)}
-            className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+            className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
             title="Annuler"
           >
             <X className="h-4 w-4" />
@@ -1425,7 +1425,7 @@ export function CreatorSpace({
             navigator.clipboard?.writeText(val);
             toast(`${label} copié ✓`);
           }}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
           title={`Copier ${label.toLowerCase()}`}
         >
           <Copy className="h-4 w-4" />
@@ -1454,7 +1454,7 @@ export function CreatorSpace({
                 navigator.clipboard?.writeText(val);
                 toast(`${label} copié ✓`);
               }}
-              className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border bg-surface text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-border bg-surface text-faint transition-colors hover:bg-rowhover hover:text-foreground"
               title={`Copier ${label.toLowerCase()}`}
             >
               <Copy className="h-3.5 w-3.5" />
@@ -1473,7 +1473,7 @@ export function CreatorSpace({
         value={(form[k] as string) ?? ""}
         onChange={(e) => setField(k, e.target.value)}
         placeholder={placeholder}
-        className="rounded-lg border border-border bg-panel px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary"
+        className="rounded-md border border-border bg-panel px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary"
       />
     </label>
   );
@@ -1489,7 +1489,7 @@ export function CreatorSpace({
             <select
               value={name}
               onChange={(e) => preview.onPick(e.target.value)}
-              className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[12px] font-medium text-foreground outline-none focus:border-primary"
+              className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-[12px] font-medium text-foreground outline-none focus:border-primary"
               aria-label="Changer de créateur"
             >
               {preview.creators.map((cr) => (
@@ -1625,7 +1625,7 @@ export function CreatorSpace({
           {tab === "accueil" && (
             <div className="mb-6 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <h1 className="page-title text-[24px] font-semibold tracking-tight md:text-[28px]">{greetingWord()} {firstName}</h1>
+                <h1 className="page-title text-[26px] font-semibold leading-tight tracking-[-0.02em] md:text-[32px]">{greetingWord()} {firstName}</h1>
                 <div className="mt-1 text-[13px] text-muted-foreground">Ton espace TTP Creators</div>
               </div>
               <AvatarUpload
@@ -1776,7 +1776,7 @@ export function CreatorSpace({
                         <button type="button" onClick={() => setStatsModalOpen(true)} className="rounded-full bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
                           Envoyer mes stats
                         </button>
-                        <button type="button" onClick={() => setStatsModalOpen(true)} className="inline-flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
+                        <button type="button" onClick={() => setStatsModalOpen(true)} className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
                           <HelpCircle className="h-3.5 w-3.5" /> Comment faire&nbsp;?
                         </button>
                       </div>
@@ -1841,7 +1841,7 @@ export function CreatorSpace({
                           href={mkUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-muted px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-muted px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
                         >
                           <ExternalLink className="h-3.5 w-3.5" /> Voir mon media kit
                         </a>
@@ -1851,7 +1851,7 @@ export function CreatorSpace({
                             navigator.clipboard?.writeText(mkUrl);
                             toast("Lien copié ✓");
                           }}
-                          className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                           title="Copier le lien"
                         >
                           <Copy className="h-4 w-4" />
@@ -1935,7 +1935,7 @@ export function CreatorSpace({
                           setEditing(false);
                           setForm({});
                         }}
-                        className="flex h-8 items-center gap-1.5 rounded-lg bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
+                        className="flex h-8 items-center gap-1.5 rounded-full bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
                       >
                         <X className="h-3.5 w-3.5" /> Annuler
                       </button>
@@ -2084,7 +2084,7 @@ export function CreatorSpace({
                     setSuivi(null);
                     setSuiviRetry((n) => n + 1);
                   }}
-                  className="mt-3 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                  className="mt-3 rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                 >
                   Réessayer
                 </button>
@@ -2128,7 +2128,7 @@ export function CreatorSpace({
                     setDebriefErr(false);
                     setDebriefs(null);
                   }}
-                  className="mt-3 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                  className="mt-3 rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                 >
                   Réessayer
                 </button>
@@ -2297,7 +2297,7 @@ export function CreatorSpace({
                           <button
                             type="button"
                             onClick={() => (tdEditId === t.id ? setTdEditId(null) : startEditTodo(t))}
-                            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                             aria-label="Modifier la tâche"
                           >
                             <Pencil className="h-3.5 w-3.5" />
@@ -2565,7 +2565,7 @@ export function CreatorSpace({
                           rows={6}
                           autoFocus
                           placeholder={"Écris ton script ici…\n\nHook\u00A0:\nCorps\u00A0:\nCall to action\u00A0:"}
-                          className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                          className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                         />
                         <div className="flex items-center gap-2">
                           <button
@@ -2578,7 +2578,7 @@ export function CreatorSpace({
                           <button
                             type="button"
                             onClick={() => setBriefScriptId(null)}
-                            className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                            className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                             title="Annuler"
                           >
                             <X className="h-4 w-4" />
@@ -2598,7 +2598,7 @@ export function CreatorSpace({
                             setBriefScriptId(b.id);
                             setBriefScriptText(b.consignes ?? "");
                           }}
-                          className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover"
+                          className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover"
                         >
                           <Pencil className="h-3.5 w-3.5" /> {b.consignes ? "Modifier mon script" : "Écrire mon script"}
                         </button>
@@ -2811,7 +2811,7 @@ export function CreatorSpace({
                         navigator.clipboard?.writeText(mkUrl);
                         toast("Lien copié ✓");
                       }}
-                      className="grid h-9 w-9 place-items-center rounded-lg bg-panel text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                      className="grid h-9 w-9 place-items-center rounded-full bg-panel text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                       title="Copier le lien"
                     >
                       <Copy className="h-4 w-4" />
@@ -2821,7 +2821,7 @@ export function CreatorSpace({
                         href={`${mkUrl}ugc/`}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                        className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                       >
                         <Sparkles className="h-3.5 w-3.5" /> Kit UGC
                       </a>
@@ -2881,7 +2881,7 @@ export function CreatorSpace({
                           <button
                             type="button"
                             onClick={() => openDocFile(doc)}
-                            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                            className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                           >
                             <ExternalLink className="h-3.5 w-3.5" /> Ouvrir
                           </button>
@@ -2911,7 +2911,7 @@ export function CreatorSpace({
                         type="button"
                         onClick={() => openDocFile(doc)}
                         title="Ouvrir"
-                        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                       >
                         <ExternalLink className="h-4 w-4" />
                       </button>
@@ -3301,7 +3301,7 @@ export function CreatorSpace({
                     ))}
                   </div>
                   <form onSubmit={(e) => { e.preventDefault(); addSubtask(taskView); }} className="mt-1.5 flex items-center gap-2">
-                    <input value={subInput} onChange={(e) => setSubInput(e.target.value)} placeholder="Ajouter une sous-tâche…" className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary" />
+                    <input value={subInput} onChange={(e) => setSubInput(e.target.value)} placeholder="Ajouter une sous-tâche…" className="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary" />
                     <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"><Plus className="h-4 w-4" /></button>
                   </form>
                 </div>
@@ -3325,7 +3325,7 @@ export function CreatorSpace({
                   </div>
                 ))}
                 <input ref={attFileRef} type="file" multiple className="hidden" onChange={(e) => uploadAttachments(taskView, e.target.files)} />
-                <button type="button" onClick={() => attFileRef.current?.click()} disabled={attUploading} className="flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border px-3 py-2.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
+                <button type="button" onClick={() => attFileRef.current?.click()} disabled={attUploading} className="flex items-center justify-center gap-2 rounded-full border-2 border-dashed border-border px-3 py-2.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
                   <Upload className="h-4 w-4" /> {attUploading ? "Envoi…" : "Ajouter un fichier"}
                 </button>
               </div>
@@ -3340,7 +3340,7 @@ export function CreatorSpace({
                   setTodoView("liste"); // le formulaire d'édition n'existe qu'en vue liste
                   startEditTodo(t);
                 }}
-                className="flex items-center gap-1.5 rounded-lg bg-panel px-3 py-2 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
+                className="flex items-center gap-1.5 rounded-full bg-panel px-3 py-2 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
               >
                 <Pencil className="h-3.5 w-3.5" /> Modifier
               </button>

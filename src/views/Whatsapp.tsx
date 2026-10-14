@@ -203,26 +203,26 @@ export function WhatsappView() {
           type="button"
           onClick={() => act(x.r, "whatsapp")}
           title="Ouvrir WhatsApp et noter la prise de contact"
-          className="grid h-8 w-8 place-items-center rounded-lg bg-signal text-white transition-opacity hover:opacity-90"
+          className="grid h-8 w-8 place-items-center rounded-full bg-signal text-white transition-opacity hover:opacity-90"
         >
           <MessageCircle className="h-4 w-4" />
         </button>
       )}
       {x.r.email && (
         <button type="button" onClick={() => act(x.r, "email")} title="Écrire un mail depuis un modèle (prospection / relance)"
-          className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          className="grid h-8 w-8 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
           <Mail className="h-4 w-4" />
         </button>
       )}
       {x.r.instagram && (
         <button type="button" onClick={() => act(x.r, "instagram")} title="Ouvrir Instagram et noter la prise de contact"
-          className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          className="grid h-8 w-8 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
           <AtSign className="h-4 w-4" />
         </button>
       )}
       {x.r.phone && !waLink(x.r.phone) && (
         <button type="button" onClick={() => act(x.r, "tel")} title="Appeler et noter la prise de contact"
-          className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          className="grid h-8 w-8 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
           <Phone className="h-4 w-4" />
         </button>
       )}
@@ -231,7 +231,7 @@ export function WhatsappView() {
           type="button"
           onClick={() => logTouch(x.r, lastTouch(x.list)?.canal ?? "autre", "reponse")}
           title="Il ou elle a répondu"
-          className="grid h-8 w-8 place-items-center rounded-lg border border-signal/30 bg-signal/[0.08] text-signal transition-colors hover:bg-signal/15"
+          className="grid h-8 w-8 place-items-center rounded-full border border-signal/30 bg-signal/[0.08] text-signal transition-colors hover:bg-signal/15"
         >
           <Check className="h-4 w-4" />
         </button>
@@ -304,7 +304,7 @@ export function WhatsappView() {
             setComposeFor(null);
             setComposerOpen(true);
           }}
-          className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+          className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
         >
           Modèles de mails
         </button>
@@ -398,7 +398,7 @@ export function WhatsappView() {
       {/* 4) Journal d'activité (replié) */}
       <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
         <button type="button" onClick={() => setJournalOpen(!journalOpen)} className="flex w-full items-center gap-2 text-left">
-          <span className="grid size-7 place-items-center rounded-lg bg-panel text-muted-foreground"><ScrollText className="h-4 w-4" /></span>
+          <span className="grid size-7 place-items-center rounded-full bg-panel text-muted-foreground"><ScrollText className="h-4 w-4" /></span>
           <span className="text-[13px] font-semibold tracking-tight text-foreground">Journal de prospection</span>
           <span className="rounded-full bg-rowhover px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">{journal.length}</span>
           <ChevronDown className={cn("ml-auto h-4 w-4 text-faint transition-transform", journalOpen && "rotate-180")} />

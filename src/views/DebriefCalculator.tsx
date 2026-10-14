@@ -464,7 +464,7 @@ export function DebriefCalculator({
                       type="button"
                       onClick={() => pushRows(rows.filter((x) => x.id !== r.id))}
                       title="Retirer cette publication"
-                      className="grid h-7 w-7 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+                      className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -492,7 +492,7 @@ export function DebriefCalculator({
         <button
           type="button"
           onClick={() => pushRows([...rows, blankRow()])}
-          className="mt-2 flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover"
+          className="mt-2 flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover"
         >
           <Plus className="h-3.5 w-3.5" /> Publication
         </button>
@@ -566,7 +566,7 @@ export function DebriefCalculator({
           <button
             type="button"
             onClick={() => !busy && fileRef.current?.click()}
-            className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover disabled:opacity-50"
+            className="flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover disabled:opacity-50"
             disabled={busy}
           >
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />} Joindre

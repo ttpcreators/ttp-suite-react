@@ -180,7 +180,7 @@ export function MailItem({
             type="button"
             onClick={() => setShowQuoted((v) => !v)}
             title={showQuoted ? "Masquer l'historique" : "Afficher l'historique"}
-            className="mt-2 self-start rounded-md bg-muted px-2 py-0.5 text-[12px] font-semibold leading-none tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+            className="mt-2 self-start rounded-full bg-muted px-2 py-0.5 text-[12px] font-semibold leading-none tracking-widest text-muted-foreground transition-colors hover:text-foreground"
           >
             {showQuoted ? "Masquer" : "···"}
           </button>
@@ -290,7 +290,7 @@ export function MailItem({
             type="button"
             onClick={() => setShowQuoted((v) => !v)}
             title={showQuoted ? "Masquer l'historique" : "Afficher l'historique"}
-            className="mt-2 rounded-md bg-muted px-2 py-0.5 text-[12px] font-semibold leading-none tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+            className="mt-2 rounded-full bg-muted px-2 py-0.5 text-[12px] font-semibold leading-none tracking-widest text-muted-foreground transition-colors hover:text-foreground"
           >
             {showQuoted ? "Masquer" : "···"}
           </button>
@@ -307,7 +307,7 @@ export function MailItem({
                 }}
                 className="flex max-w-full items-center gap-2.5 rounded-xl border border-border bg-surface px-3 py-2 text-left transition-colors hover:bg-rowhover"
               >
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted">
                   <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
                 </span>
                 <span className="min-w-0">

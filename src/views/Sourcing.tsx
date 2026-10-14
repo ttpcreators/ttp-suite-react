@@ -177,7 +177,7 @@ export function Sourcing() {
           </HelpTip>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setGuide(true)} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
+          <button type="button" onClick={() => setGuide(true)} className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
             <BookOpen className="h-3.5 w-3.5 text-primary" /> Mode d'emploi
           </button>
           <MetaQuotaBadge />
@@ -197,7 +197,7 @@ export function Sourcing() {
               onClick={() => pick(t.v)}
               className={cn("flex items-start gap-3 rounded-2xl border p-4 text-left transition-colors", on ? "border-primary bg-primary/[0.04]" : "border-border bg-surface hover:bg-rowhover")}
             >
-              <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl", on ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground")}>
+              <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full", on ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground")}>
                 <Icon className="h-4 w-4" />
               </span>
               <span className="min-w-0">
@@ -760,7 +760,7 @@ function CreatorFinder() {
                       ) : inPool ? (
                         <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"><Check className="h-3 w-3" /> Scouting</span>
                       ) : (
-                        <button type="button" onClick={() => void addToScouting(c)} disabled={adding === c.username} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
+                        <button type="button" onClick={() => void addToScouting(c)} disabled={adding === c.username} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
                           {adding === c.username ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Scouting
                         </button>
                       )}
@@ -1140,7 +1140,7 @@ function BrandRadar() {
           const Icon = t.icon;
           return (
             <button key={t.v} type="button" role="tab" aria-selected={on} title={t.text} onClick={() => setKind(t.v)} className={cn("flex items-start gap-3 rounded-2xl border p-3 text-left transition-colors sm:p-3.5", on ? t.on : "border-border bg-surface hover:bg-rowhover")}>
-              <span className={cn("hidden h-8 w-8 shrink-0 place-items-center rounded-lg sm:grid", on ? t.dot : "bg-panel text-muted-foreground")}><Icon className="h-4 w-4" /></span>
+              <span className={cn("hidden h-8 w-8 shrink-0 place-items-center rounded-full sm:grid", on ? t.dot : "bg-panel text-muted-foreground")}><Icon className="h-4 w-4" /></span>
               <span className="min-w-0">
                 <span className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
                   <span className="text-[20px] font-bold leading-none tabular-nums text-foreground">{t.n}</span>
@@ -1182,11 +1182,11 @@ function BrandRadar() {
 
       {/* Actions + filtres repliés */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <button type="button" onClick={() => setFiltersOpen((o) => !o)} className={cn("flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[12px] font-medium transition-colors", filtersOpen || activeFilters ? "border-primary text-primary" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+        <button type="button" onClick={() => setFiltersOpen((o) => !o)} className={cn("flex h-9 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors", filtersOpen || activeFilters ? "border-primary text-primary" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
           <SlidersHorizontal className="h-3.5 w-3.5" /> Filtres{activeFilters ? ` · ${activeFilters}` : ""}
         </button>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => void runScan()} disabled={scanning} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" title="Le radar passe tout seul toutes les 2 heures">
+          <button type="button" onClick={() => void runScan()} disabled={scanning} className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" title="Le radar passe tout seul toutes les 2 heures">
             {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} {scanning ? "Lecture des posts (1 à 2 min)…" : "Lancer le radar"}
           </button>
           <HelpTip title="Comment marche le radar ?" align="end">
@@ -1290,7 +1290,7 @@ function BrandRadar() {
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2 pl-[54px] lg:pl-0">
-                    <button type="button" onClick={() => toggleRow(row.brand)} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground" aria-expanded={open}>
+                    <button type="button" onClick={() => toggleRow(row.brand)} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground" aria-expanded={open}>
                       {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />} {open ? "Masquer les preuves" : `Voir les preuves (${list.length})`}
                     </button>
                     {row.status !== "pipeline" ? (
@@ -1300,15 +1300,15 @@ function BrandRadar() {
                     ) : (
                       <span className="flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"><Check className="h-3.5 w-3.5" /> Au Pipeline</span>
                     )}
-                    <button type="button" onClick={() => setMailFor({ row, post: posts.find((p) => p.roster && postType(p) === "spontane") ?? posts[0] })} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover">
+                    <button type="button" onClick={() => setMailFor({ row, post: posts.find((p) => p.roster && postType(p) === "spontane") ?? posts[0] })} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover">
                       <Send className="h-3.5 w-3.5" /> Contacter
                     </button>
                     {row.status === "nouveau" ? (
-                      <button type="button" onClick={() => void setRowStatus(row.brand, "ignore").then(() => toast("Retirée · retrouve-la dans Filtres → Statut → Ignorées"))} className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                      <button type="button" onClick={() => void setRowStatus(row.brand, "ignore").then(() => toast("Retirée · retrouve-la dans Filtres → Statut → Ignorées"))} className="flex items-center gap-1 rounded-full px-2 py-1.5 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground">
                         <EyeOff className="h-3.5 w-3.5" /> Pas pertinent
                       </button>
                     ) : (
-                      <button type="button" onClick={() => void setRowStatus(row.brand, "nouveau")} className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                      <button type="button" onClick={() => void setRowStatus(row.brand, "nouveau")} className="flex items-center gap-1 rounded-full px-2 py-1.5 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground">
                         <RotateCcw className="h-3.5 w-3.5" /> Remettre à traiter
                       </button>
                     )}
@@ -1327,7 +1327,7 @@ function BrandRadar() {
                             {profiles[p.c]?.followers != null && <span className="text-faint">{fmtCompact(profiles[p.c]?.followers ?? 0)}</span>}
                             <span className="text-faint">{fmtAgo(p.at)}{p.n > 1 ? ` · ${p.n} posts pareils` : ""}</span>
                             {srcOf(p) === "hors" && (
-                              <button type="button" onClick={() => void addCreator(p.c, row.brand)} disabled={adding === p.c} className="flex items-center gap-0.5 rounded-md border border-border bg-surface px-1.5 py-0.5 text-[10px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
+                              <button type="button" onClick={() => void addCreator(p.c, row.brand)} disabled={adding === p.c} className="flex items-center gap-0.5 rounded-full border border-border bg-surface px-1.5 py-0.5 text-[10px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
                                 {adding === p.c ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />} Scouting
                               </button>
                             )}

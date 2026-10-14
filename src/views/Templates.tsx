@@ -332,7 +332,7 @@ export function Templates() {
               value={localQuery}
               onChange={(e) => setLocalQuery(e.target.value)}
               placeholder="Rechercher un template…"
-              className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-xs text-foreground placeholder:text-faint outline-none transition-colors focus:border-primary"
+              className="w-full rounded-md border border-border bg-surface py-2 pl-9 pr-3 text-xs text-foreground placeholder:text-faint outline-none transition-colors focus:border-primary"
             />
           </div>
           <Tabs
@@ -449,7 +449,7 @@ export function Templates() {
                           copy(t.body);
                         }}
                         title="Copier"
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-panel hover:text-foreground"
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-panel hover:text-foreground"
                       >
                         <Copy className="h-4 w-4" />
                       </button>
@@ -477,7 +477,7 @@ export function Templates() {
               <button
                 type="button"
                 onClick={() => setPreview(null)}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
               >
                 <X className="h-4 w-4" />
               </button>

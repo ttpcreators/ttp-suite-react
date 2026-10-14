@@ -4,7 +4,7 @@ import { BOX_LABEL, BOX_STYLE, type MailBox } from "@/lib/mailSend";
 /** Pastille de boîte d'envoi : violet = partnerships@, vert fluo = talent@. */
 export function BoxChip({ box, prefix, className }: { box: MailBox; prefix?: string; className?: string }) {
   return (
-    <span className={cn("inline-flex shrink-0 items-center rounded-md px-1.5 py-px text-[11px] font-semibold", BOX_STYLE[box].chip, className)}>
+    <span className={cn("inline-flex shrink-0 items-center rounded-full px-1.5 py-px text-[11px] font-semibold", BOX_STYLE[box].chip, className)}>
       {prefix ? `${prefix} ` : ""}{BOX_LABEL[box]}
     </span>
   );
@@ -21,7 +21,7 @@ export function BoxPicker({ value, onChange }: { value: MailBox; onChange: (b: M
           onClick={() => onChange(b)}
           aria-pressed={value === b}
           className={cn(
-            "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] font-semibold transition-colors",
+            "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors",
             value === b ? BOX_STYLE[b].chip + " shadow-sm" : "text-muted-foreground hover:text-foreground",
           )}
         >

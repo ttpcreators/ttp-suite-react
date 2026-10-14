@@ -553,7 +553,7 @@ export function Briefs() {
                   <select
                     value={creatorFilter}
                     onChange={(e) => setCreatorFilter(e.target.value)}
-                    className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
+                    className="rounded-md border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
                   >
                     <option value="">Tous les créateurs</option>
                     {creators.map((c) => (

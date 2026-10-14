@@ -39,7 +39,7 @@ function ResetPasswordButton({ email, onReset }: { email: string; onReset: (emai
         type="button"
         onClick={() => setAsk(true)}
         title={`Nouveau mot de passe pour ${email}`}
-        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
+        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
       >
         <KeyRound className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Nouveau mot de passe</span>
       </button>
@@ -94,7 +94,7 @@ function AgencyAccountEditor({ a, onSaved, onClose }: { a: AgencyAccount; onSave
             if (e.key === "Escape") onClose();
           }}
           placeholder="Prénom"
-          className="h-9 rounded-lg border border-border bg-surface px-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
+          className="h-9 rounded-md border border-border bg-surface px-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
         />
       </label>
       <div className="flex shrink-0 justify-end gap-2 sm:self-end">
@@ -148,7 +148,7 @@ function AgencyAccountsPanel({ onReset }: { onReset: (email: string) => void }) 
                 onClick={() => setEditing((e) => (e === a.user_id ? null : a.user_id))}
                 aria-expanded={editing === a.user_id}
                 title="Changer le nom et la photo"
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
               >
                 <Pencil className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Modifier</span>
               </button>
@@ -518,14 +518,14 @@ export function Acces() {
               type="button"
               onClick={() => setCreated(null)}
               aria-label="Fermer"
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="truncate text-sm text-foreground">{created.email}</span>
-            <span className="rounded-md bg-rowhover px-2 py-1 font-mono text-xs tracking-wide text-foreground">{created.pwd}</span>
+            <span className="rounded-full bg-rowhover px-2 py-1 font-mono text-xs tracking-wide text-foreground">{created.pwd}</span>
             <button
               type="button"
               onClick={() => {
@@ -534,7 +534,7 @@ export function Acces() {
                   .then(() => toast("Identifiants copiés ✓"))
                   .catch(() => toast("Copie impossible"));
               }}
-              className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
               <Copy className="h-3.5 w-3.5" /> Copier
             </button>

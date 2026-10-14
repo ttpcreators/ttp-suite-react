@@ -88,7 +88,7 @@ export function BugsPanel() {
   return (
     <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", open.length ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-muted text-muted-foreground")}>
+        <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full", open.length ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-muted text-muted-foreground")}>
           <Bug className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
@@ -96,7 +96,7 @@ export function BugsPanel() {
           <div className="text-[11px] text-faint">Remontés automatiquement depuis l'app (30 derniers jours). Tu es aussi prévenu sur ton téléphone.</div>
         </div>
         <button type="button" onClick={() => void load()} disabled={busy}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm transition-colors hover:bg-rowhover disabled:opacity-60">
+          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm transition-colors hover:bg-rowhover disabled:opacity-60">
           <RefreshCw className={cn("h-3.5 w-3.5", busy && "animate-spin")} /> Actualiser
         </button>
       </div>
@@ -139,12 +139,12 @@ export function BugsPanel() {
                 )}
                 <div className="mt-2.5 flex flex-wrap gap-2 pl-4">
                   <button type="button" onClick={() => void copy(g)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground hover:bg-rowhover">
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground hover:bg-rowhover">
                     <Copy className="h-3.5 w-3.5" /> Copier pour Claude
                   </button>
                   {!g.resolved && (
                     <button type="button" onClick={() => void resolve(g)}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 text-[12px] font-semibold text-white hover:opacity-90">
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-600 px-2.5 text-[12px] font-semibold text-white hover:opacity-90">
                       <Check className="h-3.5 w-3.5" /> Marquer résolu
                     </button>
                   )}

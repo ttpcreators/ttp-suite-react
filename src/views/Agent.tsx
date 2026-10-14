@@ -105,7 +105,7 @@ function Section({ icon: Icon, title, count, children, collapsible = false, defa
   const [open, setOpen] = useState(defaultOpen);
   const head = (
     <div className="flex items-center gap-2">
-      <span className="grid size-7 place-items-center rounded-lg bg-panel text-muted-foreground">
+      <span className="grid size-7 place-items-center rounded-full bg-panel text-muted-foreground">
         <Icon className="h-4 w-4" />
       </span>
       <h2 className="text-[13px] font-semibold tracking-tight text-foreground">{title}</h2>
@@ -525,7 +525,7 @@ export function AgentView() {
                 {c.prochain_pretexte && <span className="text-[11px] text-muted-foreground">Prétexte : {c.prochain_pretexte}</span>}
                 <div className="ml-auto flex items-center gap-1.5">
                   <button type="button" onClick={() => deciderCercle(c, false)}
-                    className="rounded-md border border-border px-2.5 py-1 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover">Retirer</button>
+                    className="rounded-full border border-border px-2.5 py-1 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover">Retirer</button>
                   <button type="button" onClick={() => deciderCercle(c, true)}
                     className="rounded-full bg-primary px-2.5 py-1 text-[10px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">Valider</button>
                 </div>
@@ -592,13 +592,13 @@ export function AgentView() {
               <label className="flex flex-col gap-1 sm:w-40">
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Module</span>
                 <input value={leconModule} onChange={(e) => setLeconModule(e.target.value)} placeholder="ex Prospection"
-                  className="h-[36px] rounded-lg border border-border bg-panel px-3 text-[12px] text-foreground outline-none focus:border-primary" />
+                  className="h-[36px] rounded-md border border-border bg-panel px-3 text-[12px] text-foreground outline-none focus:border-primary" />
               </label>
               <label className="flex flex-1 flex-col gap-1">
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">La leçon</span>
                 <input value={leconTexte} onChange={(e) => setLeconTexte(e.target.value)} placeholder="Ce que l'agent doit retenir…"
                   onKeyDown={(e) => { if (e.key === "Enter") ajouterLecon(); }}
-                  className="h-[36px] rounded-lg border border-border bg-panel px-3 text-[12px] text-foreground outline-none focus:border-primary" />
+                  className="h-[36px] rounded-md border border-border bg-panel px-3 text-[12px] text-foreground outline-none focus:border-primary" />
               </label>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={() => setLeconOpen(false)}
@@ -609,7 +609,7 @@ export function AgentView() {
             </div>
           ) : (
             <button type="button" onClick={() => setLeconOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+              className="flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
               <Plus className="h-3.5 w-3.5" /> Corriger l'agent (nouvelle leçon)
             </button>
           )}

@@ -387,7 +387,7 @@ export function CreatorDetail({
         value={form[key] ?? ""}
         onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
         placeholder="—"
-        className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+        className="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
       />
     </div>
   );
@@ -407,7 +407,7 @@ export function CreatorDetail({
               navigator.clipboard?.writeText(v);
               toast(`${label} copié ✓`);
             }}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
             title={`Copier ${label.toLowerCase()}`}
           >
             <Copy className="h-4 w-4" />
@@ -669,12 +669,12 @@ export function CreatorDetail({
                     target="_blank"
                     rel="noreferrer"
                     title={`Ouvrir le ${p.label} de ${titleCase(name)}`}
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-surface text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border bg-surface text-muted-foreground transition-colors hover:border-primary hover:text-primary"
                   >
                     {platIcon(p.key)}
                   </a>
                 ) : (
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-surface text-faint">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border bg-surface text-faint">
                     {platIcon(p.key)}
                   </span>
                 )}
@@ -766,7 +766,7 @@ export function CreatorDetail({
               <button
                 type="button"
                 onClick={() => setEditing(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
               >
                 <Pencil className="h-3.5 w-3.5" /> Modifier
               </button>
@@ -869,7 +869,7 @@ export function CreatorDetail({
                   min={1}
                   value={ctMonths}
                   onChange={(e) => setCtMonths(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  className="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                 />
               </div>
               <div>
@@ -878,7 +878,7 @@ export function CreatorDetail({
                   value={ctType}
                   onChange={(e) => setCtType(e.target.value)}
                   placeholder="représentation"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  className="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                 />
               </div>
             </div>
@@ -894,7 +894,7 @@ export function CreatorDetail({
               <button
                 type="button"
                 onClick={() => setCtEditing(false)}
-                className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                 title="Annuler"
               >
                 <X className="h-4 w-4" />

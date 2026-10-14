@@ -426,7 +426,7 @@ export function SidebarBrand({
                 }}
                 className="flex w-full items-center gap-2.5 rounded-[8px] px-2 py-1.5 text-left transition-colors hover:bg-rowhover"
               >
-                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[7px] border border-border text-foreground/70">
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-border text-foreground/70">
                   <o.icon className="h-3.5 w-3.5" strokeWidth={1.75} />
                 </span>
                 <span className="min-w-0 flex-1">

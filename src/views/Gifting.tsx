@@ -278,7 +278,7 @@ export function Gifting() {
           type="button"
           onClick={() => setContentExpected((v) => !v)}
           className={cn(
-            "flex min-w-full items-center gap-2 rounded-lg px-3.5 py-2.5 text-[12px] font-semibold transition-colors",
+            "flex min-w-full items-center gap-2 rounded-full px-3.5 py-2.5 text-[12px] font-semibold transition-colors",
             contentExpected ? "bg-foreground/[0.06] text-amber" : "border border-border text-muted-foreground hover:bg-rowhover",
           )}
         >

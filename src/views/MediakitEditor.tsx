@@ -425,7 +425,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 href={publicUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+                className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
               >
                 <ExternalLink className="h-3.5 w-3.5" /> <span>Voir le media kit</span>
               </a>
@@ -436,7 +436,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 target="_blank"
                 rel="noreferrer"
                 title="Version anglaise, pour les marques étrangères"
-                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+                className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
               >
                 <Languages className="h-3.5 w-3.5" /> <span>En anglais</span>
               </a>
@@ -446,7 +446,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 href={`${publicUrl}ugc/`}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+                className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
               >
                 <Sparkles className="h-3.5 w-3.5" /> <span>Voir le kit UGC</span>
               </a>
@@ -738,7 +738,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 type="button"
                 onClick={() => patch({ hideRates: !mk.hideRates })}
                 className={cn(
-                  "flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-[12px] font-medium transition-colors",
+                  "flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 text-[12px] font-medium transition-colors",
                   !mk.hideRates ? "border border-border bg-muted text-foreground" : "border border-border text-muted-foreground hover:bg-rowhover",
                 )}
               >
@@ -800,7 +800,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                   <button
                     type="button"
                     onClick={() => setBrands((mk.brands ?? []).filter((_, j) => j !== i))}
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -839,7 +839,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 type="button"
                 onClick={() => patchUgc({ enabled: !ugc.enabled })}
                 className={cn(
-                  "flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-[12px] font-medium transition-colors",
+                  "flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 text-[12px] font-medium transition-colors",
                   ugc.enabled ? "border border-border bg-muted text-foreground" : "border border-border text-muted-foreground hover:bg-rowhover",
                 )}
               >
@@ -1012,7 +1012,7 @@ function CastingEditor({ value, onChange }: { value: Record<string, string>; onC
               onClick={() => setKey(c.key, on ? null : "oui")}
               aria-pressed={on}
               className={cn(
-                "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors",
+                "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors",
                 on ? "bg-foreground text-background" : "border border-border text-muted-foreground hover:bg-rowhover",
               )}
             >
