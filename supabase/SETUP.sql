@@ -406,6 +406,26 @@ revoke all on public.ig_quota from anon;
 drop policy if exists ig_quota_agency_read on public.ig_quota;
 create policy ig_quota_agency_read on public.ig_quota for select to authenticated using (public.is_agency());
 
+-- YouTube · Sourcing (sql/2026-10-14-youtube-sourcing) : chaînes lues par yt-sourcing
+-- (cache 7 j) et unités YouTube consommées par jour. Lecture agence, écriture serveur.
+create table if not exists public.yt_channels (
+  id   text primary key,
+  data jsonb not null,
+  at   timestamptz not null default now()
+);
+create table if not exists public.yt_quota (
+  day   date primary key,
+  units int not null default 0
+);
+alter table public.yt_channels enable row level security;
+alter table public.yt_quota    enable row level security;
+revoke all on public.yt_channels from anon;
+revoke all on public.yt_quota    from anon;
+drop policy if exists yt_channels_agency_read on public.yt_channels;
+create policy yt_channels_agency_read on public.yt_channels for select to authenticated using (public.is_agency());
+drop policy if exists yt_quota_agency_read on public.yt_quota;
+create policy yt_quota_agency_read on public.yt_quota for select to authenticated using (public.is_agency());
+
 -- DONNÉES AGENCE PURES : agence seulement
 -- contacts : partagés — l'agence voit/gère tout ; le créateur voit ceux de l'agence
 -- (creator NULL) + ajoute/gère les siens (creator = son nom). (sql/12)

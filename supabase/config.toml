@@ -132,3 +132,8 @@ verify_jwt = true
 # auth dans le code (CRON_SECRET OU rôle agence).
 [functions.ig-sourcing]
 verify_jwt = false
+
+# yt-sourcing : Sourcing YouTube (YouTube Data API v3, clé YT_API_KEY). JWT requis
+# + rôle agence vérifié dans le code.
+[functions.yt-sourcing]
+verify_jwt = true

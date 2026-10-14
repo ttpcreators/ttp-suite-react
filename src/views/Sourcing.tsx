@@ -9,6 +9,7 @@ import { Tabs } from "@/components/ui/animated-tabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { HelpTip } from "@/components/ui/help-tip";
+import { PlatformIcon } from "@/components/ui/platform-icon";
 import { dbInsert, dbUpdate } from "@/lib/db";
 import { fmtCompact } from "@/lib/timeSeries";
 import { fmtAgo, fmtEr, fmtPerWeek, igWhyText, noteQuota } from "@/lib/instagram";
@@ -30,6 +31,8 @@ type Prof = {
   name?: string; followers?: number; following?: number; posts?: number; er?: number | null; perWeek?: number | null;
   lastPost?: string | null; bio?: string; website?: string; email?: string; emailFrom?: "bio" | "lien" | "";
   agency?: string | null; deals?: string[]; cites?: string[]; picture?: string; brandScore?: number; isBrand?: boolean;
+  // YouTube (yt-sourcing)
+  platform?: "youtube"; handle?: string; url?: string; avgViews?: number | null; views?: number; videos?: number; sponsored?: number; sample?: number; country?: string;
 };
 type Candidate = { username: string; count?: number; via?: string[]; lastAt?: string; url?: string; data: Prof | null; why: string | null };
 type RadarPost = { c: string; roster: boolean; url: string; at: string; paid: boolean; likes: number | null; comments: number; cap: string };
@@ -75,9 +78,9 @@ function Pic({ src, name, size = 40, square }: { src?: string; name: string; siz
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-[64px]">
-      <div className="text-[10px] text-faint">{label}</div>
-      <div className="text-[13px] font-semibold tabular-nums text-foreground">{value}</div>
+    <div className="min-w-0 lg:min-w-[64px]">
+      <div className="truncate text-[10px] text-faint">{label}</div>
+      <div className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-foreground">{value}</div>
     </div>
   );
 }
@@ -109,7 +112,7 @@ function Check2({ label, checked, onChange, help }: { label: string; checked: bo
 const TOOLS = [
   {
     v: "createurs" as const, icon: Users, title: "Trouver des créatrices", goal: "Pour recruter",
-    text: "Pars d'une marque, d'une créatrice que tu aimes ou d'une liste de @ : l'app trouve des profils avec leurs chiffres, un score, leur email, et te dit si elles ont déjà une agence.",
+    text: "Sur Instagram ou YouTube : pars d'un thème, d'une marque, d'une créatrice que tu aimes ou d'une liste. L'app trouve des profils avec leurs chiffres, un score, leur email, et te dit si elles ont déjà une agence.",
   },
   {
     v: "radar" as const, icon: Radar, title: "Radar à marques", goal: "Pour trouver des clients",
@@ -154,9 +157,10 @@ export function Sourcing() {
     <>
       <PageHeaderRow>
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          Données Instagram
+          Instagram et YouTube
           <HelpTip title="D'où viennent les chiffres ?" align="end">
-            <p>De l'outil officiel de Meta (Instagram), le même que pour le Roster et le Scouting.</p>
+            <p>Des outils officiels de Meta (Instagram, le même que pour le Roster et le Scouting) et de Google (YouTube).</p>
+            <p>YouTube : 10 000 unités offertes par jour ; une recherche par thème ou par marque en coûte environ 150.</p>
             <p>Seuls les comptes <span className="font-medium text-foreground">pro ou créateur</span> sont visibles. Les comptes perso apparaissent grisés.</p>
             <p>Meta limite le nombre de demandes par heure : si l'app dit « Meta a freiné », réessaie un peu plus tard.</p>
           </HelpTip>
@@ -203,7 +207,7 @@ export function Sourcing() {
 
 // ═════════════════════════ Trouver des créatrices ═════════════════════════
 type LastSearch = {
-  label: string; at: string; mode: "marque" | "similaire" | "liste";
+  label: string; at: string; mode: "marque" | "similaire" | "liste" | "yt-search" | "yt-brand" | "yt-list"; platform?: "instagram" | "youtube";
   brand?: Prof & { username: string }; creator?: Prof & { username: string }; brands?: string[]; results: Candidate[];
 };
 const LAST_KEY = "ttp:sourcing-last";
@@ -234,7 +238,41 @@ function potential(d: Prof): { score: number; flags: string[] } {
   s -= flags.length * 15;
   return { score: Math.max(0, Math.min(100, Math.round(s))), flags };
 }
+/**
+ * Score « Potentiel » d'une chaîne YouTube : vues moyennes par rapport aux abonnés (30),
+ * engagement des vidéos (10), rythme (15), déjà sponsorisée (15), email (10), pas
+ * d'agence (10), active ce mois-ci (10), moins 15 par signal d'alerte.
+ */
+function potentialYt(d: Prof): { score: number; flags: string[] } {
+  const f = d.followers ?? 0;
+  const flags: string[] = [];
+  let s = 0;
+  const vr = d.avgViews != null && f > 0 ? d.avgViews / f : null;
+  if (vr != null) s += Math.min(30, (vr / 0.25) * 22);
+  else if (d.avgViews) s += 15; // abonnés masqués : on juge sur les vues seules
+  if (d.er != null) s += Math.min(10, (d.er / 4) * 8);
+  s += Math.min(15, (d.perWeek ?? 0) * 10);
+  if (d.deals?.length || d.sponsored) s += 15;
+  if (d.email) s += 10;
+  if (!d.agency) s += 10;
+  const quiet = d.lastPost ? (Date.now() - Date.parse(d.lastPost)) / 86400000 : 999;
+  if (quiet < 30) s += 10;
+  if (vr != null && vr < 0.02) flags.push("Très peu de vues pour sa taille");
+  if (quiet > 90 && quiet < 999) flags.push("Aucune vidéo depuis 3 mois");
+  s -= flags.length * 15;
+  return { score: Math.max(0, Math.min(100, Math.round(s))), flags };
+}
+const scoreOf = (d: Prof) => (d.platform === "youtube" ? potentialYt(d) : potential(d));
 const firstName = (d: Prof | null, user: string) => (d?.name?.trim().split(/\s+/)[0] ?? "") || user;
+const REGIONS = [["FR", "France"], ["BE", "Belgique"], ["CH", "Suisse"], ["CA", "Canada"], ["GB", "Royaume-Uni"], ["US", "États-Unis"]] as const;
+const ytErr = (e?: string) =>
+  e === "youtube_non_configure" ? "YouTube n'est pas encore relié (clé YouTube à ajouter)."
+    : e === "migration_manquante" ? "YouTube sera actif après la mise à jour de la base (SQL à lancer)."
+      : e === "recherche_vide" ? "Tape un thème ou une marque."
+        : e === "quota_youtube" ? "Quota YouTube du jour atteint : ça repart demain."
+          : "YouTube n'a pas répondu, réessaie.";
+/** Clé d'une créatrice dans le Scouting : @ Instagram, ou « yt:<handle> » pour une chaîne YouTube. */
+const poolKey = (handle: string) => (/youtube\.com|youtu\.be/i.test(handle) ? `yt:${(/@([\w.-]+)/.exec(handle)?.[1] ?? handle).toLowerCase()}` : cleanUser(handle));
 
 function CreatorFinder() {
   const [source, setSource] = useState<"marque" | "similaire" | "liste">("marque");
@@ -242,22 +280,53 @@ function CreatorFinder() {
   const [creatorIn, setCreatorIn] = useState("");
   const [listIn, setListIn] = useState("");
   const [busy, setBusy] = useState("");
-  const [last, setLast] = useState<LastSearch | null>(() => {
+  // Réseau : Instagram ou YouTube (dernière recherche gardée pour chacun, sur cet appareil).
+  const [platform, setPlatformState] = useState<"instagram" | "youtube">(() => {
     try {
-      const v = JSON.parse(localStorage.getItem(LAST_KEY) ?? "null") as LastSearch | null;
+      return localStorage.getItem("ttp:sourcing-platform") === "youtube" ? "youtube" : "instagram";
+    } catch {
+      return "instagram";
+    }
+  });
+  const setPlatform = (p: "instagram" | "youtube") => {
+    setPlatformState(p);
+    try {
+      localStorage.setItem("ttp:sourcing-platform", p);
+    } catch {
+      /* stockage indisponible */
+    }
+  };
+  const lastKey = (p: string) => (p === "youtube" ? `${LAST_KEY}-yt` : LAST_KEY);
+  const readLast = (p: string): LastSearch | null => {
+    try {
+      const v = JSON.parse(localStorage.getItem(lastKey(p)) ?? "null") as LastSearch | null;
       return v?.mode ? v : null;
     } catch {
       return null;
     }
-  });
+  };
+  const [lastBy, setLastBy] = useState<Record<"instagram" | "youtube", LastSearch | null>>(() => ({ instagram: readLast("instagram"), youtube: readLast("youtube") }));
+  const last = lastBy[platform];
+  const isYt = platform === "youtube";
   const keep = (s: LastSearch) => {
-    setLast(s);
+    const p = s.platform === "youtube" ? "youtube" : "instagram";
+    setLastBy((m) => ({ ...m, [p]: s }));
     try {
-      localStorage.setItem(LAST_KEY, JSON.stringify(s));
+      localStorage.setItem(lastKey(p), JSON.stringify(s));
     } catch {
       /* stockage plein ou indisponible */
     }
   };
+  // YouTube : thème, marque ou liste de chaînes ; pays ; quota du jour.
+  const [ytSource, setYtSource] = useState<"search" | "brand" | "list">("search");
+  const [ytQ, setYtQ] = useState("");
+  const [ytRegion, setYtRegion] = useState("FR");
+  const [ytList, setYtList] = useState("");
+  const [ytQuota, setYtQuota] = useState<{ used: number; limit: number } | null>(null);
+  useEffect(() => {
+    void supabase.from("yt_quota").select("units").eq("day", new Date().toISOString().slice(0, 10)).maybeSingle()
+      .then(({ data, error }) => { if (!error) setYtQuota({ used: (data as { units?: number } | null)?.units ?? 0, limit: 10000 }); });
+  }, []);
 
   // Filtres
   const [minF, setMinF] = useState("");
@@ -282,7 +351,7 @@ function CreatorFinder() {
       if (!alive) return;
       const pr = (p.data as { id: string; handle: string | null; sort_order: number | null; last_contacted: string | null }[] | null) ?? [];
       const cr = (c.data as { name: string; handle: string | null; platform: string | null; instagram: string | null; status: string | null }[] | null) ?? [];
-      setPool(new Map(pr.filter((r) => cleanUser(r.handle ?? "")).map((r) => [cleanUser(r.handle ?? ""), { id: r.id, last_contacted: r.last_contacted }])));
+      setPool(new Map(pr.filter((r) => poolKey(r.handle ?? "")).map((r) => [poolKey(r.handle ?? ""), { id: r.id, last_contacted: r.last_contacted }])));
       setMaxOrder(pr.reduce((m, r) => Math.max(m, r.sort_order ?? 0), 0));
       setRoster(
         cr
@@ -296,6 +365,8 @@ function CreatorFinder() {
     };
   }, []);
   const rosterUsers = useMemo(() => new Set(roster.map((r) => r.user)), [roster]);
+  /** Clé de comparaison d'un résultat avec le Scouting et le roster. */
+  const keyOf = (c: Candidate) => (c.data?.platform === "youtube" ? `yt:${(c.data.handle || c.username).toLowerCase()}` : c.username);
 
   const finish = (r: { stopped?: string }) => {
     if (r.stopped) toast(`Meta a freiné : ${igWhyText(r.stopped)}. Le compteur en haut dit quand reprendre.`);
@@ -344,30 +415,50 @@ function CreatorFinder() {
     if (results.length) keep({ mode: "liste", label: `Liste de ${users.length} @`, at: new Date().toISOString(), results });
   };
 
+  const runYt = async () => {
+    const q = ytQ.trim();
+    const list = ytList.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+    if (ytSource !== "list" && !q) return toast(ytSource === "search" ? "Tape un thème (ex : fitness lyon)" : "Tape le nom d'une marque");
+    if (ytSource === "list" && !list.length) return toast("Colle des @ ou des liens de chaînes YouTube");
+    setBusy(ytSource === "list" ? "Lecture des chaînes…" : "Recherche sur YouTube, puis lecture des chaînes (environ 20 s)…");
+    const { data, error } = await supabase.functions.invoke("yt-sourcing", {
+      body: ytSource === "list" ? { mode: "list", channels: list } : { mode: ytSource, q, region: ytRegion },
+    });
+    setBusy("");
+    const r = (data ?? {}) as { candidates?: Candidate[]; stopped?: string; error?: string; quota?: { used: number; limit: number } };
+    if (r.quota) setYtQuota(r.quota);
+    if (error || r.error || !r.candidates) return toast(ytErr(r.error ?? undefined));
+    const label = ytSource === "search" ? `Chaînes YouTube · « ${q} »` : ytSource === "brand" ? `Vidéos sur « ${q} »` : `Liste de ${list.length} chaîne${list.length > 1 ? "s" : ""}`;
+    keep({ platform: "youtube", mode: ytSource === "search" ? "yt-search" : ytSource === "brand" ? "yt-brand" : "yt-list", label, at: new Date().toISOString(), results: r.candidates });
+    if (!r.candidates.length) toast("Aucune chaîne trouvée : essaie d'autres mots");
+    if (r.stopped) toast(ytErr(r.stopped));
+  };
+
   // Scouting : ajout (et date de contact quand on vient d'écrire).
   const [adding, setAdding] = useState<string | null>(null);
   const toScouting = async (c: Candidate, contacted?: boolean): Promise<boolean> => {
     const now = new Date().toISOString();
-    const known = pool.get(c.username);
+    const yt = c.data?.platform === "youtube";
+    const known = pool.get(keyOf(c));
     if (known) {
       if (!contacted) return true;
       const ok = await dbUpdate("creator_pool", known.id, { last_contacted: now });
-      if (ok) setPool((m) => new Map(m).set(c.username, { ...known, last_contacted: now }));
+      if (ok) setPool((m) => new Map(m).set(keyOf(c), { ...known, last_contacted: now }));
       return ok;
     }
     const origin = last?.mode === "marque" && last.brand ? ` (citée par @${last.brand.username})` : last?.mode === "similaire" && last.creator ? ` (proche de @${last.creator.username})` : "";
     const created = await dbInsert("creator_pool", {
       name: c.data?.name?.trim() || `@${c.username}`,
-      handle: `@${c.username}`,
+      handle: yt ? c.data?.url ?? `https://www.youtube.com/@${c.username}` : `@${c.username}`,
       email: c.data?.email || null,
-      tag: null,
-      note: `Trouvée via le Sourcing${origin}`,
+      tag: yt ? "YouTube" : null,
+      note: yt ? `Trouvée via le Sourcing YouTube (${last?.label ?? ""})` : `Trouvée via le Sourcing${origin}`,
       sort_order: maxOrder + 1,
       ...(contacted ? { last_contacted: now } : {}),
     });
     if (!created) return false;
     setMaxOrder((n) => n + 1);
-    setPool((m) => new Map(m).set(c.username, { id: String(created.id), last_contacted: contacted ? now : null }));
+    setPool((m) => new Map(m).set(keyOf(c), { id: String(created.id), last_contacted: contacted ? now : null }));
     return true;
   };
   const addToScouting = async (c: Candidate) => {
@@ -378,7 +469,7 @@ function CreatorFinder() {
   };
   const [contact, setContact] = useState<Candidate | null>(null);
 
-  const scored = useMemo(() => (last?.results ?? []).map((c) => ({ c, p: c.data ? potential(c.data) : { score: 0, flags: [] as string[] } })), [last]);
+  const scored = useMemo(() => (last?.results ?? []).map((c) => ({ c, p: c.data ? scoreOf(c.data) : { score: 0, flags: [] as string[] } })), [last]);
   const shown = useMemo(() => {
     const lo = parseCount(minF);
     const hi = parseCount(maxF);
@@ -419,6 +510,65 @@ function CreatorFinder() {
     <div>
       {/* Point de départ */}
       <div className="mb-3 rounded-2xl border border-border bg-surface p-4">
+        {/* Réseau */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+          <Tabs
+            size="sm"
+            label="Réseau"
+            value={platform}
+            onValueChange={(v) => setPlatform(v === "youtube" ? "youtube" : "instagram")}
+            items={[
+              { value: "instagram", label: "Instagram", icon: <PlatformIcon platform="instagram" className="h-3.5 w-3.5" /> },
+              { value: "youtube", label: "YouTube", icon: <PlatformIcon platform="youtube" className="h-3.5 w-3.5" /> },
+            ]}
+          />
+          {isYt && ytQuota && (
+            <span className="text-[11px] text-faint" title="Google offre 10 000 unités par jour : une recherche par thème ou par marque en coûte environ 150, une chaîne de la liste environ 3">
+              Quota YouTube du jour : <span className={cn("font-semibold", ytQuota.used / ytQuota.limit > 0.85 ? "text-rose-500" : "text-foreground")}>{ytQuota.used.toLocaleString("fr-FR")}</span> / {ytQuota.limit.toLocaleString("fr-FR")}
+            </span>
+          )}
+        </div>
+        {isYt ? (
+          <div>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <Tabs
+                size="sm"
+                wrap
+                label="Point de départ YouTube"
+                value={ytSource}
+                onValueChange={(v) => setYtSource(v as typeof ytSource)}
+                items={[
+                  { value: "search", label: "Par thème" },
+                  { value: "brand", label: "Depuis une marque" },
+                  { value: "list", label: "Liste de chaînes" },
+                ]}
+              />
+              <HelpTip title="Quelle différence ?">
+                <p><span className="font-medium text-foreground">Par thème</span> : tu tapes un sujet (« fitness lyon », « maman bébé », « recettes healthy ») et un pays : YouTube te donne les chaînes qui en parlent. Impossible sur Instagram, possible ici.</p>
+                <p><span className="font-medium text-foreground">Depuis une marque</span> : les chaînes qui ont fait des vidéos sur cette marque (tests, sponsors, avis).</p>
+                <p><span className="font-medium text-foreground">Liste de chaînes</span> : tu colles des @ ou des liens YouTube pour voir leurs chiffres.</p>
+              </HelpTip>
+            </div>
+            {ytSource === "list" ? (
+              <div className="flex flex-col gap-2">
+                <textarea aria-label="Liste de chaînes" value={ytList} onChange={(e) => setYtList(e.target.value)} rows={4} placeholder={"@lea.fit\nyoutube.com/@camilleyoga\nyoutube.com/channel/UC…"} className={cn(IN, "resize-y text-[13px]")} />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] text-faint">Un @ ou un lien par ligne. Environ 3 unités YouTube par chaîne.</span>
+                  {runBtn("Analyser", () => void runYt())}
+                </div>
+              </div>
+            ) : (
+              <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void runYt(); }}>
+                <input aria-label={ytSource === "search" ? "Thème" : "Marque"} value={ytQ} onChange={(e) => setYtQ(e.target.value)} placeholder={ytSource === "search" ? "fitness lyon, maman bébé, recettes healthy…" : "nom de la marque (ex : gymshark)"} className={cn(IN, "min-w-[200px] flex-1 py-2 text-[13px]")} />
+                <select aria-label="Pays" value={ytRegion} onChange={(e) => setYtRegion(e.target.value)} className={cn(IN, "w-36")}>
+                  {REGIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+                {runBtn(ytSource === "search" ? "Trouver des chaînes" : "Trouver ses créatrices", () => void runYt())}
+              </form>
+            )}
+          </div>
+        ) : (
+        <>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <Tabs size="sm" wrap label="Point de départ" value={source} onValueChange={(v) => setSource(v as typeof source)} items={SOURCES} />
           <HelpTip title="Quelle différence ?">
@@ -466,6 +616,8 @@ function CreatorFinder() {
             </div>
           </div>
         )}
+        </>
+        )}
         {busy && <div className="mt-2 text-[12px] text-muted-foreground">{busy}</div>}
       </div>
 
@@ -492,7 +644,7 @@ function CreatorFinder() {
                 <option value="score">Potentiel</option>
                 <option value="followers">Abonnés</option>
                 <option value="er">Engagement</option>
-                {last.mode !== "liste" && <option value="count">{last.mode === "similaire" ? "Marques en commun" : "Citations"}</option>}
+                {last.mode !== "liste" && last.mode !== "yt-list" && <option value="count">{last.mode === "similaire" ? "Marques en commun" : last.mode === "yt-brand" ? "Vidéos sur la marque" : last.mode === "yt-search" ? "Pertinence" : "Citations"}</option>}
               </select>
             </Field>
             <div className="pb-2 text-[12px] text-muted-foreground">
@@ -527,8 +679,9 @@ function CreatorFinder() {
             <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
               {shown.map(({ c, p }) => {
                 const d = c.data;
-                const inPool = pool.get(c.username);
-                const inRoster = rosterUsers.has(c.username);
+                const yt = d?.platform === "youtube";
+                const inPool = pool.get(keyOf(c));
+                const inRoster = rosterUsers.has(keyOf(c));
                 const ok = !!d && !c.why;
                 return (
                   <div key={c.username} className={cn("flex flex-col gap-2.5 px-4 py-3.5 lg:flex-row lg:items-center lg:gap-4", !ok && "opacity-60")}>
@@ -543,10 +696,16 @@ function CreatorFinder() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <a href={igLink(c.username)} target="_blank" rel="noreferrer" className="truncate text-[13px] font-semibold text-foreground hover:underline">@{c.username}</a>
-                          {d?.name && <span className="truncate text-[12px] text-muted-foreground">{d.name}</span>}
+                          <a href={yt ? d?.url : igLink(c.username)} target="_blank" rel="noreferrer" className="flex items-center gap-1 truncate text-[13px] font-semibold text-foreground hover:underline">
+                            {yt && <PlatformIcon platform="youtube" className="h-3.5 w-3.5 shrink-0" />}{yt ? d?.name || `@${c.username}` : `@${c.username}`}
+                          </a>
+                          {d?.name && <span className="truncate text-[12px] text-muted-foreground">{yt ? `@${d.handle || c.username}` : d.name}</span>}
                           {ok && p.score >= 70 && <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Pépite</span>}
-                          {c.count ? <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{last.mode === "similaire" ? `${c.count} marque${c.count > 1 ? "s" : ""} en commun` : `citée ${c.count}×`}</span> : null}
+                          {c.count && last.mode !== "yt-search" ? (
+                            <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                              {last.mode === "similaire" ? `${c.count} marque${c.count > 1 ? "s" : ""} en commun` : last.mode === "yt-brand" ? `${c.count} vidéo${c.count > 1 ? "s" : ""} sur la marque` : `citée ${c.count}×`}
+                            </span>
+                          ) : null}
                           {d?.agency && <span title={`Indice : « ${d.agency} »`} className="rounded-full bg-amber/15 px-2 py-0.5 text-[10px] font-medium text-amber">En agence ?</span>}
                           {d?.email && (
                             <button type="button" onClick={() => { void navigator.clipboard?.writeText(d.email ?? ""); toast("Email copié ✓"); }} className="flex items-center gap-1 rounded-full bg-signalsoft px-2 py-0.5 text-[10px] font-medium text-signaltext" title={d.emailFrom === "lien" ? "Trouvé sur son lien en bio · copier" : "Trouvé dans sa bio · copier"}>
@@ -558,7 +717,9 @@ function CreatorFinder() {
                         {!!d?.deals?.length && (
                           <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-faint">
                             A déjà bossé avec
-                            {d.deals.slice(0, 5).map((b) => <a key={b} href={igLink(b)} target="_blank" rel="noreferrer" className="rounded bg-primary/10 px-1.5 py-0.5 font-medium text-primary hover:underline">@{b}</a>)}
+                            {d.deals.slice(0, 5).map((b) => yt
+                              ? <span key={b} className="rounded bg-primary/10 px-1.5 py-0.5 font-medium text-primary">{b}</span>
+                              : <a key={b} href={igLink(b)} target="_blank" rel="noreferrer" className="rounded bg-primary/10 px-1.5 py-0.5 font-medium text-primary hover:underline">@{b}</a>)}
                           </div>
                         )}
                         {!!c.via?.length && (
@@ -569,8 +730,9 @@ function CreatorFinder() {
                       </div>
                     </div>
                     {ok && (
-                      <div className="flex shrink-0 items-center gap-4 pl-[52px] lg:pl-0">
-                        <Stat label="Abonnés" value={d.followers != null ? fmtCompact(d.followers) : "—"} />
+                      <div className={cn("grid shrink-0 gap-2 lg:flex lg:items-center lg:gap-4", yt ? "grid-cols-4" : "grid-cols-3 sm:pl-[52px] lg:pl-0")}>
+                        <Stat label="Abonnés" value={d.followers != null ? fmtCompact(d.followers) : yt ? "masqués" : "—"} />
+                        {yt && <Stat label="Vues / vidéo" value={d.avgViews != null ? fmtCompact(d.avgViews) : "—"} />}
                         <Stat label="Engagement" value={fmtEr(d.er)} />
                         <Stat label="Rythme" value={fmtPerWeek(d.perWeek)} />
                       </div>
@@ -622,7 +784,7 @@ function CreatorFinder() {
           title={`Contacter @${contact.username}`}
           to={contact.data?.email}
           box="talent"
-          instagram={contact.username}
+          instagram={contact.data?.platform === "youtube" ? undefined : contact.username}
           contactName={contact.data?.name || `@${contact.username}`}
           subject={`TTP Creators × ${firstName(contact.data, contact.username)}`}
           body={`Bonjour ${firstName(contact.data, contact.username)},\n\nJe te contacte de la part de TTP Creators, une agence qui accompagne des créatrices de contenu dans leurs partenariats avec les marques.\n\nJ'aime beaucoup ton contenu${contact.data?.deals?.length ? ` et tes collaborations (${contact.data.deals.slice(0, 2).map((b) => `@${b}`).join(", ")})` : ""} : je pense qu'on pourrait faire de belles choses ensemble.\n\nTu serais partante pour qu'on en parle ?\n\nBelle journée,`}

@@ -47,13 +47,21 @@ const ALL = "__all__";
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const esc = (s: unknown) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c] ?? c);
 
-/** @handle → nom d'utilisateur nettoyé (sans @, sans URL). */
+/** Chaîne YouTube (ajoutée depuis le Sourcing YouTube) plutôt qu'un @ Instagram. */
+const isYtHandle = (handle?: string | null) => /youtube\.com|youtu\.be/i.test(handle ?? "");
+/** @handle → nom d'utilisateur nettoyé (sans @, sans URL). YouTube : le @ de la chaîne. */
 const igName = (handle?: string | null) =>
-  (handle ?? "").trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/[/?].*$/, "").replace(/\s/g, "");
+  isYtHandle(handle)
+    ? /@([\w.-]+)/.exec(handle ?? "")?.[1] ?? "chaîne YouTube"
+    : (handle ?? "").trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/[/?].*$/, "").replace(/\s/g, "");
 /** Clé de catégorie : sans espaces ni majuscules (« Mode » = « mode »). */
 const tagKey = (t: string) => t.trim().toLocaleLowerCase("fr");
-/** URL du profil Instagram, ou "" si pas de handle. */
+/** URL du profil Instagram (ou de la chaîne YouTube), ou "" si pas de handle. */
 const igUrl = (handle?: string | null) => {
+  if (isYtHandle(handle)) {
+    const h = (handle ?? "").trim();
+    return /^https?:\/\//i.test(h) ? h : `https://${h.replace(/^\/+/, "")}`;
+  }
   const h = igName(handle);
   return h ? `https://www.instagram.com/${h}/` : "";
 };
@@ -177,6 +185,7 @@ export function Vivier() {
   useEffect(() => {
     if (!rows || trackData === null) return;
     const want = rows
+      .filter((r) => !isYtHandle(r.handle)) // une chaîne YouTube n'a pas de profil Instagram à lire
       .map((r) => ({ id: r.id, h: igName(r.handle) }))
       .filter((x) => x.h && !igAsked.has(x.h) && igStale(tracking[x.id], x.h))
       .slice(0, 20);
@@ -507,7 +516,7 @@ export function Vivier() {
               {selected.handle && (igUrl(selected.handle) ? (
                 <a href={igUrl(selected.handle)} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[13px] font-semibold text-primary transition-colors hover:bg-primary/5">
                   <AtSign className="h-4 w-4 shrink-0" /><span className="truncate">{igName(selected.handle)}</span>
-                  <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] font-medium text-faint">Instagram <ExternalLink className="h-3.5 w-3.5" /></span>
+                  <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] font-medium text-faint">{isYtHandle(selected.handle) ? "YouTube" : "Instagram"} <ExternalLink className="h-3.5 w-3.5" /></span>
                 </a>
               ) : (
                 <div className="flex items-center gap-2.5 rounded-xl border border-border bg-panel/50 px-3.5 py-2.5 text-[13px] font-medium text-foreground"><AtSign className="h-4 w-4 shrink-0 text-faint" /><span className="truncate">{selected.handle.replace(/^@/, "")}</span></div>

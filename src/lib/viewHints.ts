@@ -29,7 +29,7 @@ export const VIEW_HINTS: Partial<Record<ViewId, string>> = {
   mails: "Tes deux boîtes mail, partnerships@ et talent@, au même endroit.",
   prospection: "Les marques que tu démarches, étape par étape jusqu'à la signature.",
   vivier: "Les créatrices repérées, que tu suis avant de les recruter.",
-  sourcing: "Trouve de nouvelles créatrices et des marques à démarcher grâce à Instagram.",
+  sourcing: "Trouve de nouvelles créatrices et des marques à démarcher grâce à Instagram et YouTube.",
   contrats: "Prépare les contrats : marque × créatrice, représentation, UGC.",
   documents: "Tous les fichiers de l'agence et des créatrices.",
   templates: "Tes modèles de mails et de messages, prêts à réutiliser.",

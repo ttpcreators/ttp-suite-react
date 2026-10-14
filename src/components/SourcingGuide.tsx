@@ -35,7 +35,7 @@ export function SourcingGuide({ onClose }: { onClose: () => void }) {
           <div className="flex items-center gap-2 text-[17px] font-semibold text-foreground"><BookOpen className="h-5 w-5 text-primary" /> Mode d'emploi du Sourcing</div>
           <button type="button" onClick={onClose} aria-label="Fermer" className="text-faint transition-colors hover:text-foreground"><X className="h-5 w-5" /></button>
         </div>
-        <p className="mb-5 text-[13px] text-muted-foreground">Deux outils, à partir d'Instagram (comptes pro). Tout ce que tu fais ici est partagé avec l'équipe.</p>
+        <p className="mb-5 text-[13px] text-muted-foreground">Deux outils, à partir d'Instagram (comptes pro) et de YouTube. Tout ce que tu fais ici est partagé avec l'équipe.</p>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <section className="rounded-xl border border-border p-4">
@@ -52,11 +52,11 @@ export function SourcingGuide({ onClose }: { onClose: () => void }) {
             <div className="mb-0.5 text-[14px] font-semibold text-foreground">Trouver des créatrices</div>
             <div className="mb-3 text-[12px] text-primary">Pour recruter</div>
             <Steps items={[
-              ["Choisis un point de départ.", "Une marque de ta niche (ses créatrices), une créatrice que tu aimes (des profils proches), ou une liste de @."],
+              ["Choisis le réseau et un point de départ.", "Instagram : une marque de ta niche (ses créatrices), une créatrice que tu aimes (des profils proches), ou une liste de @. YouTube : un thème (« fitness lyon »), une marque, ou une liste de chaînes."],
               ["Trie et filtre.", "Par score « Potentiel », abonnés, engagement, ville dans la bio, avec email, sans agence."],
-              ["Agis.", "« Contacter » (mail depuis ta boîte Gmail ou message Instagram) ou « + Scouting » pour la suivre plus tard."],
+              ["Agis.", "« Contacter » (mail depuis ta boîte Gmail, ou message Instagram) ou « + Scouting » pour la suivre plus tard."],
             ]} />
-            <p className="mt-3 text-[11px] leading-snug text-faint">Ouvre toujours son Instagram (clic sur le @) avant d'écrire : le score aide à trier, il ne remplace pas ton œil.</p>
+            <p className="mt-3 text-[11px] leading-snug text-faint">Ouvre toujours son profil (clic sur son nom) avant d'écrire : le score aide à trier, il ne remplace pas ton œil.</p>
           </section>
         </div>
 
@@ -70,6 +70,7 @@ export function SourcingGuide({ onClose }: { onClose: () => void }) {
             <Word term="À confirmer">L'app n'est pas sûre que ce compte soit une marque : vérifie avant d'écrire.</Word>
             <Word term="Potentiel · Pépite">Note sur 100 d'une créatrice (engagement selon sa taille, rythme, partenariats, email, sans agence). Pépite = 70 et plus.</Word>
             <Word term="Quota Meta">Meta limite les demandes par heure. Au-delà de 80 %, l'app fait une pause ; ça redescend tout seul.</Word>
+            <Word term="Quota YouTube">Google offre 10 000 unités par jour : une recherche par thème ou par marque en coûte environ 150. Ça repart chaque jour.</Word>
           </div>
         </section>
 
