@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { BadgeCheck, ChevronDown, ChevronUp, Eye, EyeOff, Loader2, Plus, RefreshCw, RotateCcw, Search, Tv, Users, Wallet } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { BadgeCheck, ChevronDown, ChevronUp, Eye, EyeOff, Plus, RotateCcw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { HelpTip } from "@/components/ui/help-tip";
+import { RadarFrame, RADAR_BTN } from "@/components/RadarFrame";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert } from "@/lib/db";
@@ -36,7 +37,7 @@ const SRC = [
 const chUrl = (p: Post) => (p.h ? `https://www.youtube.com/@${p.h}` : `https://www.youtube.com/channel/${p.ch}`);
 const frDay = (iso: string) => (iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "");
 
-export function YouTubeRadar() {
+export function YouTubeRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [missing, setMissing] = useState(false);
   const [state, setState] = useState<{ data: State; at: string } | null>(null);
@@ -146,60 +147,42 @@ export function YouTubeRadar() {
       </div>
     );
   }
-  const TILES = [
-    { icon: Wallet, n: brands.length, title: "Marques qui paient" },
-    { icon: Tv, n: counts.channels.size, title: "Chaînes sponsorisées" },
-    { icon: Users, n: counts.mine, title: "Chez tes créateurs" },
-  ];
-
   return (
-    <div>
-      <div className="mb-3 grid grid-cols-3 gap-2 sm:gap-2.5">
-        {TILES.map((t) => (
-          <div key={t.title} className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3 sm:p-3.5">
-            <span className="hidden h-8 w-8 shrink-0 place-items-center rounded-full bg-panel text-muted-foreground sm:grid"><t.icon className="h-4 w-4" /></span>
-            <span className="min-w-0">
-              <span className="block text-[20px] font-bold leading-none tabular-nums text-foreground">{t.n}</span>
-              <span className="mt-1 block text-[12px] font-semibold text-foreground">{t.title}</span>
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Tabs size="sm" label="Période" value={period} onValueChange={setPeriod} items={PERIODS} />
-        <Tabs size="sm" label="Chez quelles chaînes" value={src} onValueChange={setSrc} items={SRC} />
-        <div className="relative min-w-[180px] flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher une marque ou une chaîne" className="w-full rounded-md border border-border bg-surface py-2 pl-8 pr-3 text-[12px] outline-none focus:border-primary" />
-        </div>
-        <label className="inline-flex items-center gap-1.5 text-[12px] text-foreground" title="Seulement les vidéos où le créateur a coché « communication commerciale » sur YouTube">
-          <input type="checkbox" checked={onlyFlag} onChange={(e) => setOnlyFlag(e.target.checked)} /> Placement déclaré
-        </label>
-        <button type="button" onClick={() => void run()} disabled={running} className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
-          {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Lancer le radar
-        </button>
-        <HelpTip title="Comment le radar YouTube trouve les collabs ?" align="end">
-          <p>Chaque matin, il lit les dernières vidéos de tes créateurs YouTube et du Scouting, et cherche des vidéos récentes en France (« code promo », « partenariat », « sponsorisé »…).</p>
-          <p>Une vidéo compte si le créateur a coché « communication commerciale » sur YouTube (<span className="font-medium text-foreground">placement déclaré</span>), ou si sa description le dit (#ad, code promo…). La marque vient des liens et des noms de la description.</p>
-          <p>{state?.at ? `Dernier passage ${fmtAgo(state.at)}` : "Pas encore lancé"}{state?.data.quota ? ` · quota YouTube du jour ${state.data.quota.used} / ${state.data.quota.limit}` : ""}.</p>
-        </HelpTip>
-      </div>
-
-      <div className="mb-3">
-        <Tabs
-          size="sm"
-          label="Quelles marques"
-          value={view}
-          onValueChange={(v) => setView(v as Status)}
-          items={[
-            { value: "nouveau", label: "À traiter", count: counts.nouveau },
-            { value: "pipeline", label: "Au Pipeline", count: counts.pipeline },
-            { value: "ignore", label: "Pas pertinentes", count: counts.ignore },
-          ]}
-        />
-      </div>
-
+    <RadarFrame
+      platformTabs={platformTabs}
+      lastRun={state?.at ?? null}
+      running={running}
+      onRun={() => void run()}
+      help={
+          <HelpTip title="Comment le radar YouTube trouve les collabs ?" align="end">
+            <p>Chaque matin, il lit les dernières vidéos de tes créateurs YouTube et du Scouting, et cherche des vidéos récentes en France (« code promo », « partenariat », « sponsorisé »…).</p>
+            <p>Une vidéo compte si le créateur a coché « communication commerciale » sur YouTube (<span className="font-medium text-foreground">placement déclaré</span>), ou si sa description le dit (#ad, code promo…). La marque vient des liens et des noms de la description.</p>
+            <p>{state?.at ? `Dernier passage ${fmtAgo(state.at)}` : "Pas encore lancé"}{state?.data.quota ? ` · quota YouTube du jour ${state.data.quota.used} / ${state.data.quota.limit}` : ""}.</p>
+          </HelpTip>
+      }
+      status={view}
+      onStatus={setView}
+      counts={counts}
+      query={q}
+      onQuery={setQ}
+      placeholder="Chercher une marque ou une chaîne"
+      filters={
+        <>
+          <Tabs size="sm" label="Période" value={period} onValueChange={setPeriod} items={PERIODS} />
+          <Tabs size="sm" label="Chez quelles chaînes" value={src} onValueChange={setSrc} items={SRC} />
+          <label className="inline-flex items-center gap-1.5 text-[12px] text-foreground" title="Seulement les vidéos où le créateur a coché « communication commerciale » sur YouTube">
+            <input type="checkbox" checked={onlyFlag} onChange={(e) => setOnlyFlag(e.target.checked)} /> Placement déclaré
+          </label>
+        </>
+      }
+      summary={
+        <>
+          <span className="font-semibold tabular-nums text-foreground">{brands.length}</span> marque{brands.length > 1 ? "s" : ""} qui paient ·{" "}
+          <span className="font-semibold tabular-nums text-foreground">{counts.channels.size}</span> chaîne{counts.channels.size > 1 ? "s" : ""}
+          {counts.mine > 0 && <> · <span className="font-semibold tabular-nums text-foreground">{counts.mine}</span> chez tes créateurs</>}
+        </>
+      }
+    >
       <div className="overflow-hidden rounded-2xl border border-border bg-surface">
         {list.length ? (
           <div className="divide-y divide-border">
@@ -236,7 +219,7 @@ export function YouTubeRadar() {
                       {view === "nouveau" ? (
                         <>
                           <button type="button" onClick={() => void toPipeline(b)} className={cn(BTN, "border-primary/40 text-primary")}><Plus className="h-3.5 w-3.5" /> Pipeline</button>
-                          <button type="button" onClick={() => void setStatus(b, "ignore")} className={cn(BTN, "text-muted-foreground")} title="Pas pertinent"><EyeOff className="h-3.5 w-3.5" /></button>
+                          <button type="button" onClick={() => void setStatus(b, "ignore")} className={cn(BTN, "text-muted-foreground")}><EyeOff className="h-3.5 w-3.5" /> Pas pertinente</button>
                         </>
                       ) : (
                         <button type="button" onClick={() => void setStatus(b, "nouveau")} className={BTN}><RotateCcw className="h-3.5 w-3.5" /> Remettre à traiter</button>
@@ -281,7 +264,7 @@ export function YouTubeRadar() {
           </div>
         )}
       </div>
-    </div>
+    </RadarFrame>
   );
 }
-const BTN = "inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover";
+const BTN = RADAR_BTN;

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, EyeOff, ExternalLink, Hourglass, Loader2, Plus, RefreshCw, RotateCcw, Search, Users, Wallet } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ChevronDown, ChevronUp, EyeOff, ExternalLink, Hourglass, Plus, RotateCcw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { HelpTip } from "@/components/ui/help-tip";
+import { RadarFrame, RADAR_BTN } from "@/components/RadarFrame";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert } from "@/lib/db";
@@ -36,7 +37,7 @@ function stateText(s: State | null): string {
   return "";
 }
 
-export function TikTokRadar() {
+export function TikTokRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
   const [rows, setRows] = useState<TtContent[] | null>(null);
   const [missing, setMissing] = useState(false);
   const [state, setState] = useState<{ data: State; at: string } | null>(null);
@@ -147,70 +148,55 @@ export function TikTokRadar() {
     );
   }
   const problem = state?.data && !state.data.ok ? stateText(state.data) : "";
-  const TILES = [
-    { icon: Wallet, n: brands.length, title: "Marques qui paient", text: "Marques qui ont payé au moins un créateur en France sur la période." },
-    { icon: Users, n: counts.creators.size, title: "Créateurs payés", text: "Créateurs en France qui ont publié un partenariat rémunéré." },
-    { icon: Plus, n: counts.mine, title: "Chez tes créateurs", text: "Marques qui ont déjà payé un créateur de ton roster sur TikTok." },
-  ];
-
   return (
-    <div>
-      {problem ? (
-        <div className="mb-3 flex items-start gap-3 rounded-2xl border border-amber/40 bg-amber/[0.06] p-3.5 text-[12px] leading-relaxed text-muted-foreground">
-          <Hourglass className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
-          <div>
-            <p className="font-semibold text-foreground">Radar TikTok pas encore allumé</p>
-            <p>{problem}</p>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="mb-3 grid grid-cols-3 gap-2 sm:gap-2.5">
-        {TILES.map((t) => (
-          <div key={t.title} title={t.text} className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3 sm:p-3.5">
-            <span className="hidden h-8 w-8 shrink-0 place-items-center rounded-full bg-panel text-muted-foreground sm:grid"><t.icon className="h-4 w-4" /></span>
-            <span className="min-w-0">
-              <span className="block text-[20px] font-bold leading-none tabular-nums text-foreground">{t.n}</span>
-              <span className="mt-1 block text-[12px] font-semibold text-foreground">{t.title}</span>
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Tabs size="sm" label="Période" value={period} onValueChange={setPeriod} items={PERIODS} />
-        <div className="relative min-w-[180px] flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher une marque ou un @créateur" className="w-full rounded-md border border-border bg-surface py-2 pl-8 pr-3 text-[12px] outline-none focus:border-primary" />
-        </div>
-        <label className="inline-flex items-center gap-1.5 text-[12px] text-foreground">
-          <input type="checkbox" checked={onlyMany} onChange={(e) => setOnlyMany(e.target.checked)} /> 2 créateurs et plus
-        </label>
-        <button type="button" onClick={() => void run()} disabled={running} className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
-          {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Lancer le radar
-        </button>
-        <HelpTip title="D'où viennent ces données ?" align="end">
-          <p>De la bibliothèque officielle de TikTok sur les contenus commerciaux en Europe : chaque vidéo marquée « partenariat rémunéré » par un créateur en France, avec la marque qui paie.</p>
-          <p>Mis à jour chaque matin. {state?.at ? `Dernier passage ${fmtAgo(state.at)}.` : ""}</p>
-          <p>« Contenus de mes créateurs » lit les partenariats TikTok des créateurs du roster et du Scouting qui ont un @ TikTok.</p>
-          <button type="button" onClick={() => void run("creators")} disabled={running} className="mt-1 text-[12px] font-medium text-primary">Lire les contenus de mes créateurs</button>
-        </HelpTip>
-      </div>
-
-      <div className="mb-3">
-        <Tabs
-          size="sm"
-          label="Quelles marques"
-          value={view}
-          onValueChange={(v) => setView(v as Status)}
-          items={[
-            { value: "nouveau", label: "À traiter", count: counts.nouveau },
-            { value: "pipeline", label: "Au Pipeline", count: counts.pipeline },
-            { value: "ignore", label: "Pas pertinentes", count: counts.ignore },
-          ]}
-        />
-      </div>
-
+    <RadarFrame
+      platformTabs={platformTabs}
+      lastRun={state?.at ?? null}
+      running={running}
+      onRun={() => void run()}
+      help={
+          <HelpTip title="D'où viennent ces données ?" align="end">
+            <p>De la bibliothèque officielle de TikTok sur les contenus commerciaux en Europe : chaque vidéo marquée « partenariat rémunéré » par un créateur en France, avec la marque qui paie.</p>
+            <p>Mis à jour chaque matin. {state?.at ? `Dernier passage ${fmtAgo(state.at)}.` : ""}</p>
+            <p>« Contenus de mes créateurs » lit les partenariats TikTok des créateurs du roster et du Scouting qui ont un @ TikTok.</p>
+            <button type="button" onClick={() => void run("creators")} disabled={running} className="mt-1 text-[12px] font-medium text-primary">Lire les contenus de mes créateurs</button>
+          </HelpTip>
+      }
+      status={view}
+      onStatus={setView}
+      counts={counts}
+      query={q}
+      onQuery={setQ}
+      placeholder="Chercher une marque ou un @créateur"
+      filters={
+        <>
+          <Tabs size="sm" label="Période" value={period} onValueChange={setPeriod} items={PERIODS} />
+          <label className="inline-flex items-center gap-1.5 text-[12px] text-foreground">
+            <input type="checkbox" checked={onlyMany} onChange={(e) => setOnlyMany(e.target.checked)} /> 2 créateurs et plus
+          </label>
+        </>
+      }
+      summary={
+        <>
+          <span className="font-semibold tabular-nums text-foreground">{brands.length}</span> marque{brands.length > 1 ? "s" : ""} qui paient ·{" "}
+          <span className="font-semibold tabular-nums text-foreground">{counts.creators.size}</span> créateur{counts.creators.size > 1 ? "s" : ""} payé{counts.creators.size > 1 ? "s" : ""}
+          {counts.mine > 0 && <> · <span className="font-semibold tabular-nums text-foreground">{counts.mine}</span> chez tes créateurs</>}
+        </>
+      }
+      notice={
+        <>
+          {problem ? (
+            <div className="mb-3 flex items-start gap-3 rounded-2xl border border-amber/40 bg-amber/[0.06] p-3.5 text-[12px] leading-relaxed text-muted-foreground">
+              <Hourglass className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
+              <div>
+                <p className="font-semibold text-foreground">Radar TikTok pas encore allumé</p>
+                <p>{problem}</p>
+              </div>
+            </div>
+          ) : null}
+        </>
+      }
+    >
       <div className="overflow-hidden rounded-2xl border border-border bg-surface">
         {view_.length ? (
           <div className="divide-y divide-border">
@@ -244,7 +230,7 @@ export function TikTokRadar() {
                       {view === "nouveau" ? (
                         <>
                           <button type="button" onClick={() => void toPipeline(b)} className={cn(BTN, "border-primary/40 text-primary")}><Plus className="h-3.5 w-3.5" /> Pipeline</button>
-                          <button type="button" onClick={() => void setBrandStatus(b, "ignore")} className={cn(BTN, "text-muted-foreground")} title="Pas pertinent"><EyeOff className="h-3.5 w-3.5" /></button>
+                          <button type="button" onClick={() => void setBrandStatus(b, "ignore")} className={cn(BTN, "text-muted-foreground")}><EyeOff className="h-3.5 w-3.5" /> Pas pertinente</button>
                         </>
                       ) : (
                         <button type="button" onClick={() => void setBrandStatus(b, "nouveau")} className={BTN}><RotateCcw className="h-3.5 w-3.5" /> Remettre à traiter</button>
@@ -286,7 +272,7 @@ export function TikTokRadar() {
           </div>
         )}
       </div>
-    </div>
+    </RadarFrame>
   );
 }
-const BTN = "inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover";
+const BTN = RADAR_BTN;
