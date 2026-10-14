@@ -155,6 +155,8 @@ export function Engagement() {
   const [viewEntry, setViewEntry] = useState<HistEntry | null>(null);
   // Vidéos TikTok de la créatrice (si elle a connecté son TikTok) : vraies stats 30 j.
   const [ttVideos, setTtVideos] = useState<{ at: string; views: number | null; likes: number | null; comments: number | null; shares: number | null }[]>([]);
+  // YouTube connecté : stats YouTube Studio des 30 derniers jours (toute la chaîne).
+  const [ytA30, setYtA30] = useState<{ views?: number | null; likes?: number | null; comments?: number | null; from?: string; to?: string } | null>(null);
 
   const { data: histData } = useAppState<HistEntry[]>(
     (s) => ((s as Record<string, unknown>).engagementHistory as HistEntry[]) ?? [],
@@ -182,13 +184,15 @@ export function Engagement() {
     let alive = true;
     supabase
       .from("creators")
-      .select("followers, tt")
+      .select("*") // (« * » : la colonne yt peut manquer tant que son SQL n'est pas lancé)
       .eq("id", creatorId)
       .limit(1)
       .then(({ data }) => {
         if (!alive) return;
         const tt = data?.[0]?.tt as { link?: unknown; recent?: typeof ttVideos } | null | undefined;
         setTtVideos(tt?.link && Array.isArray(tt.recent) ? tt.recent : []);
+        const yt = data?.[0]?.yt as { link?: unknown; a30?: typeof ytA30 } | null | undefined;
+        setYtA30(yt?.link && yt.a30?.views ? yt.a30 : null);
         if (editingIdRef.current) return;
         // Au CHANGEMENT de créateur, on charge SES abonnés (écrase la valeur du
         // créateur précédent — sinon la fiche du nouveau se retrouve corrompue).
@@ -424,6 +428,22 @@ export function Engagement() {
             title="Additionne les vues, j'aime, commentaires et partages de ses vidéos des 30 derniers jours (TikTok connecté)"
           >
             <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" /> Remplir avec ses vraies stats TikTok (30 j)
+          </button>
+        )}
+
+        {/* YouTube connecté : vues, j'aime et commentaires des 30 derniers jours (YouTube Studio) */}
+        {platformKey === "youtube" && ytA30 && (
+          <button
+            type="button"
+            onClick={() => {
+              setVals((cur) => ({ ...cur, likes: String(ytA30.likes ?? 0), comments: String(ytA30.comments ?? 0), views: String(ytA30.views ?? 0) }));
+              setSavedOk(false);
+              toast("Stats YouTube Studio des 30 derniers jours reprises ✓");
+            }}
+            className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+            title="Vues, j'aime et commentaires de toute sa chaîne sur 30 jours, donnés par YouTube (chaîne connectée)"
+          >
+            <PlatformIcon platform="youtube" className="h-3.5 w-3.5" /> Remplir avec ses vraies stats YouTube (30 j)
           </button>
         )}
 

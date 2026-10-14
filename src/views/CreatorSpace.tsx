@@ -54,6 +54,7 @@ import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { consumeIgReturn, igConnect, igDisconnect, type IgCreator } from "@/lib/instagram";
 import { consumeTtReturn, ttConnect, ttDisconnect, type TtCreator } from "@/lib/tiktok";
+import { consumeYtReturn, ytConnect, ytDisconnect, type YtCreator } from "@/lib/youtube";
 import { AddButton, InlineForm, TextField, SelectField, AutoGrowTextField } from "@/components/ui/form";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PlatformIcon } from "@/components/ui/platform-icon";
@@ -110,6 +111,7 @@ type Creator = {
   mediakit: { slug?: string; ugc?: { enabled?: boolean } } | null; // blob media kit (slug + activation UGC)
   ig?: IgCreator | null; // chiffres Instagram (ig-sync) + lien « Instagram connecté »
   tt?: TtCreator | null; // chiffres TikTok (tt-sync) + lien « TikTok connecté »
+  yt?: YtCreator | null; // chiffres YouTube (yt-sync) + lien « YouTube connecté »
 };
 type Subtask = { id: string; text: string; done: boolean };
 type Attachment = { name: string; size: string; path: string };
@@ -801,6 +803,8 @@ export function CreatorSpace({
     const tBack = consumeTtReturn();
     if (tBack === "connected") toast("TikTok connecté ✓ Tes stats arrivent toutes seules");
     else if (tBack === "error") toast("Connexion TikTok annulée");
+    const yBack = consumeYtReturn();
+    if (yBack) toast(yBack);
   }, []);
   // Connexion TikTok : abonnés, j'aime et vues de chaque vidéo, tout seuls.
   const [ttBusy, setTtBusy] = useState(false);
@@ -816,6 +820,21 @@ export function CreatorSpace({
     setTtBusy(false);
     if (ok) setCreator((c) => (c ? { ...c, tt: { ...(c.tt ?? {}), link: null } } : c));
     toast(ok ? "TikTok déconnecté" : "Erreur, réessaie");
+  };
+  // Connexion YouTube : stats YouTube Studio (vues, heures, audience), toutes seules.
+  const [ytBusy, setYtBusy] = useState(false);
+  const connectYt = async () => {
+    setYtBusy(true);
+    const err = await ytConnect();
+    setYtBusy(false);
+    if (err) toast(err);
+  };
+  const disconnectYt = async () => {
+    setYtBusy(true);
+    const ok = await ytDisconnect();
+    setYtBusy(false);
+    if (ok) setCreator((c) => (c ? { ...c, yt: { ...(c.yt ?? {}), link: null } } : c));
+    toast(ok ? "YouTube déconnecté" : "Erreur, réessaie");
   };
   const connectIg = async () => {
     setIgBusy(true);
@@ -3127,6 +3146,44 @@ export function CreatorSpace({
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
               >
                 {ttBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} Connecter mon TikTok
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Et YouTube (stats YouTube Studio, lecture seule) */}
+        <div className="mb-3 rounded-xl border border-border bg-surface p-3.5">
+          {creator?.yt?.link ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] leading-relaxed text-foreground">
+              <span className="flex items-start gap-1.5">
+                <PlatformIcon platform="youtube" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
+                <span>
+                  <span className="font-semibold">YouTube connecté</span>
+                  {creator.yt.link.title ? ` (${creator.yt.link.title})` : ""} : tes vues, ton temps de visionnage et ton audience arrivent tout seuls.
+                </span>
+              </span>
+              {!preview && (
+                <button type="button" onClick={() => void disconnectYt()} disabled={ytBusy} className="text-[11px] text-faint transition-colors hover:text-rose-500 disabled:opacity-50">
+                  Déconnecter
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
+                <PlatformIcon platform="youtube" className="h-3.5 w-3.5" /> Tu as une chaîne YouTube ?
+              </div>
+              <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                Connecte-la : tes stats YouTube Studio (vues, heures regardées, abonnés gagnés, audience) arrivent toutes seules. Lecture seule, on ne peut rien publier ni modifier. Tu peux déconnecter quand tu veux.
+              </div>
+              <button
+                type="button"
+                onClick={() => void connectYt()}
+                disabled={ytBusy || !!preview}
+                title={preview ? "La créatrice le fait depuis son espace" : undefined}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
+              >
+                {ytBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} Connecter mon YouTube
               </button>
             </>
           )}

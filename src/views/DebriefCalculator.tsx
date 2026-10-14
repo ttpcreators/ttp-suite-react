@@ -3,6 +3,7 @@ import { Plus, Trash2, Camera, Loader2, Calculator, ArrowUp, Rows3, Layers } fro
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { postKind, type IgCollab, type IgCreator, type IgPostLite } from "@/lib/instagram";
 import type { TtCollab, TtCreator, TtVideoLite } from "@/lib/tiktok";
+import type { YtCollab, YtCreator, YtVideoLite } from "@/lib/youtube";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import { downscaleImage } from "@/components/ui/image-field";
@@ -307,6 +308,31 @@ export function DebriefCalculator({
     toast(`${posts.length} vidéo${posts.length > 1 ? "s" : ""} TikTok reprise${posts.length > 1 ? "s" : ""} ✓`);
   };
 
+  // Pareil avec YouTube (chaîne connectée) : vidéos qui citent la marque, avec vues,
+  // j'aime et commentaires (pas de couverture → taux sur les abonnés).
+  const fillFromYouTube = async () => {
+    const brand = igFor?.brand.trim() ?? "";
+    const creator = igFor?.creator.trim() ?? "";
+    if (!brand || !creator) return toast("Renseigne d'abord la marque et la créatrice");
+    setIgBusy(true);
+    const [cols, cr] = await Promise.all([
+      supabase.from("collabs").select("yt").ilike("brand", brand).ilike("creator", creator),
+      supabase.from("creators").select("*").ilike("name", creator).limit(1),
+    ]);
+    setIgBusy(false);
+    if (cols.error) return toast("Pas encore disponible (YouTube pas encore activé)");
+    const byId = new Map<string, YtVideoLite>();
+    for (const c of (cols.data as { yt: YtCollab | null }[] | null) ?? []) for (const p of c.yt?.posts ?? []) byId.set(p.id, p);
+    const posts = [...byId.values()].sort((a, b) => a.at.localeCompare(b.at));
+    if (!posts.length) return toast("Aucune vidéo YouTube repérée pour cette collab (elle doit avoir connecté sa chaîne)");
+    const n = (v?: number | null) => (v ? String(v) : "");
+    const next: Row[] = posts.map((p) => ({ id: rid(), kind: p.short ? "Short" : "YouTube", reach: "", likes: n(p.likes), comments: n(p.comments), saves: "", shares: "", views: n(p.views) }));
+    const live = ((cr.data as { yt?: YtCreator | null }[] | null) ?? [])[0]?.yt?.subscribers;
+    setRows(next);
+    onChange({ ...state, mode: "detail", stats: next.map(rowToStat), followers: live ? String(live) : state.followers, basis: "followers" });
+    toast(`${posts.length} vidéo${posts.length > 1 ? "s" : ""} YouTube reprise${posts.length > 1 ? "s" : ""} ✓`);
+  };
+
   const onFiles = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
@@ -393,6 +419,17 @@ export function DebriefCalculator({
           title="Reprend les vidéos TikTok de la créatrice qui citent la marque (si elle a connecté son TikTok)"
         >
           {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} Remplir depuis TikTok
+        </button>
+      )}
+      {igFor && (
+        <button
+          type="button"
+          onClick={() => void fillFromYouTube()}
+          disabled={igBusy}
+          className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+          title="Reprend les vidéos YouTube de la créatrice qui citent la marque (si elle a connecté sa chaîne)"
+        >
+          {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} Remplir depuis YouTube
         </button>
       )}
 

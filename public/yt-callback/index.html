@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Connexion YouTube · TTP Creators</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: system-ui, -apple-system, sans-serif; background: #faf9f7; color: #1c1917; }
+  p { font-size: 15px; padding: 24px; text-align: center; }
+  @media (prefers-color-scheme: dark) { body { background: #111; color: #eee; } }
+</style>
+</head>
+<body>
+<p>Connexion YouTube en cours…</p>
+<script>
+  // Retour de Google après « Connecter mon YouTube » : on passe tel quel ?code=…&state=…
+  // (ou ?error=…) au serveur, qui range l'accès puis renvoie dans l'app.
+  // (Google exige une adresse de retour sur notre domaine pour valider l'app.)
+  location.replace("https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/yt-callback" + location.search);
+</script>
+</body>
+</html>

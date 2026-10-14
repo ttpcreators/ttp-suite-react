@@ -27,6 +27,7 @@ import { PlatformIcon } from "@/components/ui/platform-icon";
 import { fmtCompact } from "@/lib/timeSeries";
 import { igRefresh, igWhyText, postKind, useIgColumn, type IgCollab } from "@/lib/instagram";
 import type { TtCollab } from "@/lib/tiktok";
+import type { YtCollab } from "@/lib/youtube";
 
 type Row = {
   id: string;
@@ -84,6 +85,7 @@ export function Collabs() {
   const [igCollabs, putIgCollab] = useIgColumn<IgCollab>("collabs", "id");
   const [igBusy, setIgBusy] = useState<string | null>(null);
   const [ttCollabs, setTtCollabs] = useState<Record<string, TtCollab>>({});
+  const [ytCollabs, setYtCollabs] = useState<Record<string, YtCollab>>({});
   const [error, setError] = useState(false);
   const { query } = useSearch();
   const creators = useCreators();
@@ -96,6 +98,13 @@ export function Collabs() {
       const m: Record<string, TtCollab> = {};
       for (const r of (data as { id: string; tt: TtCollab | null }[] | null) ?? []) if (r.tt) m[r.id] = r.tt;
       setTtCollabs(m);
+    });
+    // Pareil pour YouTube (yt-sync) ; requête à part : colonne absente avant son SQL.
+    void supabase.from("collabs").select("id, yt").not("yt", "is", null).then(({ data, error }) => {
+      if (!alive || error) return;
+      const m: Record<string, YtCollab> = {};
+      for (const r of (data as { id: string; yt: YtCollab | null }[] | null) ?? []) if (r.yt?.posts?.length) m[r.id] = r.yt;
+      setYtCollabs(m);
     });
     return () => {
       alive = false;
@@ -191,7 +200,8 @@ export function Collabs() {
     const posts = ig?.posts ?? [];
     // Vidéos TikTok de la créatrice qui citent la marque (tt-sync, si elle a connecté son TikTok).
     const ttPosts = ttCollabs[row.id]?.posts ?? [];
-    const total = posts.length + ttPosts.length;
+    const ytPosts = ytCollabs[row.id]?.posts ?? [];
+    const total = posts.length + ttPosts.length + ytPosts.length;
     const expected = expectedPosts(row.deliverables);
     return (
       <div className="mt-2 rounded-xl bg-panel px-3 py-2.5">
@@ -231,6 +241,18 @@ export function Collabs() {
             {ttPosts.map((p) => (
               <a key={`tt${p.id}`} href={p.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg bg-surface px-2 py-1.5 text-[11px] transition-colors hover:bg-rowhover">
                 <span className="flex shrink-0 items-center gap-1 font-semibold text-foreground"><PlatformIcon platform="tiktok" className="h-3 w-3" />TikTok</span>
+                <span className="shrink-0 text-faint">{frDate(p.at)}</span>
+                <span className="ml-auto flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
+                  {p.views != null && <span title="Vues">{fmtCompact(p.views)} vues</span>}
+                  {p.likes != null && <span className="flex items-center gap-0.5"><Heart className="h-3 w-3" />{fmtCompact(p.likes)}</span>}
+                  {p.comments != null && <span className="flex items-center gap-0.5"><MessageCircle className="h-3 w-3" />{fmtCompact(p.comments)}</span>}
+                  <ExternalLink className="h-3 w-3 text-faint" />
+                </span>
+              </a>
+            ))}
+            {ytPosts.map((p) => (
+              <a key={`yt${p.id}`} href={p.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg bg-surface px-2 py-1.5 text-[11px] transition-colors hover:bg-rowhover">
+                <span className="flex shrink-0 items-center gap-1 font-semibold text-foreground"><PlatformIcon platform="youtube" className="h-3 w-3" />{p.short ? "Short" : "YouTube"}</span>
                 <span className="shrink-0 text-faint">{frDate(p.at)}</span>
                 <span className="ml-auto flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
                   {p.views != null && <span title="Vues">{fmtCompact(p.views)} vues</span>}
@@ -658,6 +680,11 @@ export function Collabs() {
             {(ttCollabs[row.id]?.posts?.length ?? 0) > 0 && (
               <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
                 <PlatformIcon platform="tiktok" className="h-3 w-3" /> {ttCollabs[row.id]?.posts?.length} vidéo{(ttCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""} TikTok repérée{(ttCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""}
+              </div>
+            )}
+            {(ytCollabs[row.id]?.posts?.length ?? 0) > 0 && (
+              <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                <PlatformIcon platform="youtube" className="h-3 w-3" /> {ytCollabs[row.id]?.posts?.length} vidéo{(ytCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""} YouTube repérée{(ytCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""}
               </div>
             )}
           </div>

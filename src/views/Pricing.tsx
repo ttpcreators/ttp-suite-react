@@ -26,10 +26,11 @@ type Mode = "influence" | "ugc";
 /** views = vues attendues par contenu (vide = estimées) ; src = d'où viennent vues et engagement. */
 type InfRow = { id: string; platform: PlatKey; format: string; qty: number; followers: string; er: string; views: string; src: string; erBase: "views" | "followers" };
 /** Audience d'une plateforme pour la créatrice choisie (données réelles quand on les a). */
-type Aud = { followers: string; er: string; views: string; storyViews: string; src: string; erBase: "views" | "followers" };
+type Aud = { followers: string; er: string; views: string; storyViews: string; shortViews?: string; src: string; erBase: "views" | "followers" };
 const NO_AUD: Aud = { followers: "", er: "", views: "", storyViews: "", src: "", erBase: "followers" };
 const SRC_LABEL: Record<string, string> = {
   tiktok: "vues mesurées sur TikTok (12 dernières vidéos)",
+  youtube: "vues mesurées sur YouTube (dernières vidéos, Shorts à part)",
   instagram: "chiffres Instagram du jour",
   igreels: "vues mesurées sur Instagram (derniers reels)",
   kit: "vues du media kit",
@@ -77,6 +78,7 @@ export function Pricing() {
         followers?: string; er?: string; niche?: string; mediakit?: { platforms?: Kit[] };
         ig?: { followers?: number; er?: number | null; link?: unknown; insights?: { reelViews?: number | null } | null } | null;
         tt?: { followers?: number | null; avgViews?: number | null; er?: number | null; link?: unknown } | null;
+        yt?: { subscribers?: number | null; avgViews?: number | null; avgShortViews?: number | null; er?: number | null; link?: unknown } | null;
       } | undefined;
       if (!row) return;
       const map: Record<string, Aud> = {};
@@ -97,6 +99,16 @@ export function Pricing() {
       // TikTok connecté : vraies vues moyennes et engagement sur les vues.
       if (row.tt?.link && row.tt.followers) {
         map.tiktok = { ...(map.tiktok ?? NO_AUD), followers: String(row.tt.followers), views: row.tt.avgViews ? String(row.tt.avgViews) : "", er: row.tt.er != null ? String(row.tt.er) : "", erBase: "views", src: row.tt.avgViews ? "tiktok" : "fiche" };
+      }
+      // YouTube connecté : vraies vues moyennes (vidéos longues pour les intégrations, Shorts à part).
+      if (row.yt?.link && (row.yt.subscribers || row.yt.avgViews || row.yt.avgShortViews)) {
+        const k = map.youtube ?? NO_AUD;
+        const real = !!(row.yt.avgViews || row.yt.avgShortViews);
+        map.youtube = {
+          ...k, followers: row.yt.subscribers ? String(row.yt.subscribers) : k.followers,
+          views: row.yt.avgViews ? String(row.yt.avgViews) : k.views, shortViews: row.yt.avgShortViews ? String(row.yt.avgShortViews) : "",
+          er: row.yt.er != null ? String(row.yt.er) : k.er, erBase: "views", src: real ? "youtube" : k.src || "fiche",
+        };
       }
       setPlatMap(map);
       const fb: Aud = { ...NO_AUD, followers: String(row.followers ?? ""), er: String(row.er ?? ""), src: "fiche", erBase: "views" };
@@ -121,7 +133,7 @@ export function Pricing() {
   function fill(r: InfRow, map: Record<string, Aud>, fb: Aud, force = false): InfRow {
     const a = map[r.platform] || fb;
     const isStory = r.format === "story";
-    const v = isStory ? a.storyViews : ["reel", "video", "integration", "dedicated", "short"].includes(r.format) ? a.views : "";
+    const v = isStory ? a.storyViews : r.format === "short" ? a.shortViews ?? a.views : ["reel", "video", "integration", "dedicated"].includes(r.format) ? a.views : "";
     return {
       ...r,
       followers: force ? a.followers : r.followers || a.followers || "",

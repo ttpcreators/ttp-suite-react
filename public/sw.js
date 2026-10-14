@@ -33,6 +33,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // Supabase, Google, avatars… : jamais touchés
   if (req.mode === "navigate") {
+    if (url.pathname.startsWith("/yt-callback")) return; // page relais du retour de Google : jamais gardée
     event.respondWith(networkFirst(req));
     return;
   }

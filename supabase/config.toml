@@ -177,3 +177,18 @@ verify_jwt = false
 # l'agence) → verify_jwt=false ; auth dans le code.
 [functions.yt-radar]
 verify_jwt = false
+
+# yt-connect : une créatrice (ou l'agence pour elle) lance / coupe la connexion YouTube.
+# JWT requis + rôle vérifié dans le code (même schéma que tt-connect).
+[functions.yt-connect]
+verify_jwt = true
+
+# yt-callback : retour du navigateur depuis Google, via app.ttpcreators.pro/yt-callback/
+# (sans JWT) → verify_jwt=false ; l'authenticité tient au state signé.
+[functions.yt-callback]
+verify_jwt = false
+
+# yt-sync : chiffres YouTube (cron quotidien avec CRON_SECRET, ou agence) → verify_jwt=false ;
+# auth dans le code.
+[functions.yt-sync]
+verify_jwt = false

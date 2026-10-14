@@ -17,6 +17,7 @@
 
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { igUser } from "../_shared/instagram.ts";
+import { brandMatcher, norm } from "../_shared/brandmatch.ts";
 import { ttFreshToken, ttReady, ttStats, ttUser, ttVideos, type TtAccount, type TtVideo } from "../_shared/tiktok.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -26,7 +27,6 @@ type CollabRow = { id: string; brand: string; creator: string | null; step: numb
 
 const today = () => new Date().toISOString().slice(0, 10);
 const fmtInt = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 function pushDay(hist: unknown, n: number): { d: string; f: number }[] {
   const d = today();
@@ -57,26 +57,6 @@ function updateKit(mk: Json, tt: Json): Json | null {
   platforms[i] = block;
   const next = { ...mk, platforms };
   return JSON.stringify(next) === JSON.stringify(mk) ? null : next;
-}
-
-/** La vidéo cite-t-elle la marque ? (@ ou # du compte de la marque, ou son nom). */
-function brandMatcher(brand: string, handles: string[]): (text: string) => boolean {
-  const words = new Set<string>();
-  for (const h of handles) {
-    words.add(h.toLowerCase());
-    words.add(h.toLowerCase().replace(/[._]/g, ""));
-  }
-  const flat = norm(brand).replace(/[^a-z0-9]/g, "");
-  if (flat.length >= 3) words.add(flat);
-  const spaced = norm(brand).trim();
-  return (text: string) => {
-    const t = ` ${norm(text)} `;
-    for (const w of words) {
-      const esc = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      if (new RegExp(`(^|[^a-z0-9._])[@#]?${esc}([^a-z0-9_]|$)`).test(t)) return true;
-    }
-    return spaced.length >= 4 && spaced.includes(" ") && t.includes(spaced);
-  };
 }
 
 async function caller(req: Request, sb: SupabaseClient): Promise<"cron" | "agency" | null> {

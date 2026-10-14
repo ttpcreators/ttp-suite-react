@@ -58,7 +58,9 @@ import { DateInput } from "@/components/ui/date-range-picker";
 import { SelectField } from "@/components/ui/form";
 import { InstagramCard } from "@/components/InstagramCard";
 import { TikTokCard } from "@/components/TikTokCard";
+import { YouTubeCard } from "@/components/YouTubeCard";
 import type { TtCreator } from "@/lib/tiktok";
+import type { YtCreator } from "@/lib/youtube";
 import { fmtAgo, type IgCreator } from "@/lib/instagram";
 
 type Creator = {
@@ -84,8 +86,12 @@ type Creator = {
   tiktok: string | null;
   ig?: IgCreator | null; // chiffres Instagram du jour (ig-sync, après la migration 2026-10-13)
   tt?: TtCreator | null; // TikTok connecté par la créatrice (tt-sync, après la migration 2026-10-14)
+  yt?: YtCreator | null; // chaîne YouTube connectée par la créatrice (yt-sync)
+  mediakit?: { platforms?: { key?: string }[] } | null;
   email_pro: string | null;
 };
+/** Le media kit a-t-il une ligne YouTube ? (carte YouTube affichée même sans @). */
+const hasKitYouTube = (mk: Creator["mediakit"]) => !!mk?.platforms?.some((p) => p?.key === "youtube");
 type Inv = { ref: string; party: string; amount: string; date: string; status?: string | null };
 type Td = { id: string; text: string; done: boolean };
 type Br = { brand: string; deliverables: string | null; due: string | null };
@@ -713,6 +719,16 @@ export function CreatorDetail({
           name={c.name}
           tt={c.tt}
           onChange={(tt) => setC((prev) => (prev ? { ...prev, tt } : prev))}
+          className={segHide("infos")}
+        />
+      )}
+
+      {c?.id && (c.yt || socialLinks.some((l) => l.label === "YouTube") || hasKitYouTube(c.mediakit)) && (
+        <YouTubeCard
+          creatorId={c.id}
+          name={c.name}
+          yt={c.yt}
+          onChange={(yt) => setC((prev) => (prev ? { ...prev, yt } : prev))}
           className={segHide("infos")}
         />
       )}
