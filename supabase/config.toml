@@ -147,3 +147,8 @@ verify_jwt = false
 # maintenant » de l'agence) → verify_jwt=false ; auth dans le code.
 [functions.ig-publish]
 verify_jwt = false
+
+# ig-webhook : Meta appelle cette adresse à chaque DM (pas de JWT) → verify_jwt=false ;
+# authenticité = signature X-Hub-Signature-256 (META_APP_SECRET), vérifiée dans le code.
+[functions.ig-webhook]
+verify_jwt = false

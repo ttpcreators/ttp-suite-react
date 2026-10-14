@@ -10,6 +10,11 @@
 //      remplit l'email de la fiche s'il manque, et ajoute au journal de prospection
 //      (contacts.touches) une touche par jour d'échange : canal Instagram.
 // Le Radar à marques (page Sourcing) met de côté les marques déjà en conversation.
+// { users: [id Instagram…] } : lecture ciblée de ces conversations seulement (appelé
+// par ig-webhook à chaque nouveau message : marche aussi avant la validation Meta pour
+// les comptes qui ont un rôle sur l'app, ce qui sert à la démo de l'App Review).
+// Conservation : conversations et messages de plus de 3 ans supprimés (politique de
+// confidentialité, ttpcreators.pro/confidentialite).
 //
 // À régler une fois : permissions instagram_manage_messages + pages_manage_metadata
 // sur le jeton de l'utilisateur système, et dans l'app Instagram de TTP :
@@ -18,7 +23,7 @@
 // ============================================================================
 
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
-import { GRAPH, META_IG_ID, getJson, graphWhy, igUser, metaReady, ownAccount, pageAccess, saveState, saveUsage, storePicture } from "../_shared/instagram.ts";
+import { GRAPH, META_IG_ID, getJson, graphWhy, igUser, metaReady, ownAccount, pageAccess, postGraph, saveState, saveUsage, storePicture } from "../_shared/instagram.ts";
 import { dmTouches, NO_TEXT, type DmMsg, type Touch } from "../_shared/inbox.ts";
 import { emailsIn } from "../_shared/signals.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -60,15 +65,23 @@ Deno.serve(async (req: Request) => {
   const probe = await sb.from("ig_threads").select("id").limit(1);
   if (probe.error) return res({ error: "migration_manquante" });
   if (!metaReady()) return res({ error: "meta_non_configure" });
+  let body: { users?: unknown } = {};
+  try {
+    body = (await req.json()) ?? {};
+  } catch {
+    body = {};
+  }
+  const targets = Array.isArray(body.users) ? [...new Set(body.users.map(String).filter((x) => /^\d{5,25}$/.test(x)))].slice(0, 10) : [];
+  const stateKey = targets.length ? "inbox_direct" : "inbox";
   // En attente de la validation Meta : le cron ne réessaie qu'une fois par jour (le bouton, toujours).
-  if (who === "cron") {
+  if (who === "cron" && !targets.length) {
     const { data: st } = await sb.from("ig_sync_state").select("data, at").eq("key", "inbox").maybeSingle<{ data: { why?: string }; at: string }>();
     if (st?.data?.why === "meta_validation" && Date.now() - Date.parse(st.at) < 24 * 3600e3) return res({ ok: false, skipped: "meta_validation" });
   }
   const t0 = Date.now();
   const fail = async (why: string, detail?: string) => {
     console.log("ig-inbox échec", why, detail ?? "");
-    await saveState(sb, "inbox", { ok: false, why, detail: detail ?? null });
+    await saveState(sb, stateKey, { ok: false, why, detail: detail ?? null });
     return res({ error: why, detail, quota: await saveUsage(sb) });
   };
 
@@ -79,12 +92,31 @@ Deno.serve(async (req: Request) => {
   const meUser = me?.username ?? "";
   const isMe = (p?: Person) => !!p && (p.id === META_IG_ID || (!!meUser && (p.username ?? "").toLowerCase() === meUser));
 
+  // Réception en direct (ig-webhook) : la Page doit avoir l'app installée. Une fois suffit.
+  if (!targets.length) {
+    const { data: st } = await sb.from("ig_sync_state").select("data").eq("key", "webhook").maybeSingle<{ data: { subscribed?: boolean } }>();
+    if (!st?.data?.subscribed) {
+      const sub = await postGraph(`${page.pageId}/subscribed_apps`, { subscribed_fields: "messages" }, page.token);
+      await saveState(sb, "webhook", { subscribed: !sub.error && !!sub.success, detail: sub.error ? (sub.error as GraphError).message ?? "erreur" : null });
+    }
+  }
+
   // 2. Conversations récentes (liste seule, sans les messages : Meta met trop de temps
   //    à tout renvoyer d'un coup). On s'arrête dès qu'une page entière n'a rien de neuf.
   const { data: knownRaw } = await sb.from("ig_threads").select("id, username, contact_id, emails, picture, updated_at");
   const known = new Map(((knownRaw as ThreadRow[] | null) ?? []).map((t) => [t.id, t]));
-  let url: string | null = `${GRAPH}/${page.pageId}/conversations?platform=instagram&limit=${PAGE_SIZE}&fields=${enc("id,updated_time,participants")}&access_token=${enc(page.token)}`;
+  let url: string | null = targets.length ? null : `${GRAPH}/${page.pageId}/conversations?platform=instagram&limit=${PAGE_SIZE}&fields=${enc("id,updated_time,participants")}&access_token=${enc(page.token)}`;
   const todo: Conv[] = [];
+  // Lecture ciblée : la conversation de chaque compte signalé par le webhook.
+  for (const uid of targets) {
+    const one = await getJson(`${GRAPH}/${page.pageId}/conversations?platform=instagram&user_id=${enc(uid)}&fields=${enc("id,updated_time,participants")}&access_token=${enc(page.token)}`, 20_000);
+    if (one.error) {
+      const e = one.error as GraphError;
+      console.log("ig-inbox ciblé", uid, e.code, e.message);
+      continue;
+    }
+    for (const conv of (one.data as Conv[] | undefined) ?? []) if (!todo.some((c) => c.id === conv.id)) todo.push(conv);
+  }
   for (let n = 0; url && n < MAX_PAGES && Date.now() - t0 < 40_000; n++) {
     const body = await getJson(url, 30_000);
     if (body.error) {
@@ -233,8 +265,15 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // 6. Conservation : rien au-delà de 3 ans après le dernier échange.
+  if (!targets.length) {
+    const limit = new Date(Date.now() - 3 * 365 * 86400000).toISOString();
+    await sb.from("ig_threads").delete().lt("updated_at", limit);
+    await sb.from("ig_messages").delete().lt("at", limit);
+  }
+
   const out = { ok: true, threads: changed.length, left: skipped, saved, linked, touches: touchesAdded, emails: emailsAdded, me: meUser || null, ms: Date.now() - t0 };
-  await saveState(sb, "inbox", out);
+  await saveState(sb, stateKey, out);
   console.log("ig-inbox", JSON.stringify(out));
   return res({ ...out, quota: await saveUsage(sb) });
 });
