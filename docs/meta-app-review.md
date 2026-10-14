@@ -12,8 +12,8 @@ App Meta : « TTP Suite Scouting », ID `1085983370893343`, type Entreprise, por
 
 | # | Étape | Qui | État |
 |---|-------|-----|------|
-| 1 | Vérification de l'entreprise (Business Manager → Centre de sécurité → « Démarrer la vérification ») : documents officiels au nom de l'entreprise | Marc | ⏳ |
-| 2 | Pages publiques `ttpcreators.pro/confidentialite/` et `/conditions/` (site vitrine) | assistant (prêt), Marc valide | ⏳ |
+| 1 | Vérification de l'entreprise (Business Manager → Centre de sécurité → « Démarrer la vérification ») : documents officiels au nom de l'entreprise. Avant : renommer le portefeuille « The Insider's Private Society » en « TTP Creators » et corriger « Informations sur l'entreprise » (raison sociale actuelle « TIPS CONCIERGE », site instagram.com/tipsconcierge, pas de téléphone) avec les données de l'avis SIRENE / extrait RNE de l'EI de Marc ; code de confirmation par email sur partnerships@ttpcreators.pro | Marc | ⏸️ en pause (2026-10-14) |
+| 2 | Pages publiques `ttpcreators.pro/confidentialite/` et `/conditions/` (site vitrine) | assistant | ✅ en ligne (2026-10-14) |
 | 3 | Fiche de l'app (Paramètres de l'app → Général) : voir « Champs » ci-dessous | Marc | ⏳ |
 | 4 | Réception en direct : déployer `ig-webhook` + secrets + Webhooks Meta (voir plus bas) | Marc | ⏳ |
 | 5 | Vidéo de démonstration (scénario ci-dessous) | Marc + assistant | ⏳ |
