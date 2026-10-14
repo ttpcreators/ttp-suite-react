@@ -146,7 +146,7 @@ export function Notifications({
           aria-label="Notifications"
           className={variant === "bar"
             ? "relative grid h-11 w-11 place-items-center text-foreground"
-            : "relative grid h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"}
+            : "relative grid h-10 w-10 place-items-center rounded-full bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"}
         >
           <Bell className={variant === "bar" ? "h-[22px] w-[22px]" : "h-4 w-4"} strokeWidth={variant === "bar" ? 1.9 : 2} />
           {notifications.length > 0 && (

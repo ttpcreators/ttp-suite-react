@@ -6,6 +6,7 @@ import { frDate, toISODate } from "@/lib/dates";
 import { parseAmount, formatEuro, useAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { Delta, RadialTicks, TickMeter, SegmentBar } from "@/components/ui/dash";
+import { initialsTone } from "@/components/ui/creator-avatar";
 import { invMonthKey, monthsBetween, monthLabel, momDelta } from "@/lib/timeSeries";
 import { Users, ListChecks, CalendarDays, Wallet, ArrowRight, Sparkles, FileText, Trophy, CalendarClock } from "lucide-react";
 import { useLiveKey } from "@/lib/useLive";
@@ -86,7 +87,7 @@ function Panel({ children, className = "", i = 0 }: { children: ReactNode; class
       initial={reduce ? false : { y: 10 }}
       animate={{ y: 0 }}
       transition={{ delay: i * 0.05, duration: 0.4, ease: "easeOut" }}
-      className={cn("overflow-hidden rounded-2xl border border-border bg-surface", className)}
+      className={cn("overflow-hidden rounded-2xl bg-surface", className)}
     >
       {children}
     </motion.section>
@@ -99,7 +100,7 @@ function WideLink({ label, onClick }: { label: string; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center justify-center gap-1.5 rounded-full bg-muted px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+      className="flex w-full items-center justify-center gap-1.5 rounded-full bg-muted px-4 py-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-input/60"
     >
       {label} <ArrowRight className="h-3.5 w-3.5" />
     </button>
@@ -109,8 +110,8 @@ function WideLink({ label, onClick }: { label: string; onClick: () => void }) {
 function SectionTitle({ icon: Icon, children, right }: { icon: typeof Users; children: ReactNode; right?: ReactNode }) {
   return (
     <div className="mb-4 flex items-center gap-2">
-      <Icon className="h-4 w-4 text-muted-foreground" />
-      <h2 className="text-[14px] font-semibold text-foreground">{children}</h2>
+      <Icon className="h-4 w-4 text-muted-foreground" aria-hidden />
+      <h2 className="text-[18px] font-semibold tracking-[-0.01em] text-foreground md:text-[20px]">{children}</h2>
       {right && <div className="ml-auto">{right}</div>}
     </div>
   );
@@ -300,13 +301,13 @@ export function ApercuView({
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         {/* ── Colonne principale ── (flex : la dernière rangée s'étire jusqu'en bas) */}
         <Panel className="flex flex-col xl:col-span-8" i={0}>
           {/* KPI séparés par des filets */}
           <div className="ios-kpis grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             {kpis.map((k) => (
-              <div key={k.label} className="px-5 py-5">
+              <div key={k.label} className="px-6 py-6">
                 <div className="text-[13px] text-muted-foreground">{k.label}</div>
                 <div className="ios-kpi-value mt-2 text-[28px] font-semibold leading-none tracking-tight tabular-nums">{k.value}</div>
                 <div className="mt-3">
@@ -317,7 +318,7 @@ export function ApercuView({
           </div>
 
           {/* Grand graphique */}
-          <div className="border-t border-border px-5 pb-3 pt-5">
+          <div className="border-t border-border px-6 pb-4 pt-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-[30px] font-semibold leading-none tracking-tight tabular-nums">{formatEuro(lastMonth)}</div>
@@ -354,7 +355,7 @@ export function ApercuView({
 
           {/* Insight Megan + répartition */}
           <div className="grid flex-1 grid-cols-1 divide-y divide-border border-t border-border md:grid-cols-2 md:divide-x md:divide-y-0">
-            <div className="px-5 py-5">
+            <div className="px-6 py-6">
               <SectionTitle
                 icon={Sparkles}
                 right={
@@ -369,14 +370,14 @@ export function ApercuView({
               </SectionTitle>
               <p className="line-clamp-4 text-[19px] leading-snug text-muted-foreground md:text-[21px]">{insight}</p>
             </div>
-            <div className="px-5 py-5">
+            <div className="px-6 py-6">
               <div className="text-[13px] text-muted-foreground">Facturé au total</div>
               <div className="mb-5 mt-2 text-[28px] font-semibold leading-none tracking-tight tabular-nums">{formatEuro(factTotal)}</div>
               <SegmentBar
                 segments={[
-                  { label: "Payé", value: paidSum, className: "bg-foreground/70" },
-                  { label: "En attente", value: waitSum, className: "bg-foreground/30" },
-                  { label: "En retard", value: lateSum, className: "bg-rose-500/80" },
+                  { label: "Payé", value: paidSum, className: "bg-status-pos-dot" },
+                  { label: "En attente", value: waitSum, className: "bg-status-wait-dot" },
+                  { label: "En retard", value: lateSum, className: "bg-status-urg-dot" },
                 ]}
               />
             </div>
@@ -385,7 +386,7 @@ export function ApercuView({
 
         {/* ── Colonne de droite ── */}
         <Panel className="flex flex-col xl:col-span-4" i={1}>
-          <div className="px-5 pb-5 pt-6">
+          <div className="px-6 pb-6 pt-6">
             <RadialTicks pct={gaugePct} label={`${gaugeLabel} : ${gaugeRound} %`}>
               <span className="mb-2 grid size-10 place-items-center rounded-full bg-muted text-muted-foreground">
                 <Wallet className="h-4 w-4" />
@@ -403,7 +404,7 @@ export function ApercuView({
             </div>
           </div>
 
-          <div className="border-t border-border px-5 py-5">
+          <div className="border-t border-border px-6 py-6">
             <div className="text-[13px] text-muted-foreground">Créatrices actives</div>
             <div className="mb-3 mt-2 text-[28px] font-semibold leading-none tracking-tight tabular-nums">{activeCount}</div>
             <TickMeter pct={activePct} label={`${activeCount} créatrices actives sur ${d.creators.length}`} />
@@ -413,18 +414,18 @@ export function ApercuView({
             </div>
           </div>
 
-          <div className="border-t border-border px-5 py-5">
+          <div className="border-t border-border px-6 py-6">
             <div className="mb-3 text-[13px] text-muted-foreground">Dernière facture</div>
             {lastInv ? (
-              <dl className="flex flex-col gap-2.5 text-[13px]">
+              <dl className="flex flex-col gap-3 text-[14px]">
                 {[
-                  ["Émise le", frDate(invDetails[lastInv.id]?.issueDate || lastInv.date)],
-                  ["Montant", formatEuro(parseAmount(lastInv.amount))],
-                  ["Client", lastInv.party || "—"],
-                ].map(([k, v]) => (
-                  <div key={k} className="flex items-center justify-between gap-3">
+                  ["Émise le", frDate(invDetails[lastInv.id]?.issueDate || lastInv.date), true],
+                  ["Montant", formatEuro(parseAmount(lastInv.amount)), true],
+                  ["Client", lastInv.party || "—", false],
+                ].map(([k, v, num]) => (
+                  <div key={String(k)} className="flex items-center justify-between gap-3">
                     <dt className="text-muted-foreground">{k}</dt>
-                    <dd className="truncate font-medium tabular-nums text-foreground">{v}</dd>
+                    <dd className={cn("truncate font-medium text-foreground", num && "tabular-nums")}>{v}</dd>
                   </div>
                 ))}
                 <div className="flex items-center justify-between gap-3">
@@ -445,19 +446,19 @@ export function ApercuView({
 
         {/* ── Blocs opérationnels ── */}
         <Panel className="xl:col-span-12" i={2}>
-          <div className="px-5 py-5">
+          <div className="px-6 py-6">
             <SectionTitle icon={CalendarClock}>Prochains rendez-vous</SectionTitle>
             {rdv.length === 0 ? (
               <div className="text-[12px] text-faint">Aucun rendez-vous à venir.</div>
             ) : (
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 {rdv.map((e, i) => (
-                  <div key={i} className="flex min-w-0 flex-col gap-2 rounded-xl bg-panel p-3.5">
-                    <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
+                  <div key={i} className="flex min-w-0 flex-col gap-1.5 rounded-xl bg-panel p-4">
+                    <span className="text-[12px] tabular-nums text-muted-foreground">
                       {evDate(e).slice(8, 10)}/{evDate(e).slice(5, 7)}
-                      {e.time && e.time !== "—" ? ` · ${e.time}` : ""}
                     </span>
-                    <span className="line-clamp-2 break-words text-[13px] font-medium leading-snug">{e.title}</span>
+                    {e.time && e.time !== "—" && <span className="text-[24px] font-medium leading-none tabular-nums">{e.time}</span>}
+                    <span className="mt-1 line-clamp-2 break-words text-[14px] font-medium leading-snug">{e.title}</span>
                   </div>
                 ))}
               </div>
@@ -466,16 +467,16 @@ export function ApercuView({
         </Panel>
 
         <Panel className="xl:col-span-4" i={3}>
-          <div className="px-5 py-5">
+          <div className="px-6 py-6">
             <SectionTitle icon={ListChecks}>To-do</SectionTitle>
             {openTodos.length === 0 ? (
               <div className="text-[12px] text-faint">Rien à faire pour le moment.</div>
             ) : (
               openTodos.slice(0, 5).map((t, i) => (
-                <div key={i} className="flex items-center gap-2.5 py-[7px]">
+                <div key={i} className="flex items-center gap-3 border-b border-border py-3 last:border-0">
                   <span className="h-4 w-4 shrink-0 rounded-[5px] border border-faint" />
-                  <span className="flex-1 truncate text-[13px]">{t.text}</span>
-                  <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  <span className="flex-1 truncate text-[14px]">{t.text}</span>
+                  <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
                     {t.creator ? titleCase(t.creator) : "Agence"}
                   </span>
                 </div>
@@ -485,20 +486,20 @@ export function ApercuView({
         </Panel>
 
         <Panel className="xl:col-span-4" i={4}>
-          <div className="px-5 py-5">
+          <div className="px-6 py-6">
             <SectionTitle icon={FileText}>Briefs à valider</SectionTitle>
             {briefsShown.length === 0 ? (
               <div className="text-[12px] text-faint">Aucun brief.</div>
             ) : (
               briefsShown.map((b, i) => (
-                <div key={i} className="flex items-center gap-3 border-b border-border py-2.5 last:border-0">
+                <div key={i} className="flex items-center gap-3 border-b border-border py-3 last:border-0">
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-medium">
+                    <div className="truncate text-[14px] font-medium">
                       {b.brand} × {titleCase(b.creator)}
                     </div>
-                    <div className="truncate text-[11px] text-muted-foreground">{b.deliverables || "Livrables à préciser"}</div>
+                    <div className="truncate text-[13px] text-faint">{b.deliverables || "Livrables à préciser"}</div>
                   </div>
-                  <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{frDate(b.due)}</span>
+                  <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">{frDate(b.due)}</span>
                 </div>
               ))
             )}
@@ -506,19 +507,19 @@ export function ApercuView({
         </Panel>
 
         <Panel className="xl:col-span-4" i={5}>
-          <div className="px-5 py-5">
+          <div className="px-6 py-6">
             <SectionTitle icon={Trophy}>Qui rapporte</SectionTitle>
             {topCreators.length === 0 ? (
               <div className="text-[12px] text-faint">Aucune créatrice.</div>
             ) : (
               topCreators.map((c, i) => (
-                <div key={c.name} className="flex items-center gap-3 py-[7px]">
+                <div key={c.name} className="flex items-center gap-3 border-b border-border py-2.5 last:border-0">
                   <span className="w-4 text-[12px] tabular-nums text-faint">{i + 1}</span>
-                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted text-[10px] font-semibold text-muted-foreground">
+                  <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold", initialsTone(c.name))}>
                     {initials(c.name)}
                   </span>
-                  <span className="flex-1 truncate text-[13px] font-medium">{titleCase(c.name)}</span>
-                  <span className="text-[13px] font-medium tabular-nums">{c.ca ? formatEuro(c.ca) : "—"}</span>
+                  <span className="flex-1 truncate font-mono text-[13px] font-medium uppercase tracking-[0.02em]">{c.name}</span>
+                  <span className="text-[14px] font-medium tabular-nums">{c.ca ? formatEuro(c.ca) : "—"}</span>
                 </div>
               ))
             )}
