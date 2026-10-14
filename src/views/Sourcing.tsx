@@ -771,10 +771,11 @@ function BrandRadar() {
 
   const srcOf = (p: RadarPost): "miennes" | "scouting" | "hors" => (rosterNames[p.c] || p.roster ? "miennes" : poolUsers.has(p.c) ? "scouting" : "hors");
   type Item = { row: RadarRow; posts: RadarPost[]; types: Record<PostType, number>; warm: number; creators: string[]; lastAt: string; known: boolean; prof?: Prof & { why?: string | null } };
-  const { list: view, hid, counts } = useMemo(() => {
+  const { list: view, hid, counts, prog } = useMemo(() => {
     const hid = { pending: 0, notBrand: 0, known: 0, filters: 0 };
     const counts = { clients: 0, chauds: 0, tous: 0 };
-    if (!rows) return { list: [] as Item[], hid, counts };
+    const prog = { total: 0, verified: 0 };
+    if (!rows) return { list: [] as Item[], hid, counts, prog };
     const since = period === "all" ? 0 : Date.now() - Number(period) * 86400000;
     const tokens = norm(words).split(/[\s,]+/).filter(Boolean);
     const lo = parseCount(minF);
@@ -784,6 +785,8 @@ function BrandRadar() {
     for (const row of rows) {
       if (row.status !== status) continue;
       const prof = profiles[row.brand];
+      prog.total++;
+      if (prof && (prof.why || prof.followers != null)) prog.verified++;
       // « Incertain » : profil pas encore vérifié auprès de Meta, ou compte qui ne ressemble pas à une marque.
       if (!showUnsure && !prof?.isBrand) {
         if (!prof || (!prof.why && prof.followers == null)) hid.pending++;
@@ -829,7 +832,7 @@ function BrandRadar() {
       });
     }
     const rank = (x: Item) => (x.types.paye * 3 + x.types.offert * 2 + x.warm * 2) * 10 + x.creators.length;
-    return { list: out.sort((a, b) => rank(b) - rank(a)), hid, counts };
+    return { list: out.sort((a, b) => rank(b) - rank(a)), hid, counts, prog };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, profiles, knownBrands, kind, period, words, minF, maxF, city, status, showUnsure, showKnown, srcF, rosterNames, poolUsers]);
   const activeFilters = [words.trim(), minF.trim(), maxF.trim(), city.trim()].filter(Boolean).length + (period !== "90" ? 1 : 0) + (status !== "nouveau" ? 1 : 0);
@@ -841,7 +844,7 @@ function BrandRadar() {
     toast(`${r.verified ?? 0} comptes vérifiés${r.left ? ` · ${r.left} restants` : ""}${r.stopped ? ` · ${igWhyText(r.stopped)}` : ""}`);
     setReload((n) => n + 1);
   };
-  const hiddenTotal = hid.pending + hid.notBrand + hid.known + hid.filters;
+  const pendingNow = prog.total - prog.verified;
 
   if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement du radar…</AnimatedBadge>;
   if (missing) {
@@ -917,10 +920,9 @@ function BrandRadar() {
           <p>Des créatrices que tu ne connais pas encore : celles trouvées par le Sourcing, et celles que citent les marques du radar. Le radar lit leurs posts petit à petit et ajoute leurs marques.</p>
           <p>Double intérêt : de nouvelles marques à démarcher, et de nouvelles créatrices à recruter (bouton « + Scouting » sur leurs posts).</p>
         </HelpTip>
-        {queue && (
-          <span className="text-[11px] text-faint">
-            {queue.read} créatrice{queue.read > 1 ? "s" : ""} hors agence déjà lue{queue.read > 1 ? "s" : ""}
-            {queue.waiting > 0 && ` · ${queue.waiting} en attente (lues toutes les 2 heures, petit à petit)`}
+        {queue && (queue.read > 0 || queue.waiting > 0) && (
+          <span className="text-[11px] text-faint" title="Créatrices hors agence : lues par le radar, et en file pour les prochains passages (toutes les 2 heures)">
+            Hors agence : {queue.read} lue{queue.read > 1 ? "s" : ""}{queue.waiting > 0 ? ` · ${queue.waiting} en attente` : ""}
           </span>
         )}
       </div>
@@ -967,22 +969,24 @@ function BrandRadar() {
         </div>
       )}
 
-      {/* Marques cachées, et pourquoi */}
-      {hiddenTotal > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-panel/70 px-3.5 py-2.5 text-[12px] text-muted-foreground">
-          <span className="font-medium text-foreground">{hiddenTotal} marque{hiddenTotal > 1 ? "s" : ""} cachée{hiddenTotal > 1 ? "s" : ""} :</span>
-          {hid.pending > 0 && <span>{hid.pending} pas encore vérifiée{hid.pending > 1 ? "s" : ""}</span>}
-          {hid.pending > 0 && (
-            <button type="button" onClick={() => void runVerify()} disabled={verifying} className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
-              {verifying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} {verifying ? "Vérification…" : "Vérifier maintenant"}
-            </button>
-          )}
-          {hid.notBrand > 0 && <span>· {hid.notBrand} pas sûre{hid.notBrand > 1 ? "s" : ""} d'être des marques</span>}
-          {hid.known > 0 && <span>· {hid.known} déjà dans tes contacts</span>}
-          {hid.filters > 0 && <span>· {hid.filters} hors filtres</span>}
-          {(hid.notBrand > 0 || hid.known > 0) && (
-            <button type="button" onClick={() => { setShowUnsure(true); setShowKnown(true); }} className="font-medium text-primary hover:underline">Tout afficher</button>
-          )}
+      {/* Vérification en cours : une barre, une phrase, un bouton */}
+      {pendingNow > 0 && (
+        <div className="mb-3 flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between gap-3 text-[13px]">
+              <span className="font-semibold text-foreground">Vérification des marques</span>
+              <span className="tabular-nums text-muted-foreground"><span className="font-semibold text-foreground">{prog.verified}</span> sur {prog.total}</span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-panel">
+              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.max(2, Math.round((prog.verified / Math.max(1, prog.total)) * 100))}%` }} />
+            </div>
+            <p className="mt-2 text-[12px] leading-snug text-muted-foreground">
+              L'app vérifie auprès de Meta que chaque nom trouvé dans les posts est bien une marque. Ça avance tout seul toutes les 2 heures (Meta limite les demandes par heure).
+            </p>
+          </div>
+          <button type="button" onClick={() => void runVerify()} disabled={verifying} className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-3.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+            {verifying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} {verifying ? "Vérification…" : "Vérifier la suite"}
+          </button>
         </div>
       )}
 
@@ -990,7 +994,11 @@ function BrandRadar() {
         <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center text-[13px] text-muted-foreground">
           {rows.length === 0
             ? "Le radar n'a encore rien lu. Il passe toutes les 2 heures ; tu peux aussi « Lancer le radar » maintenant."
-            : kind === "chauds" ? "Aucune marque citée spontanément par tes créatrices pour l'instant." : "Aucune marque ici pour l'instant."}
+            : pendingNow > 0
+              ? "Les marques apparaissent ici au fur et à mesure qu'elles sont vérifiées."
+              : srcF === "hors"
+                ? "Aucune marque vue chez des créatrices hors agence pour l'instant : le radar en lit de nouvelles toutes les 2 heures."
+                : kind === "chauds" ? "Aucune marque citée spontanément par tes créatrices pour l'instant." : "Aucune marque avec ces réglages."}
         </div>
       ) : (
         <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
@@ -1078,6 +1086,22 @@ function BrandRadar() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Le reste : masqué par choix, un seul lien discret */}
+      {(hid.notBrand + hid.known > 0 || showUnsure || showKnown) && (
+        <div className="mt-3 text-center text-[12px] text-faint">
+          {showUnsure || showKnown ? (
+            <button type="button" onClick={() => { setShowUnsure(false); setShowKnown(false); }} className="font-medium text-primary hover:underline">
+              Masquer les comptes douteux et les marques déjà en contact
+            </button>
+          ) : (
+            <button type="button" onClick={() => { setShowUnsure(true); setShowKnown(true); }} className="hover:text-foreground">
+              {hid.notBrand + hid.known} autre{hid.notBrand + hid.known > 1 ? "s" : ""} masquée{hid.notBrand + hid.known > 1 ? "s" : ""} (pas sûres d'être des marques, ou déjà dans tes contacts) · <span className="font-medium text-primary">Afficher</span>
+            </button>
+          )}
+          {hid.filters > 0 && <span> · {hid.filters} hors de tes filtres</span>}
         </div>
       )}
 

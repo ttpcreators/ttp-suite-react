@@ -469,7 +469,9 @@ async function scan(ctx: Ctx) {
     .sort((a, b) => (weightOf.get(b) ?? 0) - (weightOf.get(a) ?? 0))
     .slice(0, BRANDS_PER_SCAN);
   await each(ctx, todo, (b) => verifyBrand(ctx, b));
-  return { creators: scanned.length, discovered: discoveredRead, brands: brands.length, profiles: todo.length, diag, stopped: ctx.stop || undefined };
+  // Puis les marques en attente des passages précédents, avec le quota qui reste.
+  const backlog = inBudget(ctx) ? await verify(ctx) : null;
+  return { creators: scanned.length, discovered: discoveredRead, brands: brands.length, profiles: todo.length + (backlog?.verified ?? 0), diag, stopped: ctx.stop || undefined };
 }
 
 async function caller(req: Request, sb: SupabaseClient): Promise<"cron" | "agency" | null> {
