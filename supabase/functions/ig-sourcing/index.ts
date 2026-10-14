@@ -34,11 +34,16 @@ const FRESH_DAYS = 7;
 const POOL_PER_SCAN = 40; // créatrices du Scouting lues par passage (les plus anciennes d'abord)
 const BRANDS_PER_SCAN = 80; // comptes cités vérifiés par passage (les plus probables d'abord)
 const QUOTA_MAX = 80; // au-delà, pause : on ne risque pas le blocage par Meta
+const DISCOVER_PER_SCAN = 40; // créatrices hors agence lues par passage (découvertes)
 const age = (iso: string | null | undefined) => (iso ? Date.now() - Date.parse(iso) : Infinity);
 
 /** Mots qui signalent un partenariat payé dans une légende. */
 const PAID = /#(ad|ads|pub|publicite|publicité|sponsor|sponsorise|sponsorisé|sponsored|partenariat|partenariatremunere|partenariatrémunéré|partnership|collab|collaboration|gifted|ambassador|ambassadrice)(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}])publicit[ée](?![\p{L}\p{N}])|collaboration commerciale|partenariat commercial|code promo|avec le code|code\s*:|-\s?\d{1,2}\s?%|en partenariat|partenariat r[ée]mun[ée]r[ée]|paid partnership|sponsoris[ée] par|offert par/iu;
-const isPaid = (caption: string) => PAID.test(caption);
+// Cadeau ou code promo : « (produit offert) », « 10 % de réduction », « avec MARGOT10 ».
+const GIFT = /produits?\s+offerts?|\(offert\)|cadeau de|envoy[ée]s? par|\d{1,2}\s?%\s?(de\s)?(r[ée]duction|remise|off)|lien affili|affiliate/iu;
+const PROMO_CODE = /\b(code|avec|with)\s+[A-Z][A-Z0-9]{3,}\b/u; // majuscules : un code, pas un mot
+/** Le post montre une relation commerciale avec une marque (payé, offert, code promo). */
+const isPaid = (caption: string) => PAID.test(caption) || GIFT.test(caption) || PROMO_CODE.test(caption);
 
 /** Comptes cités dans un texte (Meta retire les @ : voir _shared/mentions.ts), poids ≥ `min`. */
 const KNOWN = new Set<string>(); // marques déjà connues : contacts, radar (rempli par loadKnown)
@@ -338,6 +343,47 @@ async function similar(ctx: Ctx, creator: string) {
   };
 }
 
+/**
+ * Vérifie un compte cité (est-ce une marque ?) et, si c'en est une, met en file les
+ * créatrices qu'elle cite dans ses posts : elles seront lues aux passages suivants
+ * (« hors agence »). Le réseau du radar grandit ainsi tout seul. 1 demande Meta.
+ */
+async function verifyBrand(ctx: Ctx, b: string) {
+  const { row, media } = await profile(ctx, b, 12);
+  if (!media || !row.data?.isBrand) return;
+  const cited = [...tally(media.map((p) => ({ text: p.caption })), new Set([b])).keys()].filter((u) => !ctx.cache.has(u));
+  if (!cited.length) return;
+  await loadCache(ctx, cited);
+  const fresh = cited.filter((u) => !ctx.cache.has(u)).slice(0, 15);
+  if (fresh.length) {
+    await ctx.sb.from("ig_profiles").upsert(
+      fresh.map((u) => ({ username: u, data: { pending: true, from: b }, why: null, at: new Date(0).toISOString() })),
+      { onConflict: "username", ignoreDuplicates: true },
+    );
+  }
+}
+
+/**
+ * « Vérifier » : lit le profil des comptes du radar pas encore vérifiés (les plus
+ * cités d'abord), sans relire les créatrices. S'arrête à QUOTA_MAX % du quota Meta.
+ */
+async function verify(ctx: Ctx) {
+  const { data } = await ctx.sb.from("ig_radar").select("brand, posts").eq("status", "nouveau").limit(5000);
+  const rows = (data as { brand: string; posts: unknown[] }[] | null) ?? [];
+  await loadCache(ctx, rows.map((r) => r.brand));
+  const todo = rows
+    .filter((r) => { const k = ctx.cache.get(r.brand); return !k || (!k.why && k.data?.v !== DATA_V); })
+    .sort((a, b) => (b.posts?.length ?? 0) - (a.posts?.length ?? 0))
+    .slice(0, 150)
+    .map((r) => r.brand);
+  let verified = 0;
+  await each(ctx, todo, async (b) => {
+    await verifyBrand(ctx, b);
+    verified++;
+  });
+  return { verified, left: Math.max(0, todo.length - verified), stopped: ctx.stop || undefined };
+}
+
 // ── Radar : marques citées par les créatrices ────────────────────────────────
 async function scan(ctx: Ctx) {
   const [cr, pool] = await Promise.all([
@@ -357,16 +403,31 @@ async function scan(ctx: Ctx) {
   const poolTodo = [...new Set(poolUsers)].filter((u) => !roster.includes(u))
     .sort((a, b) => age(ctx.cache.get(b)?.scanned_at) - age(ctx.cache.get(a)?.scanned_at)).slice(0, POOL_PER_SCAN);
   const rosterSet = new Set(roster);
+  // Hors agence : créatrices découvertes (Sourcing, ou citées par les marques du radar),
+  // les moins récemment lues d'abord. Les comptes qui s'avèrent être des marques sont sautés.
+  const { data: disc } = await ctx.sb.from("ig_profiles").select("username, data, why, scanned_at, at")
+    .or("data->>pending.eq.true,data->>isBrand.eq.false").is("why", null)
+    .order("scanned_at", { ascending: true, nullsFirst: true }).limit(300);
+  const discovered = ((disc as ProfileRow[] | null) ?? [])
+    .filter((r) => !ours.has(r.username) && (r.data?.pending || Number(r.data?.followers ?? 0) >= 3000))
+    .slice(0, DISCOVER_PER_SCAN);
+  for (const r of discovered) if (!ctx.cache.has(r.username)) ctx.cache.set(r.username, r);
+  const discoveredSet = new Set(discovered.map((r) => r.username));
+  let discoveredRead = 0;
 
   const found = new Map<string, RadarPost[]>();
   const scanned: string[] = [];
   // Compteurs pour comprendre un radar vide : posts reçus, avec texte, avec un @.
   const diag = { posts: 0, withText: 0, withAt: 0, withName: 0 };
   const weightOf = new Map<string, number>();
-  await each(ctx, [...new Set(roster), ...poolTodo], async (u) => {
-    const { media } = await profile(ctx, u, 25, true);
+  await each(ctx, [...new Set(roster), ...poolTodo, ...discoveredSet], async (u) => {
+    const { row, media } = await profile(ctx, u, 25, true);
     if (!media) return;
     scanned.push(u);
+    if (discoveredSet.has(u)) {
+      if (row.data?.isBrand) return; // une marque, pas une créatrice
+      discoveredRead++;
+    }
     for (const p of media) {
       diag.posts++;
       if (p.caption.trim()) diag.withText++;
@@ -407,8 +468,8 @@ async function scan(ctx: Ctx) {
     .filter((b) => { const k = ctx.cache.get(b); return !k || age(k.at) > (k.why === "compte_perso" ? 30 : FRESH_DAYS) * DAY; })
     .sort((a, b) => (weightOf.get(b) ?? 0) - (weightOf.get(a) ?? 0))
     .slice(0, BRANDS_PER_SCAN);
-  await each(ctx, todo, (b) => profile(ctx, b, 0));
-  return { creators: scanned.length, brands: brands.length, profiles: todo.length, diag, stopped: ctx.stop || undefined };
+  await each(ctx, todo, (b) => verifyBrand(ctx, b));
+  return { creators: scanned.length, discovered: discoveredRead, brands: brands.length, profiles: todo.length, diag, stopped: ctx.stop || undefined };
 }
 
 async function caller(req: Request, sb: SupabaseClient): Promise<"cron" | "agency" | null> {
@@ -447,6 +508,7 @@ Deno.serve(async (req: Request) => {
   if (body.mode === "brand") return done(await fromBrand(ctx, String(body.brand ?? "")));
   if (body.mode === "list") return done(await fromList(ctx, Array.isArray(body.handles) ? body.handles : []));
   if (body.mode === "similar") return done(await similar(ctx, String(body.creator ?? "")));
+  if (body.mode === "verify") return done(await verify(ctx));
   const out = await scan(ctx);
   console.log("ig-sourcing scan", JSON.stringify({ ...out, ms: Date.now() - ctx.t0 }));
   return done(out);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  AtSign, Check, Globe, Loader2, Mail, Plus, Radar, RefreshCw, Search, Send, Users, EyeOff, RotateCcw,
+  AtSign, Check, ChevronDown, ChevronUp, Flame, Globe, Loader2, Mail, Plus, Radar, RefreshCw, Search, Send, SlidersHorizontal, Users, Wallet, EyeOff, RotateCcw,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
@@ -607,6 +607,55 @@ function CreatorFinder() {
 }
 
 // ═════════════════════════════ Radar à marques ═════════════════════════════
+type PostType = "paye" | "offert" | "spontane";
+// Le type d'un post, lu dans son texte (les anciens relevés n'ont que « payé : oui/non »).
+const RX_PAID = /#(ad|ads|pub|publicit[ée]|sponsor\w*|partenariat\w*|partnership|collab|collaboration|ambassad\w*)(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}])publicit[ée](?![\p{L}\p{N}])|collaboration commerciale|partenariat (commercial|r[ée]mun[ée]r[ée])|paid partnership|sponsoris[ée] par|en partenariat/iu;
+const RX_GIFT = /#gifted|produits?\s+offerts?|\(offert\)|offert par|cadeau de|envoy[ée]s? par|code promo|avec le code|code\s*:|\d{1,2}\s?%\s?(de\s)?(r[ée]duction|remise|off)|-\s?\d{1,2}\s?%|affili/iu;
+const RX_CODE = /\b(code|avec|with)\s+[A-Z][A-Z0-9]{3,}\b/u;
+function postType(p: RadarPost): PostType {
+  if (RX_PAID.test(p.cap)) return "paye";
+  if (p.paid || RX_GIFT.test(p.cap) || RX_CODE.test(p.cap)) return "offert";
+  return "spontane";
+}
+const TYPE_META: Record<PostType, { label: string; cls: string; tip: string }> = {
+  paye: { label: "PAYÉ", cls: "bg-primary/10 text-primary", tip: "Le post dit #ad, publicité, collaboration commerciale, sponsorisé…" },
+  offert: { label: "OFFERT / CODE", cls: "bg-amber/15 text-amber", tip: "Produit offert, code promo ou réduction : la marque envoie des produits ou rémunère à la vente" },
+  spontane: { label: "SPONTANÉ", cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", tip: "Aucun signe de partenariat dans le texte" },
+};
+/** Extrait du texte centré sur la marque, avec la marque en évidence. */
+function Excerpt({ text, brand, name }: { text: string; brand: string; name?: string }) {
+  const lower = text.toLowerCase();
+  let i = lower.indexOf(brand.toLowerCase());
+  let len = brand.length;
+  if (i === -1 && name) {
+    i = lower.indexOf(name.toLowerCase());
+    len = name.length;
+  }
+  if (i === -1) return <>{text.length > 140 ? `${text.slice(0, 140)}…` : text}</>;
+  const start = Math.max(0, i - 50);
+  const end = Math.min(text.length, i + len + 90);
+  return (
+    <>
+      {start > 0 && "…"}
+      {text.slice(start, i)}
+      <span className="rounded bg-primary/10 px-0.5 font-semibold text-foreground">{text.slice(i, i + len)}</span>
+      {text.slice(i + len, end)}
+      {end < text.length && "…"}
+    </>
+  );
+}
+/** Un même texte posté plusieurs fois par la même créatrice : une seule ligne. */
+function dedupe(posts: RadarPost[]): (RadarPost & { n: number })[] {
+  const out = new Map<string, RadarPost & { n: number }>();
+  for (const p of [...posts].sort((a, b) => b.at.localeCompare(a.at))) {
+    const k = `${p.c}|${norm(p.cap).replace(/\s+/g, " ").slice(0, 60)}`;
+    const cur = out.get(k);
+    if (cur) cur.n++;
+    else out.set(k, { ...p, n: 1 });
+  }
+  return [...out.values()];
+}
+
 const PERIODS = [
   { value: "30", label: "30 jours" },
   { value: "90", label: "90 jours" },
@@ -619,11 +668,15 @@ function BrandRadar() {
   const [profiles, setProfiles] = useState<Record<string, Prof & { why?: string | null }>>({});
   const [knownBrands, setKnownBrands] = useState<{ handles: Set<string>; names: Set<string> }>({ handles: new Set(), names: new Set() });
   const [rosterNames, setRosterNames] = useState<Record<string, string>>({});
+  const [poolUsers, setPoolUsers] = useState<Set<string>>(new Set());
   const [reload, setReload] = useState(0);
   const [scanning, setScanning] = useState(false);
 
   // Filtres
-  const [kind, setKind] = useState<"payes" | "gratuits" | "tous">("payes");
+  const [kind, setKind] = useState<"clients" | "chauds" | "tous">("clients");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
+  const [verifying, setVerifying] = useState(false);
   const [period, setPeriod] = useState("90");
   const [words, setWords] = useState("");
   const [minF, setMinF] = useState("");
@@ -652,10 +705,12 @@ function BrandRadar() {
         const { data } = await supabase.from("ig_profiles").select("username, data, why").in("username", users.slice(i, i + 150));
         for (const p of (data as { username: string; data: Prof | null; why: string | null }[] | null) ?? []) prof[p.username] = { ...(p.data ?? {}), why: p.why };
       }
-      const [ct, cr] = await Promise.all([
+      const [ct, cr, pl] = await Promise.all([
         supabase.from("contacts").select("brand, instagram"),
         supabase.from("creators").select("name, handle, instagram"),
+        supabase.from("creator_pool").select("handle"),
       ]);
+      setPoolUsers(new Set(((pl.data as { handle: string | null }[] | null) ?? []).map((x) => cleanUser(x.handle ?? "")).filter(Boolean)));
       if (!alive) return;
       const cts = (ct.data as { brand: string | null; instagram: string | null }[] | null) ?? [];
       setKnownBrands({
@@ -676,14 +731,14 @@ function BrandRadar() {
 
   const runScan = async () => {
     setScanning(true);
-    const r = await invokeSourcing<{ creators?: number; brands?: number; stopped?: string; diag?: { posts: number; withText: number; withAt: number; withName?: number } }>({ mode: "scan" });
+    const r = await invokeSourcing<{ creators?: number; discovered?: number; brands?: number; stopped?: string; diag?: { posts: number; withText: number; withAt: number; withName?: number } }>({ mode: "scan" });
     setScanning(false);
     if (r.error) return toast(errorText(r.error));
     const d = r.diag;
     toast(
-      `${r.creators ?? 0} créatrices lues · ${r.brands ?? 0} marques citées` +
+      `${r.creators ?? 0} créatrices lues${r.discovered ? ` (dont ${r.discovered} hors agence)` : ""} · ${r.brands ?? 0} marques citées` +
         (d && !r.brands ? ` · ${d.posts} posts reçus, ${d.withName ?? 0} citent un compte` : "") +
-        (r.stopped ? " · Meta a freiné, la suite passera plus tard" : ""),
+        (r.stopped ? ` · ${igWhyText(r.stopped)}` : ""),
     );
     setReload((n) => n + 1);
   };
@@ -705,15 +760,17 @@ function BrandRadar() {
 
   const [mailFor, setMailFor] = useState<{ row: RadarRow; post: RadarPost } | null>(null);
 
-  const { list: view, hid } = useMemo(() => {
+  type Item = { row: RadarRow; posts: RadarPost[]; types: Record<PostType, number>; warm: number; creators: string[]; lastAt: string; known: boolean; prof?: Prof & { why?: string | null } };
+  const { list: view, hid, counts } = useMemo(() => {
     const hid = { pending: 0, notBrand: 0, known: 0, filters: 0 };
-    if (!rows) return { list: [], hid };
+    const counts = { clients: 0, chauds: 0, tous: 0 };
+    if (!rows) return { list: [] as Item[], hid, counts };
     const since = period === "all" ? 0 : Date.now() - Number(period) * 86400000;
     const tokens = norm(words).split(/[\s,]+/).filter(Boolean);
     const lo = parseCount(minF);
     const hi = parseCount(maxF);
     const town = norm(city.trim());
-    const out: { row: RadarRow; posts: RadarPost[]; paid: number; organic: number; creators: string[]; known: boolean; prof?: Prof & { why?: string | null } }[] = [];
+    const out: Item[] = [];
     for (const row of rows) {
       if (row.status !== status) continue;
       const prof = profiles[row.brand];
@@ -728,10 +785,8 @@ function BrandRadar() {
         hid.known++;
         continue;
       }
-      const posts = row.posts.filter((p) => {
+      const base = row.posts.filter((p) => {
         if (since && Date.parse(p.at) < since) return false;
-        if (kind === "payes" && !p.paid) return false;
-        if (kind === "gratuits" && (p.paid || !p.roster)) return false;
         const cap = norm(p.cap);
         if (tokens.some((t) => !cap.includes(t))) return false;
         const cp = profiles[p.c];
@@ -742,19 +797,38 @@ function BrandRadar() {
         if (town && !norm(`${cp?.bio ?? ""}`).includes(town)) return false;
         return true;
       });
-      if (!posts.length) {
+      if (!base.length) {
         hid.filters++;
         continue;
       }
+      const commercial = base.filter((p) => postType(p) !== "spontane");
+      const warmPosts = base.filter((p) => postType(p) === "spontane" && p.roster);
+      counts.tous++;
+      if (commercial.length) counts.clients++;
+      if (warmPosts.length) counts.chauds++;
+      const posts = kind === "clients" ? commercial : kind === "chauds" ? warmPosts : base;
+      if (!posts.length) continue;
+      const types: Record<PostType, number> = { paye: 0, offert: 0, spontane: 0 };
+      for (const p of base) types[postType(p)]++;
       out.push({
-        row, posts, known, prof,
-        paid: posts.filter((p) => p.paid).length,
-        organic: posts.filter((p) => !p.paid && p.roster).length,
+        row, posts, types, known, prof,
+        warm: warmPosts.length,
         creators: [...new Set(posts.map((p) => p.c))],
+        lastAt: posts.reduce((m, p) => (p.at > m ? p.at : m), ""),
       });
     }
-    return { list: out.sort((a, b) => b.paid - a.paid || b.creators.length - a.creators.length || b.posts.length - a.posts.length), hid };
+    const rank = (x: Item) => (x.types.paye * 3 + x.types.offert * 2 + x.warm * 2) * 10 + x.creators.length;
+    return { list: out.sort((a, b) => rank(b) - rank(a)), hid, counts };
   }, [rows, profiles, knownBrands, kind, period, words, minF, maxF, city, status, showUnsure, showKnown]);
+  const activeFilters = [words.trim(), minF.trim(), maxF.trim(), city.trim()].filter(Boolean).length + (period !== "90" ? 1 : 0) + (status !== "nouveau" ? 1 : 0);
+  const runVerify = async () => {
+    setVerifying(true);
+    const r = await invokeSourcing<{ verified?: number; left?: number; stopped?: string }>({ mode: "verify" });
+    setVerifying(false);
+    if (r.error) return toast(errorText(r.error));
+    toast(`${r.verified ?? 0} comptes vérifiés${r.left ? ` · ${r.left} restants` : ""}${r.stopped ? ` · ${igWhyText(r.stopped)}` : ""}`);
+    setReload((n) => n + 1);
+  };
   const hiddenTotal = hid.pending + hid.notBrand + hid.known + hid.filters;
 
   if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement du radar…</AnimatedBadge>;
@@ -766,42 +840,56 @@ function BrandRadar() {
     );
   }
 
+  const TILES = [
+    { v: "clients" as const, icon: Wallet, title: "Clients potentiels", short: "Clients", n: counts.clients, text: "Elles paient ou offrent des produits à des créatrices de ta niche.", on: "border-primary bg-primary/[0.04]", dot: "bg-primary text-primary-foreground" },
+    { v: "chauds" as const, icon: Flame, title: "Contacts chauds", short: "Chauds", n: counts.chauds, text: "Tes créatrices en parlent déjà, sans être payées.", on: "border-emerald-500 bg-emerald-500/[0.05]", dot: "bg-emerald-500 text-white" },
+    { v: "tous" as const, icon: Radar, title: "Toutes les marques", short: "Toutes", n: counts.tous, text: "Tout ce que le radar a repéré.", on: "border-foreground/40 bg-panel/60", dot: "bg-foreground text-background" },
+  ];
+  const toggleRow = (b: string) => setOpenRows((cur) => { const n = new Set(cur); if (n.has(b)) n.delete(b); else n.add(b); return n; });
+  const srcTag = (p: RadarPost) =>
+    rosterNames[p.c] || p.roster ? { t: "ROSTER", c: "bg-foreground/[0.07] text-foreground" } : poolUsers.has(p.c) ? { t: "SCOUTING", c: "bg-indigo/10 text-indigo" } : { t: "HORS AGENCE", c: "bg-panel text-faint" };
+
   return (
     <div>
+      {/* Les 3 lectures du radar, qui servent aussi de filtre */}
+      <div role="tablist" aria-label="Quelles marques" className="mb-3 grid grid-cols-3 gap-2 sm:gap-2.5">
+        {TILES.map((t) => {
+          const on = kind === t.v;
+          const Icon = t.icon;
+          return (
+            <button key={t.v} type="button" role="tab" aria-selected={on} title={t.text} onClick={() => setKind(t.v)} className={cn("flex items-start gap-3 rounded-2xl border p-3 text-left transition-colors sm:p-3.5", on ? t.on : "border-border bg-surface hover:bg-rowhover")}>
+              <span className={cn("hidden h-8 w-8 shrink-0 place-items-center rounded-lg sm:grid", on ? t.dot : "bg-panel text-muted-foreground")}><Icon className="h-4 w-4" /></span>
+              <span className="min-w-0">
+                <span className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
+                  <span className="text-[20px] font-bold leading-none tabular-nums text-foreground">{t.n}</span>
+                  <span className="text-[12px] font-semibold text-foreground sm:text-[13px]"><span className="sm:hidden">{t.short}</span><span className="hidden sm:inline">{t.title}</span></span>
+                </span>
+                <span className="mt-1 hidden text-[11px] leading-snug text-muted-foreground sm:block">{t.text}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Actions + filtres repliés */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Tabs
-            size="sm"
-            wrap
-            label="Quelles marques"
-            value={kind}
-            onValueChange={(v) => setKind(v as typeof kind)}
-            items={[
-              { value: "payes", label: "Partenariats payés" },
-              { value: "gratuits", label: "Citées gratuitement" },
-              { value: "tous", label: "Toutes" },
-            ]}
-          />
-          <HelpTip title="Quelle différence ?">
-            <p><span className="font-medium text-foreground">Partenariats payés</span> : des créatrices de ta niche ont fait un post payé pour la marque (#ad, #sponsorisé, #partenariat, code promo…). Elle a un budget influence : c'est un <span className="font-medium text-foreground">client potentiel</span>.</p>
-            <p><span className="font-medium text-foreground">Citées gratuitement</span> : une de TES créatrices parle de la marque sans être payée. C'est un <span className="font-medium text-foreground">contact chaud</span> : tu as la preuve qu'elle aime la marque, à mettre dans ton mail.</p>
-            <p><span className="font-medium text-foreground">Toutes</span> : tout ce que le radar a vu.</p>
-          </HelpTip>
-        </div>
-        <div className="flex items-center gap-2">
-        <button type="button" onClick={() => void runScan()} disabled={scanning} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" title="Le radar passe tout seul chaque nuit">
-          {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} {scanning ? "Lecture des posts (1 à 2 min)…" : "Lancer le radar"}
+        <button type="button" onClick={() => setFiltersOpen((o) => !o)} className={cn("flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[12px] font-medium transition-colors", filtersOpen || activeFilters ? "border-primary text-primary" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+          <SlidersHorizontal className="h-3.5 w-3.5" /> Filtres{activeFilters ? ` · ${activeFilters}` : ""}
         </button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => void runScan()} disabled={scanning} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" title="Le radar passe tout seul chaque nuit">
+            {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} {scanning ? "Lecture des posts (1 à 2 min)…" : "Lancer le radar"}
+          </button>
           <HelpTip title="Comment marche le radar ?" align="end">
-            <p>Chaque nuit, l'app lit les 25 derniers posts des créatrices de ton roster et de 20 créatrices de ton Scouting, et note les marques qu'elles citent avec un @.</p>
-            <p>Elle regarde ensuite le profil de chaque @ pour deviner si c'est une marque (site web, bio, abonnés).</p>
+            <p>Chaque nuit, l'app lit les derniers posts de tes créatrices, de celles de ton Scouting, et de créatrices hors agence découvertes au fil des recherches (celles que citent les marques du radar). Elle note les marques citées.</p>
+            <p>Elle vérifie ensuite chaque nom auprès de Meta pour savoir si c'est bien une marque, tant que le quota Meta le permet.</p>
             <p>« Lancer le radar » le fait tout de suite (1 à 2 minutes).</p>
           </HelpTip>
         </div>
       </div>
+      {filtersOpen && (
+        <div className="mb-3 flex flex-wrap items-end gap-2 rounded-2xl border border-border bg-surface p-3">
 
-      {/* Filtres */}
-      <div className="mb-3 flex flex-wrap items-end gap-2 rounded-2xl border border-border bg-surface p-3">
         <Field label="# ou mots dans le post" className="min-w-[180px] flex-1" help={<><p>Ne garde que les posts qui contiennent TOUS ces mots ou hashtags.</p><p>Exemple : « #running #ad » = les partenariats payés dans le running. « lyon » = les posts qui parlent de Lyon.</p><p>L'app lit le texte sous le post : les # mis en commentaire ne sont pas visibles.</p></>}><input aria-label="Hashtags ou mots" value={words} onChange={(e) => setWords(e.target.value)} placeholder="#running #ad" className={IN} /></Field>
         <label className="flex flex-col gap-1 text-[10px] font-medium text-faint">Période
           <select value={period} onChange={(e) => setPeriod(e.target.value)} className={cn(IN, "w-28")}>
@@ -822,103 +910,114 @@ function BrandRadar() {
           <Check2 label="Déjà dans mes contacts" checked={showKnown} onChange={setShowKnown} help={<p>Les marques déjà dans tes Contacts sont cachées, pour ne garder que les nouvelles. Coche pour les voir aussi.</p>} />
           <Check2 label="Comptes incertains" checked={showUnsure} onChange={setShowUnsure} help={<p>L'app devine si un @ est une marque (site web, bio, abonnés). Quand elle n'est pas sûre (ami tagué, autre créatrice, profil pas encore lu), le compte est caché. Coche pour le voir.</p>} />
         </div>
-      </div>
+        </div>
+      )}
 
-      <div className="mb-2 px-1 text-[12px] text-muted-foreground">
-        {view.length} marque{view.length > 1 ? "s" : ""}
-        {kind === "payes" ? " qui paient des créatrices" : kind === "gratuits" ? " dont tes créatrices parlent déjà" : ""}
-        <span className="text-faint"> · l'app devine à partir du texte des posts : vérifie avant d'écrire</span>
-        {hiddenTotal > 0 && (
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-faint">
-            <span className="font-medium text-muted-foreground">{hiddenTotal} cachée{hiddenTotal > 1 ? "s" : ""} :</span>
-            {hid.pending > 0 && <span>{hid.pending} à vérifier (le radar les lit au fil des passages)</span>}
-            {hid.notBrand > 0 && <span>· {hid.notBrand} pas sûre{hid.notBrand > 1 ? "s" : ""} d'être des marques</span>}
-            {(hid.pending > 0 || hid.notBrand > 0) && (
-              <button type="button" onClick={() => setShowUnsure(true)} className="font-medium text-primary hover:underline">Afficher</button>
-            )}
-            {hid.known > 0 && (
-              <>
-                <span>· {hid.known} déjà dans tes contacts</span>
-                <button type="button" onClick={() => setShowKnown(true)} className="font-medium text-primary hover:underline">Afficher</button>
-              </>
-            )}
-            {hid.filters > 0 && <span>· {hid.filters} hors filtres (onglet, période, mots, abonnés, ville)</span>}
-          </div>
-        )}
-      </div>
+      {/* Marques cachées, et pourquoi */}
+      {hiddenTotal > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-panel/70 px-3.5 py-2.5 text-[12px] text-muted-foreground">
+          <span className="font-medium text-foreground">{hiddenTotal} marque{hiddenTotal > 1 ? "s" : ""} cachée{hiddenTotal > 1 ? "s" : ""} :</span>
+          {hid.pending > 0 && <span>{hid.pending} pas encore vérifiée{hid.pending > 1 ? "s" : ""}</span>}
+          {hid.pending > 0 && (
+            <button type="button" onClick={() => void runVerify()} disabled={verifying} className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+              {verifying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} {verifying ? "Vérification…" : "Vérifier maintenant"}
+            </button>
+          )}
+          {hid.notBrand > 0 && <span>· {hid.notBrand} pas sûre{hid.notBrand > 1 ? "s" : ""} d'être des marques</span>}
+          {hid.known > 0 && <span>· {hid.known} déjà dans tes contacts</span>}
+          {hid.filters > 0 && <span>· {hid.filters} hors filtres</span>}
+          {(hid.notBrand > 0 || hid.known > 0) && (
+            <button type="button" onClick={() => { setShowUnsure(true); setShowKnown(true); }} className="font-medium text-primary hover:underline">Tout afficher</button>
+          )}
+        </div>
+      )}
 
       {view.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center text-[13px] text-muted-foreground">
           {rows.length === 0
             ? "Le radar n'a encore rien lu. Il passe chaque nuit ; tu peux aussi « Lancer le radar » maintenant."
-            : "Aucune marque pour ces filtres."}
+            : kind === "chauds" ? "Aucune marque citée spontanément par tes créatrices pour l'instant." : "Aucune marque ici pour l'instant."}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {view.map(({ row, posts, paid, organic, creators, known, prof }) => (
-            <div key={row.brand} className="flex flex-col rounded-2xl border border-border bg-surface p-4">
-              <div className="flex items-start gap-3">
-                <Pic src={prof?.picture} name={prof?.name || row.brand} size={44} square />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-x-2">
-                    <span className="truncate text-[14px] font-semibold text-foreground">{prof?.name || `@${row.brand}`}</span>
-                    <a href={igLink(row.brand)} target="_blank" rel="noreferrer" className="text-[11px] text-primary hover:underline">@{row.brand}</a>
-                    {known && <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Déjà en contact</span>}
+        <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+          {view.map(({ row, posts, types, warm, creators, lastAt, known, prof }) => {
+            const open = openRows.has(row.brand);
+            const list = dedupe(posts);
+            const verdict = types.paye || types.offert ? { t: "Client potentiel", c: "bg-primary/10 text-primary" } : warm ? { t: "Contact chaud", c: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" } : { t: "Citée", c: "bg-panel text-muted-foreground" };
+            const summary = [
+              types.paye ? `${types.paye} payé${types.paye > 1 ? "s" : ""}` : "",
+              types.offert ? `${types.offert} offert${types.offert > 1 ? "s" : ""} / code` : "",
+              warm ? `${warm} spontané${warm > 1 ? "s" : ""} chez tes créatrices` : "",
+            ].filter(Boolean).join(" · ");
+            return (
+              <div key={row.brand} className="px-4 py-3.5">
+                <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:gap-4">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <Pic src={prof?.picture} name={prof?.name || row.brand} size={42} square />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="truncate text-[14px] font-semibold text-foreground">{prof?.name || `@${row.brand}`}</span>
+                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", verdict.c)}>{verdict.t}</span>
+                        {known && <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Déjà en contact</span>}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+                        <a href={igLink(row.brand)} target="_blank" rel="noreferrer" className="text-primary hover:underline">@{row.brand}</a>
+                        {prof?.followers != null && <span>· {fmtCompact(prof.followers)} abonnés</span>}
+                        {prof?.website && <a href={safeHref(prof.website)} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-foreground">· <Globe className="h-3 w-3" />{domainOf(prof.website)}</a>}
+                        {prof?.email && <span className="flex items-center gap-1">· <Mail className="h-3 w-3" />{prof.email}</span>}
+                      </div>
+                      <div className="mt-1 text-[11px] text-faint">
+                        {summary && <span className="font-medium text-muted-foreground">{summary}</span>}
+                        {summary && " · "}vue chez {creators.slice(0, 3).map((c) => `@${c}`).join(", ")}{creators.length > 3 ? ` +${creators.length - 3}` : ""} · {fmtAgo(lastAt)}
+                      </div>
+                    </div>
                   </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[11px] text-muted-foreground">
-                    {prof?.followers != null && <span>{fmtCompact(prof.followers)} abonnés</span>}
-                    {prof?.website && (
-                      <a href={safeHref(prof.website)} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-foreground"><Globe className="h-3 w-3" />{domainOf(prof.website)}</a>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 pl-[54px] lg:pl-0">
+                    <button type="button" onClick={() => toggleRow(row.brand)} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground" aria-expanded={open}>
+                      {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />} {list.length} post{list.length > 1 ? "s" : ""}
+                    </button>
+                    {row.status !== "pipeline" && (
+                      <button type="button" onClick={() => void toPipeline(row)} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+                        <Plus className="h-3.5 w-3.5" /> Pipeline
+                      </button>
                     )}
-                    {prof?.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{prof.email}</span>}
+                    <button type="button" onClick={() => setMailFor({ row, post: posts.find((p) => p.roster && postType(p) === "spontane") ?? posts[0] })} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover">
+                      <Mail className="h-3.5 w-3.5" /> Mail
+                    </button>
+                    {row.status === "nouveau" ? (
+                      <button type="button" onClick={() => void setRowStatus(row.brand, "ignore")} title="Ignorer cette marque" aria-label="Ignorer" className="grid h-7 w-7 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                        <EyeOff className="h-3.5 w-3.5" />
+                      </button>
+                    ) : (
+                      <button type="button" onClick={() => void setRowStatus(row.brand, "nouveau")} title="Remettre à traiter" aria-label="Remettre à traiter" className="grid h-7 w-7 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
-              </div>
-
-              <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
-                {paid > 0 && <span className="rounded-full bg-primary/10 px-2.5 py-1 font-medium text-primary">{paid} partenariat{paid > 1 ? "s" : ""} payé{paid > 1 ? "s" : ""}</span>}
-                {organic > 0 && <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 font-medium text-emerald-600 dark:text-emerald-400">citée gratuitement {organic}×</span>}
-                <span className="rounded-full bg-panel px-2.5 py-1 text-muted-foreground">{creators.length} créatrice{creators.length > 1 ? "s" : ""}</span>
-              </div>
-
-              <div className="mt-2.5 flex flex-col gap-1.5">
-                {posts.slice(0, 3).map((p) => (
-                  <a key={p.url || `${p.c}${p.at}`} href={p.url} target="_blank" rel="noreferrer" className="rounded-lg bg-panel/60 px-2.5 py-2 transition-colors hover:bg-rowhover">
-                    <div className="flex items-center gap-2 text-[11px]">
-                      <span className={cn("font-semibold", p.roster ? "text-foreground" : "text-muted-foreground")}>@{p.c}</span>
-                      {rosterNames[p.c] && <span className="rounded bg-foreground/[0.06] px-1.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">roster</span>}
-                      {profiles[p.c]?.followers != null && <span className="text-faint">{fmtCompact(profiles[p.c]?.followers ?? 0)}</span>}
-                      <span className="text-faint">{fmtAgo(p.at)}</span>
-                      <span title={p.paid ? "Le post contient #ad, #sponsorisé, #partenariat, un code promo…" : "Aucun signe de partenariat payé dans le texte du post"} className={cn("ml-auto shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold", p.paid ? "bg-primary/10 text-primary" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400")}>{p.paid ? "PAYÉ" : "GRATUIT"}</span>
-                    </div>
-                    <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">{p.cap || "Sans légende"}</div>
-                  </a>
-                ))}
-                {posts.length > 3 && <div className="px-1 text-[10px] text-faint">+ {posts.length - 3} autre{posts.length - 3 > 1 ? "s" : ""} post{posts.length - 3 > 1 ? "s" : ""}</div>}
-              </div>
-
-              <div className="mt-3 flex flex-wrap items-center gap-2 pt-1">
-                {row.status !== "pipeline" && (
-                  <button type="button" onClick={() => void toPipeline(row)} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
-                    <Plus className="h-3.5 w-3.5" /> Pipeline
-                  </button>
-                )}
-                <button type="button" onClick={() => setMailFor({ row, post: posts.find((p) => p.roster && !p.paid) ?? posts[0] })} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover">
-                  <Mail className="h-3.5 w-3.5" /> Préparer le mail
-                </button>
-                <div className="flex-1" />
-                {row.status === "nouveau" ? (
-                  <button type="button" onClick={() => void setRowStatus(row.brand, "ignore")} className="flex items-center gap-1 text-[11px] text-faint transition-colors hover:text-foreground">
-                    <EyeOff className="h-3.5 w-3.5" /> Ignorer
-                  </button>
-                ) : (
-                  <button type="button" onClick={() => void setRowStatus(row.brand, "nouveau")} className="flex items-center gap-1 text-[11px] text-faint transition-colors hover:text-foreground">
-                    <RotateCcw className="h-3.5 w-3.5" /> Remettre à traiter
-                  </button>
+                {open && (
+                  <div className="mt-3 flex flex-col gap-1.5 lg:pl-[54px]">
+                    {list.map((p) => {
+                      const tp = TYPE_META[postType(p)];
+                      const src = srcTag(p);
+                      return (
+                        <a key={p.url || `${p.c}${p.at}`} href={p.url} target="_blank" rel="noreferrer" className="rounded-lg bg-panel/60 px-3 py-2 transition-colors hover:bg-rowhover">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                            <span className="font-semibold text-foreground">@{p.c}</span>
+                            <span className={cn("rounded px-1.5 text-[9px] font-semibold uppercase tracking-wide", src.c)}>{src.t}</span>
+                            {profiles[p.c]?.followers != null && <span className="text-faint">{fmtCompact(profiles[p.c]?.followers ?? 0)}</span>}
+                            <span className="text-faint">{fmtAgo(p.at)}{p.n > 1 ? ` · ${p.n} posts pareils` : ""}</span>
+                            <span title={tp.tip} className={cn("ml-auto shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold", tp.cls)}>{tp.label}</span>
+                          </div>
+                          <div className="mt-0.5 text-[12px] leading-snug text-muted-foreground"><Excerpt text={p.cap || "Sans légende"} brand={row.brand} name={prof?.name} /></div>
+                        </a>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
