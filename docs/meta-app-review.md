@@ -53,6 +53,11 @@ validation) puis, après validation, à recevoir les DM en temps réel.
 Compte de démonstration : un compte Instagram relié au compte Facebook d'une personne qui a un
 rôle sur l'app (Marc, ou Gianni ajouté comme testeur de l'app).
 
+✅ Essai réel réussi le 2026-10-15 : DM « Test 4 » envoyé depuis **@tipsconcierge** (relié au Facebook
+de Marc) → reçu par `ig-webhook` → affiché dans DM Instagram. Prérequis corrigé : la Page installe
+l'app avec le champ « name » (`ig_sync_state.webhook = {subscribed: true, fields: "name"}`) ; le champ
+« messages » demandait l'autorisation Messenger `pages_messaging`.
+
 1. Se connecter à `https://app.ttpcreators.pro` (compte agence).
 2. Menu Relations → **DM Instagram** (montrer la page vide ou existante).
 3. Depuis le compte de démonstration, envoyer à @ttpcreators : « Hello TTP, we'd love to work
