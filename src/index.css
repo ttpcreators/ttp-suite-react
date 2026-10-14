@@ -27,112 +27,347 @@
 }
 
 :root {
+  /* ══ DA « Calme, aéré, précis » (oct. 2026) ═══════════════════════════════
+     Cartes blanches sur fond gris froid, noir réservé à l'action, pastels =
+     statut (UN sens par couleur dans toute l'app). Tout passe par ces jetons :
+     aucune couleur en dur dans les composants. */
   /* Fait suivre le thème aux contrôles NATIFs (pickers date/mois, spinners
      number, menus <select>, cases à cocher, scrollbars) — sinon ils restent
      blancs en dark. */
   color-scheme: light;
-  --radius: 0.75rem;
-  --background: #eaebef;
-  --foreground: #18181b;
+  --radius: 0.875rem;
+  /* Base */
+  --background: #eef1f4; /* fond de l'app */
+  --foreground: #0e0f12; /* texte principal */
   --card: #ffffff;
-  --card-foreground: #18181b;
+  --card-foreground: #0e0f12;
   --popover: #ffffff;
-  --popover-foreground: #18181b;
-  --primary: #0069fe;
+  --popover-foreground: #0e0f12;
+  --primary: #0e0f12; /* action principale : noir, texte blanc (le bleu disparaît) */
   --primary-foreground: #ffffff;
-  --secondary: #f4f4f5;
-  --secondary-foreground: #18181b;
-  --muted: #f4f4f5;
-  --muted-foreground: #52525b;
-  --accent: #f4f4f5;
-  --accent-foreground: #18181b;
-  --destructive: #dc2626;
+  --secondary: #f2f4f6; /* champs et boutons doux */
+  --secondary-foreground: #0e0f12;
+  --muted: #f2f4f6;
+  --muted-foreground: #4a5059; /* texte secondaire */
+  --accent: #f2f4f6;
+  --accent-foreground: #0e0f12;
+  --destructive: #9b2c3b;
   --destructive-foreground: #ffffff;
-  --border: #e4e4e7;
-  --input: #e4e4e7;
-  --ring: #0069fe;
-  --burgundy: #0069fe;
-  /* Tokens fidèles à l'app d'origine */
-  --panel: #f4f4f5;
-  --surface: #ffffff;
-  --faint: #a1a1aa;
-  --rowhover: #f4f4f5;
-  --signal: #16a34a;
-  --signaltext: #15803d;
-  --signalsoft: #f0fdf4;
-  /* Code couleur de l’Aperçu : encre + gris, vert = bon, rouge = retard, bleu =
-     action. Les anciens jetons décoratifs deviennent des niveaux d’encre :
-     indigo = encre forte, cyan et amber = gris neutre (plus d’orange). */
-  --indigo: #27272a;
-  --amber: #71717a;
-  --cyan: #71717a;
+  --border: #e8ebef; /* bordures légères */
+  --input: #dde1e6; /* bordures de champs */
+  --ring: #0e0f12;
+  --burgundy: #0e0f12;
+  --panel: #f5f7f9; /* surface secondaire (tuiles dans les cartes) */
+  --surface: #ffffff; /* cartes */
+  --faint: #5b616a; /* métadonnées (contraste ≥ 4,5:1 sur blanc) */
+  --rowhover: #f2f4f6;
+  --signal: #16a34a; /* point « positif » / live */
+  --signaltext: #0b6b3a;
+  --signalsoft: #ddf5e6;
+  --indigo: #26292e;
+  --amber: #5b616a;
+  --cyan: #5b616a;
   --onsignal: #ffffff;
+  /* Statuts : fond / texte / point / aplat (pastille pleine, texte blanc dessus). */
+  --st-pos-bg: #ddf5e6; /* positif : signé, payé, à jour, actif */
+  --st-pos-fg: #0b6b3a;
+  --st-pos-dot: #16a34a;
+  --st-pos-solid: #0b6b3a;
+  --st-brief-bg: #e7e3fb; /* brief, idée, en observation */
+  --st-brief-fg: #4b3fa0;
+  --st-brief-dot: #7062d6;
+  --st-brief-solid: #4b3fa0;
+  --st-prog-bg: #ddeefb; /* en cours, en tournage, envoyé, en discussion */
+  --st-prog-fg: #1f5f8b;
+  --st-prog-dot: #3a86c4;
+  --st-prog-solid: #1f5f8b;
+  --st-wait-bg: #fcebd3; /* en attente, en négo, à contacter */
+  --st-wait-fg: #8a5413;
+  --st-wait-dot: #d08a2e;
+  --st-wait-solid: #8a5413;
+  --st-urg-bg: #fbe1e4; /* urgent, en retard, impayé, priorité haute */
+  --st-urg-fg: #9b2c3b;
+  --st-urg-dot: #d1495b;
+  --st-urg-solid: #9b2c3b;
+  --st-off-bg: #f2f4f6; /* clôturé, écarté, inactif */
+  --st-off-fg: #5b616a;
+  --st-off-dot: #9aa1ab;
+  --st-off-solid: #5b616a;
+  /* Graphes : bâtons pleins en encre, vides en gris clair. */
+  --chart-ink: #0e0f12;
+  --chart-empty: #e3e7ec;
 }
 
-/* Sombre « Minuit » (par défaut) : noir profond, gris NEUTRES (pas de teinte
-   bleue), filets très fins, accent monochrome (le blanc joue le rôle du bleu).
-   Hiérarchie : fond #000 < zone de contenu et cartes #0a0a0a < tuiles #141414. */
+/* Sombre (déduit de la palette) : fond très sombre, cartes un cran plus claires,
+   mêmes pastels désaturés pour les statuts, action en blanc (inversée). */
 .dark {
   color-scheme: dark;
-  --background: #000000;
-  --foreground: #fafafa;
-  --card: #0a0a0a;
-  --card-foreground: #fafafa;
-  --popover: #0f0f0f;
-  --popover-foreground: #fafafa;
-  --primary: #fafafa;
-  --primary-foreground: #0a0a0a;
-  --secondary: #171717;
-  --secondary-foreground: #fafafa;
-  --muted: #171717;
-  --muted-foreground: #a3a3a3;
-  --accent: #171717;
-  --accent-foreground: #fafafa;
-  --destructive: #ef4444;
+  --background: #0b0c0e;
+  --foreground: #f2f4f6;
+  --card: #15171a;
+  --card-foreground: #f2f4f6;
+  --popover: #1b1e22;
+  --popover-foreground: #f2f4f6;
+  --primary: #f2f4f6;
+  --primary-foreground: #0e0f12;
+  --secondary: #1f2227;
+  --secondary-foreground: #f2f4f6;
+  --muted: #1f2227;
+  --muted-foreground: #a7adb6;
+  --accent: #1f2227;
+  --accent-foreground: #f2f4f6;
+  --destructive: #e0566a;
   --destructive-foreground: #ffffff;
-  --border: #222222;
-  --input: #262626;
-  --ring: #a3a3a3;
-  --burgundy: #fafafa;
-  --panel: #141414;
-  --surface: #0a0a0a;
-  --faint: #737373;
-  --rowhover: #141414;
-  --signal: #16a34a;
-  --signaltext: #4ade80;
-  --signalsoft: #052e16;
-  --indigo: #e5e5e5;
-  --amber: #a3a3a3;
-  --cyan: #a3a3a3;
+  --border: #262a30;
+  --input: #30353c;
+  --ring: #a7adb6;
+  --burgundy: #f2f4f6;
+  --panel: #1b1e22;
+  --surface: #15171a;
+  --faint: #8b929c;
+  --rowhover: #1f2227;
+  --signal: #34c473;
+  --signaltext: #86d9a8;
+  --signalsoft: #143022;
+  --indigo: #e3e6ea;
+  --amber: #a7adb6;
+  --cyan: #a7adb6;
   --onsignal: #ffffff;
+  --st-pos-bg: #143022;
+  --st-pos-fg: #86d9a8;
+  --st-pos-dot: #34c473;
+  --st-pos-solid: #2f8f5b;
+  --st-brief-bg: #24203d;
+  --st-brief-fg: #bcb2f6;
+  --st-brief-dot: #8b7ee8;
+  --st-brief-solid: #6a5cc9;
+  --st-prog-bg: #13293a;
+  --st-prog-fg: #94c8ee;
+  --st-prog-dot: #4d9bd6;
+  --st-prog-solid: #2f74a8;
+  --st-wait-bg: #33250f;
+  --st-wait-fg: #ebbb76;
+  --st-wait-dot: #d9953a;
+  --st-wait-solid: #9c661c;
+  --st-urg-bg: #3a1a20;
+  --st-urg-fg: #f2a2ae;
+  --st-urg-dot: #e0566a;
+  --st-urg-solid: #b23a4c;
+  --st-off-bg: #1f2227;
+  --st-off-fg: #a7adb6;
+  --st-off-dot: #6b727c;
+  --st-off-solid: #4a5059;
+  --chart-ink: #f2f4f6;
+  --chart-empty: #2a2e34;
 }
 
-/* Sombre « Classique » (l'ancien) : Paramètres → Apparence → Style sombre. */
+/* Sombre « Classique » (Paramètres → Apparence → Style sombre) : même palette
+   depuis la refonte (plus de bleu), cartes un cran plus claires. */
 .dark.dark-classic {
-  --card: #18181b;
-  --popover: #18181b;
-  --primary: #2b7fff;
-  --primary-foreground: #ffffff;
-  --secondary: #27272a;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --accent: #27272a;
-  --border: #27272a;
-  --input: #27272a;
-  --ring: #2b7fff;
-  --burgundy: #2b7fff;
-  --panel: #18181b;
-  --surface: #18181b;
-  --faint: #71717a;
-  --rowhover: #27272a;
-  --cyan: #a1a1aa;
+  --card: #1b1e22;
+  --surface: #1b1e22;
+  --popover: #22262b;
+  --panel: #22262b;
 }
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Formes : champs 10, éléments internes 14, cartes 20 (boutons et chips en pilule). */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+  /* Typo : Geist pour l'interface, Geist Mono pour chiffres, montants, dates, références. */
+  --font-sans: "Geist Variable", "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Statuts : les couleurs Tailwind des anciens écrans (emerald, rose, amber…) pointent
+     désormais sur les jetons de statut → un seul sens par couleur, clair ET sombre. */
+  --color-emerald-50: color-mix(in srgb, var(--st-pos-bg) 60%, var(--card));
+  --color-emerald-100: var(--st-pos-bg);
+  --color-emerald-200: color-mix(in srgb, var(--st-pos-fg) 18%, var(--st-pos-bg));
+  --color-emerald-300: color-mix(in srgb, var(--st-pos-fg) 38%, var(--st-pos-bg));
+  --color-emerald-400: var(--st-pos-fg);
+  --color-emerald-500: var(--st-pos-solid);
+  --color-emerald-600: var(--st-pos-fg);
+  --color-emerald-700: var(--st-pos-fg);
+  --color-emerald-800: var(--st-pos-fg);
+  --color-emerald-900: var(--st-pos-fg);
+  --color-emerald-950: var(--st-pos-bg);
+  --color-green-50: color-mix(in srgb, var(--st-pos-bg) 60%, var(--card));
+  --color-green-100: var(--st-pos-bg);
+  --color-green-200: color-mix(in srgb, var(--st-pos-fg) 18%, var(--st-pos-bg));
+  --color-green-300: color-mix(in srgb, var(--st-pos-fg) 38%, var(--st-pos-bg));
+  --color-green-400: var(--st-pos-fg);
+  --color-green-500: var(--st-pos-solid);
+  --color-green-600: var(--st-pos-fg);
+  --color-green-700: var(--st-pos-fg);
+  --color-green-800: var(--st-pos-fg);
+  --color-green-900: var(--st-pos-fg);
+  --color-green-950: var(--st-pos-bg);
+  --color-teal-50: color-mix(in srgb, var(--st-pos-bg) 60%, var(--card));
+  --color-teal-100: var(--st-pos-bg);
+  --color-teal-200: color-mix(in srgb, var(--st-pos-fg) 18%, var(--st-pos-bg));
+  --color-teal-300: color-mix(in srgb, var(--st-pos-fg) 38%, var(--st-pos-bg));
+  --color-teal-400: var(--st-pos-fg);
+  --color-teal-500: var(--st-pos-solid);
+  --color-teal-600: var(--st-pos-fg);
+  --color-teal-700: var(--st-pos-fg);
+  --color-teal-800: var(--st-pos-fg);
+  --color-teal-900: var(--st-pos-fg);
+  --color-teal-950: var(--st-pos-bg);
+  --color-lime-50: color-mix(in srgb, var(--st-pos-bg) 60%, var(--card));
+  --color-lime-100: var(--st-pos-bg);
+  --color-lime-200: color-mix(in srgb, var(--st-pos-fg) 18%, var(--st-pos-bg));
+  --color-lime-300: color-mix(in srgb, var(--st-pos-fg) 38%, var(--st-pos-bg));
+  --color-lime-400: var(--st-pos-fg);
+  --color-lime-500: var(--st-pos-solid);
+  --color-lime-600: var(--st-pos-fg);
+  --color-lime-700: var(--st-pos-fg);
+  --color-lime-800: var(--st-pos-fg);
+  --color-lime-900: var(--st-pos-fg);
+  --color-lime-950: var(--st-pos-bg);
+  --color-rose-50: color-mix(in srgb, var(--st-urg-bg) 60%, var(--card));
+  --color-rose-100: var(--st-urg-bg);
+  --color-rose-200: color-mix(in srgb, var(--st-urg-fg) 18%, var(--st-urg-bg));
+  --color-rose-300: color-mix(in srgb, var(--st-urg-fg) 38%, var(--st-urg-bg));
+  --color-rose-400: var(--st-urg-fg);
+  --color-rose-500: var(--st-urg-solid);
+  --color-rose-600: var(--st-urg-fg);
+  --color-rose-700: var(--st-urg-fg);
+  --color-rose-800: var(--st-urg-fg);
+  --color-rose-900: var(--st-urg-fg);
+  --color-rose-950: var(--st-urg-bg);
+  --color-red-50: color-mix(in srgb, var(--st-urg-bg) 60%, var(--card));
+  --color-red-100: var(--st-urg-bg);
+  --color-red-200: color-mix(in srgb, var(--st-urg-fg) 18%, var(--st-urg-bg));
+  --color-red-300: color-mix(in srgb, var(--st-urg-fg) 38%, var(--st-urg-bg));
+  --color-red-400: var(--st-urg-fg);
+  --color-red-500: var(--st-urg-solid);
+  --color-red-600: var(--st-urg-fg);
+  --color-red-700: var(--st-urg-fg);
+  --color-red-800: var(--st-urg-fg);
+  --color-red-900: var(--st-urg-fg);
+  --color-red-950: var(--st-urg-bg);
+  --color-pink-50: color-mix(in srgb, var(--st-urg-bg) 60%, var(--card));
+  --color-pink-100: var(--st-urg-bg);
+  --color-pink-200: color-mix(in srgb, var(--st-urg-fg) 18%, var(--st-urg-bg));
+  --color-pink-300: color-mix(in srgb, var(--st-urg-fg) 38%, var(--st-urg-bg));
+  --color-pink-400: var(--st-urg-fg);
+  --color-pink-500: var(--st-urg-solid);
+  --color-pink-600: var(--st-urg-fg);
+  --color-pink-700: var(--st-urg-fg);
+  --color-pink-800: var(--st-urg-fg);
+  --color-pink-900: var(--st-urg-fg);
+  --color-pink-950: var(--st-urg-bg);
+  --color-amber-50: color-mix(in srgb, var(--st-wait-bg) 60%, var(--card));
+  --color-amber-100: var(--st-wait-bg);
+  --color-amber-200: color-mix(in srgb, var(--st-wait-fg) 18%, var(--st-wait-bg));
+  --color-amber-300: color-mix(in srgb, var(--st-wait-fg) 38%, var(--st-wait-bg));
+  --color-amber-400: var(--st-wait-fg);
+  --color-amber-500: var(--st-wait-solid);
+  --color-amber-600: var(--st-wait-fg);
+  --color-amber-700: var(--st-wait-fg);
+  --color-amber-800: var(--st-wait-fg);
+  --color-amber-900: var(--st-wait-fg);
+  --color-amber-950: var(--st-wait-bg);
+  --color-orange-50: color-mix(in srgb, var(--st-wait-bg) 60%, var(--card));
+  --color-orange-100: var(--st-wait-bg);
+  --color-orange-200: color-mix(in srgb, var(--st-wait-fg) 18%, var(--st-wait-bg));
+  --color-orange-300: color-mix(in srgb, var(--st-wait-fg) 38%, var(--st-wait-bg));
+  --color-orange-400: var(--st-wait-fg);
+  --color-orange-500: var(--st-wait-solid);
+  --color-orange-600: var(--st-wait-fg);
+  --color-orange-700: var(--st-wait-fg);
+  --color-orange-800: var(--st-wait-fg);
+  --color-orange-900: var(--st-wait-fg);
+  --color-orange-950: var(--st-wait-bg);
+  --color-yellow-50: color-mix(in srgb, var(--st-wait-bg) 60%, var(--card));
+  --color-yellow-100: var(--st-wait-bg);
+  --color-yellow-200: color-mix(in srgb, var(--st-wait-fg) 18%, var(--st-wait-bg));
+  --color-yellow-300: color-mix(in srgb, var(--st-wait-fg) 38%, var(--st-wait-bg));
+  --color-yellow-400: var(--st-wait-fg);
+  --color-yellow-500: var(--st-wait-solid);
+  --color-yellow-600: var(--st-wait-fg);
+  --color-yellow-700: var(--st-wait-fg);
+  --color-yellow-800: var(--st-wait-fg);
+  --color-yellow-900: var(--st-wait-fg);
+  --color-yellow-950: var(--st-wait-bg);
+  --color-sky-50: color-mix(in srgb, var(--st-prog-bg) 60%, var(--card));
+  --color-sky-100: var(--st-prog-bg);
+  --color-sky-200: color-mix(in srgb, var(--st-prog-fg) 18%, var(--st-prog-bg));
+  --color-sky-300: color-mix(in srgb, var(--st-prog-fg) 38%, var(--st-prog-bg));
+  --color-sky-400: var(--st-prog-fg);
+  --color-sky-500: var(--st-prog-solid);
+  --color-sky-600: var(--st-prog-fg);
+  --color-sky-700: var(--st-prog-fg);
+  --color-sky-800: var(--st-prog-fg);
+  --color-sky-900: var(--st-prog-fg);
+  --color-sky-950: var(--st-prog-bg);
+  --color-blue-50: color-mix(in srgb, var(--st-prog-bg) 60%, var(--card));
+  --color-blue-100: var(--st-prog-bg);
+  --color-blue-200: color-mix(in srgb, var(--st-prog-fg) 18%, var(--st-prog-bg));
+  --color-blue-300: color-mix(in srgb, var(--st-prog-fg) 38%, var(--st-prog-bg));
+  --color-blue-400: var(--st-prog-fg);
+  --color-blue-500: var(--st-prog-solid);
+  --color-blue-600: var(--st-prog-fg);
+  --color-blue-700: var(--st-prog-fg);
+  --color-blue-800: var(--st-prog-fg);
+  --color-blue-900: var(--st-prog-fg);
+  --color-blue-950: var(--st-prog-bg);
+  --color-violet-50: color-mix(in srgb, var(--st-brief-bg) 60%, var(--card));
+  --color-violet-100: var(--st-brief-bg);
+  --color-violet-200: color-mix(in srgb, var(--st-brief-fg) 18%, var(--st-brief-bg));
+  --color-violet-300: color-mix(in srgb, var(--st-brief-fg) 38%, var(--st-brief-bg));
+  --color-violet-400: var(--st-brief-fg);
+  --color-violet-500: var(--st-brief-solid);
+  --color-violet-600: var(--st-brief-fg);
+  --color-violet-700: var(--st-brief-fg);
+  --color-violet-800: var(--st-brief-fg);
+  --color-violet-900: var(--st-brief-fg);
+  --color-violet-950: var(--st-brief-bg);
+  --color-purple-50: color-mix(in srgb, var(--st-brief-bg) 60%, var(--card));
+  --color-purple-100: var(--st-brief-bg);
+  --color-purple-200: color-mix(in srgb, var(--st-brief-fg) 18%, var(--st-brief-bg));
+  --color-purple-300: color-mix(in srgb, var(--st-brief-fg) 38%, var(--st-brief-bg));
+  --color-purple-400: var(--st-brief-fg);
+  --color-purple-500: var(--st-brief-solid);
+  --color-purple-600: var(--st-brief-fg);
+  --color-purple-700: var(--st-brief-fg);
+  --color-purple-800: var(--st-brief-fg);
+  --color-purple-900: var(--st-brief-fg);
+  --color-purple-950: var(--st-brief-bg);
+  --color-fuchsia-50: color-mix(in srgb, var(--st-brief-bg) 60%, var(--card));
+  --color-fuchsia-100: var(--st-brief-bg);
+  --color-fuchsia-200: color-mix(in srgb, var(--st-brief-fg) 18%, var(--st-brief-bg));
+  --color-fuchsia-300: color-mix(in srgb, var(--st-brief-fg) 38%, var(--st-brief-bg));
+  --color-fuchsia-400: var(--st-brief-fg);
+  --color-fuchsia-500: var(--st-brief-solid);
+  --color-fuchsia-600: var(--st-brief-fg);
+  --color-fuchsia-700: var(--st-brief-fg);
+  --color-fuchsia-800: var(--st-brief-fg);
+  --color-fuchsia-900: var(--st-brief-fg);
+  --color-fuchsia-950: var(--st-brief-bg);
+  --color-status-pos: var(--st-pos-fg);
+  --color-status-pos-bg: var(--st-pos-bg);
+  --color-status-pos-dot: var(--st-pos-dot);
+  --color-status-brief: var(--st-brief-fg);
+  --color-status-brief-bg: var(--st-brief-bg);
+  --color-status-brief-dot: var(--st-brief-dot);
+  --color-status-prog: var(--st-prog-fg);
+  --color-status-prog-bg: var(--st-prog-bg);
+  --color-status-prog-dot: var(--st-prog-dot);
+  --color-status-wait: var(--st-wait-fg);
+  --color-status-wait-bg: var(--st-wait-bg);
+  --color-status-wait-dot: var(--st-wait-dot);
+  --color-status-urg: var(--st-urg-fg);
+  --color-status-urg-bg: var(--st-urg-bg);
+  --color-status-urg-dot: var(--st-urg-dot);
+  --color-status-off: var(--st-off-fg);
+  --color-status-off-bg: var(--st-off-bg);
+  --color-status-off-dot: var(--st-off-dot);
+  --color-chart-ink: var(--chart-ink);
+  --color-chart-empty: var(--chart-empty);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -184,16 +419,32 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01" on;
   -webkit-font-smoothing: antialiased;
 }
 
 /* Minuit : la zone de contenu est un panneau #0a0a0a posé sur le noir, avec un
    filet (au lieu du gris de tuile). Les cartes s'y fondent, seules leurs
    bordures les dessinent : l'effet « sections séparées par des filets ». */
-.dark:not(.dark-classic) .shell-panel {
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--border);
+.shell-panel {
+  background: var(--background);
+}
+
+/* Règle 1 de la DA : cartes blanches posées sur le gris, sans bordure ni ombre lourde.
+   (Les bordures colorées d'état — sélection, erreur — restent.) */
+.rounded-2xl.border-border:is(.bg-surface, .bg-card),
+.rounded-\[22px\].border-border:is(.bg-surface, .bg-card) {
+  border-color: transparent;
+}
+
+/* Règle 4 de la DA : chiffres, montants, pourcentages, dates et références en mono.
+   Tout ce qui est déjà en chiffres tabulaires passe en Geist Mono. */
+@layer utilities {
+  .tabular-nums {
+    font-family: var(--font-mono);
+    letter-spacing: -0.01em;
+  }
 }
 /* Langage de l'Aperçu : panneaux PLATS, dessinés par leur seule bordure. Les
    petites ombres des cartes sont coupées partout (les menus et fenêtres gardent

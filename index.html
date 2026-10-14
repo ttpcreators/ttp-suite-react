@@ -5,7 +5,7 @@
     <link rel="icon" type="image/png" href="/logo.png?v=2" />
     <link rel="apple-touch-icon" href="/logo.png?v=2" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#f4f4f5" />
+    <meta name="theme-color" content="#eef1f4" />
     <!-- Web app installé sur l'écran d'accueil (condition des notifications push iOS 16.4+) -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
       try {
         if (localStorage.getItem("ttp:theme") === "dark") {
           document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').setAttribute("content", "black-translucent");
-          document.querySelector('meta[name="theme-color"]').setAttribute("content", "#000000");
+          document.querySelector('meta[name="theme-color"]').setAttribute("content", "#0b0c0e");
         }
       } catch (e) {}
     </script>

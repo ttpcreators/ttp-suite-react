@@ -155,7 +155,7 @@ export function setThemePref(dark: boolean): void {
     /* stockage indispo : le thème reste valable pour la session */
   }
   // Couleur de la barre d'état (iPhone : appliquée au prochain lancement de l'app installée).
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#000000" : "#f4f4f5");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#0b0c0e" : "#eef1f4");
   document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.setAttribute("content", dark ? "black-translucent" : "default");
 }
 
