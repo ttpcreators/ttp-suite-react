@@ -10,7 +10,7 @@
 > Les sections 3 à 5 ci-dessous décrivent la première version (palette noire et pastels), écartée.
 
 Uniquement le visuel : ni la logique métier, ni Supabase, ni les routes ne changent.
-Rien n'est en ligne tant que la branche n'est pas fusionnée dans `main`.
+✅ **En ligne depuis le 2026-10-14** (branche `refonte-da` fusionnée dans `main`, commit `bf7b98a`).
 
 ## 1. Inventaire du système actuel (avant refonte)
 
