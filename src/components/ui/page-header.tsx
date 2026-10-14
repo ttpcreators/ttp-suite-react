@@ -18,12 +18,16 @@ import { InPageHeaderContext } from "@/lib/navAction";
 
 const PageSlotContext = createContext<HTMLElement | null>(null);
 
-export function PageFrame({ title, children }: { title: ReactNode; children: ReactNode }) {
+export function PageFrame({ title, hint, children }: { title: ReactNode; hint?: string; children: ReactNode }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   return (
     <>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-        <h1 className="page-title text-[24px] font-semibold tracking-tight md:text-[28px]">{title}</h1>
+        <div className="min-w-0">
+          <h1 className="page-title text-[24px] font-semibold tracking-tight md:text-[28px]">{title}</h1>
+          {/* À quoi sert la page, en une phrase (src/lib/viewHints.ts). */}
+          {hint && <p className="page-hint mt-1 max-w-[46rem] text-[13px] leading-snug text-muted-foreground">{hint}</p>}
+        </div>
         {/* Mobile : pleine largeur sous le titre, compteur à gauche / actions à
             droite, et les groupes d'actions passent à la ligne au lieu de déborder.
             ≥ sm : collé à droite du titre. */}

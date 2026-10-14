@@ -255,7 +255,7 @@ export function AgencyTab() {
             rel="noreferrer"
             className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
           >
-            <ExternalLink className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Voir le deck</span>
+            <ExternalLink className="h-3.5 w-3.5" /> <span>Voir le deck</span>
           </a>
           <a
             href={`${PUBLIC_URL}en/`}
@@ -264,7 +264,7 @@ export function AgencyTab() {
             title="Version anglaise, pour les marques étrangères"
             className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
           >
-            <Languages className="h-3.5 w-3.5" /> <span className="hidden sm:inline">En anglais</span>
+            <Languages className="h-3.5 w-3.5" /> <span>En anglais</span>
           </a>
           <button
             type="button"

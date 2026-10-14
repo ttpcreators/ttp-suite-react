@@ -750,11 +750,11 @@ export function Facturation() {
         <div className="flex items-center gap-2">
           <button type="button" onClick={openBanks} className={cn(ghostBtn, "flex items-center gap-1.5")} title="Comptes bancaires">
             <Landmark className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Comptes</span>
+            <span>Comptes</span>
           </button>
           <button type="button" onClick={() => setIssuerDraft(issuer)} className={cn(ghostBtn, "flex items-center gap-1.5")} title="Informations émetteur">
             <Settings2 className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Émetteur</span>
+            <span>Émetteur</span>
           </button>
           <AddButton label="Facture" onClick={openCreate} />
         </div>

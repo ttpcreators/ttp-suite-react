@@ -427,7 +427,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 rel="noreferrer"
                 className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
               >
-                <ExternalLink className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Voir le media kit</span>
+                <ExternalLink className="h-3.5 w-3.5" /> <span>Voir le media kit</span>
               </a>
             )}
             {publicUrl && (
@@ -438,7 +438,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 title="Version anglaise, pour les marques étrangères"
                 className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
               >
-                <Languages className="h-3.5 w-3.5" /> <span className="hidden sm:inline">En anglais</span>
+                <Languages className="h-3.5 w-3.5" /> <span>En anglais</span>
               </a>
             )}
             {publicUrl && mk.ugc?.enabled && (
@@ -448,7 +448,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 rel="noreferrer"
                 className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
               >
-                <Sparkles className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Voir le kit UGC</span>
+                <Sparkles className="h-3.5 w-3.5" /> <span>Voir le kit UGC</span>
               </a>
             )}
             <button

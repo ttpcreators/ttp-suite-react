@@ -137,7 +137,7 @@ export function Sourcing() {
     <>
       <PageHeaderRow>
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          Deux outils, à partir d'Instagram
+          Données Instagram
           <HelpTip title="D'où viennent les chiffres ?" align="end">
             <p>De l'outil officiel de Meta (Instagram), le même que pour le Roster et le Scouting.</p>
             <p>Seuls les comptes <span className="font-medium text-foreground">pro ou créateur</span> sont visibles. Les comptes perso apparaissent grisés.</p>

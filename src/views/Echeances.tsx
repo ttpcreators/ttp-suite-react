@@ -217,7 +217,7 @@ export function Echeances() {
             className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
           >
             <RefreshCw className={"h-3.5 w-3.5" + (syncing ? " animate-spin" : "")} />
-            <span className="hidden sm:inline">{syncing ? "Synchro…" : "Synchroniser"}</span>
+            <span>{syncing ? "Synchro…" : "Synchroniser"}</span>
           </button>
           <AddButton label="Ajouter un contrat" onClick={openAdd} />
         </div>

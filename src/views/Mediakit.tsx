@@ -400,7 +400,7 @@ function MediakitFiles() {
             onClick={() => (selected ? setLinkOpen(true) : toast("Choisis d'abord un créateur"))}
             className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
           >
-            <Link2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Par lien</span>
+            <Link2 className="h-3.5 w-3.5" /> <span>Par lien</span>
           </button>
           <button
             type="button"

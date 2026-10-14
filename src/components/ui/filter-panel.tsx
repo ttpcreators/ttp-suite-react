@@ -30,7 +30,7 @@ export function FilterPanel({
   right,
   extra,
   className,
-  defaultOpen = true,
+  defaultOpen,
 }: {
   title?: string;
   groups: FilterGroup[];
@@ -42,9 +42,10 @@ export function FilterPanel({
   /** Contrôle libre sous les groupes (ex. sélecteur de créatrice). */
   extra?: ReactNode;
   className?: string;
+  /** Ouvert au départ ? Par défaut : seulement si un filtre est actif (sinon replié, pour laisser la place au contenu). */
   defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useState(defaultOpen ?? activeCount > 0);
   const [sheet, setSheet] = useState(false);
   const ios = useIosPhone();
   const activeLabel =

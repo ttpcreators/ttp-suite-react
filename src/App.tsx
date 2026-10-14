@@ -18,6 +18,7 @@ import { getThemePref, setThemePref } from "@/lib/accent";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PageFrame } from "@/components/ui/page-header";
+import { VIEW_HINTS } from "@/lib/viewHints";
 import { Login } from "@/components/Login";
 import { NAV, findItem, findPinnable, viewTitle, type NavItem, type ViewId } from "@/lib/nav";
 import { NavSubContext, NavSubSetContext } from "@/lib/navSub";
@@ -864,7 +865,7 @@ export default function App() {
                           <GlobalSearch inline autoFocus query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={hiddenIds} />
                         </PageFrame>
                       ) : showPrimaryH1 ? (
-                        <PageFrame title={title}>{mainInner}</PageFrame>
+                        <PageFrame title={title} hint={VIEW_HINTS[active]}>{mainInner}</PageFrame>
                       ) : (
                         mainInner
                       )}
@@ -922,7 +923,7 @@ export default function App() {
                               <Suspense fallback={PANE_FALLBACK}>
                                 <NavSubContext.Provider value={id === active ? sub : null}>
                                   {id !== "apercu" ? (
-                                    <PageFrame title={tabTitle}>
+                                    <PageFrame title={tabTitle} hint={VIEW_HINTS[id]}>
                                       <ViewContent active={id} onOpenCreator={openDetail} />
                                     </PageFrame>
                                   ) : (

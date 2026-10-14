@@ -845,7 +845,7 @@ export function Contacts() {
             title="Importer un fichier CSV"
           >
             <Upload className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{importing ? "Import…" : "Importer"}</span>
+            <span>{importing ? "Import…" : "Importer"}</span>
           </button>
           <button
             type="button"
@@ -854,7 +854,7 @@ export function Contacts() {
             title="Exporter en CSV"
           >
             <Download className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Exporter</span>
+            <span>Exporter</span>
           </button>
           <button
             type="button"
@@ -863,7 +863,7 @@ export function Contacts() {
             title="Écrire un email (choisir les destinataires)"
           >
             <Mail className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Email</span>
+            <span>Email</span>
           </button>
           <AddButton label="Contact" onClick={openAdd} />
         </div>

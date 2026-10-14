@@ -2,6 +2,10 @@ import { useEffect, useState, type ReactNode, type MouseEvent as ReactMouseEvent
 import { Check, ChevronRight, ChevronsUpDown, Columns2, PanelLeftClose, Star, type LucideIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { VIEW_HINTS } from "@/lib/viewHints";
+
+/** À quoi sert la page (bulle au survol du menu). */
+const hintOf = (id: string) => (VIEW_HINTS as Record<string, string | undefined>)[id];
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -95,7 +99,7 @@ function Row({
     : (hasChildren ? "pr-9" : "pr-2.5");
   return (
     <div className="group relative flex items-center">
-      <button type="button" onClick={onClick} onContextMenu={onContext} className={cn(sbItemCls(active), pr)}>
+      <button type="button" onClick={onClick} onContextMenu={onContext} title={hintOf(item.id)} className={cn(sbItemCls(active), pr)}>
         <item.icon className={sbIconCls(active)} strokeWidth={1.75} />
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
         {/* Pastille : décalée pour ne pas passer sous le bouton « à côté » ni l'étoile. */}
