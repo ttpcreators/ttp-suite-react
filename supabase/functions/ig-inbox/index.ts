@@ -96,8 +96,22 @@ Deno.serve(async (req: Request) => {
   if (!targets.length) {
     const { data: st } = await sb.from("ig_sync_state").select("data").eq("key", "webhook").maybeSingle<{ data: { subscribed?: boolean } }>();
     if (!st?.data?.subscribed) {
-      const sub = await postGraph(`${page.pageId}/subscribed_apps`, { subscribed_fields: "messages" }, page.token);
-      await saveState(sb, "webhook", { subscribed: !sub.error && !!sub.success, detail: sub.error ? (sub.error as GraphError).message ?? "erreur" : null });
+      // Les messages Instagram arrivent par l'objet « Instagram » réglé dans le tableau de bord
+      // Meta ; la Page n'a qu'à avoir l'app installée. Le champ Page « messages » est celui de
+      // Messenger (autorisation pages_messaging, que l'app n'a pas) : on installe l'app avec un
+      // champ Page sans bruit (« name », puis « feed » en secours), couverts par pages_manage_metadata.
+      let sub: Record<string, unknown> = {};
+      let used = "";
+      for (const fields of ["name", "feed"]) {
+        sub = await postGraph(`${page.pageId}/subscribed_apps`, { subscribed_fields: fields }, page.token);
+        used = fields;
+        if (!sub.error && sub.success) break;
+      }
+      await saveState(sb, "webhook", {
+        subscribed: !sub.error && !!sub.success,
+        fields: used,
+        detail: sub.error ? (sub.error as GraphError).message ?? "erreur" : null,
+      });
     }
   }
 
