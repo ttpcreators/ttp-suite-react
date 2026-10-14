@@ -1,5 +1,7 @@
 # Validation Google : « Connecter mon YouTube » pour toutes les créatrices
 
+> ⏸️ En pause (Marc, 2026-10-14). Reprendre à : déploiement des fonctions, essai réel, puis étape 4.
+
 Pourquoi : l'app Google « TTP Suite » (ex « TTP Creators ») est **en test**. Seules les adresses de la liste
 « Utilisateurs tests » peuvent se connecter (100 au maximum), et l'accès saute tous les
 7 jours. Pour ouvrir « Connecter mon YouTube » à toutes les créatrices, sans liste et sans
@@ -23,7 +25,7 @@ Drive…), et nous n'en demandons aucun.
 | # | Étape | Qui | État |
 |---|-------|-----|------|
 | 1 | Code conforme aux règles YouTube : effacement de TOUTES les données de la chaîne à la déconnexion ou quand l'accès est retiré chez Google (`ytForget`) ; vidéos du radar non relues depuis 30 jours effacées (`yt-radar`) ; cache des chaînes purgé à 30 jours (`yt-sourcing`). Déployer : `supabase functions deploy yt-connect yt-sync yt-radar yt-sourcing --project-ref zizvggziggswhrbuyhuo` | assistant (code) + Marc (déploiement) | ✅ code (2026-10-14), ⏳ déploiement |
-| 2 | Pages publiques sur ttpcreators.pro : **`/suite/`** (page d'accueil de l'app, FR + EN), `/confidentialite/` (connexions des comptes, effacement, usage limité Google), `/conditions/` (phrase « vous acceptez les conditions de YouTube ») | assistant | ⏳ publication après accord de Marc (capture montrée) |
+| 2 | Pages publiques sur ttpcreators.pro : **`/suite/`** (page d'accueil de l'app, FR + EN), `/confidentialite/` (connexions des comptes, effacement, usage limité Google), `/conditions/` (phrase « vous acceptez les conditions de YouTube ») | assistant | ✅ en ligne (2026-10-14) |
 | 3 | Google Auth Platform → Branding : **nom de l'app « TTP Suite »** (même nom que la page d'accueil, sinon Google refuse pour « nom différent ») ; page d'accueil **`https://ttpcreators.pro/suite/`** | assistant, avec l'accord de Marc | ✅ fait (2026-10-14) |
 | 4 | **Propriété du domaine** : Google Search Console (search.google.com/search-console), connecté avec **partnerships@ttpcreators.pro** → Ajouter une propriété → **Domaine** → `ttpcreators.pro`. Un enregistrement `google-site-verification` existe déjà chez OVH : s'il appartient à ce compte, c'est validé tout de suite. Sinon, Google donne un nouvel enregistrement TXT : OVH → Web Cloud → Noms de domaine → ttpcreators.pro → Zone DNS → Ajouter une entrée → TXT (sous-domaine vide), coller la valeur, puis « Valider » dans Search Console (quelques minutes à quelques heures) | Marc | ⏳ |
 | 5 | Compte de démonstration pour Google (il peut le demander) : un accès créatrice « ZZZ Démo Google » créé depuis l'app (Réglages → Accès → Comptes app) ; identifiants transmis à Google seulement s'il les demande, par le formulaire de validation | Marc | ⏳ si demandé |
