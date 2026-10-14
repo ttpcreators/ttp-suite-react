@@ -57,6 +57,8 @@ import { EditorialProfileCard, MonthlyTracking, JournalCard, CreatorAlerts } fro
 import { DateInput } from "@/components/ui/date-range-picker";
 import { SelectField } from "@/components/ui/form";
 import { InstagramCard } from "@/components/InstagramCard";
+import { TikTokCard } from "@/components/TikTokCard";
+import type { TtCreator } from "@/lib/tiktok";
 import { fmtAgo, type IgCreator } from "@/lib/instagram";
 
 type Creator = {
@@ -81,6 +83,7 @@ type Creator = {
   instagram: string | null;
   tiktok: string | null;
   ig?: IgCreator | null; // chiffres Instagram du jour (ig-sync, après la migration 2026-10-13)
+  tt?: TtCreator | null; // TikTok connecté par la créatrice (tt-sync, après la migration 2026-10-14)
   email_pro: string | null;
 };
 type Inv = { ref: string; party: string; amount: string; date: string; status?: string | null };
@@ -700,6 +703,16 @@ export function CreatorDetail({
           name={c.name}
           ig={c.ig}
           onChange={(ig) => setC((prev) => (prev ? { ...prev, ig } : prev))}
+          className={segHide("infos")}
+        />
+      )}
+
+      {c?.id && (c.tt || socialLinks.some((l) => l.label === "TikTok")) && (
+        <TikTokCard
+          creatorId={c.id}
+          name={c.name}
+          tt={c.tt}
+          onChange={(tt) => setC((prev) => (prev ? { ...prev, tt } : prev))}
           className={segHide("infos")}
         />
       )}

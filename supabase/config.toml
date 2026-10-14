@@ -152,3 +152,18 @@ verify_jwt = false
 # authenticité = signature X-Hub-Signature-256 (META_APP_SECRET), vérifiée dans le code.
 [functions.ig-webhook]
 verify_jwt = false
+
+# tt-connect : une créatrice (ou l'agence pour elle) lance / coupe la connexion TikTok.
+# JWT requis + rôle vérifié dans le code (même schéma que ig-connect).
+[functions.tt-connect]
+verify_jwt = true
+
+# tt-callback : retour du navigateur depuis TikTok (sans JWT) → verify_jwt=false ;
+# l'authenticité tient au state signé.
+[functions.tt-callback]
+verify_jwt = false
+
+# tt-sync : chiffres TikTok (cron quotidien avec CRON_SECRET, ou agence) → verify_jwt=false ;
+# auth dans le code.
+[functions.tt-sync]
+verify_jwt = false

@@ -26,6 +26,7 @@ import { PageHeaderRow } from "@/components/ui/page-header";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { fmtCompact } from "@/lib/timeSeries";
 import { igRefresh, igWhyText, postKind, useIgColumn, type IgCollab } from "@/lib/instagram";
+import type { TtCollab } from "@/lib/tiktok";
 
 type Row = {
   id: string;
@@ -82,10 +83,24 @@ export function Collabs() {
   // Publications de la marque repérées sur Instagram (ig-sync, chaque nuit dès l'étape 4).
   const [igCollabs, putIgCollab] = useIgColumn<IgCollab>("collabs", "id");
   const [igBusy, setIgBusy] = useState<string | null>(null);
+  const [ttCollabs, setTtCollabs] = useState<Record<string, TtCollab>>({});
   const [error, setError] = useState(false);
   const { query } = useSearch();
   const creators = useCreators();
   const live = useLiveKey();
+  // Vidéos TikTok repérées (tt-sync) ; colonne absente avant le SQL TikTok : rien.
+  useEffect(() => {
+    let alive = true;
+    void supabase.from("collabs").select("id, tt").not("tt", "is", null).then(({ data, error }) => {
+      if (!alive || error) return;
+      const m: Record<string, TtCollab> = {};
+      for (const r of (data as { id: string; tt: TtCollab | null }[] | null) ?? []) if (r.tt) m[r.id] = r.tt;
+      setTtCollabs(m);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [live]);
 
   const [phaseFilter, setPhaseFilter] = useState<string>("__all__");
   const [statusFilter, setStatusFilter] = useState<string>("active");
@@ -174,15 +189,18 @@ export function Collabs() {
     if (row.step < 4) return null;
     const ig = igCollabs[row.id];
     const posts = ig?.posts ?? [];
+    // Vidéos TikTok de la créatrice qui citent la marque (tt-sync, si elle a connecté son TikTok).
+    const ttPosts = ttCollabs[row.id]?.posts ?? [];
+    const total = posts.length + ttPosts.length;
     const expected = expectedPosts(row.deliverables);
     return (
       <div className="mt-2 rounded-xl bg-panel px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <PlatformIcon platform="instagram" className="h-3 w-3" /> Publications repérées
-            {(expected > 0 || posts.length > 0) && (
-              <span className={cn("font-semibold", expected > 0 && posts.length >= expected ? "text-emerald-600 dark:text-emerald-400" : "text-foreground")}>
-                · {posts.length}{expected > 0 ? ` / ${expected}` : ""}
+            {(expected > 0 || total > 0) && (
+              <span className={cn("font-semibold", expected > 0 && total >= expected ? "text-emerald-600 dark:text-emerald-400" : "text-foreground")}>
+                · {total}{expected > 0 ? ` / ${expected}` : ""}
               </span>
             )}
           </div>
@@ -196,7 +214,7 @@ export function Collabs() {
             {igBusy === row.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Vérifier
           </button>
         </div>
-        {posts.length > 0 ? (
+        {total > 0 ? (
           <div className="mt-1.5 flex flex-col gap-1">
             {posts.map((p) => (
               <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg bg-surface px-2 py-1.5 text-[11px] transition-colors hover:bg-rowhover">
@@ -206,6 +224,18 @@ export function Collabs() {
                   {p.likes != null && <span className="flex items-center gap-0.5"><Heart className="h-3 w-3" />{fmtCompact(p.likes)}</span>}
                   <span className="flex items-center gap-0.5"><MessageCircle className="h-3 w-3" />{fmtCompact(p.comments)}</span>
                   {p.reach != null && <span title="Comptes touchés">{fmtCompact(p.reach)} touchés</span>}
+                  <ExternalLink className="h-3 w-3 text-faint" />
+                </span>
+              </a>
+            ))}
+            {ttPosts.map((p) => (
+              <a key={`tt${p.id}`} href={p.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg bg-surface px-2 py-1.5 text-[11px] transition-colors hover:bg-rowhover">
+                <span className="flex shrink-0 items-center gap-1 font-semibold text-foreground"><PlatformIcon platform="tiktok" className="h-3 w-3" />TikTok</span>
+                <span className="shrink-0 text-faint">{frDate(p.at)}</span>
+                <span className="ml-auto flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
+                  {p.views != null && <span title="Vues">{fmtCompact(p.views)} vues</span>}
+                  {p.likes != null && <span className="flex items-center gap-0.5"><Heart className="h-3 w-3" />{fmtCompact(p.likes)}</span>}
+                  {p.comments != null && <span className="flex items-center gap-0.5"><MessageCircle className="h-3 w-3" />{fmtCompact(p.comments)}</span>}
                   <ExternalLink className="h-3 w-3 text-faint" />
                 </span>
               </a>
@@ -623,6 +653,11 @@ export function Collabs() {
             {(igCollabs[row.id]?.posts?.length ?? 0) > 0 && (
               <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
                 <PlatformIcon platform="instagram" className="h-3 w-3" /> {igCollabs[row.id]?.posts?.length} publication{(igCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""} repérée{(igCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""}
+              </div>
+            )}
+            {(ttCollabs[row.id]?.posts?.length ?? 0) > 0 && (
+              <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                <PlatformIcon platform="tiktok" className="h-3 w-3" /> {ttCollabs[row.id]?.posts?.length} vidéo{(ttCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""} TikTok repérée{(ttCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""}
               </div>
             )}
           </div>

@@ -426,6 +426,47 @@ create policy yt_channels_agency_read on public.yt_channels for select to authen
 drop policy if exists yt_quota_agency_read on public.yt_quota;
 create policy yt_quota_agency_read on public.yt_quota for select to authenticated using (public.is_agency());
 
+-- TikTok · connexion des créatrices (sql/2026-10-14-tiktok-connexion ; cron tt-sync-quotidien
+-- dans ce fichier daté) : jetons dans tt_accounts (aucune politique), chiffres dans
+-- creators.tt / collabs.tt (écrits par tt-sync, garde tt_guard comme pour ig).
+create table if not exists public.tt_accounts (
+  creator_id         uuid primary key references public.creators(id) on delete cascade,
+  open_id            text not null,
+  username           text,
+  token              text not null,
+  expires_at         timestamptz,
+  refresh_token      text,
+  refresh_expires_at timestamptz,
+  scopes             text,
+  connected_at       timestamptz default now(),
+  refreshed_at       timestamptz
+);
+alter table public.tt_accounts enable row level security;
+revoke all on public.tt_accounts from anon, authenticated;
+
+alter table public.creators add column if not exists tt jsonb;
+alter table public.collabs  add column if not exists tt jsonb;
+
+-- Même garde que creators.ig : une créatrice ne peut pas écrire ses propres chiffres.
+create or replace function public.tt_guard() returns trigger
+  language plpgsql set search_path = public as $$
+begin
+  if public.is_agency()
+     or coalesce(auth.role(), '') = 'service_role'
+     or current_user in ('postgres', 'service_role', 'supabase_admin') then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    new.tt := null;
+  else
+    new.tt := old.tt;
+  end if;
+  return new;
+end $$;
+drop trigger if exists creators_tt_guard on public.creators;
+create trigger creators_tt_guard before insert or update on public.creators
+  for each row execute function public.tt_guard();
+
 -- Instagram · DM de TTP, posts programmés, agences concurrentes
 -- (sql/2026-10-14-instagram-dm-posts-concurrents ; crons ig-inbox-horaire et
 -- ig-publish-minute dans ce fichier daté, pas ici).
