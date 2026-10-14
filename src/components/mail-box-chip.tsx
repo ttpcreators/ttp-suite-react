@@ -10,6 +10,11 @@ export function BoxChip({ box, prefix, className }: { box: MailBox; prefix?: str
   );
 }
 
+/** Point de couleur d'une boîte (liste des mails, filtre des boîtes). */
+export function BoxDot({ box, className }: { box: MailBox; className?: string }) {
+  return <span aria-hidden className={cn("inline-block size-2 shrink-0 rounded-full", BOX_STYLE[box].dot, className)} />;
+}
+
 /** Sélecteur de boîte coloré (composeur, transfert). */
 export function BoxPicker({ value, onChange }: { value: MailBox; onChange: (b: MailBox) => void }) {
   return (

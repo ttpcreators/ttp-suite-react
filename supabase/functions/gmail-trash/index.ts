@@ -13,6 +13,7 @@
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 import { boxToken, boxError, parseBox } from "../_shared/gmailBox.ts";
+import { gfetch, classifyGmail, GfetchError } from "../_shared/gfetch.ts";
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 
@@ -56,15 +57,25 @@ Deno.serve(async (req: Request) => {
     return jsonRes({ error: be.error }, be.status);
   }
 
-  const r = await fetch(`${GMAIL}/threads/${threadId}/${body.undo ? "untrash" : "trash"}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!r.ok) {
-    // 403 = droit « modifier » pas encore accordé à cette boîte.
-    if (r.status === 403) return jsonRes({ error: "gmail_scope_manquant" }, 403);
-    if (r.status === 404) return jsonRes({ error: "introuvable" }, 404);
-    return jsonRes({ error: "corbeille_echouee" }, 502);
+  // Interface inchangée (jamais d'autre action ici : une ancienne version déployée
+  // mettrait à la corbeille tout appel inconnu). Lu / non lu / archiver : gmail-thread.
+  let r: Response;
+  try {
+    // Corbeille et sortie de corbeille sont idempotentes : nouvelles tentatives sans risque.
+    r = await gfetch(`${GMAIL}/threads/${threadId}/${body.undo ? "untrash" : "trash"}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (e) {
+    return jsonRes({ error: "corbeille_echouee", detail: e instanceof GfetchError ? e.kind : "reseau" }, 502);
   }
+  if (!r.ok) {
+    if (r.status === 404) return jsonRes({ error: "introuvable" }, 404);
+    // 403 = droit « modifier » pas encore accordé à cette boîte ; 429 = limite Gmail ; 401 = Google déconnecté.
+    const data = await r.json().catch(() => ({}));
+    const c = classifyGmail(r.status, data, "corbeille_echouee");
+    return jsonRes({ error: c.error }, c.status);
+  }
+  await r.body?.cancel().catch(() => {});
   return jsonRes({ ok: true });
 });

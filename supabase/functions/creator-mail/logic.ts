@@ -5,7 +5,8 @@
 // Règle d'appartenance d'un fil à une créatrice (vérifiée CÔTÉ SERVEUR avant de
 // renvoyer quoi que ce soit) : au moins un message « réel » (ni brouillon, ni
 // corbeille, ni spam) du fil porte son libellé manuel, OU fait apparaître son
-// alias dans un en-tête d'adresse (From / To / Cc / Delivered-To / X-Original-To).
+// alias dans un en-tête d'adresse (From / To / Cc / Bcc / Delivered-To / X-Original-To / Reply-To).
+// Dans un fil, la créatrice ne voit que les messages qui la concernent (concernedMessages).
 // ============================================================================
 
 export type GHeader = { name: string; value: string };
@@ -49,6 +50,98 @@ export function messageMatches(m: GMessageLite, alias: string, labelId: string |
 /** Le fil appartient-il à la créatrice ? (au moins un message visible correspondant) */
 export function threadMatches(messages: GMessageLite[], alias: string, labelId: string | null | undefined): boolean {
   return messages.some((m) => messageMatches(m, alias, labelId));
+}
+
+/**
+ * Messages d'un fil que la créatrice a le droit de voir (dans l'ordre reçu) :
+ *   • le fil porte son libellé (sur un message visible) → tous les messages visibles ;
+ *   • sinon (accès par alias) → seulement les messages visibles où son alias apparaît
+ *     dans From / To / Cc / Bcc / Delivered-To / X-Original-To / Reply-To.
+ * Un échange interne de l'agence dans le même fil, sans elle, reste donc caché.
+ */
+export function concernedMessages<T>(
+  items: T[], toLite: (item: T) => GMessageLite, alias: string, labelId: string | null | undefined,
+): T[] {
+  const visible = items.filter((m) => isVisibleMessage(toLite(m)));
+  if (labelId && visible.some((m) => (toLite(m).labelIds ?? []).includes(labelId))) return visible;
+  return visible.filter((m) => messageMatches(toLite(m), alias, null));
+}
+
+/** Boîtes partagées de l'agence : jamais l'alias d'un créateur (il verrait les mails des autres). */
+export const SHARED_LOCAL_PARTS = [
+  "partnerships", "talent", "talents", "contact", "hello", "booking", "info", "admin", "noreply", "no-reply",
+  "marc", "bonjour", "team",
+];
+
+/** L'adresse est-elle une boîte partagée de l'agence (partnerships@, talent@, contact@…) ? */
+export function isSharedBox(address: string, agencyDomain: string): boolean {
+  const a = normEmail(address);
+  if (!a) return false;
+  const [local, domain] = a.split("@");
+  return domain === agencyDomain.toLowerCase() && SHARED_LOCAL_PARTS.includes(local);
+}
+
+/**
+ * Alias refusé (→ section « non configurée ») : la boîte talent@ elle-même, une boîte
+ * partagée, ou un alias déjà utilisé par un autre créateur (casse ignorée).
+ */
+export function aliasRefused(alias: string, opts: { talent: string; agencyDomain: string; otherAliases: (string | null | undefined)[] }): boolean {
+  const a = normEmail(alias);
+  if (!a) return false;
+  if (opts.talent && a === normEmail(opts.talent)) return true;
+  if (isSharedBox(a, opts.agencyDomain)) return true;
+  return opts.otherAliases.some((o) => normEmail(o) === a);
+}
+
+/** Découpe un en-tête d'adresses sur les virgules hors guillemets et hors chevrons. */
+export function splitAddressList(value: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let quoted = false;
+  let angle = false;
+  for (let i = 0; i < value.length; i++) {
+    const c = value[i];
+    if (c === "\\" && quoted && i + 1 < value.length) {
+      cur += c + value[++i];
+      continue;
+    }
+    if (c === '"') quoted = !quoted;
+    else if (c === "<" && !quoted) angle = true;
+    else if (c === ">" && !quoted) angle = false;
+    if (c === "," && !quoted && !angle) {
+      if (cur.trim()) out.push(cur.trim());
+      cur = "";
+      continue;
+    }
+    cur += c;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
+/**
+ * To / Cc montrés à une créatrice : toute adresse de l'agence autre que son alias
+ * devient « TTP Creators » (une seule fois). Une adresse extérieure dont le nom
+ * affiché cite une adresse de l'agence est réduite à l'adresse seule.
+ */
+export function maskAgencyAddresses(value: string, alias: string, agencyDomain: string): string {
+  if (!value.trim()) return value;
+  const dom = "@" + agencyDomain.toLowerCase();
+  const own = normEmail(alias);
+  const isOther = (a: string) => a.endsWith(dom) && a !== own;
+  const out: string[] = [];
+  for (const entry of splitAddressList(value)) {
+    const angle = /<([^<>]+)>\s*$/.exec(entry);
+    const addr = (angle ? angle[1].trim().toLowerCase() : addressesIn(entry)[0]) ?? "";
+    if (addr && isOther(addr)) {
+      if (!out.includes("TTP Creators")) out.push("TTP Creators");
+    } else if (addr && addressesIn(entry).some(isOther)) {
+      out.push(addr);
+    } else {
+      out.push(entry);
+    }
+  }
+  return out.join(", ");
 }
 
 /** Requête Gmail des fils où l'alias apparaît (envoyés ET reçus). */

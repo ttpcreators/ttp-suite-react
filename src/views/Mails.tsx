@@ -1,34 +1,41 @@
-import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
-  Mail, ArrowDownLeft, ArrowUpRight, ArrowLeft, Inbox, Search, Loader2, PenLine, Reply, Forward, Settings2, RefreshCw, Send,
-  MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, CircleAlert, type LucideIcon,
+  Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, Loader2, PenLine, Reply, Forward, Settings2, RefreshCw, Send,
+  MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X,
+  type LucideIcon,
 } from "lucide-react";
-import { ConfirmDialog } from "@/components/ui/action-menu";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
+import { getCache, setCache } from "@/lib/viewCache";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
-import { BarButton, RailButton, SearchField, Tip, ToolButton, mailRowCls, pillCls } from "@/components/mail-shell";
-import { SwipeRow } from "@/components/mobile/swipe-row";
+import { Kbd, RailButton, SearchField, Tip, ToolButton, mailRowCls, pillCls, type TipSide } from "@/components/mail-shell";
+import { SwipeRow, type SwipeAction } from "@/components/mobile/swipe-row";
 import { saveBase64, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
 import { toast } from "@/components/ui/toast";
 import { parseTouches, nextKind, touchId, type Touch } from "@/lib/touches";
 import { updateTouches } from "@/lib/touchesDb";
 import { MailComposer, type ComposerContact } from "@/components/mail-composer";
-import { BoxChip } from "@/components/mail-box-chip";
-import { BOX_LABEL, BOX_STYLE, sendErrorText, sendGmail, type MailBox, type OutAttachment } from "@/lib/mailSend";
-import { ForwardDialog, MailSettingsDialog, NewMailDialog, ReplyBox } from "@/components/mail-tools";
+import { BoxChip, BoxDot } from "@/components/mail-box-chip";
+import { BOX_LABEL, BOX_STYLE, replyDraftKey, sendFailText, sendGmail, type MailBox, type OutAttachment } from "@/lib/mailSend";
+import { ForwardDialog, MailSettingsDialog, NewMailDialog, ReplyBox, useReplyDraftKeys, type ForwardReopen } from "@/components/mail-tools";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useCreators } from "@/lib/useCreators";
 import { useCreatorMailCounts } from "@/lib/creatorMailCounts";
+import { connect as connectGoogle, consumeOAuthReturn } from "@/lib/googleCalendar";
 
-// Espace mails d'une créatrice (statuts, remarques, suivi), chargé seulement à la demande.
+// Espace mails d'un créateur (statuts, remarques, suivi), chargé seulement à la demande.
 const CreatorMailsAgency = lazy(() => import("@/views/CreatorMails").then((m) => ({ default: m.CreatorMailsAgency })));
 
 /**
- * Page « Mails » : historique des échanges Gmail par contact + lecture d'un fil
- * complet. Lecture seule (scope gmail.readonly via les fonctions gmail-history /
- * gmail-thread). Réservé à l'agence (les fonctions vérifient le rôle).
+ * Page « Mails » de l'agence, façon client mail : dossiers (reçus, envoyés,
+ * contacts, créateurs), liste des conversations des deux boîtes (partnerships@ et
+ * talent@, filtrées sans rechargement), lecture d'un fil, réponse, transfert,
+ * archivage, corbeille, lu / non lu, brouillons et raccourcis clavier.
+ *
+ * Fiabilité : les réponses périmées sont ignorées, une erreur ne vide jamais la
+ * liste affichée, les actions ne sont gardées que si le serveur les confirme
+ * (une ancienne version des fonctions Gmail ne fait rien : l'app revient en arrière).
  */
 type Contact = {
   id: string;
@@ -45,14 +52,50 @@ type MailMsg = { id: string; threadId: string; from: string; to?: string; subjec
 type ThreadMsg = {
   id: string; from: string; to?: string; cc?: string; subject: string; date: string; html: string; text: string;
   direction: "in" | "out"; ts: number; attachments?: MailAttachment[];
+  /** En-têtes ajoutés par la v2 de gmail-thread (absents avec une ancienne version). */
+  messageIdHeader?: string; inReplyTo?: string; references?: string; replyTo?: string;
 };
-
 type InboxThread = {
   threadId: string; subject: string; name: string; email: string; snippet: string;
   ts: number; count: number; direction: "in" | "out"; unread: boolean; box: MailBox;
+  /** v2 : adresses du fil (To/Cc/Delivered-To) et fil hors boîte de réception (recherche). */
+  to?: string[]; archived?: boolean;
 };
+type Folder = "inbox" | "sent";
+type PageTokens = Partial<Record<MailBox, string>>;
+type ListRes = { ok?: boolean; threads?: InboxThread[]; nextPageTokens?: PageTokens; partial?: boolean; failedBoxes?: string[]; error?: string };
+type ListState = { threads: InboxThread[]; next: PageTokens | null; partial: boolean; failedBoxes: MailBox[]; pages: number; v2: boolean };
+type ThreadRes = { ok?: boolean; messages?: ThreadMsg[]; error?: string };
+type ActionRes = { ok?: boolean; action?: string; error?: string };
+type PeekRes = { ok?: boolean; boxes?: Partial<Record<MailBox, { historyId?: string; unread?: number }>>; error?: string };
+/** Fil visé par une action (archiver, corbeille, lu / non lu). */
+type Target = { threadId: string; box: MailBox; subject: string };
+/** Fil à ouvrir (depuis la liste, l'historique d'un contact ou les raccourcis). */
+type OpenRef = { threadId: string; subject: string; box: MailBox; contact?: string; name?: string };
+type OpenThread = { contact: string; name: string; subject: string; threadId: string; box: MailBox };
+/** Changement affiché avant la confirmation du serveur (retiré s'il n'est pas confirmé). */
+type Override = { unread?: boolean; hidden?: "archive" | "trash"; at: number; done?: number };
+type SearchState = { q: string; folder: Folder; threads: InboxThread[]; busy: boolean; err: string | null; off: boolean };
+type UndoState = { kind: "trash" | "archive"; t: Target; row: InboxThread | null; folder: Folder; done: Promise<boolean>; at: number };
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const AGENCY_DOMAIN = "@ttpcreators.pro";
+const LIST_TIMEOUT = 20_000;
+const FILE_TIMEOUT = 60_000;
+const THREAD_TTL = 60_000;
+const OLD_RETRY_MS = 10 * 60_000;
+const OLD_SERVER_TEXT = "Pas encore disponible : la mise à jour des fonctions Gmail n'est pas encore déployée.";
+
+const tkey = (box: MailBox, threadId: string) => `${box}:${threadId}`;
+const keyOf = (t: { box: MailBox; threadId: string }) => tkey(t.box, t.threadId);
+
+// Caches de module : gardés quand on change de page (perdus au rechargement).
+const threadCache = new Map<string, { at: number; msgs: ThreadMsg[] }>();
+const prefetching = new Set<string>();
+let actionsOldAt = 0; // gmail-thread n'a pas reconnu `action` (ancienne version déployée)
+let searchOldAt = 0; // gmail-history n'a pas reconnu `q`
+let peekOff = false; // gmail-history n'a pas reconnu `peek` : actualisation complète toutes les 2 min
+let peekSig = ""; // derniers historyId vus (coup d'œil)
 
 /** Date façon Gmail : « 14:32 » aujourd'hui, « 3 oct. » cette année, « 03/10/2025 » avant. */
 function fmtDate(d: string): string {
@@ -70,37 +113,82 @@ function prettyName(n: string): string {
   return n.toLowerCase().replace(/\p{L}[\p{L}'’-]*/gu, (w) => (w.length <= 3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)));
 }
 /** Décode les entités HTML des extraits Gmail (« l&#39;ensemble » → « l'ensemble »). */
+const entityCache = new Map<string, string>();
 function decodeEntities(s: string): string {
   if (!s.includes("&")) return s;
+  const hit = entityCache.get(s);
+  if (hit != null) return hit;
   const t = document.createElement("textarea");
   t.innerHTML = s;
+  if (entityCache.size > 500) entityCache.clear();
+  entityCache.set(s, t.value);
   return t.value;
 }
+const ADDR_RE = /[^\s<>"',;]+@[^\s<>"',;]+/g;
+const addrsOf = (v?: string | null) => (v?.match(ADDR_RE) ?? []).map((a) => a.toLowerCase());
+const addrOf = (v?: string | null) => addrsOf(v)[0] ?? "";
+const isAgencyAddr = (a: string) => a.endsWith(AGENCY_DOMAIN);
 
-/*
- * Mise en page façon client mail : barre d'icônes (dossiers + boîtes), liste,
- * lecture, et à droite (grand écran) les créatrices en accès direct.
+/**
+ * Réponse à un fil : destinataire = Reply-To du dernier message reçu, sinon son
+ * expéditeur ; « Répondre à tous » = ses To + Cc, sans les adresses de l'agence ni
+ * le destinataire ; In-Reply-To / References = dernier message du fil.
  */
-type Mode = "inbox" | "sent" | "contacts" | "creators";
-const MODES: { id: Mode; label: string; short: string; icon: LucideIcon }[] = [
-  { id: "inbox", label: "Boîte de réception", short: "Reçus", icon: Inbox },
-  { id: "sent", label: "Envoyés", short: "Envoyés", icon: Send },
-  { id: "contacts", label: "Contacts", short: "Contacts", icon: BookUser },
-  { id: "creators", label: "Par créateur", short: "Créateurs", icon: UsersRound },
-];
-const BOXES: { id: "all" | MailBox; label: string; short: string; hint: string }[] = [
-  { id: "all", label: "Les deux boîtes", short: "Les deux", hint: "Les deux boîtes réunies" },
-  { id: "partnerships", label: BOX_LABEL.partnerships, short: BOX_LABEL.partnerships, hint: "Prospection et contacts agence" },
-  { id: "talent", label: BOX_LABEL.talent, short: BOX_LABEL.talent, hint: "Échanges créateurs (leurs alias)" },
-];
-/** Pastille de nombre posée sur une icône ou un avatar (même style que les pastilles du rail). */
-function CountDot({ n }: { n: number }) {
-  return (
-    <span aria-hidden className="pointer-events-none absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-foreground px-1 text-center text-[10px] font-semibold leading-[18px] tabular-nums text-background ring-2 ring-surface">
-      {n > 99 ? "99+" : n}
-    </span>
-  );
+function replyPlan(msgs: ThreadMsg[], fallback: string): { to: string; cc: string[]; inReplyTo?: string; references?: string } {
+  const lastIn = [...msgs].reverse().find((m) => !isAgencyAddr(addrOf(m.from)));
+  const base = lastIn ?? msgs[msgs.length - 1];
+  let to = lastIn ? addrOf(lastIn.replyTo) || addrOf(lastIn.from) : "";
+  if (!to) to = fallback || addrsOf(base?.to).find((a) => !isAgencyAddr(a)) || "";
+  const others = base ? [...addrsOf(base.from), ...addrsOf(base.to), ...addrsOf(base.cc)] : [];
+  const cc = [...new Set(others.filter((a) => a !== to && !isAgencyAddr(a)))];
+  const last = msgs[msgs.length - 1];
+  const id = last?.messageIdHeader?.trim();
+  const references = [last?.references?.trim(), id].filter(Boolean).join(" ").slice(-1900) || undefined;
+  return { to, cc, inReplyTo: id || undefined, references: id ? references : undefined };
 }
+
+const needsReconnect = (code?: string | null) => code === "google_non_connecte" || code === "gmail_scope_manquant";
+/** Texte d'une erreur de chargement (liste, fil, historique). */
+function loadErrText(code: string | null | undefined, fallback: string): string {
+  if (needsReconnect(code)) return "Google n'est plus connecté à l'app (ou les droits Gmail manquent).";
+  if (code === "limite_gmail") return "Gmail limite les demandes, réessaie dans une minute.";
+  if (code === "talent_non_configure") return "La boîte talent@ n'est pas encore reliée à l'app.";
+  if (code === "reseau") return "Pas de réponse du serveur (connexion lente ou coupée).";
+  return fallback;
+}
+const actionErrText = (code?: string) =>
+  needsReconnect(code) ? "Reconnecte Google (droits Gmail) pour modifier tes mails."
+    : code === "limite_gmail" ? "Gmail limite les demandes, réessaie dans une minute."
+    : code === "talent_droit_manquant" ? "Modification depuis talent@ pas encore autorisée (admin.google.com, droit gmail.modify)."
+    : code === "reseau" ? "Pas de réponse du serveur : action non faite, réessaie."
+    : "Action impossible, réessaie";
+const trashErrorText = (code?: string, b?: MailBox) =>
+  code === "gmail_scope_manquant" || code === "talent_droit_manquant"
+    ? b === "talent"
+      ? "Suppression depuis talent@ pas encore autorisée (admin.google.com, droit gmail.modify)."
+      : "Reconnecte Google (Planning → Google Agenda) pour autoriser la suppression."
+    : code === "introuvable" ? "Mail introuvable (déjà supprimé ?)"
+    : code === "limite_gmail" ? "Gmail limite les demandes, réessaie dans une minute."
+    : "Suppression impossible, réessaie";
+
+/**
+ * Appel d'une fonction Gmail, avec délai max. supabase-js met le corps JSON des
+ * réponses non-2xx dans error.context ; coupure réseau / délai dépassé → `{ error: "reseau" }`.
+ */
+async function invokeJson<T extends { error?: string }>(fn: string, body: Record<string, unknown>, timeout = LIST_TIMEOUT): Promise<T> {
+  try {
+    const { data, error } = await supabase.functions.invoke(fn, { body, timeout });
+    if (error) {
+      const ctx = (error as { context?: { json?: () => Promise<unknown> } }).context;
+      const parsed = ctx && typeof ctx.json === "function" ? ((await ctx.json().catch(() => null)) as T | null) : null;
+      return parsed ?? ({ error: "reseau" } as T);
+    }
+    return ((data && typeof data === "object" ? data : {}) as T) ?? ({} as T);
+  } catch {
+    return { error: "reseau" } as T;
+  }
+}
+
 function readPref<T extends string>(key: string, allowed: readonly T[], def: T): T {
   try {
     const v = localStorage.getItem(key) as T | null;
@@ -117,49 +205,303 @@ function writePref(key: string, v: string) {
   }
 }
 
-/** Carré de couleur d'une boîte : violet = partnerships@, vert = talent@, les deux = moitié-moitié. */
-function BoxSquare({ box, className }: { box: "all" | MailBox; className?: string }) {
-  if (box === "all") {
-    return (
-      <span aria-hidden className={cn("grid size-3.5 shrink-0 grid-cols-2 overflow-hidden rounded-[4px]", className)}>
-        <span className={BOX_STYLE.partnerships.dot} />
-        <span className={BOX_STYLE.talent.dot} />
-      </span>
-    );
+/** Conteneur qui défile autour de la page (zone principale de l'app). */
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  let p = el?.parentElement ?? null;
+  while (p) {
+    const oy = getComputedStyle(p).overflowY;
+    if (oy === "auto" || oy === "scroll") return p;
+    p = p.parentElement;
   }
-  return <span aria-hidden className={cn("size-3.5 shrink-0 rounded-[4px]", BOX_STYLE[box].dot, className)} />;
+  return null;
+}
+const isWide = () => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches;
+
+/** Grand écran : le client mail remplit la hauteur visible de la zone principale. */
+function useFillHeight(ref: RefObject<HTMLElement | null>): number | null {
+  const [h, setH] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const scroller = scrollParent(el);
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const fit = () => {
+      if (!mq.matches) return setH(null);
+      if (!scroller || !el.getClientRects().length) return; // onglet masqué : on garde la hauteur
+      const top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+      const pb = parseFloat(getComputedStyle(scroller).paddingBottom) || 0;
+      setH(Math.max(560, Math.floor(scroller.clientHeight - top - pb)));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    if (scroller) ro.observe(scroller);
+    mq.addEventListener("change", fit);
+    window.addEventListener("resize", fit);
+    return () => {
+      ro.disconnect();
+      mq.removeEventListener("change", fit);
+      window.removeEventListener("resize", fit);
+    };
+  }, [ref]);
+  return h;
 }
 
-/** supabase-js met le corps JSON des réponses non-2xx dans error.context. */
-async function invokeJson<T>(fn: string, body: Record<string, unknown>): Promise<T | null> {
-  const { data, error } = await supabase.functions.invoke(fn, { body });
-  if (error && (error as { context?: { json?: () => Promise<unknown> } }).context?.json)
-    return (await (error as { context: { json: () => Promise<unknown> } }).context.json().catch(() => null)) as T | null;
-  return (data as T) ?? null;
+/** Fusionne une liste fraîche avec celle affichée, sans perdre les pages chargées ni une boîte muette. */
+function mergeList(prev: ListState | null, res: ListRes): ListState {
+  const fresh = res.threads ?? [];
+  const failed = (res.failedBoxes ?? []).filter((b): b is MailBox => b === "partnerships" || b === "talent");
+  const seen = new Set(fresh.map(keyOf));
+  const threads = [...fresh];
+  if (prev) {
+    // Boîte qui n'a pas répondu : ses fils déjà affichés restent.
+    for (const t of prev.threads) {
+      if (failed.includes(t.box) && !seen.has(keyOf(t))) {
+        threads.push(t);
+        seen.add(keyOf(t));
+      }
+    }
+    // Pages déjà chargées (« Charger plus ») : les fils plus anciens restent.
+    if (prev.pages > 1) {
+      const oldest: Partial<Record<MailBox, number>> = {};
+      for (const t of fresh) oldest[t.box] = Math.min(oldest[t.box] ?? Infinity, t.ts);
+      for (const t of prev.threads) {
+        if (!seen.has(keyOf(t)) && t.ts < (oldest[t.box] ?? Infinity)) {
+          threads.push(t);
+          seen.add(keyOf(t));
+        }
+      }
+    }
+  }
+  threads.sort((a, b) => b.ts - a.ts);
+  const keep = !!prev && prev.pages > 1;
+  return {
+    threads,
+    next: keep && prev ? prev.next : res.nextPageTokens ?? null,
+    partial: !!res.partial,
+    failedBoxes: failed,
+    pages: keep && prev ? prev.pages : 1,
+    v2: "nextPageTokens" in res || fresh.some((t) => typeof t.archived === "boolean"),
+  };
+}
+const hasTokens = (p: PageTokens | null | undefined, box: "all" | MailBox) =>
+  !!p && (box === "all" ? !!(p.partnerships || p.talent) : !!p[box]);
+
+/*
+ * Mise en page façon client mail : barre d'icônes (dossiers), liste avec son
+ * en-tête (titre, boîtes, recherche), lecture.
+ */
+type Mode = "inbox" | "sent" | "contacts" | "creators";
+const MODES: { id: Mode; label: string; short: string; icon: LucideIcon; shortcut?: string }[] = [
+  { id: "inbox", label: "Boîte de réception", short: "Reçus", icon: Inbox, shortcut: "g puis i" },
+  { id: "sent", label: "Envoyés", short: "Envoyés", icon: Send, shortcut: "g puis s" },
+  { id: "contacts", label: "Contacts", short: "Contacts", icon: BookUser },
+  { id: "creators", label: "Par créateur", short: "Créateurs", icon: UsersRound },
+];
+const BOX_FILTERS: { id: "all" | MailBox; label: string }[] = [
+  { id: "all", label: "Toutes" },
+  { id: "partnerships", label: BOX_LABEL.partnerships },
+  { id: "talent", label: BOX_LABEL.talent },
+];
+const SHORTCUTS: [string, string][] = [
+  ["j / k", "Mail suivant / précédent"],
+  ["Entrée / o", "Ouvrir"],
+  ["r", "Répondre"],
+  ["a", "Répondre à tous"],
+  ["f", "Transférer"],
+  ["e", "Archiver"],
+  ["#", "Corbeille"],
+  ["⇧ U", "Marquer non lu"],
+  ["/", "Rechercher"],
+  ["c", "Nouveau mail"],
+  ["Échap", "Fermer le mail"],
+  ["g puis i", "Boîte de réception"],
+  ["g puis s", "Envoyés"],
+  ["?", "Cette aide"],
+];
+
+/** Lignes fantômes pendant le premier chargement de la liste. */
+function ListSkeleton({ rows = 8 }: { rows?: number }) {
+  return (
+    <ul aria-hidden className="divide-y divide-border">
+      {Array.from({ length: rows }, (_, i) => (
+        <li key={i} className="flex gap-3 px-4 py-3 sm:px-5">
+          <span className="size-9 shrink-0 animate-pulse rounded-full bg-muted" />
+          <span className="flex min-w-0 flex-1 flex-col gap-2 pt-0.5">
+            <span className="flex gap-2">
+              <span className="h-3 w-28 animate-pulse rounded bg-muted" />
+              <span className="ml-auto h-3 w-10 animate-pulse rounded bg-muted" />
+            </span>
+            <span className="h-3 w-4/5 animate-pulse rounded bg-muted" />
+            <span className="h-3 w-3/5 animate-pulse rounded bg-muted/70" />
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+/** Corps fantôme pendant le chargement d'un fil. */
+function BodySkeleton() {
+  return (
+    <div aria-hidden className="mt-5 flex flex-col gap-4">
+      <div className="flex items-center gap-3">
+        <span className="size-10 shrink-0 animate-pulse rounded-full bg-muted" />
+        <span className="flex flex-1 flex-col gap-2">
+          <span className="h-3 w-40 animate-pulse rounded bg-muted" />
+          <span className="h-3 w-56 animate-pulse rounded bg-muted/70" />
+        </span>
+      </div>
+      {[92, 100, 85, 96, 60].map((w, i) => (
+        <span key={i} className="h-3 animate-pulse rounded bg-muted" style={{ width: `${w}%` }} />
+      ))}
+    </div>
+  );
+}
+
+/** Bandeau d'erreur dans la liste (la liste affichée reste en place). */
+function ErrorBanner({ text, onRetry, onReconnect, tone = "error" }: { text: string; onRetry?: () => void; onReconnect?: () => void; tone?: "error" | "info" }) {
+  return (
+    <div role={tone === "error" ? "alert" : "status"} className={cn(
+      "flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-4 py-2.5 text-[12.5px] sm:px-5",
+      tone === "error" ? "bg-red-500/[0.06] text-foreground" : "bg-muted/50 text-muted-foreground",
+    )}>
+      <CircleAlert className={cn("h-3.5 w-3.5 shrink-0", tone === "error" ? "text-red-500" : "text-muted-foreground")} />
+      <span className="min-w-0 flex-1">{text}</span>
+      {onReconnect && (
+        <button type="button" onClick={onReconnect} className="shrink-0 rounded-full bg-primary px-2.5 py-1 text-[12px] font-semibold text-primary-foreground hover:opacity-90">
+          Reconnecter Google
+        </button>
+      )}
+      {onRetry && (
+        <button type="button" onClick={onRetry} className="flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[12px] font-semibold text-foreground hover:bg-rowhover">
+          <RotateCw className="h-3 w-3" /> Réessayer
+        </button>
+      )}
+    </div>
+  );
+}
+/** Carte d'erreur (fil ou liste impossible à charger). */
+function ErrorCard({ text, onRetry, onReconnect }: { text: string; onRetry: () => void; onReconnect?: () => void }) {
+  return (
+    <div role="alert" className="mx-auto mt-6 flex max-w-md flex-col items-center gap-3 rounded-xl border border-border bg-muted/40 px-5 py-6 text-center">
+      <CircleAlert className="h-5 w-5 text-red-500" />
+      <p className="text-[13px] text-foreground">{text}</p>
+      <div className="flex flex-wrap justify-center gap-2">
+        {onReconnect && (
+          <button type="button" onClick={onReconnect} className="h-8 rounded-full bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground hover:opacity-90">
+            Reconnecter Google
+          </button>
+        )}
+        <button type="button" onClick={onRetry} className="flex h-8 items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 text-[12.5px] font-semibold text-foreground hover:bg-rowhover">
+          <RotateCw className="h-3.5 w-3.5" /> Réessayer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Bouton d'action au survol d'une ligne (ordinateur). */
+function RowAction({ icon: Icon, label, shortcut, onClick, danger, side = "bottom-end" }: {
+  icon: LucideIcon; label: string; shortcut?: string; onClick: () => void; danger?: boolean; side?: TipSide;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      aria-label={label}
+      className={cn(
+        "group/tip relative grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground",
+        danger && "hover:text-red-600 dark:hover:text-red-400",
+      )}
+    >
+      <Icon className="h-[15px] w-[15px]" />
+      <Tip side={side}>
+        {label}
+        {shortcut && <Kbd>{shortcut}</Kbd>}
+      </Tip>
+    </button>
+  );
+}
+
+/** Une conversation de la liste (≈ 72 px) : expéditeur, objet, extrait sur une ligne. */
+function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhoto, onOpen, onArchive, onTrash, onToggleRead }: {
+  t: InboxThread; folder: Folder; on: boolean; cursor: boolean; showBox: boolean; draft: boolean;
+  creator: string | null; creatorPhoto: string | null;
+  onOpen: () => void; onArchive: () => void; onTrash: () => void; onToggleRead: () => void;
+}) {
+  const name = prettyName(t.name) || t.email;
+  const swipe: SwipeAction[] = [
+    ...(folder === "inbox" ? [{ key: "archive", label: "Archiver", icon: Archive, tone: "blue" as const, onClick: onArchive }] : []),
+    { key: "trash", label: "Corbeille", icon: Trash2, tone: "red", onClick: onTrash },
+  ];
+  return (
+    <li className="group relative" data-key={keyOf(t)}>
+      <SwipeRow actions={swipe}>
+        <button
+          type="button"
+          aria-current={on || undefined}
+          onClick={onOpen}
+          className={cn(mailRowCls(on), "items-center py-2.5", cursor && !on && "bg-surface/60 shadow-[inset_3px_0_0_var(--color-primary)] dark:bg-white/[0.04]")}
+        >
+          <Initial name={name} email={t.email} size="md" />
+          <span className="min-w-0 flex-1">
+            <span className="flex min-w-0 items-center gap-1.5">
+              {t.unread && <span className="size-2 shrink-0 rounded-full bg-primary"><span className="sr-only">Non lu</span></span>}
+              <span className={cn("min-w-0 truncate text-[12.5px] leading-4", t.unread ? "font-semibold text-foreground" : "font-medium text-muted-foreground")}>
+                {folder === "sent" && <span className="font-normal">À : </span>}
+                {name}
+              </span>
+              {t.count > 1 && <span className="shrink-0 text-[11.5px] leading-4 text-faint">{t.count}</span>}
+              {creator && (
+                <span title={`Créateur : ${titleCase(creator)}`} className="shrink-0">
+                  <CreatorAvatar name={creator} photoUrl={creatorPhoto} className="h-4 w-4 rounded-full text-[7px]" />
+                </span>
+              )}
+              {draft && <span className="shrink-0 text-[11.5px] italic leading-4 text-red-600 dark:text-red-400">Brouillon</span>}
+              <span className="flex-1" />
+              <span className={cn("shrink-0 text-[11px] leading-4 tabular-nums lg:group-focus-within:invisible lg:group-hover:invisible", t.unread ? "font-semibold text-foreground" : "text-faint")}>
+                {fmtWhen(t.ts)}
+              </span>
+            </span>
+            <span className={cn("mt-0.5 block truncate text-[13px] leading-[18px] text-foreground", t.unread ? "font-bold" : "font-medium")}>{t.subject || "(sans objet)"}</span>
+            <span className="mt-0.5 flex min-w-0 items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-[12.5px] leading-4 text-muted-foreground">
+                {t.direction === "out" && folder === "inbox" && <span className="text-faint">Toi : </span>}
+                {decodeEntities(t.snippet)}
+              </span>
+              {t.archived && <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Archivé</span>}
+              {showBox && <span title={BOX_LABEL[t.box]} className="flex shrink-0"><BoxDot box={t.box} /></span>}
+            </span>
+          </span>
+        </button>
+      </SwipeRow>
+      <div className="pointer-events-none absolute right-3 top-1.5 hidden items-center gap-0.5 rounded-full bg-surface p-0.5 opacity-0 shadow-sm ring-1 ring-border transition-opacity lg:flex lg:group-focus-within:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-hover:pointer-events-auto lg:group-hover:opacity-100">
+        {folder === "inbox" && !t.archived && <RowAction icon={Archive} label="Archiver" shortcut="e" onClick={onArchive} />}
+        <RowAction icon={Trash2} label="Corbeille" shortcut="#" onClick={onTrash} danger />
+        <RowAction icon={t.unread ? MailOpen : Mail} label={t.unread ? "Marquer comme lu" : "Marquer non lu"} shortcut={t.unread ? undefined : "⇧U"} onClick={onToggleRead} />
+      </div>
+    </li>
+  );
 }
 
 export function Mails() {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [query, setQuery] = useState("");
-  const [tagFilter, setTagFilter] = useState("__all__"); // filtre par niche/tag
-  const [contactFilter, setContactFilter] = useState<"all" | "contacted" | "never">("all"); // déjà échangé ?
-  const [selected, setSelected] = useState<Contact | null>(null);
-  // Boîte affichée : les deux (défaut), partnerships@ (prospection) ou talent@ (créatrices).
-  const [box, setBoxState] = useState<"all" | MailBox>(() => {
-    try {
-      const v = localStorage.getItem("ttp:mails-box");
-      return v === "partnerships" || v === "talent" ? v : "all";
-    } catch {
-      return "all";
-    }
-  });
-  // Filtre « Par créatrice » : ses échanges (talent@, son alias) avec statuts et remarques.
-  // Toutes les créatrices du Roster y sont : une créatrice pas encore reliée affiche
+  const rootRef = useRef<HTMLDivElement>(null);
+  const fillH = useFillHeight(rootRef);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const contactSearchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // ── Créateurs reliés (alias talent@) ─────────────────────────────────────
+  // Filtre « Par créateur » : ses échanges (talent@, son alias) avec statuts et remarques.
+  // Tous les créateurs du Roster y sont : un créateur pas encore relié affiche
   // de quoi relier son adresse mail.
   const allCreators = useCreators();
   const [linked, setLinked] = useState<{ creator: string; alias: string | null; enabled: boolean }[]>([]);
   const [linkedTick, setLinkedTick] = useState(0);
-  const [emailPro, setEmailPro] = useState<Map<string, string>>(new Map());
+  const [emailPro, setEmailPro] = useState<Map<string, string> | null>(null);
   const [creatorView, setCreatorView] = useState<{ name: string; threadId?: string } | null>(null);
   useEffect(() => {
     let alive = true;
@@ -172,7 +514,40 @@ export function Mails() {
       alive = false;
     };
   }, [linkedTick]);
+  const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  // Créateurs reliés d'abord, puis le reste du Roster actif.
+  const creatorChoices = useMemo(() => {
+    const names = linked.map((l) => l.creator);
+    for (const c of allCreators) {
+      if (c.status !== "inactif" && !names.some((n) => sameName(n, c.name))) names.push(c.name);
+    }
+    return names;
+  }, [linked, allCreators]);
+  // Pastilles : échanges à traiter par créateur relié (nouvelles demandes + messages non lus).
+  // (relues seulement quand la page Mails est affichée : `rootRef`)
+  const mailCount = useCreatorMailCounts(linked.map((l) => l.creator), { rootRef });
+  const mailTotal = linked.reduce((sum, l) => sum + mailCount(l.creator), 0);
+  // Alias → créateur (avatar sur les lignes de talent@).
+  const aliasOwner = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of linked) if (l.alias) m.set(l.alias.trim().toLowerCase(), l.creator);
+    return m;
+  }, [linked]);
+  const photoOf = (n: string) => allCreators.find((c) => sameName(c.name, n))?.photo_url ?? null;
+
+  // ── Dossier et boîte ─────────────────────────────────────────────────────
+  const [mode, setModeState] = useState<Mode>(() => readPref("ttp:mails-mode", MODES.map((m) => m.id), "inbox"));
+  const folder: Folder = mode === "sent" ? "sent" : "inbox";
+  // Boîte affichée : un simple filtre (les deux boîtes sont chargées ensemble).
+  const [box, setBoxState] = useState<"all" | MailBox>(() => readPref("ttp:mails-box", ["all", "partnerships", "talent"] as const, "all"));
+  const setBox = (v: "all" | MailBox) => {
+    setBoxState(v);
+    writePref("ttp:mails-box", v);
+  };
+
+  // Adresse pro des créateurs (suggestion d'alias), seulement pour le dossier Créateurs.
   useEffect(() => {
+    if (mode !== "creators" || emailPro) return;
     let alive = true;
     void supabase.from("creators").select("name, email_pro").then(({ data }) => {
       if (!alive) return;
@@ -183,78 +558,188 @@ export function Mails() {
     return () => {
       alive = false;
     };
-  }, []);
-  const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-  // Créatrices reliées d'abord, puis le reste du Roster actif.
-  const creatorChoices = useMemo(() => {
-    const names = linked.map((l) => l.creator);
-    for (const c of allCreators) {
-      if (c.status !== "inactif" && !names.some((n) => sameName(n, c.name))) names.push(c.name);
-    }
-    return names;
-  }, [linked, allCreators]);
-  // Pastilles : échanges à traiter par créateur relié (nouvelles demandes + messages non lus).
-  const mailCount = useCreatorMailCounts(linked.map((l) => l.creator));
-  const mailTotal = linked.reduce((sum, l) => sum + mailCount(l.creator), 0);
+  }, [mode, emailPro]);
 
-  // Dossier affiché dans la barre d'icônes (retenu sur cet appareil).
-  const [mode, setModeState] = useState<Mode>(() => readPref("ttp:mails-mode", MODES.map((m) => m.id), "inbox"));
-  const setMode = (m: Mode) => {
-    setModeState(m);
-    writePref("ttp:mails-mode", m);
-  };
-  // Dossier Gmail lu : reçus ou envoyés (Contacts et Créatrices gardent les reçus).
-  const folder: "inbox" | "sent" = mode === "sent" ? "sent" : "inbox";
-  const goMode = (m: Mode) => {
-    if ((m === "inbox" || m === "sent") && (m === "sent") !== (folder === "sent")) setInbox(null);
-    setMode(m);
-    setThread(null);
-    if (m !== "contacts") setSelected(null);
-  };
-  const openCreator = (name: string, threadId?: string) => {
-    setCreatorView({ name, threadId });
-    setMode("creators");
-  };
-
-  // Choisir une boîte = afficher SA boîte de réception (le contact sélectionné est fermé).
-  const setBox = (v: "all" | MailBox) => {
-    setBoxState(v);
-    setThread(null);
-    setSelected(null);
-    if (mode !== "inbox" && mode !== "sent") setMode("inbox");
-    writePref("ttp:mails-box", v);
-  };
-
-  const [history, setHistory] = useState<MailMsg[] | null>(null);
-  const [historyBusy, setHistoryBusy] = useState(false);
-  const [historyErr, setHistoryErr] = useState("");
-  const [historyPartial, setHistoryPartial] = useState(false); // une des deux boîtes n'a pas répondu
-
-  const [composerOpen, setComposerOpen] = useState(false);
-  const [thread, setThread] = useState<{ contact: string; name: string; subject: string; threadId: string; box: MailBox } | null>(null);
-  // Boîte de réception de la boîte choisie (quand aucun contact n'est sélectionné).
-  const [inbox, setInbox] = useState<InboxThread[] | null>(null);
-  const [inboxBusy, setInboxBusy] = useState(false);
-  const [inboxErr, setInboxErr] = useState("");
-  const [inboxPartial, setInboxPartial] = useState(false);
-  const [inboxTick, setInboxTick] = useState(0); // « Actualiser »
-  const [inboxQuery, setInboxQuery] = useState(""); // recherche dans la liste chargée
-  const [unread, setUnread] = useState<number | null>(null); // non lus de la boîte (pastille)
-  const [threadMsgs, setThreadMsgs] = useState<ThreadMsg[] | null>(null);
-  const [threadBusy, setThreadBusy] = useState(false);
-  const [replyFocus, setReplyFocus] = useState(0); // « Répondre » sur une carte → focus de la réponse
-  const [forwardMsg, setForwardMsg] = useState<MailMessage | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [newMailOpen, setNewMailOpen] = useState(false); // mail libre, n'importe quelle adresse
-  const [expanded, setExpanded] = useState<Set<string>>(new Set()); // messages dépliés du fil
-
-  // Contacts avec un email valide.
+  // Retour de la reconnexion Google lancée depuis cette page.
   useEffect(() => {
-    supabase
+    try {
+      if (!sessionStorage.getItem("ttp:mails-reconnect")) return;
+      sessionStorage.removeItem("ttp:mails-reconnect");
+    } catch {
+      return;
+    }
+    const r = consumeOAuthReturn();
+    if (r.justConnected) toast("Google reconnecté ✓");
+    else if (r.error) toast("Échec de la connexion Google, réessaie");
+  }, []);
+  const reconnectGoogle = async () => {
+    try {
+      sessionStorage.setItem("ttp:mails-reconnect", "1");
+    } catch {
+      /* stockage indisponible */
+    }
+    try {
+      await connectGoogle();
+    } catch {
+      toast("Impossible de démarrer la connexion Google");
+    }
+  };
+
+  // ── Listes (reçus / envoyés), les deux boîtes ensemble, en cache ─────────
+  const [lists, setLists] = useState<Record<Folder, ListState | null>>(() => ({
+    inbox: getCache<ListState>("mails:list:inbox"),
+    sent: getCache<ListState>("mails:list:sent"),
+  }));
+  useEffect(() => {
+    setCache("mails:list:inbox", lists.inbox);
+    setCache("mails:list:sent", lists.sent);
+  }, [lists]);
+  const [listBusy, setListBusy] = useState<Record<Folder, boolean>>({ inbox: false, sent: false });
+  const [listErr, setListErr] = useState<Record<Folder, string | null>>({ inbox: null, sent: null });
+  const [moreBusy, setMoreBusy] = useState(false);
+  const listReq = useRef<Record<Folder, number>>({ inbox: 0, sent: 0 });
+  const lastLoad = useRef<Record<Folder, number>>({ inbox: 0, sent: 0 });
+
+  // Changements affichés avant confirmation (lu / non lu, archivé, corbeille).
+  const [overrides, setOverrides] = useState<Map<string, Override>>(() => new Map());
+  const putOv = (key: string, o: Override) => setOverrides((m) => new Map(m).set(key, o));
+  const dropOv = (key: string, at: number) =>
+    setOverrides((m) => {
+      if (m.get(key)?.at !== at) return m;
+      const n = new Map(m);
+      n.delete(key);
+      return n;
+    });
+  const doneOv = (key: string, at: number) =>
+    setOverrides((m) => {
+      const o = m.get(key);
+      return o && o.at === at ? new Map(m).set(key, { ...o, done: Date.now() }) : m;
+    });
+
+  const refreshList = useCallback(async (f: Folder) => {
+    const id = ++listReq.current[f];
+    setListBusy((b) => ({ ...b, [f]: true }));
+    const res = await invokeJson<ListRes>("gmail-history", { inbox: true, box: "all", folder: f });
+    if (id !== listReq.current[f]) return; // une actualisation plus récente est en cours
+    lastLoad.current[f] = Date.now();
+    setListBusy((b) => ({ ...b, [f]: false }));
+    if (!res.ok) {
+      // La liste affichée reste en place : bandeau d'erreur + « Réessayer ».
+      setListErr((e) => ({ ...e, [f]: res.error ?? "erreur" }));
+      return;
+    }
+    setListErr((e) => ({ ...e, [f]: null }));
+    setLists((prev) => ({ ...prev, [f]: mergeList(prev[f], res) }));
+    // Les changements confirmés depuis plus de 45 s sont désormais dans la liste du serveur.
+    setOverrides((m) => {
+      const now = Date.now();
+      let n: Map<string, Override> | null = null;
+      for (const [k, o] of m) {
+        if (o.done && now - o.done > 45_000) {
+          n ??= new Map(m);
+          n.delete(k);
+        }
+      }
+      return n ?? m;
+    });
+  }, []);
+  // Ouverture et changement de dossier : liste en cache tout de suite, actualisée en fond.
+  useEffect(() => {
+    void refreshList(folder);
+  }, [folder, refreshList]);
+
+  // Modifie les fils connus (listes + résultats de recherche).
+  const [search, setSearch] = useState<SearchState | null>(null);
+  const patchThreads = (fn: (t: InboxThread) => InboxThread | null) => {
+    const map = (l: InboxThread[]) => l.map(fn).filter((x): x is InboxThread => !!x);
+    setLists((p) => ({
+      inbox: p.inbox && { ...p.inbox, threads: map(p.inbox.threads) },
+      sent: p.sent && { ...p.sent, threads: map(p.sent.threads) },
+    }));
+    setSearch((s) => s && { ...s, threads: map(s.threads) });
+  };
+  const applyOv = useCallback(
+    (t: InboxThread): InboxThread | null => {
+      const o = overrides.get(keyOf(t));
+      if (!o) return t;
+      if (o.hidden) return null;
+      return o.unread !== undefined && o.unread !== t.unread ? { ...t, unread: o.unread } : t;
+    },
+    [overrides],
+  );
+  const effList = (l: InboxThread[] | undefined) => (l ?? []).map(applyOv).filter((x): x is InboxThread => !!x);
+
+  // Non lus par boîte (pastilles), d'après la boîte de réception chargée.
+  const inboxEff = useMemo(() => effList(lists.inbox?.threads), [lists.inbox, applyOv]); // eslint-disable-line react-hooks/exhaustive-deps
+  const unreadBy = useMemo(() => {
+    const c = { all: 0, partnerships: 0, talent: 0 };
+    for (const t of inboxEff) {
+      if (!t.unread) continue;
+      c.all++;
+      c[t.box]++;
+    }
+    return c;
+  }, [inboxEff]);
+  const unreadShown = unreadBy[box];
+
+  // ── Recherche : filtre local immédiat + recherche Gmail (350 ms, ≥ 2 caractères) ──
+  const [inboxQuery, setInboxQuery] = useState("");
+  const [searchTick, setSearchTick] = useState(0);
+  const searchReq = useRef(0);
+  const baseKeys = useRef<Record<Folder, Set<string>>>({ inbox: new Set(), sent: new Set() });
+  baseKeys.current = {
+    inbox: new Set((lists.inbox?.threads ?? []).map(keyOf)),
+    sent: new Set((lists.sent?.threads ?? []).map(keyOf)),
+  };
+  useEffect(() => {
+    const q = inboxQuery.trim();
+    if (q.length < 2 || Date.now() - searchOldAt < OLD_RETRY_MS) {
+      searchReq.current++;
+      setSearch(null);
+      return;
+    }
+    const f = folder;
+    const timer = window.setTimeout(async () => {
+      const id = ++searchReq.current;
+      setSearch({ q, folder: f, threads: [], busy: true, err: null, off: false });
+      const res = await invokeJson<ListRes>("gmail-history", { inbox: true, box: "all", folder: f, q: q.slice(0, 200) });
+      if (id !== searchReq.current) return;
+      if (!res.ok) return setSearch({ q, folder: f, threads: [], busy: false, err: res.error ?? "erreur", off: false });
+      const threads = res.threads ?? [];
+      // Ancienne version : `q` ignoré, la boîte de réception revient telle quelle.
+      const noKey = !("nextPageTokens" in res);
+      const noV2 = threads.length > 0 && threads.every((x) => x.archived === undefined);
+      const base = baseKeys.current[f];
+      const same = threads.length > 0 && threads.length >= Math.min(base.size, 20) && threads.every((x) => base.has(keyOf(x)));
+      const old = noKey && (noV2 || same);
+      if (old && noV2) searchOldAt = Date.now();
+      setSearch({ q, folder: f, threads: old ? [] : threads, busy: false, err: null, off: old });
+    }, 350);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [inboxQuery, folder, searchTick]);
+
+  // ── Contacts (chargés à la première ouverture du dossier Contacts) ───────
+  const [contacts, setContacts] = useState<Contact[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [tagFilter, setTagFilter] = useState("__all__"); // filtre par niche/tag
+  const [contactFilter, setContactFilter] = useState<"all" | "contacted" | "never">("all"); // déjà échangé ?
+  const [selected, setSelected] = useState<Contact | null>(null);
+  const contactsAsked = useRef(false);
+  useEffect(() => {
+    if (mode !== "contacts" || contactsAsked.current) return;
+    contactsAsked.current = true;
+    void supabase
       .from("contacts")
-      .select("*")
+      .select("id, brand, person, first_name, last_name, email, tag, last_contacted, touches")
       .order("sort_order")
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          contactsAsked.current = false;
+          setContacts([]);
+          return toast("Contacts indisponibles, réessaie");
+        }
         const rows = (data as Record<string, unknown>[]) ?? [];
         setContacts(
           rows
@@ -276,12 +761,18 @@ export function Mails() {
             .filter((c) => EMAIL_RE.test(c.email)),
         );
       });
-  }, []);
+  }, [mode]);
 
   // Historique du contact sélectionné.
+  const [history, setHistory] = useState<MailMsg[] | null>(null);
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [historyErr, setHistoryErr] = useState<string | null>(null);
+  const [historyPartial, setHistoryPartial] = useState<{ boxes: MailBox[] } | null>(null);
+  const [historyTick, setHistoryTick] = useState(0);
   useEffect(() => {
     setHistory(null);
-    setHistoryErr("");
+    setHistoryErr(null);
+    setHistoryPartial(null);
     const email = selected?.email?.toLowerCase();
     if (!email) return;
     let alive = true;
@@ -289,8 +780,8 @@ export function Mails() {
     (async () => {
       // Gmail (fils réels) + email_activity (envois Resend / media kit non présents dans Gmail).
       const [res, act] = await Promise.all([
-        // Toujours les DEUX boîtes : le choix de boîte filtre ensuite l'affichage (bascule instantanée).
-        invokeJson<{ ok?: boolean; messages?: MailMsg[]; error?: string; partial?: boolean }>("gmail-history", { contact: email, box: "all" }),
+        // Toujours les DEUX boîtes : le choix de boîte filtre ensuite l'affichage.
+        invokeJson<{ ok?: boolean; messages?: MailMsg[]; error?: string; partial?: boolean; failedBoxes?: string[] }>("gmail-history", { contact: email, box: "all" }),
         supabase
           .from("email_activity")
           .select("subject,snippet,direction,source,created_at,thread_id,gmail_message_id")
@@ -299,11 +790,10 @@ export function Mails() {
           .limit(20),
       ]);
       if (!alive) return;
-      if (res?.error === "google_non_connecte" || res?.error === "gmail_scope_manquant")
-        setHistoryErr("Reconnecte Google (droits Gmail) dans l'app pour lire tes mails.");
-      else if (res?.error === "talent_non_configure") setHistoryErr("La boîte talent@ n'est pas encore reliée à l'app.");
-      setHistoryPartial(!!res?.partial);
-      const gmail = res?.ok ? res.messages ?? [] : [];
+      // Erreur (réseau compris) : un état d'erreur, jamais « Aucun échange ».
+      if (!res.ok) setHistoryErr(res.error ?? "erreur");
+      if (res.partial) setHistoryPartial({ boxes: (res.failedBoxes ?? []).filter((b): b is MailBox => b === "partnerships" || b === "talent") });
+      const gmail = res.ok ? res.messages ?? [] : [];
       const gmailIds = new Set(gmail.map((m) => m.id));
       const extra: MailMsg[] = ((act.data as { subject: string | null; snippet: string | null; direction: string | null; source: string | null; created_at: string | null; thread_id: string | null; gmail_message_id: string | null }[]) ?? [])
         .filter((a) => a.source && a.source !== "manual" && (!a.gmail_message_id || !gmailIds.has(a.gmail_message_id)))
@@ -325,261 +815,666 @@ export function Mails() {
     return () => {
       alive = false;
     };
-  }, [selected]);
+  }, [selected, historyTick]);
 
-  // Boîte de réception : dernières conversations de la boîte choisie (les deux = fusion).
-  useEffect(() => {
-    let alive = true;
-    setInboxBusy(true);
-    setInboxErr("");
-    (async () => {
-      const res = await invokeJson<{ ok?: boolean; threads?: InboxThread[]; error?: string; partial?: boolean }>("gmail-history", { inbox: true, box, folder });
-      if (!alive) return;
-      if (res?.ok) {
-        setInbox(res.threads ?? []);
-        setInboxPartial(!!res.partial);
-        if (folder === "inbox") setUnread((res.threads ?? []).filter((t) => t.unread).length);
-      } else {
-        setInbox([]);
-        setInboxErr(
-          res?.error === "google_non_connecte" || res?.error === "gmail_scope_manquant" ? "Reconnecte Google (droits Gmail) dans l'app pour lire tes mails."
-            : res?.error === "talent_non_configure" ? "La boîte talent@ n'est pas encore reliée à l'app."
-            : "Impossible de charger la boîte de réception.",
-        );
-      }
-      setInboxBusy(false);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [box, folder, inboxTick]);
+  // ── Fil ouvert ───────────────────────────────────────────────────────────
+  const [thread, setThread] = useState<OpenThread | null>(null);
+  const threadRef = useRef<OpenThread | null>(null);
+  threadRef.current = thread;
+  const [threadMsgs, setThreadMsgs] = useState<ThreadMsg[] | null>(null);
+  const [threadErr, setThreadErr] = useState<string | null>(null);
+  const threadReq = useRef(0);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set()); // messages dépliés du fil
+  const [showAllMsgs, setShowAllMsgs] = useState(false); // « N messages plus anciens »
+  const [replyFocus, setReplyFocus] = useState<{ key: number; mode: "reply" | "all" }>({ key: 0, mode: "reply" });
+  const [forward, setForward] = useState<{ msg: MailMessage; subject: string; box: MailBox } | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [newMailOpen, setNewMailOpen] = useState(false); // mail libre, n'importe quelle adresse
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [cursor, setCursor] = useState<string | null>(null); // ligne choisie au clavier (j / k)
+  const draftSet = useReplyDraftKeys();
 
-  const openThread = async (m: { threadId: string; subject: string; box?: MailBox; contact?: string; name?: string }) => {
-    const mBox: MailBox = m.box ?? (box === "talent" ? "talent" : "partnerships");
-    const contact = (m.contact ?? selected?.email ?? "").toLowerCase();
-    setThread({ contact, name: m.name ?? selected?.person ?? "", subject: m.subject, threadId: m.threadId, box: mBox });
-    setThreadMsgs(null);
-    setThreadBusy(true);
-    const res = await invokeJson<{ ok?: boolean; messages?: ThreadMsg[] }>("gmail-thread", {
-      threadId: m.threadId,
-      contact,
-      box: mBox,
-    });
-    const msgs = res?.ok ? res.messages ?? [] : [];
+  const applyMsgs = (msgs: ThreadMsg[]) => {
     setThreadMsgs(msgs);
     // Dernier message déplié, les précédents repliés (comme Gmail).
     setExpanded(new Set(msgs.length ? [msgs[msgs.length - 1].id] : []));
-    setThreadBusy(false);
+  };
+  const loadThread = async (t: OpenThread, id: number) => {
+    const res = await invokeJson<ThreadRes>("gmail-thread", { threadId: t.threadId, contact: t.contact, box: t.box });
+    if (id !== threadReq.current) return; // un autre fil a été ouvert entre-temps
+    if (!res.ok) return setThreadErr(res.error ?? "erreur");
+    const msgs = res.messages ?? [];
+    threadCache.set(tkey(t.box, t.threadId), { at: Date.now(), msgs });
+    applyMsgs(msgs);
+  };
+  const retryThread = () => {
+    if (!thread) return;
+    setThreadErr(null);
+    setThreadMsgs(null);
+    void loadThread(thread, ++threadReq.current);
   };
 
-  // Supprimer = corbeille Gmail (récupérable 30 jours), jamais de suppression définitive.
-  const [trashAsk, setTrashAsk] = useState(false);
-  const [trashBusy, setTrashBusy] = useState(false);
-  const [trashed, setTrashed] = useState<{ threadId: string; box: MailBox; subject: string } | null>(null);
-  useEffect(() => {
-    if (!trashed) return;
-    const t = window.setTimeout(() => setTrashed(null), 10_000);
-    return () => window.clearTimeout(t);
-  }, [trashed]);
-  const trashErrorText = (code?: string, b?: MailBox) =>
-    code === "gmail_scope_manquant" || code === "talent_droit_manquant"
-      ? b === "talent"
-        ? "Suppression depuis talent@ pas encore autorisée (admin.google.com, droit gmail.modify)."
-        : "Reconnecte Google (Planning → Google Agenda) pour autoriser la suppression."
-      : code === "introuvable" ? "Mail introuvable (déjà supprimé ?)" : "Suppression impossible, réessaie";
-  // Met un fil à la corbeille (fil ouvert, ou ligne glissée en mode iPhone).
-  const trashTarget = async (t: { threadId: string; box: MailBox; subject: string }): Promise<boolean> => {
-    const res = await invokeJson<{ ok?: boolean; error?: string }>("gmail-trash", { threadId: t.threadId, box: t.box });
-    if (!res?.ok) {
-      toast(trashErrorText(res?.error, t.box));
-      return false;
-    }
-    // Retiré tout de suite des listes affichées ; « Annuler » pendant 10 s.
-    setInbox((l) => l?.filter((x) => x.threadId !== t.threadId) ?? l);
-    setHistory((l) => l?.filter((x) => x.threadId !== t.threadId) ?? l);
-    setThread((cur) => (cur && cur.threadId === t.threadId ? null : cur));
-    setTrashed({ threadId: t.threadId, box: t.box, subject: t.subject });
-    return true;
+  // Défilement de la liste (téléphone, tablette) : retrouvé en fermant un mail.
+  const listScroll = useRef<number | null>(null);
+  const closeThread = () => {
+    threadReq.current++;
+    setThread(null);
+    setThreadMsgs(null);
+    setThreadErr(null);
   };
-  const trashThread = async () => {
-    if (!thread || trashBusy) return;
-    setTrashBusy(true);
-    await trashTarget(thread);
-    setTrashBusy(false);
-    setTrashAsk(false);
-  };
-  const untrash = async () => {
-    if (!trashed) return;
-    const t = trashed;
-    setTrashed(null);
-    const res = await invokeJson<{ ok?: boolean; error?: string }>("gmail-trash", { threadId: t.threadId, box: t.box, undo: true });
-    if (!res?.ok) {
-      toast(trashErrorText(res?.error, t.box));
-      return;
-    }
-    toast("Mail restauré ✓");
-    setInboxTick((n) => n + 1);
-  };
+  useLayoutEffect(() => {
+    if (thread || listScroll.current == null) return;
+    const sc = scrollParent(rootRef.current);
+    if (sc) sc.scrollTop = listScroll.current;
+    listScroll.current = null;
+  }, [thread]);
 
-  // Répondre : envoie via Gmail dans le MÊME fil (threadId) → apparaît chez le contact.
-  // Répondre : envoie via Gmail dans le MÊME fil (threadId), depuis la boîte du fil.
-  // Appelé à l'envoi réel (après le délai d'annulation de ReplyBox).
-  const sendReply = async ({ cc, bcc, html, attachments }: { cc: string[]; bcc: string[]; html: string; attachments: OutAttachment[] }): Promise<boolean> => {
-    if (!thread) return false;
-    const t = thread;
-    const subject = t.subject.replace(/^\s*re\s*:\s*/i, "");
-    const res = await sendGmail({ to: t.contact, cc, subject: `Re: ${subject}`, html, threadId: t.threadId, source: "manual", box: t.box, bcc, attachments });
-    if (!res.ok) {
-      toast(sendErrorText(res.error));
-      return false;
+  // Lu / non lu, archiver : via gmail-thread `action`, gardé seulement si le serveur renvoie `action`.
+  const callAction = async (t: Target, action: "read" | "unread" | "archive" | "unarchive"): Promise<"ok" | "old" | string> => {
+    const res = await invokeJson<ActionRes>("gmail-thread", { threadId: t.threadId, box: t.box, action });
+    if (res.ok && res.action === action) return "ok";
+    if (res.ok) {
+      actionsOldAt = Date.now(); // ancienne version : elle a lu le fil sans rien modifier
+      return "old";
     }
-    toast("Réponse envoyée ✓");
-    // Recharge le fil pour afficher la réponse.
-    const fresh = await invokeJson<{ ok?: boolean; messages?: ThreadMsg[] }>("gmail-thread", { threadId: t.threadId, contact: t.contact, box: t.box });
-    if (fresh?.ok) {
-      const msgs = fresh.messages ?? [];
-      setThreadMsgs(msgs);
-      if (msgs.length) setExpanded((e) => new Set([...e, msgs[msgs.length - 1].id]));
-    }
-    return true;
+    return res.error ?? "erreur";
   };
-
-  // Tags/niches réellement présents (pour le filtre) — hors « perso » (défaut créateurs).
-  const tagList = useMemo(
-    () => [...new Set(contacts.map((c) => (c.tag ?? "").trim()).filter((t) => t && t.toLowerCase() !== "perso"))],
-    [contacts],
-  );
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return contacts.filter((c) => {
-      if (tagFilter !== "__all__" && (c.tag ?? "").trim() !== tagFilter) return false;
-      // Même règle qu'ailleurs : échangé = dernier mail suivi OU touche manuelle.
-      const contacted = !!c.lastContacted || parseTouches(c.touches).length > 0;
-      if (contactFilter === "contacted" && !contacted) return false;
-      if (contactFilter === "never" && contacted) return false;
-      if (q && !(c.label.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || (c.tag ?? "").toLowerCase().includes(q))) return false;
-      return true;
+  const allKnown = () => [...(lists.inbox?.threads ?? []), ...(lists.sent?.threads ?? []), ...(search?.threads ?? [])];
+  const findRow = (key: string) => {
+    const row = allKnown().find((t) => keyOf(t) === key);
+    return row ? applyOv(row) : null;
+  };
+  const markRead = (t: Target) => {
+    const key = keyOf(t);
+    if (!findRow(key)?.unread || Date.now() - actionsOldAt < OLD_RETRY_MS) return;
+    const at = Date.now();
+    putOv(key, { unread: false, at });
+    void callAction(t, "read").then((r) => {
+      if (r !== "ok") return dropOv(key, at); // ancienne version ou erreur : reste non lu, sans message
+      patchThreads((x) => (keyOf(x) === key ? { ...x, unread: false } : x));
+      doneOv(key, at);
     });
-  }, [contacts, query, tagFilter, contactFilter]);
+  };
+  const setRead = async (t: Target, unread: boolean) => {
+    const key = keyOf(t);
+    const at = Date.now();
+    putOv(key, { unread, at });
+    const cur = threadRef.current;
+    if (unread && cur && keyOf(cur) === key) closeThread(); // comme Gmail : retour à la liste
+    const r = await callAction(t, unread ? "unread" : "read");
+    if (r === "ok") {
+      patchThreads((x) => (keyOf(x) === key ? { ...x, unread } : x));
+      return doneOv(key, at);
+    }
+    dropOv(key, at);
+    toast(r === "old" ? OLD_SERVER_TEXT : actionErrText(r));
+  };
 
-  // Historique filtré par la boîte choisie (le serveur renvoie les deux).
-  const boxOf = (m: MailMsg): MailBox => m.box ?? "partnerships";
-  const visibleHistory = history ?? [];
+  const openThread = (m: OpenRef) => {
+    const contact = (m.contact ?? selected?.email ?? "").toLowerCase();
+    const t: OpenThread = { contact, name: m.name ?? selected?.person ?? "", subject: m.subject, threadId: m.threadId, box: m.box };
+    // Téléphone : on retient où on était dans la liste, et le mail s'ouvre en haut.
+    if (!isWide()) {
+      const sc = scrollParent(rootRef.current);
+      if (sc) {
+        if (!threadRef.current) listScroll.current = sc.scrollTop;
+        sc.scrollTop = 0;
+      }
+    }
+    setThread(t);
+    setThreadErr(null);
+    setShowAllMsgs(false);
+    setReplyFocus({ key: 0, mode: "reply" }); // la zone de réponse du nouveau fil ne prend pas le focus
+    setCursor(keyOf(t));
+    const id = ++threadReq.current;
+    const cached = threadCache.get(keyOf(t));
+    if (cached && Date.now() - cached.at < THREAD_TTL) applyMsgs(cached.msgs);
+    else {
+      setThreadMsgs(null);
+      void loadThread(t, id);
+    }
+    markRead({ threadId: t.threadId, box: t.box, subject: t.subject });
+  };
 
-  const contacted = (c: Contact) => !!c.lastContacted || parseTouches(c.touches).length > 0;
-  // Échange de talent@ qui concerne une créatrice liée (son alias y apparaît) :
-  // lien direct vers son suivi (statut, remarques).
-  const threadCreator = (() => {
-    if (!thread || thread.box !== "talent" || !threadMsgs?.length || !linked.length) return null;
-    const addrs = new Set(threadMsgs.flatMap((m) => `${m.from} ${m.to ?? ""} ${m.cc ?? ""}`.toLowerCase().match(/[^\s<>"',;]+@[^\s<>"',;]+/g) ?? []));
-    return linked.find((l) => l.alias && addrs.has(l.alias.toLowerCase())) ?? null;
-  })();
-  const firstName = (n: string) => titleCase(n).split(" ")[0] || titleCase(n);
-
-  // Fil → format du lecteur partagé (messages envoyés = agence).
-  const readerMsgs: MailMessage[] = (threadMsgs ?? []).map((m) => ({
-    id: m.id,
-    from: displayName(m.from),
-    fromEmail: (m.from.match(/[^\s<>"]+@[^\s<>"]+/)?.[0] ?? "").toLowerCase(),
-    fromAgency: m.direction === "out",
-    to: m.to ?? "",
-    cc: m.cc ?? "",
-    ts: m.ts || new Date(m.date).getTime(),
-    html: m.html,
-    text: m.html ? "" : m.text,
-    attachments: m.attachments ?? [],
-  }));
-
-  // Recherche dans la boîte affichée (nom, adresse, objet, extrait).
+  // ── Liste affichée (filtre de boîte + recherche) et navigation ───────────
+  const folderList = useMemo(() => effList(lists[folder]?.threads), [lists, folder, applyOv]); // eslint-disable-line react-hooks/exhaustive-deps
+  const boxThreads = useMemo(() => folderList.filter((t) => box === "all" || t.box === box), [folderList, box]);
   const inboxQ = inboxQuery.trim().toLowerCase();
-  const shownInbox = useMemo(
-    () => (inbox ?? []).filter((t) => !inboxQ || `${t.name} ${t.email} ${t.subject} ${decodeEntities(t.snippet)}`.toLowerCase().includes(inboxQ)),
-    [inbox, inboxQ],
+  const localMatches = useMemo(
+    () => (inboxQ ? boxThreads.filter((t) => `${t.name} ${t.email} ${t.subject} ${decodeEntities(t.snippet)}`.toLowerCase().includes(inboxQ)) : boxThreads),
+    [boxThreads, inboxQ],
   );
+  const searchLive = !!search && search.q === inboxQuery.trim() && search.folder === folder;
+  const remote = useMemo(() => {
+    if (!searchLive || !search) return [];
+    const local = new Set(localMatches.map(keyOf));
+    return effList(search.threads).filter((t) => (box === "all" || t.box === box) && !local.has(keyOf(t)));
+  }, [searchLive, search, localMatches, box, applyOv]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // « 3 sur 12 » ‹ › : les fils de la liste d'où le mail a été ouvert.
-  type NavRef = { threadId: string; subject: string; box: MailBox; contact?: string; name?: string };
-  const navList = useMemo<NavRef[]>(() => {
-    if (selected) {
+  const navList = useMemo<OpenRef[]>(() => {
+    if (mode === "contacts" && selected) {
       const seen = new Set<string>();
-      const out: NavRef[] = [];
+      const out: OpenRef[] = [];
       for (const m of history ?? []) {
         const b = m.box ?? "partnerships";
-        if (!m.threadId || seen.has(`${b}-${m.threadId}`)) continue;
-        seen.add(`${b}-${m.threadId}`);
-        out.push({ threadId: m.threadId, subject: m.subject, box: b });
+        if (!m.threadId || seen.has(tkey(b, m.threadId))) continue;
+        seen.add(tkey(b, m.threadId));
+        out.push({ threadId: m.threadId, subject: m.subject, box: b, contact: selected.email });
       }
       return out;
     }
-    return shownInbox.map((t) => ({ threadId: t.threadId, subject: t.subject, box: t.box, contact: t.email, name: t.name }));
-  }, [selected, history, shownInbox]);
-  const navIdx = thread ? navList.findIndex((n) => n.threadId === thread.threadId && n.box === thread.box) : -1;
-  const focusReply = () => {
+    return [...localMatches, ...remote].map((t) => ({ threadId: t.threadId, subject: t.subject, box: t.box, contact: t.email, name: t.name }));
+  }, [mode, selected, history, localMatches, remote]);
+  const navIdx = thread ? navList.findIndex((n) => keyOf(n) === keyOf(thread)) : -1;
+
+  // Fil suivant préchargé quand le navigateur est libre.
+  useEffect(() => {
+    if (!thread || !threadMsgs || navIdx < 0) return;
+    const next = navList[navIdx + 1];
+    if (!next) return;
+    const key = keyOf(next);
+    const c = threadCache.get(key);
+    if ((c && Date.now() - c.at < THREAD_TTL) || prefetching.has(key)) return;
+    const run = () => {
+      prefetching.add(key);
+      void invokeJson<ThreadRes>("gmail-thread", { threadId: next.threadId, contact: (next.contact ?? "").toLowerCase(), box: next.box }).then((r) => {
+        prefetching.delete(key);
+        if (r.ok) threadCache.set(key, { at: Date.now(), msgs: r.messages ?? [] });
+      });
+    };
+    // requestIdleCallback absent sur Safari : petit délai à la place.
+    const w = window as Window & { requestIdleCallback?: Window["requestIdleCallback"] };
+    if (w.requestIdleCallback) {
+      const h = w.requestIdleCallback(run, { timeout: 3000 });
+      return () => window.cancelIdleCallback(h);
+    }
+    const h = window.setTimeout(run, 1200);
+    return () => window.clearTimeout(h);
+  }, [thread, threadMsgs, navIdx, navList]);
+
+  // ── Archiver / corbeille (optimiste, annulable 10 s) ─────────────────────
+  const [undo, setUndo] = useState<UndoState | null>(null);
+  useEffect(() => {
+    if (!undo) return;
+    const t = window.setTimeout(() => setUndo((u) => (u === undo ? null : u)), 10_000);
+    return () => window.clearTimeout(t);
+  }, [undo]);
+  // Le fil retiré est ouvert : on passe au suivant (ou au précédent, sinon on ferme).
+  const leave = (t: Target) => {
+    const cur = threadRef.current;
+    if (!cur || keyOf(cur) !== keyOf(t)) return;
+    const i = navList.findIndex((n) => keyOf(n) === keyOf(t));
+    const next = i >= 0 ? navList[i + 1] ?? navList[i - 1] : null;
+    if (next) openThread(next);
+    else closeThread();
+  };
+  const removeRows = (key: string) => patchThreads((x) => (keyOf(x) === key ? null : x));
+  const archive = (t: Target) => {
+    const key = keyOf(t);
+    const at = Date.now();
+    const row = allKnown().find((x) => keyOf(x) === key) ?? null;
+    leave(t);
+    putOv(key, { hidden: "archive", at });
+    const done = callAction(t, "archive").then((r) => {
+      if (r === "ok") {
+        removeRows(key);
+        threadCache.delete(key);
+        doneOv(key, at);
+        return true;
+      }
+      dropOv(key, at);
+      setUndo((u) => (u?.at === at ? null : u));
+      toast(r === "old" ? `Archiver : ${OLD_SERVER_TEXT.charAt(0).toLowerCase()}${OLD_SERVER_TEXT.slice(1)}` : actionErrText(r));
+      return false;
+    });
+    setUndo({ kind: "archive", t, row, folder, done, at });
+  };
+  const trash = (t: Target) => {
+    const key = keyOf(t);
+    const at = Date.now();
+    const row = allKnown().find((x) => keyOf(x) === key) ?? null;
+    leave(t);
+    putOv(key, { hidden: "trash", at });
+    // Corbeille Gmail (récupérable 30 jours), jamais de suppression définitive.
+    const done = invokeJson<{ ok?: boolean; error?: string }>("gmail-trash", { threadId: t.threadId, box: t.box }).then((res) => {
+      if (res.ok) {
+        removeRows(key);
+        threadCache.delete(key);
+        setHistory((l) => l?.filter((x) => x.threadId !== t.threadId) ?? l);
+        doneOv(key, at);
+        return true;
+      }
+      dropOv(key, at);
+      setUndo((u) => (u?.at === at ? null : u));
+      toast(trashErrorText(res.error, t.box));
+      return false;
+    });
+    setUndo({ kind: "trash", t, row, folder, done, at });
+  };
+  const undoLast = async () => {
+    const u = undo;
+    if (!u) return;
+    setUndo(null);
+    if (!(await u.done)) return;
+    let ok = false;
+    let err: string | undefined;
+    if (u.kind === "trash") {
+      const res = await invokeJson<{ ok?: boolean; error?: string }>("gmail-trash", { threadId: u.t.threadId, box: u.t.box, undo: true });
+      ok = !!res.ok;
+      err = res.error;
+    } else {
+      const r = await callAction(u.t, "unarchive");
+      ok = r === "ok";
+      err = r === "old" ? undefined : r;
+    }
+    if (!ok) return toast(u.kind === "trash" ? trashErrorText(err, u.t.box) : actionErrText(err));
+    // Le fil revient tout de suite dans la liste d'où il venait.
+    const key = keyOf(u.t);
+    setOverrides((m) => {
+      if (!m.has(key)) return m;
+      const n = new Map(m);
+      n.delete(key);
+      return n;
+    });
+    if (u.row) {
+      const row = { ...u.row, archived: false };
+      setLists((p) => {
+        const l = p[u.folder];
+        if (!l || l.threads.some((x) => keyOf(x) === key)) return p;
+        return { ...p, [u.folder]: { ...l, threads: [...l.threads, row].sort((a, b) => b.ts - a.ts) } };
+      });
+    }
+    toast(u.kind === "trash" ? "Mail restauré ✓" : "Mail remis dans la boîte de réception ✓");
+    void refreshList(u.folder);
+    if (u.kind === "trash" && selected) setHistoryTick((n) => n + 1);
+  };
+
+  // ── « Charger plus » (pages suivantes de Gmail) ──────────────────────────
+  const cur = lists[folder];
+  const canMore = !inboxQ && hasTokens(cur?.next, box);
+  const loadMore = async () => {
+    const l = lists[folder];
+    if (!l?.next || moreBusy) return;
+    const f = folder;
+    const boxes: MailBox[] = box === "all" ? (["partnerships", "talent"] as MailBox[]).filter((b) => l.next?.[b]) : [box];
+    const tokens: PageTokens = {};
+    for (const b of boxes) if (l.next[b]) tokens[b] = l.next[b];
+    if (!Object.keys(tokens).length) return;
+    setMoreBusy(true);
+    const res = await invokeJson<ListRes>("gmail-history", { inbox: true, box: boxes.length > 1 ? "all" : boxes[0], folder: f, pageTokens: tokens });
+    setMoreBusy(false);
+    if (!res.ok) return toast(loadErrText(res.error, "Impossible de charger la suite, réessaie"));
+    setLists((p) => {
+      const pl = p[f];
+      if (!pl) return p;
+      const seen = new Set(pl.threads.map(keyOf));
+      const add = (res.threads ?? []).filter((t) => !seen.has(keyOf(t)));
+      const next: PageTokens = { ...pl.next };
+      for (const b of Object.keys(tokens) as MailBox[]) {
+        const tok = res.nextPageTokens?.[b];
+        if (tok) next[b] = tok;
+        else delete next[b];
+      }
+      return { ...p, [f]: { ...pl, threads: [...pl.threads, ...add].sort((a, b) => b.ts - a.ts), next, pages: pl.pages + 1 } };
+    });
+  };
+
+  // ── Coup d'œil toutes les 60 s (page visible) + au retour sur la fenêtre ─
+  const folderRef = useRef(folder);
+  folderRef.current = folder;
+  useEffect(() => {
+    let alive = true;
+    let lastCheck = 0;
+    const visible = () => document.visibilityState === "visible" && !!rootRef.current?.getClientRects().length;
+    const fullIfStale = (ms: number) => {
+      const f = folderRef.current;
+      if (Date.now() - lastLoad.current[f] >= ms) void refreshList(f);
+    };
+    const check = async () => {
+      if (!alive || !visible()) return;
+      lastCheck = Date.now();
+      // Ancienne version (coup d'œil inconnu) : liste complète toutes les 2 min.
+      if (peekOff) return fullIfStale(110_000);
+      const res = await invokeJson<PeekRes>("gmail-history", { peek: true, box: "all" });
+      if (!alive) return;
+      if (!res.ok || !res.boxes) {
+        if (res.error === "contact_invalide" || (res.ok && !res.boxes)) {
+          peekOff = true;
+          fullIfStale(110_000);
+        }
+        return; // coupure réseau : on réessaiera au prochain tour
+      }
+      const sig = Object.entries(res.boxes).map(([b, v]) => `${b}:${v?.historyId ?? ""}`).sort().join("|");
+      if (peekSig && sig !== peekSig) void refreshList(folderRef.current);
+      peekSig = sig;
+    };
+    const first = window.setTimeout(() => void check(), 4000);
+    const iv = window.setInterval(() => void check(), 60_000);
+    const onFocus = () => {
+      if (!visible()) return;
+      if (peekOff) fullIfStale(30_000);
+      else if (Date.now() - lastCheck > 15_000) void check();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      alive = false;
+      window.clearTimeout(first);
+      window.clearInterval(iv);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [refreshList]);
+
+  // ── Dossiers ─────────────────────────────────────────────────────────────
+  const setMode = (m: Mode) => {
+    setModeState(m);
+    writePref("ttp:mails-mode", m);
+  };
+  const goMode = (m: Mode) => {
+    if (m !== mode) closeThread();
+    setMode(m);
+    if (m !== "contacts") setSelected(null);
+    if (m === "creators" && mode === "creators") setCreatorView(null);
+  };
+  const openCreator = (name: string, threadId?: string) => {
+    setCreatorView({ name, threadId });
+    setMode("creators");
+  };
+
+  // ── Réponse ──────────────────────────────────────────────────────────────
+  const firstName = (n: string) => titleCase(n).split(" ")[0] || titleCase(n);
+  // Fil → format du lecteur partagé (messages envoyés = agence).
+  const readerMsgs: MailMessage[] = useMemo(
+    () =>
+      (threadMsgs ?? []).map((m) => ({
+        id: m.id,
+        from: displayName(m.from),
+        fromEmail: addrOf(m.from),
+        fromAgency: m.direction === "out",
+        to: m.to ?? "",
+        cc: m.cc ?? "",
+        ts: m.ts || new Date(m.date).getTime(),
+        html: m.html,
+        text: m.html ? "" : m.text,
+        attachments: m.attachments ?? [],
+      })),
+    [threadMsgs],
+  );
+  const plan = useMemo(() => replyPlan(threadMsgs ?? [], thread?.contact ?? ""), [threadMsgs, thread]);
+  const replyName = thread
+    ? plan.to === thread.contact
+      ? titleCase(prettyName(selected?.person || thread.name || displayName(thread.contact))) || plan.to
+      : plan.to
+    : "";
+  // Échange de talent@ qui concerne un créateur relié (son alias y apparaît) :
+  // lien direct vers son suivi (statut, remarques).
+  const threadCreator = useMemo(() => {
+    if (!thread || thread.box !== "talent" || !linked.length) return null;
+    const addrs = new Set((threadMsgs ?? []).flatMap((m) => addrsOf(`${m.from} ${m.to ?? ""} ${m.cc ?? ""}`)));
+    for (const a of allKnown().find((t) => keyOf(t) === keyOf(thread))?.to ?? []) addrs.add(a.toLowerCase());
+    return linked.find((l) => l.alias && addrs.has(l.alias.toLowerCase())) ?? null;
+  }, [thread, threadMsgs, linked, lists, search]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const focusReply = (m: "reply" | "all" = "reply") => {
     const last = readerMsgs[readerMsgs.length - 1];
     if (last) setExpanded((s) => new Set([...s, last.id]));
-    setReplyFocus(Date.now());
+    setReplyFocus({ key: Date.now(), mode: m });
   };
-  const photoOf = (n: string) => allCreators.find((c) => sameName(c.name, n))?.photo_url ?? null;
-  const readerOpen = !!thread || (mode === "contacts" && !!selected);
+  const forwardLast = () => {
+    if (!thread || !readerMsgs.length) return;
+    setForward({ msg: readerMsgs[readerMsgs.length - 1], subject: thread.subject, box: thread.box });
+  };
+
+  // Répondre : envoie via Gmail dans le MÊME fil (threadId), depuis la boîte du fil.
+  // Appelé à l'envoi réel (après le délai d'annulation de ReplyBox).
+  const sendReply = async ({ cc, bcc, html, attachments, draftKey }: { cc: string[]; bcc: string[]; html: string; attachments: OutAttachment[]; draftKey?: string }): Promise<boolean> => {
+    if (!thread) return false;
+    const t = thread;
+    const p = plan;
+    if (!p.to) {
+      toast("Destinataire introuvable pour ce fil, utilise « Transférer ».");
+      return false;
+    }
+    const subject = t.subject.replace(/^\s*re\s*:\s*/i, "");
+    const res = await sendGmail(
+      {
+        to: p.to, cc, subject: `Re: ${subject}`, html, threadId: t.threadId, source: "manual", box: t.box, bcc, attachments,
+        ...(p.inReplyTo ? { inReplyTo: p.inReplyTo } : {}),
+        ...(p.references ? { references: p.references } : {}),
+      },
+      { label: `Réponse à ${p.to}`, draftKey },
+    );
+    if (!res.ok) {
+      toast(sendFailText(res.error));
+      return false;
+    }
+    toast("Réponse envoyée ✓");
+    const key = keyOf(t);
+    threadCache.delete(key);
+    void refreshList(folderRef.current);
+    // Recharge le fil pour afficher la réponse, seulement s'il est encore ouvert.
+    const fresh = await invokeJson<ThreadRes>("gmail-thread", { threadId: t.threadId, contact: t.contact, box: t.box });
+    if (fresh.ok) {
+      const msgs = fresh.messages ?? [];
+      threadCache.set(key, { at: Date.now(), msgs });
+      const now = threadRef.current;
+      if (now && keyOf(now) === key) {
+        threadReq.current++;
+        setThreadMsgs(msgs);
+        if (msgs.length) setExpanded((e) => new Set([...e, msgs[msgs.length - 1].id]));
+      }
+    }
+    return true;
+  };
 
   // Pièce jointe d'un fil agence : lue côté serveur dans la boîte du fil.
   const downloadAgencyAttachment = async (a: MailAttachment) => {
     if (!thread) return;
     const r = await invokeJson<{ ok?: boolean; data?: string; error?: string }>("gmail-thread", {
       action: "attachment", messageId: a.messageId, attachmentId: a.attachmentId, box: thread.box,
-    });
-    if (!r?.ok || !r.data) return toast(r?.error === "piece_trop_lourde" ? "Pièce jointe trop lourde (20 Mo max)." : "Téléchargement impossible");
+    }, FILE_TIMEOUT);
+    if (!r.ok || !r.data) return toast(r.error === "piece_trop_lourde" ? "Pièce jointe trop lourde (20 Mo max)." : r.error === "reseau" ? "Téléchargement interrompu, réessaie" : "Téléchargement impossible");
     saveBase64(r.data, a.filename);
   };
 
-  const boxMeta = BOXES.find((b) => b.id === box) ?? BOXES[0];
+  // ── Raccourcis clavier ───────────────────────────────────────────────────
+  const gAt = useRef(0);
+  const curTarget = (): Target | null => {
+    if (thread) return { threadId: thread.threadId, box: thread.box, subject: thread.subject };
+    const n = cursor ? navList.find((x) => keyOf(x) === cursor) : null;
+    return n ? { threadId: n.threadId, box: n.box, subject: n.subject } : null;
+  };
+  const move = (dir: 1 | -1) => {
+    if (thread) {
+      const n = navIdx >= 0 ? navList[navIdx + dir] : null;
+      if (n) openThread(n);
+      return;
+    }
+    if (!navList.length) return;
+    const i = cursor ? navList.findIndex((x) => keyOf(x) === cursor) : -1;
+    const n = navList[i < 0 ? 0 : Math.min(navList.length - 1, Math.max(0, i + dir))];
+    setCursor(keyOf(n));
+  };
+  useEffect(() => {
+    if (!cursor || thread) return;
+    listRef.current?.querySelector(`[data-key="${cursor}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [cursor, thread]);
+  const keyHandler = useRef<(e: KeyboardEvent) => void>(() => {});
+  keyHandler.current = (e: KeyboardEvent) => {
+    const k = e.key;
+    // Fenêtre ouverte (nouveau mail, transfert, réglages…) : aucun raccourci.
+    const dialog = newMailOpen || !!forward || settingsOpen || composerOpen || !!document.querySelector('[role="dialog"]:not([data-mails-help]), [aria-modal="true"], [role="alertdialog"]');
+    if (dialog) return;
+    if (k === "?" || (k === "Escape" && helpOpen)) {
+      e.preventDefault();
+      setHelpOpen((v) => (k === "Escape" ? false : !v));
+      return;
+    }
+    if (gAt.current && Date.now() - gAt.current < 1500) {
+      gAt.current = 0;
+      if (k === "i" || k === "s") {
+        e.preventDefault();
+        goMode(k === "i" ? "inbox" : "sent");
+        return;
+      }
+    }
+    if (k === "g") {
+      gAt.current = Date.now();
+      return;
+    }
+    if (k === "c") {
+      e.preventDefault();
+      setNewMailOpen(true);
+      return;
+    }
+    if (k === "Escape") {
+      if (thread) {
+        e.preventDefault();
+        closeThread();
+      }
+      return;
+    }
+    if (mode === "creators") return;
+    if (k === "/") {
+      e.preventDefault();
+      (mode === "contacts" ? contactSearchRef : searchRef).current?.focus();
+      return;
+    }
+    if (mode === "contacts" && !thread) return;
+    switch (k) {
+      case "j":
+      case "k":
+        e.preventDefault();
+        move(k === "j" ? 1 : -1);
+        return;
+      case "Enter":
+      case "o": {
+        if (thread) return;
+        const n = (cursor ? navList.find((x) => keyOf(x) === cursor) : null) ?? navList[0];
+        if (n) {
+          e.preventDefault();
+          openThread(n);
+        }
+        return;
+      }
+      case "r":
+      case "a":
+        if (thread && readerMsgs.length) {
+          e.preventDefault();
+          focusReply(k === "a" ? "all" : "reply");
+        }
+        return;
+      case "f":
+        if (thread && readerMsgs.length) {
+          e.preventDefault();
+          forwardLast();
+        }
+        return;
+      case "e": {
+        const t = curTarget();
+        if (t) {
+          e.preventDefault();
+          archive(t);
+        }
+        return;
+      }
+      case "#":
+      case "Delete": {
+        const t = curTarget();
+        if (t) {
+          e.preventDefault();
+          trash(t);
+        }
+        return;
+      }
+      case "U":
+        if (e.shiftKey) {
+          const t = curTarget();
+          if (t) {
+            e.preventDefault();
+            void setRead(t, true);
+          }
+        }
+        return;
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.metaKey || (e.ctrlKey && !e.altKey)) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      if (e.key === "Enter" && el?.closest("button, a")) return; // Entrée sur un bouton : son action
+      if (document.visibilityState !== "visible" || !rootRef.current?.getClientRects().length) return;
+      keyHandler.current(e);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // ── Contacts : filtres ───────────────────────────────────────────────────
+  // Tags/niches réellement présents (pour le filtre) — hors « perso » (défaut créateurs).
+  const tagList = useMemo(
+    () => [...new Set((contacts ?? []).map((c) => (c.tag ?? "").trim()).filter((t) => t && t.toLowerCase() !== "perso"))],
+    [contacts],
+  );
+  const contacted = (c: Contact) => !!c.lastContacted || parseTouches(c.touches).length > 0;
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (contacts ?? []).filter((c) => {
+      if (tagFilter !== "__all__" && (c.tag ?? "").trim() !== tagFilter) return false;
+      // Même règle qu'ailleurs : échangé = dernier mail suivi OU touche manuelle.
+      const done = contacted(c);
+      if (contactFilter === "contacted" && !done) return false;
+      if (contactFilter === "never" && done) return false;
+      if (q && !(c.label.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || (c.tag ?? "").toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [contacts, query, tagFilter, contactFilter]);
+
+  const readerOpen = !!thread || (mode === "contacts" && !!selected);
   const listCls = "flex min-h-0 min-w-0 flex-col bg-panel lg:border-r lg:border-border";
-  const listHead = (title: string, meta: ReactNode, right?: ReactNode) => (
-    <div className="px-4 pt-4 sm:px-5 sm:pt-5">
-      <div className="flex items-center gap-2">
-        <h2 className="min-w-0 flex-1 truncate text-[20px] font-semibold tracking-tight text-foreground sm:text-[22px]">{title}</h2>
-        {right}
-      </div>
-      <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">{meta}</p>
-    </div>
-  );
-  const listNote = (text: string) => (
-    <div className="flex items-center gap-2 px-4 py-2.5 text-[12px] text-muted-foreground sm:px-5">
-      <CircleAlert className="h-3.5 w-3.5 shrink-0" /> {text}
-    </div>
-  );
   const centerNote = (icon: ReactNode, text: string) => (
     <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
       {icon}
       <p className="text-[13px] text-muted-foreground">{text}</p>
     </div>
   );
+  const boxesText = (boxes: MailBox[]) => boxes.map((b) => BOX_LABEL[b]).join(" et ");
 
-  // ── Barre d'icônes (ordinateur) ──────────────────────────────────────────
+  // ── Barre d'icônes (ordinateur) : dossiers ───────────────────────────────
   const rail = (
-    <nav aria-label="Dossiers et boîtes" className="hidden min-h-0 flex-col items-center gap-1.5 border-r border-border py-3 lg:flex">
+    <nav aria-label="Dossiers" className="hidden min-h-0 flex-col items-center gap-1 border-r border-border py-3 lg:flex">
       <button
         type="button"
         onClick={() => setNewMailOpen(true)}
         aria-label="Nouveau mail"
-        className="group relative mb-2 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"
+        aria-keyshortcuts="c"
+        className="group/tip relative mb-2 flex h-[54px] w-14 shrink-0 flex-col items-center justify-center gap-1 rounded-xl text-foreground transition-colors hover:bg-rowhover"
       >
-        <PenLine className="h-[17px] w-[17px]" />
-        <Tip>Nouveau mail</Tip>
+        <span className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground">
+          <PenLine className="h-[15px] w-[15px]" />
+        </span>
+        <span className="text-[10.5px] font-medium leading-none">Nouveau</span>
+        <Tip>Nouveau mail <Kbd>c</Kbd></Tip>
       </button>
       {MODES.map((m) => (
-        <RailButton key={m.id} label={m.label} active={mode === m.id} badge={m.id === "inbox" ? unread : m.id === "creators" ? mailTotal || null : null} onClick={() => goMode(m.id)}>
+        <RailButton
+          key={m.id}
+          label={m.label}
+          caption={m.short}
+          shortcut={m.shortcut}
+          active={mode === m.id}
+          badge={m.id === "inbox" ? unreadShown || null : m.id === "creators" ? mailTotal || null : null}
+          onClick={() => goMode(m.id)}
+        >
           <m.icon className="h-[18px] w-[18px]" />
         </RailButton>
       ))}
-      <span aria-hidden className="my-2 h-px w-6 shrink-0 bg-border" />
-      {BOXES.map((b) => (
-        <RailButton key={b.id} label={`${b.label} · ${b.hint}`} active={box === b.id} bar={false} onClick={() => setBox(b.id)}>
-          <BoxSquare box={b.id} />
-        </RailButton>
-      ))}
       <span className="flex-1" />
-      <RailButton label="Signature et délai" onClick={() => setSettingsOpen(true)}>
+      <RailButton label="Signature et délai d'annulation" caption="Réglages" onClick={() => setSettingsOpen(true)}>
         <Settings2 className="h-[18px] w-[18px]" />
       </RailButton>
     </nav>
@@ -587,32 +1482,23 @@ export function Mails() {
 
   // ── Même barre, en ligne (téléphone, tablette) ──────────────────────────
   const mobileNav = (
-    <nav aria-label="Dossiers et boîtes" className="flex gap-1.5 overflow-x-auto border-b border-border p-2 [scrollbar-width:none] lg:hidden">
+    <nav aria-label="Dossiers" className={cn("flex gap-1.5 overflow-x-auto border-b border-border p-2 [scrollbar-width:none] lg:hidden", readerOpen && "max-lg:hidden")}>
       <button type="button" onClick={() => setNewMailOpen(true)} className={cn(pillCls, "bg-primary px-3 text-primary-foreground hover:opacity-90")}>
         <PenLine className="h-3.5 w-3.5" /> Nouveau
       </button>
       {MODES.map((m) => {
         const on = mode === m.id;
+        const n = m.id === "inbox" ? unreadShown : m.id === "creators" ? mailTotal : 0;
         return (
           <button key={m.id} type="button" onClick={() => goMode(m.id)} aria-pressed={on}
             className={cn(pillCls, on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
             <m.icon className="h-3.5 w-3.5" /> {m.short}
-            {m.id === "inbox" && unread ? <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{unread}</span> : null}
-            {m.id === "creators" && mailTotal ? <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{mailTotal}</span> : null}
+            {n ? <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{n}</span> : null}
           </button>
         );
       })}
-      <span aria-hidden className="mx-0.5 my-1.5 w-px shrink-0 bg-border" />
-      {BOXES.map((b) => {
-        const on = box === b.id;
-        return (
-          <button key={b.id} type="button" onClick={() => setBox(b.id)} aria-pressed={on} title={b.hint}
-            className={cn(pillCls, on ? "bg-muted text-foreground ring-1 ring-border" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
-            <BoxSquare box={b.id} className="size-3 rounded-[3px]" /> {b.short}
-          </button>
-        );
-      })}
-      <button type="button" onClick={() => setSettingsOpen(true)} aria-label="Signature et délai"
+      <span className="flex-1" />
+      <button type="button" onClick={() => setSettingsOpen(true)} aria-label="Signature et délai d'annulation"
         className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
         <Settings2 className="h-4 w-4" />
       </button>
@@ -620,71 +1506,158 @@ export function Mails() {
   );
 
   // ── Liste : boîte de réception / envoyés ────────────────────────────────
-  const nInbox = inbox?.length ?? 0;
+  const busyNow = listBusy[folder];
+  const errNow = listErr[folder];
+  const boxCount = (id: "all" | MailBox) => (folder === "inbox" ? unreadBy[id] : 0);
+  const boxSelect = (
+    <label className="relative flex shrink-0 items-center lg:hidden">
+      <span className="sr-only">Boîte affichée</span>
+      <span aria-hidden className="pointer-events-none absolute left-2.5 flex gap-0.5">
+        {box === "all" ? (
+          <>
+            <BoxDot box="partnerships" className="size-1.5" />
+            <BoxDot box="talent" className="size-1.5" />
+          </>
+        ) : (
+          <BoxDot box={box} />
+        )}
+      </span>
+      <select
+        value={box}
+        onChange={(e) => setBox(e.target.value as "all" | MailBox)}
+        className="h-8 appearance-none rounded-full border border-border bg-surface pl-7 pr-7 text-[12px] font-semibold text-foreground outline-none focus:border-primary"
+      >
+        {BOX_FILTERS.map((b) => (
+          <option key={b.id} value={b.id}>
+            {b.label}
+            {boxCount(b.id) ? ` (${boxCount(b.id)})` : ""}
+          </option>
+        ))}
+      </select>
+      <ChevronDown aria-hidden className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-faint" />
+    </label>
+  );
+  const metaText = inboxQ
+    ? `${localMatches.length} dans la liste${searchLive && search && !search.off && !search.busy ? ` · ${remote.length} de plus dans Gmail` : ""}`
+    : `${boxThreads.length} plus récente${boxThreads.length > 1 ? "s" : ""}`;
+  const partialText = cur?.partial
+    ? cur.failedBoxes.length
+      ? `${boxesText(cur.failedBoxes)} ${cur.failedBoxes.length > 1 ? "ne répondent" : "ne répond"} pas pour l'instant : ses mails affichés peuvent dater.`
+      : cur.v2
+        ? "Certains mails n'ont pas pu être lus : la liste peut être incomplète."
+        : "Une des deux boîtes n'a pas répondu : la liste peut être incomplète."
+    : null;
+  const rowFor = (t: InboxThread) => {
+    const key = keyOf(t);
+    const on = !!thread && keyOf(thread) === key;
+    const owner = t.box === "talent" ? (t.to ?? []).map((a) => aliasOwner.get(a.toLowerCase())).find(Boolean) ?? null : null;
+    const target: Target = { threadId: t.threadId, box: t.box, subject: t.subject };
+    return (
+      <ThreadRow
+        key={key}
+        t={t}
+        folder={folder}
+        on={on}
+        cursor={cursor === key}
+        showBox={box === "all"}
+        draft={draftSet.has(replyDraftKey(t.box, t.threadId))}
+        creator={owner}
+        creatorPhoto={owner ? photoOf(owner) : null}
+        onOpen={() => openThread({ threadId: t.threadId, subject: t.subject, box: t.box, contact: t.email, name: t.name })}
+        onArchive={() => archive(target)}
+        onTrash={() => trash(target)}
+        onToggleRead={() => void setRead(target, !t.unread)}
+      />
+    );
+  };
+
   const inboxCol = (
-    <section className={cn(listCls, readerOpen && "max-lg:hidden")}>
-      {listHead(
-        folder === "sent" ? "Envoyés" : "Boîte de réception",
-        <>
-          <BoxSquare box={box} className="size-2.5 rounded-[3px]" />
-          <span className="truncate">
-            {boxMeta.label}
-            {inbox && !inboxBusy ? ` · ${inboxQ ? `${shownInbox.length} sur ${nInbox}` : nInbox} conversation${nInbox > 1 ? "s" : ""}` : ""}
-          </span>
-        </>,
-        <ToolButton icon={RefreshCw} label="Actualiser" spin={inboxBusy} disabled={inboxBusy} onClick={() => setInboxTick((n) => n + 1)} />,
-      )}
-      <div className="px-4 pb-3 pt-3 sm:px-5"><SearchField value={inboxQuery} onChange={setInboxQuery} placeholder="Rechercher dans ces mails…" /></div>
-      <div className="min-h-0 flex-1 overflow-y-auto border-t border-border">
-        {inboxBusy && !inbox?.length ? (
-          <div className="flex items-center justify-center gap-2 px-5 py-12 text-[13px] text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Chargement de la boîte…
-          </div>
-        ) : inboxErr ? (
-          <div className="px-5 py-10 text-center text-[13px] text-muted-foreground">{inboxErr}</div>
-        ) : !inbox?.length ? (
+    <section className={cn(listCls, readerOpen && "max-lg:hidden")} aria-label={folder === "sent" ? "Envoyés" : "Boîte de réception"}>
+      <div className="shrink-0 border-b border-border px-3 pb-2.5 pt-3 sm:px-4">
+        <div className="flex items-center gap-1">
+          <h2 className="min-w-0 flex-1 truncate pl-1 text-[17px] font-semibold tracking-tight text-foreground">{folder === "sent" ? "Envoyés" : "Boîte de réception"}</h2>
+          {boxSelect}
+          <ToolButton icon={RefreshCw} label="Actualiser" spin={busyNow} disabled={busyNow} onClick={() => void refreshList(folder)} className="h-8 w-8" />
+          <ToolButton icon={Keyboard} label="Raccourcis clavier" shortcut="?" tipSide="bottom-end" onClick={() => setHelpOpen((v) => !v)} className="h-8 w-8 max-lg:hidden" />
+        </div>
+        <Tabs
+          className="mt-2 max-lg:hidden"
+          size="sm"
+          fullWidth
+          label="Boîte affichée"
+          value={box}
+          onValueChange={(v) => setBox(v as "all" | MailBox)}
+          items={BOX_FILTERS.map((b) => ({
+            value: b.id,
+            label: b.label,
+            dot: b.id === "all" ? undefined : BOX_STYLE[b.id].dot,
+            count: boxCount(b.id) || undefined,
+          }))}
+        />
+        <div className="mt-2">
+          <SearchField size="sm" inputRef={searchRef} value={inboxQuery} onChange={setInboxQuery} placeholder="Rechercher dans les mails…"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                if (inboxQuery) setInboxQuery("");
+                else e.currentTarget.blur();
+              }
+            }} />
+        </div>
+        <p className="mt-1.5 truncate pl-1 text-[11.5px] text-muted-foreground" aria-live="polite">{cur ? metaText : busyNow ? "Chargement…" : ""}</p>
+      </div>
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto" aria-busy={busyNow}>
+        {errNow && cur && (
+          <ErrorBanner
+            text={loadErrText(errNow, "Actualisation impossible : la liste affichée peut dater.")}
+            onRetry={() => void refreshList(folder)}
+            onReconnect={needsReconnect(errNow) ? () => void reconnectGoogle() : undefined}
+          />
+        )}
+        {partialText && <ErrorBanner tone="info" text={partialText} onRetry={() => void refreshList(folder)} />}
+        {!cur ? (
+          errNow ? (
+            <ErrorCard
+              text={loadErrText(errNow, "Impossible de charger la boîte de réception.")}
+              onRetry={() => void refreshList(folder)}
+              onReconnect={needsReconnect(errNow) ? () => void reconnectGoogle() : undefined}
+            />
+          ) : (
+            <ListSkeleton />
+          )
+        ) : !boxThreads.length && !inboxQ ? (
           centerNote(<Inbox className="h-5 w-5 text-faint" />, folder === "sent" ? "Aucun mail envoyé depuis cette boîte." : "Aucun mail dans cette boîte.")
         ) : (
-          <ul className={cn("divide-y divide-border transition-opacity", inboxBusy && "opacity-60")}>
-            {inboxPartial && <li>{listNote("Une des deux boîtes n'a pas répondu : la liste peut être incomplète.")}</li>}
-            {shownInbox.length === 0 && <li>{centerNote(<Search className="h-5 w-5 text-faint" />, `Aucun mail ne correspond à « ${inboxQuery.trim()} ».`)}</li>}
-            {shownInbox.map((t) => {
-              const on = thread?.threadId === t.threadId && thread.box === t.box;
-              return (
-                <li key={`${t.box}-${t.threadId}`}>
-                  <SwipeRow actions={[{ key: "trash", label: "Corbeille", icon: Trash2, tone: "red", onClick: () => void trashTarget(t) }]}>
-                  <button
-                    type="button"
-                    aria-current={on || undefined}
-                    onClick={() => void openThread({ threadId: t.threadId, subject: t.subject, box: t.box, contact: t.email, name: t.name })}
-                    className={cn(mailRowCls(on), "py-4")}
-                  >
-                    <Initial name={prettyName(t.name)} email={t.email} size="md" />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex min-w-0 items-center gap-2">
-                        {t.unread && <span className="size-2 shrink-0 rounded-full bg-primary" title="Non lu" />}
-                        <span className={cn("min-w-0 flex-1 truncate text-[12.5px]", t.unread ? "font-semibold text-foreground" : "font-medium text-muted-foreground")}>
-                          {folder === "sent" && <span className="font-normal">À : </span>}
-                          {prettyName(t.name) || t.email}
-                          {t.count > 1 && <span className="ml-1.5 font-normal text-faint">{t.count}</span>}
-                        </span>
-                        <span className={cn("shrink-0 text-[11px] tabular-nums", t.unread ? "font-semibold text-foreground" : "text-faint")}>{fmtWhen(t.ts)}</span>
-                      </span>
-                      <span className={cn("mt-1 block truncate text-[13.5px] text-foreground", t.unread ? "font-bold" : "font-semibold")}>{t.subject || "(sans objet)"}</span>
-                      <span className="mt-1 flex min-w-0 items-end gap-3">
-                        <span className="line-clamp-2 min-w-0 flex-1 text-[12.5px] leading-[1.45] text-muted-foreground">
-                          {t.direction === "out" && folder === "inbox" && <span className="text-faint">Toi : </span>}
-                          {decodeEntities(t.snippet)}
-                        </span>
-                        <span title={BOX_LABEL[t.box]} className="mb-0.5 shrink-0"><BoxSquare box={t.box} className="size-2.5 rounded-[3px]" /></span>
-                      </span>
-                    </span>
-                  </button>
-                  </SwipeRow>
-                </li>
-              );
-            })}
-          </ul>
+          <>
+            {inboxQ && !localMatches.length && (
+              <p className="px-5 py-4 text-[12.5px] text-muted-foreground">Aucun mail de la liste ne correspond à « {inboxQuery.trim()} ».</p>
+            )}
+            <ul className="divide-y divide-border">{localMatches.map(rowFor)}</ul>
+            {inboxQ && searchLive && search && !search.off && (
+              <div className="border-t border-border">
+                <div className="flex items-center gap-2 bg-muted/40 px-4 py-2 text-[11.5px] font-semibold uppercase tracking-wide text-muted-foreground sm:px-5">
+                  <Search className="h-3.5 w-3.5" /> Résultats dans Gmail
+                  {search.busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                </div>
+                {search.err ? (
+                  <ErrorBanner text={loadErrText(search.err, "Recherche Gmail impossible.")} onRetry={() => setSearchTick((n) => n + 1)}
+                    onReconnect={needsReconnect(search.err) ? () => void reconnectGoogle() : undefined} />
+                ) : !search.busy && !remote.length ? (
+                  <p className="px-5 py-3 text-[12.5px] text-muted-foreground">Rien de plus dans Gmail.</p>
+                ) : (
+                  <ul className="divide-y divide-border">{remote.map(rowFor)}</ul>
+                )}
+              </div>
+            )}
+            {canMore && (
+              <div className="flex justify-center border-t border-border px-4 py-3">
+                <button type="button" onClick={() => void loadMore()} disabled={moreBusy}
+                  className="flex h-8 items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 text-[12.5px] font-semibold text-foreground transition-colors hover:bg-rowhover disabled:opacity-60">
+                  {moreBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Charger plus
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>
@@ -692,37 +1665,44 @@ export function Mails() {
 
   // ── Liste : contacts ─────────────────────────────────────────────────────
   const contactsCol = (
-    <section className={cn(listCls, readerOpen && "max-lg:hidden")}>
-      {listHead("Contacts", `${filtered.length} contact${filtered.length > 1 ? "s" : ""} avec e-mail`)}
-      <div className="flex flex-col gap-2.5 px-4 pb-3 pt-3 sm:px-5">
-        <SearchField value={query} onChange={setQuery} placeholder="Rechercher un contact…" />
-        {/* Filtre « déjà échangé » (basé sur le suivi de contact) */}
-        <Tabs
-          size="sm"
-          fullWidth
-          label="Filtrer par échange"
-          items={[
-            { value: "all", label: "Tous" },
-            { value: "contacted", label: "Déjà échangé" },
-            { value: "never", label: "Jamais" },
-          ]}
-          value={contactFilter}
-          onValueChange={(v) => setContactFilter(v as "all" | "contacted" | "never")}
-        />
-        {/* Filtre par type (marque, agence…) */}
-        {tagList.length > 0 && (
+    <section className={cn(listCls, readerOpen && "max-lg:hidden")} aria-label="Contacts">
+      <div className="shrink-0 border-b border-border px-3 pb-3 pt-3 sm:px-4">
+        <h2 className="truncate pl-1 text-[17px] font-semibold tracking-tight text-foreground">Contacts</h2>
+        <p className="mt-0.5 pl-1 text-[11.5px] text-muted-foreground">
+          {contacts ? `${filtered.length} contact${filtered.length > 1 ? "s" : ""} avec e-mail` : "Chargement…"}
+        </p>
+        <div className="mt-2 flex flex-col gap-2">
+          <SearchField size="sm" inputRef={contactSearchRef} value={query} onChange={setQuery} placeholder="Rechercher un contact…" />
+          {/* Filtre « déjà échangé » (basé sur le suivi de contact) */}
           <Tabs
             size="sm"
-            label="Filtrer par catégorie"
-            wrap
-            items={[{ value: "__all__", label: "Toutes les catégories" }, ...tagList.map((t) => ({ value: t, label: t }))]}
-            value={tagFilter}
-            onValueChange={setTagFilter}
+            fullWidth
+            label="Filtrer par échange"
+            items={[
+              { value: "all", label: "Tous" },
+              { value: "contacted", label: "Déjà échangé" },
+              { value: "never", label: "Jamais" },
+            ]}
+            value={contactFilter}
+            onValueChange={(v) => setContactFilter(v as "all" | "contacted" | "never")}
           />
-        )}
+          {/* Filtre par type (marque, agence…) */}
+          {tagList.length > 0 && (
+            <Tabs
+              size="sm"
+              label="Filtrer par catégorie"
+              wrap
+              items={[{ value: "__all__", label: "Toutes les catégories" }, ...tagList.map((t) => ({ value: t, label: t }))]}
+              value={tagFilter}
+              onValueChange={setTagFilter}
+            />
+          )}
+        </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto border-t border-border">
-        {filtered.length === 0 ? (
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {!contacts ? (
+          <ListSkeleton rows={6} />
+        ) : filtered.length === 0 ? (
           <div className="px-4 py-12 text-center text-[13px] text-muted-foreground">
             {query.trim() || tagFilter !== "__all__" || contactFilter !== "all" ? "Aucun contact pour ce filtre." : "Aucun contact avec email."}
           </div>
@@ -733,8 +1713,11 @@ export function Mails() {
                 <button
                   type="button"
                   aria-current={selected?.id === c.id || undefined}
-                  onClick={() => { setSelected(c); setThread(null); }}
-                  className={cn(mailRowCls(selected?.id === c.id), "items-center py-3.5")}
+                  onClick={() => {
+                    setSelected(c);
+                    closeThread();
+                  }}
+                  className={cn(mailRowCls(selected?.id === c.id), "items-center py-3")}
                 >
                   <Initial name={c.brand || c.label} email={c.email} />
                   <span className="min-w-0 flex-1">
@@ -760,49 +1743,70 @@ export function Mails() {
   const openThreadCreator = () => {
     if (thread && threadCreator) openCreator(threadCreator.creator, thread.threadId);
   };
-  const replyTo = thread ? titleCase(prettyName(selected?.person || thread.name || displayName(thread.contact))) || thread.contact : "";
-  const threadReader = thread && (
-    <section className="flex min-h-0 min-w-0 flex-col">
-      <div className="flex h-14 shrink-0 items-center gap-0.5 border-b border-border px-2 sm:px-3">
-        <ToolButton icon={ArrowLeft} label={selected ? "Retour aux échanges" : "Fermer"} onClick={() => setThread(null)} />
-        {readerMsgs.length > 0 && (
-          <ToolButton icon={Trash2} label="Supprimer (corbeille Gmail)" danger busy={trashBusy} disabled={trashBusy} onClick={() => setTrashAsk(true)} />
-        )}
+  const tgt: Target | null = thread ? { threadId: thread.threadId, box: thread.box, subject: thread.subject } : null;
+  const loaded = !!threadMsgs && readerMsgs.length > 0;
+  const draftKey = thread ? replyDraftKey(thread.box, thread.threadId) : "";
+  const listName = thread ? selected?.label ?? (prettyName(thread.name) || thread.contact) : "";
+  const many = readerMsgs.length > 4 && !showAllMsgs;
+  const navBtns = navIdx >= 0 && navList.length > 1 && (
+    <>
+      <ToolButton icon={ChevronLeft} label="Mail précédent" shortcut="k" className="h-8 w-8" disabled={navIdx <= 0} onClick={() => openThread(navList[navIdx - 1])} />
+      <span className="whitespace-nowrap px-1 text-[12.5px] tabular-nums text-muted-foreground">{navIdx + 1} sur {navList.length}</span>
+      <ToolButton icon={ChevronRight} label="Mail suivant" shortcut="j" className="h-8 w-8" disabled={navIdx >= navList.length - 1} onClick={() => openThread(navList[navIdx + 1])} />
+    </>
+  );
+  const threadReader = thread && tgt && (
+    <section className="flex min-h-0 min-w-0 flex-col" aria-label="Lecture du mail">
+      <div className="@container sticky top-0 z-20 flex h-14 shrink-0 items-center gap-0.5 border-b border-border bg-surface px-2 max-md:top-[calc(2.75rem+env(safe-area-inset-top))] sm:px-3 lg:static">
+        <ToolButton icon={ArrowLeft} label={selected ? "Retour aux échanges" : "Retour à la liste"} shortcut="Échap" tipSide="bottom-start" onClick={closeThread} />
+        <ToolButton icon={Archive} label="Archiver" text="Archiver" shortcut="e" className="max-md:hidden" onClick={() => archive(tgt)} />
+        <ToolButton icon={Trash2} label="Corbeille" text="Corbeille" shortcut="#" danger onClick={() => trash(tgt)} />
+        <ToolButton icon={Mail} label="Marquer non lu" text="Non lu" shortcut="⇧U" onClick={() => void setRead(tgt, true)} />
         {threadCreator && (
-          <ToolButton icon={MessageSquareText} label={`Statut et remarques que ${firstName(threadCreator.creator)} voit`} onClick={openThreadCreator} />
+          <ToolButton icon={MessageSquareText} label={`Statut et remarques que ${firstName(threadCreator.creator)} voit`} tipSide="bottom" onClick={openThreadCreator} />
         )}
-        <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5">
-          {navIdx >= 0 && navList.length > 1 && (
-            <>
-              <ToolButton icon={ChevronLeft} label="Mail précédent" className="h-8 w-8" disabled={navIdx <= 0} onClick={() => void openThread(navList[navIdx - 1])} />
-              <span className="whitespace-nowrap px-1 text-[12.5px] tabular-nums text-muted-foreground">{navIdx + 1} sur {navList.length}</span>
-              <ToolButton icon={ChevronRight} label="Mail suivant" className="h-8 w-8" disabled={navIdx >= navList.length - 1} onClick={() => void openThread(navList[navIdx + 1])} />
-            </>
-          )}
-        </div>
-        {readerMsgs.length > 0 && <ToolButton icon={Reply} label="Répondre" onClick={focusReply} />}
-        {readerMsgs.length > 0 && <ToolButton icon={Forward} label="Transférer" onClick={() => setForwardMsg(readerMsgs[readerMsgs.length - 1])} />}
+        <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5 max-md:invisible">{navBtns}</div>
+        <ToolButton icon={Reply} label="Répondre" text="Répondre" shortcut="r" className="max-md:hidden" disabled={!loaded} onClick={() => focusReply("reply")} />
+        <ToolButton icon={Forward} label="Transférer" text="Transférer" shortcut="f" tipSide="bottom-end" disabled={!loaded} onClick={forwardLast} />
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="px-4 py-6 sm:px-8">
-          <h1 className="text-[20px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere] [text-wrap:balance] sm:text-[22px]">
+        <div className="mx-auto w-full max-w-[860px] px-4 pb-6 pt-4 max-md:pb-24 sm:px-8">
+          <h1 className="text-[18px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere] [text-wrap:balance] sm:text-[20px]">
             {thread.subject || "(sans objet)"}
           </h1>
-          <p className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+          <p className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
             <BoxChip box={thread.box} className="text-[10px]" />
             <span className="min-w-0 truncate">
-              {selected?.label ?? (prettyName(thread.name) || thread.contact)}
+              {listName}
               {threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
             </span>
           </p>
-          {threadBusy ? (
-            <div className="flex items-center justify-center gap-2 py-16 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Ouverture…</div>
+          {threadErr ? (
+            <ErrorCard
+              text={loadErrText(threadErr, "Impossible de charger ce fil.")}
+              onRetry={retryThread}
+              onReconnect={needsReconnect(threadErr) ? () => void reconnectGoogle() : undefined}
+            />
+          ) : !threadMsgs ? (
+            <BodySkeleton />
           ) : readerMsgs.length === 0 ? (
-            <div className="py-16 text-center text-[13px] text-muted-foreground">Impossible de charger ce fil.</div>
+            <ErrorCard text="Ce fil est vide (mail supprimé ?)." onRetry={retryThread} />
           ) : (
-            <div className="mt-3 flex flex-col divide-y divide-border">
+            <div className="mt-2 flex flex-col divide-y divide-border">
               {readerMsgs.map((m, i) => {
+                if (many && i > 0 && i < readerMsgs.length - 2) {
+                  if (i !== 1) return null;
+                  const n = readerMsgs.length - 3;
+                  return (
+                    <button key="older" type="button" onClick={() => setShowAllMsgs(true)}
+                      className="flex w-full items-center gap-3 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground">
+                      <span className="h-px flex-1 bg-border" />
+                      <span className="rounded-full border border-border bg-surface px-3 py-1">{n} message{n > 1 ? "s" : ""} plus ancien{n > 1 ? "s" : ""}</span>
+                      <span className="h-px flex-1 bg-border" />
+                    </button>
+                  );
+                }
                 const last = i === readerMsgs.length - 1;
                 return (
                   <div key={m.id} className="flex flex-col">
@@ -818,15 +1822,21 @@ export function Mails() {
                         return n;
                       })}
                       actions={[
-                        { icon: Reply, label: "Répondre", onClick: focusReply },
-                        { icon: Forward, label: "Transférer", onClick: () => setForwardMsg(m) },
+                        { icon: Reply, label: "Répondre", onClick: () => focusReply("reply") },
+                        { icon: Forward, label: "Transférer", onClick: () => setForward({ msg: m, subject: thread.subject, box: thread.box }) },
                       ]}
                       footer={last ? (
                         <ReplyBox
+                          key={draftKey}
                           variant="card"
-                          to={replyTo}
+                          to={replyName}
+                          toTitle={plan.to}
                           box={thread.box}
-                          focusKey={replyFocus}
+                          focusKey={replyFocus.key}
+                          focusMode={replyFocus.mode}
+                          draftKey={draftKey}
+                          replyAllCc={plan.cc}
+                          sendLabel={`Réponse à ${replyName || plan.to}`}
                           placeholder="Écris ta réponse…"
                           onSend={sendReply}
                         />
@@ -840,85 +1850,115 @@ export function Mails() {
         </div>
       </div>
 
-      {readerMsgs.length > 0 && (
-        <div className="flex h-14 shrink-0 items-center gap-1 border-t border-border px-2 max-sm:hidden sm:px-3">
-          <BarButton icon={Reply} label="Répondre" onClick={focusReply} />
-          <BarButton icon={Forward} label="Transférer" onClick={() => setForwardMsg(readerMsgs[readerMsgs.length - 1])} />
-          <span className="flex-1" />
-          {threadCreator && <BarButton icon={MessageSquareText} label={`Statut et remarques · ${firstName(threadCreator.creator)}`} onClick={openThreadCreator} />}
-          <BarButton icon={Trash2} label="Supprimer" danger busy={trashBusy} disabled={trashBusy} onClick={() => setTrashAsk(true)} />
-        </div>
-      )}
+      {/* Téléphone : actions principales en bas, au-dessus des onglets de l'app. */}
+      <div className="ios-chrome ios-bar fixed inset-x-0 bottom-[calc(50px+env(safe-area-inset-bottom))] z-40 flex h-12 items-center gap-1 border-t border-border/70 px-2 md:hidden">
+        <button type="button" onClick={() => focusReply("reply")} disabled={!loaded}
+          className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground disabled:opacity-40">
+          <Reply className="h-4 w-4" /> Répondre
+        </button>
+        <button type="button" onClick={() => archive(tgt)}
+          className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium text-foreground">
+          <Archive className="h-4 w-4" /> Archiver
+        </button>
+        <span className="flex-1" />
+        {navIdx >= 0 && navList.length > 1 && (
+          <>
+            <button type="button" aria-label="Mail précédent" disabled={navIdx <= 0} onClick={() => openThread(navList[navIdx - 1])}
+              className="grid h-9 w-9 place-items-center rounded-full text-foreground disabled:opacity-30">
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <span className="text-[12px] tabular-nums text-muted-foreground">{navIdx + 1}/{navList.length}</span>
+            <button type="button" aria-label="Mail suivant" disabled={navIdx >= navList.length - 1} onClick={() => openThread(navList[navIdx + 1])}
+              className="grid h-9 w-9 place-items-center rounded-full text-foreground disabled:opacity-30">
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </>
+        )}
+      </div>
     </section>
   );
 
   // ── Lecture : échanges d'un contact ──────────────────────────────────────
+  const visibleHistory = history ?? [];
   const contactReader = selected && (
-    <section className="flex min-h-0 min-w-0 flex-col">
-      <div className="flex h-14 shrink-0 items-center gap-1 border-b border-border px-2 sm:px-3">
+    <section className="flex min-h-0 min-w-0 flex-col" aria-label="Échanges avec ce contact">
+      <div className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-1 border-b border-border bg-surface px-2 max-md:top-[calc(2.75rem+env(safe-area-inset-top))] sm:px-3 lg:static">
         <ToolButton icon={ArrowLeft} label="Retour aux contacts" className="lg:hidden" onClick={() => setSelected(null)} />
         <span className="min-w-0 flex-1 truncate px-2 text-[12.5px] text-muted-foreground">Échanges avec ce contact, dans les deux boîtes</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="flex items-center gap-4 px-4 py-6 sm:px-8">
-          <Initial name={selected.brand || selected.label} email={selected.email} size="lg" />
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[20px] font-semibold tracking-tight text-foreground sm:text-[22px]">{selected.brand || selected.person || selected.email}</h1>
-            <p className="truncate text-[12.5px] text-muted-foreground">{[selected.brand ? selected.person : null, selected.email].filter(Boolean).join(" · ")}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setComposerOpen(true)}
-            className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
-          >
-            <PenLine className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Nouveau mail</span>
-          </button>
-        </div>
-
-        <div className="border-t border-border">
-          {historyBusy ? (
-            <div className="flex items-center justify-center gap-2 px-5 py-12 text-[13px] text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Chargement des échanges…
+        <div className="mx-auto w-full max-w-[860px]">
+          <div className="flex items-center gap-4 px-4 py-5 sm:px-8">
+            <Initial name={selected.brand || selected.label} email={selected.email} size="lg" />
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-[18px] font-semibold tracking-tight text-foreground sm:text-[20px]">{selected.brand || selected.person || selected.email}</h1>
+              <p className="truncate text-[12.5px] text-muted-foreground">{[selected.brand ? selected.person : null, selected.email].filter(Boolean).join(" · ")}</p>
             </div>
-          ) : historyErr ? (
-            <div className="px-5 py-10 text-center text-[13px] text-muted-foreground">{historyErr}</div>
-          ) : visibleHistory.length === 0 ? (
-            centerNote(<Mail className="h-5 w-5 text-faint" />, "Aucun échange trouvé dans les deux boîtes avec ce contact.")
-          ) : (
-            <ul className="divide-y divide-border">
-              {historyPartial && <li>{listNote("Une des deux boîtes n'a pas répondu : l'historique peut être incomplet.")}</li>}
-              {visibleHistory.map((m) => (
-                <li key={m.id}>
-                  <button
-                    type="button"
-                    onClick={() => m.threadId && void openThread({ threadId: m.threadId, subject: m.subject, box: m.box })}
-                    className={cn("flex w-full items-start gap-3 px-4 py-4 text-left transition-colors sm:px-8", m.threadId ? "hover:bg-rowhover" : "cursor-default")}
-                  >
-                    <span
-                      className={cn("mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full", BOX_STYLE[boxOf(m)].soft)}
-                      title={m.direction === "in" ? "Reçu" : "Envoyé"}
-                    >
-                      {m.direction === "in" ? <ArrowDownLeft className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex min-w-0 items-baseline gap-2">
-                        <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-foreground">{m.subject || "(sans objet)"}</span>
-                        <span className="shrink-0 text-[11px] tabular-nums text-faint">{fmtDate(m.date)}</span>
-                      </span>
-                      <span className="mt-1 flex min-w-0 items-center gap-2">
-                        <span className="shrink-0 text-[11px] text-muted-foreground">{m.direction === "in" ? "Reçu" : "Envoyé"}</span>
-                        <BoxChip box={boxOf(m)} className="text-[10px]" />
-                        {m.source === "mediakit" && (
-                          <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Media kit</span>
-                        )}
-                        <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{decodeEntities(m.snippet)}</span>
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+            <button
+              type="button"
+              onClick={() => setComposerOpen(true)}
+              className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              <PenLine className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Nouveau mail</span>
+            </button>
+          </div>
+
+          <div className="border-t border-border">
+            {historyErr && !historyBusy && (
+              <ErrorBanner
+                text={loadErrText(historyErr, "Impossible de lire les échanges Gmail avec ce contact.")}
+                onRetry={() => setHistoryTick((n) => n + 1)}
+                onReconnect={needsReconnect(historyErr) ? () => void reconnectGoogle() : undefined}
+              />
+            )}
+            {historyPartial && !historyBusy && (
+              <ErrorBanner
+                tone="info"
+                text={historyPartial.boxes.length
+                  ? `${boxesText(historyPartial.boxes)} ${historyPartial.boxes.length > 1 ? "ne répondent" : "ne répond"} pas pour l'instant : l'historique peut être incomplet.`
+                  : "Une des deux boîtes n'a pas répondu : l'historique peut être incomplet."}
+                onRetry={() => setHistoryTick((n) => n + 1)}
+              />
+            )}
+            {historyBusy ? (
+              <ListSkeleton rows={4} />
+            ) : visibleHistory.length === 0 ? (
+              historyErr ? null : centerNote(<Mail className="h-5 w-5 text-faint" />, "Aucun échange trouvé dans les deux boîtes avec ce contact.")
+            ) : (
+              <ul className="divide-y divide-border">
+                {visibleHistory.map((m) => {
+                  const b = m.box ?? "partnerships";
+                  return (
+                    <li key={m.id}>
+                      <button
+                        type="button"
+                        onClick={() => m.threadId && openThread({ threadId: m.threadId, subject: m.subject, box: b, contact: selected.email })}
+                        className={cn("flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors sm:px-8", m.threadId ? "hover:bg-rowhover" : "cursor-default")}
+                      >
+                        <span className={cn("mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full", BOX_STYLE[b].soft)} title={m.direction === "in" ? "Reçu" : "Envoyé"}>
+                          {m.direction === "in" ? <ArrowDownLeft className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex min-w-0 items-baseline gap-2">
+                            <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-foreground">{m.subject || "(sans objet)"}</span>
+                            <span className="shrink-0 text-[11px] tabular-nums text-faint">{fmtDate(m.date)}</span>
+                          </span>
+                          <span className="mt-1 flex min-w-0 items-center gap-2">
+                            <span className="shrink-0 text-[11px] text-muted-foreground">{m.direction === "in" ? "Reçu" : "Envoyé"}</span>
+                            <BoxChip box={b} className="text-[10px]" />
+                            {m.source === "mediakit" && (
+                              <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Media kit</span>
+                            )}
+                            <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{decodeEntities(m.snippet)}</span>
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
     </section>
@@ -929,9 +1969,15 @@ export function Mails() {
     <section className="hidden min-h-0 min-w-0 flex-col items-center justify-center gap-3 px-6 text-center lg:flex">
       <span className="grid h-12 w-12 place-items-center rounded-full bg-muted"><Mail className="h-5 w-5 text-muted-foreground" /></span>
       <p className="text-[14px] font-medium text-foreground">{mode === "contacts" ? "Aucun contact ouvert" : "Aucun mail ouvert"}</p>
-      <p className="max-w-[300px] text-[13px] text-muted-foreground">
+      <p className="max-w-[320px] text-[13px] text-muted-foreground">
         {mode === "contacts" ? "Choisis un contact pour voir tous vos échanges, dans les deux boîtes." : "Choisis un mail dans la liste pour le lire ici."}
       </p>
+      {mode !== "contacts" && (
+        <p className="flex flex-wrap items-center justify-center gap-1.5 text-[12px] text-faint">
+          <Kbd className="bg-muted text-muted-foreground">j</Kbd><Kbd className="bg-muted text-muted-foreground">k</Kbd> pour parcourir,
+          <Kbd className="bg-muted text-muted-foreground">?</Kbd> pour tous les raccourcis
+        </p>
+      )}
       <button
         type="button"
         onClick={() => setNewMailOpen(true)}
@@ -942,9 +1988,9 @@ export function Mails() {
     </section>
   );
 
-  // ── Par créatrice : ses échanges (talent@, son alias), statuts et remarques ──
+  // ── Par créateur : ses échanges (talent@, son alias), statuts et remarques ──
   const creatorsCol = (
-    <section className="min-h-0 min-w-0 overflow-y-auto">
+    <section className="min-h-0 min-w-0 overflow-y-auto" aria-label="Par créateur">
       <div className="px-4 pt-4 sm:px-6 sm:pt-5">
         <div className="flex items-center gap-1">
           {creatorView && <ToolButton icon={ArrowLeft} label="Tous les créateurs" className="-ml-2" onClick={() => setCreatorView(null)} />}
@@ -955,7 +2001,7 @@ export function Mails() {
         </p>
         {creatorView && creatorChoices.length > 1 && (
           <Tabs
-            className="mt-3 xl:hidden"
+            className="mt-3"
             size="sm"
             wrap
             label="Créateur"
@@ -976,7 +2022,7 @@ export function Mails() {
             <CreatorMailsAgency
               key={`${creatorView.name}-${creatorView.threadId ?? ""}`}
               creator={creatorView.name}
-              suggestedAlias={emailPro.get(creatorView.name.trim().toLowerCase()) ?? null}
+              suggestedAlias={emailPro?.get(creatorView.name.trim().toLowerCase()) ?? null}
               initialThreadId={creatorView.threadId}
               onSaved={() => setLinkedTick((n) => n + 1)}
               className="mt-0"
@@ -1017,56 +2063,16 @@ export function Mails() {
     </section>
   );
 
-  // ── Colonne de droite (grand écran) : les créatrices en un clic ─────────
-  const rightRail = (
-    <aside aria-label="Créateurs" className="hidden min-h-0 flex-col items-center border-l border-border xl:flex">
-      <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-border">
-        <button
-          type="button"
-          onClick={() => { goMode("creators"); setCreatorView(null); }}
-          title={mailTotal ? `Par créateur · ${mailTotal} à traiter` : "Par créateur"}
-          aria-label={mailTotal ? `Par créateur, ${mailTotal} à traiter` : "Par créateur"}
-          className={cn(
-            "relative grid h-9 w-9 place-items-center rounded-full transition-colors",
-            mode === "creators" && !creatorView ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground",
-          )}
-        >
-          <UsersRound className="h-[17px] w-[17px]" />
-          {mailTotal > 0 && <CountDot n={mailTotal} />}
-        </button>
-      </div>
-      <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-2.5 overflow-y-auto py-3 [scrollbar-width:none]">
-        {creatorChoices.map((n) => {
-          const on = mode === "creators" && !!creatorView && sameName(creatorView.name, n);
-          const todo = mailCount(n);
-          const who = `Mails de ${titleCase(n)}${todo ? ` · ${todo} à traiter` : ""}`;
-          return (
-            <button
-              key={n}
-              type="button"
-              onClick={() => openCreator(n)}
-              title={who}
-              aria-label={who}
-              aria-pressed={on}
-              className={cn("relative shrink-0 rounded-full p-0.5 ring-2 transition-shadow", on ? "ring-foreground" : "ring-transparent hover:ring-border")}
-            >
-              <CreatorAvatar name={n} photoUrl={photoOf(n)} className="h-8 w-8 rounded-full text-[10px]" />
-              {todo > 0 && <CountDot n={todo} />}
-            </button>
-          );
-        })}
-      </div>
-    </aside>
-  );
-
   return (
     <>
       <div
+        ref={rootRef}
+        style={fillH ? { height: fillH } : undefined}
         className={cn(
-          "flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-surface lg:grid lg:h-[calc(100dvh-204px)] lg:min-h-[560px] lg:grid-rows-[minmax(0,1fr)]",
+          "flex min-w-0 flex-col overflow-clip rounded-2xl border border-border bg-surface lg:grid lg:min-h-[560px] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden",
           mode === "creators"
-            ? "lg:grid-cols-[64px_minmax(0,1fr)] xl:grid-cols-[64px_minmax(0,1fr)_60px]"
-            : "lg:grid-cols-[64px_minmax(280px,320px)_minmax(0,1fr)] xl:grid-cols-[64px_minmax(300px,350px)_minmax(0,1fr)_60px]",
+            ? "lg:grid-cols-[72px_minmax(0,1fr)]"
+            : "lg:grid-cols-[72px_minmax(320px,360px)_minmax(0,1fr)] xl:grid-cols-[72px_minmax(330px,400px)_minmax(0,1fr)]",
         )}
       >
         {rail}
@@ -1079,43 +2085,64 @@ export function Mails() {
             {thread ? threadReader : mode === "contacts" && selected ? contactReader : emptyReader}
           </>
         )}
-        {rightRail}
       </div>
-      {trashAsk && thread && (
-        <ConfirmDialog
-          title="Supprimer ce mail ?"
-          message={`« ${thread.subject || "(sans objet)"} » part dans la corbeille de ${BOX_LABEL[thread.box]}, avec toute la conversation. Il y reste 30 jours : tu peux le récupérer dans Gmail.`}
-          confirmLabel={trashBusy ? "Suppression…" : "Supprimer"}
-          danger
-          onConfirm={() => void trashThread()}
-          onCancel={() => setTrashAsk(false)}
-        />
-      )}
-      {trashed && (
+
+      {/* Archivé / mis à la corbeille : « Annuler » pendant 10 s. */}
+      {undo && (
         <div className="pointer-events-none fixed inset-x-0 bottom-[calc(10rem+env(safe-area-inset-bottom))] z-[1301] flex justify-center px-4 md:bottom-24">
           <div role="status" className="pointer-events-auto flex w-full max-w-[440px] items-center gap-3 rounded-xl border border-border bg-surface px-4 py-2.5 shadow-lg shadow-black/5">
-            <Trash2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">« {trashed.subject || "(sans objet)"} » mis à la corbeille</span>
-            <button type="button" onClick={() => void untrash()}
+            {undo.kind === "trash" ? <Trash2 className="h-4 w-4 shrink-0 text-muted-foreground" /> : <Archive className="h-4 w-4 shrink-0 text-muted-foreground" />}
+            <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">
+              « {undo.t.subject || "(sans objet)"} » {undo.kind === "trash" ? "mis à la corbeille" : "archivé"}
+            </span>
+            <button type="button" onClick={() => void undoLast()}
               className="flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover">
               <Undo2 className="h-3.5 w-3.5" /> Annuler
             </button>
           </div>
         </div>
       )}
+
+      {/* Aide des raccourcis clavier (?) */}
+      {helpOpen && (
+        <>
+          <div className="fixed inset-0 z-[1199]" onClick={() => setHelpOpen(false)} />
+          <div role="dialog" data-mails-help aria-label="Raccourcis clavier" className="fixed bottom-6 right-6 z-[1200] w-[300px] rounded-2xl border border-border bg-surface p-4 shadow-xl">
+            <div className="mb-2 flex items-center gap-2">
+              <Keyboard className="h-4 w-4 text-muted-foreground" />
+              <span className="flex-1 text-[13px] font-semibold text-foreground">Raccourcis clavier</span>
+              <button type="button" onClick={() => setHelpOpen(false)} aria-label="Fermer"
+                className="grid h-7 w-7 place-items-center rounded-full text-faint hover:bg-rowhover hover:text-foreground">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <dl className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 text-[12.5px]">
+              {SHORTCUTS.map(([k, label]) => (
+                <div key={k} className="contents">
+                  <dt><Kbd className="bg-muted px-1.5 text-foreground">{k}</Kbd></dt>
+                  <dd className="text-muted-foreground">{label}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </>
+      )}
+
       <ForwardDialog
-        message={forwardMsg}
-        subject={thread?.subject ?? ""}
-        defaultBox={thread?.box ?? "partnerships"}
-        sourceBox={thread?.box}
-        onClose={() => setForwardMsg(null)}
+        message={forward?.msg ?? null}
+        subject={forward?.subject ?? ""}
+        defaultBox={forward?.box ?? "partnerships"}
+        sourceBox={forward?.box}
+        onClose={() => setForward(null)}
+        onReopen={(p: ForwardReopen) => setForward({ msg: p.message, subject: p.subject, box: p.sourceBox ?? p.defaultBox })}
       />
       <MailSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <NewMailDialog
         open={newMailOpen}
         defaultBox={box === "talent" ? "talent" : "partnerships"}
         onClose={() => setNewMailOpen(false)}
-        onSent={() => setInboxTick((n) => n + 1)}
+        onSent={() => void refreshList("sent")}
+        onReopen={() => setNewMailOpen(true)}
       />
 
       {/* Composeur : nouveau mail depuis un modèle (prospection / relance) */}
@@ -1147,12 +2174,11 @@ export function Mails() {
           void updateTouches(id, { add: t }).then((res) => {
             if (!res) return toast("Mail envoyé, mais la touche n'a pas été notée");
             const upd = (c: Contact): Contact => (c.id === id ? { ...c, touches: res.touches, lastContacted: res.last_contacted } : c);
-            setContacts((prev) => prev.map(upd));
+            setContacts((prev) => prev && prev.map(upd));
             setSelected((prev) => (prev ? upd(prev) : prev));
           });
         }}
       />
-
     </>
   );
 }

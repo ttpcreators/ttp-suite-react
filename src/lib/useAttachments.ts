@@ -2,7 +2,7 @@ import { useState } from "react";
 import { toast } from "@/components/ui/toast";
 import { ATTACH_MAX_BYTES, readAttachment, type OutAttachment } from "@/lib/mailSend";
 
-/** Pièces jointes d'un mail en cours d'écriture (20 Mo au total). */
+/** Pièces jointes d'un mail en cours d'écriture (18 Mo au total). */
 export function useAttachments() {
   const [files, setFiles] = useState<OutAttachment[]>([]);
   const total = files.reduce((n, f) => n + f.size, 0);
@@ -13,7 +13,7 @@ export function useAttachments() {
     const next: OutAttachment[] = [];
     for (const f of Array.from(list)) {
       if (sum + f.size > ATTACH_MAX_BYTES) {
-        toast(`« ${f.name} » dépasse la limite de 20 Mo au total`);
+        toast(`« ${f.name} » dépasse la limite de 18 Mo au total`);
         continue;
       }
       try {
