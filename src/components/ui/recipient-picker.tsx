@@ -113,7 +113,7 @@ export function RecipientPicker({
             }
           }}
           placeholder={tag ? `Rechercher dans « ${tag} » ou taper un email…` : "Rechercher un contact ou taper un email…"}
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+          className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
         />
         {showList && (
           <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-surface shadow-lg">

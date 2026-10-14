@@ -98,7 +98,7 @@ export function GlobalSearch({
       {/* Champ contrôlé — langage de l’Aperçu : champ clair bordé, halo discret au focus.
           Écran plein (téléphone) : champ gris façon iOS. */}
       <div className={cn(
-        "flex h-10 items-center gap-2.5 rounded-xl px-3.5 text-foreground transition-shadow",
+        "flex h-10 items-center gap-2.5 rounded-full px-4 text-foreground transition-shadow",
         inline ? "bg-foreground/[0.06]" : "border border-border bg-surface focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-foreground/10",
       )}>
         <SearchIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -162,11 +162,11 @@ export function GlobalSearch({
                         onClick={() => gotoPage(p.id)}
                         className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-rowhover"
                       >
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-panel text-muted-foreground">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-panel text-muted-foreground">
                           <p.icon className="h-4 w-4" />
                         </span>
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{p.label}</span>
-                        <span className="shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-[9px] font-semibold uppercase text-primary">Page</span>
+                        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-semibold uppercase text-primary">Page</span>
                       </button>
                     ))}
                     {hits.length > 0 && <div className="mx-2 my-1 h-px bg-border/60" />}
@@ -184,14 +184,14 @@ export function GlobalSearch({
                     onClick={() => pick(h)}
                     className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-rowhover"
                   >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-panel text-muted-foreground">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-panel text-muted-foreground">
                       <M.icon className="h-4 w-4" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-foreground">{label}</span>
                       {sub && <span className="block truncate text-[11px] text-faint">{sub}</span>}
                     </span>
-                    <span className="shrink-0 rounded-md bg-rowhover px-2 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">
+                    <span className="shrink-0 rounded-full bg-rowhover px-2 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">
                       {M.label}
                     </span>
                   </button>

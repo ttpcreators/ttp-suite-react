@@ -349,20 +349,20 @@ export function Idees() {
                     rows={3}
                     autoFocus
                     placeholder="Ton idée de contenu…"
-                    className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                    className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                   />
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => saveEdit(row.id)}
-                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                      className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                     >
                       <Check className="h-3.5 w-3.5" /> Enregistrer
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditId(null)}
-                      className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                      className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                       title="Annuler"
                     >
                       <X className="h-4 w-4" />
@@ -427,7 +427,7 @@ export function Idees() {
                     rows={2}
                     autoFocus
                     placeholder="Infos, rappel, lien…"
-                    className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                    className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                   />
                   <div className="flex items-center gap-2">
                     <button
@@ -437,14 +437,14 @@ export function Idees() {
                         setEditNoteId(null);
                         toast("Commentaire enregistré ✓");
                       }}
-                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                      className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                     >
                       <Check className="h-3.5 w-3.5" /> Enregistrer
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditNoteId(null)}
-                      className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                      className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                       title="Annuler"
                     >
                       <X className="h-4 w-4" />

@@ -22,7 +22,7 @@ export function MetaQuotaBadge({ className }: { className?: string }) {
         <button
           type="button"
           className={cn(
-            "flex h-9 items-center gap-2 rounded-lg border px-3 text-[12px] font-medium transition-colors hover:bg-rowhover",
+            "flex h-9 items-center gap-2 rounded-full border px-3 text-[12px] font-medium transition-colors hover:bg-rowhover",
             tone === "red" ? "border-rose-500/30 text-rose-600 dark:text-rose-400" : tone === "amber" ? "border-amber/40 text-amber" : "border-border text-muted-foreground",
             className,
           )}

@@ -206,7 +206,7 @@ export function Login() {
                 type="button"
                 aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
                 onClick={() => setShowPassword((s) => !s)}
-                className="absolute right-1 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+                className="absolute right-1 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -228,7 +228,7 @@ export function Login() {
             <button
               type="submit"
               disabled={isLoading}
-              className="mt-1 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[14px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+              className="mt-1 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-primary text-[14px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
             >
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {isLoading ? "Connexion…" : "Se connecter"}

@@ -144,7 +144,7 @@ export function FilterPanel({
               <button
                 type="button"
                 onClick={onClear}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+                className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
               >
                 <X className="h-3.5 w-3.5" /> Tout effacer
               </button>

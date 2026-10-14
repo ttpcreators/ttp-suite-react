@@ -36,7 +36,7 @@ const EXCHANGE_ICON: Record<ExchangeType, typeof Phone> = { appel: Phone, messag
 /** Bouton « Modifier » (passe une carte en édition) — homogène sur les 3 cartes. */
 function EditBtn({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+    <button type="button" onClick={onClick} className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
       <Pencil className="h-3.5 w-3.5" /> Modifier
     </button>
   );
@@ -145,7 +145,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
         {mode === "view" ? (
           <EditBtn onClick={enterEdit} />
         ) : (
-          <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
+          <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
             <X className="h-3.5 w-3.5" /> Annuler
           </button>
         )}
@@ -163,7 +163,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
               {cur.piliers.filter(Boolean).length > 0 && (
                 <ReadBlock label="Piliers de contenu">
                   <div className="flex flex-wrap gap-1.5">
-                    {cur.piliers.filter(Boolean).map((p2, i) => <span key={i} className="rounded-lg bg-panel px-2.5 py-1 text-[12px] font-medium text-foreground">{p2}</span>)}
+                    {cur.piliers.filter(Boolean).map((p2, i) => <span key={i} className="rounded-full bg-panel px-2.5 py-1 text-[12px] font-medium text-foreground">{p2}</span>)}
                   </div>
                 </ReadBlock>
               )}
@@ -171,7 +171,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
                 <ReadBlock label="Plateformes prioritaires">
                   <div className="flex flex-wrap gap-1.5">
                     {cur.plateformes.map((pl) => (
-                      <span key={pl} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-[12px] font-semibold text-foreground">
+                      <span key={pl} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[12px] font-semibold text-foreground">
                         <PlatformIcon platform={pl} className="h-3.5 w-3.5" /> {platPrioLabel[pl]}
                       </span>
                     ))}
@@ -261,13 +261,13 @@ export function EditorialProfileCard({ name }: { name: string }) {
                           placeholder={`Pilier ${i + 1} (ex : routine sport, coulisses…)`}
                           className={IN}
                         />
-                        <button type="button" onClick={() => set({ piliers: cur.piliers.filter((_, j) => j !== i) })} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                        <button type="button" onClick={() => set({ piliers: cur.piliers.filter((_, j) => j !== i) })} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                     ))}
                   </div>
-                  <button type="button" onClick={() => set({ piliers: [...cur.piliers, ""] })} className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                  <button type="button" onClick={() => set({ piliers: [...cur.piliers, ""] })} className="mt-2 flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                     <Plus className="h-3.5 w-3.5" /> Ajouter un pilier
                   </button>
                 </div>
@@ -280,7 +280,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
                     {PLATFORMS_PRIO.map((pl) => {
                       const on = cur.plateformes.includes(pl);
                       return (
-                        <button key={pl} type="button" onClick={() => togglePlat(pl)} className={cn("flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold transition-colors", on ? "bg-foreground text-background" : "border border-border text-muted-foreground hover:bg-rowhover")}>
+                        <button key={pl} type="button" onClick={() => togglePlat(pl)} className={cn("flex items-center gap-1.5 rounded-full px-3 py-2 text-[12px] font-semibold transition-colors", on ? "bg-foreground text-background" : "border border-border text-muted-foreground hover:bg-rowhover")}>
                           <PlatformIcon platform={pl} className="h-3.5 w-3.5" /> {platPrioLabel[pl]}
                         </button>
                       );
@@ -304,7 +304,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
                       {CADENCE_FIELDS.map((f) => (
                         <label key={f.key} className="flex flex-col gap-1">
                           <span className="text-[11px] font-medium text-muted-foreground">{f.label}</span>
-                          <input type="number" min={0} value={cur.cadenceReco[f.key]} onChange={(e) => setCad(f.key, parseInt(e.target.value, 10) || 0)} className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-center text-sm tabular-nums outline-none focus:border-primary" />
+                          <input type="number" min={0} value={cur.cadenceReco[f.key]} onChange={(e) => setCad(f.key, parseInt(e.target.value, 10) || 0)} className="w-full rounded-md border border-border bg-surface px-2.5 py-2 text-center text-sm tabular-nums outline-none focus:border-primary" />
                         </label>
                       ))}
                     </div>
@@ -330,16 +330,16 @@ export function EditorialProfileCard({ name }: { name: string }) {
 
             {/* Navigation du wizard */}
             <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
-              <button type="button" onClick={() => setStep((x) => Math.max(0, x - 1))} disabled={s === 0} className="flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover disabled:pointer-events-none disabled:opacity-40">
+              <button type="button" onClick={() => setStep((x) => Math.max(0, x - 1))} disabled={s === 0} className="flex items-center gap-1.5 rounded-full border border-border px-3.5 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover disabled:pointer-events-none disabled:opacity-40">
                 <ChevronLeft className="h-4 w-4" /> Précédent
               </button>
               <span className="text-[11px] text-faint">Étape {s + 1} / {STEPS.length}</span>
               {s < lastStep ? (
-                <button type="button" onClick={() => setStep((x) => Math.min(lastStep, x + 1))} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                <button type="button" onClick={() => setStep((x) => Math.min(lastStep, x + 1))} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
                   Suivant <ChevronRight className="h-4 w-4" />
                 </button>
               ) : (
-                <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+                <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
                   <Check className="h-4 w-4" /> {saving ? "Enregistrement…" : "Enregistrer"}
                 </button>
               )}
@@ -425,14 +425,14 @@ export function MonthlyTracking({ name }: { name: string }) {
         ) : (
           <div className="flex items-center gap-2">
             {sorted.length > 0 && (
-              <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
+              <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
                 <X className="h-3.5 w-3.5" /> Annuler
               </button>
             )}
-            <button type="button" onClick={addMonth} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <button type="button" onClick={addMonth} className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
               <Plus className="h-3.5 w-3.5" /> Ajouter le mois
             </button>
-            <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+            <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
               <Save className="h-3.5 w-3.5" /> {saving ? "…" : "Enregistrer"}
             </button>
           </div>
@@ -513,7 +513,7 @@ export function MonthlyTracking({ name }: { name: string }) {
                       </span>
                     )}
                   </div>
-                  <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.month !== m.month))} className="grid h-7 w-7 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                  <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.month !== m.month))} className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -525,7 +525,7 @@ export function MonthlyTracking({ name }: { name: string }) {
                       <span className="text-[11px] font-medium text-muted-foreground">
                         {f.short} <span className="text-faint/70">/ {reco[f.key]}</span>
                       </span>
-                      <input type="number" min={0} value={m.cadence[f.key]} onChange={(e) => editCad(m.month, f.key, parseInt(e.target.value, 10) || 0)} className={cn("w-full rounded-lg border bg-surface px-2 py-1.5 text-center text-sm tabular-nums outline-none focus:border-primary", reco[f.key] > 0 && m.cadence[f.key] < reco[f.key] ? "border-border" : "border-border")} />
+                      <input type="number" min={0} value={m.cadence[f.key]} onChange={(e) => editCad(m.month, f.key, parseInt(e.target.value, 10) || 0)} className={cn("w-full rounded-md border bg-surface px-2 py-1.5 text-center text-sm tabular-nums outline-none focus:border-primary", reco[f.key] > 0 && m.cadence[f.key] < reco[f.key] ? "border-border" : "border-border")} />
                     </label>
                   ))}
                 </div>
@@ -561,7 +561,7 @@ export function MonthlyTracking({ name }: { name: string }) {
 
                 {/* Dérive éditoriale */}
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start">
-                  <button type="button" onClick={() => editMonth(m.month, { derive: !m.derive })} className={cn("flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-semibold transition-colors", m.derive ? "bg-foreground/[0.06] text-amber" : "border border-border text-muted-foreground hover:bg-rowhover")}>
+                  <button type="button" onClick={() => editMonth(m.month, { derive: !m.derive })} className={cn("flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-[12px] font-semibold transition-colors", m.derive ? "bg-foreground/[0.06] text-amber" : "border border-border text-muted-foreground hover:bg-rowhover")}>
                     <span className={cn("grid h-4 w-4 place-items-center rounded", m.derive ? "bg-foreground text-background" : "border border-border")}>{m.derive && "!"}</span>
                     Dérive éditoriale
                   </button>
@@ -648,14 +648,14 @@ export function JournalCard({ name }: { name: string }) {
         ) : (
           <div className="flex items-center gap-2">
             {sorted.length > 0 && (
-              <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
+              <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
                 <X className="h-3.5 w-3.5" /> Annuler
               </button>
             )}
-            <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
               <Plus className="h-3.5 w-3.5" /> Échange
             </button>
-            <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+            <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
               <Save className="h-3.5 w-3.5" /> {saving ? "…" : "Enregistrer"}
             </button>
           </div>
@@ -712,7 +712,7 @@ export function JournalCard({ name }: { name: string }) {
                   {(Object.keys(EXCHANGE_META) as ExchangeType[]).map((t) => <option key={t} value={t}>{EXCHANGE_META[t].label}</option>)}
                 </select>
                 <div className="flex-1" />
-                <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.id !== e.id))} className="grid h-7 w-7 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.id !== e.id))} className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -1055,7 +1055,7 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
                   min={0}
                   value={draft[f.key]}
                   onChange={(e) => setDraft({ ...draft, [f.key]: Math.max(0, parseInt(e.target.value, 10) || 0) })}
-                  className="w-16 shrink-0 rounded-lg border border-border bg-surface px-2 py-1.5 text-center text-[14px] font-semibold tabular-nums text-foreground outline-none focus:border-foreground/30"
+                  className="w-16 shrink-0 rounded-md border border-border bg-surface px-2 py-1.5 text-center text-[14px] font-semibold tabular-nums text-foreground outline-none focus:border-foreground/30"
                 />
               </label>
             );
@@ -1069,7 +1069,7 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
               contenu{draftTot > 1 ? "s" : ""}{recoTot > 0 ? ` sur ${recoTot} recommandés` : ""}
             </span>
           </div>
-          <button type="button" onClick={saveCadence} disabled={saving} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+          <button type="button" onClick={saveCadence} disabled={saving} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
             <Save className="h-3.5 w-3.5" /> {saving ? "Envoi…" : "Envoyer ma cadence"}
           </button>
         </div>

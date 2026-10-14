@@ -36,7 +36,7 @@ type Tab = string;
 function InfoRow({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-3 py-3.5">
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted">
         <Icon className="h-4 w-4 text-muted-foreground" />
       </span>
       <div className="min-w-0">
@@ -97,7 +97,7 @@ export function CreatorGuide({
                 </li>
               ))}
             </ul>
-            <button type="button" onClick={() => onGoto("todo")} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+            <button type="button" onClick={() => onGoto("todo")} className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
               <ListChecks className="h-4 w-4" /> Ouvrir «&nbsp;À faire&nbsp;»
             </button>
           </DashPanel>
@@ -153,7 +153,7 @@ export function CreatorGuide({
                 </li>
               ))}
             </ol>
-            <button type="button" onClick={onSendStats} className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border px-3.5 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
+            <button type="button" onClick={onSendStats} className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-border px-3.5 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
               <Share2 className="h-4 w-4" /> Envoyer mes stats
             </button>
           </DashPanel>

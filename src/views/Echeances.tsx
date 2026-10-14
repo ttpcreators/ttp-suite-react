@@ -214,7 +214,7 @@ export function Echeances() {
             onClick={syncFromContracts}
             disabled={syncing}
             title="Créer les échéances manquantes depuis les contrats déjà enregistrés"
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
           >
             <RefreshCw className={"h-3.5 w-3.5" + (syncing ? " animate-spin" : "")} />
             <span>{syncing ? "Synchro…" : "Synchroniser"}</span>
@@ -253,7 +253,7 @@ export function Echeances() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-sm font-semibold text-foreground">{titleCase(d.creator)}</span>
-                    <span className="rounded-md bg-rowhover px-2 py-0.5 text-[12px] font-medium text-muted-foreground">{d.type}</span>
+                    <span className="rounded-full bg-rowhover px-2 py-0.5 text-[12px] font-medium text-muted-foreground">{d.type}</span>
                   </div>
                   <div className="mt-1 text-[11px] text-faint">
                     {frDate(new Date(d.start.replace(/-/g, "/")))} → {end ? frDate(end) : "—"} · {d.months} mois
@@ -265,7 +265,7 @@ export function Echeances() {
                   <button
                     type="button"
                     onClick={() => openEdit(d)}
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                     title="Modifier"
                   >
                     <Pencil className="h-4 w-4" />

@@ -58,10 +58,10 @@ export function ConfirmDialog({
           </div>
         </div>
         <div className="mt-5 flex items-center justify-end gap-2">
-          <button type="button" onClick={onCancel} className="rounded-lg border border-border bg-surface px-4 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={onCancel} className="rounded-full border border-border bg-surface px-4 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             {cancelLabel}
           </button>
-          <button type="button" onClick={onConfirm} className={cn("rounded-lg px-4 py-2 text-[12px] font-semibold transition-opacity hover:opacity-90", danger ? "bg-rose-500 text-white" : "bg-primary text-primary-foreground")}>
+          <button type="button" onClick={onConfirm} className={cn("rounded-full px-4 py-2 text-[12px] font-semibold transition-opacity hover:opacity-90", danger ? "bg-rose-500 text-white" : "bg-primary text-primary-foreground")}>
             {confirmLabel}
           </button>
         </div>
@@ -120,7 +120,7 @@ export function ActionMenu({ items, buttonClassName, align = "right" }: { items:
         type="button"
         onClick={toggle}
         title="Actions"
-        className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground", buttonClassName)}
+        className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground", buttonClassName)}
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>

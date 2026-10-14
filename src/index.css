@@ -26,6 +26,8 @@
   }
 }
 
+/* Couleurs : celles de l'app d'origine (choix de Marc, 2026-10-14) ; la refonte garde
+   seulement les formes (pilules, cartes blanches, plus d'air). */
 :root {
   /* Fait suivre le thème aux contrôles NATIFs (pickers date/mois, spinners
      number, menus <select>, cases à cocher, scrollbars) — sinon ils restent
@@ -55,7 +57,7 @@
   /* Tokens fidèles à l'app d'origine */
   --panel: #f4f4f5;
   --surface: #ffffff;
-  --faint: #a1a1aa;
+  --faint: #71717a; /* 4,8:1 sur blanc (était #a1a1aa, 2,6:1) */
   --rowhover: #f4f4f5;
   --signal: #16a34a;
   --signaltext: #15803d;
@@ -129,10 +131,13 @@
 }
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Formes : champs 10, éléments internes 14, cartes 20 (boutons et chips en pilule). */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -191,10 +196,17 @@ body {
 /* Minuit : la zone de contenu est un panneau #0a0a0a posé sur le noir, avec un
    filet (au lieu du gris de tuile). Les cartes s'y fondent, seules leurs
    bordures les dessinent : l'effet « sections séparées par des filets ». */
-.dark:not(.dark-classic) .shell-panel {
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--border);
+.shell-panel {
+  background: var(--background);
 }
+
+/* Règle 1 de la DA : cartes blanches posées sur le gris, sans bordure ni ombre lourde.
+   (Les bordures colorées d'état — sélection, erreur — restent.) */
+.rounded-2xl.border-border:is(.bg-surface, .bg-card),
+.rounded-\[22px\].border-border:is(.bg-surface, .bg-card) {
+  border-color: transparent;
+}
+
 /* Langage de l'Aperçu : panneaux PLATS, dessinés par leur seule bordure. Les
    petites ombres des cartes sont coupées partout (les menus et fenêtres gardent
    leurs ombres fortes, shadow-lg/xl, pour flotter au-dessus du contenu). */

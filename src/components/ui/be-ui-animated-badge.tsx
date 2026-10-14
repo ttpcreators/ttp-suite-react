@@ -73,8 +73,8 @@ const STATUS_CLASS: Record<AnimatedBadgeStatus, string> = {
 };
 
 const SIZE_CLASS: Record<AnimatedBadgeSize, string> = {
-  sm: "h-6 gap-1.5 px-2 text-[11px]",
-  md: "h-8 gap-2 px-3 text-xs",
+  sm: "h-6 gap-1.5 px-2.5 text-[12px]",
+  md: "h-8 gap-2 px-3.5 text-[13px]",
 };
 
 const ICON_CLASS: Record<AnimatedBadgeSize, string> = {
@@ -172,7 +172,7 @@ export function AnimatedBadge({
       layout
       transition={SPRING_LAYOUT}
       className={cn(
-        "relative inline-flex shrink-0 items-center overflow-hidden whitespace-nowrap rounded-full border font-medium tabular-nums",
+        "relative inline-flex shrink-0 items-center overflow-hidden whitespace-nowrap rounded-full border font-medium [font-variant-numeric:tabular-nums]",
         "transition-colors duration-300",
         STATUS_CLASS[status],
         SIZE_CLASS[size],

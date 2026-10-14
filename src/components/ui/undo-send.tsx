@@ -44,14 +44,14 @@ export function UndoSendBar() {
             <button
               type="button"
               onClick={() => cancelSend(p.id) && toast("Envoi annulé", { variant: "info" })}
-              className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover"
+              className="flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover"
             >
               <Undo2 className="h-3.5 w-3.5" /> Annuler
             </button>
             <button
               type="button"
               onClick={() => flushSend(p.id)}
-              className="shrink-0 rounded-md px-2 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className="shrink-0 rounded-full px-2 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
               Envoyer
             </button>

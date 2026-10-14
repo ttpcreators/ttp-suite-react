@@ -92,7 +92,7 @@ function PushRow() {
             if (!ok && Notification.permission === "granted") toast("Activation échouée — réessaie");
           }}
           disabled={busy}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           <BellRing className="h-3.5 w-3.5" /> {busy ? "Activation…" : "Activer sur ce téléphone"}
         </button>
@@ -146,7 +146,7 @@ export function Notifications({
           aria-label="Notifications"
           className={variant === "bar"
             ? "relative grid h-11 w-11 place-items-center text-foreground"
-            : "relative grid h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"}
+            : "relative grid h-10 w-10 place-items-center rounded-full bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"}
         >
           <Bell className={variant === "bar" ? "h-[22px] w-[22px]" : "h-4 w-4"} strokeWidth={variant === "bar" ? 1.9 : 2} />
           {notifications.length > 0 && (

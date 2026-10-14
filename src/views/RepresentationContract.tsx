@@ -58,7 +58,7 @@ function Modal({ title, onClose, children, footer, wide }: { title: string; onCl
       <div className={cn("my-2 w-full rounded-2xl border border-border bg-card shadow-2xl", wide ? "max-w-3xl" : "max-w-lg")} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
           <div className="text-sm font-semibold text-foreground">{title}</div>
-          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"><X className="h-4 w-4" /></button>
         </div>
         <div className="max-h-[72vh] overflow-y-auto px-5 py-4">{children}</div>
         {footer && <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">{footer}</div>}
@@ -492,7 +492,7 @@ export function RepresentationContract() {
         <HistoryPanel title="Contrats enregistrés" count={hist.length} empty="Aucun contrat enregistré. « Enregistrer » le range ici et l'envoie sur l'espace du créateur concerné.">
           {hist.map((e) => (
             <div key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-3 transition-colors hover:bg-rowhover/50 sm:px-5">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><FileText className="h-4 w-4" /></span>
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground"><FileText className="h-4 w-4" /></span>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13px] font-semibold text-foreground">{e.title}</div>
                 <div className="truncate text-[12px] text-muted-foreground">
@@ -500,15 +500,15 @@ export function RepresentationContract() {
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <button type="button" onClick={() => setPreview(representationHTML(e.config))} title="Ouvrir" aria-label="Ouvrir" className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"><Eye className="h-4 w-4" /></button>
-                <button type="button" onClick={() => loadContract(e)} title="Modifier" aria-label="Modifier" className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"><PenLine className="h-4 w-4" /></button>
-                <button type="button" onClick={() => shareContract(e)} title="Copier un lien de partage (7 jours)" aria-label="Partager" className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"><Link2 className="h-4 w-4" /></button>
+                <button type="button" onClick={() => setPreview(representationHTML(e.config))} title="Ouvrir" aria-label="Ouvrir" className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"><Eye className="h-4 w-4" /></button>
+                <button type="button" onClick={() => loadContract(e)} title="Modifier" aria-label="Modifier" className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"><PenLine className="h-4 w-4" /></button>
+                <button type="button" onClick={() => shareContract(e)} title="Copier un lien de partage (7 jours)" aria-label="Partager" className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"><Link2 className="h-4 w-4" /></button>
                 <button
                   type="button"
                   onClick={() => setPendingDel({ title: "Supprimer le contrat", message: `Supprimer « ${e.title} » ?${e.creator ? " Il sera aussi retiré de l'espace du créateur." : ""}`, run: () => deleteContract(e) })}
                   title="Supprimer"
                   aria-label="Supprimer"
-                  className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-rose-500"
+                  className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-rose-500"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

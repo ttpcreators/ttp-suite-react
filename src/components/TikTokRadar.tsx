@@ -168,7 +168,7 @@ export function TikTokRadar() {
       <div className="mb-3 grid grid-cols-3 gap-2 sm:gap-2.5">
         {TILES.map((t) => (
           <div key={t.title} title={t.text} className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3 sm:p-3.5">
-            <span className="hidden h-8 w-8 shrink-0 place-items-center rounded-lg bg-panel text-muted-foreground sm:grid"><t.icon className="h-4 w-4" /></span>
+            <span className="hidden h-8 w-8 shrink-0 place-items-center rounded-full bg-panel text-muted-foreground sm:grid"><t.icon className="h-4 w-4" /></span>
             <span className="min-w-0">
               <span className="block text-[20px] font-bold leading-none tabular-nums text-foreground">{t.n}</span>
               <span className="mt-1 block text-[12px] font-semibold text-foreground">{t.title}</span>
@@ -181,12 +181,12 @@ export function TikTokRadar() {
         <Tabs size="sm" label="Période" value={period} onValueChange={setPeriod} items={PERIODS} />
         <div className="relative min-w-[180px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher une marque ou une @créatrice" className="w-full rounded-lg border border-border bg-surface py-2 pl-8 pr-3 text-[12px] outline-none focus:border-primary" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher une marque ou une @créatrice" className="w-full rounded-md border border-border bg-surface py-2 pl-8 pr-3 text-[12px] outline-none focus:border-primary" />
         </div>
         <label className="inline-flex items-center gap-1.5 text-[12px] text-foreground">
           <input type="checkbox" checked={onlyMany} onChange={(e) => setOnlyMany(e.target.checked)} /> 2 créatrices et plus
         </label>
-        <button type="button" onClick={() => void run()} disabled={running} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
+        <button type="button" onClick={() => void run()} disabled={running} className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
           {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Lancer le radar
         </button>
         <HelpTip title="D'où viennent ces données ?" align="end">

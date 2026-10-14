@@ -96,7 +96,7 @@ export function Activite() {
       <PageHeaderRow>
         <span className="text-sm text-muted-foreground">Ajouts, « Fait », suppressions et avancées</span>
         <button type="button" onClick={() => void load()} disabled={busy}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover disabled:opacity-60">
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover disabled:opacity-60">
           <RefreshCw className={cn("h-3.5 w-3.5", busy && "animate-spin")} /> Actualiser
         </button>
       </PageHeaderRow>

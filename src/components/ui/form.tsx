@@ -38,7 +38,7 @@ export function AddButton({ label, onClick, navBar }: { label: string; onClick: 
     <button
       type="button"
       onClick={onClick}
-      className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+      className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
     >
       <Plus className="h-3.5 w-3.5" /> {label}
     </button>
@@ -95,7 +95,7 @@ export function AddMenuButton({ label, items, navBar }: { label: string; items: 
           onClick={toggle}
           aria-haspopup="menu"
           aria-expanded={open}
-          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+          className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
         >
           <Plus className="h-3.5 w-3.5" /> {label}
           <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
@@ -379,7 +379,7 @@ export function InlineForm({
         <button
           type="submit"
           disabled={busy}
-          className="h-[42px] w-full shrink-0 rounded-lg bg-primary px-5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50 sm:w-auto"
+          className="h-[42px] w-full shrink-0 rounded-full bg-primary px-5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50 sm:w-auto"
         >
           {submitLabel}
         </button>
@@ -397,7 +397,7 @@ export function DeleteButton({ onClick }: { onClick: () => void }) {
         e.stopPropagation();
         onClick();
       }}
-      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+      className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
       title="Supprimer"
     >
       <X className="h-4 w-4" />

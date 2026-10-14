@@ -1,11 +1,7 @@
 import { useEffect, useState } from "react";
 import { cn, initials } from "@/lib/utils";
 
-/**
- * Avatar créateur en lecture seule avec fallback robuste : si `photoUrl` est
- * vide OU si l'image ne charge pas (ex. ancienne URL de stockage bloquée en
- * 402), on affiche proprement les initiales au lieu d'une image cassée.
- */
+
 export function CreatorAvatar({
   name,
   photoUrl,

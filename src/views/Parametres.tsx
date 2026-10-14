@@ -110,11 +110,11 @@ function TeamNameField() {
           value={name}
           onChange={(e) => setName(e.target.value.slice(0, 40))}
           onKeyDown={(e) => e.key === "Enter" && void save()}
-          className="h-9 w-40 rounded-lg border border-border bg-surface px-3 text-[13px] text-foreground outline-none focus:border-primary"
+          className="h-9 w-40 rounded-md border border-border bg-surface px-3 text-[13px] text-foreground outline-none focus:border-primary"
           placeholder="Ton prénom"
         />
         <button type="button" onClick={() => void save()} disabled={busy || !name.trim() || name.trim() === saved}
-          className="h-9 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+          className="h-9 rounded-full bg-primary px-3 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
           Enregistrer
         </button>
       </div>
@@ -126,7 +126,7 @@ function Section({ icon, title, hint, children }: { icon: ReactNode; title: stri
   return (
     <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="mb-1 flex items-center gap-2">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">{icon}</span>
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">{icon}</span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-foreground">{title}</div>
           {hint && <div className="text-[11px] text-faint">{hint}</div>}
@@ -146,7 +146,7 @@ function NotifTextRow({ field, value, onChange, onSave }: { field: NotifTextFiel
         onChange={(e) => onChange(e.target.value)}
         onBlur={onSave}
         placeholder={field.def}
-        className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+        className="w-full rounded-md border border-border bg-surface px-3 py-2 text-[13px] text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
       />
       {field.hint && <span className="text-[10px] leading-snug text-faint">{field.hint}</span>}
     </div>
@@ -396,7 +396,7 @@ export function Parametres() {
                 }}
                 onBlur={saveRelanceDays}
                 placeholder={String(RELANCE_DAYS)}
-                className="w-20 rounded-lg border border-border bg-surface px-3 py-2 text-center text-[13px] tabular-nums text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                className="w-20 rounded-md border border-border bg-surface px-3 py-2 text-center text-[13px] tabular-nums text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               />
               <span className="text-[12px] text-muted-foreground">jours</span>
             </label>
@@ -466,7 +466,7 @@ export function Parametres() {
                 type="button"
                 onClick={runTest}
                 disabled={testing}
-                className="rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+                className="rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
               >
                 {testing ? "Envoi…" : "Envoyer un test"}
               </button>
@@ -474,7 +474,7 @@ export function Parametres() {
                 type="button"
                 onClick={disable}
                 disabled={busy}
-                className="rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+                className="rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
               >
                 Désactiver
               </button>
@@ -501,7 +501,7 @@ export function Parametres() {
               if (!ok && Notification.permission === "granted") toast("Activation échouée — réessaie");
             }}
             disabled={busy}
-            className="my-1 flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="my-1 flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <BellRing className="h-3.5 w-3.5" /> {busy ? "Activation…" : "Activer sur cet appareil"}
           </button>
@@ -690,7 +690,7 @@ export function Parametres() {
         <button
           type="button"
           onClick={() => supabase.auth.signOut()}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-[12px] font-medium text-[#E5484D] transition-colors hover:bg-rowhover"
+          className="flex w-full items-center justify-center gap-2 rounded-full border border-border bg-surface px-4 py-2.5 text-[12px] font-medium text-[#E5484D] transition-colors hover:bg-rowhover"
         >
           <LogOut className="h-3.5 w-3.5" /> Se déconnecter
         </button>

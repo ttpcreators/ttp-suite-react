@@ -219,7 +219,7 @@ export function Collabs() {
             onClick={() => void checkIg(row)}
             disabled={igBusy === row.id}
             title="Chercher maintenant les posts qui citent la marque"
-            className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+            className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
           >
             {igBusy === row.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Vérifier
           </button>
@@ -479,7 +479,7 @@ export function Collabs() {
           <button
             type="button"
             onClick={() => setStep(row, row.step + 1)}
-            className={cn("flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-primary px-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90", h, compact ? "max-md:flex-1" : "flex-1")}
+            className={cn("flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-primary px-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90", h, compact ? "max-md:flex-1" : "flex-1")}
           >
             {stepDef(row.step + 1).short} <ArrowRight className="h-3.5 w-3.5" />
           </button>
@@ -487,7 +487,7 @@ export function Collabs() {
         <button
           type="button"
           onClick={() => toggleExpand(row.id)}
-          className={cn("flex shrink-0 items-center gap-1 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground", h)}
+          className={cn("flex shrink-0 items-center gap-1 rounded-full border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground", h)}
           title="Voir toutes les étapes"
           aria-expanded={isOpen}
         >
@@ -520,7 +520,7 @@ export function Collabs() {
             <button
               type="button"
               onClick={() => saveEdit(row.id)}
-              className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              className="h-[42px] shrink-0 rounded-full bg-primary px-5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
               Enregistrer
             </button>
@@ -813,7 +813,7 @@ export function Collabs() {
                   <select
                     value={creatorFilter}
                     onChange={(e) => setCreatorFilter(e.target.value)}
-                    className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
+                    className="rounded-md border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
                   >
                     <option value="">Toutes les créatrices</option>
                     {creators.map((c) => (

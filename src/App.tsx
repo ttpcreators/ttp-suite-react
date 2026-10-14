@@ -156,7 +156,7 @@ function PaneHeader({ title, onClose }: { title: string; onClose?: () => void })
         <button
           type="button"
           onClick={onClose}
-          className="ml-auto grid h-9 w-9 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+          className="ml-auto grid h-9 w-9 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
           title="Fermer le volet"
           aria-label="Fermer le volet"
         >
@@ -219,7 +219,7 @@ function TabBar({
       <button
         type="button"
         onClick={onNew}
-        className="ml-1 grid h-7 w-7 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+        className="ml-1 grid h-7 w-7 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
         title="Nouvel onglet"
         aria-label="Nouvel onglet"
       >
@@ -624,14 +624,14 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setProfileReload((n) => n + 1)}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
               >
                 Réessayer
               </button>
               <button
                 type="button"
                 onClick={logout}
-                className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-rowhover"
+                className="rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-rowhover"
               >
                 Se déconnecter
               </button>
@@ -674,14 +674,14 @@ export default function App() {
             <button
               type="button"
               onClick={() => setProfileReload((n) => n + 1)}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
               Réessayer
             </button>
             <button
               type="button"
               onClick={logout}
-              className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-rowhover"
+              className="rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-rowhover"
             >
               Se déconnecter
             </button>
@@ -701,7 +701,7 @@ export default function App() {
         <div className="grid min-h-screen place-items-center bg-background p-6 text-center">
           <div>
             <p className="text-sm text-muted-foreground">Aucun créateur dans le roster.</p>
-            <button type="button" onClick={() => setSpace("agency")} className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90">
+            <button type="button" onClick={() => setSpace("agency")} className="mt-3 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90">
               Retour à l'espace agence
             </button>
           </div>
@@ -733,7 +733,7 @@ export default function App() {
         <button
           type="button"
           onClick={toggleTheme}
-          className="hidden h-10 w-10 place-items-center rounded-lg bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover md:grid"
+          className="hidden h-10 w-10 place-items-center rounded-full bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover md:grid"
           aria-label="Basculer le thème"
         >
           {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}

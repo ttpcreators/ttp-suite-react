@@ -70,7 +70,7 @@ export function HashtagSearch({ onClose }: { onClose: () => void }) {
             { value: "recent", label: "Dernières 24 h" },
           ]}
         />
-        <button type="submit" disabled={busy || !tag.trim()} className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+        <button type="submit" disabled={busy || !tag.trim()} className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />} Chercher
         </button>
       </form>

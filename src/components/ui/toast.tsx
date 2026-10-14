@@ -76,7 +76,7 @@ export function Toaster() {
               type="button"
               onClick={() => close(i.id)}
               aria-label="Fermer la notification"
-              className="-my-1 -me-1 grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className="-my-1 -me-1 grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
               <X className="h-3.5 w-3.5" />
             </button>

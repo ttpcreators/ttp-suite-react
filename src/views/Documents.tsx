@@ -363,7 +363,7 @@ export function Documents() {
           <div className="mt-0.5 truncate text-[10px] text-faint">{details}</div>
         </button>
         {row.creator ? (
-          <span className="hidden shrink-0 whitespace-nowrap rounded-md bg-rowhover px-2.5 py-1 text-[10px] font-medium text-muted-foreground sm:inline">
+          <span className="hidden shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2.5 py-1 text-[10px] font-medium text-muted-foreground sm:inline">
             {row.creator}
           </span>
         ) : null}
@@ -400,7 +400,7 @@ export function Documents() {
             ref={fileRef}
             type="file"
             onChange={() => setFileName(fileRef.current?.files?.[0]?.name ?? "")}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground outline-none file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-primary-foreground hover:file:opacity-90"
+            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-xs text-foreground outline-none file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-primary-foreground hover:file:opacity-90"
           />
           {fileName && <span className="truncate text-[10px] text-faint">{fileName}</span>}
         </label>
@@ -458,7 +458,7 @@ export function Documents() {
             <button
               type="button"
               onClick={() => setOpenType(null)}
-              className="mb-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
               <ChevronLeft className="h-3.5 w-3.5" /> Tous les dossiers
             </button>
@@ -512,7 +512,7 @@ export function Documents() {
                       }
                       if (previewDoc.html) renderHtmlInWindow(w, previewDoc.html);
                     }}
-                    className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                    className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                     title="Ouvrir dans un onglet"
                   >
                     <Download className="h-4 w-4" />
@@ -522,7 +522,7 @@ export function Documents() {
                     href={previewDoc.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                    className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                     title="Ouvrir dans un onglet"
                   >
                     <Download className="h-4 w-4" />
@@ -531,7 +531,7 @@ export function Documents() {
                 <button
                   type="button"
                   onClick={() => setPreviewDoc(null)}
-                  className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                  className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                   title="Fermer"
                 >
                   <X className="h-4 w-4" />
@@ -555,7 +555,7 @@ export function Documents() {
                     href={previewDoc.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                    className="rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
                   >
                     Ouvrir le fichier
                   </a>

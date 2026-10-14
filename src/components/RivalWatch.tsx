@@ -180,7 +180,7 @@ export function RivalWatch() {
             placeholder="@ d'une agence concurrente (ou lien Instagram)"
             className={cn(IN, "min-w-0 flex-1")}
           />
-          <button type="button" disabled={adding || !input.trim()} onClick={() => void follow(input)} className="flex h-10 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+          <button type="button" disabled={adding || !input.trim()} onClick={() => void follow(input)} className="flex h-10 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
             {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Suivre
           </button>
         </div>
@@ -295,10 +295,10 @@ function RivalCard({ r, busy, pool, roster, known, onRefresh, onRemove, onScouti
         <Spark r={r} />
         <div className="flex items-center gap-1.5">
           <span className="hidden text-[11px] text-faint sm:inline">{r.read_at ? `Lu ${fmtAgo(r.read_at)}` : "Pas encore lu"}</span>
-          <button type="button" onClick={onRefresh} disabled={busy} className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" aria-label="Actualiser">
+          <button type="button" onClick={onRefresh} disabled={busy} className="grid h-8 w-8 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" aria-label="Actualiser">
             <RefreshCw className={cn("h-3.5 w-3.5", busy && "animate-spin")} />
           </button>
-          <button type="button" onClick={onRemove} className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-rose-500" aria-label="Ne plus suivre">
+          <button type="button" onClick={onRemove} className="grid h-8 w-8 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:text-rose-500" aria-label="Ne plus suivre">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -332,7 +332,7 @@ function RivalCard({ r, busy, pool, roster, known, onRefresh, onRemove, onScouti
                       ) : inPool ? (
                         <span className="inline-flex items-center gap-0.5 rounded-full bg-indigo/10 px-2 py-0.5 text-[10px] font-semibold text-indigo"><Check className="h-2.5 w-2.5" />SCOUTING</span>
                       ) : (
-                        <button type="button" onClick={() => onScouting(c)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover"><Plus className="h-3 w-3" /> Scouting</button>
+                        <button type="button" onClick={() => onScouting(c)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover"><Plus className="h-3 w-3" /> Scouting</button>
                       )}
                     </div>
                   );
@@ -368,7 +368,7 @@ function RivalCard({ r, busy, pool, roster, known, onRefresh, onRemove, onScouti
                       {isKnown ? (
                         <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Déjà en contact</span>
                       ) : (
-                        <button type="button" onClick={() => onPipeline(b)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover"><Plus className="h-3 w-3" /> Pipeline</button>
+                        <button type="button" onClick={() => onPipeline(b)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover"><Plus className="h-3 w-3" /> Pipeline</button>
                       )}
                     </div>
                   );

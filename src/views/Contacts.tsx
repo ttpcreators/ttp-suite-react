@@ -252,7 +252,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
             navigator.clipboard?.writeText(v);
             toast(`${label} copié ✓`);
           }}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
           title={`Copier ${label.toLowerCase()}`}
         >
           <Copy className="h-4 w-4" />
@@ -841,7 +841,7 @@ export function Contacts() {
             type="button"
             onClick={() => csvInputRef.current?.click()}
             disabled={importing}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
             title="Importer un fichier CSV"
           >
             <Upload className="h-3.5 w-3.5" />
@@ -850,7 +850,7 @@ export function Contacts() {
           <button
             type="button"
             onClick={exportCsv}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             title="Exporter en CSV"
           >
             <Download className="h-3.5 w-3.5" />
@@ -859,7 +859,7 @@ export function Contacts() {
           <button
             type="button"
             onClick={() => openMail()}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             title="Écrire un email (choisir les destinataires)"
           >
             <Mail className="h-3.5 w-3.5" />
@@ -928,7 +928,7 @@ export function Contacts() {
               <select
                 value={cityFilter}
                 onChange={(e) => setCityFilter(e.target.value)}
-                className="h-11 rounded-xl border border-border bg-surface px-3 text-foreground outline-none focus:border-primary"
+                className="h-11 rounded-md border border-border bg-surface px-3 text-foreground outline-none focus:border-primary"
                 aria-label="Filtrer par ville"
               >
                 <option value="">Toutes les villes</option>
@@ -977,7 +977,7 @@ export function Contacts() {
             <select
               value={cityFilter}
               onChange={(e) => setCityFilter(e.target.value)}
-              className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[12px] font-medium text-foreground outline-none focus:border-primary"
+              className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-[12px] font-medium text-foreground outline-none focus:border-primary"
               aria-label="Filtrer par ville"
             >
               <option value="">Toutes les villes</option>
@@ -1249,7 +1249,7 @@ export function Contacts() {
                         type="button"
                         onClick={() => openSpark(selected)}
                         title={`Ouvre un mail pré-rempli (${kindNext === "contact" ? "premier contact" : "relance"}) dans Spark et le note`}
-                        className="flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                        className="flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                       >
                         <Mail className="h-3.5 w-3.5" /> Spark
                       </button>
@@ -1260,7 +1260,7 @@ export function Contacts() {
                         type="button"
                         onClick={() => (canal === "whatsapp" && waLink(selected.phone) ? openWhatsApp(selected) : logTouch(selected, canal))}
                         title={`Noter : ${kindNext === "contact" ? "premier contact" : "relance"} via ${CANAL_LABELS[canal]}`}
-                        className="flex items-center gap-1.5 rounded-lg border border-border bg-panel px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                        className="flex items-center gap-1.5 rounded-full border border-border bg-panel px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                       >
                         <CI className="h-3.5 w-3.5" /> {CANAL_LABELS[canal]}
                       </button>
@@ -1269,7 +1269,7 @@ export function Contacts() {
                       <button
                         type="button"
                         onClick={() => logTouch(selected, last?.canal ?? "autre", "reponse")}
-                        className="flex items-center gap-1.5 rounded-lg border border-signal/30 bg-signal/[0.08] px-2.5 py-1.5 text-[11px] font-semibold text-signal transition-colors hover:bg-signal/15"
+                        className="flex items-center gap-1.5 rounded-full border border-signal/30 bg-signal/[0.08] px-2.5 py-1.5 text-[11px] font-semibold text-signal transition-colors hover:bg-signal/15"
                       >
                         <Check className="h-3.5 w-3.5" /> Réponse reçue
                       </button>
@@ -1356,7 +1356,7 @@ export function Contacts() {
                 <button
                   type="button"
                   onClick={() => openMail(selected)}
-                  className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                  className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-full bg-primary py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                 >
                   <Mail className="h-3.5 w-3.5" /> Email
                 </button>
@@ -1401,7 +1401,7 @@ export function Contacts() {
               <button
                 type="button"
                 onClick={() => setMailOpen(false)}
-                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground"
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-faint hover:bg-rowhover hover:text-foreground"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1419,7 +1419,7 @@ export function Contacts() {
                   value={mailSubject}
                   onChange={(e) => setMailSubject(e.target.value)}
                   placeholder="Ex : Proposition de collaboration avec TTP Creators"
-                  className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  className="rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                 />
               </label>
 
@@ -1429,7 +1429,7 @@ export function Contacts() {
                   value={mailBody}
                   onChange={(e) => setMailBody(e.target.value)}
                   rows={8}
-                  className="resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  className="resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                 />
               </label>
 
@@ -1443,7 +1443,7 @@ export function Contacts() {
                 <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Pièces jointes</div>
                 <div className="flex flex-wrap items-center gap-2">
                   {attachments.map((a, i) => (
-                    <span key={`${a.filename}-${i}`} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-panel px-2.5 py-1 text-[11px] text-foreground">
+                    <span key={`${a.filename}-${i}`} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-panel px-2.5 py-1 text-[11px] text-foreground">
                       <Paperclip className="h-3 w-3 text-faint" />
                       <span className="max-w-[160px] truncate">{a.filename}</span>
                       <span className="text-faint">{fmtSize(a.size)}</span>
@@ -1460,7 +1460,7 @@ export function Contacts() {
                   <button
                     type="button"
                     onClick={() => attachRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                   >
                     <Paperclip className="h-3.5 w-3.5" /> Joindre un fichier
                   </button>
@@ -1507,7 +1507,7 @@ export function Contacts() {
                   type="button"
                   onClick={() => setMailOpen(false)}
                   disabled={sending}
-                  className="rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground hover:bg-rowhover disabled:opacity-50"
+                  className="rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground hover:bg-rowhover disabled:opacity-50"
                 >
                   Annuler
                 </button>
@@ -1516,7 +1516,7 @@ export function Contacts() {
                   onClick={sendViaSpark}
                   disabled={sending}
                   title="Ouvre ce mail dans Spark pour l'envoyer de là (pièces jointes à remettre dans Spark)"
-                  className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
                 >
                   <Mail className="h-3.5 w-3.5" /> Spark
                 </button>
@@ -1524,7 +1524,7 @@ export function Contacts() {
                   type="button"
                   onClick={requestSend}
                   disabled={sending}
-                  className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   <Send className="h-3.5 w-3.5" /> {sending ? "Envoi…" : "Envoyer"}
                 </button>

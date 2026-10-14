@@ -358,7 +358,7 @@ export function Briefs() {
             <button
               type="button"
               onClick={() => saveEdit(row.id)}
-              className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              className="h-[42px] shrink-0 rounded-full bg-primary px-5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
               Enregistrer
             </button>
@@ -553,7 +553,7 @@ export function Briefs() {
                   <select
                     value={creatorFilter}
                     onChange={(e) => setCreatorFilter(e.target.value)}
-                    className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
+                    className="rounded-md border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
                   >
                     <option value="">Tous les créateurs</option>
                     {creators.map((c) => (

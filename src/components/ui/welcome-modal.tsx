@@ -52,7 +52,7 @@ export function WelcomeModal({
             type="button"
             onClick={onClose}
             aria-label="Fermer"
-            className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+            className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
@@ -68,7 +68,7 @@ export function WelcomeModal({
               type="button"
               onClick={onPrimary}
               disabled={primaryDisabled}
-              className="rounded-xl bg-primary px-5 py-2.5 text-[13px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="rounded-full bg-primary px-5 py-2.5 text-[13px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {primaryLabel}
             </button>

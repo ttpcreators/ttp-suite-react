@@ -253,7 +253,7 @@ export function AgencyTab() {
             href={PUBLIC_URL}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
           >
             <ExternalLink className="h-3.5 w-3.5" /> <span>Voir le deck</span>
           </a>
@@ -262,7 +262,7 @@ export function AgencyTab() {
             target="_blank"
             rel="noreferrer"
             title="Version anglaise, pour les marques étrangères"
-            className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
           >
             <Languages className="h-3.5 w-3.5" /> <span>En anglais</span>
           </a>
@@ -270,7 +270,7 @@ export function AgencyTab() {
             type="button"
             onClick={save}
             disabled={saving || loading || loadError || !loaded}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <Save className="h-3.5 w-3.5" /> {saving ? "Enregistrement…" : "Enregistrer"}
           </button>
@@ -289,7 +289,7 @@ export function AgencyTab() {
           <button
             type="button"
             onClick={() => setReloadKey((k) => k + 1)}
-            className="mt-3 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            className="mt-3 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             Réessayer
           </button>
@@ -402,7 +402,7 @@ export function AgencyTab() {
                     <button
                       type="button"
                       onClick={() => setPillars(kit.pillars.filter((_, j) => j !== i))}
-                      className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
                       aria-label="Supprimer le pilier"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -452,7 +452,7 @@ export function AgencyTab() {
                     <button
                       type="button"
                       onClick={() => setConcepts(kit.concepts.filter((_, j) => j !== i))}
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
                       aria-label="Supprimer le concept"
                     >
                       <Trash2 className="h-4 w-4" />

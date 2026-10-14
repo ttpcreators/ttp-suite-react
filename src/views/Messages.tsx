@@ -196,7 +196,7 @@ export function Messages() {
             <p><span className="font-medium text-foreground">Radar à marques</span> : les marques avec qui tu as déjà une conversation sont mises de côté.</p>
           </HelpTip>
         </div>
-        <button type="button" onClick={() => void sync()} disabled={syncing} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
+        <button type="button" onClick={() => void sync()} disabled={syncing} className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
           <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} /> Actualiser
         </button>
       </PageHeaderRow>
@@ -224,7 +224,7 @@ export function Messages() {
           <div className="space-y-2 border-b border-border p-3">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher un nom, un @, un mot, un email…" className="w-full rounded-lg border border-border bg-surface py-2 pl-8 pr-8 text-[13px] outline-none focus:border-primary" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher un nom, un @, un mot, un email…" className="w-full rounded-md border border-border bg-surface py-2 pl-8 pr-8 text-[13px] outline-none focus:border-primary" />
               {q && <button type="button" onClick={() => setQ("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-faint hover:text-foreground" aria-label="Effacer"><X className="h-3.5 w-3.5" /></button>}
             </div>
             <div className="flex flex-wrap gap-1">
@@ -292,7 +292,7 @@ export function Messages() {
 function Kpi({ icon: Icon, n, label }: { icon: typeof Mail; n: number; label: string }) {
   return (
     <div className="flex items-center gap-2.5 rounded-2xl border border-border bg-surface px-3 py-2.5">
-      <span className="hidden h-8 w-8 shrink-0 place-items-center rounded-lg bg-panel text-muted-foreground sm:grid"><Icon className="h-4 w-4" /></span>
+      <span className="hidden h-8 w-8 shrink-0 place-items-center rounded-full bg-panel text-muted-foreground sm:grid"><Icon className="h-4 w-4" /></span>
       <div className="min-w-0">
         <div className="text-[18px] font-bold leading-none tabular-nums text-foreground">{n}</div>
         <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{label}</div>
@@ -380,7 +380,7 @@ function Conversation({ t, q, contact, onBack, onChange }: { t: Thread; q: strin
   return (
     <div className="flex h-full max-h-[78vh] flex-col">
       <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
-        <button type="button" onClick={onBack} className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-rowhover md:hidden" aria-label="Retour"><ArrowLeft className="h-4 w-4" /></button>
+        <button type="button" onClick={onBack} className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground hover:bg-rowhover md:hidden" aria-label="Retour"><ArrowLeft className="h-4 w-4" /></button>
         <Avatar t={t} size={42} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[14px] font-semibold text-foreground">{display(t)}</div>

@@ -154,7 +154,7 @@ function StatusPanel({
           </button>
         )}
         <button type="button" onClick={onWriteNote}
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover">
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover">
           <MessageSquarePlus className="h-3.5 w-3.5" /> Ajouter une remarque
         </button>
       </div>
@@ -215,7 +215,7 @@ function StatusPanel({
             maxLength={1000}
             rows={2}
             placeholder={mode === "creator" ? "Un mot pour ton manager (facultatif) : pourquoi, tes conditions…" : `Un mot pour ${creatorName} (facultatif)`}
-            className="mt-2 max-h-40 min-h-[60px] w-full resize-none rounded-lg border border-border bg-transparent px-3 py-2 text-[13px] text-foreground outline-none [field-sizing:content] placeholder:text-faint focus:border-primary"
+            className="mt-2 max-h-40 min-h-[60px] w-full resize-none rounded-md border border-border bg-transparent px-3 py-2 text-[13px] text-foreground outline-none [field-sizing:content] placeholder:text-faint focus:border-primary"
           />
           <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
             <span className="mr-auto w-full text-[11px] text-faint sm:w-auto">
@@ -225,7 +225,7 @@ function StatusPanel({
               Annuler
             </button>
             <button type="button" onClick={() => void confirm()} disabled={busy}
-              className={cn("inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50", pick.confirm)}>
+              className={cn("inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50", pick.confirm)}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Confirmer
             </button>
           </div>
@@ -566,7 +566,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           : "Ouvre un échange et range-le dans « En cours », « Validé » ou « Refusé » pour donner ton avis. Avec « Ajouter une remarque », écris à ton manager quand tu veux. Il est prévenu ; ses remarques et tout l'historique sont dans le suivi de l'échange."}
       </span>
       <button type="button" onClick={() => setHelp(false)} aria-label="Masquer l'aide"
-        className="-mr-1 -mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+        className="-mr-1 -mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground">
         <X className="h-3.5 w-3.5" />
       </button>
     </div>
@@ -605,7 +605,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         );
       })}
       <button type="button" onClick={() => setHelp(!help)} aria-label={help ? "Masquer l'aide" : "Comment ça marche"} aria-pressed={help}
-        className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors", help ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+        className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors", help ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
         <Info className="h-4 w-4" />
       </button>
     </nav>
@@ -777,7 +777,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
                     type="button"
                     onClick={() => void submitNote()}
                     disabled={!note.trim() || sending}
-                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-35"
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-35"
                   >
                     {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Envoyer
                   </button>
@@ -910,7 +910,7 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
           icon={Mail}
           right={!editing && linked && (
             <button type="button" onClick={openEdit}
-              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+              className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
               <Settings2 className="h-3.5 w-3.5" /> Modifier
             </button>
           )}
@@ -925,7 +925,7 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
               Relie l'adresse mail de {titleCase(creator)} (son alias) pour voir ses échanges ici, les ranger (À vérifier, À valider, Validé, Refusé) et lui écrire des remarques.
             </span>
             <button type="button" onClick={openEdit}
-              className="h-8 shrink-0 rounded-lg bg-primary px-3 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+              className="h-8 shrink-0 rounded-full bg-primary px-3 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
               Relier
             </button>
           </div>
@@ -936,12 +936,12 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
               <label className="flex flex-col gap-1.5">
                 <span className="text-[11px] font-medium text-muted-foreground">Alias (adresse utilisée avec les marques)</span>
                 <input value={alias} onChange={(e) => setAlias(e.target.value)} placeholder="prenom@ttpcreators.pro" inputMode="email"
-                  className="h-9 rounded-lg border border-border bg-surface px-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary" />
+                  className="h-9 rounded-md border border-border bg-surface px-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary" />
               </label>
               <label className="flex flex-col gap-1.5">
                 <span className="text-[11px] font-medium text-muted-foreground">Libellé Gmail (facultatif, en plus de l'alias)</span>
                 <select value={labelId} onChange={(e) => setLabelId(e.target.value)}
-                  className="h-9 rounded-lg border border-border bg-surface px-2.5 text-[13px] text-foreground outline-none focus:border-primary">
+                  className="h-9 rounded-md border border-border bg-surface px-2.5 text-[13px] text-foreground outline-none focus:border-primary">
                   <option value="">Aucun</option>
                   {labels === null && labelId && <option value={labelId}>{settings?.label_name ?? labelId}</option>}
                   {(labels ?? []).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -954,7 +954,7 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setEditing(false)} className="h-9 rounded-lg px-3 text-[13px] text-muted-foreground hover:text-foreground">Annuler</button>
               <button type="button" onClick={() => void submit()} disabled={saving}
-                className="h-9 rounded-lg bg-primary px-3.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+                className="h-9 rounded-full bg-primary px-3.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
                 Enregistrer
               </button>
             </div>

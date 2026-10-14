@@ -162,7 +162,7 @@ export function DateRangePicker({
         <button
           type="button"
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium tabular-nums text-foreground transition-colors hover:bg-rowhover data-[state=open]:bg-rowhover",
+            "inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium tabular-nums text-foreground transition-colors hover:bg-rowhover data-[state=open]:bg-rowhover",
             className,
           )}
         >
@@ -206,10 +206,10 @@ export function DateRangePicker({
           {/* Calendrier : du … au … */}
           <div className="p-3">
             <div className="relative flex gap-5">
-              <button type="button" onClick={() => shift(-1)} aria-label="Mois précédent" className="absolute left-0 top-0 grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+              <button type="button" onClick={() => shift(-1)} aria-label="Mois précédent" className="absolute left-0 top-0 grid h-6 w-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <button type="button" onClick={() => shift(1)} aria-label="Mois suivant" className="absolute right-0 top-0 grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+              <button type="button" onClick={() => shift(1)} aria-label="Mois suivant" className="absolute right-0 top-0 grid h-6 w-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                 <ChevronRight className="h-4 w-4" />
               </button>
               <div className="hidden sm:block">
@@ -231,14 +231,14 @@ export function DateRangePicker({
                 )}
               </span>
               <div className="ml-auto flex gap-2">
-                <button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                <button type="button" onClick={() => setOpen(false)} className="rounded-full border border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                   Annuler
                 </button>
                 <button
                   type="button"
                   onClick={() => draft && choose(draft)}
                   disabled={!draft}
-                  className="rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                  className="rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
                 >
                   Appliquer
                 </button>
@@ -301,20 +301,20 @@ export function DateInput({
       </PopoverTrigger>
       <PopoverContent align="start" alignOffset={alignOffset} sideOffset={8} collisionPadding={16} className="w-auto p-3" onOpenAutoFocus={(e) => e.preventDefault()}>
         <div className="relative">
-          <button type="button" onClick={() => shift(-1)} aria-label="Mois précédent" className="absolute left-0 top-0 grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={() => shift(-1)} aria-label="Mois précédent" className="absolute left-0 top-0 grid h-6 w-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <button type="button" onClick={() => shift(1)} aria-label="Mois suivant" className="absolute right-0 top-0 grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={() => shift(1)} aria-label="Mois suivant" className="absolute right-0 top-0 grid h-6 w-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             <ChevronRight className="h-4 w-4" />
           </button>
           <Month y={view.getFullYear()} m={view.getMonth()} from={valid} to={valid} hover={null} today={today} onPick={pick} onHover={() => {}} />
         </div>
         <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
-          <button type="button" onClick={() => pick(today)} className="rounded-lg border border-border px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
+          <button type="button" onClick={() => pick(today)} className="rounded-full border border-border px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
             Aujourd'hui
           </button>
           {clearable && valid && (
-            <button type="button" onClick={() => pick("")} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <button type="button" onClick={() => pick("")} className="rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
               Effacer
             </button>
           )}
@@ -335,7 +335,7 @@ export function MonthPicker({ value, onChange, max }: { value: string; onChange:
   const label = new Date(y, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   const btn = "grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent";
   return (
-    <div className="flex items-center rounded-lg border border-border bg-surface p-0.5">
+    <div className="flex items-center rounded-full border border-border bg-surface p-0.5">
       <button type="button" onClick={() => shift(-1)} aria-label="Mois précédent" className={btn}>
         <ChevronLeft className="h-4 w-4" />
       </button>
