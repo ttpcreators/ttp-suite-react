@@ -172,3 +172,8 @@ verify_jwt = false
 # l'agence) → verify_jwt=false ; auth dans le code.
 [functions.tt-radar]
 verify_jwt = false
+
+# yt-radar : radar à collabs YouTube (cron quotidien avec CRON_SECRET, ou bouton de
+# l'agence) → verify_jwt=false ; auth dans le code.
+[functions.yt-radar]
+verify_jwt = false

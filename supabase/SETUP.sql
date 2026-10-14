@@ -497,6 +497,24 @@ drop policy if exists tt_brand_status_agency on public.tt_brand_status;
 create policy tt_brand_status_agency on public.tt_brand_status for all to authenticated
   using (public.is_agency()) with check (public.is_agency());
 
+-- YouTube · radar à collabs (sql/2026-10-14-youtube-radar ; cron yt-radar-quotidien dans ce
+-- fichier daté) : vidéos sponsorisées des créatrices, regroupées par marque.
+create table if not exists public.yt_radar (
+  brand      text primary key,                -- clé de marque (minuscules, sans ponctuation)
+  name       text not null,                   -- nom affiché
+  posts      jsonb not null default '[]'::jsonb,
+  status     text not null default 'nouveau' check (status in ('nouveau', 'ignore', 'pipeline')),
+  first_seen timestamptz not null default now(),
+  last_seen  timestamptz not null default now()
+);
+alter table public.yt_radar enable row level security;
+revoke all on public.yt_radar from anon;
+drop policy if exists yt_radar_agency_read on public.yt_radar;
+create policy yt_radar_agency_read on public.yt_radar for select to authenticated using (public.is_agency());
+drop policy if exists yt_radar_agency_update on public.yt_radar;
+create policy yt_radar_agency_update on public.yt_radar for update to authenticated
+  using (public.is_agency()) with check (public.is_agency());
+
 -- Instagram · DM de TTP, posts programmés, agences concurrentes
 -- (sql/2026-10-14-instagram-dm-posts-concurrents ; crons ig-inbox-horaire et
 -- ig-publish-minute dans ce fichier daté, pas ici).

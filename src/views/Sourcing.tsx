@@ -18,6 +18,7 @@ import { OutreachComposer } from "@/components/OutreachComposer";
 import { SourcingGuide } from "@/components/SourcingGuide";
 import { RivalWatch } from "@/components/RivalWatch";
 import { TikTokRadar } from "@/components/TikTokRadar";
+import { YouTubeRadar } from "@/components/YouTubeRadar";
 
 /**
  * SOURCING (agence) — deux outils, toujours via l'outil officiel de Meta (comptes pro) :
@@ -120,7 +121,7 @@ const TOOLS = [
   },
   {
     v: "radar" as const, icon: Radar, title: "Radar à marques", goal: "Pour trouver des clients",
-    text: "Instagram : toutes les 2 heures, l'app lit des posts de créatrices et repère les marques qui les paient. TikTok : les partenariats payés déclarés en France, chaque matin.",
+    text: "Les marques qui paient des créatrices : sur Instagram (toutes les 2 heures), TikTok et YouTube (placements de produit déclarés, chaque matin).",
   },
   {
     v: "concurrents" as const, icon: Binoculars, title: "Agences concurrentes", goal: "Pour garder une longueur d'avance",
@@ -862,17 +863,18 @@ const PERIODS = [
   { value: "all", label: "Tout" },
 ];
 
-/** Radar à marques : Instagram (posts des créatrices) ou TikTok (partenariats payés déclarés en France). */
+/** Radar à marques : Instagram (posts des créatrices), TikTok (partenariats payés déclarés en France) ou YouTube (vidéos sponsorisées). */
 function RadarTool() {
-  const [pf, setPf] = useState<"instagram" | "tiktok">(() => {
+  const [pf, setPf] = useState<"instagram" | "tiktok" | "youtube">(() => {
     try {
-      return localStorage.getItem("ttp:radar-platform") === "tiktok" ? "tiktok" : "instagram";
+      const v = localStorage.getItem("ttp:radar-platform");
+      return v === "tiktok" || v === "youtube" ? v : "instagram";
     } catch {
       return "instagram";
     }
   });
   const pick = (v: string) => {
-    const next = v === "tiktok" ? "tiktok" : "instagram";
+    const next = v === "tiktok" || v === "youtube" ? v : "instagram";
     setPf(next);
     try {
       localStorage.setItem("ttp:radar-platform", next);
@@ -891,10 +893,11 @@ function RadarTool() {
           items={[
             { value: "instagram", label: "Instagram", icon: <PlatformIcon platform="instagram" className="h-3.5 w-3.5" /> },
             { value: "tiktok", label: "TikTok", icon: <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" /> },
+            { value: "youtube", label: "YouTube", icon: <PlatformIcon platform="youtube" className="h-3.5 w-3.5" /> },
           ]}
         />
       </div>
-      {pf === "tiktok" ? <TikTokRadar /> : <BrandRadar />}
+      {pf === "tiktok" ? <TikTokRadar /> : pf === "youtube" ? <YouTubeRadar /> : <BrandRadar />}
     </div>
   );
 }
