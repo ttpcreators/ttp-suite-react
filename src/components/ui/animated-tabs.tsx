@@ -172,7 +172,7 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
         ref={rowRef}
         aria-label={label}
         className={cn(
-          "relative flex max-w-full flex-wrap gap-0.5 overflow-x-auto rounded-full bg-muted [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          "relative flex max-w-full flex-wrap gap-0.5 overflow-x-auto rounded-full border border-border bg-surface [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
           !wrap && "sm:flex-nowrap",
           sm ? "p-0.5" : "p-1",
           fullWidth ? "w-full" : "w-fit",
@@ -182,7 +182,7 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
             `style` ne déclenche pas le ressort). Masqué si aucune valeur ne correspond. */}
         <motion.span
           aria-hidden
-          className="pointer-events-none absolute rounded-full bg-surface ring-1 ring-border dark:bg-input dark:ring-0"
+          className="pointer-events-none absolute rounded-full bg-muted"
           initial={false}
           animate={{ left: ind.x, top: ind.y, width: ind.width, height: ind.height, opacity: ind.ready && selectedIndex >= 0 ? 1 : 0 }}
           transition={reduced || !ind.ready ? { duration: 0 } : INDICATOR}

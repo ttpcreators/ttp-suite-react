@@ -63,12 +63,13 @@ export interface AnimatedBadgeProps
 }
 
 const STATUS_CLASS: Record<AnimatedBadgeStatus, string> = {
-  neutral: "border-transparent bg-status-off-bg text-status-off", // clôturé, écarté, inactif
-  info: "border-transparent bg-status-prog-bg text-status-prog", // en cours, envoyé, en discussion
-  success: "border-transparent bg-status-pos-bg text-status-pos", // signé, payé, à jour, actif
-  warning: "border-transparent bg-status-wait-bg text-status-wait", // en attente, en négo, à contacter
-  danger: "border-transparent bg-status-urg-bg text-status-urg", // urgent, en retard, impayé
-  loading: "border-transparent bg-status-prog-bg text-status-prog",
+  neutral: "border-border bg-card text-muted-foreground",
+  info: "border-foreground/20 bg-surface text-foreground",
+  success:
+    "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  warning: "border-border bg-muted text-muted-foreground",
+  danger: "border-destructive/30 bg-destructive/10 text-destructive",
+  loading: "border-border bg-muted text-muted-foreground",
 };
 
 const SIZE_CLASS: Record<AnimatedBadgeSize, string> = {

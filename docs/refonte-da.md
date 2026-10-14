@@ -1,5 +1,14 @@
 # Refonte visuelle « Calme, aéré, précis » (branche `refonte-da`)
 
+> **Décision de Marc (2026-10-14, après les 3 premières étapes)** : on garde la **typo** et les
+> **couleurs** de l'app actuelle (police d'origine partout, chiffres compris ; bleu pour l'action
+> et les graphes ; vert et rouge vifs pour les variations ; couleurs de statut d'avant ; sombre
+> Minuit et Classique d'avant). La refonte ne garde que les **formes** : boutons et onglets en
+> pilule, boutons icône ronds, rayons 10 / 14 / 20, cartes blanches sans bordure posées sur le
+> fond, plus d'air, titres de page en 32. Seule entorse : `--faint` passe de `#a1a1aa` à
+> `#71717a` (métadonnées lisibles, 4,8:1 sur blanc, exigence d'accessibilité du brief).
+> Les sections 3 à 5 ci-dessous décrivent la première version (palette noire et pastels), écartée.
+
 Uniquement le visuel : ni la logique métier, ni Supabase, ni les routes ne changent.
 Rien n'est en ligne tant que la branche n'est pas fusionnée dans `main`.
 

@@ -6,7 +6,6 @@ import { frDate, toISODate } from "@/lib/dates";
 import { parseAmount, formatEuro, useAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { Delta, RadialTicks, TickMeter, SegmentBar } from "@/components/ui/dash";
-import { initialsTone } from "@/components/ui/creator-avatar";
 import { invMonthKey, monthsBetween, monthLabel, momDelta } from "@/lib/timeSeries";
 import { Users, ListChecks, CalendarDays, Wallet, ArrowRight, Sparkles, FileText, Trophy, CalendarClock } from "lucide-react";
 import { useLiveKey } from "@/lib/useLive";
@@ -111,7 +110,7 @@ function SectionTitle({ icon: Icon, children, right }: { icon: typeof Users; chi
   return (
     <div className="mb-4 flex items-center gap-2">
       <Icon className="h-4 w-4 text-muted-foreground" aria-hidden />
-      <h2 className="text-[18px] font-semibold tracking-[-0.01em] text-foreground md:text-[20px]">{children}</h2>
+      <h2 className="text-[15px] font-semibold text-foreground">{children}</h2>
       {right && <div className="ml-auto">{right}</div>}
     </div>
   );
@@ -375,9 +374,9 @@ export function ApercuView({
               <div className="mb-5 mt-2 text-[28px] font-semibold leading-none tracking-tight tabular-nums">{formatEuro(factTotal)}</div>
               <SegmentBar
                 segments={[
-                  { label: "Payé", value: paidSum, className: "bg-status-pos-dot" },
-                  { label: "En attente", value: waitSum, className: "bg-status-wait-dot" },
-                  { label: "En retard", value: lateSum, className: "bg-status-urg-dot" },
+                  { label: "Payé", value: paidSum, className: "bg-foreground/70" },
+                  { label: "En attente", value: waitSum, className: "bg-foreground/30" },
+                  { label: "En retard", value: lateSum, className: "bg-rose-500/80" },
                 ]}
               />
             </div>
@@ -457,7 +456,7 @@ export function ApercuView({
                     <span className="text-[12px] tabular-nums text-muted-foreground">
                       {evDate(e).slice(8, 10)}/{evDate(e).slice(5, 7)}
                     </span>
-                    {e.time && e.time !== "—" && <span className="text-[24px] font-medium leading-none tabular-nums">{e.time}</span>}
+                    {e.time && e.time !== "—" && <span className="text-[22px] font-semibold leading-none tracking-tight tabular-nums">{e.time}</span>}
                     <span className="mt-1 line-clamp-2 break-words text-[14px] font-medium leading-snug">{e.title}</span>
                   </div>
                 ))}
@@ -515,10 +514,10 @@ export function ApercuView({
               topCreators.map((c, i) => (
                 <div key={c.name} className="flex items-center gap-3 border-b border-border py-2.5 last:border-0">
                   <span className="w-4 text-[12px] tabular-nums text-faint">{i + 1}</span>
-                  <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold", initialsTone(c.name))}>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground">
                     {initials(c.name)}
                   </span>
-                  <span className="flex-1 truncate font-mono text-[13px] font-medium uppercase tracking-[0.02em]">{c.name}</span>
+                  <span className="flex-1 truncate text-[14px] font-medium">{titleCase(c.name)}</span>
                   <span className="text-[14px] font-medium tabular-nums">{c.ca ? formatEuro(c.ca) : "—"}</span>
                 </div>
               ))

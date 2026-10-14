@@ -12,7 +12,7 @@ export function DashSectionTitle({ icon: Icon, children, right }: { icon: Lucide
   return (
     <div className="mb-4 flex items-center gap-2">
       <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <h2 className="text-[18px] font-semibold tracking-[-0.01em] text-foreground md:text-[20px]">{children}</h2>
+      <h2 className="text-[15px] font-semibold text-foreground">{children}</h2>
       {right && <div className="ml-auto">{right}</div>}
     </div>
   );
@@ -49,18 +49,21 @@ export function Delta({ value, suffix = "vs période préc." }: { value: number 
   }
   const up = value >= 0;
   return (
-    <span className="inline-flex flex-wrap items-center gap-2 text-[13px]">
+    <span className="inline-flex flex-wrap items-center gap-1.5 text-[13px]">
       <span
         className={cn(
-          "inline-flex h-6 items-center gap-1 rounded-full px-2 text-[12px] font-medium tabular-nums",
-          up ? "bg-status-pos-bg text-status-pos" : "bg-status-urg-bg text-status-urg",
+          "grid size-[17px] shrink-0 place-items-center rounded-full text-white dark:text-black",
+          up ? "bg-emerald-500" : "bg-rose-500",
         )}
+        aria-hidden
       >
-        {up ? <ArrowUp className="size-3" strokeWidth={2.5} aria-hidden /> : <ArrowDown className="size-3" strokeWidth={2.5} aria-hidden />}
-        <span className="sr-only">{up ? "Hausse de " : "Baisse de "}</span>
-        {up ? "+" : "−"}{pctFr(value)}
+        {up ? <ArrowUp className="size-3" strokeWidth={3} /> : <ArrowDown className="size-3" strokeWidth={3} />}
       </span>
-      <span className="text-faint">{suffix}</span>
+      <span className={cn("font-medium tabular-nums", up ? "text-emerald-500" : "text-rose-500")}>
+        <span className="sr-only">{up ? "Hausse de " : "Baisse de "}</span>
+        {pctFr(value)}
+      </span>
+      <span className="text-muted-foreground">{suffix}</span>
     </span>
   );
 }
