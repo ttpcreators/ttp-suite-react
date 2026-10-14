@@ -112,7 +112,7 @@ const TOOLS = [
   },
   {
     v: "radar" as const, icon: Radar, title: "Radar à marques", goal: "Pour trouver des clients",
-    text: "Chaque nuit, l'app lit les posts de tes créatrices et te montre les marques qui paient des créatrices, ou que tes créatrices citent déjà.",
+    text: "Toutes les 2 heures, l'app lit des posts de créatrices (les tiennes et d'autres) et te montre les marques qui paient des créatrices, ou que tes créatrices citent déjà.",
   },
 ];
 
@@ -920,7 +920,7 @@ function BrandRadar() {
         {queue && (
           <span className="text-[11px] text-faint">
             {queue.read} créatrice{queue.read > 1 ? "s" : ""} hors agence déjà lue{queue.read > 1 ? "s" : ""}
-            {queue.waiting > 0 && ` · ${queue.waiting} en attente (lues chaque nuit, ou avec « Lancer le radar » quand le quota Meta est sous 80 %)`}
+            {queue.waiting > 0 && ` · ${queue.waiting} en attente (lues toutes les 2 heures, petit à petit)`}
           </span>
         )}
       </div>
@@ -931,12 +931,12 @@ function BrandRadar() {
           <SlidersHorizontal className="h-3.5 w-3.5" /> Filtres{activeFilters ? ` · ${activeFilters}` : ""}
         </button>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => void runScan()} disabled={scanning} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" title="Le radar passe tout seul chaque nuit">
+          <button type="button" onClick={() => void runScan()} disabled={scanning} className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" title="Le radar passe tout seul toutes les 2 heures">
             {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} {scanning ? "Lecture des posts (1 à 2 min)…" : "Lancer le radar"}
           </button>
           <HelpTip title="Comment marche le radar ?" align="end">
-            <p>Chaque nuit, l'app lit les derniers posts de tes créatrices, de celles de ton Scouting, et de créatrices hors agence découvertes au fil des recherches (celles que citent les marques du radar). Elle note les marques citées.</p>
-            <p>Elle vérifie ensuite chaque nom auprès de Meta pour savoir si c'est bien une marque, tant que le quota Meta le permet.</p>
+            <p>Toutes les 2 heures, l'app lit les derniers posts de tes créatrices, de celles de ton Scouting, et de créatrices hors agence découvertes au fil des recherches (celles que citent les marques du radar). Elle note les marques citées.</p>
+            <p>Elle vérifie ensuite chaque nom auprès de Meta pour savoir si c'est bien une marque. Chaque passage s'arrête à 60 % du quota Meta, pour te laisser de la marge.</p>
             <p>« Lancer le radar » le fait tout de suite (1 à 2 minutes).</p>
           </HelpTip>
         </div>
@@ -989,7 +989,7 @@ function BrandRadar() {
       {view.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center text-[13px] text-muted-foreground">
           {rows.length === 0
-            ? "Le radar n'a encore rien lu. Il passe chaque nuit ; tu peux aussi « Lancer le radar » maintenant."
+            ? "Le radar n'a encore rien lu. Il passe toutes les 2 heures ; tu peux aussi « Lancer le radar » maintenant."
             : kind === "chauds" ? "Aucune marque citée spontanément par tes créatrices pour l'instant." : "Aucune marque ici pour l'instant."}
         </div>
       ) : (

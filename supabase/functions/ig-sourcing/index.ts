@@ -33,7 +33,7 @@ const FRESH_DAYS = 7;
 // dans la limite de ces plafonds par passage.
 const POOL_PER_SCAN = 40; // créatrices du Scouting lues par passage (les plus anciennes d'abord)
 const BRANDS_PER_SCAN = 80; // comptes cités vérifiés par passage (les plus probables d'abord)
-const QUOTA_MAX = 80; // au-delà, pause : on ne risque pas le blocage par Meta
+const QUOTA_MAX = 80; // au-delà, pause : on ne risque pas le blocage par Meta (le cron des 2 h envoie 60)
 const DISCOVER_PER_SCAN = 40; // créatrices hors agence lues par passage (découvertes)
 const age = (iso: string | null | undefined) => (iso ? Date.now() - Date.parse(iso) : Infinity);
 
@@ -174,9 +174,9 @@ async function toData(p: IgProfile): Promise<Json> {
   };
 }
 
-type Ctx = { sb: SupabaseClient; stop: string; t0: number; cache: Map<string, ProfileRow> };
+type Ctx = { sb: SupabaseClient; stop: string; t0: number; cache: Map<string, ProfileRow>; quotaMax: number };
 function inBudget(ctx: Ctx): boolean {
-  if (!ctx.stop && (quotaPct() ?? 0) >= QUOTA_MAX) ctx.stop = "quota_proche";
+  if (!ctx.stop && (quotaPct() ?? 0) >= ctx.quotaMax) ctx.stop = "quota_proche";
   return !ctx.stop && Date.now() - ctx.t0 < 110_000;
 }
 
@@ -492,14 +492,17 @@ Deno.serve(async (req: Request) => {
 
   const sb = getServiceClient();
   if (!(await caller(req, sb))) return res({ error: "non_autorise" }, 401);
-  let body: { mode?: string; brand?: string; creator?: string; handles?: unknown } = {};
+  let body: { mode?: string; brand?: string; creator?: string; handles?: unknown; quota?: number } = {};
   try {
     body = (await req.json()) ?? {};
   } catch {
     body = {};
   }
   if (!metaReady()) return res({ error: "meta_non_configure" });
-  const ctx: Ctx = { sb, stop: "", t0: Date.now(), cache: new Map() };
+  // Seuil de pause : 80 % à la main ; le passage automatique toutes les 2 h envoie 60 pour
+  // laisser de la marge aux recherches de l'agence pendant la journée.
+  const quotaMax = Math.min(85, Math.max(30, Number(body.quota) || QUOTA_MAX));
+  const ctx: Ctx = { sb, stop: "", t0: Date.now(), cache: new Map(), quotaMax };
   // Table absente (SQL pas encore lancé) : on le dit clairement.
   const probe = await sb.from("ig_profiles").select("username").limit(1);
   if (probe.error) return res({ error: "migration_manquante" });
