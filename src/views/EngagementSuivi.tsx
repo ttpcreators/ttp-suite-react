@@ -24,7 +24,7 @@ import { Tabs } from "@/components/ui/animated-tabs";
 
 /**
  * Suivi engagement — page dédiée à l'ÉVOLUTION des mesures enregistrées dans
- * Roster → Engagement (blob `engagementHistory`) : taux d'engagement, abonnés
+ * Créateurs → Engagement (blob `engagementHistory`) : taux d'engagement, abonnés
  * et volume d'interactions dans le temps, par créateur et par plateforme.
  * Lecture seule : les mesures s'ajoutent/s'éditent depuis le calculateur.
  */
@@ -87,6 +87,19 @@ const PLATFORM_LABELS: Record<string, string> = {
   snapchat: "Snapchat",
 };
 
+/** Petit bouton vers la page Engagement (où l'on enregistre les mesures). */
+function OpenEngagementButton() {
+  return (
+    <button
+      type="button"
+      onClick={() => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "engagement" }))}
+      className="mt-3 inline-flex items-center rounded-full border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+    >
+      Ouvrir Engagement
+    </button>
+  );
+}
+
 /**
  * Panneau réutilisable : côté AGENCE (sélecteur de créateur) et côté ESPACE
  * CRÉATEUR (`lockedCreator` = verrouillé sur soi, entries déjà filtrées par la
@@ -142,8 +155,9 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
         <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
           {lockedCreator
             ? "Ton évolution apparaîtra ici dès que l'agence aura enregistré tes premières mesures d'engagement."
-            : "Enregistre des calculs dans Roster → Engagement : chaque mesure alimente automatiquement l'évolution ici."}
+            : "Aucune mesure pour l'instant. Enregistre-en une depuis la page Engagement."}
         </p>
+        {!lockedCreator && <OpenEngagementButton />}
       </div>
     );
 
@@ -232,7 +246,7 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
         <div className="mb-4 text-sm font-semibold">Évolution du taux d'engagement</div>
         {points.length < 2 ? (
           <p className="py-6 text-center text-xs text-muted-foreground">
-            Il faut au moins 2 mesures pour tracer une courbe — enregistre un nouveau calcul le mois prochain 📈
+            Il faut au moins 2 mesures pour tracer une courbe : enregistre une nouvelle mesure le mois prochain.
           </p>
         ) : (
           <div className="h-[260px]">
@@ -449,27 +463,14 @@ function AllCreatorsPanel({ entries, onOpen, period, setPeriod }: { entries: Sui
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-3">
-        {[
-          { l: "Créateurs suivis", v: String(rows.length), icon: Users },
-          { l: "Moyenne des derniers relevés", v: `${String(avgEr).replace(".", ",")} %`, icon: Activity },
-          { l: "Meilleur taux", v: rows.length ? `${String(bestGlobal).replace(".", ",")} %` : "—", icon: TrendingUp },
-        ].map((c) => (
-          <div key={c.l} className="flex min-w-0 flex-col bg-surface px-3 py-4 last:col-span-2 sm:px-5 sm:py-5 sm:last:col-span-1">
-            <div className="flex items-start gap-1.5 text-[12px] text-muted-foreground sm:text-[13px]"><c.icon className="mt-px h-3.5 w-3.5 shrink-0" /> <span className="min-w-0 break-words leading-snug sm:line-clamp-2">{c.l}</span></div>
-            <div className="mt-auto whitespace-nowrap pt-2 text-[18px] font-semibold leading-none tracking-tight tabular-nums sm:text-[26px]">{c.v}</div>
-          </div>
-        ))}
-      </div>
-
       {/* Filtre par période (mois/année) */}
       <div className="flex items-center gap-2">
         <span className="text-[12px] font-medium text-muted-foreground">Période</span>
         <Select value={period || "__all__"} onValueChange={(v) => setPeriod(v === "__all__" ? "" : v)}>
-          <SelectTrigger className="h-10 w-auto min-w-[240px] rounded-lg bg-surface text-[12px]" placeholder="Toutes périodes (dernier relevé)" />
+          <SelectTrigger className="h-10 w-auto min-w-[240px] rounded-lg bg-surface text-[12px]" placeholder="Toutes périodes (dernière mesure)" />
           <SelectContent>
             <SelectItem index={0} value="__all__">
-              Toutes périodes (dernier relevé)
+              Toutes périodes (dernière mesure)
             </SelectItem>
             {periods.map((p, i) => (
               <SelectItem key={p} index={i + 1} value={p}>
@@ -478,6 +479,19 @@ function AllCreatorsPanel({ entries, onOpen, period, setPeriod }: { entries: Sui
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-3">
+        {[
+          { l: "Créateurs suivis", v: String(rows.length), icon: Users },
+          { l: "Moyenne des dernières mesures", v: `${String(avgEr).replace(".", ",")} %`, icon: Activity },
+          { l: "Meilleur taux", v: rows.length ? `${String(bestGlobal).replace(".", ",")} %` : "—", icon: TrendingUp },
+        ].map((c) => (
+          <div key={c.l} className="flex min-w-0 flex-col bg-surface px-3 py-4 last:col-span-2 sm:px-5 sm:py-5 sm:last:col-span-1">
+            <div className="flex items-start gap-1.5 text-[12px] text-muted-foreground sm:text-[13px]"><c.icon className="mt-px h-3.5 w-3.5 shrink-0" /> <span className="min-w-0 break-words leading-snug sm:line-clamp-2">{c.l}</span></div>
+            <div className="mt-auto whitespace-nowrap pt-2 text-[18px] font-semibold leading-none tracking-tight tabular-nums sm:text-[26px]">{c.v}</div>
+          </div>
+        ))}
       </div>
 
       {/* Tendance du taux d'engagement moyen du roster (glass) */}
@@ -497,7 +511,8 @@ function AllCreatorsPanel({ entries, onOpen, period, setPeriod }: { entries: Sui
 
       {rows.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-surface px-4 py-10 text-center text-[13px] text-muted-foreground">
-          Aucun relevé d'engagement{period ? " sur cette période" : ""}. Enregistre des calculs dans Roster → Engagement pour les voir ici.
+          {period ? "Aucune mesure sur cette période." : "Aucune mesure pour l'instant."} Enregistre-en une depuis la page Engagement.
+          <div><OpenEngagementButton /></div>
         </div>
       ) : (<>
       {/* Mobile : cartes empilées (le tableau large ne tient pas) */}

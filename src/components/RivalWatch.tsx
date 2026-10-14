@@ -163,7 +163,7 @@ export function RivalWatch() {
   if (missing) {
     return (
       <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/[0.04] px-6 py-10 text-center text-sm text-muted-foreground">
-        La veille des agences sera active après la mise à jour de la base (SQL <span className="font-mono text-[12px] text-foreground">2026-10-14-instagram-dm-posts-concurrents.sql</span>).
+        Cette partie n'est pas encore activée : une mise à jour est en attente (voir Réglages › Diagnostic).
       </div>
     );
   }
@@ -328,9 +328,9 @@ function RivalCard({ r, busy, pool, roster, known, onRefresh, onRemove, onScouti
                         </div>
                       </div>
                       {ours ? (
-                        <span className="rounded-full bg-foreground/[0.07] px-2 py-0.5 text-[10px] font-semibold text-foreground">ROSTER</span>
+                        <span className="rounded-full bg-foreground/[0.07] px-2 py-0.5 text-[10px] font-semibold text-foreground">Roster</span>
                       ) : inPool ? (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-indigo/10 px-2 py-0.5 text-[10px] font-semibold text-indigo"><Check className="h-2.5 w-2.5" />SCOUTING</span>
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-indigo/10 px-2 py-0.5 text-[10px] font-semibold text-indigo"><Check className="h-2.5 w-2.5" />Scouting</span>
                       ) : (
                         <button type="button" onClick={() => onScouting(c)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover"><Plus className="h-3 w-3" /> Scouting</button>
                       )}

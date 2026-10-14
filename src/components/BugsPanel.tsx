@@ -72,7 +72,7 @@ export function BugsPanel() {
     const ids = g.rows.filter((r) => !r.resolved_at).map((r) => r.id);
     const now = new Date().toISOString();
     const { error } = await supabase.from("error_log").update({ resolved_at: now }).in("id", ids);
-    if (error) return toast(/resolved_at/.test(error.message) ? "Lance d'abord le SQL « error-log-resolve »." : "Impossible de marquer résolu");
+    if (error) return toast(/resolved_at/.test(error.message) ? "Pas encore activé (mise à jour en attente)." : "Impossible de marquer résolu");
     setRows((l) => l?.map((r) => (ids.includes(r.id) ? { ...r, resolved_at: now } : r)) ?? l);
     toast("Bug marqué résolu ✓");
   };

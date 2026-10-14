@@ -859,7 +859,7 @@ function EventModal({
           <ConfirmDialog
             title="Supprimer l'événement"
             message="Cette action est irréversible."
-            confirmLabel="Supprimer"
+            confirmLabel="Supprimer définitivement"
             danger
             onCancel={() => setShowConfirm(false)}
             onConfirm={() => {

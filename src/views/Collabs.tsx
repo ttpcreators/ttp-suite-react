@@ -304,7 +304,7 @@ export function Collabs() {
       step: 1, status: "active", sort_order: nextOrder(rows ?? []),
     };
     const created = await dbInsert("collabs", row);
-    if (!created) return toast("Erreur — la migration collabs est-elle lancée ?");
+    if (!created) return toast("Erreur, réessaie");
     setRows([created as unknown as Row, ...(rows ?? [])]);
     toast("Collab créée ✓");
     setFormOpen(false);
@@ -511,11 +511,11 @@ export function Collabs() {
           </div>
           <div className="flex flex-col gap-3">
             <TextField label="Marque" value={eBrand} onChange={setEBrand} />
+            <SelectField label="Créatrice" value={eCreator} onChange={setECreator} options={creatorOptions} />
             <TextField label="Libellé de la collab" value={eTitle} onChange={setETitle} placeholder="ex Campagne été" />
             <TextField label="Contact marque" value={eContact} onChange={setEContact} />
             <TextField label="Livrables" value={eDeliverables} onChange={setEDeliverables} placeholder="ex 3 posts · 1 reel" />
             <TextField label="Cachet" value={eCachet} onChange={setECachet} />
-            <SelectField label="Créatrice" value={eCreator} onChange={setECreator} options={creatorOptions} />
             <AutoGrowTextField label="Note" value={eNote} onChange={setENote} placeholder="Contexte, angle, points d'attention…" />
             <button
               type="button"
@@ -712,9 +712,7 @@ export function Collabs() {
   } else if (missing) {
     content = (
       <div className="rounded-xl border border-dashed border-primary/30 bg-primary/[0.04] px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">
-        La table des collabs n'est pas encore active.
-        <br />
-        Lance la migration <span className="font-mono text-[12px] text-foreground">2026-09-27-collabs.sql</span> dans le SQL Editor, puis recharge.
+        Les collabs ne sont pas encore activées. Détails dans Réglages › Diagnostic.
       </div>
     );
   } else if (error) {
@@ -753,7 +751,7 @@ export function Collabs() {
             className="mb-5"
             primary={{ eyebrow: "Collabs en cours", value: String(activeRows.length), caption: `sur ${rows.length} collab${rows.length > 1 ? "s" : ""} au total.` }}
             bars={{ label: "En production", value: String(prod), series: byPhase }}
-            small={{ value: String(staleCount), label: `À relancer (> ${STALE_DAYS} j)` }}
+            small={{ value: String(staleCount), label: `Bloquées depuis ${STALE_DAYS} j ou +` }}
             accent={{ value: String(won), label: "Bouclées / gagnées", icon: Trophy }}
           />
         );

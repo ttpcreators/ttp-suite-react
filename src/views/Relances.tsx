@@ -177,7 +177,7 @@ export function Relances() {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border">
         <div className="min-w-0 bg-surface px-5 py-5">
-          <div className="text-[13px] text-muted-foreground">Total impayé</div>
+          <div className="text-[13px] text-muted-foreground">Total en retard</div>
           <div className="mt-2 truncate text-[26px] font-semibold leading-none tracking-tight tabular-nums text-rose-500">{formatEuro(totalDue)}</div>
         </div>
         <div className="min-w-0 bg-surface px-5 py-5">

@@ -65,7 +65,7 @@ async function invokeSourcing<T>(body: Record<string, unknown>): Promise<T & { e
   return (data ?? { error: "reseau" }) as T & { error?: string };
 }
 const errorText = (e?: string) =>
-  e === "migration_manquante" ? "Le Sourcing sera actif après la mise à jour (SQL à lancer)."
+  e === "migration_manquante" ? "Cette partie n'est pas encore activée : une mise à jour est en attente (voir Réglages › Diagnostic)."
     : e === "meta_non_configure" ? "Instagram n'est pas encore relié à Meta."
       : e === "reseau" ? "Le Sourcing n'est pas encore en ligne, ou Meta n'a pas répondu. Réessaie."
         : igWhyText(e) || "Erreur, réessaie.";
@@ -117,15 +117,15 @@ function Check2({ label, checked, onChange, help }: { label: string; checked: bo
 const TOOLS = [
   {
     v: "createurs" as const, icon: Users, title: "Trouver des créatrices", goal: "Pour recruter",
-    text: "Sur Instagram ou YouTube : pars d'un thème, d'une marque, d'une créatrice que tu aimes ou d'une liste. L'app trouve des profils avec leurs chiffres, un score, leur email, et te dit si elles ont déjà une agence.",
+    text: "Des profils à recruter, avec chiffres et email.",
   },
   {
     v: "radar" as const, icon: Radar, title: "Radar à marques", goal: "Pour trouver des clients",
-    text: "Les marques qui paient des créatrices : sur Instagram (toutes les 2 heures), TikTok et YouTube (placements de produit déclarés, chaque matin).",
+    text: "Les marques qui paient des créatrices : tes futurs clients.",
   },
   {
     v: "concurrents" as const, icon: Binoculars, title: "Agences concurrentes", goal: "Pour garder une longueur d'avance",
-    text: "Suis les agences concurrentes : leur croissance jour par jour, les créatrices qu'elles mettent en avant et les marques avec qui elles travaillent.",
+    text: "Leur croissance, leurs créatrices, leurs marques.",
   },
 ];
 type ToolId = (typeof TOOLS)[number]["v"];
@@ -167,15 +167,6 @@ export function Sourcing() {
   return (
     <>
       <PageHeaderRow>
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          Instagram, YouTube et TikTok
-          <HelpTip title="D'où viennent les chiffres ?" align="end">
-            <p>Des outils officiels de Meta (Instagram, le même que pour le Roster et le Scouting), de Google (YouTube) et de TikTok (bibliothèque des partenariats payés en Europe).</p>
-            <p>YouTube : 10 000 unités offertes par jour ; une recherche par thème ou par marque en coûte environ 150.</p>
-            <p>Seuls les comptes <span className="font-medium text-foreground">pro ou créateur</span> sont visibles. Les comptes perso apparaissent grisés.</p>
-            <p>Meta limite le nombre de demandes par heure : si l'app dit « Meta a freiné », réessaie un peu plus tard.</p>
-          </HelpTip>
-        </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setGuide(true)} className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
             <BookOpen className="h-3.5 w-3.5 text-primary" /> Mode d'emploi
@@ -278,7 +269,7 @@ const firstName = (d: Prof | null, user: string) => (d?.name?.trim().split(/\s+/
 const REGIONS = [["FR", "France"], ["BE", "Belgique"], ["CH", "Suisse"], ["CA", "Canada"], ["GB", "Royaume-Uni"], ["US", "États-Unis"]] as const;
 const ytErr = (e?: string) =>
   e === "youtube_non_configure" ? "YouTube n'est pas encore relié (clé YouTube à ajouter)."
-    : e === "migration_manquante" ? "YouTube sera actif après la mise à jour de la base (SQL à lancer)."
+    : e === "migration_manquante" ? "Cette partie n'est pas encore activée : une mise à jour est en attente (voir Réglages › Diagnostic)."
       : e === "recherche_vide" ? "Tape un thème ou une marque."
         : e === "quota_youtube" ? "Quota YouTube du jour atteint : ça repart demain."
           : "YouTube n'a pas répondu, réessaie.";
@@ -819,9 +810,9 @@ function postType(p: RadarPost): PostType {
   return "spontane";
 }
 const TYPE_META: Record<PostType, { label: string; cls: string; tip: string }> = {
-  paye: { label: "PAYÉ", cls: "bg-primary/10 text-primary", tip: "Le post dit #ad, publicité, collaboration commerciale, sponsorisé…" },
-  offert: { label: "OFFERT / CODE", cls: "bg-amber/15 text-amber", tip: "Produit offert, code promo ou réduction : la marque envoie des produits ou rémunère à la vente" },
-  spontane: { label: "SPONTANÉ", cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", tip: "Aucun signe de partenariat dans le texte" },
+  paye: { label: "Payé", cls: "bg-primary/10 text-primary", tip: "Le post dit #ad, publicité, collaboration commerciale, sponsorisé…" },
+  offert: { label: "Offert / code", cls: "bg-amber/15 text-amber", tip: "Produit offert, code promo ou réduction : la marque envoie des produits ou rémunère à la vente" },
+  spontane: { label: "Spontané", cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", tip: "Aucun signe de partenariat dans le texte" },
 };
 /** Extrait du texte centré sur la marque, avec la marque en évidence. */
 function Excerpt({ text, brand, name }: { text: string; brand: string; name?: string }) {
@@ -1103,7 +1094,7 @@ function BrandRadar() {
   if (missing) {
     return (
       <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/[0.04] px-6 py-10 text-center text-sm text-muted-foreground">
-        Le radar sera actif après la mise à jour de la base (SQL <span className="font-mono text-[12px] text-foreground">2026-10-13-instagram-sourcing.sql</span>).
+        Cette partie n'est pas encore activée : une mise à jour est en attente (voir Réglages › Diagnostic).
       </div>
     );
   }
@@ -1129,7 +1120,7 @@ function BrandRadar() {
     toast(`@${handle} ajoutée au Scouting ✓`);
   };
   const srcTag = (p: RadarPost) =>
-    rosterNames[p.c] || p.roster ? { t: "ROSTER", c: "bg-foreground/[0.07] text-foreground" } : poolUsers.has(p.c) ? { t: "SCOUTING", c: "bg-indigo/10 text-indigo" } : { t: "HORS AGENCE", c: "bg-panel text-faint" };
+    rosterNames[p.c] || p.roster ? { t: "Roster", c: "bg-foreground/[0.07] text-foreground" } : poolUsers.has(p.c) ? { t: "Scouting", c: "bg-indigo/10 text-indigo" } : { t: "Hors agence", c: "bg-panel text-faint" };
 
   return (
     <div>
@@ -1208,11 +1199,11 @@ function BrandRadar() {
         <Field label="Créatrice : abonnés min" help={<p>La taille de la créatrice qui a fait le post. Utile pour trouver les marques qui travaillent avec des comptes de la taille des tiens.</p>}><input aria-label="Abonnés minimum de la créatrice" value={minF} onChange={(e) => setMinF(e.target.value)} placeholder="10k" className={cn(IN, "w-28")} /></Field>
         <Field label="max"><input aria-label="Abonnés maximum de la créatrice" value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-24")} /></Field>
         <Field label="Ville de la créatrice" help={<p>Cherche le mot dans la bio de la créatrice qui a fait le post (par exemple Lyon).</p>}><input aria-label="Ville de la créatrice" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Lyon" className={cn(IN, "w-28")} /></Field>
-        <label className="flex flex-col gap-1 text-[10px] font-medium text-faint" title="À traiter = pas encore triées ; Au Pipeline = déjà ajoutées ; Ignorées = mises de côté">Statut
+        <label className="flex flex-col gap-1 text-[10px] font-medium text-faint" title="À traiter = pas encore triées ; Au Pipeline = déjà ajoutées ; Pas pertinentes = mises de côté">Statut
           <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className={cn(IN, "w-32")}>
             <option value="nouveau">À traiter</option>
             <option value="pipeline">Au Pipeline</option>
-            <option value="ignore">Ignorées</option>
+            <option value="ignore">Pas pertinentes</option>
           </select>
         </label>
         <div className="flex flex-wrap items-center gap-3 pb-2 text-[12px] text-muted-foreground">
@@ -1304,7 +1295,7 @@ function BrandRadar() {
                       <Send className="h-3.5 w-3.5" /> Contacter
                     </button>
                     {row.status === "nouveau" ? (
-                      <button type="button" onClick={() => void setRowStatus(row.brand, "ignore").then(() => toast("Retirée · retrouve-la dans Filtres → Statut → Ignorées"))} className="flex items-center gap-1 rounded-full px-2 py-1.5 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                      <button type="button" onClick={() => void setRowStatus(row.brand, "ignore").then(() => toast("Retirée · retrouve-la dans Filtres → Statut → Pas pertinentes"))} className="flex items-center gap-1 rounded-full px-2 py-1.5 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground">
                         <EyeOff className="h-3.5 w-3.5" /> Pas pertinent
                       </button>
                     ) : (
@@ -1323,7 +1314,7 @@ function BrandRadar() {
                         <div key={p.url || `${p.c}${p.at}`} className="rounded-lg bg-panel/60 px-3 py-2">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
                             <a href={igLink(p.c)} target="_blank" rel="noreferrer" className="font-semibold text-foreground hover:underline">@{p.c}</a>
-                            <span className={cn("rounded px-1.5 text-[9px] font-semibold uppercase tracking-wide", src.c)}>{src.t}</span>
+                            <span className={cn("rounded px-1.5 text-[9px] font-semibold tracking-wide", src.c)}>{src.t}</span>
                             {profiles[p.c]?.followers != null && <span className="text-faint">{fmtCompact(profiles[p.c]?.followers ?? 0)}</span>}
                             <span className="text-faint">{fmtAgo(p.at)}{p.n > 1 ? ` · ${p.n} posts pareils` : ""}</span>
                             {srcOf(p) === "hors" && (

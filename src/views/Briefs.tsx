@@ -2,7 +2,7 @@ import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn, titleCase } from "@/lib/utils";
-import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown, Paperclip, FileText, UserRound, Clock } from "lucide-react";
+import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown, Paperclip, FileText, UserRound, CheckCircle2 } from "lucide-react";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { StatsBento } from "@/components/ui/stats-bento";
@@ -286,7 +286,7 @@ export function Briefs() {
       if (!(await dbUpdate("briefs", row.id, { pdf }))) {
         await supabase.storage.from("documents").remove([path]).catch(() => {});
         if (pdf.docId) await supabase.from("documents").delete().eq("id", pdf.docId).then(() => {}, () => {});
-        return toast("Erreur — lance le SQL « briefs.pdf » ?");
+        return toast("Le PDF n'a pas pu être joint, réessaie");
       }
       patchRow(row.id, { pdf });
       // Brief à jour : on peut maintenant nettoyer l'ancien fichier + son doc.
@@ -383,7 +383,7 @@ export function Briefs() {
             <ActionMenu
               items={[
                 { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(row) },
-                { key: "pdf", label: "Script en PDF", icon: FileDown, onClick: () => printHtml(briefHTML(row)) },
+                { key: "pdf", label: "Télécharger le brief (PDF)", icon: FileDown, onClick: () => printHtml(briefHTML(row)) },
                 ...(row.pdf
                   ? [
                       { key: "pdfopen", label: "Ouvrir le PDF joint", icon: FileText, onClick: () => openPdf(row) },
@@ -468,7 +468,7 @@ export function Briefs() {
               </div>
               <div className="flex flex-col gap-3 rounded-2xl bg-panel/60 p-2 min-h-[120px]">
                 {items.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-[11px] text-faint">Vide</div>
+                  <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-[11px] text-faint">Aucun brief</div>
                 ) : (
                   items.map((r) => renderCard(r, true))
                 )}
@@ -500,10 +500,10 @@ export function Briefs() {
         return (
           <StatsBento
             className="mb-5"
-            primary={{ eyebrow: "Briefs terminés", value: String(termine), caption: `sur ${rows.length} brief${rows.length > 1 ? "s" : ""} au total.` }}
+            primary={{ eyebrow: "À valider", value: String(valider), caption: `sur ${rows.length} brief${rows.length > 1 ? "s" : ""} au total.` }}
             bars={{ label: "Par statut", value: `${cours} en cours`, series: [attente, valider, cours, termine] }}
             small={{ value: String(attente), label: "En attente" }}
-            accent={{ value: String(valider), label: "À valider", icon: Clock }}
+            accent={{ value: String(termine), label: "Terminés", icon: CheckCircle2 }}
           />
         );
       })()}

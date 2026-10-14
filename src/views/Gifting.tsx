@@ -200,11 +200,11 @@ export function Gifting() {
         { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(g) },
         {
           key: "del",
-          label: "Supprimer",
+          label: "Mettre à la corbeille",
           icon: Trash2,
           danger: true,
           onClick: () => remove(g),
-          confirm: { title: "Supprimer le gifting", message: `Supprimer « ${g.brand || g.product || "ce gifting"} » ? Il ira dans la corbeille.` },
+          confirm: { title: "Mettre à la corbeille", message: `Déplacer « ${g.brand || g.product || "ce gifting"} » vers la corbeille ? Tu pourras le restaurer.`, confirmLabel: "Mettre à la corbeille" },
         },
       ]}
     />

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
-import { Activity, Check, Save, Pencil, X, ArrowUpRight, Calculator, Gauge, History } from "lucide-react";
+import { Activity, Check, Save, Pencil, X, Calculator, Gauge, History } from "lucide-react";
 import { TickMeter } from "@/components/ui/dash";
 import { supabase } from "@/lib/supabase";
 
@@ -306,7 +306,7 @@ export function Engagement() {
         : creatorId
           ? updatesFiche
             ? "Enregistré (fiche + historique) ✓"
-            : `Historique + portail ✓ (fiche = ${selectedCreator?.platform ?? "plateforme principale"})`
+            : "Mesure enregistrée ✓"
           : "Ajouté à l'historique ✓",
     );
   };
@@ -405,7 +405,7 @@ export function Engagement() {
               setSavedOk(false);
             }}
             options={[
-              { value: "", label: "— Aucun (calcul libre)" },
+              { value: "", label: "Aucune (simple calcul)" },
               ...creators.map((c) => ({ value: c.id, label: titleCase(c.name) })),
             ]}
           />
@@ -472,8 +472,7 @@ export function Engagement() {
             className="min-w-[130px] flex-1"
           />
           <p className="flex-[2] pb-2.5 text-[11px] leading-snug text-faint">
-            Stats <span className="font-medium text-foreground">cumulées des 30 derniers jours</span> (Insights).
-            Taux = interactions ÷ vues × 100. Les abonnés ne comptent pas dans le calcul — ils suivent l'évolution du créateur (mis à jour sur sa fiche).
+            Chiffres des 30 derniers jours. Les abonnés ne comptent pas dans le taux.
           </p>
         </div>
       </div>
@@ -579,7 +578,7 @@ export function Engagement() {
         <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-panel/50" />}>
           <GlassStatChart
             title="Taux d'engagement moyen"
-            subtitle="Moyenne de tes calculs, par mois"
+            subtitle="Moyenne de tes mesures, par mois"
             points={erTrend}
             format={(n) => `${n.toFixed(2).replace(".", ",")} %`}
             color="var(--primary)"
@@ -589,22 +588,25 @@ export function Engagement() {
         </Suspense>
       )}
 
-      {/* Historique des calculs */}
+      {/* Historique des mesures */}
       {history.length > 0 && (
         <div className="rounded-2xl border border-border bg-surface p-5">
-          <div className="mb-2 flex items-center justify-between">
-            {/* → page Suivi engagement (courbes d'évolution taux / abonnés / interactions) */}
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "suivi" }))}
-              title="Voir l'évolution (graphiques)"
-              className="group flex items-center gap-2 text-[14px] font-semibold text-foreground transition-colors hover:text-muted-foreground"
-            >
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <div className="flex items-center gap-2 text-[14px] font-semibold text-foreground">
               <History className="h-4 w-4 text-muted-foreground" />
-              Historique des calculs
-              <ArrowUpRight className="h-4 w-4 text-faint" />
-            </button>
-            <span className="text-[12px] text-muted-foreground">{history.length} calcul{history.length > 1 ? "s" : ""}</span>
+              Historique des mesures
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[12px] text-muted-foreground">{history.length} mesure{history.length > 1 ? "s" : ""}</span>
+              {/* → page Suivi engagement (courbes d'évolution taux / abonnés / interactions) */}
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "suivi" }))}
+                className="text-[12px] font-medium text-primary transition-opacity hover:opacity-80"
+              >
+                Voir l'évolution →
+              </button>
+            </div>
           </div>
           <div className="divide-y divide-border">
             {history.map((h) => (
@@ -612,7 +614,7 @@ export function Engagement() {
                 <button
                   type="button"
                   onClick={() => setViewEntry(h)}
-                  title="Voir le détail du calcul"
+                  title="Voir le détail de la mesure"
                   className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left transition-colors hover:opacity-80"
                 >
                   <span className="min-w-0 flex-1">
@@ -621,7 +623,7 @@ export function Engagement() {
                       <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{h.platformLabel}</span>
                     </span>
                     <span className="mt-0.5 block truncate text-[10px] text-faint">
-                      <span className="font-semibold text-muted-foreground">Calculé le {h.date}</span> · {h.detail}
+                      <span className="font-semibold text-muted-foreground">Mesure du {h.date}</span> · {h.detail}
                     </span>
                   </span>
                   <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{h.er}</span>
@@ -632,7 +634,7 @@ export function Engagement() {
                 <button
                   type="button"
                   onClick={() => loadHist(h)}
-                  title="Modifier ce calcul"
+                  title="Modifier cette mesure"
                   className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors hover:bg-rowhover", editingId === h.id ? "text-primary" : "text-faint hover:text-foreground")}
                 >
                   <Pencil className="h-4 w-4" />
@@ -710,7 +712,7 @@ function DetailModal({
               <span className="truncate text-sm font-semibold text-foreground">{entry.creator}</span>
               <span className="shrink-0 rounded-full bg-rowhover px-1.5 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">{entry.platformLabel}</span>
             </div>
-            <div className="mt-0.5 text-[10px] text-faint">Calculé le {entry.date}</div>
+            <div className="mt-0.5 text-[10px] text-faint">Mesure du {entry.date}</div>
           </div>
           <button
             type="button"

@@ -187,7 +187,7 @@ export function Objectifs() {
     const caVal = ca.trim();
     const pct = tg ? Math.round((parseAmount(caVal) / parseAmount(tg)) * 100) || 0 : 0;
     const item: Objective = {
-      name: nm.toUpperCase(),
+      name: nm,
       ca: caVal || "—",
       target: tg,
       pct: Number.isFinite(pct) ? pct : 0,
@@ -255,7 +255,7 @@ export function Objectifs() {
               <span>{list.length > 1 ? "objectifs" : "objectif"}</span>
               <span className="text-faint">·</span>
               <span>Progression moyenne</span>
-              <span className="font-semibold text-signaltext">{avgPct}%</span>
+              <span className="font-semibold text-signaltext">{avgPct}&nbsp;%</span>
             </>
           )}
         </div>
@@ -290,7 +290,7 @@ export function Objectifs() {
           className="min-w-[140px] flex-none"
         />
         <TextField
-          label="CA réalisé (optionnel)"
+          label="Réalisé (optionnel)"
           value={ca}
           onChange={setCa}
           placeholder="38 000 €"
@@ -349,7 +349,7 @@ export function Objectifs() {
                   <Progress value={pct} className={"h-2 w-auto min-w-0 flex-1 " + tone.track} indicatorClassName={tone.ind} />
                   <div className="flex shrink-0 items-center justify-end gap-2 md:gap-4">
                     <span className={"w-10 shrink-0 text-right text-[13px] font-semibold md:w-12 " + tone.text}>
-                      {pct}%
+                      {pct}&nbsp;%
                     </span>
                     <span className="max-w-28 shrink-0 truncate whitespace-nowrap text-right text-[11px] tabular-nums text-faint md:w-36 md:max-w-none" title={progressLabel(o)}>
                       {progressLabel(o)}
@@ -376,7 +376,7 @@ export function Objectifs() {
       {!loading && !error && (
         <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <TrendingUp className="h-4 w-4 text-primary" /> Suivi des objectifs
+            <TrendingUp className="h-4 w-4 text-primary" /> Progression mois par mois
           </div>
           <p className="mb-2 mt-0.5 text-[11px] text-faint">Progression moyenne par mois</p>
           {trend.length === 0 ? (

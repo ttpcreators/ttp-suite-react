@@ -8,6 +8,7 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { PageHeaderRow } from "@/components/ui/page-header";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { useSearch, matchQuery } from "@/lib/search";
@@ -294,9 +295,9 @@ export function WhatsappView() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
-          {pool.length} contact{pool.length > 1 ? "s" : ""} · statut mis à jour tout seul depuis ton journal
+          {pool.length} contact{pool.length > 1 ? "s" : ""}
         </div>
         <button
           type="button"
@@ -308,13 +309,13 @@ export function WhatsappView() {
         >
           Modèles de mails
         </button>
-      </div>
+      </PageHeaderRow>
 
       {pool.length > 0 && view === "all" && (
         <StatsBento
           className="mb-5"
-          primary={{ eyebrow: "À relancer", value: String(aRelancer.length), caption: `Sans échange depuis ${relanceDays} j (Paramètres).` }}
-          bars={{ label: "Cette semaine · canaux (total)", value: String(faitsSemaine), series: parCanal }}
+          primary={{ eyebrow: "À relancer", value: String(aRelancer.length), caption: `Sans échange depuis ${relanceDays} jours (réglable dans Paramètres).` }}
+          bars={{ label: "Prises de contact cette semaine", value: String(faitsSemaine), series: parCanal }}
           small={{ value: String(reponsesMois), label: "Réponses (30 j)" }}
           accent={{ value: String(jamais.length), label: "Jamais contactés", icon: UserRound }}
         />
@@ -338,17 +339,26 @@ export function WhatsappView() {
         {tagList.length > 0 && (
           <Tabs
             size="md"
-            label="Filtrer par type de contact"
+            label="Filtrer par catégorie"
             wrap
             value={tagFilter}
             onValueChange={setTagFilter}
-            items={[{ value: "__all__", label: "Tous les types" }, ...tagList.map((t) => ({ value: t, label: t }))]}
+            items={[{ value: "__all__", label: "Toutes les catégories" }, ...tagList.map((t) => ({ value: t, label: t }))]}
           />
         )}
       </div>
 
+      {/* Aucun contact (carnet vide ou catégorie vide) : un seul message, pas de sections vides. */}
+      {pool.length === 0 && (
+        <div className="mb-5 rounded-2xl border border-dashed border-border px-4 py-6 text-center text-[12px] text-faint">
+          {query.trim()
+            ? `Aucun résultat pour « ${query} »`
+            : "Aucune marque à contacter. Ajoute des contacts dans Contacts, ou trouve des marques dans Sourcing › Radar à marques."}
+        </div>
+      )}
+
       {/* 1) À relancer aujourd'hui */}
-      {(view === "all" || view === "relance") && (
+      {pool.length > 0 && (view === "all" || view === "relance") && (
         <section className="mb-5">
           <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
             <Send className="h-3 w-3" /> À relancer ({aRelancer.length})
@@ -364,7 +374,7 @@ export function WhatsappView() {
       )}
 
       {/* 2) Jamais contactés */}
-      {(view === "all" || view === "jamais") && (
+      {pool.length > 0 && (view === "all" || view === "jamais") && (
         <section className="mb-5">
           <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
             <UserRound className="h-3 w-3" /> Jamais contactés ({jamais.length})

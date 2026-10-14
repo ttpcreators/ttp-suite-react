@@ -193,7 +193,7 @@ export function RepresentationContract() {
       const nextList = idx >= 0 ? list.map((c, i) => (i === idx ? { ...cs, id: c.id } : c)) : [...list, cs];
       return { ...fresh, [ctName]: nextList };
     });
-    if (ok) toast(existed ? `Cas « ${name} » mis à jour ✓` : `Cas « ${name} » enregistré ✓`);
+    if (ok) toast(existed ? `Modèle « ${name} » mis à jour ✓` : `Modèle « ${name} » enregistré ✓`);
   };
   const loadCase = (cs: SavedCase) => {
     setConfig({ ...defaultConfig(cs.config.variante || "exclusif"), ...cs.config });
@@ -204,7 +204,7 @@ export function RepresentationContract() {
       ...fresh,
       [ctName]: (fresh[ctName] ?? []).filter((c) => c.id !== id),
     }));
-    if (ok) toast("Cas supprimé");
+    if (ok) toast("Modèle supprimé");
   };
 
   // ── Historique des contrats : enregistrer / charger / partager / supprimer ──
@@ -253,7 +253,7 @@ export function RepresentationContract() {
       const fresh = ((await getAppState())["contractHistory"] as ContractHist[]) ?? [];
       const ok = await saveAppStateKey("contractHistory", [entry, ...fresh]);
       if (!ok) {
-        toast("Contrat stocké mais historique non enregistré — réessaie");
+        toast("Contrat stocké, mais pas ajouté aux contrats enregistrés. Réessaie");
         return;
       }
       setLocalHist([entry, ...hist]);
@@ -330,7 +330,7 @@ export function RepresentationContract() {
     setLocalHist(hist.filter((x) => x.id !== e.id));
     const { error: docErr } = await supabase.from("documents").delete().eq("id", e.id);
     await supabase.storage.from("documents").remove([e.path]).catch(() => {});
-    toast(docErr ? "Contrat retiré de l'historique, mais toujours visible dans Documents. Supprime-le là-bas" : "Contrat supprimé");
+    toast(docErr ? "Contrat retiré des contrats enregistrés, mais toujours visible dans Documents. Supprime-le là-bas" : "Contrat supprimé");
   };
 
   // Champs courts (nombre, date, petit menu) côte à côte par deux ; un champ court sans
@@ -441,7 +441,7 @@ export function RepresentationContract() {
               }}
               onDelete={(id) => {
                 const cs = cases.find((c) => c.id === id);
-                if (cs) setPendingDel({ message: `Supprimer le cas « ${cs.name} » ? Cette action est irréversible.`, run: () => deleteCase(cs.id) });
+                if (cs) setPendingDel({ message: `Supprimer définitivement le modèle « ${cs.name} » ? Cette action est irréversible.`, run: () => deleteCase(cs.id) });
               }}
               name={caseName}
               onName={setCaseName}
@@ -505,9 +505,9 @@ export function RepresentationContract() {
                 <button type="button" onClick={() => shareContract(e)} title="Copier un lien de partage (7 jours)" aria-label="Partager" className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"><Link2 className="h-4 w-4" /></button>
                 <button
                   type="button"
-                  onClick={() => setPendingDel({ title: "Supprimer le contrat", message: `Supprimer « ${e.title} » ?${e.creator ? " Il sera aussi retiré de l'espace du créateur." : ""}`, run: () => deleteContract(e) })}
-                  title="Supprimer"
-                  aria-label="Supprimer"
+                  onClick={() => setPendingDel({ title: "Supprimer définitivement", message: `Supprimer « ${e.title} » ?${e.creator ? " Il sera aussi retiré de l'espace du créateur." : ""} Cette action est irréversible.`, run: () => deleteContract(e) })}
+                  title="Supprimer définitivement"
+                  aria-label="Supprimer définitivement"
                   className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-rose-500"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -532,9 +532,9 @@ export function RepresentationContract() {
       )}
       {pendingDel && (
         <ConfirmDialog
-          title={pendingDel.title ?? "Supprimer le cas"}
+          title={pendingDel.title ?? "Supprimer définitivement le modèle"}
           message={pendingDel.message}
-          confirmLabel="Supprimer"
+          confirmLabel="Supprimer définitivement"
           danger
           onCancel={() => setPendingDel(null)}
           onConfirm={() => {

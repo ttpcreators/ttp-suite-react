@@ -108,7 +108,7 @@ export function YouTubeRadar() {
     setRunning(false);
     setReload((n) => n + 1);
     const r = (data ?? {}) as State & { error?: string };
-    if (error || r.error) return toast(r.error === "migration_manquante" ? "Le radar YouTube sera actif après le SQL" : r.error === "youtube_non_configure" ? "YouTube n'est pas relié" : "Le radar n'a pas pu tourner, réessaie");
+    if (error || r.error) return toast(r.error === "migration_manquante" ? "Radar YouTube pas encore activé (mise à jour en attente)." : r.error === "youtube_non_configure" ? "YouTube n'est pas relié" : "Le radar n'a pas pu tourner, réessaie");
     toast(`${r.sponsored ?? 0} vidéo${(r.sponsored ?? 0) > 1 ? "s" : ""} sponsorisée${(r.sponsored ?? 0) > 1 ? "s" : ""} · ${r.brands ?? 0} marque${(r.brands ?? 0) > 1 ? "s" : ""}${r.quota ? ` · quota YouTube ${r.quota.used}/${r.quota.limit}` : ""}`);
   };
   const setStatus = async (b: Row, s: Status) => {
@@ -142,7 +142,7 @@ export function YouTubeRadar() {
   if (missing) {
     return (
       <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/[0.04] px-6 py-10 text-center text-sm text-muted-foreground">
-        Le radar YouTube sera actif après la mise à jour de la base (SQL <span className="font-mono text-[12px] text-foreground">2026-10-14-youtube-radar.sql</span>).
+        Cette partie n'est pas encore activée : une mise à jour est en attente (voir Réglages › Diagnostic).
       </div>
     );
   }
@@ -214,9 +214,9 @@ export function YouTubeRadar() {
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="truncate text-[14px] font-semibold text-foreground">{b.name}</span>
                         {flagged > 0 ? (
-                          <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary" title="La créatrice a coché « communication commerciale » sur YouTube"><BadgeCheck className="h-3 w-3" />PLACEMENT DÉCLARÉ</span>
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary" title="La créatrice a coché « communication commerciale » sur YouTube"><BadgeCheck className="h-3 w-3" />Placement déclaré</span>
                         ) : (
-                          <span className="rounded-full bg-amber/15 px-2 py-0.5 text-[10px] font-semibold text-amber" title="Code promo, #ad ou partenariat dans la description">CODE / #AD</span>
+                          <span className="rounded-full bg-amber/15 px-2 py-0.5 text-[10px] font-semibold text-amber" title="Code promo, #ad ou partenariat dans la description">Code / #ad</span>
                         )}
                         {mine > 0 && <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">Chez {mine} de tes créatrices</span>}
                         {known.has(b.brand) && <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Déjà en contact</span>}
@@ -260,9 +260,9 @@ export function YouTubeRadar() {
                               {p.c}{p.subs != null ? <span className="font-normal text-faint"> · {fmtCompact(p.subs)}</span> : null}
                             </a>
                             {p.src === "roster" ? (
-                              <span className="shrink-0 text-[9px] font-semibold text-foreground">ROSTER</span>
+                              <span className="shrink-0 text-[9px] font-semibold text-foreground">Roster</span>
                             ) : p.src === "scouting" || pool.has(chUrl(p).toLowerCase()) ? (
-                              <span className="shrink-0 text-[9px] font-semibold text-indigo">SCOUTING</span>
+                              <span className="shrink-0 text-[9px] font-semibold text-indigo">Scouting</span>
                             ) : (
                               <button type="button" onClick={() => void toScouting(p, b.name)} className="shrink-0 text-[10px] font-medium text-primary">+ Scouting</button>
                             )}

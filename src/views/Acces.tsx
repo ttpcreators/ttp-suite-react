@@ -73,7 +73,7 @@ function AgencyAccountEditor({ a, onSaved, onClose }: { a: AgencyAccount; onSave
     setSaving(true);
     const r = await saveAgencyName(a.user_id, n);
     setSaving(false);
-    if (r === "sql") return toast("Lance d'abord le SQL « nom fondateur » dans Supabase.");
+    if (r === "sql") return toast("Pas encore activé (mise à jour en attente).");
     if (r === "erreur") return toast("Nom non enregistré, réessaie");
     onSaved(n);
     toast("Nom enregistré ✓");
@@ -128,7 +128,6 @@ function AgencyAccountsPanel({ onReset }: { onReset: (email: string) => void }) 
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <Crown className="h-4 w-4 text-muted-foreground" />
         <span className="text-[14px] font-semibold text-foreground">Comptes de l'agence</span>
-        <span className="text-[12px] text-faint">· tels qu'enregistrés dans la base</span>
       </div>
       <ul className="divide-y divide-border">
         {list.map((a) => (
@@ -141,7 +140,7 @@ function AgencyAccountsPanel({ onReset }: { onReset: (email: string) => void }) 
               </span>
               <span className="text-[11px] text-faint max-sm:hidden">{when(a.last_sign_in_at)}</span>
               <AnimatedBadge status={a.agency_role === "founder" ? "success" : "neutral"} size="sm">
-                {a.agency_role === "founder" ? "Propriétaire" : "Membre"}
+                {a.agency_role === "founder" ? "Fondateur" : "Membre"}
               </AnimatedBadge>
               <button
                 type="button"
@@ -236,8 +235,8 @@ function AccountRow({ a, onDelete, onReset, photoUrl }: { a: AccessAccount; onDe
               danger: true,
               onClick: () => onDelete(a),
               confirm: {
-                title: "Retirer l'accès",
-                message: `Retirer ${a.email} de cette liste ? (Le compte de connexion, lui, n'est pas supprimé.)`,
+                title: "Retirer de la liste",
+                message: `« ${a.email} » disparaît de cette liste, mais peut toujours se connecter.`,
                 confirmLabel: "Retirer",
               },
             },
@@ -479,7 +478,7 @@ export function Acces() {
         label="Sous-pages des accès"
         items={[
           { value: "comptes", label: "Comptes app" },
-          { value: "emails", label: "E-mails créateurs" },
+          { value: "emails", label: "Identifiants des créatrices" },
         ]}
         value={section}
         onValueChange={(v) => {

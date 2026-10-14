@@ -80,7 +80,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
     const t = text.trim();
     if (!t) return;
     const created = await dbInsert("todo_routines", { text: t, weekday: day, sort_order: nextOrder(rows ?? []) });
-    if (!created) return toast("Non enregistré : lance d'abord le SQL « équipe, activité, routines ».");
+    if (!created) return toast("Les tâches hebdomadaires ne sont pas encore activées.");
     setRows((l) => [...(l ?? []), created as unknown as Routine]);
     setText("");
     setDay(null);
@@ -148,7 +148,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
           <div className="border-t border-border">
             {missing ? (
               <p className="px-4 py-4 text-[12px] text-muted-foreground sm:px-5">
-                Les tâches qui reviennent chaque semaine arrivent ici dès que le SQL « équipe, activité, routines » est lancé dans Supabase.
+                Les tâches hebdomadaires ne sont pas encore activées.
               </p>
             ) : (
               <>
@@ -173,7 +173,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                 )}
                 {list.length === 0 && !adding ? (
                   <p className="px-4 py-4 text-[12px] text-muted-foreground sm:px-5">
-                    Ajoute ici ce que tu refais chaque semaine : plus besoin de le réécrire, ça revient tout seul chaque lundi.
+                    Ajoute ici ce que tu refais chaque semaine, sans avoir à le réécrire. Chaque tâche revient toute seule chaque semaine, le jour choisi.
                   </p>
                 ) : (
                   <ul className="divide-y divide-border">
@@ -239,7 +239,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                             <ActionMenu
                               items={[
                                 { key: "edit", label: "Modifier", icon: Pencil, onClick: () => { setEditId(r.id); setEditText(r.text); setEditDay(r.weekday ?? null); } },
-                                { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => void remove(r), confirm: { title: "Supprimer la tâche hebdomadaire", message: `Supprimer « ${r.text} » ? Tu pourras la restaurer depuis la corbeille.` } },
+                                { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: () => void remove(r), confirm: { title: "Mettre à la corbeille", message: `Déplacer « ${r.text} » vers la corbeille ? Tu pourras la restaurer.`, confirmLabel: "Mettre à la corbeille" } },
                               ]}
                             />
                           </div>

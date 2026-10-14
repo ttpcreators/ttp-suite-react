@@ -47,9 +47,9 @@ const DEFAULT_TEMPLATES: Template[] = [
     title: "DM marque à froid",
     body:
       "Bonjour {marque} 👋\n\n" +
-      "Je gère les collaborations de {créateur} chez TTP Agency. On adore votre univers et on pense qu'une campagne ensemble aurait du sens : audience engagée, contenu qui performe.\n\n" +
+      "Je gère les collaborations de {créateur} chez TTP Creators. On adore votre univers et on pense qu'une campagne ensemble aurait du sens : audience engagée, contenu qui performe.\n\n" +
       "Puis-je vous envoyer le media kit de {créateur} par mail ?\n\n" +
-      "Belle journée,\nTTP Agency",
+      "Belle journée,\nTTP Creators",
   },
   {
     category: "Prospection",
@@ -58,7 +58,7 @@ const DEFAULT_TEMPLATES: Template[] = [
       "Bonjour {marque},\n\n" +
       "Je me permets de revenir vers vous concernant le devis envoyé pour la collaboration avec {créateur}.\n\n" +
       "Avez-vous eu l'occasion d'en discuter en interne ? Je reste disponible pour ajuster le format ou le budget si besoin.\n\n" +
-      "Au plaisir d'échanger,\nTTP Agency",
+      "Au plaisir d'échanger,\nTTP Creators",
   },
   {
     category: "Négociation",
@@ -67,7 +67,7 @@ const DEFAULT_TEMPLATES: Template[] = [
       "Bonjour {marque},\n\n" +
       "Merci pour votre retour. Pour ce format, le tarif de {créateur} est de [Montant], droits et exclusivité inclus.\n\n" +
       "Nous pouvons ajuster selon le volume ou la durée de diffusion : dites-moi ce qui correspond à votre budget et je vous fais une proposition sur-mesure.\n\n" +
-      "Bien à vous,\nTTP Agency",
+      "Bien à vous,\nTTP Creators",
   },
   {
     category: "Suivi",
@@ -76,7 +76,7 @@ const DEFAULT_TEMPLATES: Template[] = [
       "Bonjour {marque},\n\n" +
       "Bonne nouvelle : {créateur} a validé le brief 🎉 La production démarre.\n\n" +
       "Livraison prévue le [Date]. Je vous tiens informé(e) de l'avancement et reviens vers vous dès que les premiers contenus sont prêts pour relecture.\n\n" +
-      "Merci de votre confiance,\nTTP Agency",
+      "Merci de votre confiance,\nTTP Creators",
   },
   {
     category: "Suivi",
@@ -85,7 +85,7 @@ const DEFAULT_TEMPLATES: Template[] = [
       "Bonjour {marque},\n\n" +
       "Petit rappel amical : la livraison des contenus de {créateur} est prévue pour le [Date].\n\n" +
       "Il nous manque encore [élément manquant] de votre côté pour finaliser. Pourriez-vous nous le transmettre d'ici [Date] afin de tenir la deadline ?\n\n" +
-      "Merci !\nTTP Agency",
+      "Merci !\nTTP Creators",
   },
   {
     category: "Facturation",
@@ -94,7 +94,7 @@ const DEFAULT_TEMPLATES: Template[] = [
       "Bonjour {marque},\n\n" +
       "Comme convenu, vous trouverez ci-joint la facture #[Réf] pour la collaboration avec {créateur}, d'un montant de [Montant].\n\n" +
       "Le règlement est attendu sous [30] jours. N'hésitez pas si vous avez besoin d'un justificatif complémentaire.\n\n" +
-      "Merci et à bientôt,\nTTP Agency",
+      "Merci et à bientôt,\nTTP Creators",
   },
   {
     category: "Facturation",
@@ -103,7 +103,7 @@ const DEFAULT_TEMPLATES: Template[] = [
       "Bonjour {marque},\n\n" +
       "Sauf erreur de notre part, la facture #[Réf] d'un montant de [Montant] (échéance le [Date]) reste en attente de règlement.\n\n" +
       "Pourriez-vous nous indiquer une date de paiement ? Je reste à disposition pour tout justificatif.\n\n" +
-      "Merci d'avance,\nTTP Agency",
+      "Merci d'avance,\nTTP Creators",
   },
 ];
 
@@ -244,12 +244,12 @@ export function Templates() {
       return;
     }
     closeForm();
-    toast(target ? "Template modifié ✓" : "Template ajouté ✓");
+    toast(target ? "Modèle modifié ✓" : "Modèle ajouté ✓");
   }
 
   async function removeTpl(t: Template) {
     const ok = await writeFresh((fresh) => fresh.filter((x) => !sameTpl(x, t)));
-    toast(ok ? "Template supprimé" : "Erreur, réessaie");
+    toast(ok ? "Modèle supprimé" : "Erreur, réessaie");
   }
 
   // Menu Modifier / Supprimer, uniquement pour les modèles perso.
@@ -265,7 +265,7 @@ export function Templates() {
               icon: Trash2,
               danger: true,
               onClick: () => removeTpl(t),
-              confirm: { title: "Supprimer le template", message: `Supprimer « ${t.title} » ? Cette action est irréversible.` },
+              confirm: { title: "Supprimer le modèle", message: `Supprimer « ${t.title} » ? Cette action est irréversible.` },
             },
           ]}
         />
@@ -277,7 +277,7 @@ export function Templates() {
       <PageHeaderRow>
         {!showForm && (
           <AddButton
-            label="Template"
+            label="Modèle"
             onClick={() => {
               setEditing(null);
               setShowForm(true);
@@ -286,14 +286,15 @@ export function Templates() {
         )}
       </PageHeaderRow>
       <p className="mb-4 text-sm text-muted-foreground">
-        Bibliothèque de modèles réutilisables. Variables :{" "}
-        <code className="rounded bg-rowhover px-1 py-0.5 text-xs text-foreground">{"{marque}"}</code>{" "}
-        <code className="rounded bg-rowhover px-1 py-0.5 text-xs text-foreground">{"{créateur}"}</code>
+        Copie un modèle, puis remplace{" "}
+        <code className="rounded bg-rowhover px-1 py-0.5 text-xs text-foreground">{"{marque}"}</code> et{" "}
+        <code className="rounded bg-rowhover px-1 py-0.5 text-xs text-foreground">{"{créateur}"}</code> avant
+        d'envoyer.
       </p>
 
       <InlineForm
         open={showForm}
-        title={editing ? "Modifier le template" : "Nouveau template"}
+        title={editing ? "Modifier le modèle" : "Nouveau modèle"}
         submitLabel={editing ? "Enregistrer" : "Ajouter"}
         onClose={closeForm}
         onSubmit={submit}
@@ -331,7 +332,7 @@ export function Templates() {
               type="text"
               value={localQuery}
               onChange={(e) => setLocalQuery(e.target.value)}
-              placeholder="Rechercher un template…"
+              placeholder="Rechercher un modèle…"
               className="w-full rounded-md border border-border bg-surface py-2 pl-9 pr-3 text-xs text-foreground placeholder:text-faint outline-none transition-colors focus:border-primary"
             />
           </div>
@@ -359,7 +360,7 @@ export function Templates() {
       {!loading && filtered.length === 0 && (
         <div className="rounded-2xl border border-border bg-surface px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">
           {query.trim() || localQuery.trim() || activeCategory !== "Tous"
-            ? "Aucun modèle ne correspond à votre recherche."
+            ? "Aucun modèle ne correspond à ta recherche."
             : "Aucun modèle pour le moment."}
         </div>
       )}

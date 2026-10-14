@@ -56,10 +56,10 @@ async function checkEdge(): Promise<DiagCheck> {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/daily-digest`, { method: "OPTIONS" });
     return res.status >= 200 && res.status < 500
-      ? { key: "edge", label: "Fonctions serveur (notifs / e-mails)", status: "ok", detail: "Joignables" }
-      : { key: "edge", label: "Fonctions serveur (notifs / e-mails)", status: "warn", detail: `Réponse ${res.status}` };
+      ? { key: "edge", label: "Envois (notifications et mails)", status: "ok", detail: "Joignables" }
+      : { key: "edge", label: "Envois (notifications et mails)", status: "warn", detail: `Réponse ${res.status}` };
   } catch {
-    return { key: "edge", label: "Fonctions serveur (notifs / e-mails)", status: "warn", detail: "Injoignables" };
+    return { key: "edge", label: "Envois (notifications et mails)", status: "warn", detail: "Injoignables" };
   }
 }
 
@@ -72,7 +72,7 @@ async function checkIntegrity(): Promise<DiagCheck> {
       supabase.from("creators").select("name").limit(2000),
       supabase.from("todos").select("text").limit(2000),
     ]);
-    if (inv.error || cr.error || td.error) return { key: "data", label: "Intégrité des données", status: "warn", detail: "Vérification partielle (accès restreint)" };
+    if (inv.error || cr.error || td.error) return { key: "data", label: "Données", status: "warn", detail: "Vérification partielle (accès restreint)" };
     const badInv = (inv.data ?? []).filter((r) => !String((r as { ref?: string }).ref ?? "").trim()).length;
     const badCr = (cr.data ?? []).filter((r) => !String((r as { name?: string }).name ?? "").trim()).length;
     const badTd = (td.data ?? []).filter((r) => !String((r as { text?: string }).text ?? "").trim()).length;
@@ -80,10 +80,10 @@ async function checkIntegrity(): Promise<DiagCheck> {
     if (badCr) issues.push(`${badCr} créateur(s) sans nom`);
     if (badTd) issues.push(`${badTd} tâche(s) vide(s)`);
     return issues.length
-      ? { key: "data", label: "Intégrité des données", status: "warn", detail: issues.join(" · ") }
-      : { key: "data", label: "Intégrité des données", status: "ok", detail: "Aucune anomalie détectée" };
+      ? { key: "data", label: "Données", status: "warn", detail: issues.join(" · ") }
+      : { key: "data", label: "Données", status: "ok", detail: "Aucune anomalie détectée" };
   } catch {
-    return { key: "data", label: "Intégrité des données", status: "warn", detail: "Vérification impossible" };
+    return { key: "data", label: "Données", status: "warn", detail: "Vérification impossible" };
   }
 }
 

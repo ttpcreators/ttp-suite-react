@@ -94,7 +94,6 @@ export function Activite() {
   return (
     <div>
       <PageHeaderRow>
-        <span className="text-sm text-muted-foreground">Ajouts, « Fait », suppressions et avancées</span>
         <button type="button" onClick={() => void load()} disabled={busy}
           className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover disabled:opacity-60">
           <RefreshCw className={cn("h-3.5 w-3.5", busy && "animate-spin")} /> Actualiser
@@ -122,12 +121,12 @@ export function Activite() {
         </DashPanel>
       ) : missing ? (
         <DashPanel className="px-6 py-10 text-center text-[13px] text-muted-foreground">
-          Le journal de l'équipe n'est pas encore activé. Lance le SQL « équipe, activité, routines » dans Supabase.
+          Le journal de l'équipe n'est pas encore activé.
         </DashPanel>
       ) : days.length === 0 ? (
         <DashPanel className="flex flex-col items-center gap-2 px-6 py-12 text-center">
           <History className="h-5 w-5 text-faint" />
-          <p className="text-[13px] text-muted-foreground">Rien sur cette période.</p>
+          <p className="text-[13px] text-muted-foreground">Aucune activité sur cette période. Essaie « 30 jours ».</p>
         </DashPanel>
       ) : (
         <div className="flex flex-col gap-4">

@@ -145,7 +145,7 @@ export const NICHES = [
 ];
 export const nicheMult = (v: string): number => NICHES.find((n) => n.value === v)?.m ?? 1;
 
-/** Barème modifié par l'agence (Roster → Pricing → Barème) : clé « plateforme.format ». */
+/** Barème modifié par l'agence (Créateurs → Tarifs → Barème) : clé « plateforme.format ». */
 export type RateOverrides = Record<string, { cpm?: [number, number]; rate?: number }>;
 
 export function infFormat(platform: PlatKey, formatKey: string, rates?: RateOverrides): InfFormat | undefined {
