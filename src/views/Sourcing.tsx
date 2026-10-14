@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  AtSign, Binoculars, Bookmark, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Loader2, Mail, PhoneOutgoing, Plus, Radar, RefreshCw, Search, Send, SlidersHorizontal, Users, Wallet, EyeOff, RotateCcw, X,
+  AtSign, Binoculars, Bookmark, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Loader2, Mail, PhoneOutgoing, Plus, Radar, Search, Send, SlidersHorizontal, Users, Wallet, EyeOff, RotateCcw, X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
@@ -18,6 +18,7 @@ import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
 import { OutreachComposer } from "@/components/OutreachComposer";
 import { SourcingGuide } from "@/components/SourcingGuide";
 import { RivalWatch } from "@/components/RivalWatch";
+import { RadarFrame } from "@/components/RadarFrame";
 import { TikTokRadar } from "@/components/TikTokRadar";
 import { YouTubeRadar } from "@/components/YouTubeRadar";
 
@@ -1005,9 +1006,7 @@ function RadarTool() {
       /* stockage indisponible */
     }
   };
-  return (
-    <div>
-      <div className="mb-3">
+  const tabs = (
         <Tabs
           size="sm"
           label="Réseau du radar"
@@ -1019,13 +1018,11 @@ function RadarTool() {
             { value: "youtube", label: "YouTube", icon: <PlatformIcon platform="youtube" className="h-3.5 w-3.5" /> },
           ]}
         />
-      </div>
-      {pf === "tiktok" ? <TikTokRadar /> : pf === "youtube" ? <YouTubeRadar /> : <BrandRadar />}
-    </div>
   );
+  return pf === "tiktok" ? <TikTokRadar platformTabs={tabs} /> : pf === "youtube" ? <YouTubeRadar platformTabs={tabs} /> : <BrandRadar platformTabs={tabs} />;
 }
 
-function BrandRadar() {
+function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
   const [rows, setRows] = useState<RadarRow[] | null>(null);
   const [missing, setMissing] = useState(false);
   const [profiles, setProfiles] = useState<Record<string, Prof & { why?: string | null }>>({});
@@ -1047,6 +1044,7 @@ function BrandRadar() {
   const [city, setCity] = useState("");
   const [status, setStatus] = useState<"nouveau" | "ignore" | "pipeline">("nouveau");
   const [srcF, setSrcF] = useState<"toutes" | "miennes" | "scouting" | "hors">("toutes");
+  const [q, setQ] = useState("");
   // Créatrices hors agence : en file (citées par une marque vérifiée) et déjà lues.
   const [queue, setQueue] = useState<{ waiting: number; read: number } | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
@@ -1157,10 +1155,12 @@ function BrandRadar() {
     const lo = parseCount(minF);
     const hi = parseCount(maxF);
     const town = norm(city.trim());
+    const qn = norm(q.trim()).replace(/^@/, "");
     const out: Item[] = [];
     for (const row of rows) {
       if (row.status !== status) continue;
       const prof = profiles[row.brand];
+      if (qn && !(row.brand.includes(qn) || norm(prof?.name ?? "").includes(qn))) continue;
       prog.total++;
       if (prof && (prof.why || prof.followers != null)) prog.verified++;
       // « Incertain » : profil pas encore vérifié auprès de Meta, ou compte qui ne ressemble pas à une marque.
@@ -1210,8 +1210,8 @@ function BrandRadar() {
     const rank = (x: Item) => (x.types.paye * 3 + x.types.offert * 2 + x.warm * 2) * 10 + x.creators.length;
     return { list: out.sort((a, b) => rank(b) - rank(a)), hid, counts, prog };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, profiles, knownBrands, dmHandles, kind, period, words, minF, maxF, city, status, showUnsure, showKnown, srcF, rosterNames, poolUsers]);
-  const activeFilters = [words.trim(), minF.trim(), maxF.trim(), city.trim()].filter(Boolean).length + (period !== "90" ? 1 : 0) + (status !== "nouveau" ? 1 : 0);
+  }, [rows, profiles, knownBrands, dmHandles, kind, period, words, minF, maxF, city, status, showUnsure, showKnown, srcF, rosterNames, poolUsers, q]);
+  const activeFilters = [words.trim(), minF.trim(), maxF.trim(), city.trim()].filter(Boolean).length + (period !== "90" ? 1 : 0);
   const runVerify = async () => {
     setVerifying(true);
     const r = await invokeSourcing<{ verified?: number; left?: number; stopped?: string }>({ mode: "verify" });
@@ -1221,6 +1221,8 @@ function BrandRadar() {
     setReload((n) => n + 1);
   };
   const pendingNow = prog.total - prog.verified;
+  const statusCounts = { nouveau: 0, pipeline: 0, ignore: 0 } as Record<RadarRow["status"], number>;
+  for (const r of rows ?? []) statusCounts[r.status] = (statusCounts[r.status] ?? 0) + 1;
 
   if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement du radar…</AnimatedBadge>;
   if (missing) {
@@ -1255,70 +1257,63 @@ function BrandRadar() {
     rosterNames[p.c] || p.roster ? { t: "Roster", c: "bg-foreground/[0.07] text-foreground" } : poolUsers.has(p.c) ? { t: "Scouting", c: "bg-indigo/10 text-indigo" } : { t: "Hors agence", c: "bg-panel text-faint" };
 
   return (
-    <div>
-      {/* Les 3 lectures du radar, qui servent aussi de filtre */}
-      <div role="tablist" aria-label="Quelles marques" className="mb-3 grid grid-cols-3 gap-2 sm:gap-2.5">
-        {TILES.map((t) => {
-          const on = kind === t.v;
-          const Icon = t.icon;
-          return (
-            <button key={t.v} type="button" role="tab" aria-selected={on} title={t.text} onClick={() => setKind(t.v)} className={cn("flex items-start gap-3 rounded-2xl border p-3 text-left transition-colors sm:p-3.5", on ? t.on : "border-border bg-surface hover:bg-rowhover")}>
-              <span className={cn("hidden h-8 w-8 shrink-0 place-items-center rounded-full sm:grid", on ? t.dot : "bg-panel text-muted-foreground")}><Icon className="h-4 w-4" /></span>
-              <span className="min-w-0">
-                <span className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
-                  <span className="text-[20px] font-bold leading-none tabular-nums text-foreground">{t.n}</span>
-                  <span className="text-[12px] font-semibold text-foreground sm:text-[13px]"><span className="sm:hidden">{t.short}</span><span className="hidden sm:inline">{t.title}</span></span>
-                </span>
-                <span className="mt-1 hidden text-[11px] leading-snug text-muted-foreground sm:block">{t.text}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Chez quelles créatrices */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="text-[11px] font-medium text-faint">Vu chez</span>
-        <Tabs
-          size="sm"
-          wrap
-          label="Vu chez quels créateurs"
-          value={srcF}
-          onValueChange={(v) => setSrcF(v as typeof srcF)}
-          items={[
-            { value: "toutes", label: "Toutes" },
-            { value: "miennes", label: "Mes créateurs" },
-            { value: "scouting", label: "Scouting" },
-            { value: "hors", label: "Hors agence" },
-          ]}
-        />
-        <HelpTip title="Hors agence ?">
-          <p>Des créateurs que tu ne connais pas encore : ceux trouvés par le Sourcing, et ceux que citent les marques du radar. Le radar lit leurs posts petit à petit et ajoute leurs marques.</p>
-          <p>Double intérêt : de nouvelles marques à démarcher, et de nouveaux créateurs à recruter (bouton « + Scouting » sur leurs posts).</p>
-        </HelpTip>
-        {queue && (queue.read > 0 || queue.waiting > 0) && (
-          <span className="text-[11px] text-faint" title="Créateurs hors agence : lus par le radar, et en file pour les prochains passages (toutes les 2 heures)">
-            Hors agence : {queue.read} lue{queue.read > 1 ? "s" : ""}{queue.waiting > 0 ? ` · ${queue.waiting} en attente` : ""}
-          </span>
-        )}
-      </div>
-
-      {/* Actions + filtres repliés */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <button type="button" onClick={() => setFiltersOpen((o) => !o)} className={cn("flex h-9 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors", filtersOpen || activeFilters ? "border-primary text-primary" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
-          <SlidersHorizontal className="h-3.5 w-3.5" /> Filtres{activeFilters ? ` · ${activeFilters}` : ""}
-        </button>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => void runScan()} disabled={scanning} className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" title="Le radar passe tout seul toutes les 2 heures">
-            {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} {scanning ? "Lecture des posts (1 à 2 min)…" : "Lancer le radar"}
-          </button>
-          <HelpTip title="Comment marche le radar ?" align="end">
-            <p>Toutes les 2 heures, l'app lit les derniers posts de tes créateurs, de ceux de ton Scouting, et de créateurs hors agence découverts au fil des recherches (ceux que citent les marques du radar). Elle note les marques citées.</p>
-            <p>Elle vérifie ensuite chaque nom auprès de Meta pour savoir si c'est bien une marque. Chaque passage s'arrête à 60 % du quota Meta, pour te laisser de la marge.</p>
-            <p>« Lancer le radar » le fait tout de suite (1 à 2 minutes).</p>
+    <RadarFrame
+      platformTabs={platformTabs}
+      runNote="Passe toutes les 2 heures"
+      running={scanning}
+      runLabel={scanning ? "Lecture des posts (1 à 2 min)…" : "Lancer le radar"}
+      onRun={() => void runScan()}
+      help={
+            <HelpTip title="Comment marche le radar ?" align="end">
+              <p>Toutes les 2 heures, l'app lit les derniers posts de tes créateurs, de ceux de ton Scouting, et de créateurs hors agence découverts au fil des recherches (ceux que citent les marques du radar). Elle note les marques citées.</p>
+              <p>Elle vérifie ensuite chaque nom auprès de Meta pour savoir si c'est bien une marque. Chaque passage s'arrête à 60 % du quota Meta, pour te laisser de la marge.</p>
+              <p>« Lancer le radar » le fait tout de suite (1 à 2 minutes).</p>
+            </HelpTip>
+      }
+      status={status}
+      onStatus={setStatus}
+      counts={statusCounts}
+      query={q}
+      onQuery={setQ}
+      placeholder="Chercher une marque (@ ou nom)"
+      filters={
+        <>
+          <Tabs
+            size="sm"
+            label="Quel type de marques"
+            value={kind}
+            onValueChange={(v) => setKind(v as typeof kind)}
+            items={TILES.map((t) => ({ value: t.v, label: t.short === "Toutes" ? "Toutes" : t.title, count: t.n }))}
+          />
+          <Tabs
+            size="sm"
+            label="Vu chez quels créateurs"
+            value={srcF}
+            onValueChange={(v) => setSrcF(v as typeof srcF)}
+            items={[
+              { value: "toutes", label: "Tous" },
+              { value: "miennes", label: "Mes créateurs" },
+              { value: "scouting", label: "Scouting" },
+              { value: "hors", label: "Hors agence" },
+            ]}
+          />
+          <HelpTip title="Hors agence ?">
+            <p>Des créateurs que tu ne connais pas encore : ceux trouvés par le Sourcing, et ceux que citent les marques du radar. Le radar lit leurs posts petit à petit et ajoute leurs marques.</p>
+            <p>Double intérêt : de nouvelles marques à démarcher, et de nouveaux créateurs à recruter (bouton « + Scouting » sur leurs posts).</p>
           </HelpTip>
-        </div>
-      </div>
+          <button type="button" onClick={() => setFiltersOpen((o) => !o)} className={cn("flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors", filtersOpen || activeFilters ? "border-primary text-primary" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+            <SlidersHorizontal className="h-3.5 w-3.5" /> Plus de filtres{activeFilters ? ` · ${activeFilters}` : ""}
+          </button>
+        </>
+      }
+      summary={
+        queue && (queue.read > 0 || queue.waiting > 0) ? (
+          <span title="Créateurs hors agence : lus par le radar, et en file pour les prochains passages (toutes les 2 heures)">
+            Hors agence : {queue.read} lu{queue.read > 1 ? "s" : ""}{queue.waiting > 0 ? ` · ${queue.waiting} en attente` : ""}
+          </span>
+        ) : undefined
+      }
+    >
       {filtersOpen && (
         <div className="mb-3 flex flex-wrap items-end gap-2 rounded-2xl border border-border bg-surface p-3">
 
@@ -1331,13 +1326,6 @@ function BrandRadar() {
         <Field label="Créateur : abonnés min" help={<p>La taille du créateur qui a fait le post. Utile pour trouver les marques qui travaillent avec des comptes de la taille des tiens.</p>}><input aria-label="Abonnés minimum du créateur" value={minF} onChange={(e) => setMinF(e.target.value)} placeholder="10k" className={cn(IN, "w-28")} /></Field>
         <Field label="max"><input aria-label="Abonnés maximum du créateur" value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-24")} /></Field>
         <Field label="Ville du créateur" help={<p>Cherche le mot dans la bio du créateur qui a fait le post (par exemple Lyon).</p>}><input aria-label="Ville du créateur" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Lyon" className={cn(IN, "w-28")} /></Field>
-        <label className="flex flex-col gap-1 text-[10px] font-medium text-faint" title="À traiter = pas encore triées ; Au Pipeline = déjà ajoutées ; Pas pertinentes = mises de côté">Statut
-          <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className={cn(IN, "w-32")}>
-            <option value="nouveau">À traiter</option>
-            <option value="pipeline">Au Pipeline</option>
-            <option value="ignore">Pas pertinentes</option>
-          </select>
-        </label>
         <div className="flex flex-wrap items-center gap-3 pb-2 text-[12px] text-muted-foreground">
           <Check2 label="Déjà en contact" checked={showKnown} onChange={setShowKnown} help={<p>Les marques déjà dans tes Contacts, ou avec qui TTP a déjà une conversation en message privé Instagram, sont cachées pour ne garder que les nouvelles. Coche pour les voir aussi.</p>} />
           <Check2 label="Comptes incertains" checked={showUnsure} onChange={setShowUnsure} help={<p>L'app devine si un @ est une marque (site web, bio, abonnés). Quand elle n'est pas sûre (ami tagué, autre créateur, profil pas encore lu), le compte est caché. Coche pour le voir.</p>} />
@@ -1367,7 +1355,7 @@ function BrandRadar() {
       )}
 
       {view.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center text-[13px] text-muted-foreground">
+        <div className="rounded-2xl bg-surface px-6 py-10 text-center text-[13px] text-muted-foreground">
           {rows.length === 0
             ? "Le radar n'a encore rien lu. Il passe toutes les 2 heures ; tu peux aussi « Lancer le radar » maintenant."
             : pendingNow > 0
@@ -1427,7 +1415,7 @@ function BrandRadar() {
                       <Send className="h-3.5 w-3.5" /> Contacter
                     </button>
                     {row.status === "nouveau" ? (
-                      <button type="button" onClick={() => void setRowStatus(row.brand, "ignore").then(() => toast("Retirée · retrouve-la dans Filtres → Statut → Pas pertinentes"))} className="flex items-center gap-1 rounded-full px-2 py-1.5 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                      <button type="button" onClick={() => void setRowStatus(row.brand, "ignore").then(() => toast("Retirée · retrouve-la dans « Pas pertinentes »"))} className="flex items-center gap-1 rounded-full px-2 py-1.5 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground">
                         <EyeOff className="h-3.5 w-3.5" /> Pas pertinent
                       </button>
                     ) : (
@@ -1507,6 +1495,6 @@ function BrandRadar() {
           />
         );
       })()}
-    </div>
+    </RadarFrame>
   );
 }
