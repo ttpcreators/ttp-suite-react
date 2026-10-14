@@ -99,3 +99,50 @@ dans le champ « notes » de la demande.
 > TTP Suite is an internal tool: access is limited to our agency team (accounts are created by
 > us, no public sign-up). Test credentials for the reviewer are provided below. The interface is
 > in French; the screencast has English captions. Path: Relations → DM Instagram.
+
+---
+
+# « Connecter mon Instagram » (créatrices) : même validation Meta
+
+Produit Meta « API Instagram avec connexion Instagram » (ID de l'app Instagram
+`1794104085073381`, redirection `https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ig-callback`).
+Code en place : `ig-connect`, `ig-callback`, `ig-sync` (couverture, vues, interactions 28 j,
+audience âge / genre / villes / pays, vues et couverture moyennes des derniers reels, stats
+des posts de collab ; reporté dans la fiche, le media kit et le calculateur de prix).
+
+**En attendant la validation** : chaque créatrice peut se connecter si elle est ajoutée comme
+**« Testeur(se) Instagram »** (Meta → app → Rôles dans l'application → Ajouter des personnes),
+puis accepte l'invitation sur https://www.instagram.com/accounts/manage_access/ (onglet
+« Invitations de testeur »). Elle clique ensuite « Connecter mon Instagram » dans son espace.
+
+**Pour toutes les créatrices** : vérification de l'entreprise (étape 1 plus haut), puis App
+Review de `instagram_business_basic` et `instagram_business_manage_insights` (accès avancé).
+On peut l'envoyer dans la même demande que `instagram_manage_messages`.
+
+## Scénario de la vidéo
+
+1. Espace créatrice TTP (compte de démonstration de créatrice) → « Envoyer mes stats ».
+2. « Connecter mon Instagram » → page d'accord Instagram (montrer les autorisations) → Autoriser.
+3. Retour dans l'espace : « Instagram connecté ».
+4. Côté agence : fiche de la créatrice → carte « Instagram du jour » → couverture, vues 28 j,
+   vues par reel, audience ; puis Media kit (lignes Instagram et audience remplies).
+5. Montrer « Déconnecter » (la créatrice garde la main).
+
+## Textes à coller (anglais)
+
+**instagram_business_basic**
+
+> TTP Creators is a talent management agency. The creators we represent log in to their own
+> space in TTP Suite (app.ttpcreators.pro) and click "Connect my Instagram". We use
+> instagram_business_basic to identify the connected professional account (username, profile
+> picture, follower count) and to list her recent media, so her stats and sponsored posts are
+> attached to the right creator record. Read-only: we never post or modify anything.
+
+**instagram_business_manage_insights**
+
+> We use instagram_business_manage_insights to read the creator's own account and media
+> insights (reach, views, interactions, saves, shares, aggregated audience demographics by age,
+> gender, city and country). They fill her media kit and the campaign reports we send to brands
+> she works with, replacing the screenshots creators used to send us by hand. Data is visible
+> only to the creator and our agency team, never sold or shared with third parties. The creator
+> can disconnect at any time from her space or from Instagram (Apps and websites).

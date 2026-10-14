@@ -121,3 +121,20 @@ export async function postInsights(token: string, mediaId: string): Promise<{ re
   const n = (k: string) => (typeof by.get(k) === "number" ? (by.get(k) as number) : undefined);
   return { reach: n("reach"), saves: n("saved"), shares: n("shares"), views: n("views") };
 }
+
+/**
+ * Vues et couverture moyennes de ses derniers reels (8 max, 9 demandes) : la vraie
+ * base du prix d'un reel (calculateur de prix, ligne Instagram du media kit).
+ */
+export async function recentReels(token: string, igId: string): Promise<{ reelViews: number | null; reelReach: number | null; reels: number } | null> {
+  const list = await getJson(`${IG_GRAPH}/${igId}/media?fields=id,media_product_type,timestamp&limit=20&access_token=${encodeURIComponent(token)}`);
+  if (list.error) return null;
+  const reels = ((list.data as { id?: string; media_product_type?: string }[] | undefined) ?? [])
+    .filter((m) => m.id && m.media_product_type === "REELS").slice(0, 8);
+  const stats = (await Promise.all(reels.map((m) => postInsights(token, String(m.id))))).filter((x): x is NonNullable<typeof x> => !!x);
+  const avg = (k: "views" | "reach") => {
+    const v = stats.map((x) => x[k]).filter((n): n is number => typeof n === "number" && n > 0);
+    return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null;
+  };
+  return { reelViews: avg("views"), reelReach: avg("reach"), reels: stats.length };
+}

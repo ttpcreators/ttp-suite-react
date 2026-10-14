@@ -24,7 +24,7 @@
 
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { discover, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, type IgPost, type IgResult } from "../_shared/instagram.ts";
-import { accountTotals, audience, freshToken, loginReady, postInsights, type IgAccount, type Split } from "../_shared/instagram-login.ts";
+import { accountTotals, audience, freshToken, loginReady, postInsights, recentReels, type IgAccount, type Split } from "../_shared/instagram-login.ts";
 import { citesHandle } from "../_shared/mentions.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -125,6 +125,7 @@ function updateKit(mk: Json, ig: Json): Json | null {
   let audienceOut = mk.audience as Json | undefined;
   if (ins) {
     if (typeof ins.views === "number" && ins.views > 0) block.views30j = String(ins.views);
+    if (typeof ins.reelViews === "number" && ins.reelViews > 0) block.avgViews = String(ins.reelViews);
     const ages = top(ins.age as Split, 5);
     if (ages[0]) block.ageBracket = ages[0].label.replace("-", "–");
     const g = (ins.gender as Split | undefined) ?? [];
@@ -170,10 +171,10 @@ async function syncCreator(ctx: Ctx, c: CreatorRow): Promise<Json> {
   const acc = ctx.accounts.get(c.id);
   if (acc && loginReady()) {
     const token = await freshToken(ctx.sb, acc);
-    const [tot, aud] = await Promise.all([accountTotals(token, acc.ig_user_id), audience(token, acc.ig_user_id)]);
+    const [tot, aud, reels] = await Promise.all([accountTotals(token, acc.ig_user_id), audience(token, acc.ig_user_id), recentReels(token, acc.ig_user_id)]);
     if ("error" in tot) next.insightsWhy = /token|session|oauth/i.test(tot.error) ? "jeton" : "insights";
     else {
-      next.insights = { at: now, reach: tot.reach, views: tot.views, interactions: tot.interactions, engaged: tot.engaged, ...(aud ?? {}) };
+      next.insights = { at: now, reach: tot.reach, views: tot.views, interactions: tot.interactions, engaged: tot.engaged, ...(aud ?? {}), ...(reels ?? {}) };
       next.insightsWhy = null;
     }
   }

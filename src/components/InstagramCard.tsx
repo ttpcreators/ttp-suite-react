@@ -104,6 +104,7 @@ export function InstagramCard({ creatorId, name, ig, onChange, className }: {
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {cell("Couverture 28 j", ins.reach != null ? fmtCompact(ins.reach) : "—")}
                 {cell("Vues 28 j", ins.views != null ? fmtCompact(ins.views) : "—")}
+                {ins.reelViews ? cell("Vues par reel", fmtCompact(ins.reelViews), "moyenne des derniers reels") : null}
                 {ins.age?.length ? cell("Âge", topOf(ins.age, 1) || "—", "tranche principale") : null}
                 {ins.city?.length ? cell("Ville", topOf(ins.city, 1) || "—", "ville principale") : null}
               </div>

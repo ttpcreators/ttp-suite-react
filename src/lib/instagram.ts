@@ -45,6 +45,9 @@ export type IgCreator = {
     views: number | null;
     interactions: number | null;
     engaged: number | null;
+    /** Vues et couverture moyennes de ses derniers reels (compte connecté). */
+    reelViews?: number | null;
+    reelReach?: number | null;
     age?: IgSplit;
     gender?: IgSplit;
     city?: IgSplit;

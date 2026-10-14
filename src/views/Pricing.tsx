@@ -31,6 +31,7 @@ const NO_AUD: Aud = { followers: "", er: "", views: "", storyViews: "", src: "",
 const SRC_LABEL: Record<string, string> = {
   tiktok: "vues mesurées sur TikTok (12 dernières vidéos)",
   instagram: "chiffres Instagram du jour",
+  igreels: "vues mesurées sur Instagram (derniers reels)",
   kit: "vues du media kit",
   fiche: "chiffres de la fiche",
 };
@@ -74,7 +75,7 @@ export function Pricing() {
       type Kit = { key?: string; followers?: string; er?: string; avgViews?: string; avgStoryViews?: string };
       const row = data?.[0] as {
         followers?: string; er?: string; niche?: string; mediakit?: { platforms?: Kit[] };
-        ig?: { followers?: number; er?: number | null } | null;
+        ig?: { followers?: number; er?: number | null; link?: unknown; insights?: { reelViews?: number | null } | null } | null;
         tt?: { followers?: number | null; avgViews?: number | null; er?: number | null; link?: unknown } | null;
       } | undefined;
       if (!row) return;
@@ -87,7 +88,11 @@ export function Pricing() {
       // Instagram du jour (Meta) : abonnés et engagement public (sur les abonnés).
       if (row.ig?.followers) {
         const k = map.instagram ?? NO_AUD;
-        map.instagram = { ...k, followers: String(row.ig.followers), er: row.ig.er != null ? String(row.ig.er) : k.er, erBase: row.ig.er != null ? "followers" : k.erBase, src: k.views ? "kit" : "instagram" };
+        const rv = row.ig.link ? row.ig.insights?.reelViews : null;
+        map.instagram = {
+          ...k, followers: String(row.ig.followers), er: row.ig.er != null ? String(row.ig.er) : k.er, erBase: row.ig.er != null ? "followers" : k.erBase,
+          views: rv ? String(rv) : k.views, src: rv ? "igreels" : k.views ? "kit" : "instagram",
+        };
       }
       // TikTok connecté : vraies vues moyennes et engagement sur les vues.
       if (row.tt?.link && row.tt.followers) {
