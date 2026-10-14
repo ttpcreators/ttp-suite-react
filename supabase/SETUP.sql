@@ -900,6 +900,8 @@ create table if not exists public.email_activity (
 );
 create index if not exists seq_enroll_due_idx         on public.sequence_enrollments (status, next_due_at);
 create index if not exists email_activity_contact_idx on public.email_activity (contact_email, created_at);
+create unique index if not exists email_activity_gmail_msg_uidx on public.email_activity (gmail_message_id) where gmail_message_id is not null;
+create index if not exists email_activity_dir_created_idx on public.email_activity (direction, created_at desc);
 alter table public.email_sequences      enable row level security;
 alter table public.sequence_enrollments enable row level security;
 alter table public.email_activity       enable row level security;
@@ -1630,6 +1632,14 @@ create table if not exists public.creator_mail_settings (
   updated_at  timestamptz not null default now()
 );
 alter table public.creator_mail_settings enable row level security;
+-- Un alias = un seul créateur, jamais une boîte partagée (sql/2026-10-14-mails-fiabilite).
+create unique index if not exists creator_mail_settings_alias_uidx
+  on public.creator_mail_settings (lower(alias)) where alias is not null and alias <> '';
+alter table public.creator_mail_settings drop constraint if exists creator_mail_settings_alias_partagee;
+alter table public.creator_mail_settings add constraint creator_mail_settings_alias_partagee check (
+  alias is null or alias = ''
+  or not (lower(split_part(alias, '@', 1)) in ('partnerships', 'talent', 'contact', 'hello', 'booking', 'info', 'admin', 'noreply', 'no-reply')
+          and lower(alias) like '%@ttpcreators.pro'));
 drop policy if exists creator_mail_settings_agency on public.creator_mail_settings;
 create policy creator_mail_settings_agency on public.creator_mail_settings for all to authenticated
   using (public.is_agency()) with check (public.is_agency());

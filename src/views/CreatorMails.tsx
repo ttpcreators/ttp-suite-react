@@ -1,6 +1,6 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleHelp, History, Hourglass, Inbox, Info, Link2, Loader2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X,
+  ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Loader2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X,
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -9,11 +9,14 @@ import { toast } from "@/components/ui/toast";
 import { DashPanel, DashSectionTitle } from "@/components/ui/dash";
 import { notifyAgency, notifyCreator } from "@/lib/push";
 import { myDisplayName } from "@/lib/team";
+import { useLive } from "@/lib/useLive";
 import { markCreatorNotesRead, reportCreatorThreads } from "@/lib/creatorMailCounts";
 import { SHARED_BOXES, emailOf } from "@/lib/mailAvatar";
 import {
   statusMeta, listMails, getMailThread, sendManagerNote, sendDecision, listGmailLabels, getStatusHistory,
-  getThreadNotes, buildFeed, choiceOf, autoStatusOf,
+  getThreadNotes, buildFeed, choiceOf, autoStatusOf, errorCode, getMailDb, dbStatus, MailError, CREATOR_UNAVAILABLE,
+  hasRemoteImages, withoutRemoteImages, remoteImagesAllowed, allowRemoteImages,
+  reportMailList, reportAgencyActivity, markThreadSeen, useUnseenMail,
   type Decision, type FeedItem, type MailChoice, type MailNote, type MailStatus, type MailStatusEvent, type MailThread,
   type MailThreadLite, type MailSettings,
 } from "@/lib/creatorMail";
@@ -22,14 +25,34 @@ import { BarButton, RailButton, SearchField, ToolButton, mailRowCls, pillCls } f
 
 /*
  * Section « Mails » (lecture seule) : les échanges de la boîte agence où apparaît
- * l'alias de la créatrice. Trois usages :
- *   - "creator" : la créatrice (lecture, son avis, ses remarques à son manager) ;
- *   - "agency"  : fiche créatrice côté agence (statut + lecture du suivi) ;
+ * l'alias du créateur. Trois usages :
+ *   - "creator" : le créateur (lecture, son avis, ses remarques à son manager) ;
+ *   - "agency"  : fiche créateur côté agence (statut + lecture du suivi) ;
  *   - "preview" : l'agence regarde l'espace créateur (un choix y est noté au nom de l'agence).
  * Le filtrage est fait par le serveur (fonction creator-mail) : ce composant ne
- * reçoit jamais un mail qui ne concerne pas la créatrice.
+ * reçoit jamais un mail qui ne concerne pas le créateur.
+ *
+ * Fraîcheur : la liste Gmail est relue au plus toutes les 3 min (écran visible) ;
+ * entre deux, chaque rafraîchissement de l'app relit seulement la base (statuts,
+ * remarques, historique de l'échange ouvert). « Actualiser » force une relecture complète.
  */
 type Mode = "creator" | "agency" | "preview";
+
+const LIST_EVERY = 3 * 60_000;
+const DESKTOP = "(min-width: 1024px)";
+const isNarrow = () => typeof window !== "undefined" && !window.matchMedia(DESKTOP).matches;
+/** Affiché à l'écran (pas dans une page masquée gardée en mémoire) ? */
+const onScreen = (el: HTMLElement | null) => !!el && el.getClientRects().length > 0;
+/** Élément qui fait défiler la boîte (téléphone : la page elle-même). */
+function scrollerOf(el: HTMLElement | null): HTMLElement | null {
+  for (let p = el?.parentElement ?? null; p; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === "auto" || oy === "scroll") && p.scrollHeight > p.clientHeight) return p;
+  }
+  return (document.scrollingElement as HTMLElement | null) ?? null;
+}
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const isAuto = (s: MailStatus) => s === "nouvelle" || s === "negociation";
 
 /** Statut discret (pastille + texte) pour les lignes de la liste, avec l'auteur du choix. */
 function StatusDot({ status, by }: { status: string; by?: string }) {
@@ -53,7 +76,7 @@ const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse"; lab
 
 /**
  * Cases du grand sélecteur (mêmes couleurs que les tuiles du haut). « À vérifier » et
- * « À valider » sont posés par l'agence (la créatrice les voit, sans pouvoir les choisir).
+ * « À valider » sont posés par l'agence (le créateur les voit, sans pouvoir les choisir).
  */
 const CHOICES: { value: MailChoice; label: string; hint: string; icon: LucideIcon; tile: string; disc: string; confirm: string; agencyOnly?: boolean }[] = [
   {
@@ -98,13 +121,22 @@ const VERB: Record<MailChoice, string> = {
   encours: "remis l'échange en cours", valide: "validé l'échange", refuse: "refusé l'échange",
   a_verifier: "passé l'échange en « À vérifier »", a_valider: "passé l'échange en « À valider »",
 };
-/** Texte de la notification envoyée à l'agence quand la créatrice choisit. */
+/** Texte de la notification envoyée à l'agence quand le créateur donne son avis. */
 const PUSH_VERB: Record<"encours" | "valide" | "refuse", string> = { encours: "a remis en cours", valide: "a validé", refuse: "a refusé" };
+/** Ce que le créateur doit comprendre d'un statut posé par son agence. */
+const AGENCY_STATUS_HINT: Partial<Record<MailChoice, string>> = {
+  a_valider: "C'est à toi de répondre : Validé ou Refusé.",
+  a_verifier: "Ton agence vérifie un point avant d'aller plus loin.",
+  valide: "Ton agence a validé cet échange. Tu peux quand même donner ton avis.",
+  refuse: "Ton agence a refusé cet échange. Tu peux quand même donner ton avis.",
+};
 
 /**
- * Grand sélecteur sous l'en-tête d'un échange : « En cours », « Validé », « Refusé »
- * (+ « À vérifier » et « À valider » côté agence). Un clic ouvre une confirmation avec
- * un mot facultatif, puis le choix est enregistré et noté dans le suivi.
+ * Grand sélecteur sous l'en-tête d'un échange. Agence : « En cours », « À vérifier »,
+ * « À valider », « Validé », « Refusé » (le statut de l'échange). Créateur : deux lignes
+ * bien distinctes, « Statut de l'agence » (quand l'agence a posé un statut) puis
+ * « Ton avis » (En cours, Validé, Refusé). Un clic ouvre une confirmation avec un mot
+ * facultatif, puis le choix est enregistré et noté dans le suivi.
  */
 function StatusPanel({
   thread, mode, creatorName, creatorSees, busy, feedCount, onChoose, onShowFeed, onWriteNote,
@@ -116,11 +148,13 @@ function StatusPanel({
   onWriteNote: () => void;
 }) {
   const real = choiceOf(thread.status);
-  // Créatrice : trois cases ; un statut posé par l'agence (« À valider »…) s'affiche
-  // dans un bandeau, la case « En cours » restant cochée.
-  const tiles = mode === "creator" ? CHOICES.filter((c) => !c.agencyOnly) : CHOICES;
-  const flagged = mode === "creator" && !!choiceMeta(real).agencyOnly ? choiceMeta(real) : null;
-  const current: MailChoice = flagged ? "encours" : real;
+  const forCreator = mode === "creator";
+  const tiles = forCreator ? CHOICES.filter((c) => !c.agencyOnly) : CHOICES;
+  // Créateur : un statut posé par l'agence (À vérifier, À valider, ou Validé / Refusé
+  // décidé par elle) s'affiche à part ; ses cases ne montrent que SON avis.
+  const agencyStatus = forCreator && (!!choiceMeta(real).agencyOnly || (real !== "encours" && thread.decidedBy === "agency"))
+    ? choiceMeta(real) : null;
+  const current: MailChoice | null = agencyStatus ? null : real;
   const [pending, setPending] = useState<MailChoice | null>(null);
   const [comment, setComment] = useState("");
   const pick = pending ? choiceMeta(pending) : null;
@@ -129,7 +163,7 @@ function StatusPanel({
   const hintFor = (c: (typeof CHOICES)[number]) => {
     if (c.value !== current) return c.hint;
     // Case active : « Nouvelle demande » / « En négociation », ou qui a tranché et quand.
-    if (c.value === "encours") return flagged ? `${flagged.label}, par ton agence` : statusMeta(thread.status).label;
+    if (c.value === "encours") return statusMeta(thread.status).label;
     return thread.decidedBy ? `par ${authorName(thread.decidedBy, mode, creatorName)}${when ? `, ${when}` : ""}` : c.hint;
   };
 
@@ -144,9 +178,7 @@ function StatusPanel({
   return (
     <div className="rounded-xl border border-border bg-panel/60 p-3.5 sm:p-4">
       <div className="mb-2.5 flex items-center gap-3">
-        <p className="min-w-0 flex-1 text-[13px] font-semibold text-foreground">
-          {mode === "creator" ? "Ton avis sur cet échange" : "Où en est cet échange ?"}
-        </p>
+        <p className="min-w-0 flex-1 text-[13px] font-semibold text-foreground">Où en est cet échange ?</p>
         {feedCount > 0 && (
           <button type="button" onClick={onShowFeed}
             className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline">
@@ -159,16 +191,17 @@ function StatusPanel({
         </button>
       </div>
 
-      {flagged && (
-        <div className={cn("mb-2.5 flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-[12px]", flagged.tile)}>
-          <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full", flagged.disc)}><flagged.icon className="h-3.5 w-3.5" /></span>
+      {agencyStatus && (
+        <div className={cn("mb-3 flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-[12px]", agencyStatus.tile)}>
+          <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full", agencyStatus.disc)}><agencyStatus.icon className="h-3.5 w-3.5" /></span>
           <span className="min-w-0 pt-0.5">
-            <b>Ton agence a passé cet échange en « {flagged.label} »{when ? ` le ${when.replace(/\.$/, "")}` : ""}.</b>{" "}
-            {flagged.value === "a_valider" ? "C'est à toi de répondre : Validé ou Refusé." : "Elle vérifie un point avant d'aller plus loin."}
+            <b>Statut de l'agence : {agencyStatus.label}</b>{when ? ` · ${when.replace(/\.$/, "")}` : ""}
+            <span className="block opacity-90">{AGENCY_STATUS_HINT[agencyStatus.value]}</span>
           </span>
         </div>
       )}
-      <div role="radiogroup" aria-label="Statut de l'échange" className={cn("grid gap-2", tiles.length > 3 ? "grid-cols-3 sm:grid-cols-5" : "grid-cols-3")}>
+      {forCreator && <p className="mb-1.5 text-[12px] font-semibold text-muted-foreground">Ton avis</p>}
+      <div role="radiogroup" aria-label={forCreator ? "Ton avis" : "Statut de l'échange"} className={cn("grid gap-2", tiles.length > 3 ? "grid-cols-3 sm:grid-cols-5" : "grid-cols-3")}>
         {tiles.map((c) => {
           const active = c.value === current;
           const picked = c.value === pending;
@@ -204,7 +237,9 @@ function StatusPanel({
 
       {pick && (
         <div className="mt-3 rounded-xl border border-border bg-surface p-3">
-          <p className="text-[13px] font-medium text-foreground">Passer cet échange en « {pick.label} » ?</p>
+          <p className="text-[13px] font-medium text-foreground">
+            {forCreator ? `Ton avis : « ${pick.label} » ?` : `Passer cet échange en « ${pick.label} » ?`}
+          </p>
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
@@ -214,12 +249,12 @@ function StatusPanel({
             }}
             maxLength={1000}
             rows={2}
-            placeholder={mode === "creator" ? "Un mot pour ton manager (facultatif) : pourquoi, tes conditions…" : `Un mot pour ${creatorName} (facultatif)`}
+            placeholder={forCreator ? "Un mot pour ton manager (facultatif) : pourquoi, tes conditions…" : `Un mot pour ${creatorName} (facultatif)`}
             className="mt-2 max-h-40 min-h-[60px] w-full resize-none rounded-md border border-border bg-transparent px-3 py-2 text-[13px] text-foreground outline-none [field-sizing:content] placeholder:text-faint focus:border-primary"
           />
           <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
             <span className="mr-auto w-full text-[11px] text-faint sm:w-auto">
-              {mode === "creator" ? "Ton manager reçoit une notification." : creatorSees ? `${creatorName} reçoit une notification.` : "Sa section Mails n'est pas encore activée : pas de notification."}
+              {forCreator ? "Ton manager reçoit une notification." : creatorSees ? `${creatorName} reçoit une notification.` : "Sa section Mails n'est pas encore activée : pas de notification."}
             </span>
             <button type="button" onClick={() => setPending(null)} className="h-9 rounded-lg px-3 text-[13px] text-muted-foreground transition-colors hover:text-foreground">
               Annuler
@@ -239,7 +274,7 @@ function StatusPanel({
   );
 }
 
-/** Suivi d'un échange : messages de la créatrice et changements de statut, dans l'ordre. */
+/** Suivi d'un échange : messages du créateur, remarques de l'agence et changements de statut, dans l'ordre. */
 function Feed({ items, mode, creatorName }: { items: FeedItem[]; mode: Mode; creatorName: string }) {
   const asAgency = mode !== "creator";
   return (
@@ -247,19 +282,29 @@ function Feed({ items, mode, creatorName }: { items: FeedItem[]; mode: Mode; cre
       {items.map((it) => {
         if (it.kind === "note") {
           const n = it.note;
+          // Auteur inconnu (ancienne version du serveur, sans by_role) : affiché neutre,
+          // jamais présenté comme un message de la personne qui regarde.
+          const known = n.by_role === "creator" || n.by_role === "agency";
           const byAgency = n.by_role === "agency";
-          // À droite ce qui vient de soi : la créatrice voit les remarques de l'agence à gauche.
-          const mine = asAgency === byAgency;
-          const author = byAgency
-            ? (asAgency ? n.author_name || "L'agence" : `Ton agence${n.author_name ? ` · ${n.author_name}` : ""}`)
-            : asAgency ? creatorName : null;
+          // À droite ce qui vient de soi : le créateur voit les remarques de l'agence à gauche.
+          const mine = known && asAgency === byAgency;
+          const author = !known
+            ? n.author_name || null
+            : byAgency
+              ? (asAgency ? n.author_name || "L'agence" : `Ton agence${n.author_name ? ` · ${n.author_name}` : ""}`)
+              : asAgency ? creatorName : null;
           return (
-            <li key={`n-${n.id}`} className={cn("max-w-[85%] rounded-2xl border px-3.5 py-2.5", byAgency ? "border-primary/20 bg-primary/[0.05]" : "border-border bg-surface", mine ? "self-end rounded-br-md" : "self-start rounded-bl-md")}>
+            <li key={`n-${n.id}`}
+              className={cn(
+                "max-w-[85%] rounded-2xl border px-3.5 py-2.5",
+                !known ? "border-border bg-muted/40" : byAgency ? "border-primary/20 bg-primary/[0.05]" : "border-border bg-surface",
+                mine ? "self-end rounded-br-md" : "self-start rounded-bl-md",
+              )}>
               {author && <p className="mb-0.5 text-[11px] font-semibold text-muted-foreground">{author}</p>}
               <p className="whitespace-pre-wrap text-[13px] text-foreground [overflow-wrap:anywhere]">{n.body}</p>
               <p className="mt-1 text-[11px] text-faint">
                 {fmtStamp(it.at)}
-                {!asAgency && !byAgency && (n.agency_read_at ? " · lu" : " · envoyé")}
+                {known && !asAgency && !byAgency && (n.agency_read_at ? " · lu" : " · envoyé")}
               </p>
             </li>
           );
@@ -296,36 +341,79 @@ function prettyName(n: string): string {
   return n.toLowerCase().replace(/\p{L}[\p{L}'’-]*/gu, (w) => (w.length <= 3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)));
 }
 
-export function CreatorMailbox({ creator, mode, creatorSees = true, initialThreadId }: {
+/** Panneau d'état (erreur, section coupée…) avec un bouton facultatif. */
+function StatePanel({ icon: Icon, text, action }: { icon: LucideIcon; text: string; action?: { label: string; busy?: boolean; onClick: () => void } }) {
+  return (
+    <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+      <span className="grid h-10 w-10 place-items-center rounded-full bg-muted"><Icon className="h-4 w-4 text-muted-foreground" /></span>
+      <p className="max-w-[340px] text-[13px] text-muted-foreground">{text}</p>
+      {action && (
+        <button type="button" onClick={action.onClick} disabled={action.busy}
+          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover disabled:opacity-50">
+          <RefreshCw className={cn("h-3.5 w-3.5", action.busy && "animate-spin")} /> {action.label}
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function CreatorMailbox({ creator, mode, creatorSees = true, initialThreadId, alias }: {
   creator: string; mode: Mode;
-  /** La créatrice a-t-elle accès à sa section Mails ? (sinon pas de notification pour elle) */
+  /** Le créateur a-t-il accès à sa section Mails ? (sinon pas de notification pour lui) */
   creatorSees?: boolean;
   /** Échange à ouvrir directement (lien depuis la page Mails de l'agence). */
   initialThreadId?: string;
+  /** Alias du créateur (réglage), pour le message « boîte vide ». */
+  alias?: string | null;
 }) {
   const asAgency = mode !== "creator";
   const forCreator = asAgency ? creator : undefined;
   const creatorName = prettyName(titleCase(creator));
   const [threads, setThreads] = useState<MailThreadLite[] | null>(null);
   const [configured, setConfigured] = useState(true);
+  const [off, setOff] = useState(false); // section désactivée par l'agence pendant la lecture
   const [err, setErr] = useState<string | null>(null);
+  const [partial, setPartial] = useState(false);
+  const [listAlias, setListAlias] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("tous");
   const [openId, setOpenId] = useState<string | null>(null);
   const [thread, setThread] = useState<MailThread | null>(null);
   const [threadErr, setThreadErr] = useState<string | null>(null);
+  const [threadRetry, setThreadRetry] = useState(0);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0); // relit l'échange ouvert dans Gmail
+  const [dbKey, setDbKey] = useState(0); // relit son suivi en base
   const [deciding, setDeciding] = useState(false);
+  const [, setImagesTick] = useState(0);
   // Historique des statuts de l'échange ouvert (events null = SQL pas encore lancé).
   const [history, setHistory] = useState<{ id: string; events: MailStatusEvent[] | null } | null>(null);
-  // Suivi écrit (messages de la créatrice + remarques de l'agence), lu directement.
+  // Suivi écrit (messages du créateur + remarques de l'agence), lu directement.
   const [threadNotes, setThreadNotes] = useState<{ id: string; list: MailNote[] } | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const feedRef = useRef<HTMLDivElement | null>(null);
+  const [feedEl, setFeedEl] = useState<HTMLDivElement | null>(null);
+  const setFeedNode = useCallback((el: HTMLDivElement | null) => {
+    feedRef.current = el;
+    setFeedEl(el);
+  }, []);
   const noteRef = useRef<HTMLTextAreaElement | null>(null);
   const initialRef = useRef(initialThreadId ?? null);
+  const firstLoad = useRef(true);
+  const listedAt = useRef(0);
+  const loadSeq = useRef(0);
+  const loadingRef = useRef(false);
+  const threadsRef = useRef(threads);
+  threadsRef.current = threads;
+  const threadRef = useRef(thread);
+  threadRef.current = thread;
+  // Statut automatique connu de chaque échange (Nouvelle demande / En négociation).
+  const autoOf = useRef(new Map<string, MailStatus>());
+  // Date du dernier message (liste) quand l'échange ouvert a été lu : relu seulement s'il a bougé.
+  const fetchedTs = useRef(new Map<string, number>());
+  const unseen = useUnseenMail(creator, mode === "creator");
   const [query, setQuery] = useState(""); // recherche dans la liste (marque, objet, extrait)
   // Aide « comment ça marche » : affichée tant qu'elle n'a pas été fermée sur cet appareil.
   const [help, setHelpState] = useState(() => {
@@ -344,68 +432,243 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     }
   };
 
-  const load = useCallback(async () => {
+  /** Texte d'erreur adapté : détaillé pour l'agence, simple pour le créateur. */
+  const errText = useCallback(
+    (e: unknown) => (e instanceof MailError ? e.message : asAgency ? "Impossible de charger les mails." : CREATOR_UNAVAILABLE),
+    [asAgency],
+  );
+
+  /** Erreur d'une action : section coupée ou alias retiré → l'écran se met à jour. */
+  const handleGone = useCallback((e: unknown): boolean => {
+    const code = errorCode(e);
+    if (code === "section_desactivee") {
+      setOpenId(null);
+      setOff(true);
+      return true;
+    }
+    if (code === "non_configure") {
+      setOpenId(null);
+      setConfigured(false);
+      return true;
+    }
+    return false;
+  }, []);
+
+  const load = useCallback(async (opts: { fresh?: boolean } = {}) => {
+    const seq = ++loadSeq.current;
+    loadingRef.current = true;
     setLoading(true);
-    setErr(null);
     try {
-      const r = await listMails(forCreator);
+      const r = await listMails(forCreator, { fresh: opts.fresh });
+      if (seq !== loadSeq.current) return;
+      listedAt.current = Date.now();
+      setErr(null);
       setConfigured(r.configured);
+      setPartial(!!r.partial);
+      if (typeof r.alias === "string") setListAlias(r.alias);
+      for (const t of r.threads) if (isAuto(t.status)) autoOf.current.set(t.id, t.status);
       setThreads(r.threads);
-      const desktop = window.matchMedia("(min-width: 1024px)").matches;
-      // Échange demandé par un lien (une seule fois), sinon sur ordinateur le dernier.
+      if (mode === "creator") reportMailList(creator, r.threads, !!r.partial);
+      const first = firstLoad.current;
+      firstLoad.current = false;
+      // Échange demandé par un lien (une seule fois), sinon sur ordinateur le premier (au premier chargement).
       const wanted = initialRef.current && r.threads.some((t) => t.id === initialRef.current) ? initialRef.current : null;
       initialRef.current = null;
+      const desktop = !isNarrow();
       setOpenId((cur) => {
-        // Échange ouvert disparu (supprimé dans Gmail…) : on le ferme.
-        const still = cur && r.threads.some((t) => t.id === cur) ? cur : null;
-        return wanted ?? still ?? (desktop && r.threads.length ? r.threads[0].id : null);
+        if (wanted) return wanted;
+        // Échange ouvert absent d'une liste COMPLÈTE (supprimé dans Gmail…) : on le ferme.
+        // Liste incomplète : il a peut-être seulement échoué à se charger, on le garde.
+        if (cur && (r.partial || r.threads.some((t) => t.id === cur))) return cur;
+        return first && desktop && r.threads.length ? r.threads[0].id : null;
       });
-      setReloadKey((n) => n + 1); // recharge aussi l'échange ouvert (nouvelles réponses)
+      // Échange ouvert : relu dans Gmail s'il a un nouveau message (ou sur « Actualiser »),
+      // sinon seul son suivi est relu en base.
+      const open = threadRef.current;
+      const lite = open ? r.threads.find((t) => t.id === open.id) : undefined;
+      if (open && (opts.fresh || (lite && lite.ts !== fetchedTs.current.get(open.id)))) setReloadKey((n) => n + 1);
+      else setDbKey((n) => n + 1);
     } catch (e) {
-      setErr((e as Error).message);
-      setThreads((t) => t ?? []);
+      if (seq !== loadSeq.current) return;
+      // La liste déjà affichée reste là ; l'erreur s'affiche à côté (ou seule s'il n'y a rien).
+      // Nouvel essai automatique dans 3 min (ou tout de suite avec « Réessayer »).
+      listedAt.current = Date.now();
+      setErr(errText(e));
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) {
+        loadingRef.current = false;
+        setLoading(false);
+      }
     }
-  }, [forCreator]);
+  }, [forCreator, mode, creator, errText]);
 
   useEffect(() => {
     setThreads(null);
     setOpenId(null);
+    setErr(null);
+    setOff(false);
+    firstLoad.current = true;
+    listedAt.current = 0;
     void load();
   }, [load]);
 
+  /** Relit en base (sans Gmail) les statuts, les remarques et l'activité de l'agence. */
+  const refreshDb = useCallback(async () => {
+    const db = await getMailDb(creator, mode === "creator");
+    if (!db) return;
+    if (mode === "creator") reportAgencyActivity(creator, db.agency);
+    setThreads((list) => {
+      if (!list) return list;
+      let changed = false;
+      const next = list.map((t) => {
+        const d = dbStatus(db.rows.get(t.id), isAuto(t.status) ? t.status : autoOf.current.get(t.id) ?? "nouvelle");
+        const notes = db.notes.get(t.id) ?? 0;
+        if (d.status === t.status && d.decidedBy === t.decidedBy && d.decidedAt === t.decidedAt && notes === t.notes) return t;
+        changed = true;
+        return { ...t, ...d, notes };
+      });
+      return changed ? next : list;
+    });
+    setThread((t) => {
+      if (!t) return t;
+      const d = dbStatus(db.rows.get(t.id), isAuto(t.status) ? t.status : autoOf.current.get(t.id) ?? autoStatusOf(t.messages));
+      return d.status === t.status && d.decidedBy === t.decidedBy && d.decidedAt === t.decidedAt ? t : { ...t, ...d };
+    });
+    setDbKey((n) => n + 1);
+  }, [creator, mode]);
+
+  // Rafraîchissement de l'app (toutes les 20 s, retour sur l'onglet…) : base à chaque
+  // fois, liste Gmail au plus toutes les 3 min. Rien si l'écran n'est pas affiché.
+  useLive(() => {
+    if (off || document.visibilityState === "hidden" || !onScreen(rootRef.current)) return;
+    if (Date.now() - listedAt.current >= LIST_EVERY) {
+      if (!loadingRef.current) void load();
+    } else if (configured && threadsRef.current) {
+      void refreshDb();
+    }
+  });
+
   // Agence : la pastille du créateur (page Mails) suit cette liste (statuts compris).
   useEffect(() => {
-    if (asAgency && threads) reportCreatorThreads(creator, threads);
-  }, [asAgency, creator, threads]);
+    if (asAgency && threads) reportCreatorThreads(creator, threads, partial);
+  }, [asAgency, creator, threads, partial]);
 
+  // Contenu de l'échange ouvert (Gmail).
   useEffect(() => {
     if (!openId) return;
     let alive = true;
     setThreadErr(null);
-    // Même échange rechargé (« Actualiser ») : pas de clignotement.
+    // Même échange rechargé : pas de clignotement.
     setThread((t) => (t && t.id === openId ? t : null));
     getMailThread(openId, forCreator)
       .then((t) => {
         if (!alive) return;
-        setThread(t);
-        // Dernier message déplié, les précédents repliés (comme Gmail).
-        setExpanded(new Set(t.messages.length ? [t.messages[t.messages.length - 1].id] : []));
-        // Agence : les notes de la créatrice sont marquées lues à l'ouverture.
-        if (mode === "agency" && t.notes.some((n) => !n.agency_read_at)) {
-          void supabase.from("creator_mail_notes").update({ agency_read_at: new Date().toISOString() })
-            .eq("creator", creator).eq("thread_id", t.id).is("agency_read_at", null);
+        const prev = threadRef.current;
+        if (prev && prev.id === t.id) {
+          // Rechargé : les messages dépliés le restent, les nouveaux s'ouvrent.
+          const known = new Set(prev.messages.map((m) => m.id));
+          const added = t.messages.filter((m) => !known.has(m.id)).map((m) => m.id);
+          if (added.length) setExpanded((s) => new Set([...s, ...added]));
+        } else {
+          // Dernier message déplié, les précédents repliés (comme Gmail).
+          setExpanded(new Set(t.messages.length ? [t.messages[t.messages.length - 1].id] : []));
         }
-        if (mode === "agency") markCreatorNotesRead(creator, t.id);
+        setThread(t);
+        fetchedTs.current.set(t.id, threadsRef.current?.find((x) => x.id === t.id)?.ts ?? 0);
       })
-      .catch((e) => alive && setThreadErr((e as Error).message));
-    getStatusHistory(creator, openId).then((events) => alive && setHistory({ id: openId, events }));
-    getThreadNotes(creator, openId).then((list) => alive && list && setThreadNotes({ id: openId, list }));
+      .catch((e) => {
+        if (!alive || handleGone(e)) return;
+        setThreadErr(errText(e));
+      });
     return () => {
       alive = false;
     };
-  }, [openId, forCreator, creator, mode, reloadKey]);
+  }, [openId, forCreator, reloadKey, threadRetry, handleGone, errText]);
+
+  // Suivi de l'échange ouvert (base) : relu à chaque rafraîchissement.
+  useEffect(() => {
+    if (!openId) return;
+    let alive = true;
+    void getStatusHistory(creator, openId).then((events) => {
+      if (alive) setHistory((cur) => (cur && cur.id === openId && same(cur.events, events) ? cur : { id: openId, events }));
+    });
+    void getThreadNotes(creator, openId).then((list) => {
+      if (!alive || !list) return;
+      // Lu en base : sans colonne by_role (SQL « remarques » pas lancé), seul le créateur a pu écrire.
+      const norm = list.map((n) => (n.by_role ? n : { ...n, by_role: "creator" as const }));
+      setThreadNotes((cur) => (cur && cur.id === openId && same(cur.list, norm) ? cur : { id: openId, list: norm }));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [openId, creator, reloadKey, dbKey]);
+
+  // Créateur : l'échange ouvert est « vu » (sa pastille et le gras de la liste disparaissent).
+  useEffect(() => {
+    if (mode === "creator" && openId && thread?.id === openId && unseen.has(openId)) markThreadSeen(creator, openId);
+  }, [mode, creator, openId, thread?.id, unseen]);
+
+  // ── Téléphone : lecture plein écran, retour par le geste « précédent » ──────
+  const listScroll = useRef<{ el: HTMLElement | null; top: number }>({ el: null, top: 0 });
+  const prevOpen = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const was = prevOpen.current;
+    prevOpen.current = openId;
+    if (was === openId || !isNarrow()) return;
+    if (openId) {
+      // Échange ouvert (ou suivant / précédent) : on remonte en haut de la boîte.
+      rootRef.current?.scrollIntoView({ block: "start" });
+    } else if (was) {
+      // Retour à la liste : là où on l'avait laissée.
+      const { el, top } = listScroll.current;
+      if (el) el.scrollTop = top;
+    }
+  }, [openId]);
+  const openFromList = (id: string) => {
+    if (isNarrow()) {
+      const el = scrollerOf(rootRef.current);
+      listScroll.current = { el, top: el?.scrollTop ?? 0 };
+    }
+    setOpenId(id);
+  };
+  // Une entrée d'historique par échange ouvert : « précédent » (geste, bouton) ferme l'échange.
+  const pushed = useRef(false);
+  const skipPop = useRef(false);
+  useEffect(() => {
+    if (openId && !pushed.current && isNarrow()) {
+      try {
+        window.history.pushState({ ...((window.history.state as object | null) ?? {}), ttpCreatorMail: true }, "");
+        pushed.current = true;
+      } catch {
+        /* historique indisponible : le bouton « Retour » suffit */
+      }
+    } else if (!openId && pushed.current) {
+      // Fermé depuis l'écran : on retire l'entrée ajoutée.
+      pushed.current = false;
+      skipPop.current = true;
+      window.history.back();
+    }
+  }, [openId]);
+  useEffect(() => {
+    const onPop = () => {
+      if (skipPop.current) {
+        skipPop.current = false;
+        return;
+      }
+      if (pushed.current) {
+        pushed.current = false;
+        setOpenId(null);
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      if (pushed.current) {
+        pushed.current = false;
+        window.history.back();
+      }
+    };
+  }, []);
 
   const applyDecision = (threadId: string, d: Decision & { status: MailStatus }) => {
     setThreads((l) => l?.map((t) => (t.id === threadId ? { ...t, ...d } : t)) ?? l);
@@ -414,7 +677,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
   /**
    * Range l'échange dans « En cours », « Validé » ou « Refusé », avec un mot facultatif.
-   * Créatrice : via le serveur (vérifie que l'échange est à elle, note la trace).
+   * Créateur : via le serveur (vérifie que l'échange est à lui, note la trace).
    * Agence : écriture directe (RLS agence) + ligne d'historique à son nom.
    */
   const choose = async (threadId: string, choice: MailChoice, comment: string): Promise<boolean> => {
@@ -427,11 +690,11 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     const label = choiceMeta(choice).label;
     try {
       if (mode === "creator") {
-        // La créatrice ne choisit qu'entre En cours, Validé et Refusé.
+        // Le créateur ne choisit qu'entre En cours, Validé et Refusé.
         if (choice === "a_verifier" || choice === "a_valider") return false;
         const r = await sendDecision(threadId, choice, word);
         applyDecision(threadId, r);
-        notifyAgency("mail", creator, `${PUSH_VERB[choice]} : ${what}${word ? ` · « ${word} »` : ""}`);
+        notifyAgency("mail", creator, `Avis : ${PUSH_VERB[choice]} ${what}${word ? ` · « ${word} »` : ""}`);
         toast(`${label} ✓ Ton manager est prévenu`);
       } else {
         const now = new Date().toISOString();
@@ -457,9 +720,9 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           });
         }
         applyDecision(threadId, choice === "encours"
-          ? { status: open ? autoStatusOf(open.messages) : "nouvelle", decidedBy: null, decidedAt: null }
+          ? { status: autoOf.current.get(threadId) ?? (open ? autoStatusOf(open.messages) : "nouvelle"), decidedBy: null, decidedAt: null }
           : { status: choice, decidedBy: "agency", decidedAt: now });
-        if (creatorSees) notifyCreator("mail", creator, `${what} : ${label} par ton agence${word ? ` · « ${word} »` : ""}`);
+        if (creatorSees) notifyCreator("mail", creator, `Statut de l'agence · ${what} : ${label}${word ? ` · « ${word} »` : ""}`);
         toast(`Statut enregistré : ${label} ✓`);
       }
       const events = await getStatusHistory(creator, threadId);
@@ -467,7 +730,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
       setHistory((cur) => (cur && cur.id !== threadId ? cur : { id: threadId, events }));
       return true;
     } catch (e) {
-      toast((e as Error).message);
+      if (!handleGone(e)) toast(errText(e));
       return false;
     } finally {
       setDeciding(false);
@@ -489,10 +752,10 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
       if (mode === "creator") {
         const n = await sendManagerNote(thread.id, body);
         addNote(thread.id, { ...n, by_role: "creator" });
-        notifyAgency("mail", creator, `${what} : ${body}`);
+        notifyAgency("mail", creator, `Remarque sur ${what} : ${body}`);
         toast("Remarque envoyée à ton manager ✓");
       } else {
-        // Remarque de l'agence : visible par la créatrice dans le suivi de l'échange.
+        // Remarque de l'agence : visible par le créateur dans le suivi de l'échange.
         const { data: auth } = await supabase.auth.getSession();
         const uid = auth.session?.user.id;
         if (!uid) return;
@@ -506,12 +769,13 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           return;
         }
         addNote(thread.id, data as MailNote);
-        if (creatorSees) notifyCreator("mail", creator, `Remarque de ton agence · ${what} : ${body}`);
+        // Texte explicite : le titre de la notification (serveur) parle d'un statut.
+        if (creatorSees) notifyCreator("mail", creator, `Nouvelle remarque de ton agence · ${what} : ${body}`);
         toast(creatorSees ? `Remarque envoyée à ${creatorName} ✓` : "Remarque enregistrée ✓");
       }
       setNote("");
     } catch (e) {
-      toast((e as Error).message);
+      if (!handleGone(e)) toast(errText(e));
     } finally {
       setSending(false);
     }
@@ -527,24 +791,101 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const shown = (threads ?? []).filter((t) => cur.match(t.status) && (!q || `${t.brand} ${t.subject} ${t.excerpt}`.toLowerCase().includes(q)));
 
   // Suivi de l'échange ouvert. Une ancienne décision (avant l'historique) n'est ajoutée
-  // qu'une fois l'historique chargé, pour éviter un clignotement.
+  // qu'une fois l'historique chargé, pour éviter un clignotement. Repli : les remarques
+  // renvoyées par le serveur (by_role absent sur une ancienne version → affichage neutre).
   const events = thread && history?.id === thread.id ? history.events : undefined;
   const notesList = thread ? (threadNotes?.id === thread.id ? threadNotes.list : thread.notes) : [];
   const feed = thread
     ? buildFeed(notesList, events ?? null, events === undefined ? undefined : { status: thread.status, decidedBy: thread.decidedBy, decidedAt: thread.decidedAt })
     : [];
 
+  // Agence : les messages du créateur ne sont marqués lus qu'une fois le suivi
+  // réellement affiché à l'écran, et la pastille ne baisse que si l'écriture a réussi.
+  const unreadSig = mode === "agency" && thread
+    ? notesList.filter((n) => !n.agency_read_at && n.by_role !== "agency").map((n) => n.id).join(",")
+    : "";
+  const threadIdForRead = thread?.id ?? null;
+  useEffect(() => {
+    if (mode !== "agency" || !feedEl || !unreadSig || !threadIdForRead || typeof IntersectionObserver === "undefined") return;
+    const threadId = threadIdForRead;
+    const el = feedEl;
+    let done = false;
+    let cancelled = false;
+    let retryTimer = 0;
+    const io = new IntersectionObserver((entries) => {
+      const e = entries[entries.length - 1];
+      if (done || !e?.isIntersecting || document.visibilityState === "hidden") return;
+      // Vraiment visible : au moins une bonne partie du suivi est à l'écran.
+      if (e.intersectionRect.height < Math.min(64, e.boundingClientRect.height * 0.5)) return;
+      done = true;
+      io.disconnect();
+      void (async () => {
+        const now = new Date().toISOString();
+        const { error } = await supabase.from("creator_mail_notes").update({ agency_read_at: now })
+          .eq("creator", creator).eq("thread_id", threadId).is("agency_read_at", null);
+        if (error) {
+          if (cancelled) return;
+          // Pastille inchangée ; nouvel essai dans 30 s si le suivi est toujours affiché.
+          retryTimer = window.setTimeout(() => {
+            if (cancelled) return;
+            done = false;
+            io.observe(el);
+          }, 30_000);
+          return;
+        }
+        markCreatorNotesRead(creator, threadId);
+        const read = (n: MailNote) => (!n.agency_read_at && n.by_role !== "agency" ? { ...n, agency_read_at: now } : n);
+        setThreadNotes((c) => (c && c.id === threadId ? { id: threadId, list: c.list.map(read) } : c));
+        setThread((t) => (t && t.id === threadId ? { ...t, notes: t.notes.map(read) } : t));
+      })();
+    }, { threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] });
+    io.observe(el);
+    return () => {
+      cancelled = true;
+      done = true;
+      window.clearTimeout(retryTimer);
+      io.disconnect();
+    };
+  }, [mode, creator, feedEl, unreadSig, threadIdForRead]);
+
+  // Images distantes masquées côté créateur (et dans l'aperçu agence) tant qu'on ne les demande pas.
+  const blockImages = mode !== "agency";
+  const remoteImgIds = useMemo(
+    () => new Set((thread?.messages ?? []).filter((m) => hasRemoteImages(m.html)).map((m) => m.id)),
+    [thread],
+  );
+
+  const retry = () => void load({ fresh: true });
+  const unavailable = err ?? "";
+
+  if (off) {
+    return (
+      <div ref={rootRef}>
+        <DashPanel><StatePanel icon={Inbox} text="Cette section n'est plus activée." /></DashPanel>
+      </div>
+    );
+  }
   if (threads === null) {
-    return <DashPanel className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Chargement des mails…</DashPanel>;
+    return (
+      <div ref={rootRef}>
+        {err ? (
+          <DashPanel><StatePanel icon={CircleAlert} text={unavailable} action={{ label: "Réessayer", busy: loading, onClick: retry }} /></DashPanel>
+        ) : (
+          <DashPanel className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Chargement des mails…</DashPanel>
+        )}
+      </div>
+    );
   }
   if (!configured) {
     return (
-      <DashPanel className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-        <Inbox className="h-6 w-6 text-faint" />
-        <p className="text-[13px] text-muted-foreground">
-          {asAgency ? "Aucun alias ni libellé n'est lié à ce créateur." : "Ta boîte mail n'est pas encore activée. Ton agence s'en occupe."}
-        </p>
-      </DashPanel>
+      <div ref={rootRef}>
+        <DashPanel className="flex flex-col items-center gap-2 px-6 py-10 text-center">
+          <Inbox className="h-6 w-6 text-faint" />
+          <p className="text-[13px] text-muted-foreground">
+            {asAgency ? "Aucun alias ni libellé n'est lié à ce créateur." : "Ta boîte mail n'est pas encore activée. Ton agence s'en occupe."}
+          </p>
+        </DashPanel>
+      </div>
     );
   }
 
@@ -555,6 +896,16 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   };
   const navIdx = openId ? shown.findIndex((t) => t.id === openId) : -1;
   const plural = (n: number) => (n > 1 ? "s" : "");
+  const shownAlias = (alias ?? listAlias ?? "").trim();
+  const emptyText = q
+    ? `Aucun échange ne correspond à « ${query.trim()} ».`
+    : filter !== "tous"
+      ? "Aucun échange ici."
+      : asAgency
+        ? "Aucun échange pour le moment."
+        : shownAlias
+          ? `Les mails envoyés à ${shownAlias} apparaîtront ici.`
+          : "Les mails des marques qui t'écrivent apparaîtront ici.";
 
   // Comment les statuts avancent (affiché pour éviter toute confusion, refermable).
   const helpBanner = (
@@ -563,7 +914,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
       <span className="min-w-0 flex-1">
         {asAgency
           ? `Ouvre un échange et range-le avec le grand sélecteur : En cours, À vérifier, À valider, Validé ou Refusé. « Ajouter une remarque » lui écrit un mot sur cet échange. ${creatorName} voit tout dans son espace et donne son avis ; chaque changement (qui, quand, son mot) est gardé dans le suivi.`
-          : "Ouvre un échange et range-le dans « En cours », « Validé » ou « Refusé » pour donner ton avis. Avec « Ajouter une remarque », écris à ton manager quand tu veux. Il est prévenu ; ses remarques et tout l'historique sont dans le suivi de l'échange."}
+          : "Ouvre un échange : le « Statut de l'agence » te dit où il en est, et « Ton avis » (En cours, Validé ou Refusé) lui donne ta réponse. Avec « Ajouter une remarque », écris à ton manager quand tu veux. Il est prévenu ; ses remarques et tout l'historique sont dans le suivi de l'échange."}
       </span>
       <button type="button" onClick={() => setHelp(false)} aria-label="Masquer l'aide"
         className="-mr-1 -mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground">
@@ -590,9 +941,9 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     </nav>
   );
 
-  // ── Même barre, en ligne (téléphone, tablette) ──────────────────────────
+  // ── Même barre, en ligne (téléphone, tablette) ; masquée pendant la lecture ──
   const pills = (
-    <nav aria-label="Ranger les échanges" className="flex gap-1.5 overflow-x-auto border-b border-border p-2 [scrollbar-width:none] lg:hidden">
+    <nav aria-label="Ranger les échanges" className={cn("flex gap-1.5 overflow-x-auto border-b border-border p-2 [scrollbar-width:none] lg:hidden", openId && "max-lg:hidden")}>
       {FILTERS.map((f) => {
         const on = filter === f.key;
         return (
@@ -612,6 +963,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   );
 
   // ── Liste ────────────────────────────────────────────────────────────────
+  const listBroken = !!err && threads.length === 0; // rien à montrer : l'erreur prend la place
   const list = (
     <section className={cn("flex min-h-0 min-w-0 flex-col bg-panel lg:border-r lg:border-border", openId && "max-lg:hidden")}>
       <div className="px-4 pt-4 sm:px-5 sm:pt-5">
@@ -619,44 +971,57 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           <h2 className="min-w-0 flex-1 truncate text-[20px] font-semibold tracking-tight text-foreground sm:text-[22px]">
             {cur.key === "tous" ? "Boîte de réception" : cur.label}
           </h2>
-          <ToolButton icon={RefreshCw} label="Actualiser" spin={loading} disabled={loading} onClick={() => void load()} />
+          <ToolButton icon={RefreshCw} label="Actualiser" spin={loading} disabled={loading} onClick={retry} />
         </div>
         <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">
           {cur.dot && <span aria-hidden className={cn("size-2.5 shrink-0 rounded-[3px]", cur.dot)} />}
           {q ? `${shown.length} sur ${counts[cur.key]}` : counts[cur.key]} échange{plural(q ? counts[cur.key] : shown.length)}
+          {mode === "creator" && unseen.size > 0 && <span className="font-medium text-foreground">· {unseen.size} à voir</span>}
         </p>
       </div>
       <div className="px-4 pb-3 pt-3 sm:px-5">
         <SearchField value={query} onChange={setQuery} placeholder="Rechercher une marque, un objet…" />
       </div>
       {help && <div className="px-4 pb-3 sm:px-5 lg:hidden">{helpBanner}</div>}
-      {err && <div className="border-t border-border px-4 py-2.5 text-[12px] text-red-600 sm:px-5 dark:text-red-400">{err}</div>}
+      {err && !listBroken && (
+        <div className="flex items-center gap-2 border-t border-border px-4 py-2.5 text-[12px] text-red-600 sm:px-5 dark:text-red-400">
+          <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 flex-1">{err}</span>
+          <button type="button" onClick={retry} disabled={loading} className="shrink-0 font-semibold underline-offset-2 hover:underline disabled:opacity-50">Réessayer</button>
+        </div>
+      )}
+      {partial && !err && (
+        <div className="flex items-center gap-2 border-t border-border px-4 py-2.5 text-[12px] text-muted-foreground sm:px-5">
+          <Info className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 flex-1">Certains échanges n'ont pas pu être chargés.</span>
+          <button type="button" onClick={retry} disabled={loading} className="shrink-0 font-semibold text-foreground underline-offset-2 hover:underline disabled:opacity-50">Réessayer</button>
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto border-t border-border">
-        {shown.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
-            <span className="grid h-10 w-10 place-items-center rounded-full bg-muted"><Mail className="h-4 w-4 text-muted-foreground" /></span>
-            <p className="text-[13px] text-muted-foreground">
-              {q ? `Aucun échange ne correspond à « ${query.trim()} ».` : filter === "tous" ? "Aucun échange pour le moment." : "Aucun échange ici."}
-            </p>
-          </div>
+        {listBroken ? (
+          <StatePanel icon={CircleAlert} text={unavailable} action={{ label: "Réessayer", busy: loading, onClick: retry }} />
+        ) : shown.length === 0 ? (
+          <StatePanel icon={Mail} text={emptyText} />
         ) : (
           <ul className="divide-y divide-border">
             {shown.map((t) => {
               const on = openId === t.id;
+              const fresh = unseen.has(t.id);
               return (
                 <li key={t.id}>
-                  <button type="button" aria-current={on || undefined} onClick={() => setOpenId(t.id)} className={cn(mailRowCls(on), "py-4")}>
+                  <button type="button" aria-current={on || undefined} onClick={() => openFromList(t.id)} className={cn(mailRowCls(on), "py-4")}>
                     <Initial name={prettyName(t.brand)} email={t.brandEmail} />
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground">
+                        {fresh && <span aria-label="Nouveau" className="size-2 shrink-0 rounded-full bg-primary" />}
+                        <span className={cn("min-w-0 flex-1 truncate text-[12.5px]", fresh ? "font-semibold text-foreground" : "font-medium text-muted-foreground")}>
                           {prettyName(t.brand) || "Marque"}
                           {t.count > 1 && <span className="ml-1.5 font-normal text-faint">{t.count}</span>}
                         </span>
-                        <span className="shrink-0 text-[11px] tabular-nums text-faint">{fmtWhen(t.ts)}</span>
+                        <span className={cn("shrink-0 text-[11px] tabular-nums", fresh ? "font-semibold text-foreground" : "text-faint")}>{fmtWhen(t.ts)}</span>
                       </span>
-                      <span className="mt-1 block truncate text-[13.5px] font-semibold text-foreground">{t.subject}</span>
-                      <span className="mt-1 line-clamp-2 text-[12.5px] leading-[1.45] text-muted-foreground">{t.excerpt}</span>
+                      <span className={cn("mt-1 block truncate text-[13.5px] text-foreground", fresh ? "font-bold" : "font-semibold")}>{t.subject}</span>
+                      <span className={cn("mt-1 line-clamp-2 text-[12.5px] leading-[1.45]", fresh ? "text-foreground/80" : "text-muted-foreground")}>{t.excerpt}</span>
                       <span className="mt-2 flex min-w-0 items-center gap-3">
                         <StatusDot status={t.status} by={t.decidedBy ? authorName(t.decidedBy, mode, creatorName) : undefined} />
                         {t.notes > 0 && (
@@ -696,7 +1061,11 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {threadErr ? (
-          <div className="px-5 py-10 text-center text-[13px] text-muted-foreground">{threadErr}</div>
+          <div className="p-4 sm:p-6">
+            <div className="rounded-xl border border-border bg-panel/60">
+              <StatePanel icon={CircleAlert} text={threadErr} action={{ label: "Réessayer", onClick: () => setThreadRetry((n) => n + 1) }} />
+            </div>
+          </div>
         ) : !thread ? (
           <div className="flex items-center justify-center gap-2 px-5 py-16 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Ouverture…</div>
         ) : (
@@ -724,27 +1093,44 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
             </div>
 
             <div className="mt-3 flex flex-col divide-y divide-border">
-              {thread.messages.map((m, i) => (
-                <div key={m.id} className="flex flex-col">
-                  <MailItem
-                    variant="plain"
-                    m={m}
-                    index={i}
-                    open={expanded.has(m.id)}
-                    onToggle={() => setExpanded((s) => {
-                      const n = new Set(s);
-                      if (n.has(m.id)) n.delete(m.id); else n.add(m.id);
-                      return n;
-                    })}
-                    threadId={thread.id}
-                    creator={forCreator}
-                  />
-                </div>
-              ))}
+              {thread.messages.map((m, i) => {
+                const blocked = blockImages && !remoteImagesAllowed(m.id);
+                return (
+                  <div key={m.id} className="flex flex-col">
+                    {blocked && remoteImgIds.has(m.id) && expanded.has(m.id) && (
+                      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg bg-muted/60 px-3 py-2 text-[12px] text-muted-foreground">
+                        <ImageOff className="h-3.5 w-3.5 shrink-0" />
+                        <span className="min-w-0 flex-1">Images masquées pour ta confidentialité</span>
+                        <button type="button"
+                          onClick={() => {
+                            allowRemoteImages(m.id);
+                            setImagesTick((n) => n + 1);
+                          }}
+                          className="shrink-0 font-semibold text-foreground underline-offset-2 hover:underline">
+                          Afficher les images
+                        </button>
+                      </div>
+                    )}
+                    <MailItem
+                      variant="plain"
+                      m={blocked ? { ...m, html: withoutRemoteImages(m.html) } : m}
+                      index={i}
+                      open={expanded.has(m.id)}
+                      onToggle={() => setExpanded((s) => {
+                        const n = new Set(s);
+                        if (n.has(m.id)) n.delete(m.id); else n.add(m.id);
+                        return n;
+                      })}
+                      threadId={thread.id}
+                      creator={forCreator}
+                    />
+                  </div>
+                );
+              })}
             </div>
 
             {/* Suivi interne avec le manager : avis, questions, changements de statut (jamais envoyés à la marque) */}
-            <div ref={feedRef} className="mt-6 scroll-mt-4 rounded-xl border border-border bg-panel/60 p-4 sm:p-5">
+            <div ref={setFeedNode} className="mt-6 scroll-mt-4 rounded-xl border border-border bg-panel/60 p-4 sm:p-5">
               <div className="mb-1 flex items-center gap-2">
                 <History className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="text-[13px] font-semibold text-foreground">{asAgency ? `Suivi avec ${creatorName}` : "Suivi avec ton manager"}</span>
@@ -808,7 +1194,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
   // Messagerie en un seul panneau : barre d'icônes, liste, lecture (hauteur fixe sur ordinateur).
   return (
-    <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-surface lg:grid lg:h-[min(900px,calc(100dvh-150px))] lg:min-h-[560px] lg:grid-cols-[64px_minmax(260px,300px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[64px_minmax(280px,320px)_minmax(0,1fr)] 2xl:grid-cols-[64px_minmax(300px,350px)_minmax(0,1fr)]">
+    <div ref={rootRef} className="flex min-w-0 scroll-mt-[calc(env(safe-area-inset-top)+3.5rem)] flex-col overflow-hidden rounded-2xl border border-border bg-surface lg:grid lg:h-[min(900px,calc(100dvh-150px))] lg:min-h-[560px] lg:grid-cols-[64px_minmax(260px,300px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[64px_minmax(280px,320px)_minmax(0,1fr)] 2xl:grid-cols-[64px_minmax(300px,350px)_minmax(0,1fr)]">
       {rail}
       {pills}
       {list}

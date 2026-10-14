@@ -767,7 +767,8 @@ export default function App() {
     );
   // (Le mode portail a déjà fait un return anticipé plus haut : ici space === "agency".)
   const primaryTitle = detailCreator ? titleCase(detailCreator) : canSee(active) ? title : "Accès réservé";
-  const showPrimaryH1 = !detailCreator && active !== "apercu";
+  // Accueil et Mails n'ont pas d'en-tête de page (Mails : client plein écran avec son propre en-tête).
+  const showPrimaryH1 = !detailCreator && active !== "apercu" && pageKey !== "mails";
   // Multi-pages actif dès qu'il y a ≥ 2 onglets ou un volet latéral.
   // (Mode iPhone : toujours une seule page à la fois, comme une app.)
   const multi = !iosPhone && (tabs.length > 1 || splitShown != null);
@@ -926,7 +927,7 @@ export default function App() {
                             <ErrorBoundary variant="inline" label="Cette page" resetKey={`tab:${id}`}>
                               <Suspense fallback={PANE_FALLBACK}>
                                 <NavSubContext.Provider value={id === active ? sub : null}>
-                                  {id !== "apercu" ? (
+                                  {id !== "apercu" && id !== "mails" ? (
                                     <PageFrame title={tabTitle} hint={VIEW_HINTS[id]}>
                                       <ViewContent active={id} onOpenCreator={openDetail} />
                                     </PageFrame>

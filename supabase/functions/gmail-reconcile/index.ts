@@ -39,7 +39,7 @@ async function authorized(req: Request, sb: Sb): Promise<boolean> {
   return !pe && prof?.role === "agency";
 }
 
-/** Blob agence : lecture (ligne la plus récente) + écriture d'une clé. */
+/** Blob agence : lecture (ligne la plus récente) + écriture atomique d'une clé. */
 async function readBlob(sb: Sb): Promise<{ id: string | null; obj: Record<string, unknown> }> {
   const { data } = await sb.from("module_rows").select("id,a").eq("module", "__app_state__").order("created_at", { ascending: false }).limit(1);
   const row = data?.[0] as { id: string; a: string } | undefined;
@@ -51,9 +51,22 @@ async function readBlob(sb: Sb): Promise<{ id: string | null; obj: Record<string
     return { id: row.id, obj: {} };
   }
 }
-async function writeBlobKey(sb: Sb, id: string | null, obj: Record<string, unknown>, key: string, value: unknown) {
-  const next = { ...obj, [key]: value };
-  const json = JSON.stringify(next);
+/**
+ * Écrit UNE clé du blob via la fonction SQL app_state_set (jsonb_set sous verrou de
+ * ligne) : un réglage enregistré pendant le passage n'est plus écrasé. Ancienne
+ * réécriture du blob entier seulement si la fonction SQL n'existe pas encore.
+ */
+async function saveStateKey(sb: Sb, key: string, value: unknown) {
+  const { error } = await sb.rpc("app_state_set", { p_key: key, p_value: value });
+  if (!error) return;
+  const missing = error.code === "42883" || error.code === "PGRST202" ||
+    /function .* does not exist|could not find the function/i.test(error.message ?? "");
+  if (!missing) {
+    console.error("gmail-reconcile app_state_set", error.message);
+    return;
+  }
+  const { id, obj } = await readBlob(sb);
+  const json = JSON.stringify({ ...obj, [key]: value });
   if (id) await sb.from("module_rows").update({ a: json }).eq("id", id);
   else await sb.from("module_rows").insert({ module: "__app_state__", a: json });
 }
@@ -99,7 +112,7 @@ Deno.serve(async (req: Request) => {
     return metas.filter((x): x is Sent => x !== null);
   }
 
-  const { id: blobId, obj: blob } = await readBlob(sb);
+  const { obj: blob } = await readBlob(sb);
   const state = (blob.gmailReconcileState as { lastTs?: number; talentLastTs?: number }) ?? {};
   // 1er passage (par boîte) : petit amorçage de 24 h (jamais tout l'historique).
   const dayAgo = Date.now() - 24 * 3600e3;
@@ -181,6 +194,6 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  await writeBlobKey(sb, blobId, blob, "gmailReconcileState", nextState);
+  await saveStateKey(sb, "gmailReconcileState", nextState);
   return jsonRes({ ok: true, mails: sent.length, contacts: updated, touches: touchesAdded });
 });

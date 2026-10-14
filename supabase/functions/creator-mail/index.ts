@@ -11,14 +11,21 @@
 //      peut passer { creator } (aperçu « vue créatrice »).
 //   2. Réglage lu en base (creator_mail_settings) : section activée + alias/libellé.
 //   3. Chaque accès à un fil (ouverture, pièce jointe, note, avis) revérifie que
-//      le fil appartient à la créatrice (logic.threadMatches) ; sinon 404.
+//      le fil appartient à la créatrice (logic.threadMatches) ; sinon 404. Dans un fil,
+//      elle ne voit que les messages qui la concernent (logic.concernedMessages : son
+//      alias dans les en-têtes du message, ou le libellé qui vaut pour tout le fil) ;
+//      les autres adresses de l'agence en To/Cc deviennent « TTP Creators ».
+//   3 bis. Alias refusé (talent@, boîte partagée, alias d'un autre créateur) → « non
+//      configuré ». Section désactivée : toute action autre que `list` → 403.
 //   4. Accès Gmail : compte de service (secret GMAIL_SA_KEY + GMAIL_IMPERSONATE,
 //      délégation de domaine, scope gmail.readonly) ; à défaut, la connexion
 //      Gmail de l'agence déjà en place (google_tokens). Jamais côté client.
 //   5. HTML assaini ici (sanitize-html) PUIS côté client (DOMPurify).
 //
-// Cache mémoire court (liste 60 s, fil 2 min). Pas de Pub/Sub pour l'instant :
-// pour l'ajouter, il suffira d'invalider `cache` depuis un webhook.
+// Cache mémoire court (liste 60 s, fil 2 min) : promesses en cours partagées, jamais
+// d'échec ni de liste incomplète en cache. `list` accepte `fresh: true` (relit Gmail).
+// Appels Gmail : délai max + nouvelles tentatives (gfetch). Gmail injoignable pendant
+// une note / un avis : accepté si le fil est déjà connu (ligne creator_mail_threads).
 //
 // Entrée (POST JSON) : { action: "list" | "thread" | "attachment" | "note" | "decision" | "labels",
 //                        creator?, threadId?, messageId?, attachmentId?, body?, decision?, comment? }
@@ -29,8 +36,10 @@
 import sanitizeHtml from "npm:sanitize-html@2.13.0";
 import { getServiceClient, getAccessToken, corsHeaders } from "../_shared/google.ts";
 import { serviceAccountToken, talentAddress } from "../_shared/gmailBox.ts";
+import { gfetch, classifyGmail, mapPool, charsetOf, decodeGmailBody, type GfetchOptions } from "../_shared/gfetch.ts";
 import {
-  aliasQuery, brandAddressOf, brandOf, cleanComment, displayName, header, isVisibleMessage, normEmail, parseChoice, threadMatches,
+  aliasQuery, aliasRefused, brandAddressOf, brandOf, cleanComment, concernedMessages, displayName, header, isVisibleMessage,
+  maskAgencyAddresses, normEmail, parseChoice, threadMatches,
   type GHeader, type GMessageLite,
 } from "./logic.ts";
 
@@ -38,22 +47,42 @@ const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
 const LIST_MAX = 40;
 const ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
-const META_HEADERS = ["From", "To", "Cc", "Delivered-To", "X-Original-To", "Reply-To", "Subject", "Date"];
+const META_HEADERS = ["From", "To", "Cc", "Bcc", "Delivered-To", "X-Original-To", "Reply-To", "Subject", "Date"];
+const NOTE_COLUMNS = "id, body, created_at, agency_read_at, by_role, author_name";
 
 type Sb = ReturnType<typeof getServiceClient>;
 type Me = { userId: string; agency: boolean; creator: string | null };
 type Settings = { creator: string; alias: string | null; label_id: string | null; enabled: boolean };
 
 // ---------------------------------------------------------------------------
-// Cache mémoire (par instance de fonction)
+// Cache mémoire (par instance de fonction) : la PROMESSE est gardée, donc deux
+// demandes simultanées ne font qu'une lecture Gmail. Un échec n'est jamais gardé ;
+// `keep(v) === false` (ex. liste incomplète) non plus.
 // ---------------------------------------------------------------------------
-const cache = new Map<string, { exp: number; value: unknown }>();
-async function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+type CacheEntry = { exp: number; born: number; value: Promise<unknown> };
+const cache = new Map<string, CacheEntry>();
+const FRESH_FLOOR_MS = 5_000; // `fresh` ne relance pas Gmail plus d'une fois toutes les 5 s
+function cached<T>(
+  key: string, ttlMs: number, load: () => Promise<T>,
+  opts: { fresh?: boolean; keep?: (v: T) => boolean } = {},
+): Promise<T> {
+  const now = Date.now();
   const hit = cache.get(key);
-  if (hit && hit.exp > Date.now()) return hit.value as T;
-  const value = await load();
-  cache.set(key, { exp: Date.now() + ttlMs, value });
-  if (cache.size > 500) for (const [k, v] of cache) if (v.exp <= Date.now()) cache.delete(k);
+  if (hit && hit.exp > now && !(opts.fresh && now - hit.born > FRESH_FLOOR_MS)) return hit.value as Promise<T>;
+  const value = load();
+  const entry: CacheEntry = { exp: now + ttlMs, born: now, value };
+  cache.set(key, entry);
+  value.then(
+    (v) => {
+      if (opts.keep && !opts.keep(v)) {
+        if (cache.get(key) === entry) cache.delete(key);
+      } else entry.exp = Date.now() + ttlMs;
+    },
+    () => {
+      if (cache.get(key) === entry) cache.delete(key);
+    },
+  );
+  if (cache.size > 500) for (const [k, v] of cache) if (v.exp <= now) cache.delete(k);
   return value;
 }
 
@@ -82,14 +111,35 @@ async function gmailToken(sb: Sb): Promise<string> {
 }
 
 class HttpError extends Error {
-  constructor(public status: number, public code: string) { super(code); }
+  /** `unreachable` : Gmail injoignable (délai, réseau, 5xx après nouvelles tentatives). */
+  constructor(public status: number, public code: string, public unreachable = false) { super(code); }
 }
 
-async function gmail<T>(token: string, path: string): Promise<T> {
-  const r = await fetch(`${GMAIL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
-  if (r.status === 404) throw new HttpError(404, "introuvable");
-  if (!r.ok) throw new HttpError(502, r.status === 403 ? "gmail_acces_refuse" : "gmail_indisponible");
-  return r.json() as Promise<T>;
+/** Appel Gmail (GET) avec délai max + nouvelles tentatives ; erreurs → HttpError. */
+async function gmail<T>(token: string, path: string, opts?: GfetchOptions): Promise<T> {
+  let r: Response;
+  try {
+    r = await gfetch(`${GMAIL}${path}`, { headers: { Authorization: `Bearer ${token}` } }, opts);
+  } catch {
+    throw new HttpError(502, "gmail_indisponible", true);
+  }
+  if (r.status === 404) {
+    await r.body?.cancel().catch(() => {});
+    throw new HttpError(404, "introuvable");
+  }
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    const c = classifyGmail(r.status, body, "gmail_indisponible");
+    if (c.error === "limite_gmail") throw new HttpError(429, "limite_gmail");
+    if (c.error === "google_non_connecte") throw new HttpError(409, "gmail_non_connecte");
+    if (c.error === "gmail_scope_manquant") throw new HttpError(502, "gmail_acces_refuse");
+    throw new HttpError(502, "gmail_indisponible", r.status >= 500);
+  }
+  try {
+    return await r.json() as T;
+  } catch {
+    throw new HttpError(502, "gmail_indisponible", true);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -103,15 +153,6 @@ type GMessage = { id: string; threadId: string; labelIds?: string[]; snippet?: s
 type GThread = { id: string; messages?: GMessage[] };
 
 const lite = (m: GMessage): GMessageLite => ({ labelIds: m.labelIds, headers: m.payload?.headers ?? [] });
-
-function decodeB64Url(data: string): string {
-  try {
-    const bin = atob(data.replace(/-/g, "+").replace(/_/g, "/"));
-    return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
-  } catch {
-    return "";
-  }
-}
 
 function decodeEntities(s: string): string {
   return s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -136,8 +177,8 @@ function extract(payload: GPart | undefined, messageId: string) {
         messageId, attachmentId: p.body.attachmentId, filename: p.filename,
         mimeType: p.mimeType ?? "application/octet-stream", size: p.body.size ?? 0,
       });
-    } else if (p.mimeType === "text/html" && p.body?.data && !html) html = decodeB64Url(p.body.data);
-    else if (p.mimeType === "text/plain" && p.body?.data && !text) text = decodeB64Url(p.body.data);
+    } else if (p.mimeType === "text/html" && p.body?.data && !html) html = decodeGmailBody(p.body.data, charsetOf(p.headers));
+    else if (p.mimeType === "text/plain" && p.body?.data && !text) text = decodeGmailBody(p.body.data, charsetOf(p.headers));
     for (const c of p.parts ?? []) walk(c);
   };
   walk(payload);
@@ -202,10 +243,26 @@ function clean(html: string): string {
 // ---------------------------------------------------------------------------
 // Réglage + appartenance
 // ---------------------------------------------------------------------------
+/**
+ * Réglage de la créatrice. Un alias refusé (talent@, boîte partagée, ou alias d'un
+ * autre créateur dont la section est active) est ignoré : sans libellé, la section
+ * est alors « non configurée ». En cas de doute (lecture impossible) : refusé.
+ */
 async function settingsFor(sb: Sb, creator: string): Promise<Settings | null> {
   const { data } = await sb.from("creator_mail_settings")
     .select("creator, alias, label_id, enabled").eq("creator", creator).maybeSingle<Settings>();
-  return data ?? null;
+  if (!data) return null;
+  const alias = normEmail(data.alias);
+  if (!alias) return data;
+  const { data: others, error } = await sb.from("creator_mail_settings")
+    .select("creator, alias").eq("enabled", true).neq("creator", creator);
+  if (error) console.error("creator-mail réglages", error.message);
+  const refused = !!error || aliasRefused(alias, {
+    talent: talentAddress(),
+    agencyDomain: AGENCY_DOMAIN,
+    otherAliases: ((others ?? []) as { alias: string | null }[]).map((o) => o.alias),
+  });
+  return refused ? { ...data, alias: null } : data;
 }
 
 async function loadThread(token: string, threadId: string): Promise<GThread> {
@@ -221,6 +278,26 @@ async function ownedThread(token: string, s: Settings, threadId: string): Promis
   if (!visible.length || !threadMatches(visible.map(lite), s.alias ?? "", s.label_id)) throw new HttpError(404, "introuvable");
   return t;
 }
+
+/**
+ * Note / avis : le fil doit appartenir à la créatrice. Si Gmail est injoignable
+ * (délai, réseau, 5xx après nouvelles tentatives), on accepte un fil déjà connu
+ * pour elle (ligne creator_mail_threads) ; renvoie alors null (messages inconnus).
+ */
+async function ownedOrKnown(sb: Sb, s: Settings, threadId: string): Promise<GThread | null> {
+  try {
+    return await ownedThread(await gmailToken(sb), s, threadId);
+  } catch (e) {
+    if (!(e instanceof HttpError && e.unreachable)) throw e;
+    const { data } = await sb.from("creator_mail_threads")
+      .select("thread_id").eq("creator", s.creator).eq("thread_id", threadId).maybeSingle();
+    if (!data) throw e;
+    return null;
+  }
+}
+
+/** Messages du fil que la créatrice peut voir (alias dans le message, ou libellé du fil). */
+const shownMessages = (t: GThread, s: Settings) => concernedMessages(t.messages ?? [], lite, s.alias ?? "", s.label_id);
 
 // ---------------------------------------------------------------------------
 // Actions
@@ -251,7 +328,8 @@ const decisionOf = (row: ThreadRow | null | undefined) =>
     ? { decidedBy: row.decided_by ?? "agency", decidedAt: row.decided_at ?? null }
     : { decidedBy: null, decidedAt: null };
 
-async function gmailThreads(token: string, s: Settings): Promise<GThread[]> {
+/** Fils Gmail de la créatrice (métadonnées). `partial` : un fil n'a pas pu être lu. */
+function gmailThreads(token: string, s: Settings, fresh: boolean): Promise<{ threads: GThread[]; partial: boolean }> {
   return cached(`l:${s.alias ?? ""}:${s.label_id ?? ""}`, 60_000, async () => {
     const ids = new Set<string>();
     const q = aliasQuery(s.alias ?? "");
@@ -264,19 +342,19 @@ async function gmailThreads(token: string, s: Settings): Promise<GThread[]> {
       for (const t of r.threads ?? []) ids.add(t.id);
     }
     const meta = META_HEADERS.map((h) => `metadataHeaders=${encodeURIComponent(h)}`).join("&");
-    const threads: GThread[] = [];
-    const all = [...ids];
-    for (let i = 0; i < all.length; i += 10) {
-      const chunk = await Promise.all(all.slice(i, i + 10).map((id) =>
-        gmail<GThread>(token, `/threads/${id}?format=metadata&${meta}`).catch(() => null)));
-      for (const t of chunk) if (t) threads.push(t);
-    }
-    return threads;
-  });
+    let partial = false;
+    const got = await mapPool([...ids], 8, (id) =>
+      gmail<GThread>(token, `/threads/${encodeURIComponent(id)}?format=metadata&${meta}`).catch((e) => {
+        // Supprimé entre la liste et la lecture : rien à signaler. Sinon : liste incomplète.
+        if (!(e instanceof HttpError && e.status === 404)) partial = true;
+        return null;
+      }));
+    return { threads: got.filter((t): t is GThread => t !== null), partial };
+  }, { fresh, keep: (v) => !v.partial });
 }
 
-async function listThreads(sb: Sb, token: string, s: Settings) {
-  const threads = await gmailThreads(token, s);
+async function listThreads(sb: Sb, token: string, s: Settings, fresh: boolean) {
+  const { threads, partial } = await gmailThreads(token, s, fresh);
   // Statuts et notes : toujours relus en base (pas de cache), l'agence les modifie.
   const [{ data: rows }, { data: notes }] = await Promise.all([
     // « * » : fonctionne avant et après l'ajout des colonnes decided_by / decided_at.
@@ -287,22 +365,26 @@ async function listThreads(sb: Sb, token: string, s: Settings) {
   const noteCount = new Map<string, number>();
   for (const n of (notes ?? []) as { thread_id: string }[]) noteCount.set(n.thread_id, (noteCount.get(n.thread_id) ?? 0) + 1);
 
-  return threads
+  const list = threads
     .map((t) => {
       const msgs = (t.messages ?? []).filter((m) => isVisibleMessage(lite(m)));
       // Revérification serveur : la recherche Gmail est approximative.
       if (!msgs.length || !threadMatches(msgs.map(lite), s.alias ?? "", s.label_id)) return null;
-      const first = msgs[0];
-      const last = msgs[msgs.length - 1];
+      // Aperçu, date et nombre : seulement les messages qui la concernent.
+      const shown = shownMessages(t, s);
+      if (!shown.length) return null;
+      const first = shown[0];
+      const last = shown[shown.length - 1];
       const row = byId.get(t.id);
       return {
         id: t.id,
         subject: header(first.payload?.headers ?? [], "Subject") || "(sans objet)",
-        brand: row?.brand || brandOf(msgs.map(lite), AGENCY_DOMAIN) || displayName(header(first.payload?.headers ?? [], "From")),
-        brandEmail: brandAddressOf(msgs.map(lite), AGENCY_DOMAIN),
+        brand: row?.brand || brandOf(shown.map(lite), AGENCY_DOMAIN) || brandOf(msgs.map(lite), AGENCY_DOMAIN) ||
+          displayName(header(first.payload?.headers ?? [], "From")),
+        brandEmail: brandAddressOf(shown.map(lite), AGENCY_DOMAIN) || brandAddressOf(msgs.map(lite), AGENCY_DOMAIN),
         excerpt: decodeEntities(last.snippet ?? "").slice(0, 220),
         ts: Number(last.internalDate ?? 0),
-        count: msgs.length,
+        count: shown.length,
         status: effectiveStatus(row, msgs),
         ...decisionOf(row),
         notes: noteCount.get(t.id) ?? 0,
@@ -310,13 +392,15 @@ async function listThreads(sb: Sb, token: string, s: Settings) {
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)
     .sort((a, b) => b.ts - a.ts);
+  return { threads: list, partial };
 }
 
 async function threadView(sb: Sb, token: string, s: Settings, threadId: string) {
   const t = await ownedThread(token, s, threadId);
   const budget = { left: INLINE_TOTAL_MAX };
   const messages = [];
-  for (const m of (t.messages ?? []).filter((x) => isVisibleMessage(lite(x)))) {
+  const shown = shownMessages(t, s);
+  for (const m of shown) {
     const hs = m.payload?.headers ?? [];
     const ex = extract(m.payload, m.id);
     const { text } = ex;
@@ -331,8 +415,9 @@ async function threadView(sb: Sb, token: string, s: Settings, threadId: string) 
       from: displayName(from),
       fromEmail: fromAddr,
       fromAgency: fromAddr.endsWith("@" + AGENCY_DOMAIN),
-      to: header(hs, "To"),
-      cc: header(hs, "Cc"),
+      // Les autres adresses de l'agence (collègues, boîtes partagées) → « TTP Creators ».
+      to: maskAgencyAddresses(header(hs, "To"), s.alias ?? "", AGENCY_DOMAIN),
+      cc: maskAgencyAddresses(header(hs, "Cc"), s.alias ?? "", AGENCY_DOMAIN),
       ts: Number(m.internalDate ?? 0),
       html: html ? clean(html) : "",
       text: html ? "" : text,
@@ -341,14 +426,14 @@ async function threadView(sb: Sb, token: string, s: Settings, threadId: string) 
   }
   const [{ data: row }, { data: notes }] = await Promise.all([
     sb.from("creator_mail_threads").select("*").eq("creator", s.creator).eq("thread_id", threadId).maybeSingle(),
-    sb.from("creator_mail_notes").select("id, body, created_at, agency_read_at")
+    sb.from("creator_mail_notes").select(NOTE_COLUMNS)
       .eq("creator", s.creator).eq("thread_id", threadId).order("created_at"),
   ]);
-  const first = t.messages?.[0];
+  const first = shown[0];
   return {
     id: threadId,
     subject: header(first?.payload?.headers ?? [], "Subject") || "(sans objet)",
-    brand: (row as ThreadRow | null)?.brand || brandOf((t.messages ?? []).map(lite), AGENCY_DOMAIN),
+    brand: (row as ThreadRow | null)?.brand || brandOf(shown.map(lite), AGENCY_DOMAIN) || brandOf((t.messages ?? []).map(lite), AGENCY_DOMAIN),
     status: effectiveStatus(row as ThreadRow | null, (t.messages ?? []).filter((x) => isVisibleMessage(lite(x)))),
     ...decisionOf(row as ThreadRow | null),
     messages,
@@ -358,12 +443,13 @@ async function threadView(sb: Sb, token: string, s: Settings, threadId: string) 
 
 async function attachment(token: string, s: Settings, threadId: string, messageId: string, attachmentId: string) {
   const t = await ownedThread(token, s, threadId);
-  const msg = (t.messages ?? []).find((m) => m.id === messageId && isVisibleMessage(lite(m)));
+  // Seulement une pièce d'un message qu'elle a le droit de voir.
+  const msg = shownMessages(t, s).find((m) => m.id === messageId);
   if (!msg) throw new HttpError(404, "introuvable");
   const meta = extract(msg.payload, msg.id).attachments.find((a) => a.attachmentId === attachmentId);
   if (!meta) throw new HttpError(404, "introuvable");
   if (meta.size > ATTACHMENT_MAX_BYTES) throw new HttpError(413, "piece_trop_lourde");
-  const a = await gmail<{ data?: string }>(token, `/messages/${messageId}/attachments/${encodeURIComponent(attachmentId)}`);
+  const a = await gmail<{ data?: string }>(token, `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`, { timeoutMs: 30_000 });
   return {
     filename: meta.filename, mimeType: meta.mimeType,
     data: (a.data ?? "").replace(/-/g, "+").replace(/_/g, "/"), // base64 standard
@@ -407,8 +493,12 @@ Deno.serve(async (req: Request) => {
     const creator = me.agency ? String(body.creator ?? "").trim() : me.creator ?? "";
     if (!creator) return res({ error: "creatrice_inconnue" }, 400);
     const s = await settingsFor(sb, creator);
+    // Section désactivée (créatrice) : seule la liste répond (« non configurée ») ;
+    // toute autre action est refusée. L'agence garde l'aperçu avant activation.
+    const disabled = !me.agency && (!s || !s.enabled);
+    if (disabled && action !== "list") return res({ error: "section_desactivee" }, 403);
     // Section désactivée ou non configurée : rien n'est lu dans Gmail.
-    if (!s || (!me.agency && !s.enabled) || (!normEmail(s.alias) && !s.label_id)) {
+    if (!s || disabled || (!normEmail(s.alias) && !s.label_id)) {
       return res({ ok: true, configured: false, threads: [] });
     }
 
@@ -417,10 +507,10 @@ Deno.serve(async (req: Request) => {
       if (me.agency) return res({ error: "non_autorise" }, 403);
       const text = String(body.body ?? "").trim();
       if (!text || text.length > 4000) return res({ error: "note_invalide" }, 400);
-      await ownedThread(await gmailToken(sb), s, threadId);
+      await ownedOrKnown(sb, s, threadId);
       const { data, error } = await sb.from("creator_mail_notes")
         .insert({ creator, thread_id: threadId, author_user_id: me.userId, body: text })
-        .select("id, body, created_at, agency_read_at").single();
+        .select(NOTE_COLUMNS).single();
       if (error) return res({ error: "note_non_enregistree" }, 500);
       return res({ ok: true, note: data });
     }
@@ -433,9 +523,10 @@ Deno.serve(async (req: Request) => {
       const choice = parseChoice(body.decision);
       if (!choice) return res({ error: "requete_invalide" }, 400);
       const comment = cleanComment(body.comment);
-      const t = await ownedThread(await gmailToken(sb), s, threadId);
+      const t = await ownedOrKnown(sb, s, threadId);
       const now = new Date().toISOString();
-      const row = choice === "encours"
+      type DecisionRow = { creator: string; thread_id: string; status: string; decided_by: string | null; decided_at: string | null; updated_at: string };
+      const row: DecisionRow = choice === "encours"
         ? { creator, thread_id: threadId, status: "nouvelle", decided_by: null, decided_at: null, updated_at: now }
         : { creator, thread_id: threadId, status: choice, decided_by: "creator", decided_at: now, updated_at: now };
       const { error } = await sb.from("creator_mail_threads").upsert(row, { onConflict: "creator,thread_id" });
@@ -446,12 +537,16 @@ Deno.serve(async (req: Request) => {
         creator, thread_id: threadId, status: choice, by_role: "creator", author_user_id: me.userId, comment,
       });
       if (logError) console.error("creator-mail historique", logError.message);
-      const msgs = (t.messages ?? []).filter((m) => isVisibleMessage(lite(m)));
-      return res({ ok: true, status: effectiveStatus(row as ThreadRow, msgs), ...decisionOf(row as ThreadRow), logged: !logError });
+      const msgs = (t?.messages ?? []).filter((m) => isVisibleMessage(lite(m)));
+      const asRow: ThreadRow = { ...row, brand: null };
+      return res({ ok: true, status: effectiveStatus(asRow, msgs), ...decisionOf(asRow), logged: !logError });
     }
 
     const token = await gmailToken(sb);
-    if (action === "list") return res({ ok: true, configured: true, threads: await listThreads(sb, token, s) });
+    if (action === "list") {
+      const { threads, partial } = await listThreads(sb, token, s, body.fresh === true);
+      return res({ ok: true, configured: true, threads, ...(partial ? { partial: true } : {}) });
+    }
     if (action === "thread") return res({ ok: true, thread: await threadView(sb, token, s, threadId) });
     if (action === "attachment") {
       return res({ ok: true, ...(await attachment(token, s, threadId, String(body.messageId ?? ""), String(body.attachmentId ?? ""))) });

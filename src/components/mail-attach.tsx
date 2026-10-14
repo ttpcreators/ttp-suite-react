@@ -1,12 +1,34 @@
 import { useRef } from "react";
 import { Paperclip, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { OutAttachment } from "@/lib/mailSend";
+import { toast } from "@/components/ui/toast";
+import { ATTACH_MAX_BYTES, ATTACH_MAX_LABEL, type OutAttachment } from "@/lib/mailSend";
 
 const fmtSize = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1).replace(".", ",")} Mo` : `${Math.max(1, Math.round(n / 1024))} Ko`);
 
-/** Bouton trombone : ouvre le sélecteur de fichiers (plusieurs à la fois). */
-export function AttachButton({ onFiles, label = "Joindre", className }: { onFiles: (f: FileList | null) => void; label?: string; className?: string }) {
+/**
+ * Garde seulement les fichiers qui tiennent sous la limite (18 Mo bruts au total,
+ * comme Gmail côté serveur) ; prévient pour les autres.
+ */
+function withinLimit(list: FileList, total: number): FileList {
+  let sum = total;
+  const keep = new DataTransfer();
+  for (const f of Array.from(list)) {
+    if (sum + f.size > ATTACH_MAX_BYTES) {
+      toast(`« ${f.name} » dépasse la limite de ${ATTACH_MAX_LABEL} au total`);
+      continue;
+    }
+    sum += f.size;
+    keep.items.add(f);
+  }
+  return keep.files;
+}
+
+/**
+ * Bouton trombone : ouvre le sélecteur de fichiers (plusieurs à la fois).
+ * `total` (octets déjà joints) : les fichiers au-delà de la limite sont écartés ici.
+ */
+export function AttachButton({ onFiles, label = "Joindre", className, total }: { onFiles: (f: FileList | null) => void; label?: string; className?: string; total?: number }) {
   const input = useRef<HTMLInputElement>(null);
   return (
     <>
@@ -23,7 +45,16 @@ export function AttachButton({ onFiles, label = "Joindre", className }: { onFile
         multiple
         hidden
         onChange={(e) => {
-          onFiles(e.target.files);
+          const files = e.target.files;
+          let picked: FileList | null = files;
+          if (files && total != null && typeof DataTransfer !== "undefined") {
+            try {
+              picked = withinLimit(files, total);
+            } catch {
+              picked = files; // DataTransfer indisponible : la limite reste vérifiée à l'ajout
+            }
+          }
+          onFiles(picked);
           e.target.value = "";
         }}
       />

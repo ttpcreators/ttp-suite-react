@@ -401,20 +401,58 @@ export function CreatorSpace({
   const live = useLiveKey();
   // Section « Mails » : affichée seulement si l'agence l'a activée et liée à un alias/libellé.
   const [mailsOn, setMailsOn] = useState(false);
+  const [mailAlias, setMailAlias] = useState<string | null>(null);
+  const mailsReadFor = useRef<string | null>(null); // créateur dont le réglage a été lu
   useEffect(() => {
     let alive = true;
     supabase.from("creator_mail_settings").select("enabled, alias, label_id").eq("creator", name).maybeSingle()
-      .then(({ data }) => {
-        const d = data as { enabled: boolean; alias: string | null; label_id: string | null } | null;
-        if (alive) setMailsOn(!!d?.enabled && !!(d.alias || d.label_id));
+      .then(({ data, error }) => {
+        if (!alive) return;
+        // Erreur réseau passagère : on garde l'état connu du même créateur (l'onglet ne disparaît pas).
+        if (error && mailsReadFor.current === name) return;
+        mailsReadFor.current = error ? null : name;
+        const d = error ? null : (data as { enabled: boolean; alias: string | null; label_id: string | null } | null);
+        setMailsOn(!!d?.enabled && !!(d.alias || d.label_id));
+        setMailAlias(d?.alias ?? null);
       });
     return () => {
       alive = false;
     };
   }, [name, live]);
+  // Pastille de l'onglet Mails : échanges qui ont bougé (message, remarque ou statut de
+  // l'agence) depuis que le créateur les a ouverts. Calculée sur l'appareil ; le module
+  // est chargé à la demande pour ne pas alourdir l'espace créateur.
+  const mailBadgeOn = mailsOn && !preview;
+  const [mailBadge, setMailBadge] = useState(0);
+  useEffect(() => {
+    if (!mailBadgeOn) {
+      setMailBadge(0);
+      return;
+    }
+    let alive = true;
+    let unsub = () => {};
+    void import("@/lib/creatorMail").then((m) => {
+      if (!alive) return;
+      const update = () => setMailBadge(m.unseenMailIds(name).length);
+      unsub = m.subscribeSeen(update);
+      update();
+    });
+    return () => {
+      alive = false;
+      unsub();
+    };
+  }, [name, mailBadgeOn]);
+  // Hors de l'onglet Mails : remarques et statuts de l'agence relus en base (léger, au plus
+  // toutes les 2 min). Dans l'onglet, la boîte s'en charge (et relit aussi la liste Gmail).
+  useEffect(() => {
+    if (!mailBadgeOn || tab === "mails") return;
+    void import("@/lib/creatorMail").then((m) => m.refreshAgencyActivity(name));
+  }, [name, mailBadgeOn, tab, live]);
   const navGroups = useMemo(
-    () => (mailsOn ? CREATOR_GROUPS : CREATOR_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => i.id !== "mails") }))),
-    [mailsOn],
+    () => (mailsOn
+      ? CREATOR_GROUPS.map((g) => ({ ...g, items: g.items.map((i) => (i.id === "mails" ? { ...i, badge: mailBadge || undefined } : i)) }))
+      : CREATOR_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => i.id !== "mails") }))),
+    [mailsOn, mailBadge],
   );
   const navTabs = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
 
@@ -1526,10 +1564,11 @@ export function CreatorSpace({
                   key={t.id}
                   type="button"
                   onClick={() => setTab(t.id)}
-                  title={t.label}
-                  className={sbRailCls(tab === t.id)}
+                  title={t.id === "mails" && mailBadge ? `${t.label} · ${mailBadge} à voir` : t.label}
+                  className={cn(sbRailCls(tab === t.id), "relative")}
                 >
                   <t.icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                  {t.id === "mails" && mailBadge > 0 && <span aria-hidden className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary" />}
                 </button>
               ))}
             </nav>
@@ -2777,7 +2816,7 @@ export function CreatorSpace({
           {tab === "mails" && (
             mailsOn ? (
               <Suspense fallback={null}>
-                <CreatorMailbox creator={name} mode={preview ? "preview" : "creator"} />
+                <CreatorMailbox creator={name} mode={preview ? "preview" : "creator"} alias={mailAlias} />
               </Suspense>
             ) : (
               <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
@@ -3048,7 +3087,7 @@ export function CreatorSpace({
           items={[
             ...ctabIds.map((id) => {
               const t = TABS.find((x) => x.id === id);
-              return { id, label: t?.label ?? id, icon: id === "accueil" ? House : t?.icon ?? LayoutDashboard };
+              return { id, label: t?.label ?? id, icon: id === "accueil" ? House : t?.icon ?? LayoutDashboard, badge: id === "mails" ? mailBadge : null };
             }),
             { id: "__more", label: "Plus", icon: CircleEllipsis },
           ]}

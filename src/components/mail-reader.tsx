@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { Paperclip, type LucideIcon } from "lucide-react";
+import { ChevronUp, Paperclip, type LucideIcon } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { MailAvatar } from "@/components/mail-avatar";
 import { mailDocument, hasQuote, mailSnippet, fmtSize, downloadAttachment, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
@@ -95,6 +95,51 @@ export type MailAction = { icon: LucideIcon; label: string; onClick: () => void 
 
 const cleanAddr = (v: string) => v.replace(/"?([^"<,]+?)"?\s*<[^>]+>/g, "$1");
 
+/** Pièces « intégrées » (images du corps du mail) : pas listées comme pièces jointes. */
+const isInline = (a: MailAttachment) => !!(a as MailAttachment & { inline?: boolean }).inline;
+
+/** Bouton « Afficher / Masquer l'historique » (réponses précédentes citées dans le mail). */
+function QuoteToggle({ shown, onClick, className }: { shown: boolean; onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={shown}
+      className={`mt-2 self-start rounded-full bg-muted px-2.5 py-1 text-[11.5px] font-medium leading-none text-muted-foreground transition-colors hover:text-foreground ${className ?? ""}`}
+    >
+      {shown ? "Masquer l'historique" : "Afficher l'historique"}
+    </button>
+  );
+}
+
+/** Bouton chevron « Replier » d'un message déplié. */
+function FoldButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Replier"
+      title="Replier"
+      className="grid h-8 w-8 place-items-center rounded-full transition-colors hover:bg-rowhover hover:text-foreground"
+    >
+      <ChevronUp className="h-4 w-4" />
+    </button>
+  );
+}
+
+/**
+ * Clic dans l'en-tête d'un message déplié : replie, sauf sur un bouton, un lien,
+ * le texte (nom, adresse : sélectionnables) ou pendant une sélection.
+ */
+function headClick(onToggle: () => void) {
+  return (e: MouseEvent<HTMLElement>) => {
+    const el = e.target as HTMLElement;
+    if (el.closest("button, a, [data-sel]")) return;
+    if (window.getSelection()?.toString()) return;
+    onToggle();
+  };
+}
+
 /**
  * Un message du fil, en carte (inspirée d'« email-client-card ») : en-tête avec
  * avatar, nom, adresse, date et actions ; corps du mail ; pied optionnel (réponse).
@@ -112,6 +157,7 @@ export function MailItem({
 }) {
   const [showQuoted, setShowQuoted] = useState(false);
   const snippet = useMemo(() => mailSnippet(m.html, m.text), [m.html, m.text]);
+  const files = useMemo(() => m.attachments.filter((a) => !isInline(a)), [m.attachments]);
   const name = m.fromAgency ? "TTP Creators" : m.from;
   const reduce = useReducedMotion();
   const enter = reduce ? {} : { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.25, delay: Math.min(index, 6) * 0.04 } };
@@ -141,17 +187,15 @@ export function MailItem({
     const ago = fmtAgo(m.ts);
     return (
       <motion.article {...enter} className="flex flex-col py-5">
-        <div className="flex items-start gap-3">
-          <button type="button" onClick={onToggle} className="flex min-w-0 flex-1 items-start gap-3 text-left" title="Replier">
-            <Initial name={m.from} email={m.fromEmail} agency={m.fromAgency} size="lg" />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[14px] font-semibold text-foreground">{name}</span>
-              <span className="block truncate text-[12.5px] text-muted-foreground">{m.fromAgency ? m.from : m.fromEmail}</span>
-              <span className="mt-0.5 block truncate text-[11.5px] text-faint">
-                à {cleanAddr(m.to)}{m.cc ? ` · cc ${cleanAddr(m.cc)}` : ""}
-              </span>
+        <div className="flex cursor-pointer items-start gap-3" onClick={headClick(onToggle)}>
+          <Initial name={m.from} email={m.fromEmail} agency={m.fromAgency} size="lg" />
+          <span className="min-w-0 flex-1">
+            <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[14px] font-semibold text-foreground">{name}</span>
+            <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[12.5px] text-muted-foreground">{m.fromAgency ? m.from : m.fromEmail}</span>
+            <span data-sel className="mt-0.5 block w-fit max-w-full cursor-text select-text truncate text-[11.5px] text-faint">
+              à {cleanAddr(m.to)}{m.cc ? ` · cc ${cleanAddr(m.cc)}` : ""}
             </span>
-          </button>
+          </span>
           <div className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
             <span className="mr-1 hidden text-[12px] tabular-nums text-muted-foreground sm:inline">
               {fmtFull(m.ts)}{ago && <span className="text-faint"> ({ago})</span>}
@@ -169,33 +213,25 @@ export function MailItem({
                 <a.icon className="h-4 w-4" />
               </button>
             ))}
+            <FoldButton onClick={onToggle} />
           </div>
         </div>
 
-        <div className="mt-5 overflow-hidden rounded-lg bg-white dark:p-4">
+        <div className="mt-4 overflow-hidden rounded-lg bg-white dark:p-4">
           <MailBody m={m} showQuoted={showQuoted} />
         </div>
-        {hasQuote(m.html) && (
-          <button
-            type="button"
-            onClick={() => setShowQuoted((v) => !v)}
-            title={showQuoted ? "Masquer l'historique" : "Afficher l'historique"}
-            className="mt-2 self-start rounded-full bg-muted px-2 py-0.5 text-[12px] font-semibold leading-none tracking-widest text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {showQuoted ? "Masquer" : "···"}
-          </button>
-        )}
+        {hasQuote(m.html) && <QuoteToggle shown={showQuoted} onClick={() => setShowQuoted((v) => !v)} />}
 
-        {m.attachments.length > 0 && (
+        {files.length > 0 && (
           <div className="mt-6">
             <div className="mb-2.5 flex items-center justify-between gap-3">
               <span className="text-[13px] font-semibold text-foreground">
-                {m.attachments.length} pièce{m.attachments.length > 1 ? "s" : ""} jointe{m.attachments.length > 1 ? "s" : ""}
+                {files.length} pièce{files.length > 1 ? "s" : ""} jointe{files.length > 1 ? "s" : ""}
               </span>
-              {m.attachments.length > 1 && (
+              {files.length > 1 && (
                 <button
                   type="button"
-                  onClick={() => void m.attachments.reduce<Promise<unknown>>((p, a) => p.then(() => download(a)), Promise.resolve())}
+                  onClick={() => void files.reduce<Promise<unknown>>((p, a) => p.then(() => download(a)), Promise.resolve())}
                   className="text-[12.5px] font-medium text-primary hover:underline"
                 >
                   Tout télécharger
@@ -203,7 +239,7 @@ export function MailItem({
               )}
             </div>
             <div className="flex flex-wrap gap-2.5">
-              {m.attachments.map((a) => (
+              {files.map((a) => (
                 <button
                   key={a.attachmentId}
                   type="button"
@@ -249,17 +285,15 @@ export function MailItem({
   return (
     <motion.article {...enter} className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm shadow-black/[0.03]">
       {/* En-tête */}
-      <div className="flex items-start gap-3 border-b border-border px-4 py-3.5 sm:px-5">
-        <button type="button" onClick={onToggle} className="flex min-w-0 flex-1 items-start gap-3 text-left" title="Replier">
-          <Initial name={m.from} email={m.fromEmail} agency={m.fromAgency} />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[14px] font-semibold text-foreground">{name}</span>
-            <span className="block truncate text-[12px] text-muted-foreground">{m.fromAgency ? m.from : m.fromEmail}</span>
-            <span className="mt-0.5 block truncate text-[11px] text-faint">
-              à {cleanAddr(m.to)}{m.cc ? ` · cc ${cleanAddr(m.cc)}` : ""}
-            </span>
+      <div className="flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3.5 sm:px-5" onClick={headClick(onToggle)}>
+        <Initial name={m.from} email={m.fromEmail} agency={m.fromAgency} />
+        <span className="min-w-0 flex-1">
+          <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[14px] font-semibold text-foreground">{name}</span>
+          <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[12px] text-muted-foreground">{m.fromAgency ? m.from : m.fromEmail}</span>
+          <span data-sel className="mt-0.5 block w-fit max-w-full cursor-text select-text truncate text-[11px] text-faint">
+            à {cleanAddr(m.to)}{m.cc ? ` · cc ${cleanAddr(m.cc)}` : ""}
           </span>
-        </button>
+        </span>
         <div className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
           <span className="mr-1 hidden text-[11px] tabular-nums text-faint sm:inline">{fmtFull(m.ts)}</span>
           <span className="mr-1 text-[11px] tabular-nums text-faint sm:hidden">{fmtWhen(m.ts)}</span>
@@ -277,6 +311,7 @@ export function MailItem({
               <a.icon className="h-4 w-4" />
             </motion.button>
           ))}
+          <FoldButton onClick={onToggle} />
         </div>
       </div>
 
@@ -285,19 +320,10 @@ export function MailItem({
         <div className="overflow-hidden rounded-lg bg-white dark:p-4">
           <MailBody m={m} showQuoted={showQuoted} />
         </div>
-        {hasQuote(m.html) && (
-          <button
-            type="button"
-            onClick={() => setShowQuoted((v) => !v)}
-            title={showQuoted ? "Masquer l'historique" : "Afficher l'historique"}
-            className="mt-2 rounded-full bg-muted px-2 py-0.5 text-[12px] font-semibold leading-none tracking-widest text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {showQuoted ? "Masquer" : "···"}
-          </button>
-        )}
-        {m.attachments.length > 0 && (
+        {hasQuote(m.html) && <QuoteToggle shown={showQuoted} onClick={() => setShowQuoted((v) => !v)} className="block" />}
+        {files.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {m.attachments.map((a) => (
+            {files.map((a) => (
               <button
                 key={a.attachmentId}
                 type="button"

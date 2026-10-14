@@ -78,13 +78,15 @@ Deno.serve(async (req: Request) => {
       if (r.ok) {
         sent++;
         // Journal unifié (best-effort) : l'envoi Resend apparaît dans l'historique.
-        await sb.from("email_activity").insert({
+        // (Le constructeur de requête Supabase n'a pas de .catch : on lit { error }.)
+        const { error: logError } = await sb.from("email_activity").insert({
           contact_email: to,
           direction: "out",
           subject,
           snippet: html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180),
           source: typeof body.source === "string" ? body.source : "manual",
-        }).catch(() => {});
+        });
+        if (logError) console.error("send-email journal", logError.message);
       } else {
         const data = await r.json().catch(() => ({}));
         errors.push(`${to}: ${String((data as { message?: string })?.message ?? r.status).slice(0, 160)}`);

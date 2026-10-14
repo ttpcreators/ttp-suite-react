@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  addressesIn, aliasQuery, brandOf, cleanComment, displayName, isMailStatus, messageMatches, normEmail, parseChoice,
-  threadMatches, type GMessageLite,
+  addressesIn, aliasQuery, aliasRefused, brandOf, cleanComment, concernedMessages, displayName, isMailStatus, isSharedBox,
+  maskAgencyAddresses, messageMatches, normEmail, parseChoice, splitAddressList, threadMatches, type GMessageLite,
 } from "../../supabase/functions/creator-mail/logic.ts";
 import { autoStatusOf, buildFeed, choiceOf, type MailNote, type MailStatusEvent } from "./creatorMail";
 
@@ -177,5 +177,57 @@ describe("creator-mail : suivi d'un échange", () => {
     expect(buildFeed([], [ev("e1", "2026-10-03T10:00:00Z")], { status: "valide", decidedBy: "creator", decidedAt: "2026-10-03T10:00:00Z" })).toHaveLength(1);
     expect(buildFeed([], [], { status: "negociation", decidedBy: null, decidedAt: null })).toHaveLength(0);
     expect(buildFeed([], null)).toHaveLength(0);
+  });
+});
+
+describe("creator-mail : confidentialité dans un fil", () => {
+  const id = (m: GMessageLite) => m;
+  const brand = msg({ From: "marque@x.com", To: ALIAS });
+  const internal = msg({ From: "marc@ttpcreators.pro", To: "partnerships@ttpcreators.pro" });
+  const reply = msg({ From: "partnerships@ttpcreators.pro", To: "marque@x.com", Cc: ALIAS });
+
+  it("accès par alias : seuls les messages où l'alias apparaît", () => {
+    expect(concernedMessages([brand, internal, reply], id, ALIAS, null)).toEqual([brand, reply]);
+  });
+
+  it("accès par libellé : tout le fil (messages visibles)", () => {
+    const labelled = msg({ From: "marque@x.com", To: "talent@ttpcreators.pro" }, ["INBOX", "Label_42"]);
+    const trashed = msg({ From: "x@y.com", To: "talent@ttpcreators.pro" }, ["TRASH"]);
+    expect(concernedMessages([labelled, internal, trashed], id, ALIAS, "Label_42")).toEqual([labelled, internal]);
+  });
+
+  it("un libellé absent du fil ne donne pas tout le fil", () => {
+    expect(concernedMessages([brand, internal], id, ALIAS, "Label_42")).toEqual([brand]);
+  });
+
+  it("les autres adresses de l'agence deviennent « TTP Creators »", () => {
+    expect(maskAgencyAddresses(`Marc <marc@ttpcreators.pro>, Léa <${ALIAS}>, marque@x.com`, ALIAS, "ttpcreators.pro"))
+      .toBe(`TTP Creators, Léa <${ALIAS}>, marque@x.com`);
+    expect(maskAgencyAddresses("partnerships@ttpcreators.pro, chloe@ttpcreators.pro", ALIAS, "ttpcreators.pro")).toBe("TTP Creators");
+    expect(maskAgencyAddresses('"marc@ttpcreators.pro" <julie@nike.com>', ALIAS, "ttpcreators.pro")).toBe("julie@nike.com");
+    expect(maskAgencyAddresses("", ALIAS, "ttpcreators.pro")).toBe("");
+  });
+
+  it("découpe les adresses sans casser les noms entre guillemets", () => {
+    expect(splitAddressList('"Martin, Julie" <julie@nike.com>, b@c.fr')).toEqual(['"Martin, Julie" <julie@nike.com>', "b@c.fr"]);
+  });
+});
+
+describe("creator-mail : alias refusés", () => {
+  const opts = { talent: "talent@ttpcreators.pro", agencyDomain: "ttpcreators.pro", otherAliases: ["Chloe@ttpcreators.pro", null] };
+
+  it("boîtes partagées de l'agence", () => {
+    for (const a of ["partnerships", "talent", "contact", "hello", "booking", "info", "admin", "noreply"]) {
+      expect(isSharedBox(`${a}@ttpcreators.pro`, "ttpcreators.pro")).toBe(true);
+    }
+    expect(isSharedBox(ALIAS, "ttpcreators.pro")).toBe(false);
+    expect(isSharedBox("contact@nike.com", "ttpcreators.pro")).toBe(false);
+  });
+
+  it("talent@, boîte partagée ou alias d'un autre créateur → refusé", () => {
+    expect(aliasRefused("TALENT@ttpcreators.pro", opts)).toBe(true);
+    expect(aliasRefused("hello@ttpcreators.pro", opts)).toBe(true);
+    expect(aliasRefused("chloe@ttpcreators.pro", opts)).toBe(true);
+    expect(aliasRefused(ALIAS, opts)).toBe(false);
   });
 });

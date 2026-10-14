@@ -10,7 +10,7 @@ select cron.schedule(
     url     := 'https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/google-watch-renew',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer nq66DO+Bw8X7g6e2xu5jpAMrQuV45ixarQll2O7z9bBEMqBb0oTpCKB3v7KOo33r'
+      'Authorization', 'Bearer REMPLACE_MOI_SECRET_CRON'
     ),
     body    := '{}'::jsonb
   );
@@ -25,7 +25,7 @@ select cron.schedule(
     url     := 'https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/google-sync',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer nq66DO+Bw8X7g6e2xu5jpAMrQuV45ixarQll2O7z9bBEMqBb0oTpCKB3v7KOo33r'
+      'Authorization', 'Bearer REMPLACE_MOI_SECRET_CRON'
     ),
     body    := '{"trigger":"cron"}'::jsonb
   );
