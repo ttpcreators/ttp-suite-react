@@ -480,7 +480,7 @@ export function AgentView() {
                     <span className="flex items-center gap-1.5"><UserRound className="h-3 w-3 text-faint" /> {p.contact}{p.contact_role ? `, ${p.contact_role}` : ""}</span>
                   )}
                   {p.creatrice && (
-                    <span>Créatrice : <span className="font-semibold uppercase tracking-wide text-foreground">{p.creatrice}</span></span>
+                    <span>Créateur : <span className="font-semibold uppercase tracking-wide text-foreground">{p.creatrice}</span></span>
                   )}
                   {p.angle && <span>Angle : {p.angle}</span>}
                 </div>
@@ -564,15 +564,15 @@ export function AgentView() {
       </Section>
 
       {/* 5) La mémoire créatrices */}
-      <Section icon={BookOpen} title="Mémoire créatrices" count={memoire.length}>
+      <Section icon={BookOpen} title="Mémoire créateurs" count={memoire.length}>
         {memoire.length === 0 ? (
-          <Empty text="Rien en mémoire pour le moment. L'agent y notera ce que les créatrices partagent (jamais de santé ni de vie privée)." />
+          <Empty text="Rien en mémoire pour le moment. L'agent y notera ce que les créateurs partagent (jamais de santé ni de vie privée)." />
         ) : (
           <div>
             <Tabs
               className="mb-3"
               size="sm"
-              label="Créatrice"
+              label="Créateur"
               items={creatricesMem.map(([name, count]) => ({ value: name, label: titleCase(name), count }))}
               value={memSel}
               onValueChange={setMemCreatrice}

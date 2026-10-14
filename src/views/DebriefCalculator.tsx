@@ -251,7 +251,7 @@ export function DebriefCalculator({
   const fillFromInstagram = async () => {
     const brand = igFor?.brand.trim() ?? "";
     const creator = igFor?.creator.trim() ?? "";
-    if (!brand || !creator) return toast("Renseigne d'abord la marque et la créatrice");
+    if (!brand || !creator) return toast("Renseigne d'abord la marque et le créateur");
     setIgBusy(true);
     const [cols, cr] = await Promise.all([
       supabase.from("collabs").select("ig").ilike("brand", brand).ilike("creator", creator),
@@ -288,7 +288,7 @@ export function DebriefCalculator({
   const fillFromTikTok = async () => {
     const brand = igFor?.brand.trim() ?? "";
     const creator = igFor?.creator.trim() ?? "";
-    if (!brand || !creator) return toast("Renseigne d'abord la marque et la créatrice");
+    if (!brand || !creator) return toast("Renseigne d'abord la marque et le créateur");
     setIgBusy(true);
     const [cols, cr] = await Promise.all([
       supabase.from("collabs").select("tt").ilike("brand", brand).ilike("creator", creator),
@@ -299,7 +299,7 @@ export function DebriefCalculator({
     const byId = new Map<string, TtVideoLite>();
     for (const c of (cols.data as { tt: TtCollab | null }[] | null) ?? []) for (const p of c.tt?.posts ?? []) byId.set(p.id, p);
     const posts = [...byId.values()].sort((a, b) => a.at.localeCompare(b.at));
-    if (!posts.length) return toast("Aucune vidéo TikTok repérée pour cette collab (elle doit avoir connecté son TikTok)");
+    if (!posts.length) return toast("Aucune vidéo TikTok repérée pour cette collab (le créateur doit avoir connecté son TikTok)");
     const n = (v?: number | null) => (v ? String(v) : "");
     const next: Row[] = posts.map((p) => ({ id: rid(), kind: "TikTok", reach: "", likes: n(p.likes), comments: n(p.comments), saves: "", shares: n(p.shares), views: n(p.views) }));
     const live = ((cr.data as { tt: TtCreator | null }[] | null) ?? [])[0]?.tt?.followers;
@@ -313,7 +313,7 @@ export function DebriefCalculator({
   const fillFromYouTube = async () => {
     const brand = igFor?.brand.trim() ?? "";
     const creator = igFor?.creator.trim() ?? "";
-    if (!brand || !creator) return toast("Renseigne d'abord la marque et la créatrice");
+    if (!brand || !creator) return toast("Renseigne d'abord la marque et le créateur");
     setIgBusy(true);
     const [cols, cr] = await Promise.all([
       supabase.from("collabs").select("yt").ilike("brand", brand).ilike("creator", creator),
@@ -324,7 +324,7 @@ export function DebriefCalculator({
     const byId = new Map<string, YtVideoLite>();
     for (const c of (cols.data as { yt: YtCollab | null }[] | null) ?? []) for (const p of c.yt?.posts ?? []) byId.set(p.id, p);
     const posts = [...byId.values()].sort((a, b) => a.at.localeCompare(b.at));
-    if (!posts.length) return toast("Aucune vidéo YouTube repérée pour cette collab (elle doit avoir connecté sa chaîne)");
+    if (!posts.length) return toast("Aucune vidéo YouTube repérée pour cette collab (le créateur doit avoir connecté sa chaîne)");
     const n = (v?: number | null) => (v ? String(v) : "");
     const next: Row[] = posts.map((p) => ({ id: rid(), kind: p.short ? "Short" : "YouTube", reach: "", likes: n(p.likes), comments: n(p.comments), saves: "", shares: "", views: n(p.views) }));
     const live = ((cr.data as { yt?: YtCreator | null }[] | null) ?? [])[0]?.yt?.subscribers;
@@ -416,7 +416,7 @@ export function DebriefCalculator({
             onClick={() => void fillFromTikTok()}
             disabled={igBusy}
             className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
-            title="Reprend les vidéos TikTok de la créatrice qui citent la marque (si elle a connecté son TikTok)"
+            title="Reprend les vidéos TikTok du créateur qui citent la marque (s'il a connecté son TikTok)"
           >
             {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} TikTok
           </button>
@@ -425,7 +425,7 @@ export function DebriefCalculator({
             onClick={() => void fillFromYouTube()}
             disabled={igBusy}
             className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
-            title="Reprend les vidéos YouTube de la créatrice qui citent la marque (si elle a connecté sa chaîne)"
+            title="Reprend les vidéos YouTube du créateur qui citent la marque (s'il a connecté sa chaîne)"
           >
             {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} YouTube
           </button>
@@ -573,7 +573,7 @@ export function DebriefCalculator({
         </div>
         {shots.length === 0 ? (
           <div className="text-[11px] text-faint">
-            Ajoute les captures de statistiques envoyées par la créatrice. Elles sont jointes au bilan envoyé à la marque (e-mail et PDF).
+            Ajoute les captures de statistiques envoyées par le créateur. Elles sont jointes au bilan envoyé à la marque (e-mail et PDF).
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">

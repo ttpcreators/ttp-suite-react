@@ -26,9 +26,9 @@ export type YtCreator = {
 export type YtCollab = { at?: string; posts?: YtVideoLite[] };
 
 const YT_WHY: Record<string, string> = {
-  jeton: "l'accès à sa chaîne a été retiré ou a expiré : ses données YouTube ont été effacées, elle doit reconnecter sa chaîne",
+  jeton: "l'accès à sa chaîne a été retiré ou a expiré : ses données YouTube ont été effacées, il doit reconnecter sa chaîne",
   google_invalid_client: "l'identifiant ou le code secret Google de l'app est faux (secrets YT_CLIENT_ID / YT_CLIENT_SECRET)",
-  portee: "elle n'a pas coché toutes les autorisations : à reconnecter",
+  portee: "il n'a pas coché toutes les autorisations : à reconnecter",
   quota: "YouTube freine les demandes, nouvel essai demain",
   api_off: "l'API YouTube n'est pas activée dans Google Cloud",
   pas_de_chaine: "ce compte Google n'a pas de chaîne YouTube",

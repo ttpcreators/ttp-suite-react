@@ -604,7 +604,7 @@ export function Stats() {
         </ChartCard>
 
         {/* Abonnés par créatrice */}
-        <ChartCard title="Abonnés par créatrice" subtitle="8 plus grosses audiences">
+        <ChartCard title="Abonnés par créateur" subtitle="8 plus grosses audiences">
           {followersData.length === 0 ? (
             <div className="grid h-[260px] place-items-center text-sm text-faint">Aucune donnée</div>
           ) : (

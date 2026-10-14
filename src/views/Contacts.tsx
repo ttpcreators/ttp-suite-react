@@ -906,7 +906,7 @@ export function Contacts() {
               options: [
                 { value: ALL_TAGS, label: "Tous" },
                 ...tagList.map((t) => ({ value: t, label: t })),
-                ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "Ajoutés par les créatrices" }] : []),
+                ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "Ajoutés par les créateurs" }] : []),
               ],
             },
             {
@@ -948,7 +948,7 @@ export function Contacts() {
         options={[
           { value: ALL_TAGS, label: "Tous" },
           ...tagList.map((t) => ({ value: t, label: t })),
-          ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "Ajoutés par les créatrices" }] : []),
+          ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "Ajoutés par les créateurs" }] : []),
         ]}
       />
 

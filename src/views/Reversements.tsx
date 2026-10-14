@@ -250,7 +250,7 @@ export function Reversements() {
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <Metric label="Payé par la marque (TTC)" value={formatEuro(r.encaisse)} />
                 <Metric label={`Commission TTP (${r.rate} %)`} value={formatEuro(r.commission)} />
-                <Metric label="Part créatrice" value={formatEuro(r.du)} />
+                <Metric label="Part créateur" value={formatEuro(r.du)} />
                 <Metric label="Déjà reversé" value={formatEuro(r.reverse)} />
               </div>
 

@@ -538,7 +538,7 @@ export function Todo() {
           items={[
             {
               key: "creator",
-              label: "Pour une créatrice",
+              label: "Pour un créateur",
               hint: "Tu choisis qui dans le formulaire",
               icon: UserRound,
               onClick: () => {
@@ -549,7 +549,7 @@ export function Todo() {
             {
               key: "agency",
               label: "Pour l'agence",
-              hint: "Tâche interne, sans créatrice",
+              hint: "Tâche interne, sans créateur",
               icon: Building2,
               onClick: () => {
                 setCreator("");
@@ -612,7 +612,7 @@ export function Todo() {
           ]}
         />
         {forceAgency ? (
-          <p className="text-[11px] text-faint">Tâche interne à l'agence (pas de créatrice).</p>
+          <p className="text-[11px] text-faint">Tâche interne à l'agence (pas de créateur).</p>
         ) : (
           <SelectField
             label="Pour qui"
@@ -692,7 +692,7 @@ export function Todo() {
                     onValueChange={(v) => setCreatorFilter(v === "__all__" ? null : "__agency__")}
                   />
                   <Select value={creatorSelectValue} onValueChange={onCreatorSelect}>
-                    <SelectTrigger className="h-9 w-auto min-w-[170px] rounded-full bg-surface" placeholder="Une créatrice…" />
+                    <SelectTrigger className="h-9 w-auto min-w-[170px] rounded-full bg-surface" placeholder="Un créateur…" />
                     <SelectContent>
                       <SelectItem index={0} value={ALL}>Tous</SelectItem>
                       <SelectItem index={1} value="__agency__">Agence</SelectItem>
@@ -1043,7 +1043,7 @@ export function Todo() {
                 <DetailBlock label="Demandée par">
                   <p className="text-[13px] text-foreground">
                     {selectedTodo.source === "creator"
-                      ? "La créatrice"
+                      ? "Le créateur"
                       : "L'agence"}
                   </p>
                 </DetailBlock>

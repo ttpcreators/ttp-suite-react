@@ -404,12 +404,12 @@ export function ApercuView({
           </div>
 
           <div className="border-t border-border px-6 py-6">
-            <div className="text-[13px] text-muted-foreground">Créatrices actives</div>
+            <div className="text-[13px] text-muted-foreground">Créateurs actifs</div>
             <div className="mb-3 mt-2 text-[28px] font-semibold leading-none tracking-tight tabular-nums">{activeCount}</div>
-            <TickMeter pct={activePct} label={`${activeCount} créatrices actives sur ${d.creators.length}`} />
+            <TickMeter pct={activePct} label={`${activeCount} créateurs actifs sur ${d.creators.length}`} />
             <div className="mt-3 flex gap-5 text-[12px] text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-foreground/75" /> Actives</span>
-              <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-foreground/20" /> Inactives</span>
+              <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-foreground/75" /> Actifs</span>
+              <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-foreground/20" /> Inactifs</span>
             </div>
           </div>
 
@@ -509,7 +509,7 @@ export function ApercuView({
           <div className="px-6 py-6">
             <SectionTitle icon={Trophy}>Qui rapporte</SectionTitle>
             {topCreators.length === 0 ? (
-              <div className="text-[12px] text-faint">Aucune créatrice.</div>
+              <div className="text-[12px] text-faint">Aucun créateur.</div>
             ) : (
               topCreators.map((c, i) => (
                 <div key={c.name} className="flex items-center gap-3 border-b border-border py-2.5 last:border-0">

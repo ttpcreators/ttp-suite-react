@@ -29,7 +29,7 @@ const PERIODS = [
 ];
 const SRC = [
   { value: "toutes", label: "Toutes" },
-  { value: "roster", label: "Mes créatrices" },
+  { value: "roster", label: "Mes créateurs" },
   { value: "scouting", label: "Scouting" },
   { value: "hors", label: "Hors agence" },
 ];
@@ -132,10 +132,10 @@ export function YouTubeRadar() {
     const url = chUrl(p);
     const { data: top } = await supabase.from("creator_pool").select("sort_order").order("sort_order", { ascending: false }).limit(1);
     const order = (((top as { sort_order: number | null }[] | null) ?? [])[0]?.sort_order ?? 0) + 1;
-    const ok = await dbInsert("creator_pool", { name: p.c || url, handle: url, email: null, tag: "YouTube", note: `Repérée via le Radar YouTube (vidéo sponsorisée par ${brand})`, sort_order: order });
+    const ok = await dbInsert("creator_pool", { name: p.c || url, handle: url, email: null, tag: "YouTube", note: `Repéré via le Radar YouTube (vidéo sponsorisée par ${brand})`, sort_order: order });
     if (!ok) return toast("Erreur, réessaie");
     setPool((cur) => new Set([...cur, url.toLowerCase()]));
-    toast(`${p.c} ajoutée au Scouting ✓`);
+    toast(`${p.c} ajouté au Scouting ✓`);
   };
 
   if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement du radar YouTube…</AnimatedBadge>;
@@ -149,7 +149,7 @@ export function YouTubeRadar() {
   const TILES = [
     { icon: Wallet, n: brands.length, title: "Marques qui paient" },
     { icon: Tv, n: counts.channels.size, title: "Chaînes sponsorisées" },
-    { icon: Users, n: counts.mine, title: "Chez tes créatrices" },
+    { icon: Users, n: counts.mine, title: "Chez tes créateurs" },
   ];
 
   return (
@@ -173,15 +173,15 @@ export function YouTubeRadar() {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher une marque ou une chaîne" className="w-full rounded-md border border-border bg-surface py-2 pl-8 pr-3 text-[12px] outline-none focus:border-primary" />
         </div>
-        <label className="inline-flex items-center gap-1.5 text-[12px] text-foreground" title="Seulement les vidéos où la créatrice a coché « communication commerciale » sur YouTube">
+        <label className="inline-flex items-center gap-1.5 text-[12px] text-foreground" title="Seulement les vidéos où le créateur a coché « communication commerciale » sur YouTube">
           <input type="checkbox" checked={onlyFlag} onChange={(e) => setOnlyFlag(e.target.checked)} /> Placement déclaré
         </label>
         <button type="button" onClick={() => void run()} disabled={running} className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
           {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Lancer le radar
         </button>
         <HelpTip title="Comment le radar YouTube trouve les collabs ?" align="end">
-          <p>Chaque matin, il lit les dernières vidéos de tes créatrices YouTube et du Scouting, et cherche des vidéos récentes en France (« code promo », « partenariat », « sponsorisé »…).</p>
-          <p>Une vidéo compte si la créatrice a coché « communication commerciale » sur YouTube (<span className="font-medium text-foreground">placement déclaré</span>), ou si sa description le dit (#ad, code promo…). La marque vient des liens et des noms de la description.</p>
+          <p>Chaque matin, il lit les dernières vidéos de tes créateurs YouTube et du Scouting, et cherche des vidéos récentes en France (« code promo », « partenariat », « sponsorisé »…).</p>
+          <p>Une vidéo compte si le créateur a coché « communication commerciale » sur YouTube (<span className="font-medium text-foreground">placement déclaré</span>), ou si sa description le dit (#ad, code promo…). La marque vient des liens et des noms de la description.</p>
           <p>{state?.at ? `Dernier passage ${fmtAgo(state.at)}` : "Pas encore lancé"}{state?.data.quota ? ` · quota YouTube du jour ${state.data.quota.used} / ${state.data.quota.limit}` : ""}.</p>
         </HelpTip>
       </div>
@@ -214,11 +214,11 @@ export function YouTubeRadar() {
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="truncate text-[14px] font-semibold text-foreground">{b.name}</span>
                         {flagged > 0 ? (
-                          <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary" title="La créatrice a coché « communication commerciale » sur YouTube"><BadgeCheck className="h-3 w-3" />Placement déclaré</span>
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary" title="Le créateur a coché « communication commerciale » sur YouTube"><BadgeCheck className="h-3 w-3" />Placement déclaré</span>
                         ) : (
                           <span className="rounded-full bg-amber/15 px-2 py-0.5 text-[10px] font-semibold text-amber" title="Code promo, #ad ou partenariat dans la description">Code / #ad</span>
                         )}
-                        {mine > 0 && <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">Chez {mine} de tes créatrices</span>}
+                        {mine > 0 && <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">Chez {mine} de tes créateurs</span>}
                         {known.has(b.brand) && <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Déjà en contact</span>}
                       </div>
                       <div className="mt-0.5 text-[11px] text-muted-foreground">

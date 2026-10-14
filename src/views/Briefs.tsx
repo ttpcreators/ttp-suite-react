@@ -347,7 +347,7 @@ export function Briefs() {
             <TextField label="Échéance" type="date" value={editDue} onChange={setEditDue} />
             <TextField label="Objectif" value={editObjectif} onChange={setEditObjectif} />
             <TextField label="Budget" value={editBudget} onChange={setEditBudget} />
-            <SelectField label="Créatrice" value={editCreator} onChange={setEditCreator} options={creatorOptions} />
+            <SelectField label="Créateur" value={editCreator} onChange={setEditCreator} options={creatorOptions} />
             <AutoGrowTextField
               label="Script"
               value={editScript}
@@ -579,7 +579,7 @@ export function Briefs() {
           label="Script"
           value={script}
           onChange={setScript}
-          placeholder="Colle ici le script (écrit par toi ou la créatrice) — il devient le corps du PDF envoyé à la marque…"
+          placeholder="Colle ici le script (écrit par toi ou le créateur) — il devient le corps du PDF envoyé à la marque…"
           className="min-w-full"
         />
       </InlineForm>

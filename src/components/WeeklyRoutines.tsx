@@ -159,7 +159,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                       value={text}
                       onChange={(e) => setText(e.target.value.slice(0, 300))}
                       onKeyDown={(e) => e.key === "Enter" && void add()}
-                      placeholder="Ex. Mettre à jour les stats des créatrices"
+                      placeholder="Ex. Mettre à jour les stats des créateurs"
                       className="h-9 min-w-0 flex-1 rounded-md border border-border bg-surface px-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
                     />
                     <div className="flex gap-2">

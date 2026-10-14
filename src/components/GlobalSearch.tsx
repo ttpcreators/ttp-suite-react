@@ -126,7 +126,7 @@ export function GlobalSearch({
           }}
           autoFocus={autoFocus}
           enterKeyHint="search"
-          placeholder={narrow && !inline ? "Rechercher…" : "Page, créatrice, contact, facture…"}
+          placeholder={narrow && !inline ? "Rechercher…" : "Page, créateur, contact, facture…"}
           className="h-full min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-faint"
         />
         {query && (

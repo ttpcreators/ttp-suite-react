@@ -19,8 +19,8 @@ export type TtCreator = {
 export type TtCollab = { at?: string; posts?: TtVideoLite[] };
 
 const TT_WHY: Record<string, string> = {
-  jeton: "le lien avec TikTok a expiré : elle doit reconnecter son TikTok",
-  portee: "elle n'a pas accepté toutes les autorisations : à reconnecter",
+  jeton: "le lien avec TikTok a expiré : il doit reconnecter son TikTok",
+  portee: "il n'a pas accepté toutes les autorisations : à reconnecter",
   limite: "TikTok freine les demandes, nouvel essai plus tard",
   reseau: "TikTok n'a pas répondu, nouvel essai plus tard",
   non_connecte: "TikTok pas connecté",

@@ -75,7 +75,7 @@ const IG_WHY: Record<string, string> = {
   compte_perso: "compte personnel (Meta ne donne les chiffres que des comptes pro)",
   sans_photo: "pas de photo sur ce compte",
   sans_handle: "pas de @ Instagram sur la fiche",
-  sans_createur: "pas de créatrice sur la collab",
+  sans_createur: "pas de créateur sur la collab",
   meta_non_configure: "pas encore relié à Meta",
   meta_jeton: "le lien avec Meta a expiré, à refaire",
   meta_limite: "Meta freine les demandes, nouvel essai plus tard",

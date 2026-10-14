@@ -610,7 +610,7 @@ export function Parametres() {
       <Section
         icon={<Bug className="h-4 w-4" />}
         title="Alertes techniques"
-        hint="Pour être prévenu si un bug survient dans l'app — chez toi, un collègue ou une créatrice."
+        hint="Pour être prévenu si un bug survient dans l'app — chez toi, un collègue ou un créateur."
       >
         <PrefRow
           label="Notification en cas de bug"

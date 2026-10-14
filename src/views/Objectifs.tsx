@@ -318,7 +318,7 @@ export function Objectifs() {
           </div>
           <div className="text-sm font-medium text-foreground">Aucun objectif pour {monthTitle(selectedMonth)}</div>
           <div className="mt-1.5 text-xs text-faint">
-            Ajoute un objectif avec le bouton « + Objectif » (ex : CA d'une créatrice, deals signés, marge agence).
+            Ajoute un objectif avec le bouton « + Objectif » (ex : CA d'un créateur, deals signés, marge agence).
           </div>
         </div>
       ) : (

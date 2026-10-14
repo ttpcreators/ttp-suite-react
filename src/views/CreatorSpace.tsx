@@ -1563,7 +1563,7 @@ export function CreatorSpace({
                     )
                   }
                   name={titleCase(name)}
-                  sub={preview ? "Vue agence" : "Créatrice TTP"}
+                  sub={preview ? "Vue agence" : "Créateur TTP"}
                   actions={[
                     { icon: dark ? Sun : Moon, label: dark ? "Mode clair" : "Mode sombre", onClick: onToggleTheme },
                     { icon: preview ? ArrowLeft : LogOut, label: exitTitle, onClick: exitAction },
@@ -1605,7 +1605,7 @@ export function CreatorSpace({
                     <span className="grid h-[54px] w-[54px] shrink-0 place-items-center rounded-full bg-foreground/[0.08] text-[20px] font-semibold text-foreground">{titleCase(name).charAt(0)}</span>
                   ),
                   name: titleCase(name),
-                  sub: preview ? "Vue agence" : "Créatrice TTP",
+                  sub: preview ? "Vue agence" : "Créateur TTP",
                 }}
                 sections={navGroups
                   .map((g) => ({ id: g.id, label: g.label, items: g.items.filter((i) => !ctabIds.includes(i.id)) }))
@@ -3101,7 +3101,7 @@ export function CreatorSpace({
                 type="button"
                 onClick={() => void connectIg()}
                 disabled={igBusy || !!preview}
-                title={preview ? "La créatrice le fait depuis son espace" : undefined}
+                title={preview ? "Le créateur le fait depuis son espace" : undefined}
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground py-2.5 text-[12px] font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
               >
                 {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} Connecter mon Instagram
@@ -3139,7 +3139,7 @@ export function CreatorSpace({
                 type="button"
                 onClick={() => void connectTt()}
                 disabled={ttBusy || !!preview}
-                title={preview ? "La créatrice le fait depuis son espace" : undefined}
+                title={preview ? "Le créateur le fait depuis son espace" : undefined}
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
               >
                 {ttBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} Connecter mon TikTok
@@ -3177,7 +3177,7 @@ export function CreatorSpace({
                 type="button"
                 onClick={() => void connectYt()}
                 disabled={ytBusy || !!preview}
-                title={preview ? "La créatrice le fait depuis son espace" : undefined}
+                title={preview ? "Le créateur le fait depuis son espace" : undefined}
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
               >
                 {ytBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} Connecter mon YouTube

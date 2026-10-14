@@ -172,7 +172,7 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
         ref={rowRef}
         aria-label={label}
         className={cn(
-          "relative flex max-w-full flex-wrap gap-0.5 overflow-x-auto rounded-full border border-border bg-surface [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          "relative flex max-w-full flex-wrap gap-0.5 overflow-x-auto rounded-3xl border border-border bg-surface [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
           !wrap && "sm:flex-nowrap",
           sm ? "p-0.5" : "p-1",
           fullWidth ? "w-full" : "w-fit",

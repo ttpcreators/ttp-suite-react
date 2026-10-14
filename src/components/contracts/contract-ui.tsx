@@ -181,7 +181,7 @@ export function CasesBar({
           })}
         </div>
       ) : (
-        <p className="mb-3 text-[12px] text-faint">Aucun modèle pour cette créatrice. Règle le contrat puis enregistre-le sous un nom pour le retrouver.</p>
+        <p className="mb-3 text-[12px] text-faint">Aucun modèle pour ce créateur. Règle le contrat puis enregistre-le sous un nom pour le retrouver.</p>
       )}
       <div className="flex items-center gap-2">
         <div className="flex h-9 min-w-0 flex-1 items-center rounded-lg border border-border bg-surface px-3 transition-shadow focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">

@@ -182,7 +182,7 @@ export function Pricing() {
       if (ex && ex.value !== "none") txt += `• Exclusivité ${ex.label}\n`;
       const us = USAGE_RIGHTS.find((x) => x.value === infOpts.droitsUsage);
       if (us && us.value !== "none") txt += `• Droits d'usage : ${us.label}\n`;
-      if (infOpts.whitelisting) txt += "• Diffusion en pub depuis le compte de la créatrice\n";
+      if (infOpts.whitelisting) txt += "• Diffusion en pub depuis le compte du créateur\n";
       txt += `\nTotal : ${formatEuro(inf.min)} – ${formatEuro(inf.max)} HT (cible ${formatEuro(inf.mid)}).`;
     } else {
       txt = `Proposition UGC : ${who}\n\n`;
@@ -224,7 +224,7 @@ export function Pricing() {
           <div className="mt-4 flex flex-col gap-1.5">
             <span className={LBL}>Créateur</span>
             <select value={creatorId} onChange={(e) => setCreatorId(e.target.value)} className={SEL}>
-              <option value={EXTERNAL}>Autre créatrice (saisie libre)</option>
+              <option value={EXTERNAL}>Autre créateur (saisie libre)</option>
               {creators.map((c) => (
                 <option key={c.id} value={c.id}>{titleCase(c.name)}</option>
               ))}
@@ -281,7 +281,7 @@ export function Pricing() {
                       <input value={r.er} onChange={(e) => setInf(r.id, { er: e.target.value })} placeholder="engagement %" title={r.erBase === "views" ? "Engagement calculé sur les vues" : "Engagement calculé sur les abonnés"} className="w-28 rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none focus:border-primary" />
                     </div>
                     <div className="mt-1.5 text-[11px] leading-snug text-faint">
-                      {r.views ? (r.src === "saisie" ? "Vues saisies à la main" : `Vues : ${SRC_LABEL[r.src] ?? "données de la créatrice"}`) : estimate ? `Vues estimées : ${Math.round((fmtOf?.rate ?? 0) * 100)} % des abonnés (habituel pour ce format)` : "Renseigne les abonnés ou les vues"}
+                      {r.views ? (r.src === "saisie" ? "Vues saisies à la main" : `Vues : ${SRC_LABEL[r.src] ?? "données du créateur"}`) : estimate ? `Vues estimées : ${Math.round((fmtOf?.rate ?? 0) * 100)} % des abonnés (habituel pour ce format)` : "Renseigne les abonnés ou les vues"}
                       {" · engagement sur les "}{r.erBase === "views" ? "vues" : "abonnés"}
                     </div>
                   </div>
@@ -307,7 +307,7 @@ export function Pricing() {
               </label>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-4">
-              <label className="flex cursor-pointer items-center gap-2 text-[13px] text-foreground" title="La marque diffuse le contenu en publicité depuis le compte de la créatrice (Spark Ads TikTok, pubs partenaires Instagram)">
+              <label className="flex cursor-pointer items-center gap-2 text-[13px] text-foreground" title="La marque diffuse le contenu en publicité depuis le compte du créateur (Spark Ads TikTok, pubs partenaires Instagram)">
                 <input type="checkbox" checked={infOpts.whitelisting} onChange={(e) => setInfOpts((o) => ({ ...o, whitelisting: e.target.checked }))} className="h-4 w-4 accent-[var(--primary)]" />
                 La marque en fait une pub depuis son compte <span className="text-faint">+20 %</span>
               </label>
