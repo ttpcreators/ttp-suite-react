@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  AtSign, Check, ChevronDown, ChevronUp, Flame, Globe, Loader2, Mail, Plus, Radar, RefreshCw, Search, Send, SlidersHorizontal, Users, Wallet, EyeOff, RotateCcw,
+  AtSign, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Loader2, Mail, Plus, Radar, RefreshCw, Search, Send, SlidersHorizontal, Users, Wallet, EyeOff, RotateCcw,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
@@ -683,6 +683,10 @@ function BrandRadar() {
   const [maxF, setMaxF] = useState("");
   const [city, setCity] = useState("");
   const [status, setStatus] = useState<"nouveau" | "ignore" | "pipeline">("nouveau");
+  const [srcF, setSrcF] = useState<"toutes" | "miennes" | "scouting" | "hors">("toutes");
+  // Créatrices hors agence : en file (citées par une marque vérifiée) et déjà lues.
+  const [queue, setQueue] = useState<{ waiting: number; read: number } | null>(null);
+  const [adding, setAdding] = useState<string | null>(null);
   const [showUnsure, setShowUnsure] = useState(false);
   const [showKnown, setShowKnown] = useState(false);
 
@@ -711,6 +715,11 @@ function BrandRadar() {
         supabase.from("creator_pool").select("handle"),
       ]);
       setPoolUsers(new Set(((pl.data as { handle: string | null }[] | null) ?? []).map((x) => cleanUser(x.handle ?? "")).filter(Boolean)));
+      const [qw, qr] = await Promise.all([
+        supabase.from("ig_profiles").select("username", { count: "exact", head: true }).eq("data->>pending", "true"),
+        supabase.from("ig_profiles").select("username", { count: "exact", head: true }).eq("data->>isBrand", "false").not("scanned_at", "is", null),
+      ]);
+      if (alive) setQueue({ waiting: qw.count ?? 0, read: qr.count ?? 0 });
       if (!alive) return;
       const cts = (ct.data as { brand: string | null; instagram: string | null }[] | null) ?? [];
       setKnownBrands({
@@ -760,6 +769,7 @@ function BrandRadar() {
 
   const [mailFor, setMailFor] = useState<{ row: RadarRow; post: RadarPost } | null>(null);
 
+  const srcOf = (p: RadarPost): "miennes" | "scouting" | "hors" => (rosterNames[p.c] || p.roster ? "miennes" : poolUsers.has(p.c) ? "scouting" : "hors");
   type Item = { row: RadarRow; posts: RadarPost[]; types: Record<PostType, number>; warm: number; creators: string[]; lastAt: string; known: boolean; prof?: Prof & { why?: string | null } };
   const { list: view, hid, counts } = useMemo(() => {
     const hid = { pending: 0, notBrand: 0, known: 0, filters: 0 };
@@ -786,6 +796,7 @@ function BrandRadar() {
         continue;
       }
       const base = row.posts.filter((p) => {
+        if (srcF !== "toutes" && srcOf(p) !== srcF) return false;
         if (since && Date.parse(p.at) < since) return false;
         const cap = norm(p.cap);
         if (tokens.some((t) => !cap.includes(t))) return false;
@@ -819,7 +830,8 @@ function BrandRadar() {
     }
     const rank = (x: Item) => (x.types.paye * 3 + x.types.offert * 2 + x.warm * 2) * 10 + x.creators.length;
     return { list: out.sort((a, b) => rank(b) - rank(a)), hid, counts };
-  }, [rows, profiles, knownBrands, kind, period, words, minF, maxF, city, status, showUnsure, showKnown]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, profiles, knownBrands, kind, period, words, minF, maxF, city, status, showUnsure, showKnown, srcF, rosterNames, poolUsers]);
   const activeFilters = [words.trim(), minF.trim(), maxF.trim(), city.trim()].filter(Boolean).length + (period !== "90" ? 1 : 0) + (status !== "nouveau" ? 1 : 0);
   const runVerify = async () => {
     setVerifying(true);
@@ -846,6 +858,20 @@ function BrandRadar() {
     { v: "tous" as const, icon: Radar, title: "Toutes les marques", short: "Toutes", n: counts.tous, text: "Tout ce que le radar a repéré.", on: "border-foreground/40 bg-panel/60", dot: "bg-foreground text-background" },
   ];
   const toggleRow = (b: string) => setOpenRows((cur) => { const n = new Set(cur); if (n.has(b)) n.delete(b); else n.add(b); return n; });
+  const addCreator = async (handle: string, brand: string) => {
+    setAdding(handle);
+    const { data: top } = await supabase.from("creator_pool").select("sort_order").order("sort_order", { ascending: false }).limit(1);
+    const order = (((top as { sort_order: number | null }[] | null) ?? [])[0]?.sort_order ?? 0) + 1;
+    const pr = profiles[handle];
+    const created = await dbInsert("creator_pool", {
+      name: pr?.name?.trim() || `@${handle}`, handle: `@${handle}`, email: pr?.email || null, tag: null,
+      note: `Trouvée via le Radar (partenariat avec @${brand})`, sort_order: order,
+    });
+    setAdding(null);
+    if (!created) return toast("Erreur, réessaie");
+    setPoolUsers((cur) => new Set([...cur, handle]));
+    toast(`@${handle} ajoutée au Scouting ✓`);
+  };
   const srcTag = (p: RadarPost) =>
     rosterNames[p.c] || p.roster ? { t: "ROSTER", c: "bg-foreground/[0.07] text-foreground" } : poolUsers.has(p.c) ? { t: "SCOUTING", c: "bg-indigo/10 text-indigo" } : { t: "HORS AGENCE", c: "bg-panel text-faint" };
 
@@ -869,6 +895,34 @@ function BrandRadar() {
             </button>
           );
         })}
+      </div>
+
+      {/* Chez quelles créatrices */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-medium text-faint">Vu chez</span>
+        <Tabs
+          size="sm"
+          wrap
+          label="Vu chez quelles créatrices"
+          value={srcF}
+          onValueChange={(v) => setSrcF(v as typeof srcF)}
+          items={[
+            { value: "toutes", label: "Toutes" },
+            { value: "miennes", label: "Mes créatrices" },
+            { value: "scouting", label: "Scouting" },
+            { value: "hors", label: "Hors agence" },
+          ]}
+        />
+        <HelpTip title="Hors agence ?">
+          <p>Des créatrices que tu ne connais pas encore : celles trouvées par le Sourcing, et celles que citent les marques du radar. Le radar lit leurs posts petit à petit et ajoute leurs marques.</p>
+          <p>Double intérêt : de nouvelles marques à démarcher, et de nouvelles créatrices à recruter (bouton « + Scouting » sur leurs posts).</p>
+        </HelpTip>
+        {queue && (
+          <span className="text-[11px] text-faint">
+            {queue.read} créatrice{queue.read > 1 ? "s" : ""} hors agence déjà lue{queue.read > 1 ? "s" : ""}
+            {queue.waiting > 0 && ` · ${queue.waiting} en attente (lues chaque nuit, ou avec « Lancer le radar » quand le quota Meta est sous 80 %)`}
+          </span>
+        )}
       </div>
 
       {/* Actions + filtres repliés */}
@@ -1001,16 +1055,22 @@ function BrandRadar() {
                       const tp = TYPE_META[postType(p)];
                       const src = srcTag(p);
                       return (
-                        <a key={p.url || `${p.c}${p.at}`} href={p.url} target="_blank" rel="noreferrer" className="rounded-lg bg-panel/60 px-3 py-2 transition-colors hover:bg-rowhover">
+                        <div key={p.url || `${p.c}${p.at}`} className="rounded-lg bg-panel/60 px-3 py-2">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-                            <span className="font-semibold text-foreground">@{p.c}</span>
+                            <a href={igLink(p.c)} target="_blank" rel="noreferrer" className="font-semibold text-foreground hover:underline">@{p.c}</a>
                             <span className={cn("rounded px-1.5 text-[9px] font-semibold uppercase tracking-wide", src.c)}>{src.t}</span>
                             {profiles[p.c]?.followers != null && <span className="text-faint">{fmtCompact(profiles[p.c]?.followers ?? 0)}</span>}
                             <span className="text-faint">{fmtAgo(p.at)}{p.n > 1 ? ` · ${p.n} posts pareils` : ""}</span>
+                            {srcOf(p) === "hors" && (
+                              <button type="button" onClick={() => void addCreator(p.c, row.brand)} disabled={adding === p.c} className="flex items-center gap-0.5 rounded-md border border-border bg-surface px-1.5 py-0.5 text-[10px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
+                                {adding === p.c ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />} Scouting
+                              </button>
+                            )}
                             <span title={tp.tip} className={cn("ml-auto shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold", tp.cls)}>{tp.label}</span>
+                            {p.url && <a href={p.url} target="_blank" rel="noreferrer" title="Ouvrir le post" className="text-faint hover:text-foreground"><ExternalLink className="h-3.5 w-3.5" /></a>}
                           </div>
                           <div className="mt-0.5 text-[12px] leading-snug text-muted-foreground"><Excerpt text={p.cap || "Sans légende"} brand={row.brand} name={prof?.name} /></div>
-                        </a>
+                        </div>
                       );
                     })}
                   </div>

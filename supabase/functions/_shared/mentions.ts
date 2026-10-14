@@ -49,6 +49,9 @@ const STOP = new Set([
   "pendant", "avant", "apres", "maison", "boutique", "atelier", "studio", "mariage", "wedding", "voyage", "recette",
   "conseil", "conseils", "astuce", "astuces", "cadeau", "cadeaux", "noel", "christmas", "rentree", "soldes", "sale",
   "basics", "basic", "classic", "essentials", "natural", "nature", "organic", "vintage", "local", "simple", "minimal",
+  // Mots des mentions légales de partenariat (« collaboration commerciale », « rémunérée »…).
+  "commerciale", "commercial", "commerciales", "remuneree", "remunere", "sponsorisee", "offerte", "offertes",
+  "partenaire", "partenaires", "collaborations", "ambassadeur", "affiliation", "affilie", "rendez", "vous",
 ]);
 /** Mot courant (jamais pris pour un nom de compte). */
 export const isCommonWord = (u: string) => STOP.has(u.toLowerCase());
