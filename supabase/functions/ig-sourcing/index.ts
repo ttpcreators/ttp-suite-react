@@ -19,7 +19,7 @@
 // ============================================================================
 
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
-import { discover, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, type IgProfile } from "../_shared/instagram.ts";
+import { discover, engagementRate, igUser, metaReady, postsPerWeek, quotaPct, saveUsage, type IgProfile } from "../_shared/instagram.ts";
 import { handleCandidates, isCommonWord } from "../_shared/mentions.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -29,8 +29,11 @@ type RadarPost = { c: string; roster: boolean; url: string; at: string; paid: bo
 
 const DAY = 86400000;
 const FRESH_DAYS = 7;
-const POOL_PER_SCAN = 20; // créatrices du Scouting lues par nuit (les plus anciennes d'abord)
-const BRANDS_PER_SCAN = 25; // profils de marques lus par nuit (Meta limite les demandes par heure)
+// Le radar lit autant qu'il peut tant que le quota Meta reste sous QUOTA_MAX % (voir inBudget),
+// dans la limite de ces plafonds par passage.
+const POOL_PER_SCAN = 40; // créatrices du Scouting lues par passage (les plus anciennes d'abord)
+const BRANDS_PER_SCAN = 80; // comptes cités vérifiés par passage (les plus probables d'abord)
+const QUOTA_MAX = 80; // au-delà, pause : on ne risque pas le blocage par Meta
 const age = (iso: string | null | undefined) => (iso ? Date.now() - Date.parse(iso) : Infinity);
 
 /** Mots qui signalent un partenariat payé dans une légende. */
@@ -167,7 +170,10 @@ async function toData(p: IgProfile): Promise<Json> {
 }
 
 type Ctx = { sb: SupabaseClient; stop: string; t0: number; cache: Map<string, ProfileRow> };
-const inBudget = (ctx: Ctx) => !ctx.stop && Date.now() - ctx.t0 < 110_000;
+function inBudget(ctx: Ctx): boolean {
+  if (!ctx.stop && (quotaPct() ?? 0) >= QUOTA_MAX) ctx.stop = "quota_proche";
+  return !ctx.stop && Date.now() - ctx.t0 < 110_000;
+}
 
 /** Profil d'un @ : depuis ig_profiles s'il est frais, sinon demandé à Meta (et gardé). */
 async function profile(ctx: Ctx, user: string, mediaLimit: number, force = false): Promise<{ row: ProfileRow; media?: IgProfile["media"] }> {

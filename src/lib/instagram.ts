@@ -86,6 +86,7 @@ const IG_WHY: Record<string, string> = {
   reseau: "Meta n'a pas répondu, nouvel essai plus tard",
   hashtag_invalide: "hashtag non valide",
   hashtag_introuvable: "hashtag inconnu d'Instagram",
+  quota_proche: "pause pour ne pas dépasser le quota Meta, la suite au prochain passage",
 };
 export const igWhyText = (why?: string | null) => (why ? IG_WHY[why] ?? `Instagram a refusé (${why})` : "");
 

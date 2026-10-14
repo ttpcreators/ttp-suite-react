@@ -705,8 +705,9 @@ function BrandRadar() {
 
   const [mailFor, setMailFor] = useState<{ row: RadarRow; post: RadarPost } | null>(null);
 
-  const view = useMemo(() => {
-    if (!rows) return [];
+  const { list: view, hid } = useMemo(() => {
+    const hid = { pending: 0, notBrand: 0, known: 0, filters: 0 };
+    if (!rows) return { list: [], hid };
     const since = period === "all" ? 0 : Date.now() - Number(period) * 86400000;
     const tokens = norm(words).split(/[\s,]+/).filter(Boolean);
     const lo = parseCount(minF);
@@ -716,9 +717,17 @@ function BrandRadar() {
     for (const row of rows) {
       if (row.status !== status) continue;
       const prof = profiles[row.brand];
-      if (!showUnsure && !prof?.isBrand) continue; // profil pas encore lu, compte perso ou personne : « incertain »
+      // « Incertain » : profil pas encore vérifié auprès de Meta, ou compte qui ne ressemble pas à une marque.
+      if (!showUnsure && !prof?.isBrand) {
+        if (!prof || (!prof.why && prof.followers == null)) hid.pending++;
+        else hid.notBrand++;
+        continue;
+      }
       const known = knownBrands.handles.has(row.brand) || (!!prof?.name && knownBrands.names.has(norm(prof.name).trim()));
-      if (known && !showKnown) continue;
+      if (known && !showKnown) {
+        hid.known++;
+        continue;
+      }
       const posts = row.posts.filter((p) => {
         if (since && Date.parse(p.at) < since) return false;
         if (kind === "payes" && !p.paid) return false;
@@ -733,7 +742,10 @@ function BrandRadar() {
         if (town && !norm(`${cp?.bio ?? ""}`).includes(town)) return false;
         return true;
       });
-      if (!posts.length) continue;
+      if (!posts.length) {
+        hid.filters++;
+        continue;
+      }
       out.push({
         row, posts, known, prof,
         paid: posts.filter((p) => p.paid).length,
@@ -741,8 +753,9 @@ function BrandRadar() {
         creators: [...new Set(posts.map((p) => p.c))],
       });
     }
-    return out.sort((a, b) => b.paid - a.paid || b.creators.length - a.creators.length || b.posts.length - a.posts.length);
+    return { list: out.sort((a, b) => b.paid - a.paid || b.creators.length - a.creators.length || b.posts.length - a.posts.length), hid };
   }, [rows, profiles, knownBrands, kind, period, words, minF, maxF, city, status, showUnsure, showKnown]);
+  const hiddenTotal = hid.pending + hid.notBrand + hid.known + hid.filters;
 
   if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement du radar…</AnimatedBadge>;
   if (missing) {
@@ -815,6 +828,23 @@ function BrandRadar() {
         {view.length} marque{view.length > 1 ? "s" : ""}
         {kind === "payes" ? " qui paient des créatrices" : kind === "gratuits" ? " dont tes créatrices parlent déjà" : ""}
         <span className="text-faint"> · l'app devine à partir du texte des posts : vérifie avant d'écrire</span>
+        {hiddenTotal > 0 && (
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-faint">
+            <span className="font-medium text-muted-foreground">{hiddenTotal} cachée{hiddenTotal > 1 ? "s" : ""} :</span>
+            {hid.pending > 0 && <span>{hid.pending} à vérifier (le radar les lit au fil des passages)</span>}
+            {hid.notBrand > 0 && <span>· {hid.notBrand} pas sûre{hid.notBrand > 1 ? "s" : ""} d'être des marques</span>}
+            {(hid.pending > 0 || hid.notBrand > 0) && (
+              <button type="button" onClick={() => setShowUnsure(true)} className="font-medium text-primary hover:underline">Afficher</button>
+            )}
+            {hid.known > 0 && (
+              <>
+                <span>· {hid.known} déjà dans tes contacts</span>
+                <button type="button" onClick={() => setShowKnown(true)} className="font-medium text-primary hover:underline">Afficher</button>
+              </>
+            )}
+            {hid.filters > 0 && <span>· {hid.filters} hors filtres (onglet, période, mots, abonnés, ville)</span>}
+          </div>
+        )}
       </div>
 
       {view.length === 0 ? (

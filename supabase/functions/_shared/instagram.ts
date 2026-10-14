@@ -85,6 +85,10 @@ function readUsage(h: Headers) {
   }
 }
 
+/** Part du quota Meta utilisée d'après la dernière réponse (null tant qu'inconnue). */
+export const quotaPct = (): number | null =>
+  usage.appPct == null && usage.bucPct == null ? null : Math.max(usage.appPct ?? 0, usage.bucPct ?? 0);
+
 /** GET JSON avec délai max (Meta peut traîner) ; erreur réseau → { error }. */
 export async function getJson(url: string, ms = 15_000): Promise<Record<string, unknown>> {
   try {
