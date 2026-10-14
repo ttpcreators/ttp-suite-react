@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Plus, Trash2, Camera, Loader2, Calculator, ArrowUp, Rows3, Layers } from "lucide-react";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { postKind, type IgCollab, type IgCreator, type IgPostLite } from "@/lib/instagram";
+import type { TtCollab, TtCreator, TtVideoLite } from "@/lib/tiktok";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import { downscaleImage } from "@/components/ui/image-field";
@@ -280,6 +281,32 @@ export function DebriefCalculator({
     toast(`${posts.length} publication${posts.length > 1 ? "s" : ""} reprise${posts.length > 1 ? "s" : ""} d'Instagram ✓`);
   };
 
+  // Pareil avec TikTok : vidéos de la créatrice qui citent la marque (si son TikTok est
+  // connecté) : vues, j'aime, commentaires, partages. TikTok ne donne pas la couverture :
+  // le taux est alors calculé sur les abonnés, et le coût pour 1000 vues sur les vraies vues.
+  const fillFromTikTok = async () => {
+    const brand = igFor?.brand.trim() ?? "";
+    const creator = igFor?.creator.trim() ?? "";
+    if (!brand || !creator) return toast("Renseigne d'abord la marque et la créatrice");
+    setIgBusy(true);
+    const [cols, cr] = await Promise.all([
+      supabase.from("collabs").select("tt").ilike("brand", brand).ilike("creator", creator),
+      supabase.from("creators").select("tt").ilike("name", creator).limit(1),
+    ]);
+    setIgBusy(false);
+    if (cols.error) return toast("Pas encore disponible (TikTok pas encore activé)");
+    const byId = new Map<string, TtVideoLite>();
+    for (const c of (cols.data as { tt: TtCollab | null }[] | null) ?? []) for (const p of c.tt?.posts ?? []) byId.set(p.id, p);
+    const posts = [...byId.values()].sort((a, b) => a.at.localeCompare(b.at));
+    if (!posts.length) return toast("Aucune vidéo TikTok repérée pour cette collab (elle doit avoir connecté son TikTok)");
+    const n = (v?: number | null) => (v ? String(v) : "");
+    const next: Row[] = posts.map((p) => ({ id: rid(), kind: "TikTok", reach: "", likes: n(p.likes), comments: n(p.comments), saves: "", shares: n(p.shares), views: n(p.views) }));
+    const live = ((cr.data as { tt: TtCreator | null }[] | null) ?? [])[0]?.tt?.followers;
+    setRows(next);
+    onChange({ ...state, mode: "detail", stats: next.map(rowToStat), followers: live ? String(live) : state.followers, basis: "followers" });
+    toast(`${posts.length} vidéo${posts.length > 1 ? "s" : ""} TikTok reprise${posts.length > 1 ? "s" : ""} ✓`);
+  };
+
   const onFiles = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
@@ -355,6 +382,17 @@ export function DebriefCalculator({
           title="Reprend les posts de la marque repérés sur Instagram (page Collabs)"
         >
           {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} Remplir depuis Instagram
+        </button>
+      )}
+      {igFor && (
+        <button
+          type="button"
+          onClick={() => void fillFromTikTok()}
+          disabled={igBusy}
+          className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+          title="Reprend les vidéos TikTok de la créatrice qui citent la marque (si elle a connecté son TikTok)"
+        >
+          {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} Remplir depuis TikTok
         </button>
       )}
 

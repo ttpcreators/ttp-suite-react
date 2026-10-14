@@ -153,6 +153,8 @@ export function Engagement() {
   const [savedOk, setSavedOk] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewEntry, setViewEntry] = useState<HistEntry | null>(null);
+  // Vidéos TikTok de la créatrice (si elle a connecté son TikTok) : vraies stats 30 j.
+  const [ttVideos, setTtVideos] = useState<{ at: string; views: number | null; likes: number | null; comments: number | null; shares: number | null }[]>([]);
 
   const { data: histData } = useAppState<HistEntry[]>(
     (s) => ((s as Record<string, unknown>).engagementHistory as HistEntry[]) ?? [],
@@ -180,11 +182,14 @@ export function Engagement() {
     let alive = true;
     supabase
       .from("creators")
-      .select("followers")
+      .select("followers, tt")
       .eq("id", creatorId)
       .limit(1)
       .then(({ data }) => {
-        if (!alive || editingIdRef.current) return;
+        if (!alive) return;
+        const tt = data?.[0]?.tt as { link?: unknown; recent?: typeof ttVideos } | null | undefined;
+        setTtVideos(tt?.link && Array.isArray(tt.recent) ? tt.recent : []);
+        if (editingIdRef.current) return;
         // Au CHANGEMENT de créateur, on charge SES abonnés (écrase la valeur du
         // créateur précédent — sinon la fiche du nouveau se retrouve corrompue).
         const f = data?.[0]?.followers as string | undefined;
@@ -401,6 +406,26 @@ export function Engagement() {
             ]}
           />
         </div>
+
+        {/* TikTok connecté : les vraies stats des 30 derniers jours, sans capture */}
+        {platformKey === "tiktok" && ttVideos.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              const since = Date.now() - 30 * 86400000;
+              const last = ttVideos.filter((v) => Date.parse(v.at) >= since);
+              if (!last.length) return toast("Aucune vidéo TikTok publiée ces 30 derniers jours");
+              const sum = (k: "views" | "likes" | "comments" | "shares") => String(last.reduce((a, v) => a + (v[k] ?? 0), 0));
+              setVals((cur) => ({ ...cur, likes: sum("likes"), comments: sum("comments"), shares: sum("shares"), views: sum("views") }));
+              setSavedOk(false);
+              toast(`${last.length} vidéo${last.length > 1 ? "s" : ""} des 30 derniers jours reprise${last.length > 1 ? "s" : ""} de TikTok ✓`);
+            }}
+            className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+            title="Additionne les vues, j'aime, commentaires et partages de ses vidéos des 30 derniers jours (TikTok connecté)"
+          >
+            <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" /> Remplir avec ses vraies stats TikTok (30 j)
+          </button>
+        )}
 
         {/* Interactions (visibles sans le reach) */}
         <div className="mt-4 flex flex-wrap gap-3">

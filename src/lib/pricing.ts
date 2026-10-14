@@ -3,8 +3,13 @@
  *
  * Deux modèles DISTINCTS, parce qu'ils ne se tarifient pas pareil :
  *
- *  1. INFLUENCE (le créateur publie sur SON compte) → basé sur l'audience :
- *       prix/livrable = (abonnés / 1000) × CPM(plateforme, format) × niche × engagement
+ *  1. INFLUENCE (le créateur publie sur SON compte) → basé sur les VUES attendues :
+ *       prix/livrable = (vues attendues / 1000) × CPM vues(plateforme, format) × niche × engagement
+ *     Le CPM vues est CALIBRÉ sur le barème « € / 1000 abonnés » de l'agence :
+ *       CPM vues = CPM abonnés ÷ taux de vue habituel du format (ex. reel ≈ 30 % des abonnés).
+ *     → à vues habituelles, même prix qu'avec les abonnés ; plus de vues réelles (TikTok,
+ *       YouTube, Instagram connecté) = plus cher, moins de vues = moins cher. Sans vues
+ *       connues, les vues sont ESTIMÉES (abonnés × taux habituel), affiché comme tel.
  *     Cross-plateforme = somme des livrables, CHACUN avec l'audience de SA plateforme
  *     (un créateur n'a pas la même audience sur IG et TikTok), puis options + remise pack.
  *
@@ -38,7 +43,7 @@ export function parseEr(s: string | number | null | undefined): number {
   return m ? Math.max(0, parseFloat(m[1].replace(",", ".")) || 0) : 0;
 }
 
-/** Multiplicateur d'engagement (barème marché) : <1 % pénalisé, >8 % survalorisé. */
+/** Multiplicateur d'engagement SUR LES ABONNÉS (barème marché) : <1 % pénalisé, >8 % survalorisé. */
 export function engMult(er: number): number {
   if (er < 1) return 0.7;
   if (er < 2) return 0.85;
@@ -46,6 +51,19 @@ export function engMult(er: number): number {
   if (er < 6) return 1.15;
   if (er < 8) return 1.25;
   return 1.35;
+}
+
+/**
+ * Multiplicateur d'engagement SUR LES VUES (TikTok, YouTube, Instagram connecté) : plus
+ * doux, car les vues récompensent déjà la portée. Repères : ~4–7 % = normal sur TikTok.
+ */
+export function engMultViews(er: number): number {
+  if (er <= 0) return 1;
+  if (er < 2) return 0.85;
+  if (er < 4) return 0.95;
+  if (er < 7) return 1.05;
+  if (er < 10) return 1.15;
+  return 1.25;
 }
 
 export function tier(f: number): string {
@@ -69,44 +87,49 @@ const asRange = (min: number, max: number): Range => ({ min: roundNice(min), max
 // ────────────────────────────── influence ──────────────────────────────
 
 export type PlatKey = "instagram" | "tiktok" | "youtube" | "snapchat" | "x";
-export type InfFormat = { key: string; label: string; cpm: [number, number] };
+/** cpm = € pour 1000 ABONNÉS (barème historique) ; rate = taux de vue habituel (vues ÷ abonnés). */
+export type InfFormat = { key: string; label: string; cpm: [number, number]; rate: number };
 export type InfPlatform = { key: PlatKey; label: string; formats: InfFormat[] };
 
-/** CPM en €/1000 abonnés par plateforme × format (fourchettes marché 2026). */
+/**
+ * Barème par plateforme × format : € pour 1000 abonnés (fourchettes marché 2026) et taux
+ * de vue habituel (vues d'un contenu ÷ abonnés, ordres de grandeur du secteur, à ajuster
+ * dans le barème). Le CPM vues s'en déduit (cpmViews).
+ */
 export const INF_PLATFORMS: InfPlatform[] = [
   {
     key: "instagram",
     label: "Instagram",
     formats: [
-      { key: "reel", label: "Reel", cpm: [16, 32] },
-      { key: "post", label: "Post feed", cpm: [9, 18] },
-      { key: "carrousel", label: "Carrousel", cpm: [10, 20] },
-      { key: "story", label: "Story (×3)", cpm: [7, 14] },
+      { key: "reel", label: "Reel", cpm: [16, 32], rate: 0.3 },
+      { key: "post", label: "Post feed", cpm: [9, 18], rate: 0.12 },
+      { key: "carrousel", label: "Carrousel", cpm: [10, 20], rate: 0.15 },
+      { key: "story", label: "Story (×3)", cpm: [7, 14], rate: 0.07 },
     ],
   },
   {
     key: "tiktok",
     label: "TikTok",
     formats: [
-      { key: "video", label: "Vidéo", cpm: [11, 23] },
-      { key: "story", label: "Story / photo", cpm: [6, 12] },
+      { key: "video", label: "Vidéo", cpm: [11, 23], rate: 0.3 },
+      { key: "story", label: "Story / photo", cpm: [6, 12], rate: 0.08 },
     ],
   },
   {
     key: "youtube",
     label: "YouTube",
     formats: [
-      { key: "integration", label: "Intégration", cpm: [18, 37] },
-      { key: "dedicated", label: "Vidéo dédiée", cpm: [55, 110] },
-      { key: "short", label: "Short", cpm: [10, 22] },
+      { key: "integration", label: "Intégration", cpm: [18, 37], rate: 0.15 },
+      { key: "dedicated", label: "Vidéo dédiée", cpm: [55, 110], rate: 0.15 },
+      { key: "short", label: "Short", cpm: [10, 22], rate: 0.25 },
     ],
   },
   {
     key: "snapchat",
     label: "Snapchat",
-    formats: [{ key: "story", label: "Story (×3)", cpm: [6, 12] }],
+    formats: [{ key: "story", label: "Story (×3)", cpm: [6, 12], rate: 0.15 }],
   },
-  { key: "x", label: "X", formats: [{ key: "post", label: "Post", cpm: [4, 9] }] },
+  { key: "x", label: "X", formats: [{ key: "post", label: "Post", cpm: [4, 9], rate: 0.05 }] },
 ];
 
 export const NICHES = [
@@ -122,34 +145,103 @@ export const NICHES = [
 ];
 export const nicheMult = (v: string): number => NICHES.find((n) => n.value === v)?.m ?? 1;
 
-export function infFormat(platform: PlatKey, formatKey: string): InfFormat | undefined {
-  return INF_PLATFORMS.find((p) => p.key === platform)?.formats.find((f) => f.key === formatKey);
+/** Barème modifié par l'agence (Roster → Pricing → Barème) : clé « plateforme.format ». */
+export type RateOverrides = Record<string, { cpm?: [number, number]; rate?: number }>;
+
+export function infFormat(platform: PlatKey, formatKey: string, rates?: RateOverrides): InfFormat | undefined {
+  const base = INF_PLATFORMS.find((p) => p.key === platform)?.formats.find((f) => f.key === formatKey);
+  if (!base) return undefined;
+  const o = rates?.[`${platform}.${formatKey}`];
+  const ok = (v?: [number, number]) => !!v && v[0] > 0 && v[1] >= v[0];
+  return { ...base, cpm: ok(o?.cpm) ? (o!.cpm as [number, number]) : base.cpm, rate: o?.rate && o.rate > 0 && o.rate <= 3 ? o.rate : base.rate };
 }
 
-/** Un livrable influence : sa plateforme, son format, sa quantité, SON audience. */
-export type InfItem = { platform: PlatKey; format: string; qty: number; followers: number; er: number };
+/** CPM en € pour 1000 VUES, déduit du barème abonnés : cpm ÷ taux de vue habituel. */
+export function cpmViews(fmt: InfFormat): [number, number] {
+  return [fmt.cpm[0] / fmt.rate, fmt.cpm[1] / fmt.rate];
+}
+
+/**
+ * Un livrable influence : sa plateforme, son format, sa quantité, SON audience.
+ * views = vues attendues PAR contenu (réelles si connues : TikTok, YouTube, Instagram
+ * connecté, ou saisies) ; absent → estimées depuis les abonnés.
+ * erBase = sur quoi est calculé l'engagement donné (vues ou abonnés).
+ */
+export type InfItem = { platform: PlatKey; format: string; qty: number; followers: number; er: number; views?: number; erBase?: "views" | "followers" };
+
+export type PricedItem = Range & {
+  /** Vues attendues par contenu, et si elles sont estimées (pas de vraies vues). */
+  views: number;
+  estimated: boolean;
+  /** CPM vues appliqué (€ / 1000 vues), multiplicateurs, et la phrase d'explication. */
+  cpm: [number, number];
+  nicheM: number;
+  engM: number;
+  explain: string;
+};
+
+const fmtK = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).replace(".0", "").replace(".", ",")}M` : n >= 1000 ? `${(n / 1000).toFixed(1).replace(".0", "").replace(".", ",")}K` : String(Math.round(n)));
 
 /** Fourchette BRUTE d'un livrable (avant options/remise de package). */
-export function infItemRange(item: InfItem, nicheM: number): Range {
-  const fmt = infFormat(item.platform, item.format);
+export function infItemRange(item: InfItem, nicheM: number, rates?: RateOverrides): PricedItem {
+  const fmt = infFormat(item.platform, item.format, rates);
   const f = Math.max(0, item.followers || 0);
   const q = Math.max(1, Math.round(item.qty || 1));
-  if (!fmt || f <= 0) return { min: 0, max: 0, mid: 0 };
-  const em = engMult(Math.max(0, item.er || 0));
-  const unit = (cpm: number) => (f / 1000) * cpm * nicheM * em;
-  return asRange(unit(fmt.cpm[0]) * q, unit(fmt.cpm[1]) * q);
+  const real = Math.max(0, item.views || 0);
+  const views = real > 0 ? real : fmt ? Math.round(f * fmt.rate) : 0;
+  const empty: PricedItem = { min: 0, max: 0, mid: 0, views, estimated: real <= 0, cpm: [0, 0], nicheM, engM: 1, explain: "" };
+  if (!fmt || views <= 0) return empty;
+  const er = Math.max(0, item.er || 0);
+  const em = item.erBase === "views" ? engMultViews(er) : engMult(er);
+  const cpm = cpmViews(fmt);
+  const unit = (c: number) => (views / 1000) * c * nicheM * em;
+  const rng = asRange(unit(cpm[0]) * q, unit(cpm[1]) * q);
+  const explain = `${fmtK(views)} vues ${real > 0 ? "attendues" : "estimées"}${q > 1 ? ` × ${q}` : ""} × ${Math.round(cpm[0])}–${Math.round(cpm[1])} € / 1000 vues` +
+    `${nicheM !== 1 ? ` × niche ${String(nicheM).replace(".", ",")}` : ""}${em !== 1 ? ` × engagement ${String(em).replace(".", ",")}` : ""}`;
+  return { ...rng, views, estimated: real <= 0, cpm, nicheM, engM: em, explain };
 }
 
-export type InfOptions = { exclusivite: boolean; droitsUsage: boolean; remisePct: number };
+/** Exclusivité et droits d'usage : durées (anciennes cases à cocher acceptées). */
+export const EXCLUSIVITY = [
+  { value: "none", label: "Aucune", m: 0 },
+  { value: "1m", label: "1 mois", m: 0.15 },
+  { value: "3m", label: "3 mois", m: 0.25 },
+  { value: "6m", label: "6 mois", m: 0.4 },
+];
+export const USAGE_RIGHTS = [
+  { value: "none", label: "Aucun", m: 0 },
+  { value: "organique", label: "Repost par la marque (organique)", m: 0.15 },
+  { value: "ads1", label: "Pub · 1 mois", m: 0.2 },
+  { value: "ads3", label: "Pub · 3 mois", m: 0.35 },
+  { value: "ads6", label: "Pub · 6 mois", m: 0.5 },
+  { value: "ads12", label: "Pub · 12 mois", m: 0.8 },
+];
+export type InfOptions = { exclusivite: boolean | string; droitsUsage: boolean | string; whitelisting?: boolean; remisePct: number };
+const pick = (list: { value: string; m: number }[], v: boolean | string, legacy: number) =>
+  typeof v === "boolean" ? (v ? legacy : 0) : list.find((x) => x.value === v)?.m ?? 0;
 
 /** Package cross-plateforme : somme des livrables × options × (1 − remise). */
-export function computeInfluence(items: InfItem[], nicheM: number, opts: InfOptions): Range & { addon: number; itemsPriced: (Range & { item: InfItem })[] } {
-  const itemsPriced = items.map((item) => ({ ...infItemRange(item, nicheM), item }));
+export function computeInfluence(items: InfItem[], nicheM: number, opts: InfOptions, rates?: RateOverrides): Range & { addon: number; itemsPriced: (PricedItem & { item: InfItem })[] } {
+  const itemsPriced = items.map((item) => ({ ...infItemRange(item, nicheM, rates), item }));
   const sumMin = itemsPriced.reduce((s, r) => s + r.min, 0);
   const sumMax = itemsPriced.reduce((s, r) => s + r.max, 0);
-  const addon = 1 + (opts.exclusivite ? 0.25 : 0) + (opts.droitsUsage ? 0.3 : 0);
+  // Pub depuis le compte de la créatrice (« whitelisting », Spark Ads, pubs partenaires) : +20 %.
+  const addon = 1 + pick(EXCLUSIVITY, opts.exclusivite, 0.25) + pick(USAGE_RIGHTS, opts.droitsUsage, 0.3) + (opts.whitelisting ? 0.2 : 0);
   const disc = 1 - Math.min(0.5, Math.max(0, (opts.remisePct || 0) / 100));
   return { ...asRange(sumMin * addon * disc, sumMax * addon * disc), addon, itemsPriced };
+}
+
+/**
+ * Bilan de campagne : ce que la marque a réellement payé par 1000 vues, par personne
+ * touchée et par interaction. null quand la donnée manque (jamais de faux chiffre).
+ */
+export function campaignCosts(budget: number, t: { views: number; reach: number; interactions: number }) {
+  const b = Math.max(0, budget || 0);
+  return {
+    cpm: b > 0 && t.views > 0 ? (b / t.views) * 1000 : null,
+    cpmReach: b > 0 && t.reach > 0 ? (b / t.reach) * 1000 : null,
+    cpe: b > 0 && t.interactions > 0 ? b / t.interactions : null,
+  };
 }
 
 // ───────────────────────────────── UGC ─────────────────────────────────

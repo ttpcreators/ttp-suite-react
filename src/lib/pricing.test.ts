@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   parseFollowers, parseEr, engMult, roundNice,
   infItemRange, computeInfluence, nicheMult,
-  computeUgc, ugcLevelMult,
+  computeUgc, ugcLevelMult, campaignCosts,
   type InfItem,
 } from "./pricing";
 
@@ -105,5 +105,53 @@ describe("UGC — forfait, indépendant de l'audience", () => {
     const r = computeUgc([{ type: "video_long", qty: 1 }], 1, { usage: "ads3", exclusivite: true, rushes: true, montage: true, express: true });
     // 1 + .30 + .25 + .15 + .20 + .20 = 2.10
     expect(r.addon).toBeCloseTo(2.1, 5);
+  });
+});
+
+describe("influence — sur les vues réelles", () => {
+  it("à vues habituelles, même prix qu'avec les abonnés", () => {
+    // Reel IG : taux habituel 30 % → 50 000 ab ≈ 15 000 vues.
+    const a = infItemRange({ platform: "instagram", format: "reel", qty: 1, followers: 50_000, er: 3 }, 1);
+    const b = infItemRange({ platform: "instagram", format: "reel", qty: 1, followers: 50_000, er: 3, views: 15_000 }, 1);
+    expect(b.min).toBe(a.min);
+    expect(b.max).toBe(a.max);
+    expect(a.estimated).toBe(true);
+    expect(b.estimated).toBe(false);
+  });
+  it("plus de vues réelles = plus cher, moins de vues = moins cher", () => {
+    const base = { platform: "tiktok" as const, format: "video", qty: 1, followers: 100_000, er: 5, erBase: "views" as const };
+    const low = infItemRange({ ...base, views: 10_000 }, 1);
+    const high = infItemRange({ ...base, views: 80_000 }, 1);
+    expect(high.min).toBeGreaterThan(low.min * 7);
+  });
+  it("l'engagement sur les vues a son propre barème", () => {
+    const it0 = { platform: "tiktok" as const, format: "video", qty: 1, followers: 100_000, views: 30_000 };
+    expect(infItemRange({ ...it0, er: 12, erBase: "views" }, 1).engM).toBe(1.25);
+    expect(infItemRange({ ...it0, er: 1, erBase: "views" }, 1).engM).toBe(0.85);
+  });
+  it("explique le calcul", () => {
+    const r = infItemRange({ platform: "tiktok", format: "video", qty: 2, followers: 100_000, er: 5, erBase: "views", views: 31_800 }, 1.1);
+    expect(r.explain).toContain("31,8K vues attendues × 2");
+    expect(r.explain).toContain("€ / 1000 vues");
+    expect(r.explain).toContain("niche 1,1");
+  });
+  it("le barème de l'agence remplace celui par défaut", () => {
+    const a = infItemRange({ platform: "instagram", format: "reel", qty: 1, followers: 50_000, er: 3 }, 1, { "instagram.reel": { cpm: [32, 64] } });
+    expect(a.min).toBe(1600);
+  });
+});
+
+describe("options et bilan", () => {
+  it("durées d'exclusivité, de droits et pub depuis le compte de la créatrice", () => {
+    const items: InfItem[] = [{ platform: "instagram", format: "reel", qty: 1, followers: 50_000, er: 3 }];
+    const r = computeInfluence(items, 1, { exclusivite: "3m", droitsUsage: "ads6", whitelisting: true, remisePct: 0 });
+    expect(r.addon).toBeCloseTo(1 + 0.25 + 0.5 + 0.2, 5);
+  });
+  it("coûts réels d'une campagne", () => {
+    const c = campaignCosts(2000, { views: 100_000, reach: 80_000, interactions: 5000 });
+    expect(c.cpm).toBe(20);
+    expect(c.cpmReach).toBe(25);
+    expect(c.cpe).toBe(0.4);
+    expect(campaignCosts(0, { views: 1, reach: 1, interactions: 1 }).cpm).toBeNull();
   });
 });

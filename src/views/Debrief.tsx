@@ -23,6 +23,7 @@ import { DebriefCalculator, ShotStrip, useShotUrls, resolveShots, type CalcState
 import { printHtml } from "@/lib/printPdf";
 import { pdfShell, pdfHeading, pdfMeta, pdfSection, pdfKpis, pdfTicks, pdfShots } from "@/lib/pdfDoc";
 import { totalsOf as engTotals, parseNum as engParse, fmtCompact, fmtPct } from "@/lib/engagement";
+import { campaignCosts } from "@/lib/pricing";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
@@ -330,11 +331,19 @@ export function Debrief() {
     const budN = parseAmount(budget);
     const revN = parseAmount(revenue);
     const roi = budN > 0 ? (revN / budN).toFixed(1).replace(".", ",") + "×" : "—";
+    // Coûts réels de la campagne (budget ÷ chiffres du calculateur) : ce que la marque compare.
+    const calcStats = calc.mode === "global" ? calc.stats.slice(0, 1) : calc.stats;
+    const tot = engTotals(calcStats, engParse(calc.followers), calc.mode === "global" ? engParse(calc.postsCount) : undefined);
+    const costs = campaignCosts(budN, tot);
+    const eur = (n: number | null, dec = false) => (n == null ? "" : dec ? `${n.toFixed(2).replace(".", ",")} €` : formatEuro(Math.round(n)));
     const kpis: Kpi[] = [
       { l: "Reach", v: reach.trim() },
       { l: "Engagement", v: engagement.trim() },
       { l: "Clics", v: clics.trim() },
       { l: "Ventes attribuées", v: ventes.trim() },
+      { l: "Coût pour 1000 vues (CPM)", v: eur(costs.cpm, true) },
+      { l: "Coût pour 1000 personnes touchées", v: eur(costs.cpmReach, true) },
+      { l: "Coût par interaction", v: eur(costs.cpe, true) },
     ].filter((k) => k.v);
     const highlights = highlightsText.split("\n").map((h) => h.trim()).filter(Boolean);
     const deliv = deliverables.trim() || "—";
