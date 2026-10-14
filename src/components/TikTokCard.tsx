@@ -60,7 +60,7 @@ export function TikTokCard({ creatorId, name, tt, onChange, className }: {
           <PlatformIcon platform="tiktok" className="h-4 w-4 shrink-0 text-muted-foreground" /> TikTok du jour
         </div>
         {linked && (
-          <button type="button" onClick={refresh} disabled={!!busy} title="Redemander les chiffres à TikTok" className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
+          <button type="button" onClick={refresh} disabled={!!busy} title="Redemander les chiffres à TikTok" className="flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
             {busy === "sync" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Actualiser
           </button>
         )}
@@ -113,7 +113,7 @@ export function TikTokCard({ creatorId, name, tt, onChange, className }: {
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-[11px] leading-snug text-muted-foreground">Elle connecte son TikTok depuis son espace (« Envoyer mes stats »), ou ici avec elle.</span>
-            <button type="button" onClick={connect} disabled={!!busy} className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
+            <button type="button" onClick={connect} disabled={!!busy} className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
               {busy === "link" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />} Connecter
             </button>
           </div>

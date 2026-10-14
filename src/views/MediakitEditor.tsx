@@ -455,7 +455,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
               type="button"
               onClick={save}
               disabled={saving || loading || loadError || loadedId !== selId}
-              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               <Save className="h-3.5 w-3.5" /> {saving ? "Enregistrement…" : "Enregistrer"}
             </button>
@@ -483,7 +483,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
           <button
             type="button"
             onClick={() => setReloadKey((k) => k + 1)}
-            className="mt-3 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            className="mt-3 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             Réessayer
           </button>
@@ -693,7 +693,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 <button
                   type="button"
                   onClick={importFromCalculator}
-                  className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+                  className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
                 >
                   <Wand2 className="h-3.5 w-3.5" /> Importer followers + ER (calculateur)
                 </button>
@@ -1216,7 +1216,7 @@ function PlatformEditor({
         <button
           type="button"
           onClick={onRemove}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
         >
           <Trash2 className="h-4 w-4" />
         </button>

@@ -232,7 +232,7 @@ export function Relances() {
                   <button type="button" onClick={() => openMail(iv)} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                     <Mail className="h-3.5 w-3.5" /> Ouvrir le mail
                   </button>
-                  <button type="button" onClick={() => markReminded(iv.id)} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                  <button type="button" onClick={() => markReminded(iv.id)} className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
                     <BellRing className="h-3.5 w-3.5" /> Marquer relancé
                   </button>
                   {rem ? (

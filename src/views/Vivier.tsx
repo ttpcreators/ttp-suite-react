@@ -611,7 +611,7 @@ export function Vivier() {
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <DateInput value={snapDate} onChange={setSnapDate} clearable={false} className="rounded-lg border border-border bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-primary" />
                 <input value={snapVal} onChange={(e) => setSnapVal(e.target.value)} inputMode="numeric" placeholder="Abonnés (ex : 225909 · 226K)" className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] outline-none focus:border-primary" />
-                <button type="button" onClick={() => { const v = parseFol(snapVal); if (!v) { toast("Renseigne un nombre d'abonnés"); return; } void addSnap(selected.id, snapDate, v); setSnapVal(""); }} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90" title="Ajouter le relevé">
+                <button type="button" onClick={() => { const v = parseFol(snapVal); if (!v) { toast("Renseigne un nombre d'abonnés"); return; } void addSnap(selected.id, snapDate, v); setSnapVal(""); }} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90" title="Ajouter le relevé">
                   <Plus className="h-4 w-4" />
                 </button>
               </div>
@@ -630,7 +630,7 @@ export function Vivier() {
 
             <div className="mt-4 flex gap-2">
               {selected.email && (
-                <button type="button" onClick={() => { const r = selected; setSelected(null); openMail(r); }} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                <button type="button" onClick={() => { const r = selected; setSelected(null); openMail(r); }} className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
                   <Send className="h-3.5 w-3.5" /> Solliciter
                 </button>
               )}
@@ -655,7 +655,7 @@ export function Vivier() {
             <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={7} placeholder="Ton message…" className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary" />
             <div className="mt-3 flex justify-end gap-2">
               <button type="button" onClick={() => setMailRow(null)} className="rounded-lg border border-border px-3.5 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover">Annuler</button>
-              <button type="button" onClick={sendSolicit} disabled={sending} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+              <button type="button" onClick={sendSolicit} disabled={sending} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
                 <Send className="h-3.5 w-3.5" /> {sending ? "Envoi…" : "Envoyer"}
               </button>
             </div>

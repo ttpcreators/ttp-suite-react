@@ -365,7 +365,7 @@ function Modal({
       >
         <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
           <div className="text-sm font-semibold text-foreground">{title}</div>
-          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>

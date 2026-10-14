@@ -100,7 +100,7 @@ function AgencyAccountEditor({ a, onSaved, onClose }: { a: AgencyAccount; onSave
       <div className="flex shrink-0 justify-end gap-2 sm:self-end">
         <button type="button" onClick={onClose} className="h-9 rounded-lg px-3 text-[13px] text-muted-foreground transition-colors hover:text-foreground">Fermer</button>
         <button type="button" onClick={() => void save()} disabled={saving}
-          className="h-9 rounded-lg bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+          className="h-9 rounded-full bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
           Enregistrer
         </button>
       </div>
@@ -546,7 +546,7 @@ export function Acces() {
                 type="button"
                 onClick={retryPending}
                 disabled={busy}
-                className="rounded-lg border border-border px-2.5 py-1.5 font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+                className="rounded-full border border-border px-2.5 py-1.5 font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
               >
                 Réessayer
               </button>
@@ -561,7 +561,7 @@ export function Acces() {
             type="button"
             onClick={retryPending}
             disabled={busy}
-            className="rounded-lg border border-border px-2.5 py-1.5 font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+            className="rounded-full border border-border px-2.5 py-1.5 font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
           >
             Réessayer
           </button>

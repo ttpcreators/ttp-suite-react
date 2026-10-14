@@ -63,18 +63,17 @@ export interface AnimatedBadgeProps
 }
 
 const STATUS_CLASS: Record<AnimatedBadgeStatus, string> = {
-  neutral: "border-border bg-card text-muted-foreground",
-  info: "border-foreground/20 bg-surface text-foreground",
-  success:
-    "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  warning: "border-border bg-muted text-muted-foreground",
-  danger: "border-destructive/30 bg-destructive/10 text-destructive",
-  loading: "border-border bg-muted text-muted-foreground",
+  neutral: "border-transparent bg-status-off-bg text-status-off", // clôturé, écarté, inactif
+  info: "border-transparent bg-status-prog-bg text-status-prog", // en cours, envoyé, en discussion
+  success: "border-transparent bg-status-pos-bg text-status-pos", // signé, payé, à jour, actif
+  warning: "border-transparent bg-status-wait-bg text-status-wait", // en attente, en négo, à contacter
+  danger: "border-transparent bg-status-urg-bg text-status-urg", // urgent, en retard, impayé
+  loading: "border-transparent bg-status-prog-bg text-status-prog",
 };
 
 const SIZE_CLASS: Record<AnimatedBadgeSize, string> = {
-  sm: "h-6 gap-1.5 px-2 text-[11px]",
-  md: "h-8 gap-2 px-3 text-xs",
+  sm: "h-6 gap-1.5 px-2.5 text-[12px]",
+  md: "h-8 gap-2 px-3.5 text-[13px]",
 };
 
 const ICON_CLASS: Record<AnimatedBadgeSize, string> = {
@@ -172,7 +171,7 @@ export function AnimatedBadge({
       layout
       transition={SPRING_LAYOUT}
       className={cn(
-        "relative inline-flex shrink-0 items-center overflow-hidden whitespace-nowrap rounded-full border font-medium tabular-nums",
+        "relative inline-flex shrink-0 items-center overflow-hidden whitespace-nowrap rounded-full border font-medium [font-variant-numeric:tabular-nums]",
         "transition-colors duration-300",
         STATUS_CLASS[status],
         SIZE_CLASS[size],

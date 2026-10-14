@@ -501,7 +501,7 @@ export function CreatorDetail({
       <button
         type="button"
         onClick={onBack}
-        className="ios-phone-hide mb-5 inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface pl-2.5 pr-3.5 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
+        className="ios-phone-hide mb-5 inline-flex h-9 items-center gap-2 rounded-full border border-border bg-surface pl-2.5 pr-3.5 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover"
       >
         <ArrowLeft className="h-4 w-4" /> Retour au roster
       </button>
@@ -580,7 +580,7 @@ export function CreatorDetail({
         </div>
         <button
           onClick={() => onOpenPortal(name)}
-          className="flex w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 sm:w-auto"
+          className="flex w-full shrink-0 items-center justify-center gap-2 rounded-full bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 sm:w-auto"
         >
           <ExternalLink className="h-4 w-4" /> Voir le portail
         </button>
@@ -749,14 +749,14 @@ export function CreatorDetail({
                   type="button"
                   onClick={save}
                   disabled={savingInfo}
-                  className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   <Check className="h-3.5 w-3.5" /> Enregistrer
                 </button>
                 <button
                   type="button"
                   onClick={cancel}
-                  className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                  className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                   title="Annuler"
                 >
                   <X className="h-4 w-4" />
@@ -828,7 +828,7 @@ export function CreatorDetail({
             <button
               type="button"
               onClick={copyAll}
-              className="mt-3 flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className="mt-3 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
               <Copy className="h-3.5 w-3.5" /> Copier toutes les infos
             </button>
@@ -844,7 +844,7 @@ export function CreatorDetail({
             <button
               type="button"
               onClick={openCtEdit}
-              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
               <Pencil className="h-3.5 w-3.5" /> {contractEnd ? "Modifier" : "Définir"}
             </button>
@@ -887,7 +887,7 @@ export function CreatorDetail({
                 type="button"
                 onClick={saveContract}
                 disabled={savingCt}
-                className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 <Check className="h-3.5 w-3.5" /> Enregistrer
               </button>

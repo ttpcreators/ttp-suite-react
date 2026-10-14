@@ -287,7 +287,7 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
           <button
             type="button"
             onClick={onClose}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
@@ -368,7 +368,7 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
                   type="button"
                   onClick={openInMailApp}
                   title="Ouvre le mail pré-rempli dans ton app mail par défaut"
-                  className="flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                  className="flex items-center gap-1.5 rounded-full border border-border px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                 >
                   <ExternalLink className="h-3.5 w-3.5" /> Ouvrir dans Spark
                 </button>
@@ -376,7 +376,7 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
                   type="button"
                   onClick={send}
                   disabled={sending || !subject.trim() || !body.trim()}
-                  className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                   {sending ? "Envoi…" : "Envoyer via Gmail"}
@@ -416,7 +416,7 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
               <button
                 type="button"
                 onClick={addTemplate}
-                className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                className="flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
               >
                 <Plus className="h-3.5 w-3.5" /> Nouveau modèle
               </button>
@@ -478,7 +478,7 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
                 type="button"
                 onClick={saveTemplates}
                 disabled={saving}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 {saving ? "Enregistrement…" : "Enregistrer les modèles"}

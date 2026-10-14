@@ -106,7 +106,7 @@ export function OutreachComposer({ title, to: toInit, subject: subjectInit, body
               <button type="button" onClick={() => { void navigator.clipboard?.writeText(`${subject}\n\n${body}`); toast("Mail copié ✓"); }} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
                 <Copy className="h-3.5 w-3.5" /> Copier
               </button>
-              <button type="button" onClick={() => void send()} disabled={sending} className="flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+              <button type="button" onClick={() => void send()} disabled={sending} className="flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
                 {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Envoyer
               </button>
             </div>
@@ -123,7 +123,7 @@ export function OutreachComposer({ title, to: toInit, subject: subjectInit, body
                   C'est envoyé : noter le contact
                 </button>
               )}
-              <button type="button" onClick={() => void openDm()} className="flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+              <button type="button" onClick={() => void openDm()} className="flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
                 <ExternalLink className="h-3.5 w-3.5" /> Copier et ouvrir Instagram
               </button>
             </div>

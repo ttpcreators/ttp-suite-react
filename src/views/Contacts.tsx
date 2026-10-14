@@ -850,7 +850,7 @@ export function Contacts() {
           <button
             type="button"
             onClick={exportCsv}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             title="Exporter en CSV"
           >
             <Download className="h-3.5 w-3.5" />
@@ -1249,7 +1249,7 @@ export function Contacts() {
                         type="button"
                         onClick={() => openSpark(selected)}
                         title={`Ouvre un mail pré-rempli (${kindNext === "contact" ? "premier contact" : "relance"}) dans Spark et le note`}
-                        className="flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                        className="flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                       >
                         <Mail className="h-3.5 w-3.5" /> Spark
                       </button>
@@ -1356,7 +1356,7 @@ export function Contacts() {
                 <button
                   type="button"
                   onClick={() => openMail(selected)}
-                  className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                  className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-full bg-primary py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                 >
                   <Mail className="h-3.5 w-3.5" /> Email
                 </button>
@@ -1516,7 +1516,7 @@ export function Contacts() {
                   onClick={sendViaSpark}
                   disabled={sending}
                   title="Ouvre ce mail dans Spark pour l'envoyer de là (pièces jointes à remettre dans Spark)"
-                  className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
                 >
                   <Mail className="h-3.5 w-3.5" /> Spark
                 </button>
@@ -1524,7 +1524,7 @@ export function Contacts() {
                   type="button"
                   onClick={requestSend}
                   disabled={sending}
-                  className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   <Send className="h-3.5 w-3.5" /> {sending ? "Envoi…" : "Envoyer"}
                 </button>

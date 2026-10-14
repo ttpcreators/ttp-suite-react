@@ -27,7 +27,7 @@ const HOVER_BG = "hover:bg-surface/60 dark:hover:bg-rowhover/70";
 /** Ligne de menu (pleine largeur). */
 export const sbItemCls = (active: boolean) =>
   cn(
-    "flex w-full select-none items-center gap-2.5 rounded-[8px] px-2.5 py-[6px] text-left text-[13px] transition-colors focus-visible:outline-offset-[-2px]",
+    "flex w-full select-none items-center gap-2.5 rounded-full px-3 py-[7px] text-left text-[13.5px] transition-colors focus-visible:outline-offset-[-2px]",
     active ? cn(ACTIVE_BG, "font-medium text-foreground") : cn("text-foreground/70 hover:text-foreground", HOVER_BG),
   );
 /** Icône d'une ligne de menu. */
@@ -36,7 +36,7 @@ export const sbIconCls = (active: boolean) =>
 /** Bouton carré du rail replié (icône seule). */
 export const sbRailCls = (active: boolean) =>
   cn(
-    "grid h-10 w-10 shrink-0 place-items-center rounded-[10px] transition-colors",
+    "grid h-10 w-10 shrink-0 place-items-center rounded-full transition-colors",
     active ? cn(ACTIVE_BG, "text-foreground") : cn("text-foreground/50 hover:text-foreground", HOVER_BG),
   );
 /** Dégradé SVG de l'accent (deux bouts `--accent-a/-b`, égaux hors accent en dégradé). */
@@ -445,7 +445,7 @@ export function SidebarBrand({
         <button
           type="button"
           onClick={onCollapse}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-[8px] text-foreground/40 transition-colors hover:bg-surface/60 hover:text-foreground dark:hover:bg-rowhover"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-foreground/40 transition-colors hover:bg-surface/60 hover:text-foreground dark:hover:bg-rowhover"
           title="Replier le menu"
           aria-label="Replier le menu"
         >

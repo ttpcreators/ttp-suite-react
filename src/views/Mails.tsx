@@ -562,7 +562,7 @@ export function Mails() {
         type="button"
         onClick={() => setNewMailOpen(true)}
         aria-label="Nouveau mail"
-        className="group relative mb-2 grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition-opacity hover:opacity-90"
+        className="group relative mb-2 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"
       >
         <PenLine className="h-[17px] w-[17px]" />
         <Tip>Nouveau mail</Tip>
@@ -869,7 +869,7 @@ export function Mails() {
           <button
             type="button"
             onClick={() => setComposerOpen(true)}
-            className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+            className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
           >
             <PenLine className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Nouveau mail</span>
           </button>

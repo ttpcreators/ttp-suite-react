@@ -226,7 +226,7 @@ export function SignaturePicker({
                 type="button"
                 onClick={saveForm}
                 disabled={busy || !fields.name.trim()}
-                className="rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="rounded-full bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 Enregistrer
               </button>

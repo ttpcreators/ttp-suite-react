@@ -512,7 +512,7 @@ function CreatorFinder() {
     { value: "liste", label: "Liste de @" },
   ];
   const runBtn = (label: string, onClick: () => void) => (
-    <button type="button" onClick={onClick} disabled={!!busy} className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+    <button type="button" onClick={onClick} disabled={!!busy} className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />} {label}
     </button>
   );
@@ -751,7 +751,7 @@ function CreatorFinder() {
                     <div className="flex shrink-0 flex-wrap items-center gap-2 pl-[52px] lg:pl-0">
                       {inPool?.last_contacted && <span className="text-[10px] text-faint">Contactée {fmtAgo(inPool.last_contacted)}</span>}
                       {!inRoster && (
-                        <button type="button" onClick={() => setContact(c)} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+                        <button type="button" onClick={() => setContact(c)} className="flex items-center gap-1 rounded-full bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
                           <Send className="h-3.5 w-3.5" /> Contacter
                         </button>
                       )}
@@ -1237,7 +1237,7 @@ function BrandRadar() {
               L'app vérifie auprès de Meta que chaque nom trouvé dans les posts est bien une marque. Ça avance tout seul toutes les 2 heures (Meta limite les demandes par heure).
             </p>
           </div>
-          <button type="button" onClick={() => void runVerify()} disabled={verifying} className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-3.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+          <button type="button" onClick={() => void runVerify()} disabled={verifying} className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-3.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
             {verifying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} {verifying ? "Vérification…" : "Vérifier la suite"}
           </button>
         </div>
@@ -1294,7 +1294,7 @@ function BrandRadar() {
                       {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />} {open ? "Masquer les preuves" : `Voir les preuves (${list.length})`}
                     </button>
                     {row.status !== "pipeline" ? (
-                      <button type="button" onClick={() => void toPipeline(row)} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+                      <button type="button" onClick={() => void toPipeline(row)} className="flex items-center gap-1 rounded-full bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
                         <Plus className="h-3.5 w-3.5" /> Pipeline
                       </button>
                     ) : (

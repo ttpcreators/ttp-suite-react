@@ -645,7 +645,7 @@ export function Debrief() {
                 <button
                   type="button"
                   onClick={() => createFromBrief(b)}
-                  className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                  className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                 >
                   Créer le débrief
                 </button>
@@ -857,7 +857,7 @@ export function Debrief() {
                 <button type="button" onClick={() => printDebrief(shareD)} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
                   <FileText className="h-3.5 w-3.5" /> PDF
                 </button>
-                <button type="button" onClick={sendDebriefEmail} disabled={shareSending} className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+                <button type="button" onClick={sendDebriefEmail} disabled={shareSending} className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
                   <Send className="h-3.5 w-3.5" /> {shareSending ? "Envoi…" : "Envoyer"}
                 </button>
               </div>
@@ -929,7 +929,7 @@ function DebriefDetail({
                 ROI {d.roi}
               </span>
             )}
-            <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+            <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground">
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -1012,13 +1012,13 @@ function DebriefDetail({
 
         {/* Actions */}
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-5 py-3.5">
-          <button type="button" onClick={onEdit} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={onEdit} className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             <Pencil className="h-3.5 w-3.5" /> Modifier
           </button>
-          <button type="button" onClick={onPdf} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={onPdf} className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             <FileText className="h-3.5 w-3.5" /> Aperçu / PDF
           </button>
-          <button type="button" onClick={onShare} className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+          <button type="button" onClick={onShare} className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
             <Send className="h-3.5 w-3.5" /> Partager à la marque
           </button>
         </div>

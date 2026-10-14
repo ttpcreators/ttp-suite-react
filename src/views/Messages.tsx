@@ -380,7 +380,7 @@ function Conversation({ t, q, contact, onBack, onChange }: { t: Thread; q: strin
   return (
     <div className="flex h-full max-h-[78vh] flex-col">
       <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
-        <button type="button" onClick={onBack} className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-rowhover md:hidden" aria-label="Retour"><ArrowLeft className="h-4 w-4" /></button>
+        <button type="button" onClick={onBack} className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground hover:bg-rowhover md:hidden" aria-label="Retour"><ArrowLeft className="h-4 w-4" /></button>
         <Avatar t={t} size={42} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[14px] font-semibold text-foreground">{display(t)}</div>

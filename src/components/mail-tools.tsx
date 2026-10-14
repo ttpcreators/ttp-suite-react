@@ -81,7 +81,7 @@ export function MailSettingsDialog({ open, onClose }: { open: boolean; onClose: 
         <div className="flex items-center gap-2 border-b border-border px-5 py-3.5">
           <Settings2 className="h-4 w-4 text-muted-foreground" />
           <span className="flex-1 text-[14px] font-semibold text-foreground">Réglages des mails</span>
-          <button type="button" onClick={onClose} aria-label="Fermer" className="grid h-8 w-8 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={onClose} aria-label="Fermer" className="grid h-8 w-8 place-items-center rounded-full text-faint hover:bg-rowhover hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -133,7 +133,7 @@ export function MailSettingsDialog({ open, onClose }: { open: boolean; onClose: 
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
           <button type="button" onClick={onClose} className="h-9 rounded-lg px-3 text-[13px] text-muted-foreground hover:text-foreground">Annuler</button>
-          <button type="button" onClick={() => void save()} disabled={saving} className="h-9 rounded-lg bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40">
+          <button type="button" onClick={() => void save()} disabled={saving} className="h-9 rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40">
             Enregistrer
           </button>
         </div>
@@ -242,7 +242,7 @@ export function ReplyBox({
             type="button"
             onClick={submit}
             disabled={!text.trim()}
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-35"
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-35"
           >
             <Send className="h-3.5 w-3.5" /> Envoyer
           </button>
@@ -277,7 +277,7 @@ export function ReplyBox({
           onClick={submit}
           disabled={!text.trim()}
           aria-label="Envoyer la réponse"
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
         >
           <Send className="h-4 w-4" />
         </button>
@@ -368,7 +368,7 @@ export function ForwardDialog({
         <div className="flex items-center gap-2 border-b border-border px-5 py-3.5">
           <PenLine className="h-4 w-4 text-muted-foreground" />
           <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-foreground">{fwdSubject}</span>
-          <button type="button" onClick={onClose} aria-label="Fermer" className="grid h-8 w-8 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={onClose} aria-label="Fermer" className="grid h-8 w-8 place-items-center rounded-full text-faint hover:bg-rowhover hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -403,7 +403,7 @@ export function ForwardDialog({
           <AttachButton onFiles={(f) => void att.add(f)} className="text-[12px] text-muted-foreground" />
           <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
           <button type="button" onClick={send} disabled={busy}
-            className="ml-auto flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40">
+            className="ml-auto flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Transférer
           </button>
         </div>
@@ -469,7 +469,7 @@ export function NewMailDialog({
         <div className="flex items-center gap-2 border-b border-border px-5 py-3.5">
           <PenLine className="h-4 w-4 text-muted-foreground" />
           <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-foreground">Nouveau mail</span>
-          <button type="button" onClick={onClose} aria-label="Fermer" className="grid h-8 w-8 place-items-center rounded-lg text-faint hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={onClose} aria-label="Fermer" className="grid h-8 w-8 place-items-center rounded-full text-faint hover:bg-rowhover hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -501,7 +501,7 @@ export function NewMailDialog({
           <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
           <span className="text-faint max-sm:hidden">{settings.delaySec ? `Annulable ${settings.delaySec} s · ` : ""}⌘↵</span>
           <button type="button" onClick={send}
-            className="ml-auto flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40">
+            className="ml-auto flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40">
             <Send className="h-4 w-4" /> Envoyer
           </button>
         </div>

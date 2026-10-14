@@ -54,10 +54,10 @@ export function CredentialVault() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             <Plus className="h-3.5 w-3.5" /> Ajouter
           </button>
-          <button type="button" onClick={save} disabled={saving || loading} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+          <button type="button" onClick={save} disabled={saving || loading} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
             <Save className="h-3.5 w-3.5" /> {saving ? "…" : "Enregistrer"}
           </button>
         </div>

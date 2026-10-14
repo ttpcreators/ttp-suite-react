@@ -288,7 +288,7 @@ export function Pricing() {
                 );
               })}
             </div>
-            <button type="button" onClick={addInf} className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <button type="button" onClick={addInf} className="mt-2 flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
               <Plus className="h-3.5 w-3.5" /> Ajouter un livrable
             </button>
 
@@ -384,7 +384,7 @@ export function Pricing() {
             <Tag className="h-4 w-4 text-muted-foreground" /> Résultat
           </div>
           {hasResult && (
-            <button type="button" onClick={copyQuote} className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
+            <button type="button" onClick={copyQuote} className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
               <Copy className="h-3.5 w-3.5" /> Copier
             </button>
           )}
@@ -498,8 +498,8 @@ function RatesEditor({ rates, onClose }: { rates: RateOverrides; onClose: () => 
       </div>
       <div className="mt-3 flex flex-wrap justify-end gap-2">
         <button type="button" onClick={() => void save({})} disabled={saving} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover"><RotateCcw className="h-3 w-3" /> Barème par défaut</button>
-        <button type="button" onClick={onClose} className="rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover">Annuler</button>
-        <button type="button" onClick={() => void save(draft)} disabled={saving} className="rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">Enregistrer</button>
+        <button type="button" onClick={onClose} className="rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover">Annuler</button>
+        <button type="button" onClick={() => void save(draft)} disabled={saving} className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">Enregistrer</button>
       </div>
     </div>
   );

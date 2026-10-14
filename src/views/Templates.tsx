@@ -489,7 +489,7 @@ export function Templates() {
               <button
                 type="button"
                 onClick={() => copy(preview.body)}
-                className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
               >
                 <Copy className="h-3.5 w-3.5" /> Copier le message
               </button>

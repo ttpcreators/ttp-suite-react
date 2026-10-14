@@ -846,7 +846,7 @@ export function Todo() {
                         toast("Commentaire non enregistré — réessaie");
                       }
                     }}
-                    className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                    className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                   >
                     <Check className="h-3.5 w-3.5" /> Enregistrer
                   </button>
@@ -988,7 +988,7 @@ export function Todo() {
                   </button>
                   <button
                     type="submit"
-                    className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                    className="h-[42px] shrink-0 rounded-full bg-primary px-5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                   >
                     Enregistrer
                   </button>
@@ -1093,7 +1093,7 @@ export function Todo() {
                     </div>
                     <form onSubmit={(e) => { e.preventDefault(); addSubtask(selectedTodo); }} className="mt-2 flex items-center gap-2">
                       <input value={subInput} onChange={(e) => setSubInput(e.target.value)} placeholder="Ajouter une sous-tâche…" className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary" />
-                      <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90"><Plus className="h-4 w-4" /></button>
+                      <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"><Plus className="h-4 w-4" /></button>
                     </form>
                   </DetailBlock>
                 );

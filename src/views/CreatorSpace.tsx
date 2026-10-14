@@ -1025,7 +1025,7 @@ export function CreatorSpace({
           <button
             type="button"
             onClick={() => saveIdeaEdit(x.id)}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             <Check className="h-3.5 w-3.5" /> Enregistrer
           </button>
@@ -1499,7 +1499,7 @@ export function CreatorSpace({
             <button
               type="button"
               onClick={preview.onExit}
-              className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Espace agence
             </button>
@@ -1773,7 +1773,7 @@ export function CreatorSpace({
                         Envoie les captures de tes 30 derniers jours en début de mois&nbsp;: c'est ce qui prouve ton audience aux marques.
                       </p>
                       <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
-                        <button type="button" onClick={() => setStatsModalOpen(true)} className="rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+                        <button type="button" onClick={() => setStatsModalOpen(true)} className="rounded-full bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
                           Envoyer mes stats
                         </button>
                         <button type="button" onClick={() => setStatsModalOpen(true)} className="inline-flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
@@ -1942,7 +1942,7 @@ export function CreatorSpace({
                       <button
                         type="button"
                         onClick={saveInfos}
-                        className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+                        className="flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
                       >
                         <Check className="h-3.5 w-3.5" /> Enregistrer
                       </button>
@@ -1952,7 +1952,7 @@ export function CreatorSpace({
                       type="button"
                       onClick={startEdit}
                       disabled={!creator}
-                      className="flex h-8 items-center gap-1.5 rounded-lg bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover disabled:opacity-50"
+                      className="flex h-8 items-center gap-1.5 rounded-full bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover disabled:opacity-50"
                     >
                       <Pencil className="h-3.5 w-3.5" /> Modifier
                     </button>
@@ -2571,7 +2571,7 @@ export function CreatorSpace({
                           <button
                             type="button"
                             onClick={() => saveBriefScript(b.id)}
-                            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                            className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                           >
                             <Check className="h-3.5 w-3.5" /> Enregistrer
                           </button>
@@ -2830,7 +2830,7 @@ export function CreatorSpace({
                       href={mkUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+                      className="flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
                     >
                       <ExternalLink className="h-3.5 w-3.5" /> Ouvrir
                     </a>
@@ -2949,7 +2949,7 @@ export function CreatorSpace({
                     type="button"
                     onClick={() => invFileRef.current?.click()}
                     disabled={invUploading}
-                    className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+                    className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
                     <Upload className="h-3.5 w-3.5" /> {invUploading ? "Envoi…" : "Déposer ma facture"}
                   </button>
@@ -3302,7 +3302,7 @@ export function CreatorSpace({
                   </div>
                   <form onSubmit={(e) => { e.preventDefault(); addSubtask(taskView); }} className="mt-1.5 flex items-center gap-2">
                     <input value={subInput} onChange={(e) => setSubInput(e.target.value)} placeholder="Ajouter une sous-tâche…" className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary" />
-                    <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90"><Plus className="h-4 w-4" /></button>
+                    <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"><Plus className="h-4 w-4" /></button>
                   </form>
                 </div>
               );

@@ -358,7 +358,7 @@ export function Briefs() {
             <button
               type="button"
               onClick={() => saveEdit(row.id)}
-              className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              className="h-[42px] shrink-0 rounded-full bg-primary px-5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
               Enregistrer
             </button>

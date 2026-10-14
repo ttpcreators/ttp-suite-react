@@ -92,7 +92,7 @@ function PushRow() {
             if (!ok && Notification.permission === "granted") toast("Activation échouée — réessaie");
           }}
           disabled={busy}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           <BellRing className="h-3.5 w-3.5" /> {busy ? "Activation…" : "Activer sur ce téléphone"}
         </button>

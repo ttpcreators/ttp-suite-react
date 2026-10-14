@@ -64,7 +64,7 @@ export function InstagramCard({ creatorId, name, ig, onChange, className }: {
           onClick={refresh}
           disabled={!!busy}
           title="Redemander les chiffres à Meta"
-          className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+          className="flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
         >
           {busy === "sync" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Actualiser
         </button>
@@ -122,7 +122,7 @@ export function InstagramCard({ creatorId, name, ig, onChange, className }: {
               type="button"
               onClick={connect}
               disabled={!!busy}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
             >
               {busy === "link" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />} Connecter
             </button>

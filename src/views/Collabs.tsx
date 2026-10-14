@@ -479,7 +479,7 @@ export function Collabs() {
           <button
             type="button"
             onClick={() => setStep(row, row.step + 1)}
-            className={cn("flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-primary px-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90", h, compact ? "max-md:flex-1" : "flex-1")}
+            className={cn("flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-primary px-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90", h, compact ? "max-md:flex-1" : "flex-1")}
           >
             {stepDef(row.step + 1).short} <ArrowRight className="h-3.5 w-3.5" />
           </button>
@@ -520,7 +520,7 @@ export function Collabs() {
             <button
               type="button"
               onClick={() => saveEdit(row.id)}
-              className="h-[42px] shrink-0 rounded-lg bg-primary px-5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              className="h-[42px] shrink-0 rounded-full bg-primary px-5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
               Enregistrer
             </button>

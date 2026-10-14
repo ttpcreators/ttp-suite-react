@@ -57,7 +57,7 @@ export function PushCard() {
           <button type="button" onClick={() => setHelpOpen(true)} className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground">
             <HelpCircle className="h-3.5 w-3.5" /> Comment ça marche ?
           </button>
-          <button type="button" onClick={() => setActOpen(true)} className="rounded-lg bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+          <button type="button" onClick={() => setActOpen(true)} className="rounded-full bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
             {enabled ? "Gérer" : "Activer"}
           </button>
         </div>

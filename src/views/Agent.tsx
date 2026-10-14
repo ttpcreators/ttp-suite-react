@@ -137,7 +137,7 @@ function DeleteButton({ armed, onArm, onConfirm, title }: {
 }) {
   return armed ? (
     <button type="button" onClick={onConfirm}
-      className="shrink-0 rounded-md bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-500 transition-colors hover:bg-red-500/20">
+      className="shrink-0 rounded-full bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-500 transition-colors hover:bg-red-500/20">
       Supprimer ?
     </button>
   ) : (
@@ -431,7 +431,7 @@ export function AgentView() {
                         <X className="h-3.5 w-3.5" /> Écarté
                       </button>
                       <button type="button" onClick={() => traiter(a, "envoye")}
-                        className="flex h-[34px] items-center gap-1.5 rounded-lg bg-primary px-4 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
+                        className="flex h-[34px] items-center gap-1.5 rounded-full bg-primary px-4 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
                         <Check className="h-3.5 w-3.5" /> Envoyé
                       </button>
                     </div>
@@ -475,7 +475,7 @@ export function AgentView() {
                     <X className="h-3.5 w-3.5" /> Écarter
                   </button>
                   <button type="button" onClick={() => deciderProspect(p, "valide")}
-                    className="flex h-[32px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
+                    className="flex h-[32px] flex-1 items-center justify-center gap-1.5 rounded-full bg-primary text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
                     <Check className="h-3.5 w-3.5" /> Valider
                   </button>
                 </div>
@@ -527,7 +527,7 @@ export function AgentView() {
                   <button type="button" onClick={() => deciderCercle(c, false)}
                     className="rounded-md border border-border px-2.5 py-1 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover">Retirer</button>
                   <button type="button" onClick={() => deciderCercle(c, true)}
-                    className="rounded-md bg-primary px-2.5 py-1 text-[10px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">Valider</button>
+                    className="rounded-full bg-primary px-2.5 py-1 text-[10px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">Valider</button>
                 </div>
               </div>
             ))}
@@ -604,7 +604,7 @@ export function AgentView() {
                 <button type="button" onClick={() => setLeconOpen(false)}
                   className="h-[36px] rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground hover:bg-rowhover">Annuler</button>
                 <button type="button" onClick={ajouterLecon} disabled={leconBusy}
-                  className="h-[36px] rounded-lg bg-primary px-4 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">Ajouter</button>
+                  className="h-[36px] rounded-full bg-primary px-4 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">Ajouter</button>
               </div>
             </div>
           ) : (

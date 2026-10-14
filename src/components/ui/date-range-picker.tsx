@@ -162,7 +162,7 @@ export function DateRangePicker({
         <button
           type="button"
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium tabular-nums text-foreground transition-colors hover:bg-rowhover data-[state=open]:bg-rowhover",
+            "inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium tabular-nums text-foreground transition-colors hover:bg-rowhover data-[state=open]:bg-rowhover",
             className,
           )}
         >
@@ -238,7 +238,7 @@ export function DateRangePicker({
                   type="button"
                   onClick={() => draft && choose(draft)}
                   disabled={!draft}
-                  className="rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                  className="rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
                 >
                   Appliquer
                 </button>

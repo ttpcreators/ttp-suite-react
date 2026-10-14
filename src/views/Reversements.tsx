@@ -288,7 +288,7 @@ export function Reversements() {
                     <span className="text-[11px] font-medium text-muted-foreground">Note (optionnel)</span>
                     <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Virement, espèces…" className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary" />
                   </label>
-                  <button type="button" onClick={() => submitPayout(r.creator)} className="h-[38px] shrink-0 rounded-lg bg-primary px-4 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                  <button type="button" onClick={() => submitPayout(r.creator)} className="h-[38px] shrink-0 rounded-full bg-primary px-4 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
                     Enregistrer
                   </button>
                   <button type="button" onClick={() => setOpenFor(null)} className="h-[38px] shrink-0 rounded-lg border border-border px-3 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover">

@@ -98,7 +98,7 @@ export function GlobalSearch({
       {/* Champ contrôlé — langage de l’Aperçu : champ clair bordé, halo discret au focus.
           Écran plein (téléphone) : champ gris façon iOS. */}
       <div className={cn(
-        "flex h-10 items-center gap-2.5 rounded-xl px-3.5 text-foreground transition-shadow",
+        "flex h-10 items-center gap-2.5 rounded-full px-4 text-foreground transition-shadow",
         inline ? "bg-foreground/[0.06]" : "border border-border bg-surface focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-foreground/10",
       )}>
         <SearchIcon className="h-4 w-4 shrink-0 text-muted-foreground" />

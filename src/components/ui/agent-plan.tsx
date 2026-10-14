@@ -157,7 +157,7 @@ export function AgentPlan({
                         placeholder="Ajouter une sous-tâche…"
                         className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-foreground/30"
                       />
-                      <button type="submit" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-foreground text-background transition-opacity hover:opacity-90" aria-label="Ajouter">
+                      <button type="submit" className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-foreground text-background transition-opacity hover:opacity-90" aria-label="Ajouter">
                         <Plus className="h-4 w-4" />
                       </button>
                     </form>

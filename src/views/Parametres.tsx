@@ -114,7 +114,7 @@ function TeamNameField() {
           placeholder="Ton prénom"
         />
         <button type="button" onClick={() => void save()} disabled={busy || !name.trim() || name.trim() === saved}
-          className="h-9 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+          className="h-9 rounded-full bg-primary px-3 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
           Enregistrer
         </button>
       </div>
@@ -466,7 +466,7 @@ export function Parametres() {
                 type="button"
                 onClick={runTest}
                 disabled={testing}
-                className="rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+                className="rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
               >
                 {testing ? "Envoi…" : "Envoyer un test"}
               </button>
@@ -474,7 +474,7 @@ export function Parametres() {
                 type="button"
                 onClick={disable}
                 disabled={busy}
-                className="rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+                className="rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
               >
                 Désactiver
               </button>
@@ -501,7 +501,7 @@ export function Parametres() {
               if (!ok && Notification.permission === "granted") toast("Activation échouée — réessaie");
             }}
             disabled={busy}
-            className="my-1 flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="my-1 flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <BellRing className="h-3.5 w-3.5" /> {busy ? "Activation…" : "Activer sur cet appareil"}
           </button>

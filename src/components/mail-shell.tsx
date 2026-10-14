@@ -68,7 +68,7 @@ export function ToolButton({ icon: Icon, label, onClick, disabled, busy, spin, d
       title={label}
       aria-label={label}
       className={cn(
-        "grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:pointer-events-none disabled:opacity-35",
+        "grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:pointer-events-none disabled:opacity-35",
         danger && "hover:bg-red-500/[0.08] hover:text-red-600 dark:hover:text-red-400",
         className,
       )}
@@ -88,7 +88,7 @@ export function BarButton({ icon: Icon, label, onClick, disabled, busy, danger }
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50",
+        "inline-flex h-9 shrink-0 items-center gap-2 rounded-full px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50",
         danger && "hover:bg-red-500/[0.08] hover:text-red-600 dark:hover:text-red-400",
       )}
     >

@@ -154,7 +154,7 @@ function StatusPanel({
           </button>
         )}
         <button type="button" onClick={onWriteNote}
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover">
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover">
           <MessageSquarePlus className="h-3.5 w-3.5" /> Ajouter une remarque
         </button>
       </div>
@@ -777,7 +777,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
                     type="button"
                     onClick={() => void submitNote()}
                     disabled={!note.trim() || sending}
-                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-35"
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-35"
                   >
                     {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Envoyer
                   </button>
@@ -910,7 +910,7 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
           icon={Mail}
           right={!editing && linked && (
             <button type="button" onClick={openEdit}
-              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+              className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
               <Settings2 className="h-3.5 w-3.5" /> Modifier
             </button>
           )}
@@ -925,7 +925,7 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
               Relie l'adresse mail de {titleCase(creator)} (son alias) pour voir ses échanges ici, les ranger (À vérifier, À valider, Validé, Refusé) et lui écrire des remarques.
             </span>
             <button type="button" onClick={openEdit}
-              className="h-8 shrink-0 rounded-lg bg-primary px-3 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+              className="h-8 shrink-0 rounded-full bg-primary px-3 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
               Relier
             </button>
           </div>
@@ -954,7 +954,7 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setEditing(false)} className="h-9 rounded-lg px-3 text-[13px] text-muted-foreground hover:text-foreground">Annuler</button>
               <button type="button" onClick={() => void submit()} disabled={saving}
-                className="h-9 rounded-lg bg-primary px-3.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+                className="h-9 rounded-full bg-primary px-3.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
                 Enregistrer
               </button>
             </div>

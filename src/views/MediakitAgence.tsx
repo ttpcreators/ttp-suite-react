@@ -270,7 +270,7 @@ export function AgencyTab() {
             type="button"
             onClick={save}
             disabled={saving || loading || loadError || !loaded}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <Save className="h-3.5 w-3.5" /> {saving ? "Enregistrement…" : "Enregistrer"}
           </button>
@@ -289,7 +289,7 @@ export function AgencyTab() {
           <button
             type="button"
             onClick={() => setReloadKey((k) => k + 1)}
-            className="mt-3 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            className="mt-3 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             Réessayer
           </button>

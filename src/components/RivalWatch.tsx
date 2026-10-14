@@ -180,7 +180,7 @@ export function RivalWatch() {
             placeholder="@ d'une agence concurrente (ou lien Instagram)"
             className={cn(IN, "min-w-0 flex-1")}
           />
-          <button type="button" disabled={adding || !input.trim()} onClick={() => void follow(input)} className="flex h-10 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+          <button type="button" disabled={adding || !input.trim()} onClick={() => void follow(input)} className="flex h-10 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
             {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Suivre
           </button>
         </div>
@@ -295,10 +295,10 @@ function RivalCard({ r, busy, pool, roster, known, onRefresh, onRemove, onScouti
         <Spark r={r} />
         <div className="flex items-center gap-1.5">
           <span className="hidden text-[11px] text-faint sm:inline">{r.read_at ? `Lu ${fmtAgo(r.read_at)}` : "Pas encore lu"}</span>
-          <button type="button" onClick={onRefresh} disabled={busy} className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" aria-label="Actualiser">
+          <button type="button" onClick={onRefresh} disabled={busy} className="grid h-8 w-8 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" aria-label="Actualiser">
             <RefreshCw className={cn("h-3.5 w-3.5", busy && "animate-spin")} />
           </button>
-          <button type="button" onClick={onRemove} className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-rose-500" aria-label="Ne plus suivre">
+          <button type="button" onClick={onRemove} className="grid h-8 w-8 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:text-rose-500" aria-label="Ne plus suivre">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>

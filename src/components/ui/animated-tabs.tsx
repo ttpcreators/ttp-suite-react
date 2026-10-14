@@ -172,9 +172,9 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
         ref={rowRef}
         aria-label={label}
         className={cn(
-          "relative flex max-w-full flex-wrap gap-0.5 overflow-x-auto border border-border bg-surface [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          "relative flex max-w-full flex-wrap gap-0.5 overflow-x-auto rounded-full bg-muted [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
           !wrap && "sm:flex-nowrap",
-          sm ? "rounded-lg p-0.5" : "rounded-xl p-1",
+          sm ? "p-0.5" : "p-1",
           fullWidth ? "w-full" : "w-fit",
         )}
       >
@@ -182,7 +182,7 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
             `style` ne déclenche pas le ressort). Masqué si aucune valeur ne correspond. */}
         <motion.span
           aria-hidden
-          className={cn("pointer-events-none absolute bg-muted", sm ? "rounded-md" : "rounded-lg")}
+          className="pointer-events-none absolute rounded-full bg-surface ring-1 ring-border dark:bg-input dark:ring-0"
           initial={false}
           animate={{ left: ind.x, top: ind.y, width: ind.width, height: ind.height, opacity: ind.ready && selectedIndex >= 0 ? 1 : 0 }}
           transition={reduced || !ind.ready ? { duration: 0 } : INDICATOR}
@@ -198,7 +198,7 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
               title={item.hideLabel === "always" ? item.label : undefined}
               className={cn(
                 "relative z-10 flex shrink-0 items-center justify-center whitespace-nowrap font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-foreground/20 [&_svg]:text-current",
-                sm ? "h-7 gap-1.5 rounded-md px-2.5 text-[12px]" : "h-8 gap-2 rounded-lg px-3 text-[13px]",
+                sm ? "h-7 gap-1.5 rounded-full px-3 text-[12px]" : "h-8 gap-2 rounded-full px-3.5 text-[13px]",
                 fullWidth && "flex-1",
                 item.disabled ? "cursor-default text-faint" : selected ? "text-foreground" : "text-muted-foreground hover:text-foreground",
               )}

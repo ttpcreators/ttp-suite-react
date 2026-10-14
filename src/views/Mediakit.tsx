@@ -406,7 +406,7 @@ function MediakitFiles() {
             type="button"
             onClick={() => (selected ? fileRef.current?.click() : toast("Choisis d'abord un créateur"))}
             disabled={uploading}
-            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <Upload className="h-3.5 w-3.5" /> {uploading ? "Ajout…" : "Ajouter"}
           </button>
@@ -508,7 +508,7 @@ function MediakitFiles() {
                 type="button"
                 onClick={addLink}
                 disabled={linking}
-                className="rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                className="rounded-full bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
               >
                 {linking ? "Ajout…" : "Ajouter"}
               </button>
@@ -608,7 +608,7 @@ function MediakitFiles() {
                 type="button"
                 onClick={sendEmail}
                 disabled={sending}
-                className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
               >
                 <Send className="h-3.5 w-3.5" /> {sending ? "Envoi…" : "Envoyer"}
               </button>
@@ -657,7 +657,7 @@ function MediakitFiles() {
                       setTplDraft(null);
                       toast("Template enregistré ✓");
                     }}
-                    className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90"
+                    className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90"
                   >
                     <Check className="h-3.5 w-3.5" /> Enregistrer
                   </button>

@@ -164,7 +164,7 @@ export function MailItem({
                 onClick={a.onClick}
                 title={a.label}
                 aria-label={a.label}
-                className="grid h-8 w-8 place-items-center rounded-lg transition-colors hover:bg-rowhover hover:text-foreground"
+                className="grid h-8 w-8 place-items-center rounded-full transition-colors hover:bg-rowhover hover:text-foreground"
               >
                 <a.icon className="h-4 w-4" />
               </button>

@@ -446,7 +446,7 @@ export function Checklist() {
               <button
                 type="button"
                 onClick={resetSelected}
-                className="rounded-lg border border-border px-3 py-2 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover"
+                className="rounded-full border border-border px-3 py-2 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover"
               >
                 RÉINITIALISER
               </button>

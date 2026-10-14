@@ -36,7 +36,7 @@ const EXCHANGE_ICON: Record<ExchangeType, typeof Phone> = { appel: Phone, messag
 /** Bouton « Modifier » (passe une carte en édition) — homogène sur les 3 cartes. */
 function EditBtn({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+    <button type="button" onClick={onClick} className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
       <Pencil className="h-3.5 w-3.5" /> Modifier
     </button>
   );
@@ -145,7 +145,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
         {mode === "view" ? (
           <EditBtn onClick={enterEdit} />
         ) : (
-          <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
+          <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
             <X className="h-3.5 w-3.5" /> Annuler
           </button>
         )}
@@ -335,11 +335,11 @@ export function EditorialProfileCard({ name }: { name: string }) {
               </button>
               <span className="text-[11px] text-faint">Étape {s + 1} / {STEPS.length}</span>
               {s < lastStep ? (
-                <button type="button" onClick={() => setStep((x) => Math.min(lastStep, x + 1))} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                <button type="button" onClick={() => setStep((x) => Math.min(lastStep, x + 1))} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
                   Suivant <ChevronRight className="h-4 w-4" />
                 </button>
               ) : (
-                <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+                <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
                   <Check className="h-4 w-4" /> {saving ? "Enregistrement…" : "Enregistrer"}
                 </button>
               )}
@@ -425,14 +425,14 @@ export function MonthlyTracking({ name }: { name: string }) {
         ) : (
           <div className="flex items-center gap-2">
             {sorted.length > 0 && (
-              <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
+              <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
                 <X className="h-3.5 w-3.5" /> Annuler
               </button>
             )}
-            <button type="button" onClick={addMonth} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <button type="button" onClick={addMonth} className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
               <Plus className="h-3.5 w-3.5" /> Ajouter le mois
             </button>
-            <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+            <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
               <Save className="h-3.5 w-3.5" /> {saving ? "…" : "Enregistrer"}
             </button>
           </div>
@@ -648,14 +648,14 @@ export function JournalCard({ name }: { name: string }) {
         ) : (
           <div className="flex items-center gap-2">
             {sorted.length > 0 && (
-              <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
+              <button type="button" onClick={cancel} className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
                 <X className="h-3.5 w-3.5" /> Annuler
               </button>
             )}
-            <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
               <Plus className="h-3.5 w-3.5" /> Échange
             </button>
-            <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+            <button type="button" onClick={save} disabled={saving || loading || loadedKey !== key} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
               <Save className="h-3.5 w-3.5" /> {saving ? "…" : "Enregistrer"}
             </button>
           </div>
@@ -1069,7 +1069,7 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
               contenu{draftTot > 1 ? "s" : ""}{recoTot > 0 ? ` sur ${recoTot} recommandés` : ""}
             </span>
           </div>
-          <button type="button" onClick={saveCadence} disabled={saving} className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+          <button type="button" onClick={saveCadence} disabled={saving} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
             <Save className="h-3.5 w-3.5" /> {saving ? "Envoi…" : "Envoyer ma cadence"}
           </button>
         </div>

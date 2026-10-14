@@ -555,7 +555,7 @@ export function Engagement() {
               <button
                 type="button"
                 onClick={cancelEdit}
-                className="rounded-lg border border-border px-3 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                className="rounded-full border border-border px-3 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
               >
                 Annuler
               </button>
@@ -564,7 +564,7 @@ export function Engagement() {
               type="button"
               onClick={save}
               disabled={saving || !hasInputs}
-              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {savedOk ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
               {savedOk ? "Enregistré" : saving ? "Enregistrement…" : editingId ? "Mettre à jour" : "Enregistrer"}
@@ -715,7 +715,7 @@ function DetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
             aria-label="Fermer"
           >
             <X className="h-4 w-4" />
@@ -744,14 +744,14 @@ function DetailModal({
           <button
             type="button"
             onClick={onDelete}
-            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-[#E5484D] transition-colors hover:bg-rowhover"
+            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-[#E5484D] transition-colors hover:bg-rowhover"
           >
             <X className="h-3.5 w-3.5" /> Supprimer
           </button>
           <button
             type="button"
             onClick={onEdit}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             <Pencil className="h-3.5 w-3.5" /> Modifier
           </button>

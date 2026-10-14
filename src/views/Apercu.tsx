@@ -99,7 +99,7 @@ function WideLink({ label, onClick }: { label: string; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-muted px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+      className="flex w-full items-center justify-center gap-1.5 rounded-full bg-muted px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
     >
       {label} <ArrowRight className="h-3.5 w-3.5" />
     </button>
@@ -264,7 +264,7 @@ export function ApercuView({
     <div>
       {/* En-tête : salutation + période */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="page-title text-[24px] font-semibold tracking-tight md:text-[28px]">{greeting()}</h1>
+        <h1 className="page-title text-[26px] font-semibold leading-tight tracking-[-0.02em] md:text-[32px]">{greeting()}</h1>
         <div className="flex flex-wrap items-center gap-2">
           <Tabs
             size="sm"

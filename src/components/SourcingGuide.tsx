@@ -94,7 +94,7 @@ export function SourcingGuide({ onClose }: { onClose: () => void }) {
         </section>
 
         <div className="mt-5 flex justify-end">
-          <button type="button" onClick={onClose} className="rounded-lg bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90">C'est compris</button>
+          <button type="button" onClick={onClose} className="rounded-full bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90">C'est compris</button>
         </div>
       </div>
     </Overlay>

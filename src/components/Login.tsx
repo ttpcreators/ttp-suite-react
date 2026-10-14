@@ -228,7 +228,7 @@ export function Login() {
             <button
               type="submit"
               disabled={isLoading}
-              className="mt-1 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[14px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+              className="mt-1 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-primary text-[14px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
             >
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {isLoading ? "Connexion…" : "Se connecter"}

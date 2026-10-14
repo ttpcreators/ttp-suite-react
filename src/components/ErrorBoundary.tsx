@@ -135,7 +135,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <button
                 type="button"
                 onClick={forceUpdate}
-                className="mt-4 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:opacity-90"
+                className="mt-4 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:opacity-90"
               >
                 Recharger l'app
               </button>
@@ -171,7 +171,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <button
                 type="button"
                 onClick={selfHeal}
-                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:opacity-90"
+                className="rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:opacity-90"
               >
                 Recharger l'app
               </button>
@@ -196,7 +196,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <button
             type="button"
             onClick={selfHeal}
-            className="mt-5 w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90"
+            className="mt-5 w-full rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90"
           >
             Recharger l'app
           </button>

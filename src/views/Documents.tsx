@@ -555,7 +555,7 @@ export function Documents() {
                     href={previewDoc.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                    className="rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
                   >
                     Ouvrir le fichier
                   </a>

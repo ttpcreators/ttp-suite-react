@@ -165,7 +165,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                     <div className="flex gap-2">
                       <DaySelect value={day} onChange={setDay} />
                       <button type="button" onClick={() => void add()} disabled={!text.trim()}
-                        className="h-9 shrink-0 rounded-lg bg-primary px-3.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+                        className="h-9 shrink-0 rounded-full bg-primary px-3.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
                         Ajouter
                       </button>
                     </div>
@@ -190,7 +190,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                               className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 text-[13px] text-foreground outline-none focus:border-primary" />
                             <div className="flex gap-2">
                               <DaySelect value={editDay} onChange={setEditDay} />
-                              <button type="button" onClick={() => void saveEdit(r)} className="h-9 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground">Enregistrer</button>
+                              <button type="button" onClick={() => void saveEdit(r)} className="h-9 rounded-full bg-primary px-3 text-[13px] font-medium text-primary-foreground">Enregistrer</button>
                               <button type="button" onClick={() => setEditId(null)} aria-label="Annuler" className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground hover:bg-rowhover"><X className="h-4 w-4" /></button>
                             </div>
                           </li>

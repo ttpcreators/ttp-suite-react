@@ -466,7 +466,7 @@ function GiftDetail({ g, onClose, onEdit }: { g: GiftRow; onClose: () => void; o
               <span className={cn("size-1.5 rounded-full", st.dot)} /> {st.label}
             </div>
           </div>
-          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -495,7 +495,7 @@ function GiftDetail({ g, onClose, onEdit }: { g: GiftRow; onClose: () => void; o
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">
-          <button type="button" onClick={onEdit} className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+          <button type="button" onClick={onEdit} className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
             <Pencil className="h-3.5 w-3.5" /> Modifier
           </button>
         </div>

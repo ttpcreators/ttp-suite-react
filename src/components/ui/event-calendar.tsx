@@ -349,7 +349,7 @@ export function EventCalendar({
           <button
             type="button"
             onClick={goToday}
-            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="rounded-full border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
           >
             Aujourd'hui
           </button>
@@ -765,7 +765,7 @@ function EventModal({
           <button
             type="button"
             onClick={onClose}
-            className="grid h-7 w-7 place-items-center rounded-lg text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+            className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
             aria-label="Fermer"
           >
             <X className="h-4 w-4" />
@@ -840,7 +840,7 @@ function EventModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-border bg-surface px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+              className="rounded-full border border-border bg-surface px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
               {ro ? "Fermer" : "Annuler"}
             </button>
@@ -848,7 +848,7 @@ function EventModal({
               <button
                 type="submit"
                 disabled={!canSave}
-                className="rounded-lg bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                className="rounded-full bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
               >
                 {busy ? "Enregistrement…" : "Enregistrer"}
               </button>
