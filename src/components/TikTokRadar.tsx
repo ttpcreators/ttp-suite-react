@@ -109,9 +109,9 @@ export function TikTokRadar() {
     const { data, error } = await supabase.functions.invoke("tt-radar", { body: mode ? { mode } : { days: 30 } });
     setRunning(false);
     const r = (data ?? {}) as State & { error?: string };
+    setReload((n) => n + 1); // relit l'état (message « en attente de l'accord » compris)
     if (error || r.error) return toast(r.error === "non_configure" ? "Le radar TikTok attend l'accord de TikTok" : r.error === "migration_manquante" ? "Le radar TikTok sera actif après le SQL" : "TikTok n'a pas répondu, réessaie");
     toast(`${r.saved ?? 0} contenu${(r.saved ?? 0) > 1 ? "s" : ""} sponsorisé${(r.saved ?? 0) > 1 ? "s" : ""} lu${(r.saved ?? 0) > 1 ? "s" : ""}${r.why ? ` · ${r.why}` : ""}`);
-    setReload((n) => n + 1);
   };
   const setBrandStatus = async (b: TtBrand, s: Status) => {
     const { error } = await supabase.from("tt_brand_status").upsert({ brand: b.key, status: s, at: new Date().toISOString() });
