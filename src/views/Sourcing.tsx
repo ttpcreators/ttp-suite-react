@@ -17,6 +17,7 @@ import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
 import { OutreachComposer } from "@/components/OutreachComposer";
 import { SourcingGuide } from "@/components/SourcingGuide";
 import { RivalWatch } from "@/components/RivalWatch";
+import { TikTokRadar } from "@/components/TikTokRadar";
 
 /**
  * SOURCING (agence) — deux outils, toujours via l'outil officiel de Meta (comptes pro) :
@@ -119,7 +120,7 @@ const TOOLS = [
   },
   {
     v: "radar" as const, icon: Radar, title: "Radar à marques", goal: "Pour trouver des clients",
-    text: "Toutes les 2 heures, l'app lit des posts de créatrices (les tiennes et d'autres) et te montre les marques qui paient des créatrices, ou que tes créatrices citent déjà.",
+    text: "Instagram : toutes les 2 heures, l'app lit des posts de créatrices et repère les marques qui les paient. TikTok : les partenariats payés déclarés en France, chaque matin.",
   },
   {
     v: "concurrents" as const, icon: Binoculars, title: "Agences concurrentes", goal: "Pour garder une longueur d'avance",
@@ -166,9 +167,9 @@ export function Sourcing() {
     <>
       <PageHeaderRow>
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          Instagram et YouTube
+          Instagram, YouTube et TikTok
           <HelpTip title="D'où viennent les chiffres ?" align="end">
-            <p>Des outils officiels de Meta (Instagram, le même que pour le Roster et le Scouting) et de Google (YouTube).</p>
+            <p>Des outils officiels de Meta (Instagram, le même que pour le Roster et le Scouting), de Google (YouTube) et de TikTok (bibliothèque des partenariats payés en Europe).</p>
             <p>YouTube : 10 000 unités offertes par jour ; une recherche par thème ou par marque en coûte environ 150.</p>
             <p>Seuls les comptes <span className="font-medium text-foreground">pro ou créateur</span> sont visibles. Les comptes perso apparaissent grisés.</p>
             <p>Meta limite le nombre de demandes par heure : si l'app dit « Meta a freiné », réessaie un peu plus tard.</p>
@@ -209,7 +210,7 @@ export function Sourcing() {
           );
         })}
       </div>
-      {tab === "createurs" ? <CreatorFinder /> : tab === "radar" ? <BrandRadar /> : <RivalWatch />}
+      {tab === "createurs" ? <CreatorFinder /> : tab === "radar" ? <RadarTool /> : <RivalWatch />}
     </>
   );
 }
@@ -860,6 +861,43 @@ const PERIODS = [
   { value: "90", label: "90 jours" },
   { value: "all", label: "Tout" },
 ];
+
+/** Radar à marques : Instagram (posts des créatrices) ou TikTok (partenariats payés déclarés en France). */
+function RadarTool() {
+  const [pf, setPf] = useState<"instagram" | "tiktok">(() => {
+    try {
+      return localStorage.getItem("ttp:radar-platform") === "tiktok" ? "tiktok" : "instagram";
+    } catch {
+      return "instagram";
+    }
+  });
+  const pick = (v: string) => {
+    const next = v === "tiktok" ? "tiktok" : "instagram";
+    setPf(next);
+    try {
+      localStorage.setItem("ttp:radar-platform", next);
+    } catch {
+      /* stockage indisponible */
+    }
+  };
+  return (
+    <div>
+      <div className="mb-3">
+        <Tabs
+          size="sm"
+          label="Réseau du radar"
+          value={pf}
+          onValueChange={pick}
+          items={[
+            { value: "instagram", label: "Instagram", icon: <PlatformIcon platform="instagram" className="h-3.5 w-3.5" /> },
+            { value: "tiktok", label: "TikTok", icon: <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" /> },
+          ]}
+        />
+      </div>
+      {pf === "tiktok" ? <TikTokRadar /> : <BrandRadar />}
+    </div>
+  );
+}
 
 function BrandRadar() {
   const [rows, setRows] = useState<RadarRow[] | null>(null);

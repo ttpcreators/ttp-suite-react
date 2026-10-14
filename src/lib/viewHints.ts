@@ -30,7 +30,7 @@ export const VIEW_HINTS: Partial<Record<ViewId, string>> = {
   messages: "Les messages privés Instagram de TTP : recherche, emails et suivi de prospection remplis tout seuls.",
   prospection: "Les marques que tu démarches, étape par étape jusqu'à la signature.",
   vivier: "Les créatrices repérées, que tu suis avant de les recruter.",
-  sourcing: "Trouve de nouvelles créatrices et des marques à démarcher grâce à Instagram et YouTube.",
+  sourcing: "Trouve de nouvelles créatrices et des marques à démarcher grâce à Instagram, YouTube et TikTok.",
   contrats: "Prépare les contrats : marque × créatrice, représentation, UGC.",
   documents: "Tous les fichiers de l'agence et des créatrices.",
   templates: "Tes modèles de mails et de messages, prêts à réutiliser.",

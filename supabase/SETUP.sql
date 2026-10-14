@@ -467,6 +467,36 @@ drop trigger if exists creators_tt_guard on public.creators;
 create trigger creators_tt_guard before insert or update on public.creators
   for each row execute function public.tt_guard();
 
+-- TikTok · radar à collabs (sql/2026-10-14-tiktok-radar ; cron tt-radar-quotidien dans ce
+-- fichier daté) : contenus sponsorisés en France (API Commercial Content de TikTok).
+create table if not exists public.tt_commercial (
+  id         text primary key,                 -- id du contenu chez TikTok
+  created    date,                             -- date de publication
+  label      text,                             -- « Paid partnership »…
+  brands     text[] not null default '{}',     -- marques qui paient
+  creator    text,                             -- @ TikTok de la créatrice (minuscules)
+  video_url  text,
+  cover      text,
+  country    text not null default 'FR',
+  fetched_at timestamptz not null default now()
+);
+create index if not exists tt_commercial_created_idx on public.tt_commercial (created desc);
+create index if not exists tt_commercial_creator_idx on public.tt_commercial (creator);
+create table if not exists public.tt_brand_status (
+  brand  text primary key,                     -- nom de marque en minuscules, sans accents
+  status text not null default 'nouveau' check (status in ('nouveau', 'ignore', 'pipeline')),
+  at     timestamptz not null default now()
+);
+alter table public.tt_commercial   enable row level security;
+alter table public.tt_brand_status enable row level security;
+revoke all on public.tt_commercial   from anon;
+revoke all on public.tt_brand_status from anon;
+drop policy if exists tt_commercial_agency_read on public.tt_commercial;
+create policy tt_commercial_agency_read on public.tt_commercial for select to authenticated using (public.is_agency());
+drop policy if exists tt_brand_status_agency on public.tt_brand_status;
+create policy tt_brand_status_agency on public.tt_brand_status for all to authenticated
+  using (public.is_agency()) with check (public.is_agency());
+
 -- Instagram · DM de TTP, posts programmés, agences concurrentes
 -- (sql/2026-10-14-instagram-dm-posts-concurrents ; crons ig-inbox-horaire et
 -- ig-publish-minute dans ce fichier daté, pas ici).
