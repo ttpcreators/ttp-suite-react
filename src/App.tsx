@@ -72,6 +72,7 @@ const Parametres = lazy(() => import("@/views/Parametres").then((m) => ({ defaul
 const Diagnostique = lazy(() => import("@/views/Diagnostique").then((m) => ({ default: m.Diagnostique })));
 const EngagementSuivi = lazy(() => import("@/views/EngagementSuivi").then((m) => ({ default: m.EngagementSuivi })));
 const Engagement = lazy(() => import("@/views/Engagement").then((m) => ({ default: m.Engagement })));
+const Pricing = lazy(() => import("@/views/Pricing").then((m) => ({ default: m.Pricing })));
 
 
 const VIEWS: Partial<Record<ViewId, ComponentType>> = {
@@ -107,6 +108,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   diagnostique: Diagnostique,
   suivi: EngagementSuivi,
   engagement: Engagement,
+  pricing: Pricing,
   corbeille: Corbeille,
   activite: Activite,
 };

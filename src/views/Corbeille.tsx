@@ -4,6 +4,7 @@ import { useAppState, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
+import { PageHeaderRow } from "@/components/ui/page-header";
 import {
   TABLE_LABELS,
   TRASH_TTL_DAYS,
@@ -81,11 +82,11 @@ export function Corbeille() {
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm text-muted-foreground">
-          {bin.length === 0 ? "Corbeille vide" : `${bin.length} élément${bin.length > 1 ? "s" : ""} supprimé${bin.length > 1 ? "s" : ""}`}
-        </div>
-        {bin.length > 0 && (
+      {bin.length > 0 && (
+        <PageHeaderRow>
+          <div className="text-sm text-muted-foreground">
+            {`${bin.length} élément${bin.length > 1 ? "s" : ""} supprimé${bin.length > 1 ? "s" : ""}`}
+          </div>
           <button
             type="button"
             onClick={() => setConfirmEmpty(true)}
@@ -93,13 +94,15 @@ export function Corbeille() {
           >
             <Trash2 className="h-3.5 w-3.5" /> Vider la corbeille
           </button>
-        )}
-      </div>
+        </PageHeaderRow>
+      )}
 
-      <div className="mb-4 flex items-start gap-2 rounded-xl border border-border bg-panel px-3.5 py-2.5 text-[11px] text-muted-foreground">
-        <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" />
-        Les éléments supprimés sont conservés ici comme sauvegarde et effacés automatiquement au bout de {TRASH_TTL_DAYS} jours. Tu peux les restaurer ou les supprimer définitivement à tout moment.
-      </div>
+      {bin.length > 0 && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-border bg-panel px-3.5 py-2.5 text-[11px] text-muted-foreground">
+          <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" />
+          Effacés automatiquement après {TRASH_TTL_DAYS} jours.
+        </div>
+      )}
 
       {bin.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface px-6 py-14 text-center shadow-sm">
@@ -107,7 +110,7 @@ export function Corbeille() {
             <Trash2 className="size-5" />
           </div>
           <div className="text-sm font-medium text-foreground">Rien dans la corbeille</div>
-          <div className="mt-1 text-xs text-faint">Ce que tu supprimes dans l'app atterrit ici (sauf mention contraire).</div>
+          <div className="mt-1 text-xs text-faint">Ce que tu supprimes arrive ici. (Les documents et les modèles sont supprimés tout de suite.)</div>
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">

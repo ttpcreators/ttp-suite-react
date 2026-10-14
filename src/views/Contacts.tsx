@@ -649,7 +649,7 @@ export function Contacts() {
         if (!res?.ok) {
           const d = (res?.detail ?? "").toLowerCase();
           if (d.includes("domain") || d.includes("verif") || d.includes("testing"))
-            toast("Domaine non vérifié dans Resend — vérifie ttpcreators.pro.");
+            toast("L'envoi automatique TTP n'est pas encore prêt (domaine à vérifier). Envoie via Gmail en attendant.");
           else toast(res?.detail ? `Échec : ${res.detail}` : "Envoi échoué — réessaie");
           return;
         }
@@ -863,7 +863,7 @@ export function Contacts() {
             title="Écrire un email (choisir les destinataires)"
           >
             <Mail className="h-3.5 w-3.5" />
-            <span>Email</span>
+            <span>Écrire un mail</span>
           </button>
           <AddButton label="Contact" onClick={openAdd} />
         </div>
@@ -906,7 +906,7 @@ export function Contacts() {
               options: [
                 { value: ALL_TAGS, label: "Tous" },
                 ...tagList.map((t) => ({ value: t, label: t })),
-                ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "Ajoutés par les créateurs" }] : []),
+                ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "Ajoutés par les créatrices" }] : []),
               ],
             },
             {
@@ -948,7 +948,7 @@ export function Contacts() {
         options={[
           { value: ALL_TAGS, label: "Tous" },
           ...tagList.map((t) => ({ value: t, label: t })),
-          ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "↳ Créateurs" }] : []),
+          ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "Ajoutés par les créatrices" }] : []),
         ]}
       />
 
@@ -1009,7 +1009,7 @@ export function Contacts() {
         <TextField label="Nom de famille" value={lastName} onChange={setLastName} className="sm:min-w-[130px]" />
         <TextField label="Rôle" value={role} onChange={setRole} />
         <SelectField
-          label="Tag"
+          label="Catégorie"
           value={tag}
           onChange={setTag}
           options={TAG_OPTIONS}
@@ -1022,7 +1022,7 @@ export function Contacts() {
 
       {currentRows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-6 text-center text-sm text-muted-foreground shadow-sm">
-          Aucun contact
+          Aucun contact pour l'instant. Ajoute ta première marque avec « + Contact », ou « Importer » un fichier CSV.
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-6 text-center text-sm text-muted-foreground shadow-sm">
@@ -1293,7 +1293,7 @@ export function Contacts() {
                               onClick={() => { setTouchDel(null); void saveTouches(selected, { remove: t.id }); }}
                               className="shrink-0 rounded bg-red-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-red-500"
                             >
-                              Suppr ?
+                              Supprimer ?
                             </button>
                           ) : (
                             <button type="button" onClick={() => setTouchDel(t.id)} className="shrink-0 text-faint transition-colors hover:text-red-500" title="Supprimer cette entrée">
@@ -1358,7 +1358,7 @@ export function Contacts() {
                   onClick={() => openMail(selected)}
                   className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-full bg-primary py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                 >
-                  <Mail className="h-3.5 w-3.5" /> Email
+                  <Mail className="h-3.5 w-3.5" /> Écrire un mail
                 </button>
               )}
               <button
@@ -1382,7 +1382,7 @@ export function Contacts() {
                     : "bg-primary text-primary-foreground hover:opacity-90",
                 )}
               >
-                Copier {selected.email ? "la fiche" : "toute la fiche"}
+                Copier la fiche
               </button>
             </div>
           </div>
@@ -1487,7 +1487,7 @@ export function Contacts() {
                     { value: "gmail", label: "Gmail", icon: <GmailLogo className="h-3.5 w-3.5" /> },
                     {
                       value: "resend",
-                      label: "Resend",
+                      label: "Envoi automatique TTP",
                       icon: (
                         <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
                           <path d="M4 3h8.6c3 0 5 1.8 5 4.6 0 2-1 3.4-2.8 4.1L18.9 21h-4.3l-2.7-7.7H8.1V21H4V3zm4.1 3.3v4.1h4c1.3 0 2.2-.8 2.2-2s-.9-2.1-2.2-2.1H8.1z" />
@@ -1499,7 +1499,7 @@ export function Contacts() {
                   onValueChange={(v) => setSendVia(v as "gmail" | "resend")}
                 />
                 <span className="text-[10px] text-faint">
-                  {sendVia === "gmail" ? "Depuis ta boîte Gmail — réponses dans tes fils" : "Depuis ton domaine TTP (Resend)"}
+                  {sendVia === "gmail" ? "Depuis ta boîte Gmail — réponses dans tes fils" : "Les réponses n'apparaîtront pas dans Mails."}
                 </span>
               </div>
               <div className="flex gap-2">
@@ -1537,7 +1537,7 @@ export function Contacts() {
       {confirmSend && (
         <ConfirmDialog
           title="Confirmer l'envoi"
-          message={`Envoyer à ${[...new Set(mailRecipients.map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))].length} destinataire(s) via ${sendVia === "gmail" ? "ta boîte Gmail" : "Resend"} ? Objet : « ${mailSubject.trim()} ».`}
+          message={`Envoyer à ${[...new Set(mailRecipients.map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))].length} destinataire(s) via ${sendVia === "gmail" ? "ta boîte Gmail" : "l'envoi automatique TTP"} ? Objet : « ${mailSubject.trim()} ».`}
           confirmLabel="Envoyer"
           cancelLabel="Revenir"
           onCancel={() => setConfirmSend(false)}

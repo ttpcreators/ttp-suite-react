@@ -79,6 +79,26 @@ const CAT_LABELS: Record<string, string> = {
   disponibilite: "Disponibilité",
 };
 
+/** Libellés lisibles des codes du journal (affichage seulement : les valeurs stockées ne changent pas). */
+const JOURNAL_LABELS: Record<string, string> = {
+  marc_envoye: "Message envoyé",
+  marc_ecarte: "Action écartée",
+  marc_prospect_valide: "Prospect validé",
+  marc_prospect_ecarte: "Prospect écarté",
+  marc_prospect_statut: "Statut du prospect changé",
+  marc_cercle_valide: "Ajouté au cercle",
+  marc_cercle_retire: "Retiré du cercle",
+  marc_memoire_suppr: "Info supprimée",
+  marc_lecon: "Nouvelle leçon",
+};
+/** Code inconnu : « mon_code » → « Mon code ». */
+function journalLabel(code: string): string {
+  const known = JOURNAL_LABELS[code];
+  if (known) return known;
+  const t = code.replace(/_/g, " ").trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : code;
+}
+
 const CERCLE_TYPES: Record<string, string> = {
   marque_cliente: "Marque cliente",
   agence_partenaire: "Agence partenaire",
@@ -347,10 +367,8 @@ export function AgentView() {
   if (notExposed) {
     return (
       <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/[0.04] px-5 py-10 text-center text-sm text-muted-foreground shadow-sm">
-        <div className="text-[15px] font-semibold text-foreground">Le schéma agent n'est pas encore exposé à l'app.</div>
-        <div className="mt-2">
-          Dashboard Supabase → Settings → API → « Exposed schemas » : ajouter <span className="font-mono text-[12px] text-foreground">agent</span> à la liste, puis recharge cette page.
-        </div>
+        <div className="text-[15px] font-semibold text-foreground">L'agent n'est pas encore branché à l'app.</div>
+        <div className="mt-2">Préviens Marc pour l'activer.</div>
       </div>
     );
   }
@@ -422,17 +440,17 @@ export function AgentView() {
                     {a.lien_spark && (
                       <a href={a.lien_spark} target="_blank" rel="noreferrer"
                         className="flex h-[34px] items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                        <ExternalLink className="h-3.5 w-3.5" /> Brouillon Spark
+                        <ExternalLink className="h-3.5 w-3.5" /> Ouvrir le brouillon (Spark)
                       </a>
                     )}
                     <div className="ml-auto flex items-center gap-2">
                       <button type="button" onClick={() => traiter(a, "ecarte")}
                         className="flex h-[34px] items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                        <X className="h-3.5 w-3.5" /> Écarté
+                        <X className="h-3.5 w-3.5" /> Écarter
                       </button>
                       <button type="button" onClick={() => traiter(a, "envoye")}
-                        className="flex h-[34px] items-center gap-1.5 rounded-full bg-primary px-4 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
-                        <Check className="h-3.5 w-3.5" /> Envoyé
+                        className="flex h-[34px] items-center gap-1.5 rounded-full bg-primary px-4 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                        <Check className="h-3.5 w-3.5" /> Marquer envoyé
                       </button>
                     </div>
                   </div>
@@ -444,7 +462,7 @@ export function AgentView() {
       </Section>
 
       {/* 3) La prospection */}
-      <Section icon={Search} title="Prospection de la semaine" count={proposes.length}>
+      <Section icon={Search} title="Marques proposées par l'agent" count={proposes.length}>
         {proposes.length === 0 ? (
           <Empty text="Aucune nouvelle proposition. L'agent en déposera après son analyse." />
         ) : (
@@ -475,7 +493,7 @@ export function AgentView() {
                     <X className="h-3.5 w-3.5" /> Écarter
                   </button>
                   <button type="button" onClick={() => deciderProspect(p, "valide")}
-                    className="flex h-[32px] flex-1 items-center justify-center gap-1.5 rounded-full bg-primary text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90">
+                    className="flex h-[32px] flex-1 items-center justify-center gap-1.5 rounded-full bg-primary text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
                     <Check className="h-3.5 w-3.5" /> Valider
                   </button>
                 </div>
@@ -486,7 +504,7 @@ export function AgentView() {
 
         {/* Suivi des prospects en cours */}
         <div className="mt-4">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-faint">Suivi en cours</div>
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-faint">Prospects en cours</div>
           {suivis.length === 0 ? (
             <Empty text="Aucun prospect en cours de suivi." />
           ) : (
@@ -590,7 +608,7 @@ export function AgentView() {
           {leconOpen ? (
             <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-3 sm:flex-row sm:items-end">
               <label className="flex flex-col gap-1 sm:w-40">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Module</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Sujet</span>
                 <input value={leconModule} onChange={(e) => setLeconModule(e.target.value)} placeholder="ex Prospection"
                   className="h-[36px] rounded-md border border-border bg-panel px-3 text-[12px] text-foreground outline-none focus:border-primary" />
               </label>
@@ -604,7 +622,7 @@ export function AgentView() {
                 <button type="button" onClick={() => setLeconOpen(false)}
                   className="h-[36px] rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground hover:bg-rowhover">Annuler</button>
                 <button type="button" onClick={ajouterLecon} disabled={leconBusy}
-                  className="h-[36px] rounded-full bg-primary px-4 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">Ajouter</button>
+                  className="h-[36px] rounded-full bg-primary px-4 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">Ajouter</button>
               </div>
             </div>
           ) : (
@@ -637,8 +655,8 @@ export function AgentView() {
         )}
       </Section>
 
-      {/* 7) Le journal d'activité (replié par défaut) */}
-      <Section icon={ScrollText} title="Journal d'activité" count={journal.length} collapsible defaultOpen={false}>
+      {/* 7) L'historique de l'agent (replié par défaut) */}
+      <Section icon={ScrollText} title="Historique de l'agent" count={journal.length} collapsible defaultOpen={false}>
         {journal.length === 0 ? (
           <Empty text="Le journal est vide. Chaque action de l'agent y laissera une trace." />
         ) : (
@@ -646,7 +664,7 @@ export function AgentView() {
             {journal.map((j) => (
               <div key={j.id} className="flex items-baseline gap-2.5 rounded-md px-2 py-1.5 text-[11px] hover:bg-rowhover">
                 <span className="shrink-0 tabular-nums text-faint">{fmtDT(j.cree_le)}</span>
-                <span className="shrink-0 font-semibold text-foreground">{j.action}</span>
+                <span className="shrink-0 font-semibold text-foreground">{journalLabel(j.action)}</span>
                 {j.detail && <span className="min-w-0 truncate text-muted-foreground">{j.detail}</span>}
               </div>
             ))}

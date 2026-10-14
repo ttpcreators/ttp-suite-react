@@ -351,8 +351,8 @@ export function Vivier() {
     }
   };
 
-  if (error) return <div className="rounded-2xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">Impossible de charger le vivier.</div>;
-  if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement du vivier…</AnimatedBadge>;
+  if (error) return <div className="rounded-2xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">Impossible de charger le Scouting.</div>;
+  if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>;
 
   const filtered = rows.filter((r) => {
     if (tagFilter !== ALL && tagKey(r.tag ?? "") !== tagFilter) return false;
@@ -417,9 +417,9 @@ export function Vivier() {
         ]}
       />
 
-      <InlineForm open={formOpen} title={editId ? "Modifier le créateur" : "Nouveau créateur (vivier)"} onClose={() => setFormOpen(false)} onSubmit={submit} submitLabel={editId ? "Enregistrer" : "Ajouter"}>
+      <InlineForm open={formOpen} title={editId ? "Modifier le créateur" : "Nouvelle créatrice à suivre"} onClose={() => setFormOpen(false)} onSubmit={submit} submitLabel={editId ? "Enregistrer" : "Ajouter"}>
         <TextField label="Nom" value={fName} onChange={setFName} placeholder="Ex : Léna Marchand" className="min-w-[200px] flex-[2]" />
-        <TextField label="Handle / @" value={fHandle} onChange={setFHandle} placeholder="@lena.mrchd" className="min-w-[150px] flex-1" />
+        <TextField label="Compte Instagram ou YouTube" value={fHandle} onChange={setFHandle} placeholder="@lena.mrchd" className="min-w-[150px] flex-1" />
         <TextField label="Email" value={fEmail} onChange={setFEmail} type="email" placeholder="lena@email.com" className="min-w-[180px] flex-1" />
         <TextField label="Catégorie" value={fTag} onChange={setFTag} placeholder="Ex : Mode, Sport, Beauté" className="min-w-[150px] flex-1" />
         <AutoGrowTextField label="Note (tarif, dispo, remarques…)" value={fNote} onChange={setFNote} className="min-w-full" />
@@ -460,14 +460,14 @@ export function Vivier() {
                       {growthOf(r.id) >= 0 ? "+" : "−"}{fmtCompact(Math.abs(growthOf(r.id)))}
                     </div>
                   )}
-                  {tracking[r.id]?.igEr != null && <div className="text-[10px] text-faint" title="Engagement public (12 derniers posts)">ER {fmtEr(tracking[r.id]?.igEr)}</div>}
+                  {tracking[r.id]?.igEr != null && <div className="text-[10px] text-faint" title="Engagement public (12 derniers posts)">Engagement {fmtEr(tracking[r.id]?.igEr)}</div>}
                 </div>
               )}
               <span className={cn("hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-medium sm:inline-flex", statusMeta(statusOf(r.id)).pill)}>
                 <span className={cn("h-1.5 w-1.5 rounded-full", statusMeta(statusOf(r.id)).dot)} />{statusMeta(statusOf(r.id)).label}
               </span>
               {r.email && (
-                <button type="button" onClick={(e) => { e.stopPropagation(); openMail(r); }} title="Solliciter par email" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-primary/20">
+                <button type="button" onClick={(e) => { e.stopPropagation(); openMail(r); }} title={`Écrire à ${r.name}`} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-primary/20">
                   <Mail className="h-4 w-4" />
                 </button>
               )}
@@ -631,7 +631,7 @@ export function Vivier() {
             <div className="mt-4 flex gap-2">
               {selected.email && (
                 <button type="button" onClick={() => { const r = selected; setSelected(null); openMail(r); }} className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
-                  <Send className="h-3.5 w-3.5" /> Solliciter
+                  <Send className="h-3.5 w-3.5" /> Écrire à {selected.name}
                 </button>
               )}
               <button type="button" onClick={() => { const r = selected; setSelected(null); openEdit(r); }} className={cn("flex items-center justify-center gap-1.5 rounded-full border border-border px-4 py-2.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover", !selected.email && "flex-1")}>
@@ -647,7 +647,7 @@ export function Vivier() {
         <Overlay className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClose={() => setMailRow(null)}>
           <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2 text-sm font-bold text-foreground"><Sparkles className="h-4 w-4 text-primary" /> Solliciter {mailRow.name}</div>
+              <div className="flex items-center gap-2 text-sm font-bold text-foreground"><Sparkles className="h-4 w-4 text-primary" /> Écrire à {mailRow.name}</div>
               <button type="button" onClick={() => setMailRow(null)} className="shrink-0 text-faint transition-colors hover:text-foreground"><X className="h-5 w-5" /></button>
             </div>
             <div className="mb-2 text-[11px] text-faint">À : {mailRow.email}</div>

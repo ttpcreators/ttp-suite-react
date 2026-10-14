@@ -33,6 +33,14 @@ type Row = {
 
 // Ordre de colonnes fidèle à l'original (app.js : stages).
 const STAGE_ORDER = ["Prospection", "Contact", "Négociation", "Signé"];
+// Libellés affichés (les valeurs enregistrées restent celles de STAGE_ORDER).
+const STAGE_LABEL: Record<string, string> = {
+  Prospection: "Repérée",
+  Contact: "Contactée",
+  Négociation: "En négociation",
+  Signé: "Signée",
+};
+const stageLabel = (s: string) => STAGE_LABEL[s] ?? s;
 
 // Couleur de la pastille par tone (équivalents de toneHex de l'original).
 const DOT_CLASS: Record<NonNullable<Row["tone"]>, string> = {
@@ -43,7 +51,7 @@ const DOT_CLASS: Record<NonNullable<Row["tone"]>, string> = {
   danger: "bg-signal",
 };
 
-const STAGE_OPTIONS = STAGE_ORDER.map((s) => ({ value: s, label: s }));
+const STAGE_OPTIONS = STAGE_ORDER.map((s) => ({ value: s, label: stageLabel(s) }));
 
 export function Prospection() {
   const [rows, setRows] = useState<Row[] | null>(() =>
@@ -146,9 +154,9 @@ export function Prospection() {
   const header = (
     <PageHeaderRow>
       <div className="text-sm text-muted-foreground">
-        {rows === null
-          ? "Pipeline de prospection"
-          : `${rows.length} prospect${rows.length > 1 ? "s" : ""} au pipeline`}
+        {rows === null || error
+          ? null
+          : `${rows.length} marque${rows.length > 1 ? "s" : ""} en cours`}
       </div>
       <AddButton label="Prospect" onClick={() => { resetForm(); setFormOpen(true); }} />
     </PageHeaderRow>
@@ -165,10 +173,10 @@ export function Prospection() {
       <TextField label="Marque" value={brand} onChange={setBrand} />
       <TextField label="Contact" value={contact} onChange={setContact} />
       <TextField
-        label="Valeur"
+        label="Budget estimé"
         value={value}
         onChange={setValue}
-        placeholder="ex 32 000 €"
+        placeholder="ex. 32 000 €"
       />
       <SelectField
         label="Étape"
@@ -199,10 +207,10 @@ export function Prospection() {
         {header}
         {form}
         <div className="rounded-2xl border border-border bg-surface shadow-sm px-4 py-10 text-center">
-          <p className="text-sm font-medium text-foreground">Pipeline vide</p>
+          <p className="text-sm font-medium text-foreground">{error ? "Chargement impossible" : "Pipeline vide"}</p>
           <p className="text-xs text-muted-foreground mt-1.5">
             {error
-              ? "Impossible de charger les prospects."
+              ? "Les marques n'ont pas pu être chargées. Réessaie dans un instant."
               : "Ajoute ta première marque à prospecter avec « + Prospect »."}
           </p>
         </div>
@@ -226,7 +234,7 @@ export function Prospection() {
       className="mb-4"
       label="Filtrer par étape"
       wrap
-      items={stageChips.map((chip) => ({ value: chip, label: chip }))}
+      items={stageChips.map((chip) => ({ value: chip, label: stageLabel(chip) }))}
       value={effStage}
       onValueChange={setStageFilter}
     />
@@ -283,7 +291,7 @@ export function Prospection() {
             <div key={stage}>
               <div className="flex items-center justify-between px-1.5 pb-3">
                 <span className="text-[12px] font-medium text-foreground">
-                  {stage}
+                  {stageLabel(stage)}
                 </span>
                 <span className="text-[10px] font-semibold text-muted-foreground">
                   {cards.length}
@@ -318,10 +326,10 @@ export function Prospection() {
                           // Changement d'étape direct depuis le menu de la carte.
                           ...STAGE_ORDER.filter((s) => s !== card.stage).map((s) => ({
                             key: `stage-${s}`,
-                            label: `Passer en ${s}`,
+                            label: `Passer en « ${stageLabel(s)} »`,
                             icon: ArrowRight,
                             onClick: () => {
-                              void saveEdit(card.id, { stage: s }).then((ok) => ok && toast(`Passé en ${s} ✓`));
+                              void saveEdit(card.id, { stage: s }).then((ok) => ok && toast(`Passé en « ${stageLabel(s)} » ✓`));
                             },
                           })),
                           {

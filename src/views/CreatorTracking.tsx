@@ -125,7 +125,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
       setSaving(false);
       setMode("view");
       if (!error) notifyCreator("roadmap", name, "Ta feuille de route a été mise à jour — jette un œil ✨");
-      toast(error ? "Fiche enregistrée ✓ (partage créateur indispo — SQL creator-roadmap ?)" : "Fiche éditoriale enregistrée ✓");
+      toast(error ? "Fiche enregistrée ✓ (pas encore visible dans son espace)" : "Fiche éditoriale enregistrée ✓");
       return;
     }
     setSaving(false);
@@ -467,7 +467,7 @@ export function MonthlyTracking({ name }: { name: string }) {
                   )}
                   {(m.erInsta || m.erTiktok || m.vuesMoy) && (
                     <div className="mt-3 grid grid-cols-3 gap-2">
-                      {[{ l: "ER Instagram", v: m.erInsta }, { l: "ER TikTok", v: m.erTiktok }, { l: "Vues moyennes", v: m.vuesMoy }].map((x) => (
+                      {[{ l: "Engagement Instagram", v: m.erInsta }, { l: "Engagement TikTok", v: m.erTiktok }, { l: "Vues moyennes", v: m.vuesMoy }].map((x) => (
                         <div key={x.l} className="rounded-xl bg-panel/60 px-3 py-2.5">
                           <div className="text-[15px] font-bold text-foreground">{x.v || "—"}</div>
                           <div className="mt-0.5 text-[11px] font-medium text-muted-foreground">{x.l}</div>
@@ -546,10 +546,10 @@ export function MonthlyTracking({ name }: { name: string }) {
                   </button>
                 )}
 
-                {/* ER + vues */}
+                {/* Engagement + vues */}
                 <div className="mt-2 grid grid-cols-3 gap-2">
-                  <Field label="ER Instagram"><input value={m.erInsta} onChange={(e) => editMonth(m.month, { erInsta: e.target.value })} placeholder="3,5 %" className={IN} /></Field>
-                  <Field label="ER TikTok"><input value={m.erTiktok} onChange={(e) => editMonth(m.month, { erTiktok: e.target.value })} placeholder="6 %" className={IN} /></Field>
+                  <Field label="Engagement Instagram"><input value={m.erInsta} onChange={(e) => editMonth(m.month, { erInsta: e.target.value })} placeholder="3,5 %" className={IN} /></Field>
+                  <Field label="Engagement TikTok"><input value={m.erTiktok} onChange={(e) => editMonth(m.month, { erTiktok: e.target.value })} placeholder="6 %" className={IN} /></Field>
                   <Field label="Vues moyennes"><input value={m.vuesMoy} onChange={(e) => editMonth(m.month, { vuesMoy: e.target.value })} placeholder="45 K" className={IN} /></Field>
                 </div>
 
@@ -826,6 +826,11 @@ export function RosterTracking({ onOpen }: { onOpen?: (name: string) => void }) 
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-5 py-10 text-center text-[13px] text-muted-foreground">Aucune créatrice au roster.</td>
+                </tr>
+              )}
               {rows.map((r) => (
                 <tr key={r.name} onClick={() => onOpen?.(r.name)} className={cn("transition-colors hover:bg-rowhover", onOpen && "cursor-pointer")}>
                   <td className="px-5 py-3.5 text-[13px] font-semibold text-foreground">{titleCase(r.name)}</td>

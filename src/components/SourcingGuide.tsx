@@ -35,19 +35,9 @@ export function SourcingGuide({ onClose }: { onClose: () => void }) {
           <div className="flex items-center gap-2 text-[17px] font-semibold text-foreground"><BookOpen className="h-5 w-5 text-primary" /> Mode d'emploi du Sourcing</div>
           <button type="button" onClick={onClose} aria-label="Fermer" className="text-faint transition-colors hover:text-foreground"><X className="h-5 w-5" /></button>
         </div>
-        <p className="mb-5 text-[13px] text-muted-foreground">Trois outils, à partir d'Instagram (comptes pro) et de YouTube. Tout ce que tu fais ici est partagé avec l'équipe.</p>
+        <p className="mb-5 text-[13px] text-muted-foreground">Trois outils, à partir d'Instagram, TikTok et YouTube. Tout ce que tu fais ici est partagé avec l'équipe.</p>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <section className="rounded-xl border border-border p-4">
-            <div className="mb-0.5 text-[14px] font-semibold text-foreground">Radar à marques</div>
-            <div className="mb-3 text-[12px] text-primary">Pour trouver des clients</div>
-            <Steps items={[
-              ["Choisis une tuile.", "« Clients potentiels » : la marque paie ou offre des produits à des créatrices. « Contacts chauds » : tes créatrices en parlent sans être payées."],
-              ["Vérifie.", "« Voir les preuves » montre les posts où la marque apparaît. Regarde que c'est bien un partenariat et que la marque colle à tes créatrices."],
-              ["Décide.", "« + Pipeline » pour la suivre, « Contacter » pour écrire tout de suite, ou « Pas pertinent » pour la retirer."],
-            ]} />
-            <p className="mt-3 text-[11px] leading-snug text-faint">Le radar tourne tout seul toutes les 2 heures. Le bloc « Vérification des marques » montre où il en est.</p>
-          </section>
           <section className="rounded-xl border border-border p-4">
             <div className="mb-0.5 text-[14px] font-semibold text-foreground">Trouver des créatrices</div>
             <div className="mb-3 text-[12px] text-primary">Pour recruter</div>
@@ -57,6 +47,16 @@ export function SourcingGuide({ onClose }: { onClose: () => void }) {
               ["Agis.", "« Contacter » (mail depuis ta boîte Gmail, ou message Instagram) ou « + Scouting » pour la suivre plus tard."],
             ]} />
             <p className="mt-3 text-[11px] leading-snug text-faint">Ouvre toujours son profil (clic sur son nom) avant d'écrire : le score aide à trier, il ne remplace pas ton œil.</p>
+          </section>
+          <section className="rounded-xl border border-border p-4">
+            <div className="mb-0.5 text-[14px] font-semibold text-foreground">Radar à marques</div>
+            <div className="mb-3 text-[12px] text-primary">Pour trouver des clients</div>
+            <Steps items={[
+              ["Choisis une tuile.", "« Clients potentiels » : la marque paie ou offre des produits à des créatrices. « Contacts chauds » : tes créatrices en parlent sans être payées."],
+              ["Vérifie.", "« Voir les preuves » montre les posts où la marque apparaît. Regarde que c'est bien un partenariat et que la marque colle à tes créatrices."],
+              ["Décide.", "« + Pipeline » pour la suivre, « Contacter » pour écrire tout de suite, ou « Pas pertinent » pour la retirer."],
+            ]} />
+            <p className="mt-3 text-[11px] leading-snug text-faint">Le radar tourne tout seul. Instagram : toutes les 2 heures. TikTok et YouTube : chaque matin. Le bloc « Vérification des marques » montre où il en est.</p>
           </section>
           <section className="rounded-xl border border-border p-4 md:col-span-2">
             <div className="mb-0.5 text-[14px] font-semibold text-foreground">Agences concurrentes</div>
@@ -73,10 +73,10 @@ export function SourcingGuide({ onClose }: { onClose: () => void }) {
         <section className="mt-4 rounded-xl bg-panel/60 p-4">
           <div className="mb-2.5 text-[13px] font-semibold text-foreground">Le vocabulaire</div>
           <div className="flex flex-col gap-1.5">
-            <Word term="PAYÉ">Le post dit #ad, publicité, collaboration commerciale, sponsorisé…</Word>
-            <Word term="OFFERT / CODE">Produit offert, code promo ou réduction.</Word>
-            <Word term="SPONTANÉ">Aucun signe de partenariat : la créatrice en parle d'elle-même.</Word>
-            <Word term="ROSTER · SCOUTING · HORS AGENCE">Chez qui le radar a vu la marque : tes créatrices, celles que tu suis, ou des inconnues (à recruter : « + Scouting »).</Word>
+            <Word term="Payé">Le post dit #ad, publicité, collaboration commerciale, sponsorisé…</Word>
+            <Word term="Offert / code">Produit offert, code promo ou réduction.</Word>
+            <Word term="Spontané">Aucun signe de partenariat : la créatrice en parle d'elle-même.</Word>
+            <Word term="Roster · Scouting · Hors agence">Chez qui le radar a vu la marque : tes créatrices, celles que tu suis, ou des inconnues (à recruter : « + Scouting »).</Word>
             <Word term="À confirmer">L'app n'est pas sûre que ce compte soit une marque : vérifie avant d'écrire.</Word>
             <Word term="Potentiel · Pépite">Note sur 100 d'une créatrice (engagement selon sa taille, rythme, partenariats, email, sans agence). Pépite = 70 et plus.</Word>
             <Word term="Quota Meta">Meta limite les demandes par heure. Au-delà de 80 %, l'app fait une pause ; ça redescend tout seul.</Word>

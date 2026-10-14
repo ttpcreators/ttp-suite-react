@@ -255,7 +255,7 @@ export function AgencyTab() {
             rel="noreferrer"
             className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
           >
-            <ExternalLink className="h-3.5 w-3.5" /> <span>Voir le deck</span>
+            <ExternalLink className="h-3.5 w-3.5" /> <span>Voir en ligne</span>
           </a>
           <a
             href={`${PUBLIC_URL}en/`}
@@ -337,20 +337,20 @@ export function AgencyTab() {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className={LBL}>Nb créateurs (auto si vide)</label>
+                  <label className={LBL}>Nombre de créatrices</label>
                   <input
                     value={kit.kpis.creatorsOverride}
                     onChange={(e) => patchKpis({ creatorsOverride: e.target.value })}
-                    placeholder="auto"
+                    placeholder="calculé automatiquement"
                     className={IN}
                   />
                 </div>
                 <div>
-                  <label className={LBL}>Abonnés cumulés (auto si vide)</label>
+                  <label className={LBL}>Abonnés cumulés</label>
                   <input
                     value={kit.kpis.followersOverride}
                     onChange={(e) => patchKpis({ followersOverride: e.target.value })}
-                    placeholder="auto"
+                    placeholder="calculé automatiquement"
                     className={IN}
                   />
                 </div>
@@ -652,8 +652,8 @@ export function AgencyTab() {
                 boxClass="h-32 w-48"
               />
               <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-                Photo d'équipe / studio conseillée (paysage). Sans photo, le deck garde le monogramme TTP. Après un
-                upload, clique « Enregistrer ».
+                Photo d'équipe / studio conseillée (paysage). Sans photo, le deck garde le monogramme TTP. Pense à
+                cliquer « Enregistrer » après avoir ajouté la photo.
               </p>
             </div>
           </section>

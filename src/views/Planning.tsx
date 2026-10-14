@@ -236,7 +236,7 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
   const onDelete = async (id: string): Promise<boolean> => {
     if (await dbDelete("events", id)) {
       setRows((prev) => (prev ?? []).filter((r) => r.id !== id));
-      toast("Supprimé");
+      toast("Supprimé définitivement");
       return true;
     }
     toast("Suppression impossible");

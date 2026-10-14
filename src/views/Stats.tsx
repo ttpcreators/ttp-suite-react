@@ -404,15 +404,6 @@ export function Stats() {
   // Factures réellement émises (hors brouillons), pour l'indication de la carte CA.
   const issuedCount = data.invoices.filter((iv) => iv.status !== "brouillon").length;
 
-  // Volume par module
-  const volumeData = [
-    { name: "Factures", value: data.invoices.length, color: COLORS.primary },
-    { name: "Briefs", value: data.briefs, color: COLORS.indigo },
-    { name: "Idées", value: data.ideas, color: COLORS.cyan },
-    { name: "À faire", value: data.todos, color: COLORS.amber },
-    { name: "Contacts", value: data.contacts, color: COLORS.green },
-  ];
-
   return (
     <div className="space-y-4">
       {/* KPIs */}
@@ -436,16 +427,16 @@ export function Stats() {
           value={`${activeCreators}`}
           delta={snapDelta(activeCreators, "activeCreators")}
           lastValue={prevSnap ? String(prevSnap.activeCreators) : undefined}
-          compareLabel={prevLbl ? `Vs ${prevLbl}` : undefined}
+          compareLabel={prevLbl ? `vs ${prevLbl}` : undefined}
           hint={`${data.creators.length} au total`}
         />
         <StatCard
           icon={TrendingUp}
-          label="Followers cumulés"
+          label="Abonnés cumulés"
           value={fmtK(totalFollowers)}
           delta={snapDelta(totalFollowers, "totalFollowers")}
           lastValue={prevSnap ? fmtK(prevSnap.totalFollowers) : undefined}
-          compareLabel={prevLbl ? `Vs ${prevLbl}` : undefined}
+          compareLabel={prevLbl ? `vs ${prevLbl}` : undefined}
           hint="tous créateurs"
         />
         <StatCard
@@ -454,7 +445,7 @@ export function Stats() {
           value={`${avgEr.toFixed(1).replace(".", ",")} %`}
           delta={snapDelta(avgEr, "avgEr")}
           lastValue={prevSnap ? `${prevSnap.avgEr.toFixed(1).replace(".", ",")} %` : undefined}
-          compareLabel={prevLbl ? `Vs ${prevLbl}` : undefined}
+          compareLabel={prevLbl ? `vs ${prevLbl}` : undefined}
           hint={`${erVals.length} mesuré${erVals.length > 1 ? "s" : ""}`}
         />
         <StatCard
@@ -463,7 +454,7 @@ export function Stats() {
           value={`${data.briefs}`}
           delta={snapDelta(data.briefs, "briefs")}
           lastValue={prevSnap ? String(prevSnap.briefs) : undefined}
-          compareLabel={prevLbl ? `Vs ${prevLbl}` : undefined}
+          compareLabel={prevLbl ? `vs ${prevLbl}` : undefined}
           hint={`${data.ideas} idées · ${data.todos} à faire`}
         />
         <StatCard icon={ContactIcon} label="Contacts" value={`${data.contacts}`} hint="réseau agence" />
@@ -587,31 +578,6 @@ export function Stats() {
           )}
         </ChartCard>
 
-        {/* Volume par module */}
-        <ChartCard title="Volume d'activité" subtitle="Éléments par module">
-          <ChartContainer config={{}} className="h-[240px]">
-            <BarChart data={volumeData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-              <defs>
-                {volumeData.map((d, i) => (
-                  <linearGradient key={i} id={`vol-${i}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={d.color} stopOpacity={0.95} />
-                    <stop offset="100%" stopColor={d.color} stopOpacity={0.5} />
-                  </linearGradient>
-                ))}
-              </defs>
-              <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="4 8" strokeOpacity={0.6} />
-              <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickMargin={8} />
-              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} allowDecimals={false} tickFormatter={(v) => fmtK(Number(v))} width={36} />
-              <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(148,163,184,0.1)" }} />
-              <Bar dataKey="value" radius={[7, 7, 0, 0]} maxBarSize={46}>
-                {volumeData.map((d, i) => (
-                  <Cell key={d.name} fill={`url(#vol-${i})`} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ChartContainer>
-        </ChartCard>
-
         {/* Top créateurs par CA */}
         <ChartCard title="Top créateurs · CA facturé" subtitle="8 premiers par montant facturé">
           {topCreators.length === 0 ? (
@@ -637,8 +603,8 @@ export function Stats() {
           )}
         </ChartCard>
 
-        {/* Followers par créateur */}
-        <ChartCard title="Followers par créateur" subtitle="8 plus grosses audiences">
+        {/* Abonnés par créatrice */}
+        <ChartCard title="Abonnés par créatrice" subtitle="8 plus grosses audiences">
           {followersData.length === 0 ? (
             <div className="grid h-[260px] place-items-center text-sm text-faint">Aucune donnée</div>
           ) : (
@@ -654,7 +620,7 @@ export function Stats() {
                 <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => String(v).split(" ")[0]} interval={0} angle={-35} textAnchor="end" height={52} />
                 <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtK(Number(v))} width={52} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(148,163,184,0.1)" }} />
-                <Bar dataKey="followers" fill="url(#folGrad)" radius={[7, 7, 0, 0]} maxBarSize={56} />
+                <Bar dataKey="followers" name="Abonnés" fill="url(#folGrad)" radius={[7, 7, 0, 0]} maxBarSize={56} />
               </BarChart>
             </ChartContainer>
           )}

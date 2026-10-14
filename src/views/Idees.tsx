@@ -203,7 +203,7 @@ export function Idees() {
     if (!(await dbUpdate("ideas", id, { subtasks }))) {
       setRows(prev);
       if (prev) setCache("ideas", prev);
-      toast("Erreur — lance le SQL sous-tâches ?");
+      toast("Sous-tâche non enregistrée, réessaie");
     }
   };
 
@@ -374,8 +374,8 @@ export function Idees() {
                   <div className="min-w-0">
                     <div className="whitespace-pre-wrap text-sm font-medium leading-relaxed text-foreground">{row.text}</div>
                     <div className="mt-0.5 text-xs text-muted-foreground">
-                      {row.creator ? titleCase(row.creator) : "Toutes"} ·{" "}
-                      {row.source === "creator" ? "Proposée par le créateur" : "Ajoutée par l'agence"}
+                      {row.creator ? titleCase(row.creator) : "Idée générale"} ·{" "}
+                      {row.source === "creator" ? "Proposée par la créatrice" : "Ajoutée par l'agence"}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 sm:shrink-0">
@@ -395,21 +395,12 @@ export function Idees() {
                           onClick: () => startEdit(row),
                         },
                         {
-                          key: "note",
-                          label: notes[row.id] ? "Modifier le commentaire" : "Ajouter un commentaire",
-                          icon: MessageSquarePlus,
-                          onClick: () => {
-                            setEditNoteId(row.id);
-                            setEditNoteText(notes[row.id] ?? "");
-                          },
-                        },
-                        {
                           key: "delete",
-                          label: "Supprimer",
+                          label: "Mettre à la corbeille",
                           icon: Trash2,
                           danger: true,
                           onClick: () => removeRow(row.id),
-                          confirm: { title: "Supprimer l'idée", message: `Supprimer « ${row.text} » ? Elle ira dans la Corbeille, d'où tu pourras la restaurer.` },
+                          confirm: { title: "Mettre à la corbeille", message: `Déplacer « ${row.text} » vers la corbeille ? Tu pourras la restaurer.`, confirmLabel: "Mettre à la corbeille" },
                         },
                       ]}
                     />

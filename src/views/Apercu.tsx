@@ -243,7 +243,7 @@ export function ApercuView({
     .filter((e) => evDate(e) >= todayIso)
     .sort((a, b) => evDate(a).localeCompare(evDate(b)))
     .slice(0, 4);
-  const briefsShown = (briefsWaiting.length ? briefsWaiting : d.briefs).slice(0, 4);
+  const briefsShown = briefsWaiting.slice(0, 4);
   const caByCreator = new Map<string, number>();
   for (const i of issued.filter((x) => x.status === "payee")) {
     const c = (i.creator ?? "").trim();
@@ -255,7 +255,7 @@ export function ApercuView({
     .slice(0, 5);
 
   const kpis = [
-    { label: "Facturé", value: formatEuro(factCur), delta: pctChange(factCur, factPrev) },
+    { label: "Facturé sur la période", value: formatEuro(factCur), delta: pctChange(factCur, factPrev) },
     { label: "Factures émises", value: String(cur.length), delta: pctChange(cur.length, prev.length) },
     { label: "Facture moyenne", value: cur.length ? formatEuro(Math.round(avgCur)) : "—", delta: cur.length ? pctChange(avgCur, avgPrev) : null },
   ];
@@ -488,7 +488,7 @@ export function ApercuView({
           <div className="px-6 py-6">
             <SectionTitle icon={FileText}>Briefs à valider</SectionTitle>
             {briefsShown.length === 0 ? (
-              <div className="text-[12px] text-faint">Aucun brief.</div>
+              <div className="text-[12px] text-faint">Aucun brief à valider.</div>
             ) : (
               briefsShown.map((b, i) => (
                 <div key={i} className="flex items-center gap-3 border-b border-border py-3 last:border-0">

@@ -30,6 +30,8 @@ import { Overlay } from "@/components/mobile/ios-sheet";
 
 /** Une petite statistique de campagne (label / valeur). */
 type Kpi = { l: string; v: string };
+/** Libellé affiché d'un indicateur : « Reach » (gardé tel quel dans les données) s'affiche « Couverture ». */
+const kpiLabel = (l: string) => (l === "Reach" ? "Couverture" : l);
 
 /** État vierge du calculateur d'engagement. */
 const CALC_EMPTY: CalcState = { mode: "global", stats: [], followers: "", postsCount: "", basis: "reach", shots: [] };
@@ -82,7 +84,7 @@ function debriefToText(d: Debrief): string {
   if (d.kpis.length > 0) {
     lines.push("");
     lines.push("Indicateurs :");
-    d.kpis.forEach((k) => lines.push(`  • ${k.l} : ${k.v}`));
+    d.kpis.forEach((k) => lines.push(`  • ${kpiLabel(k.l)} : ${k.v}`));
   }
   lines.push("");
   lines.push("— TTP Suite · Trust the Process");
@@ -112,7 +114,7 @@ function debriefHTML(d: Debrief, shotUrls: Record<string, string> = {}): string 
   const kpis = d.kpis.filter((k) => k.v && k.v !== "—");
   const cell = (k: Kpi) =>
     `<td width="50%" style="padding:6px;vertical-align:top"><div style="border:1px solid #ececec;border-radius:12px;padding:12px 14px">` +
-    `<div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#8a8a8a">${escHtml(k.l)}</div>` +
+    `<div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#8a8a8a">${escHtml(kpiLabel(k.l))}</div>` +
     `<div style="font-size:20px;font-weight:800;color:#111;margin-top:2px">${escHtml(k.v)}</div></div></td>`;
   let kpiRows = "";
   for (let i = 0; i < kpis.length; i += 2) {
@@ -177,7 +179,7 @@ function debriefPdfHTML(d: Debrief, shotUrls: Record<string, string> = {}): stri
       ["Livrables", d.deliverables],
     ]) +
     (d.summary && d.summary !== "—" ? pdfSection("Synthèse", `<p class="lede">${escHtml(d.summary)}</p>`) : "") +
-    (d.kpis.length ? pdfSection("Indicateurs", pdfKpis(d.kpis)) : "") +
+    (d.kpis.length ? pdfSection("Indicateurs", pdfKpis(d.kpis.map((k) => ({ ...k, l: kpiLabel(k.l) })))) : "") +
     (d.highlights.length ? pdfSection("Points forts", pdfTicks(d.highlights)) : "") +
     (shots.length ? pdfSection("Captures des statistiques", pdfShots(shots)) : "");
   return pdfShell({
@@ -491,7 +493,7 @@ export function Debrief() {
         { key: "preview", label: "Aperçu / PDF", icon: Eye, onClick: () => printDebrief(d) },
         { key: "copy", label: "Copier le texte", icon: Share2, onClick: () => shareDebrief(d) },
         { key: "download", label: "Télécharger (.txt)", icon: Download, onClick: () => downloadDebrief(d) },
-        { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => remove(d), confirm: { title: "Supprimer le debrief", message: `Supprimer le debrief « ${d.brand} » ? Cette action est irréversible.` } },
+        { key: "delete", label: "Supprimer définitivement", icon: Trash2, danger: true, onClick: () => remove(d), confirm: { title: "Supprimer définitivement", message: `Supprimer le debrief « ${d.brand} » ? Cette action est irréversible.`, confirmLabel: "Supprimer définitivement" } },
       ]}
     />
   );
@@ -558,7 +560,7 @@ export function Debrief() {
           label="Marque / campagne"
           value={brand}
           onChange={setBrand}
-          placeholder="Ex : Sézane × Léna"
+          placeholder="Ex : Sézane, collection été"
           className="sm:min-w-[200px] flex-[2]"
         />
         <SelectField
@@ -597,10 +599,6 @@ export function Debrief() {
           className="min-w-full flex-[3]"
         />
         <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="3 Reels · 5 Stories…" className="min-w-full flex-[2]" />
-        <TextField label="Reach" value={reach} onChange={setReach} placeholder="480 K" className="sm:min-w-[110px] flex-1" />
-        <TextField label="Engagement" value={engagement} onChange={setEngagement} placeholder="6,4 %" className="sm:min-w-[110px] flex-1" />
-        <TextField label="Clics" value={clics} onChange={setClics} placeholder="9 200" className="sm:min-w-[110px] flex-1" />
-        <TextField label="Ventes attribuées" value={ventes} onChange={setVentes} placeholder="310" className="sm:min-w-[130px] flex-1" />
         <DebriefCalculator
           // Remonte le composant quand on change de debrief édité SANS fermer le
           // formulaire (ex : « Modifier » sur une autre ligne). Sinon la copie locale
@@ -615,6 +613,10 @@ export function Debrief() {
             setEngagement(e);
           }}
         />
+        <TextField label="Couverture" value={reach} onChange={setReach} placeholder="480 K" className="sm:min-w-[110px] flex-1" />
+        <TextField label="Engagement" value={engagement} onChange={setEngagement} placeholder="6,4 %" className="sm:min-w-[110px] flex-1" />
+        <TextField label="Clics" value={clics} onChange={setClics} placeholder="9 200" className="sm:min-w-[110px] flex-1" />
+        <TextField label="Ventes attribuées" value={ventes} onChange={setVentes} placeholder="310" className="sm:min-w-[130px] flex-1" />
         <label className="flex min-w-full flex-col gap-1.5">
           <span className="text-[11px] font-medium text-muted-foreground">Points forts (un par ligne)</span>
           <textarea
@@ -728,7 +730,7 @@ export function Debrief() {
                   {d.kpis.map((k, i) => (
                     <div key={i} className="rounded-xl bg-panel px-3 py-2.5">
                       <div className="text-[10px] font-medium text-muted-foreground">
-                        {k.l}
+                        {kpiLabel(k.l)}
                       </div>
                       <div className="mt-1 text-lg font-bold leading-none tracking-tight text-foreground">
                         {k.v}
@@ -851,7 +853,7 @@ export function Debrief() {
                 label="Envoyer via"
                 value={shareVia}
                 onValueChange={(v) => setShareVia(v as "gmail" | "resend")}
-                items={[{ value: "gmail", label: "Gmail" }, { value: "resend", label: "Resend" }]}
+                items={[{ value: "gmail", label: "Depuis ma boîte Gmail" }, { value: "resend", label: "Envoi automatique" }]}
               />
               <div className="flex gap-2">
                 <button type="button" onClick={() => printDebrief(shareD)} className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover">
@@ -978,7 +980,7 @@ function DebriefDetail({
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {kpis.map((k, i) => (
                   <div key={i} className="rounded-xl bg-panel px-3 py-2.5">
-                    <div className="text-[10px] font-medium text-muted-foreground">{k.l}</div>
+                    <div className="text-[10px] font-medium text-muted-foreground">{kpiLabel(k.l)}</div>
                     <div className="mt-1 text-lg font-bold leading-none tracking-tight text-foreground">{k.v}</div>
                   </div>
                 ))}

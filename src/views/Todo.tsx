@@ -132,7 +132,7 @@ type PriorityFilter = null | Priority;
 // Filtre de vue par statut (comme CreatorSpace).
 type TodoFilter = "encours" | "terminees" | "toutes";
 const TODO_FILTERS: { id: TodoFilter; label: string }[] = [
-  { id: "encours", label: "En cours" },
+  { id: "encours", label: "Pas terminées" },
   { id: "terminees", label: "Terminées" },
   { id: "toutes", label: "Toutes" },
 ];
@@ -224,7 +224,7 @@ export function Todo() {
       rowsRef.current = (rowsRef.current ?? []).map(revert);
       setRows((prev) => (prev ?? []).map(revert));
       setSelectedTodo((prev) => (prev ? revert(prev) : prev));
-      toast("Erreur — lance le SQL sous-tâches/pièces jointes ?");
+      toast("Modification non enregistrée, réessaie");
       return false;
     };
     const p = (todoQueue.current[id] ?? Promise.resolve(true)).then(run, run);
@@ -320,7 +320,7 @@ export function Todo() {
       setSelectedTodo((prev) => (prev?.id === row.id ? { ...prev, ...saved } : prev));
       notifyTaskDone(row, status);
     } else {
-      toast("Statut non enregistré — la colonne « status » manque (lance le SQL)");
+      toast("Statut non enregistré, réessaie");
     }
   };
 
@@ -378,7 +378,7 @@ export function Todo() {
     setSelectedTodo((prev) => (prev ? { ...prev, ...patch } : prev));
     const noteOk = await saveNote(selectedTodo.id, editNote);
     setEditing(false);
-    toast(noteOk ? "Tâche modifiée ✓" : "Tâche modifiée, commentaire non enregistré : réessaie");
+    toast(noteOk ? "Tâche modifiée ✓" : "Tâche modifiée, avancement non enregistré : réessaie");
   };
 
   useEffect(() => {
@@ -427,7 +427,7 @@ export function Todo() {
     const createdRow = created as unknown as Row;
     setRows([createdRow, ...(rows ?? [])]);
     // Le commentaire ne bloque jamais la réinitialisation du formulaire (saveNote ne lève pas).
-    if (note.trim() && !(await saveNote(createdRow.id, note))) toast("Commentaire non enregistré — réessaie");
+    if (note.trim() && !(await saveNote(createdRow.id, note))) toast("Avancement non enregistré, réessaie");
     // Push au créateur concerné (s'il a activé les notifs sur son téléphone).
     if (creator) notifyCreator("task", creator, text.trim());
     toast("Tâche ajoutée ✓");
@@ -509,7 +509,7 @@ export function Todo() {
       setSelectedTodo((prev) => (prev?.id === id ? { ...prev, ...saved } : prev));
       notifyTaskDone(row, status);
     } else {
-      toast("Statut non enregistré — la colonne « status » manque (lance le SQL)");
+      toast("Statut non enregistré, réessaie");
     }
   };
   // Supprimer = corbeille (restaurable), depuis le menu ⋯ ou en glissant la ligne.
@@ -560,7 +560,7 @@ export function Todo() {
             {
               key: "weekly",
               label: "Chaque semaine",
-              hint: "Revient toute seule chaque lundi",
+              hint: "Revient toute seule chaque semaine, le jour choisi",
               icon: Repeat,
               onClick: () => setRoutineAdd((n) => n + 1),
             },
@@ -593,7 +593,7 @@ export function Todo() {
       >
         <TextField label="Tâche" value={text} onChange={setText} icon={Type} placeholder="Ex : Contacter la marque…" />
         <AutoGrowTextField label="Description" value={descr} onChange={setDescr} icon={AlignLeft} placeholder="Détaille la tâche — le champ s'agrandit tout seul…" className="min-w-full" />
-        <TextField label="Commentaire (optionnel)" value={note} onChange={setNote} icon={MessageSquarePlus} placeholder="Infos en plus, rappel, lien…" />
+        <TextField label="Avancement (optionnel)" value={note} onChange={setNote} icon={MessageSquarePlus} placeholder="Infos en plus, rappel, lien…" />
         <TextField
           label="Échéance"
           type="date"
@@ -619,12 +619,15 @@ export function Todo() {
             value={creator}
             onChange={setCreator}
             options={[
-              { value: "", label: "Agence (tous)" },
+              { value: "", label: "L'agence (tâche interne)" },
               ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url })),
             ]}
           />
         )}
       </InlineForm>
+
+      {/* Tâches qui reviennent chaque semaine (date et auteur de chaque « Fait ») */}
+      <WeeklyRoutines addSignal={routineAdd} />
 
       {/* Panneau de filtres */}
       {rows !== null && rows.length > 0 && (() => {
@@ -707,9 +710,6 @@ export function Todo() {
         );
       })()}
 
-      {/* Tâches qui reviennent chaque semaine (date et auteur de chaque « Fait ») */}
-      <WeeklyRoutines addSignal={routineAdd} />
-
       {rows === null ? (
         <div className="rounded-xl border border-border bg-card shadow-sm px-4 py-3">
           <AnimatedBadge status="loading" size="sm">
@@ -724,7 +724,7 @@ export function Todo() {
         </div>
       ) : rows.length === 0 ? (
         <div className="rounded-xl border border-border bg-card shadow-sm px-4 py-3">
-          <p className="text-sm text-muted-foreground">Aucune tâche en cours.</p>
+          <p className="text-sm text-muted-foreground">Aucune tâche pour l'instant. Ajoute-en une avec « + Tâche ».</p>
         </div>
       ) : viewMode === "colonnes" ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -814,11 +814,11 @@ export function Todo() {
                   items={[
                     {
                       key: "delete",
-                      label: "Supprimer",
+                      label: "Mettre à la corbeille",
                       icon: Trash2,
                       danger: true,
                       onClick: () => void trashTodo(row),
-                      confirm: { title: "Supprimer la tâche", message: `Supprimer « ${row.text} » ? Tu pourras la restaurer depuis la corbeille.` },
+                      confirm: { title: "Mettre à la corbeille", message: `Déplacer « ${row.text} » vers la corbeille ? Tu pourras la restaurer.`, confirmLabel: "Mettre à la corbeille" },
                     },
                   ]}
                 />
@@ -826,7 +826,7 @@ export function Todo() {
             ),
             footer: noteEditId === row.id ? (
               <div className="flex flex-col gap-2 pb-3 pl-[46px] pr-4 sm:pl-[50px]">
-                <span className="text-[12px] font-medium text-muted-foreground">Avancement / commentaire</span>
+                <span className="text-[12px] font-medium text-muted-foreground">Avancement</span>
                 <textarea
                   value={noteEditText}
                   onChange={(e) => setNoteEditText(e.target.value)}
@@ -841,9 +841,9 @@ export function Todo() {
                     onClick={async () => {
                       if (await saveNote(row.id, noteEditText)) {
                         setNoteEditId(null);
-                        toast("Commentaire enregistré ✓");
+                        toast("Avancement enregistré ✓");
                       } else {
-                        toast("Commentaire non enregistré — réessaie");
+                        toast("Avancement non enregistré, réessaie");
                       }
                     }}
                     className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
@@ -856,13 +856,13 @@ export function Todo() {
                 </div>
               </div>
             ) : notes[row.id] ? (
-              <button type="button" onClick={() => startNote(row.id)} className="-mt-1 flex w-full items-start gap-2 pb-3 pl-[46px] pr-4 text-left transition-colors hover:text-foreground sm:pl-[50px]" title="Modifier le commentaire">
+              <button type="button" onClick={() => startNote(row.id)} className="-mt-1 flex w-full items-start gap-2 pb-3 pl-[46px] pr-4 text-left transition-colors hover:text-foreground sm:pl-[50px]" title="Modifier l'avancement">
                 <MessageSquarePlus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" />
                 <span className="whitespace-pre-wrap text-[12px] leading-relaxed text-muted-foreground">{notes[row.id]}</span>
               </button>
             ) : (
               <button type="button" onClick={() => startNote(row.id)} className="-mt-1.5 flex w-full items-center gap-1.5 pb-3 pl-[46px] pr-4 text-[12px] text-muted-foreground transition-colors hover:text-foreground sm:pl-[50px]">
-                <MessageSquarePlus className="h-3.5 w-3.5" /> Ajouter un commentaire d'avancement
+                <MessageSquarePlus className="h-3.5 w-3.5" /> Ajouter un point d'avancement
               </button>
             ),
           }))}
@@ -874,7 +874,7 @@ export function Todo() {
           }}
           onSetStatus={(id, status) => void setStatusTo(id, status)}
           onDeleteTask={(id) => { const row = (rows ?? []).find((r) => r.id === id); if (row) void trashTodo(row); }}
-          deleteMessage={(t) => `Supprimer « ${t.title} » ? Tu pourras la restaurer depuis la corbeille.`}
+          deleteMessage={(t) => `Déplacer « ${t.title} » vers la corbeille ? Tu pourras la restaurer.`}
           onToggleSubtask={(taskId, subId) => { const row = (rows ?? []).find((r) => r.id === taskId); if (row) toggleSubtask(row, subId); }}
           onAddSubtask={(taskId, text) => { patchTodo(taskId, (r) => ({ subtasks: [...(r.subtasks ?? []), { id: stid(), text, done: false }] })); }}
           onDelSubtask={(taskId, subId) => { const row = (rows ?? []).find((r) => r.id === taskId); if (row) delSubtask(row, subId); }}
@@ -943,7 +943,7 @@ export function Todo() {
                     className="min-w-full"
                   />
                   <TextField
-                    label="Commentaire"
+                    label="Avancement"
                     value={editNote}
                     onChange={setEditNote}
                     className="min-w-full"
@@ -970,7 +970,7 @@ export function Todo() {
                     value={editCreator}
                     onChange={setEditCreator}
                     options={[
-                      { value: "", label: "Agence (tous)" },
+                      { value: "", label: "L'agence (tâche interne)" },
                       ...creators.map((c) => ({
                         value: c.name,
                         label: titleCase(c.name),
@@ -1006,13 +1006,13 @@ export function Todo() {
                 )}
               </DetailBlock>
 
-              <DetailBlock label="Commentaire">
+              <DetailBlock label="Avancement">
                 {notes[selectedTodo.id] ? (
                   <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">
                     {notes[selectedTodo.id]}
                   </p>
                 ) : (
-                  <p className="text-[13px] text-faint">Aucun commentaire. Clique sur ✏️ pour en ajouter un.</p>
+                  <p className="text-[13px] text-faint">Aucun point d'avancement. Clique sur ✏️ pour en ajouter un.</p>
                 )}
               </DetailBlock>
 
@@ -1040,17 +1040,11 @@ export function Todo() {
                   </p>
                 </DetailBlock>
 
-                <DetailBlock label="Tag">
-                  <p className="text-[13px] text-foreground">
-                    {selectedTodo.tag || "—"}
-                  </p>
-                </DetailBlock>
-
-                <DetailBlock label="Source">
+                <DetailBlock label="Demandée par">
                   <p className="text-[13px] text-foreground">
                     {selectedTodo.source === "creator"
-                      ? "Du créateur"
-                      : "Agence"}
+                      ? "La créatrice"
+                      : "L'agence"}
                   </p>
                 </DetailBlock>
 

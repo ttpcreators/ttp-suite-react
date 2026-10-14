@@ -160,7 +160,7 @@ const CREATOR_GROUPS: {
       { id: "accueil", label: "Accueil", icon: LayoutDashboard },
       { id: "guide", label: "Guide", icon: HelpCircle },
       { id: "evolution", label: "Évolution", icon: TrendingUp },
-      { id: "debrief", label: "Debrief", icon: FileChartColumn },
+      { id: "debrief", label: "Bilans", icon: FileChartColumn },
       { id: "roadmap", label: "Ma feuille de route", icon: Target },
     ],
   },
@@ -336,8 +336,8 @@ const prioBadge = (p: string | null) => (p === "haute" ? "danger" : p === "basse
 
 type TodoFilter = "encours" | "terminees" | "toutes";
 const TODO_FILTERS: { id: TodoFilter; label: string }[] = [
-  { id: "encours", label: "En cours" },
-  { id: "terminees", label: "Terminées" },
+  { id: "encours", label: "À faire" },
+  { id: "terminees", label: "Faites" },
   { id: "toutes", label: "Toutes" },
 ];
 const TODO_STATUS_OPTS: StatusOption[] = [
@@ -1776,9 +1776,6 @@ export function CreatorSpace({
                         <button type="button" onClick={() => setStatsModalOpen(true)} className="rounded-full bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
                           Envoyer mes stats
                         </button>
-                        <button type="button" onClick={() => setStatsModalOpen(true)} className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
-                          <HelpCircle className="h-3.5 w-3.5" /> Comment faire&nbsp;?
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -1976,7 +1973,7 @@ export function CreatorSpace({
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                       {editInput("Abonnés", "followers")}
                       {editInput("Engagement", "er")}
-                      {editInput("Reach", "reach")}
+                      {editInput("Portée", "reach")}
                     </div>
                     <p className="text-[11px] text-faint">Le CA est calculé automatiquement depuis tes factures payées.</p>
                   </div>
@@ -2025,7 +2022,7 @@ export function CreatorSpace({
                             <div className="mb-2.5 text-[12px] font-medium text-muted-foreground">Engagement par plateforme</div>
                             {platformLatest.length === 0 ? (
                               <div className="text-xs text-muted-foreground">
-                                {toNum(creator?.er) != null ? `ER global · ${creator?.er}` : "Pas encore de mesure d'engagement de ton agence."}
+                                {toNum(creator?.er) != null ? `Engagement global · ${creator?.er}` : "Pas encore de mesure d'engagement de ton agence."}
                               </div>
                             ) : (
                               <div className="flex flex-col gap-2.5">
@@ -2121,7 +2118,7 @@ export function CreatorSpace({
             (debriefErr ? (
               <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
                 <div className="text-sm font-medium text-foreground">Chargement impossible</div>
-                <p className="mt-1 text-xs text-muted-foreground">Tes debriefs n'ont pas pu être récupérés.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Tes bilans n'ont pas pu être récupérés.</p>
                 <button
                   type="button"
                   onClick={() => {
@@ -2135,12 +2132,12 @@ export function CreatorSpace({
               </div>
             ) : myDebriefs === null ? (
               <AnimatedBadge status="loading" size="sm">
-                Chargement de tes debriefs…
+                Chargement de tes bilans…
               </AnimatedBadge>
             ) : myDebriefs.length === 0 ? (
               <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center shadow-sm">
                 <div className="mx-auto w-fit"><FileCard formatFile="doc" /></div>
-                <div className="mt-3 text-sm font-medium text-foreground">Aucun debrief pour l'instant</div>
+                <div className="mt-3 text-sm font-medium text-foreground">Aucun bilan pour l'instant</div>
                 <p className="mt-1 text-xs text-muted-foreground">Les bilans de tes campagnes apparaîtront ici.</p>
               </div>
             ) : (
@@ -2192,9 +2189,9 @@ export function CreatorSpace({
                 <StatsBento
                   className="mb-5"
                   primary={{ eyebrow: "À faire · en cours", value: String(openTodos.length), caption: `sur ${todos.length} tâche${todos.length > 1 ? "s" : ""} au total.` }}
-                  bars={{ label: "Par statut", value: `${todos.filter((t) => t.done).length} terminées`, series: TODO_STATUS_OPTS.map((o) => todos.filter((t) => cStatus(t) === o.value).length) }}
+                  bars={{ label: "Par statut", value: `${todos.filter((t) => t.done).length} faites`, series: TODO_STATUS_OPTS.map((o) => todos.filter((t) => cStatus(t) === o.value).length) }}
                   small={{ value: String(openTodos.filter((t) => t.priority === "haute").length), label: "Prioritaires" }}
-                  accent={{ value: String(todos.filter((t) => t.done).length), label: "Terminées", icon: Check }}
+                  accent={{ value: String(todos.filter((t) => t.done).length), label: "Faites", icon: Check }}
                 />
               )}
               <PageHeaderRow>
@@ -2272,7 +2269,7 @@ export function CreatorSpace({
               <div className="flex flex-col gap-3">
                 {filteredTodos.length === 0 ? (
                   <div className="rounded-2xl border border-border bg-surface p-6 text-[13px] text-muted-foreground">
-                    {todoFilter === "terminees" ? "Aucune tâche terminée." : "Aucune tâche."}
+                    {todoFilter === "terminees" ? "Aucune tâche faite." : "Aucune tâche."}
                   </div>
                 ) : (
                   <AgentPlan
@@ -2896,7 +2893,7 @@ export function CreatorSpace({
           {/* Documents */}
           {tab === "documents" && (
             docs.length === 0 ? (
-              <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">Aucun document.</div>
+              <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">Ton agence déposera ici tes documents (contrats, media kit…).</div>
             ) : (
               <div className="flex flex-col gap-2.5">
                 {docs.map((doc) => (
@@ -2995,7 +2992,7 @@ export function CreatorSpace({
               </div>
               <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
                 {invoices.length === 0 ? (
-                  <div className="p-6 text-sm text-muted-foreground">Aucune facture.</div>
+                  <div className="p-6 text-sm text-muted-foreground">Tes factures apparaîtront ici dès que ton agence les aura créées.</div>
                 ) : (
                   invoices.map((inv, i) => {
                     const b = invStatus(inv.status);

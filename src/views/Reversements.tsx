@@ -14,6 +14,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
 import { DateInput } from "@/components/ui/date-range-picker";
+import { frDate } from "@/lib/dates";
 
 /**
  * Suivi des reversements créateurs : combien l'agence doit à chaque créateur
@@ -212,7 +213,7 @@ export function Reversements() {
               caption: `${nbAPayer} créateur${nbAPayer > 1 ? "s" : ""} à payer · ${formatEuro(totalDu)} dû au total.`,
             }}
             // Valeur cohérente avec l'intitulé et les barres (reste dû) ; le déjà reversé a sa propre case.
-            bars={{ label: "Reste par créatrice (max)", value: formatEuro(Math.max(0, ...rows.map((r) => r.reste))), series: rows.map((r) => Math.max(0, r.reste)) }}
+            bars={{ label: "Plus gros reste dû", value: formatEuro(Math.max(0, ...rows.map((r) => r.reste))), series: rows.map((r) => Math.max(0, r.reste)) }}
             small={{ value: String(nbAPayer), label: "À payer" }}
             accent={{ value: formatEuro(totalReverse), label: "Déjà reversé", icon: Wallet }}
           />
@@ -236,7 +237,7 @@ export function Reversements() {
                   />
                   <div>
                     <div className="text-sm font-semibold text-foreground">{titleCase(r.creator)}</div>
-                    <div className="text-[11px] text-faint">Commission agence {r.rate}%</div>
+                    <div className="text-[11px] text-faint">Commission TTP {r.rate} %</div>
                   </div>
                 </div>
                 {r.reste > 0.5 ? (
@@ -247,9 +248,9 @@ export function Reversements() {
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Metric label="Encaissé" value={formatEuro(r.encaisse)} />
-                <Metric label={`Commission (${r.rate}%)`} value={formatEuro(r.commission)} />
-                <Metric label="Dû au créateur" value={formatEuro(r.du)} />
+                <Metric label="Payé par la marque (TTC)" value={formatEuro(r.encaisse)} />
+                <Metric label={`Commission TTP (${r.rate} %)`} value={formatEuro(r.commission)} />
+                <Metric label="Part créatrice" value={formatEuro(r.du)} />
                 <Metric label="Déjà reversé" value={formatEuro(r.reverse)} />
               </div>
 
@@ -259,7 +260,7 @@ export function Reversements() {
                     <div key={p.id} className="flex items-center gap-2 rounded-lg bg-panel px-3 py-2 text-xs">
                       <Check className="h-3.5 w-3.5 shrink-0 text-signaltext" />
                       <span className="font-semibold text-foreground">{formatEuro(p.amount)}</span>
-                      <span className="text-faint">{p.date}</span>
+                      <span className="text-faint">{frDate(p.date)}</span>
                       {p.note && <span className="truncate text-muted-foreground">· {p.note}</span>}
                       <button
                         type="button"
@@ -311,9 +312,9 @@ export function Reversements() {
 
       {pendingDel && (
         <ConfirmDialog
-          title="Supprimer le paiement"
+          title="Supprimer définitivement"
           message={pendingDel.message}
-          confirmLabel="Supprimer"
+          confirmLabel="Supprimer définitivement"
           danger
           onCancel={() => setPendingDel(null)}
           onConfirm={() => {

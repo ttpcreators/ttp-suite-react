@@ -283,7 +283,7 @@ export function Checklist() {
 
         {lists.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border bg-panel/50 px-5 py-10 text-center text-[13px] text-muted-foreground">
-            Aucune checklist. Crée-en une pour démarrer.
+            Aucune checklist. Crée-en une par collaboration (ex. « Sézane × Léa, mars ») pour cocher les étapes au fur et à mesure.
           </div>
         ) : view === "cards" ? (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -435,7 +435,7 @@ export function Checklist() {
               </div>
             )}
             <div className="mt-0.5 text-[11px] text-faint">
-              {doneCount} / {TOTAL_STEPS} étapes bouclées
+              {doneCount} / {TOTAL_STEPS} étapes faites
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -448,7 +448,7 @@ export function Checklist() {
                 onClick={resetSelected}
                 className="rounded-full border border-border px-3 py-2 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover"
               >
-                RÉINITIALISER
+                Réinitialiser
               </button>
             )}
           </div>

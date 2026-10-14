@@ -23,6 +23,11 @@ const TYPE_OPTIONS = [
 ];
 
 let _uid = 0;
+/** Libellé lisible du type (« Représentation », « Marque », « UGC »). */
+const typeLabel = (t: string) => TYPE_OPTIONS.find((o) => o.value === (t || "").toLowerCase())?.label ?? t;
+/** Les notes posées automatiquement (« Auto — … ») s'affichent sous une forme lisible. */
+const noteLabel = (n?: string) => (n && /^auto/i.test(n.trim()) ? "Ajouté depuis Contrats" : n);
+
 const uid = () => `ct${Date.now().toString(36)}${(_uid += 1)}`;
 // Date LOCALE (toISOString = UTC → la veille entre minuit et 2 h en France)
 const isoOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -140,7 +145,7 @@ export function Echeances() {
   };
   const remove = async (id: string) => {
     const ok = await mutate((fresh) => fresh.filter((x) => x.id !== id));
-    if (ok) toast("Contrat supprimé");
+    if (ok) toast("Contrat retiré du suivi");
   };
 
   // Synchronise les échéances depuis les contrats DÉJÀ enregistrés (historique) :
@@ -180,13 +185,13 @@ export function Echeances() {
         push((b.ctName ?? "").trim(), type, start, m ? parseInt(m[1], 10) : 0);
       }
       if (!added.length) {
-        toast("Rien à importer — les échéances sont déjà à jour ✓");
+        toast("Rien à importer, tous les contrats sont déjà suivis ✓");
         return;
       }
       const next = [...added, ...existing];
       setLocal(next);
       const ok = await saveAppStateKey("contractDeadlines", next);
-      toast(ok ? `${added.length} échéance${added.length > 1 ? "s" : ""} importée${added.length > 1 ? "s" : ""} ✓` : "Erreur — réessaie");
+      toast(ok ? `${added.length} contrat${added.length > 1 ? "s" : ""} importé${added.length > 1 ? "s" : ""} ✓` : "Erreur, réessaie");
     } finally {
       setSyncing(false);
     }
@@ -213,13 +218,13 @@ export function Echeances() {
             type="button"
             onClick={syncFromContracts}
             disabled={syncing}
-            title="Créer les échéances manquantes depuis les contrats déjà enregistrés"
+            title="Ajoute les contrats déjà enregistrés qui ne sont pas encore suivis"
             className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
           >
             <RefreshCw className={"h-3.5 w-3.5" + (syncing ? " animate-spin" : "")} />
-            <span>{syncing ? "Synchro…" : "Synchroniser"}</span>
+            <span>{syncing ? "Import…" : "Importer depuis Contrats"}</span>
           </button>
-          <AddButton label="Ajouter un contrat" onClick={openAdd} />
+          <AddButton label="Contrat à suivre" onClick={openAdd} />
         </div>
       </PageHeaderRow>
 
@@ -242,7 +247,7 @@ export function Echeances() {
 
       {rows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-8 text-center text-sm text-muted-foreground shadow-sm">
-          Aucun contrat suivi. Ajoute tes contrats de représentation pour être alerté avant leur échéance.
+          Aucun contrat suivi. Ajoute un contrat (représentation, marque ou UGC) pour être alerté avant sa fin.
         </div>
       ) : (
         <div className="space-y-3">
@@ -253,11 +258,11 @@ export function Echeances() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-sm font-semibold text-foreground">{titleCase(d.creator)}</span>
-                    <span className="rounded-full bg-rowhover px-2 py-0.5 text-[12px] font-medium text-muted-foreground">{d.type}</span>
+                    <span className="rounded-full bg-rowhover px-2 py-0.5 text-[12px] font-medium text-muted-foreground">{typeLabel(d.type)}</span>
                   </div>
                   <div className="mt-1 text-[11px] text-faint">
                     {frDate(new Date(d.start.replace(/-/g, "/")))} → {end ? frDate(end) : "—"} · {d.months} mois
-                    {d.note ? ` · ${d.note}` : ""}
+                    {d.note ? ` · ${noteLabel(d.note)}` : ""}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 sm:shrink-0">
@@ -270,7 +275,7 @@ export function Echeances() {
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
-                  <DeleteButton onClick={() => setPendingDel({ message: `Supprimer le suivi du contrat de ${titleCase(d.creator)} ?`, run: () => remove(d.id) })} />
+                  <DeleteButton onClick={() => setPendingDel({ message: `Ne plus suivre le contrat de ${titleCase(d.creator)} ? Les contrats enregistrés ne sont pas touchés.`, run: () => remove(d.id) })} />
                 </div>
               </div>
             );
@@ -280,9 +285,9 @@ export function Echeances() {
 
       {pendingDel && (
         <ConfirmDialog
-          title="Supprimer le contrat"
+          title="Ne plus suivre ce contrat"
           message={pendingDel.message}
-          confirmLabel="Supprimer"
+          confirmLabel="Ne plus suivre"
           danger
           onCancel={() => setPendingDel(null)}
           onConfirm={() => {

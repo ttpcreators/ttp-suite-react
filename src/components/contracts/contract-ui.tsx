@@ -145,7 +145,7 @@ export function SwitchRow({ label, help, checked, onChange }: { label: string; h
   );
 }
 
-/** Cas enregistrés d'un créateur : on en charge un d'un clic, on enregistre la config sous un nom. */
+/** Modèles (« cas ») enregistrés d'un créateur : on en charge un d'un clic, on enregistre la config sous un nom. */
 export function CasesBar({
   cases,
   active,
@@ -165,7 +165,7 @@ export function CasesBar({
 }) {
   return (
     <div className="mt-4">
-      <div className="mb-2 text-[12px] font-medium text-muted-foreground">Cas enregistrés</div>
+      <div className="mb-2 text-[12px] font-medium text-muted-foreground">Modèles enregistrés</div>
       {cases.length > 0 ? (
         <div className="mb-3 flex flex-wrap gap-1.5">
           {cases.map((cs) => {
@@ -173,7 +173,7 @@ export function CasesBar({
             return (
               <span key={cs.id} className={cn("flex h-7 items-center gap-1 rounded-full border pl-3 pr-1.5 text-[12px] font-medium transition-colors", on ? "border-foreground bg-foreground text-background" : "border-border bg-surface text-muted-foreground hover:text-foreground")}>
                 <button type="button" onClick={() => onLoad(cs.id)}>{cs.name}</button>
-                <button type="button" onClick={() => onDelete(cs.id)} title="Supprimer ce cas" aria-label={`Supprimer le cas ${cs.name}`} className={cn("grid h-5 w-5 place-items-center rounded-full transition-colors", on ? "text-background/70 hover:text-background" : "text-faint hover:text-rose-500")}>
+                <button type="button" onClick={() => onDelete(cs.id)} title="Supprimer ce modèle" aria-label={`Supprimer le modèle ${cs.name}`} className={cn("grid h-5 w-5 place-items-center rounded-full transition-colors", on ? "text-background/70 hover:text-background" : "text-faint hover:text-rose-500")}>
                   <X className="h-3 w-3" />
                 </button>
               </span>
@@ -181,14 +181,14 @@ export function CasesBar({
           })}
         </div>
       ) : (
-        <p className="mb-3 text-[12px] text-faint">Aucun cas pour ce créateur. Règle le contrat puis enregistre-le sous un nom pour le retrouver.</p>
+        <p className="mb-3 text-[12px] text-faint">Aucun modèle pour cette créatrice. Règle le contrat puis enregistre-le sous un nom pour le retrouver.</p>
       )}
       <div className="flex items-center gap-2">
         <div className="flex h-9 min-w-0 flex-1 items-center rounded-lg border border-border bg-surface px-3 transition-shadow focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
-          <input value={name} onChange={(e) => onName(e.target.value)} placeholder="Nom du cas (ex : Standard)" aria-label="Nom du cas" className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-faint" />
+          <input value={name} onChange={(e) => onName(e.target.value)} placeholder="Nom du modèle (ex. Standard)" aria-label="Nom du modèle" className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-faint" />
         </div>
         <button type="button" onClick={onSave} className={docBtn}>
-          <Save className="h-3.5 w-3.5" /> Enregistrer le cas
+          <Save className="h-3.5 w-3.5" /> Enregistrer le modèle
         </button>
       </div>
     </div>

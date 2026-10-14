@@ -242,7 +242,7 @@ export function DebriefCalculator({
       return;
     }
     onApply({ reach: t.reach > 0 ? fmtCompact(t.reach) : "", engagement: fmtPct(er) });
-    toast("Indicateurs mis à jour ✓");
+    toast("Couverture et engagement remplis ✓");
   };
 
   // Reprend les publications repérées sur Instagram pour la collab (marque + créatrice) :
@@ -384,7 +384,7 @@ export function DebriefCalculator({
       {/* En-tête */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-          <Calculator className="h-3.5 w-3.5" /> Calculateur d'engagement
+          <Calculator className="h-3.5 w-3.5" /> Chiffres de la campagne
         </div>
         <Tabs
           size="sm"
@@ -400,37 +400,36 @@ export function DebriefCalculator({
       </div>
 
       {igFor && (
-        <button
-          type="button"
-          onClick={() => void fillFromInstagram()}
-          disabled={igBusy}
-          className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
-          title="Reprend les posts de la marque repérés sur Instagram (page Collabs)"
-        >
-          {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} Remplir depuis Instagram
-        </button>
-      )}
-      {igFor && (
-        <button
-          type="button"
-          onClick={() => void fillFromTikTok()}
-          disabled={igBusy}
-          className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
-          title="Reprend les vidéos TikTok de la créatrice qui citent la marque (si elle a connecté son TikTok)"
-        >
-          {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} Remplir depuis TikTok
-        </button>
-      )}
-      {igFor && (
-        <button
-          type="button"
-          onClick={() => void fillFromYouTube()}
-          disabled={igBusy}
-          className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
-          title="Reprend les vidéos YouTube de la créatrice qui citent la marque (si elle a connecté sa chaîne)"
-        >
-          {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} Remplir depuis YouTube
-        </button>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-medium text-muted-foreground">Remplir depuis :</span>
+          <button
+            type="button"
+            onClick={() => void fillFromInstagram()}
+            disabled={igBusy}
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+            title="Reprend les posts de la marque repérés sur Instagram (page Collabs)"
+          >
+            {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} Instagram
+          </button>
+          <button
+            type="button"
+            onClick={() => void fillFromTikTok()}
+            disabled={igBusy}
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+            title="Reprend les vidéos TikTok de la créatrice qui citent la marque (si elle a connecté son TikTok)"
+          >
+            {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} TikTok
+          </button>
+          <button
+            type="button"
+            onClick={() => void fillFromYouTube()}
+            disabled={igBusy}
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+            title="Reprend les vidéos YouTube de la créatrice qui citent la marque (si elle a connecté sa chaîne)"
+          >
+            {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} YouTube
+          </button>
+        </div>
       )}
 
       {/* Base de compte */}
@@ -479,8 +478,8 @@ export function DebriefCalculator({
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
               <NumField label="Couverture" value={r.reach} onChange={(v) => patchRow(r.id, { reach: v })} placeholder="120 K" />
               <NumField label="J'aime" value={r.likes} onChange={(v) => patchRow(r.id, { likes: v })} placeholder="8 400" />
-              <NumField label="Comment." value={r.comments} onChange={(v) => patchRow(r.id, { comments: v })} placeholder="210" />
-              <NumField label="Enregistr." value={r.saves} onChange={(v) => patchRow(r.id, { saves: v })} placeholder="640" />
+              <NumField label="Commentaires" value={r.comments} onChange={(v) => patchRow(r.id, { comments: v })} placeholder="210" />
+              <NumField label="Enregistrements" value={r.saves} onChange={(v) => patchRow(r.id, { saves: v })} placeholder="640" />
               <NumField label="Partages" value={r.shares} onChange={(v) => patchRow(r.id, { shares: v })} placeholder="180" />
               <NumField label="Vues" value={r.views} onChange={(v) => patchRow(r.id, { views: v })} placeholder="210 K" />
             </div>
@@ -553,7 +552,7 @@ export function DebriefCalculator({
           disabled={!hasData}
           className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full bg-primary py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <ArrowUp className="h-3.5 w-3.5" /> Reprendre dans les indicateurs
+          <ArrowUp className="h-3.5 w-3.5" /> Remplir Couverture et Engagement
         </button>
       </div>
 
@@ -574,7 +573,7 @@ export function DebriefCalculator({
         </div>
         {shots.length === 0 ? (
           <div className="text-[11px] text-faint">
-            Joins les captures d'insights reçues du créateur — elles restent privées, en pièce jointe du debrief.
+            Ajoute les captures de statistiques envoyées par la créatrice. Elles sont jointes au bilan envoyé à la marque (e-mail et PDF).
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">

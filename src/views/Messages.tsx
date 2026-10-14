@@ -44,11 +44,12 @@ const display = (t: Thread) => t.name?.trim() || (t.username ? `@${t.username}` 
 
 function inboxWhy(s: SyncState | null): string {
   if (!s || s.ok !== false) return "";
-  if (s.why === "page_introuvable") return "Le robot Meta ne voit pas encore la Page Facebook liée au compte Instagram de TTP : attribue-la au robot « scoutingapi » dans le Business Manager.";
-  if (s.why === "meta_autorisation") return "Permission manquante : ajoute instagram_manage_messages et pages_manage_metadata au jeton du robot « scoutingapi », et active « Autoriser l'accès aux messages » dans l'app Instagram de TTP.";
+  // Réglage à faire côté Meta (Page Facebook non attribuée, autorisations manquantes) : détail dans Diagnostic.
+  if (s.why === "page_introuvable" || s.why === "meta_autorisation")
+    return "Un réglage est à faire côté Meta (Page Facebook ou autorisations). Détails dans Réglages › Diagnostic.";
   // « meta_-2 » / Timeout : ancienne réponse de la fonction pour le même blocage.
   if (s.why === "meta_validation" || s.why === "meta_-2" || /timeout/i.test(s.detail ?? ""))
-    return "Meta bloque la lecture des conversations avec des comptes extérieurs (marques, créatrices) tant que l'app n'a pas l'accès avancé à instagram_manage_messages. Il s'obtient par une validation de l'app chez Meta (App Review). La publication et le reste fonctionnent déjà.";
+    return "Meta n'a pas encore autorisé TTP Suite à lire les DM. Rien à faire de ton côté : la page se remplira dès que l'accès sera validé.";
   return igWhyText(s.why) || "Lecture des messages impossible pour l'instant.";
 }
 
@@ -152,7 +153,7 @@ export function Messages() {
     const r = (data ?? {}) as SyncState & { error?: string; saved?: number; linked?: number };
     if (error || r.error) {
       setState({ data: { ok: false, why: r.error ?? "reseau", detail: (r as { detail?: string }).detail ?? null }, at: new Date().toISOString() });
-      return toast(r.error === "migration_manquante" ? "La page sera active après le SQL" : "Lecture des messages impossible : voir le message en haut");
+      return toast(r.error === "migration_manquante" ? "Pas encore activé (mise à jour en attente)." : "Lecture des messages impossible : voir le message en haut");
     }
     toast(`${r.threads ?? 0} conversation${(r.threads ?? 0) > 1 ? "s" : ""} à jour${r.touches ? ` · ${r.touches} échange${r.touches > 1 ? "s" : ""} noté${r.touches > 1 ? "s" : ""} en prospection` : ""}${r.emails ? ` · ${r.emails} email${r.emails > 1 ? "s" : ""} ajouté${r.emails > 1 ? "s" : ""} aux fiches` : ""}${r.left ? ` · ${r.left} à lire au prochain passage` : ""}`);
     setReload((n) => n + 1);
@@ -180,7 +181,7 @@ export function Messages() {
   if (missing) {
     return (
       <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/[0.04] px-6 py-10 text-center text-sm text-muted-foreground">
-        Les DM Instagram seront visibles après la mise à jour de la base (SQL <span className="font-mono text-[12px] text-foreground">2026-10-14-instagram-dm-posts-concurrents.sql</span>).
+        Cette partie n'est pas encore activée : une mise à jour est en attente (voir Réglages › Diagnostic).
       </div>
     );
   }
@@ -189,7 +190,7 @@ export function Messages() {
     <>
       <PageHeaderRow>
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          {state?.at ? `Mis à jour ${fmtAgo(state.at)}` : "Jamais lus"}
+          {state?.at ? `Mis à jour ${fmtAgo(state.at)}` : "Jamais actualisé"}
           <HelpTip title="Comment ça marche ?" align="end">
             <p>Toutes les heures, l'app lit les conversations du compte Instagram de TTP (les 20 derniers messages de chacune : c'est la limite de Meta).</p>
             <p><span className="font-medium text-foreground">Fiches contact</span> : si le @ correspond à une fiche, l'email donné en message y est ajouté s'il manque, et chaque échange est noté dans son suivi de prospection (canal Instagram).</p>
@@ -206,8 +207,8 @@ export function Messages() {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
           <div>
             <p className="font-semibold text-foreground">Messages pas encore lisibles</p>
-            <p>{problem}</p>
-            {state?.data.detail && <p className="mt-1 font-mono text-[10px] text-faint">Meta : {state.data.detail}</p>}
+            {/* Réponse brute de Meta : gardée en infobulle, pas dans le texte. */}
+            <p title={state?.data.detail ? `Meta : ${state.data.detail}` : undefined}>{problem}</p>
           </div>
         </div>
       )}

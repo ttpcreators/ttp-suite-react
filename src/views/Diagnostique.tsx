@@ -96,7 +96,7 @@ export function Diagnostique() {
             disabled={running}
             className="flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", running && "animate-spin")} /> {running ? "Audit…" : "Relancer"}
+            <RefreshCw className={cn("h-3.5 w-3.5", running && "animate-spin")} /> {running ? "Vérification…" : "Relancer"}
           </button>
         </div>
       </div>
@@ -109,8 +109,8 @@ export function Diagnostique() {
         <div className="mb-3 flex items-center gap-2">
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground"><HeartPulse className="h-4 w-4" /></span>
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold text-foreground">État des composants</div>
-            <div className="text-[11px] text-faint">Audit automatique matin & soir (à l'ouverture de l'app) + à la demande.</div>
+            <div className="text-sm font-semibold text-foreground">Ce qui est vérifié</div>
+            <div className="text-[11px] text-faint">Audit automatique matin et soir (à l'ouverture de l'app) + à la demande.</div>
           </div>
         </div>
 

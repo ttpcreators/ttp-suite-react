@@ -156,17 +156,17 @@ export function computeAlerts(opts: {
   if (lastMonth) {
     const reco = cadenceTotal(profile.cadenceReco);
     const real = cadenceTotal(lastMonth.cadence);
-    if (reco > 0 && real < reco * 0.7) out.push({ kind: "sousperf", label: `Cadence ${real}/${reco} vs objectif`, level: "danger" });
+    if (reco > 0 && real < reco * 0.7) out.push({ kind: "sousperf", label: `${real} contenu${real > 1 ? "s" : ""} sur ${reco} prévu${reco > 1 ? "s" : ""}`, level: "danger" });
     if (lastMonth.derive) out.push({ kind: "derive", label: "Dérive éditoriale détectée", level: "warn" });
   }
   // Renouvellement de deal qui approche (≤ 30 jours).
   if (deadlineInDays != null && deadlineInDays <= 30) {
-    out.push({ kind: "renouvellement", label: deadlineInDays <= 0 ? "Deal échu" : `Renouvellement dans ${deadlineInDays} j`, level: deadlineInDays <= 7 ? "danger" : "warn" });
+    out.push({ kind: "renouvellement", label: deadlineInDays <= 0 ? "Contrat terminé" : `Renouvellement dans ${deadlineInDays} j`, level: deadlineInDays <= 7 ? "danger" : "warn" });
   }
   // Conformité loi 2023-451 : à vérifier tant que le champ n'est pas marqué « ok ».
   const conf = norm(profile.conformite);
   if (profile.conformite && conf !== "ok" && conf !== "conforme" && conf !== "à jour" && conf !== "a jour") {
-    out.push({ kind: "conformite", label: "Conformité à vérifier (loi 2023-451)", level: "warn" });
+    out.push({ kind: "conformite", label: "Mentions « Publicité » à vérifier", level: "warn" });
   }
   return out;
 }

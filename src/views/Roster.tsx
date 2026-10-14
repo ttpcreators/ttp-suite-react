@@ -68,6 +68,8 @@ function mapCreator(r: CreatorRow): Creator {
 /** Mois courant "YYYY-MM" (fuseau local agence) + libellé "juillet 2026". */
 const NOW_MONTH = new Intl.DateTimeFormat("fr-CA", { year: "numeric", month: "2-digit" }).format(new Date());
 const MONTH_LABEL = new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" }).format(new Date());
+/** « de mars » mais « d'octobre » (élision devant une voyelle). */
+const MONTH_PREP = /^[aeiouyàâéèêîôû]/i.test(MONTH_LABEL) ? "d'" : "de ";
 
 const STATUS_LABEL: Record<string, string> = {
   live: "LIVE",
@@ -200,13 +202,11 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
   const markUpToDate = async (c: Creator, done: boolean) => {
     const next = done ? NOW_MONTH : "";
     setRows(rows.map((r) => (r.id === c.id ? { ...r, statsMonth: next } : r)));
-    // Requête directe (pas dbUpdate) pour lire le message d'erreur : on ne parle du SQL
-    // manquant QUE si l'erreur concerne vraiment la colonne.
+    // Requête directe (pas dbUpdate) : 0 ligne touchée = échec, pas un faux succès.
     const { data, error } = await supabase.from("creators").update({ stats_month: next || null }).eq("id", c.id).select("id");
     if (error || !data?.length) {
       setRows(rows); // rollback optimiste
-      const missingCol = !!error && (error.code === "42703" || error.code === "PGRST204" || /stats_month/i.test(error.message));
-      toast(missingCol ? "Enregistrement impossible : la colonne « stats_month » manque (lance le SQL 11)" : "Enregistrement impossible, réessaie");
+      toast("Enregistrement impossible, réessaie");
       return;
     }
     toast(done ? `${titleCase(c.name)} · données à jour ✓` : "Marqué à mettre à jour");
@@ -296,7 +296,10 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
         <div className="mb-4 flex items-center gap-2.5 rounded-2xl border border-border bg-surface px-5 py-3.5 text-[13px] text-muted-foreground">
           <RefreshCw className="h-4 w-4 shrink-0" />
           <span>
-            <span className="font-semibold text-foreground">{staleCount} créateur{staleCount > 1 ? "s" : ""}</span> à mettre à jour pour <span className="font-semibold capitalize">{MONTH_LABEL}</span> — coche « à jour » sur chaque ligne une fois les données saisies.
+            <span className="font-semibold text-foreground">{staleCount} créatrice{staleCount > 1 ? "s" : ""}</span>{" "}
+            {staleCount > 1 ? "n'ont pas encore leurs chiffres" : "n'a pas encore ses chiffres"}{" "}
+            {MONTH_PREP}<span className="font-semibold">{MONTH_LABEL}</span>.
+            {" "}Clique « Marquer à jour » sur {staleCount > 1 ? "leur" : "sa"} ligne une fois saisis.
           </span>
         </div>
       )}
@@ -335,8 +338,8 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
             <span>Créateur</span>
             <span>Niche</span>
             <span className="text-right">Abonnés</span>
-            <span className="text-right">ER</span>
-            <span className="text-right">CA · encaissé</span>
+            <span className="text-right">Engagement</span>
+            <span className="text-right">CA encaissé</span>
             <span className="text-right">Statut</span>
             <span />
           </div>
@@ -409,7 +412,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                           onClick={(e) => { e.stopPropagation(); markUpToDate(c, true); }}
                           className="flex shrink-0 items-center gap-1 rounded-full border border-border bg-foreground/[0.06] px-2 py-1 text-[10px] font-semibold text-amber transition-colors hover:bg-foreground/[0.06] dark:text-amber"
                         >
-                          <RefreshCw className="h-3 w-3" /><span className="hidden sm:inline"> à jour ?</span>
+                          <RefreshCw className="h-3 w-3" /><span className="hidden sm:inline"> Marquer à jour</span>
                         </button>
                       ))}
                     <span className="flex items-center gap-1.5" title={titleCase(label.toLowerCase())}>

@@ -97,7 +97,7 @@ function TeamNameField() {
     if (ok) {
       setSaved(v);
       toast("Prénom enregistré ✓");
-    } else toast("Prénom non enregistré : lance d'abord le SQL « équipe, activité, routines ».");
+    } else toast("Prénom non enregistré : pas encore activé (mise à jour en attente).");
   };
   return (
     <div className="flex flex-col gap-2 border-b border-border py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -374,7 +374,7 @@ export function Parametres() {
       <Section
         icon={<MessageCircle className="h-4 w-4" />}
         title="Prospection"
-        hint="Le suivi des contacts marques (page Contacts) : rythme de recontact et ouverture de WhatsApp."
+        hint="Le rythme des relances (page À contacter) et la façon d'ouvrir WhatsApp."
       >
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -406,7 +406,7 @@ export function Parametres() {
             <div className="min-w-0">
               <div className="text-[13px] font-medium text-foreground">Ouverture WhatsApp</div>
               <div className="text-[11px] leading-snug text-faint">
-                C'est le compte connecté qui envoie, pas un réglage : choisis WhatsApp Web si ton numéro PRO y est connecté (web.whatsapp.com), l'application sinon.
+                Choisis « WhatsApp Web » si ton numéro pro est connecté sur cet ordinateur, sinon « Application ».
               </div>
             </div>
             <Tabs
@@ -440,7 +440,7 @@ export function Parametres() {
             </div>
           </div>
           <div>
-            <div className="mb-2 text-[12px] font-medium text-muted-foreground">Ce que TU reçois (quand un créateur agit)</div>
+            <div className="mb-2 text-[12px] font-medium text-muted-foreground">Ce que tu reçois (quand un créateur agit)</div>
             <div className="flex flex-col gap-3">
               {NOTIF_TEXTS_AGENCY.map((f) => (
                 <NotifTextRow key={f.key} field={f} value={texts[f.key] ?? ""} onChange={(v) => editText(f.key, v)} onSave={() => saveText(f.key, texts[f.key] ?? "")} />
@@ -600,7 +600,7 @@ export function Parametres() {
       >
         <PrefRow
           label="Rappel mensuel des données"
-          hint="Liste les créateurs dont les stats (abonnés, ER, CA…) ne sont pas encore à jour ce mois-ci. S'arrête quand tout est coché."
+          hint="Liste les créateurs dont les stats (abonnés, engagement, CA…) ne sont pas encore à jour ce mois-ci. S'arrête quand tout est coché."
           checked={on(prefs.digestStats)}
           onChange={(v) => setPref("digestStats", v)}
         />
@@ -610,11 +610,11 @@ export function Parametres() {
       <Section
         icon={<Bug className="h-4 w-4" />}
         title="Alertes techniques"
-        hint="Pour être prévenu si un bug survient dans l'app — chez toi, Gianni ou un créateur."
+        hint="Pour être prévenu si un bug survient dans l'app — chez toi, un collègue ou une créatrice."
       >
         <PrefRow
-          label="Notif quand un bug survient"
-          hint="Un push « ⚠️ bug » à la première occurrence (anti-spam), et l'erreur est journalisée pour diagnostic."
+          label="Notification en cas de bug"
+          hint="Un seul avertissement par bug, détails dans Diagnostic."
           checked={on(prefs.pushErrors)}
           onChange={(v) => setPref("pushErrors", v)}
         />
@@ -628,7 +628,7 @@ export function Parametres() {
       >
         <TeamNameField />
         <PrefRow
-          label="Notification quand l'autre agit"
+          label="Notification quand un collègue agit"
           hint="Un push sur ton téléphone dès qu'un autre compte de l'agence ajoute, termine ou supprime quelque chose. Plusieurs actions rapprochées = une seule notification."
           checked={on(prefs.pushTeamActivity)}
           onChange={(v) => setPref("pushTeamActivity", v)}

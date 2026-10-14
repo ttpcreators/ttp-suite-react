@@ -97,7 +97,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           out.push({
             id: `bug:${openBugs[0].id}`,
             title: kinds.size > 1 ? `${kinds.size} bugs à regarder` : "Un bug à regarder",
-            description: `${(openBugs[0].message ?? "").slice(0, 90)} · Réglages → Diagnostique`,
+            description: `${(openBugs[0].message ?? "").slice(0, 90)} · Réglages → Diagnostic`,
             time: agoLabel(openBugs[0].created_at),
             kind: "bug",
             page: "diagnostique",

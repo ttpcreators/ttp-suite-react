@@ -110,7 +110,7 @@ export function TikTokRadar() {
     setRunning(false);
     const r = (data ?? {}) as State & { error?: string };
     setReload((n) => n + 1); // relit l'état (message « en attente de l'accord » compris)
-    if (error || r.error) return toast(r.error === "non_configure" ? "Le radar TikTok attend l'accord de TikTok" : r.error === "migration_manquante" ? "Le radar TikTok sera actif après le SQL" : "TikTok n'a pas répondu, réessaie");
+    if (error || r.error) return toast(r.error === "non_configure" ? "Le radar TikTok attend l'accord de TikTok" : r.error === "migration_manquante" ? "Radar TikTok pas encore activé (mise à jour en attente)." : "TikTok n'a pas répondu, réessaie");
     toast(`${r.saved ?? 0} contenu${(r.saved ?? 0) > 1 ? "s" : ""} sponsorisé${(r.saved ?? 0) > 1 ? "s" : ""} lu${(r.saved ?? 0) > 1 ? "s" : ""}${r.why ? ` · ${r.why}` : ""}`);
   };
   const setBrandStatus = async (b: TtBrand, s: Status) => {
@@ -142,7 +142,7 @@ export function TikTokRadar() {
   if (missing) {
     return (
       <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/[0.04] px-6 py-10 text-center text-sm text-muted-foreground">
-        Le radar TikTok sera actif après la mise à jour de la base (SQL <span className="font-mono text-[12px] text-foreground">2026-10-14-tiktok-radar.sql</span>).
+        Cette partie n'est pas encore activée : une mise à jour est en attente (voir Réglages › Diagnostic).
       </div>
     );
   }
@@ -224,7 +224,7 @@ export function TikTokRadar() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="truncate text-[14px] font-semibold text-foreground">{b.name}</span>
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">PAYÉ</span>
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">Payé</span>
                         {mine.length > 0 && <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">Chez {mine.length} de tes créatrices</span>}
                         {isKnown && <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Déjà en contact</span>}
                       </div>
@@ -264,9 +264,9 @@ export function TikTokRadar() {
                             <div className="mt-1 flex items-center justify-between gap-1">
                               <a href={ttLink(v.creator)} target="_blank" rel="noreferrer" className="truncate text-[11px] font-medium text-foreground hover:text-primary">@{v.creator}</a>
                               {roster.has(v.creator) ? (
-                                <span className="shrink-0 text-[9px] font-semibold text-foreground">ROSTER</span>
+                                <span className="shrink-0 text-[9px] font-semibold text-foreground">Roster</span>
                               ) : pool.has(v.creator) ? (
-                                <span className="shrink-0 text-[9px] font-semibold text-indigo">SCOUTING</span>
+                                <span className="shrink-0 text-[9px] font-semibold text-indigo">Scouting</span>
                               ) : (
                                 <button type="button" onClick={() => void toScouting(v.creator!, b.name)} className="shrink-0 text-[10px] font-medium text-primary" title="Ajouter au Scouting">+ Scouting</button>
                               )}

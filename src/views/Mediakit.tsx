@@ -104,7 +104,7 @@ function MediakitFiles() {
   const [sendSig, setSendSig] = useState<MailSignature | null>(null);
   const [sending, setSending] = useState(false);
 
-  // Templates de mail (blob agence `mediakitMailTemplates`, migrés depuis
+  // Modèles d'e-mail (blob agence `mediakitMailTemplates`, migrés depuis
   // l'ancienne clé partagée `mailTemplates` : entrées sans `kind`).
   const { data: tplData } = useAppState<MailTemplate[]>((s: AppState) => readMediakitTemplates<MailTemplate>(s) ?? []);
   // Après enregistrement/suppression, la liste sauvée s'affiche tout de suite ;
@@ -154,7 +154,7 @@ function MediakitFiles() {
   };
   const saveTemplates = async (next: MailTemplate[]): Promise<boolean> => {
     const ok = await saveAppStateKey(MEDIAKIT_TEMPLATES_KEY, next);
-    if (!ok) toast("Template non enregistré, réessaie");
+    if (!ok) toast("Modèle non enregistré, réessaie");
     else setTplOverride({ from: tplData, list: next });
     return ok;
   };
@@ -165,7 +165,7 @@ function MediakitFiles() {
       return await saveTemplates(next);
     } catch (e) {
       console.warn("[mediakit] templates", e);
-      toast("Template non enregistré, réessaie");
+      toast("Modèle non enregistré, réessaie");
       return false;
     }
   };
@@ -178,7 +178,7 @@ function MediakitFiles() {
       return ok;
     } catch (e) {
       console.warn("[mediakit] templates", e);
-      toast("Template non supprimé, réessaie");
+      toast("Modèle non supprimé, réessaie");
       return false;
     }
   };
@@ -210,14 +210,14 @@ function MediakitFiles() {
 
   const upload = async (file: File) => {
     if (!selected) return toast("Choisis d'abord un créateur");
-    if (file.size > MAX_MB * 1024 * 1024) return toast(`Fichier trop lourd (max ${MAX_MB} Mo) — passe par « Ajouter par lien »`);
+    if (file.size > MAX_MB * 1024 * 1024) return toast(`Fichier trop lourd (max ${MAX_MB} Mo) — passe par « Ajouter un lien »`);
     setUploading(true);
     try {
       const ext = (/\.([a-z0-9]+)$/i.exec(file.name)?.[1] ?? "pdf").toLowerCase();
       const slug = selected.toLowerCase().replace(/[^a-z0-9]+/g, "-");
       const path = `mediakits/${slug}-${Date.now()}.${ext}`;
       const up = await supabase.storage.from("documents").upload(path, file, { upsert: false, contentType: file.type || undefined });
-      if (up.error) return toast("Échec de l'upload — réessaie");
+      if (up.error) return toast("Échec de l'envoi du fichier — réessaie");
       const added = await addRow(path, `${Math.max(1, Math.round(file.size / 1024))} Ko`);
       if (!added) {
         // Ligne non créée : on retire le fichier pour ne pas laisser d'orphelin.
@@ -307,7 +307,7 @@ function MediakitFiles() {
     if (!sendRow || sending) return;
     const recipients = [...new Set(sendRecipients.map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))];
     if (recipients.length === 0) return toast("Ajoute au moins un destinataire");
-    if (!activeTpl) return toast("Choisis un template");
+    if (!activeTpl) return toast("Choisis un modèle d'e-mail");
     const subject = sendSubject.trim();
     if (!subject) return toast("Ajoute un objet");
     setSending(true);
@@ -324,7 +324,7 @@ function MediakitFiles() {
       if (!res?.ok) {
         const d = (res?.detail ?? "").toLowerCase();
         if (d.includes("domain") || d.includes("verif") || d.includes("testing"))
-          toast("Domaine non vérifié dans Resend — envoi possible seulement à ton adresse pour l'instant.");
+          toast("L'envoi d'e-mails n'est pas encore activé : pour l'instant, seule ton adresse peut recevoir.");
         else toast(res?.detail ? `Échec : ${res.detail}` : "Envoi échoué — réessaie");
         return;
       }
@@ -400,7 +400,7 @@ function MediakitFiles() {
             onClick={() => (selected ? setLinkOpen(true) : toast("Choisis d'abord un créateur"))}
             className="flex items-center gap-2 rounded-full border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
           >
-            <Link2 className="h-3.5 w-3.5" /> <span>Par lien</span>
+            <Link2 className="h-3.5 w-3.5" /> <span>Ajouter un lien</span>
           </button>
           <button
             type="button"
@@ -408,15 +408,13 @@ function MediakitFiles() {
             disabled={uploading}
             className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
-            <Upload className="h-3.5 w-3.5" /> {uploading ? "Ajout…" : "Ajouter"}
+            <Upload className="h-3.5 w-3.5" /> {uploading ? "Import…" : "Importer un fichier"}
           </button>
         </div>
       </div>
 
       <p className="text-[11px] leading-snug text-faint">
-        Petit fichier (PDF/image, max {MAX_MB} Mo) → <span className="font-medium text-foreground">Ajouter</span>. Gros fichier
-        (vidéo, PDF lourd) → héberge-le sur Drive/Canva et colle son lien via <span className="font-medium text-foreground">Par lien</span>{" "}
-        (zéro stockage). Tout est daté et visible par le créateur dans son espace.
+        Fichier de {MAX_MB} Mo max ; au-delà, colle un lien Drive ou Canva.
       </p>
 
       {/* Liste */}
@@ -540,7 +538,7 @@ function MediakitFiles() {
               {/* Template */}
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-muted-foreground">Template</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">Modèle d'e-mail</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -549,7 +547,7 @@ function MediakitFiles() {
                     }}
                     className="flex items-center gap-1 text-[10px] font-semibold text-primary transition-opacity hover:opacity-80"
                   >
-                    <Pencil className="h-3 w-3" /> Gérer les templates
+                    <Pencil className="h-3 w-3" /> Gérer les modèles d'e-mail
                   </button>
                 </div>
                 <Select
@@ -560,7 +558,7 @@ function MediakitFiles() {
                     if (t && sendRow) setSendSubject(subjectFor(sendRow, t));
                   }}
                 >
-                  <SelectTrigger className="h-10 w-full rounded-lg bg-surface" placeholder="Choisir un template" />
+                  <SelectTrigger className="h-10 w-full rounded-lg bg-surface" placeholder="Choisir un modèle" />
                   <SelectContent>
                     {templates.map((t, i) => (
                       <SelectItem key={t.id} index={i} value={t.id}>
@@ -584,7 +582,7 @@ function MediakitFiles() {
 
               {/* Message perso ({{message}}) */}
               <div>
-                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Message (remplace {"{{message}}"})</div>
+                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Mot personnalisé (optionnel)</div>
                 <textarea
                   value={sendMsg}
                   onChange={(e) => setSendMsg(e.target.value)}
@@ -622,7 +620,7 @@ function MediakitFiles() {
         <Overlay className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClose={() => setTplMgr(false)}>
           <div onClick={(e) => e.stopPropagation()} className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
-              <div className="text-sm font-semibold">Templates de mail</div>
+              <div className="text-sm font-semibold">Modèles d'e-mail</div>
               <button type="button" onClick={() => setTplMgr(false)} className="grid h-9 w-9 place-items-center rounded-full text-faint hover:bg-rowhover hover:text-foreground">
                 <X className="h-4 w-4" />
               </button>
@@ -655,7 +653,7 @@ function MediakitFiles() {
                       setTplId(tplDraft.id);
                       if (sendRow) setSendSubject(subjectFor(sendRow, tplDraft));
                       setTplDraft(null);
-                      toast("Template enregistré ✓");
+                      toast("Modèle enregistré ✓");
                     }}
                     className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90"
                   >
@@ -689,7 +687,7 @@ function MediakitFiles() {
                   onClick={() => setTplDraft({ id: uid(), name: "", subject: "Media kit — {{creator}}", body: "Bonjour,\n\n{{message}}\n\n— TTP Creators" })}
                   className="mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                 >
-                  <Plus className="h-3.5 w-3.5" /> Nouveau template
+                  <Plus className="h-3.5 w-3.5" /> Nouveau modèle
                 </button>
               </div>
             )}
@@ -699,15 +697,15 @@ function MediakitFiles() {
 
       {tplDelete && (
         <ConfirmDialog
-          title="Supprimer le template"
-          message={`Supprimer le template « ${tplDelete.name} » ? Cette action est irréversible.`}
+          title="Supprimer le modèle"
+          message={`Supprimer le modèle « ${tplDelete.name} » ? Cette action est irréversible.`}
           confirmLabel="Supprimer"
           danger
           onCancel={() => setTplDelete(null)}
           onConfirm={async () => {
             const t = tplDelete;
             setTplDelete(null);
-            if (await removeTemplate(t.id)) toast("Template supprimé");
+            if (await removeTemplate(t.id)) toast("Modèle supprimé");
           }}
         />
       )}
@@ -766,9 +764,6 @@ export function Mediakit() {
       />
       {tab === "creatrices" ? (
         <div>
-          <p className="mb-4 text-[13px] text-muted-foreground">
-            Chaque modification met à jour <span className="text-foreground">sa page perso</span> (ttpcreators.pro/mediakit/&lt;lien&gt;) et le deck agence.
-          </p>
           <MediakitEditor />
         </div>
       ) : tab === "agence" ? (

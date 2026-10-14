@@ -115,6 +115,34 @@ function metaOf(status: string): { badge: AnimatedBadgeStatus; label: string } {
   return STATUS_META[status as InvoiceStatus] ?? { badge: "neutral", label: status || "—" };
 }
 
+/** Échéance d'une facture → Date locale (même lecture que la page Relances). */
+function parseDueDate(s: string | null): Date | null {
+  if (!s) return null;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s.trim());
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  const dm = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/.exec(s.trim());
+  if (dm) {
+    let y = dm[3] ?? String(new Date().getFullYear());
+    if (y.length === 2) y = "20" + y;
+    return new Date(Number(y), Number(dm[2]) - 1, Number(dm[1]));
+  }
+  return null;
+}
+function daysSinceDue(d: Date): number {
+  const t = new Date();
+  const today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  return Math.floor((today.getTime() - d.getTime()) / 86400000);
+}
+/** Badge AFFICHÉ (rien n'est enregistré) : « En attente » dont l'échéance est passée
+ *  s'affiche « En retard », même règle que la page Relances. */
+function shownMetaOf(r: { status: string; date: string | null }): { badge: AnimatedBadgeStatus; label: string } {
+  if (r.status === "attente") {
+    const d = parseDueDate(r.date);
+    if (d && daysSinceDue(d) > 0) return metaOf("retard");
+  }
+  return metaOf(r.status);
+}
+
 const STATUS_OPTIONS: { value: InvoiceStatus; label: string }[] = [
   { value: "brouillon", label: "Brouillon" },
   { value: "attente", label: "En attente" },
@@ -330,7 +358,7 @@ ${bankBlock}
 ${notesBlock}
 
 <div class="legal">
-  Conditions de règlement : paiement à réception, échéance le ${frDate(d.dueDate)}, par virement bancaire.
+  Conditions de règlement : paiement par virement au plus tard le ${frDate(d.dueDate)}.
   En cas de retard de paiement, application de pénalités égales à trois fois le taux d'intérêt légal, ainsi qu'une
   indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 et D441-5 du Code de commerce).
   Pas d'escompte pour paiement anticipé.${d.franchise ? " TVA non applicable, art. 293 B du CGI." : ""}
@@ -760,6 +788,13 @@ export function Facturation() {
         </div>
       </PageHeaderRow>
 
+      {/* Période : pilote les chiffres ci-dessous ET la liste */}
+      {periods.length > 0 && (
+        <div className="mb-4 flex justify-end">
+          <PeriodFilter value={period} onChange={setPeriod} periods={periods} allLabel="Toutes échéances" forward className="shrink-0" />
+        </div>
+      )}
+
       {/* Synthèse (bento) */}
       {rows.length > 0 && (
         <StatsBento
@@ -774,7 +809,7 @@ export function Facturation() {
             value: formatEuro(barsValue),
             series: monthly,
           }}
-          small={{ value: String(unpaid.length), label: period ? `Impayées · ${periodName}` : "Impayées · toutes périodes" }}
+          small={{ value: String(unpaid.length), label: period ? `À encaisser · ${periodName}` : "À encaisser · toutes périodes" }}
           accent={{
             value: formatEuro(aEncaisser),
             label: nbRetard > 0 ? `dont ${nbRetard} en retard` : "En attente de paiement",
@@ -788,9 +823,9 @@ export function Facturation() {
         <div className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border lg:grid-cols-4">
           {[
             { label: "Facturé HT", value: euro2(finBilled.ht), foot: `${euro2(finBilled.ttc)} TTC · TVA ${euro2(finBilled.tva)}` },
-            { label: "Marge TTP (commission HT)", value: euro2(finBilled.commission), foot: `${fmtRate(Math.round(margePct * 10) / 10)} % du HT en moyenne`, strong: true },
-            { label: "Marge déjà encaissée", value: euro2(finPaid.commission), foot: `sur ${euro2(finPaid.ht)} HT payés` },
-            { label: "Part des créatrices", value: euro2(finBilled.reversal), foot: "HT moins la commission" },
+            { label: "Commission TTP (HT)", value: euro2(finBilled.commission), foot: `${fmtRate(Math.round(margePct * 10) / 10)} % du HT en moyenne`, strong: true },
+            { label: "Commission encaissée", value: euro2(finPaid.commission), foot: `sur ${euro2(finPaid.ht)} HT payés` },
+            { label: "Part créatrices", value: euro2(finBilled.reversal), foot: "HT moins la commission" },
           ].map((k) => (
             <div key={k.label} className="flex min-w-0 flex-col bg-surface px-4 py-4 sm:px-5">
               <span className="line-clamp-2 min-h-[2lh] text-[12px] leading-snug text-muted-foreground sm:text-[13px] lg:min-h-0">{k.label}</span>
@@ -799,7 +834,7 @@ export function Facturation() {
             </div>
           ))}
           <div className="col-span-2 bg-surface px-4 py-2.5 text-[12px] text-muted-foreground sm:px-5 lg:col-span-4">
-            {period ? `Période : ${periodName}` : "Toutes les factures"} · brouillons exclus · la commission se calcule sur le HT, jamais sur la TVA, et pas de commission sous 100 € HT.
+            Hors brouillons · commission calculée sur le HT, aucune sous 100 € HT.
           </div>
         </div>
       )}
@@ -812,7 +847,6 @@ export function Facturation() {
           options={statusChips}
           className="min-w-0 flex-1 md:min-w-auto md:flex-initial"
         />
-        {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} allLabel="Toutes échéances" forward className="shrink-0" />}
       </div>
 
       {/* Liste */}
@@ -822,7 +856,7 @@ export function Facturation() {
           <span>Réf.</span>
           <span>Marque × Créateur</span>
           <span className="text-right">Montant HT</span>
-          <span className="text-right">Marge TTP</span>
+          <span className="text-right">Commission TTP</span>
           <span className="text-right">TTC</span>
           <span className="text-center">Échéance</span>
           <span className="text-right">Statut</span>
@@ -839,7 +873,7 @@ export function Facturation() {
           </div>
         ) : (
           filtered.map((r) => {
-            const meta = metaOf(r.status);
+            const meta = shownMetaOf(r);
             // Taux de CETTE facture si un taux spécifique a été saisi (invoiceDetails),
             // sinon le taux vivant du roster. Cohérent avec Reversements (paie).
             const fin = finOf(r);
@@ -858,11 +892,11 @@ export function Facturation() {
               { key: "preview", label: "Aperçu", icon: Eye, onClick: openPreview },
               { key: "send", label: "Envoyer au client", icon: Send, onClick: () => sendInvoice(r) },
               { key: "download", label: "Enregistrer en PDF", icon: Download, onClick: () => downloadInvoice(r) },
-              { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: del, confirm: { title: "Supprimer la facture", message: `Supprimer la facture ${r.ref} (${r.party}) ? Elle ira dans la corbeille.` } },
+              { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: del, confirm: { title: "Mettre à la corbeille", message: `Déplacer la facture ${r.ref} (${r.party}) vers la corbeille ? Tu pourras la restaurer.`, confirmLabel: "Mettre à la corbeille" } },
             ];
             const margeChip = (
               <span className="inline-block whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                Marge {euro2(fin.commission)} · {fmtRate(rate)} %
+                Commission {euro2(fin.commission)} · {fmtRate(rate)} %
               </span>
             );
             return (
@@ -1063,7 +1097,7 @@ export function Facturation() {
                 <div><div className="text-[11px] font-medium text-muted-foreground">Total HT</div><div className="mt-0.5 font-semibold text-foreground">{euro2(draftTotals.ht)}</div></div>
                 <div><div className="text-[11px] font-medium text-muted-foreground">{draft.franchise ? "TVA" : `TVA ${fmtRate(draft.vatRate)}%`}</div><div className="mt-0.5 font-semibold text-foreground">{draft.franchise ? "—" : euro2(draftTotals.tva)}</div></div>
                 <div><div className="text-[11px] font-medium text-muted-foreground">Total TTC</div><div className="mt-0.5 font-bold text-primary">{euro2(draftTotals.ttc)}</div></div>
-                <div><div className="text-[11px] font-medium text-muted-foreground">Marge agence · {fmtRate(draft.commissionRate)}%</div><div className="mt-0.5 font-semibold text-signaltext">{euro2(draftTotals.commission)}</div></div>
+                <div><div className="text-[11px] font-medium text-muted-foreground">Commission TTP · {fmtRate(draft.commissionRate)}%</div><div className="mt-0.5 font-semibold text-signaltext">{euro2(draftTotals.commission)}</div></div>
               </div>
               {draft.creator && (
                 <div className="mt-2 border-t border-border pt-2 text-[11px] text-muted-foreground">
@@ -1094,14 +1128,14 @@ export function Facturation() {
             footer={
               <>
                 <button type="button" className={ghostBtn} onClick={() => { setFinView(null); openEdit(r); }}>Modifier</button>
-                <button type="button" className={ghostBtn} onClick={() => { setFinView(null); downloadInvoice(r); }}>PDF</button>
-                <button type="button" className={ghostBtn} onClick={() => { setFinView(null); sendInvoice(r); }}>Envoyer</button>
+                <button type="button" className={ghostBtn} onClick={() => { setFinView(null); downloadInvoice(r); }}>Enregistrer en PDF</button>
+                <button type="button" className={ghostBtn} onClick={() => { setFinView(null); sendInvoice(r); }}>Envoyer au client</button>
                 <button type="button" className={primaryBtn} onClick={() => { setFinView(null); setPreview({ html: buildHTML(r), ref: r.ref, email: detailsFor(r).clientEmail, brand: r.party }); }}>Aperçu</button>
               </>
             }
           >
             <div className="mb-3 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
-              <AnimatedBadge status={metaOf(r.status).badge} size="sm">{metaOf(r.status).label}</AnimatedBadge>
+              <AnimatedBadge status={shownMetaOf(r).badge} size="sm">{shownMetaOf(r).label}</AnimatedBadge>
               <span>Échéance {frDate(r.date)}</span>
               {r.creator && <span>· {r.creator}</span>}
             </div>
@@ -1112,7 +1146,7 @@ export function Facturation() {
             </div>
             <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-muted/40 px-4">
               {line(`Commission TTP · ${fmtRate(f.rate)} % du HT`, euro2(f.commission), { strong: true, accent: true })}
-              {line("Part de la créatrice (HT − commission)", euro2(f.reversal))}
+              {line("Part créatrice (HT − commission)", euro2(f.reversal))}
             </div>
             <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
               {underFloor

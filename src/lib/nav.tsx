@@ -40,6 +40,8 @@ import {
   MessagesSquare,
   type LucideIcon,
   Mail,
+  Tag,
+  Sun,
 } from "lucide-react";
 
 export type ViewId =
@@ -54,6 +56,7 @@ export type ViewId =
   | "echeances"
   | "roster"
   | "engagement"
+  | "pricing"
   | "vivier"
   | "sourcing"
   | "collabs"
@@ -90,9 +93,13 @@ export type NavFamily = {
   items: NavItem[];
 };
 
-// Organisation par MÉTIER : chaque section = un moment de travail distinct, pour
-// retrouver une page « là où on la cherche ». La Finance est isolée (avant éclatée
-// entre Pilotage et Relations) ; les réglages admin sont séparés des vrais outils.
+// Organisation par MÉTIER (refaite le 2026-10-14) : chaque section = un moment de travail,
+// pour retrouver une page « là où on la cherche ».
+//   • Pilotage : où en est l'agence ;          • Au quotidien : ce qu'on ouvre tous les jours ;
+//   • Créateurs : le roster et ses chiffres ;  • Prospection : trouver et démarcher les marques ;
+//   • Collaborations : livrer une campagne ;   • Finance, Ressources, Réglages.
+// Les `id` ne changent JAMAIS (raccourcis, droits, onglets enregistrés) : seuls l'ordre,
+// le rangement et les libellés bougent.
 export const NAV: NavFamily[] = [
   {
     id: "pilotage",
@@ -100,42 +107,17 @@ export const NAV: NavFamily[] = [
     icon: Gauge,
     items: [
       { id: "apercu", label: "Aperçu", icon: LayoutDashboard },
-      { id: "activite", label: "Activité", icon: History },
-      { id: "agent", label: "Agent", icon: Bot },
       { id: "stats", label: "Stats", icon: TrendingUp },
       { id: "objectifs", label: "Objectifs", icon: Target },
+      { id: "agent", label: "Agent", icon: Bot },
+      { id: "activite", label: "Activité", icon: History },
     ],
   },
   {
-    id: "createurs",
-    label: "Créateurs",
-    icon: Users,
+    id: "quotidien",
+    label: "Au quotidien",
+    icon: Sun,
     items: [
-      { id: "roster", label: "Roster", icon: Users },
-      { id: "engagement", label: "Engagement", icon: BarChart3 },
-      { id: "suivi", label: "Suivi engagement", icon: Activity },
-      {
-        id: "mediakit",
-        label: "Media kit",
-        icon: ImageIcon,
-        children: [
-          { id: "creatrices", label: "Créateurs" },
-          { id: "agence", label: "Agence" },
-          { id: "files", label: "Fichiers" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "travail",
-    label: "Collaborations",
-    icon: Briefcase,
-    items: [
-      { id: "collabs", label: "Collabs", icon: Milestone },
-      { id: "briefs", label: "Briefs", icon: FileText },
-      { id: "debrief", label: "Debrief", icon: FileChartColumn },
-      { id: "gifting", label: "Gifting", icon: Gift },
-      { id: "ideas", label: "Idées", icon: Lightbulb },
       { id: "todo", label: "To-do", icon: ListChecks },
       {
         id: "planning",
@@ -146,35 +128,50 @@ export const NAV: NavFamily[] = [
           { id: "instagram", label: "Posts Instagram" },
         ],
       },
+      { id: "mails", label: "Mails", icon: Mail },
+      { id: "messages", label: "DM Instagram", icon: MessagesSquare },
     ],
   },
   {
-    id: "finance",
-    label: "Finance",
-    icon: CreditCard,
+    id: "createurs",
+    label: "Créateurs",
+    icon: Users,
     items: [
-      { id: "facturation", label: "Facturation", icon: Receipt },
-      { id: "reversements", label: "Reversements", icon: Wallet },
-      { id: "relances", label: "Relances", icon: AlarmClock },
-      { id: "echeances", label: "Échéances", icon: CalendarClock },
+      { id: "roster", label: "Roster", icon: Users },
+      { id: "engagement", label: "Engagement", icon: BarChart3 },
+      { id: "suivi", label: "Évolution", icon: Activity },
+      { id: "pricing", label: "Tarifs", icon: Tag },
+      {
+        id: "mediakit",
+        label: "Media kit",
+        icon: ImageIcon,
+        children: [
+          { id: "creatrices", label: "Créateurs" },
+          { id: "agence", label: "Agence" },
+          { id: "files", label: "Fichiers" },
+        ],
+      },
+      { id: "vivier", label: "Scouting", icon: UserPlus },
     ],
   },
   {
     id: "relations",
-    label: "Relations",
+    label: "Prospection",
     icon: Handshake,
     items: [
       { id: "contacts", label: "Contacts", icon: Contact },
-      {
-        id: "whatsapp",
-        label: "Prospection",
-        icon: MessageCircle,
-        children: [{ id: "mails", label: "Mails", icon: Mail, pinnable: true }],
-      },
-      { id: "messages", label: "DM Instagram", icon: MessagesSquare },
+      { id: "whatsapp", label: "À contacter", icon: MessageCircle },
       { id: "prospection", label: "Pipeline", icon: Search },
-      { id: "vivier", label: "Scouting", icon: UserPlus },
       { id: "sourcing", label: "Sourcing", icon: Radar },
+    ],
+  },
+  {
+    id: "travail",
+    label: "Collaborations",
+    icon: Briefcase,
+    items: [
+      { id: "collabs", label: "Collabs", icon: Milestone },
+      { id: "briefs", label: "Briefs", icon: FileText },
       {
         id: "contrats",
         label: "Contrats",
@@ -185,6 +182,20 @@ export const NAV: NavFamily[] = [
           { id: "ugc", label: "Contrat UGC" },
         ],
       },
+      { id: "echeances", label: "Fins de contrat", icon: CalendarClock },
+      { id: "gifting", label: "Gifting", icon: Gift },
+      { id: "debrief", label: "Debrief", icon: FileChartColumn },
+      { id: "ideas", label: "Idées", icon: Lightbulb },
+    ],
+  },
+  {
+    id: "finance",
+    label: "Finance",
+    icon: CreditCard,
+    items: [
+      { id: "facturation", label: "Facturation", icon: Receipt },
+      { id: "relances", label: "Relances", icon: AlarmClock },
+      { id: "reversements", label: "Reversements", icon: Wallet },
     ],
   },
   {
@@ -193,7 +204,7 @@ export const NAV: NavFamily[] = [
     icon: FolderOpen,
     items: [
       { id: "documents", label: "Documents", icon: Files },
-      { id: "templates", label: "Templates", icon: LayoutTemplate },
+      { id: "templates", label: "Modèles", icon: LayoutTemplate },
       { id: "checklist", label: "Checklist", icon: CheckCircle2 },
     ],
   },
@@ -212,7 +223,7 @@ export const NAV: NavFamily[] = [
         ],
       },
       { id: "parametres", label: "Paramètres", icon: Settings },
-      { id: "diagnostique", label: "Diagnostique", icon: HeartPulse },
+      { id: "diagnostique", label: "Diagnostic", icon: HeartPulse },
     ],
   },
 ];

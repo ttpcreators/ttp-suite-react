@@ -510,7 +510,7 @@ export function CreatorDetail({
         const profile = platCards.find((p) => p.url);
         const mail = (c?.email_pro || c?.email || "").trim();
         const actions: { key: string; label: string; icon: ReactNode; onClick?: () => void; href?: string }[] = [
-          { key: "portail", label: "Portail", icon: <ExternalLink className="h-[19px] w-[19px]" />, onClick: () => onOpenPortal(name) },
+          { key: "portail", label: "Son espace", icon: <ExternalLink className="h-[19px] w-[19px]" />, onClick: () => onOpenPortal(name) },
           ...(mail ? [{ key: "mail", label: "E-mail", icon: <Mail className="h-[19px] w-[19px]" />, href: `mailto:${mail}` }] : []),
           ...(profile?.url ? [{ key: "profil", label: profile.label, icon: platIcon(profile.key), href: profile.url }] : []),
           { key: "evolution", label: "Évolution", icon: <TrendingUp className="h-[19px] w-[19px]" />, onClick: () => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "suivi" })) },
@@ -582,7 +582,7 @@ export function CreatorDetail({
           onClick={() => onOpenPortal(name)}
           className="flex w-full shrink-0 items-center justify-center gap-2 rounded-full bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 sm:w-auto"
         >
-          <ExternalLink className="h-4 w-4" /> Voir le portail
+          <ExternalLink className="h-4 w-4" /> Voir son espace
         </button>
       </div>
 
@@ -592,8 +592,8 @@ export function CreatorDetail({
             {([
               ["Abonnés", totalFollowers > 0 ? fmtCompact(totalFollowers) : (c?.followers ?? null)],
               ["Engagement", mainEntry ? mainEntry.er : (c?.er ?? null)],
-              ["CA · encaissé", caEncaisse > 0 ? formatEuro(caEncaisse) : null],
-              ["Reach", c?.reach ?? null],
+              ["CA encaissé", caEncaisse > 0 ? formatEuro(caEncaisse) : null],
+              ["Couverture", c?.reach ?? null],
             ] as [string, string | null][]).map(([l, v]) => (
               <div key={l} className="min-w-[118px] shrink-0 snap-start rounded-xl border border-border bg-surface px-3.5 py-2.5">
                 <div className="truncate text-[12px] text-muted-foreground">{l}</div>
@@ -610,7 +610,7 @@ export function CreatorDetail({
               value={phoneSeg}
               onValueChange={(v) => setPhoneSeg(v as typeof phoneSeg)}
               items={[
-                { value: "suivi", label: "Suivi" },
+                { value: "suivi", label: "Accompagnement" },
                 { value: "infos", label: "Infos" },
                 { value: "activite", label: "Activité" },
                 { value: "mails", label: "Mails" },
@@ -630,8 +630,8 @@ export function CreatorDetail({
           mainEntry ? mainEntry.er : (c?.er ?? null),
           mainEntry ? `${mainEntry.platformLabel} · au ${mainEntry.date}` : undefined,
         )}
-        {stat("CA · encaissé", caEncaisse > 0 ? formatEuro(caEncaisse) : null)}
-        {stat("Reach", c?.reach ?? null)}
+        {stat("CA encaissé", caEncaisse > 0 ? formatEuro(caEncaisse) : null)}
+        {stat("Couverture", c?.reach ?? null)}
       </div>
 
       {/* Tableau de bord (langage Aperçu) : suivi éditorial à gauche, synthèse à droite */}
@@ -952,7 +952,7 @@ export function CreatorDetail({
               <div key={`${v.ref}-${i}`} className="flex items-center justify-between border-b border-border py-2 last:border-0">
                 <div className="min-w-0">
                   <div className="truncate text-xs font-medium">{v.party}</div>
-                  <div className="text-[10px] text-faint">#{v.ref} · {v.date}</div>
+                  <div className="text-[10px] text-faint">#{v.ref}{v.date ? ` · Échéance ${v.date}` : ""}</div>
                 </div>
                 <span className="text-[13px] font-medium tabular-nums">{parseAmount(v.amount) > 0 ? formatEuro(parseAmount(v.amount)) : v.amount || "—"}</span>
               </div>

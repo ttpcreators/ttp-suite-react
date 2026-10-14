@@ -348,11 +348,11 @@ export function Contrats() {
     if (navSub === "marque" || navSub === "repr" || navSub === "ugc") setCtType(navSub);
   }, [navSub]);
   const [creatorName, setCreatorName] = useState("");
-  const [brand, setBrand] = useState("Sephora");
-  const [value, setValue] = useState("32 000 €");
+  const [brand, setBrand] = useState("");
+  const [value, setValue] = useState("");
   const [commission, setCommission] = useState("20");
-  const [duration, setDuration] = useState("12 mois");
-  const [deliverables, setDeliverables] = useState("3 posts · 1 reel");
+  const [duration, setDuration] = useState("");
+  const [deliverables, setDeliverables] = useState("");
   const [extra, setExtra] = useState<Clause[]>([]);
   // Cas de figure
   const [collab, setCollab] = useState(SCENARIO_DEFAULT.collab);
@@ -414,8 +414,8 @@ export function Contrats() {
       applyCase(cs);
       appliedFor.current = ctName;
     } else if (switched) {
-      setBrand("Sephora");
-      setValue("32 000 €");
+      setBrand("");
+      setValue("");
       setCommission("20");
       setCaseName("Standard");
     }
@@ -526,7 +526,7 @@ export function Contrats() {
     const html = buildHTML();
     void archiveContract(html);
     printHtml(html);
-    toast("Contrat archivé · choisis « Enregistrer au format PDF »");
+    toast("PDF prêt, contrat ajouté aux contrats enregistrés");
   };
 
   // ── Cas de configuration (par créateur) ──
@@ -552,7 +552,7 @@ export function Contrats() {
       const nextList = idx >= 0 ? list.map((c, i) => (i === idx ? { ...cs, id: c.id } : c)) : [...list, cs];
       return { ...fresh, [ctName]: nextList };
     });
-    if (ok) toast(existed ? `Cas « ${name} » mis à jour ✓` : `Cas « ${name} » enregistré ✓`);
+    if (ok) toast(existed ? `Modèle « ${name} » mis à jour ✓` : `Modèle « ${name} » enregistré ✓`);
   };
 
   const deleteCase = async (id: string) => {
@@ -560,7 +560,7 @@ export function Contrats() {
       ...fresh,
       [ctName]: (fresh[ctName] ?? []).filter((c) => c.id !== id),
     }));
-    if (ok) toast("Cas supprimé");
+    if (ok) toast("Modèle supprimé");
   };
 
   // ── Historique des contrats (blob) — relecture fraîche avant merge ──
@@ -605,9 +605,9 @@ export function Contrats() {
         const p = (n: number) => String(n).padStart(2, "0");
         const start = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
         const dl: Dl = { id: uid(), creator: ctName, type: ctType, start, months, note: `Auto · ${meta.label.toLowerCase()}${dlBrand ? ` · ${dlBrand}` : ""}`, brand: dlBrand, contractId: added.id };
-        if (!(await saveAppStateKey("contractDeadlines", [dl, ...kept]))) toast("Contrat archivé, mais échéance non enregistrée. Réessaie");
+        if (!(await saveAppStateKey("contractDeadlines", [dl, ...kept]))) toast("Contrat enregistré, mais sa fin de contrat n'est pas suivie. Réessaie");
       } catch {
-        toast("Contrat archivé, mais échéance non enregistrée. Réessaie");
+        toast("Contrat enregistré, mais sa fin de contrat n'est pas suivie. Réessaie");
       }
     }
   };
@@ -668,7 +668,7 @@ export function Contrats() {
               }}
               onDelete={(id) => {
                 const cs = cases.find((c) => c.id === id);
-                if (cs) setPendingDel({ message: `Supprimer le cas « ${cs.name} » ? Cette action est irréversible.`, run: () => deleteCase(cs.id) });
+                if (cs) setPendingDel({ message: `Supprimer définitivement le modèle « ${cs.name} » ? Cette action est irréversible.`, run: () => deleteCase(cs.id) });
               }}
               name={caseName}
               onName={setCaseName}
@@ -768,7 +768,7 @@ export function Contrats() {
       {/* ============ HISTORIQUE ============ */}
       {history.length > 0 && (
         <div className="mt-4">
-          <HistoryPanel title="Historique des contrats" count={history.length}>
+          <HistoryPanel title="Contrats enregistrés" count={history.length}>
             {history.map((h) => (
               <div key={h.id} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-rowhover/50 sm:px-5">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground"><FileText className="h-4 w-4" /></span>
@@ -787,7 +787,7 @@ export function Contrats() {
                 <button type="button" onClick={() => printHtml(h.html)} title="Enregistrer en PDF" aria-label="Enregistrer en PDF" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                   <FileDown className="h-4 w-4" />
                 </button>
-                <button type="button" onClick={() => setPendingDel({ title: "Retirer de l'historique", message: `Retirer « ${h.title} » (${h.ref}) de l'historique ? Cette action est irréversible.`, run: () => deleteHistory(h.id) })} title="Supprimer" aria-label="Supprimer" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-rose-500">
+                <button type="button" onClick={() => setPendingDel({ title: "Supprimer définitivement", message: `Retirer « ${h.title} » (${h.ref}) des contrats enregistrés ? Cette action est irréversible.`, run: () => deleteHistory(h.id) })} title="Supprimer définitivement" aria-label="Supprimer définitivement" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-rose-500">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -823,9 +823,9 @@ export function Contrats() {
       )}
       {pendingDel && (
         <ConfirmDialog
-          title={pendingDel.title ?? "Supprimer le cas"}
+          title={pendingDel.title ?? "Supprimer définitivement le modèle"}
           message={pendingDel.message}
-          confirmLabel="Supprimer"
+          confirmLabel="Supprimer définitivement"
           danger
           onCancel={() => setPendingDel(null)}
           onConfirm={() => {

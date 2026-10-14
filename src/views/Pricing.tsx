@@ -224,9 +224,9 @@ export function Pricing() {
           <div className="mt-4 flex flex-col gap-1.5">
             <span className={LBL}>Créateur</span>
             <select value={creatorId} onChange={(e) => setCreatorId(e.target.value)} className={SEL}>
-              <option value={EXTERNAL}>Externe (saisie manuelle)</option>
+              <option value={EXTERNAL}>Autre créatrice (saisie libre)</option>
               {creators.map((c) => (
-                <option key={c.id} value={c.id}>{titleCase(c.name)} (auto)</option>
+                <option key={c.id} value={c.id}>{titleCase(c.name)}</option>
               ))}
             </select>
           </div>
@@ -239,7 +239,7 @@ export function Pricing() {
               <label className="flex flex-1 flex-col gap-1.5" style={{ minWidth: 160 }}>
                 <span className={LBL}>Niche (du créateur)</span>
                 <select value={niche} onChange={(e) => setNiche(e.target.value)} className={SEL}>
-                  {NICHES.map((n) => <option key={n.value} value={n.value}>{n.label} (×{n.m})</option>)}
+                  {NICHES.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
                 </select>
               </label>
             </div>
@@ -309,7 +309,7 @@ export function Pricing() {
             <div className="mt-3 flex flex-wrap items-center gap-4">
               <label className="flex cursor-pointer items-center gap-2 text-[13px] text-foreground" title="La marque diffuse le contenu en publicité depuis le compte de la créatrice (Spark Ads TikTok, pubs partenaires Instagram)">
                 <input type="checkbox" checked={infOpts.whitelisting} onChange={(e) => setInfOpts((o) => ({ ...o, whitelisting: e.target.checked }))} className="h-4 w-4 accent-[var(--primary)]" />
-                Pub depuis son compte (Spark Ads…) <span className="text-faint">+20 %</span>
+                La marque en fait une pub depuis son compte <span className="text-faint">+20 %</span>
               </label>
               <label className="flex items-center gap-2 text-[13px] text-foreground">
                 Remise pack
@@ -357,7 +357,7 @@ export function Pricing() {
             </button>
 
             <div className="mt-4 flex flex-wrap items-center gap-4">
-              {([["exclusivite", "Exclusivité", "+25 %"], ["rushes", "Rushes / fichiers bruts", "+15 %"], ["montage", "Montage avancé", "+20 %"], ["express", "Livraison express", "+20 %"]] as const).map(([k, label, pct]) => (
+              {([["exclusivite", "Exclusivité", "+25 %"], ["rushes", "Fichiers bruts", "+15 %"], ["montage", "Montage avancé", "+20 %"], ["express", "Livraison express", "+20 %"]] as const).map(([k, label, pct]) => (
                 <label key={k} className="flex cursor-pointer items-center gap-2 text-[13px] text-foreground">
                   <input type="checkbox" checked={ugcOpts[k]} onChange={(e) => setUgcOpts((o) => ({ ...o, [k]: e.target.checked }))} className="h-4 w-4 accent-[var(--primary)]" />
                   {label} <span className="text-faint">{pct}</span>
@@ -371,8 +371,8 @@ export function Pricing() {
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" />
           <span>
             {mode === "influence"
-              ? "Chaque livrable = vues attendues × CPM (€ pour 1000 vues) × niche × engagement, puis options et remise. Le CPM vues est calé sur ton barème : à vues habituelles, même prix qu'au nombre d'abonnés ; de vraies vues plus hautes (ou plus basses) font monter (ou baisser) le prix. Fourchette HT indicative."
-              : "Le prix UGC ne dépend PAS de l'audience : forfait de production × niveau, dont les DROITS d'exploitation sont le vrai levier. Fourchette HT indicative, barèmes marché 2026."}
+              ? "Prix basé sur les vues attendues, la niche et l'engagement. Fourchette HT indicative."
+              : "Prix fixe par contenu ; les droits d'utilisation font le plus varier le prix. Fourchette HT indicative."}
           </span>
         </div>
       </section>
@@ -449,7 +449,7 @@ export function Pricing() {
             <RatesEditor rates={rates ?? {}} onClose={() => setRatesOpen(false)} />
           ) : (
             <button type="button" onClick={() => setRatesOpen(true)} className="mt-4 flex items-center gap-1.5 self-start rounded-full border border-border px-2.5 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-              <SlidersHorizontal className="h-3.5 w-3.5" /> Barème (CPM){rates && Object.keys(rates).length ? " · personnalisé" : ""}
+              <SlidersHorizontal className="h-3.5 w-3.5" /> Barème de l'agence{rates && Object.keys(rates).length ? " · personnalisé" : ""}
             </button>
           )
         )}

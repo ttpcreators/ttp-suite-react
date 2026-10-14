@@ -49,7 +49,7 @@ export function CredentialVault() {
         <div className="flex items-center gap-2">
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground"><KeyRound className="h-4 w-4" /></span>
           <div>
-            <div className="text-sm font-semibold text-foreground">Coffre identifiants créateurs</div>
+            <div className="text-sm font-semibold text-foreground">Identifiants des créatrices</div>
             <div className="text-[11px] text-faint">Boîtes e-mail que tu gères. Agence uniquement — ⚠️ stocké en clair, n'ajoute que ce que tu acceptes.</div>
           </div>
         </div>

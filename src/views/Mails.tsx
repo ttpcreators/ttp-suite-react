@@ -673,7 +673,7 @@ export function Mails() {
                       <span className={cn("mt-1 block truncate text-[13.5px] text-foreground", t.unread ? "font-bold" : "font-semibold")}>{t.subject || "(sans objet)"}</span>
                       <span className="mt-1 flex min-w-0 items-end gap-3">
                         <span className="line-clamp-2 min-w-0 flex-1 text-[12.5px] leading-[1.45] text-muted-foreground">
-                          {t.direction === "out" && folder === "inbox" && <span className="text-faint">Vous : </span>}
+                          {t.direction === "out" && folder === "inbox" && <span className="text-faint">Toi : </span>}
                           {decodeEntities(t.snippet)}
                         </span>
                         <span title={BOX_LABEL[t.box]} className="mb-0.5 shrink-0"><BoxSquare box={t.box} className="size-2.5 rounded-[3px]" /></span>
@@ -713,9 +713,9 @@ export function Mails() {
         {tagList.length > 0 && (
           <Tabs
             size="sm"
-            label="Filtrer par type"
+            label="Filtrer par catégorie"
             wrap
-            items={[{ value: "__all__", label: "Tous types" }, ...tagList.map((t) => ({ value: t, label: t }))]}
+            items={[{ value: "__all__", label: "Toutes les catégories" }, ...tagList.map((t) => ({ value: t, label: t }))]}
             value={tagFilter}
             onValueChange={setTagFilter}
           />

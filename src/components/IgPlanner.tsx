@@ -219,7 +219,7 @@ export function IgPlanner({ focusId, onFocused }: { focusId?: string | null; onF
     const res = await invokePublish<{ result?: string; row?: { status: PlanStatus; error: string | null; permalink: string | null } }>({ mode: "now", id: r.id });
     setBusy(null);
     setReload((n) => n + 1);
-    if (res.error) return toast(res.error === "deja_en_cours" ? "Ce post est déjà en cours d'envoi" : res.error === "migration_manquante" ? "La publication sera active après le SQL" : "Publication impossible pour l'instant, réessaie");
+    if (res.error) return toast(res.error === "deja_en_cours" ? "Ce post est déjà en cours d'envoi" : res.error === "migration_manquante" ? "La publication n'est pas encore activée." : "Publication impossible pour l'instant, réessaie");
     if (res.row?.status === "publie") return toast("Publié sur Instagram ✓");
     if (res.row?.status === "erreur") return toast(res.row.error ?? "Instagram a refusé le post");
     toast("Instagram prépare le post : il sera en ligne dans quelques minutes");
@@ -242,7 +242,7 @@ export function IgPlanner({ focusId, onFocused }: { focusId?: string | null; onF
   if (missing) {
     return (
       <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/[0.04] px-6 py-10 text-center text-sm text-muted-foreground">
-        La programmation des posts sera active après la mise à jour de la base (SQL <span className="font-mono text-[12px] text-foreground">2026-10-14-instagram-dm-posts-concurrents.sql</span>).
+        La programmation des posts n'est pas encore activée.
       </div>
     );
   }
@@ -257,7 +257,7 @@ export function IgPlanner({ focusId, onFocused }: { focusId?: string | null; onF
       onEdit={() => setEditing(r)}
       onNow={() => setConfirm({ title: "Publier maintenant ?", message: `Le ${KIND_LABEL[r.kind].toLowerCase()} part tout de suite sur ${acc ? `@${acc.username}` : "le compte Instagram de TTP"}.`, label: "Publier", run: () => void publishNow(r) })}
       onDraft={() => void setDraft(r)}
-      onDelete={() => setConfirm({ title: r.status === "publie" ? "Retirer de la liste ?" : "Supprimer ce post ?", message: r.status === "publie" ? "Le post reste en ligne sur Instagram : il disparaît seulement de cette liste." : "Le post et ses fichiers sont supprimés. Rien n'est publié.", label: r.status === "publie" ? "Retirer" : "Supprimer", danger: true, run: () => void remove(r) })}
+      onDelete={() => setConfirm({ title: r.status === "publie" ? "Retirer de la liste ?" : "Supprimer définitivement ?", message: r.status === "publie" ? "Le post reste en ligne sur Instagram : il disparaît seulement de cette liste." : "Le post et ses fichiers sont supprimés définitivement. Rien n'est publié.", label: r.status === "publie" ? "Retirer" : "Supprimer définitivement", danger: true, run: () => void remove(r) })}
     />
   );
 
@@ -449,13 +449,11 @@ function SetupNotice({ status }: { status: Status }) {
     <div className="mb-4 flex items-start gap-3 rounded-2xl border border-amber/40 bg-amber/[0.06] p-3.5">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
       <div className="min-w-0 text-[12px] leading-relaxed text-muted-foreground">
-        <p className="font-semibold text-foreground">Publication pas encore activée : un réglage à faire une fois chez Meta</p>
+        <p className="font-semibold text-foreground">Publication pas encore activée</p>
         {status.error === "migration_manquante" ? (
-          <p>Lance d'abord le SQL de mise à jour de la base.</p>
-        ) : status.page !== "ok" ? (
-          <p>Le robot Meta ne voit pas encore la Page Facebook liée au compte Instagram de TTP. Dans le Business Manager, attribue la Page au robot « scoutingapi » (contrôle total), puis refais son jeton.</p>
-        ) : missingPerm ? (
-          <p>Ajoute la permission <span className="font-mono text-foreground">instagram_content_publish</span> au jeton du robot « scoutingapi », puis mets le nouveau jeton dans Supabase.</p>
+          <p>La publication n'est pas encore activée. Détails dans Réglages › Diagnostic.</p>
+        ) : status.page !== "ok" || missingPerm ? (
+          <p>Instagram n'autorise pas encore l'app à publier. Un réglage technique est à faire une seule fois (voir Réglages › Diagnostic).</p>
         ) : null}
         <p className="mt-1">Tu peux déjà préparer et programmer tes posts : ils partiront dès que ce sera réglé.</p>
       </div>
