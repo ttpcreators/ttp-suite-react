@@ -66,12 +66,12 @@ function StatusDot({ status, by }: { status: string; by?: string }) {
   );
 }
 
-const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse"; label: string; short: string; dot?: string; match: (s: MailStatus) => boolean }[] = [
-  { key: "tous", label: "Tous les échanges", short: "Tous", match: () => true },
-  { key: "encours", label: "En cours", short: "En cours", dot: "bg-amber-500", match: (s) => s === "nouvelle" || s === "negociation" },
-  { key: "atraiter", label: "À vérifier / valider", short: "À traiter", dot: "bg-orange-500", match: (s) => s === "a_verifier" || s === "a_valider" },
-  { key: "valide", label: "Validés", short: "Validés", dot: "bg-emerald-500", match: (s) => s === "valide" },
-  { key: "refuse", label: "Refusés", short: "Refusés", dot: "bg-red-500", match: (s) => s === "refuse" },
+const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse"; label: string; short: string; icon: LucideIcon; dot?: string; match: (s: MailStatus) => boolean }[] = [
+  { key: "tous", label: "Tous les échanges", short: "Tous", icon: Inbox, match: () => true },
+  { key: "encours", label: "En cours", short: "En cours", icon: Hourglass, dot: "bg-amber-500", match: (s) => s === "nouvelle" || s === "negociation" },
+  { key: "atraiter", label: "À vérifier / valider", short: "À traiter", icon: SearchCheck, dot: "bg-orange-500", match: (s) => s === "a_verifier" || s === "a_valider" },
+  { key: "valide", label: "Validés", short: "Validés", icon: Check, dot: "bg-emerald-500", match: (s) => s === "valide" },
+  { key: "refuse", label: "Refusés", short: "Refusés", icon: X, dot: "bg-red-500", match: (s) => s === "refuse" },
 ];
 
 /**
@@ -175,65 +175,61 @@ function StatusPanel({
     }
   };
 
+  const activeMeta = current ? choiceMeta(current) : null;
   return (
-    <div className="rounded-xl border border-border bg-panel/60 p-3.5 sm:p-4">
-      <div className="mb-2.5 flex items-center gap-3">
-        <p className="min-w-0 flex-1 text-[13px] font-semibold text-foreground">Où en est cet échange ?</p>
-        {feedCount > 0 && (
-          <button type="button" onClick={onShowFeed}
-            className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline">
-            <History className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Voir le suivi</span><span className="sm:hidden">Suivi</span> ({feedCount})
-          </button>
-        )}
-        <button type="button" onClick={onWriteNote}
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover">
-          <MessageSquarePlus className="h-3.5 w-3.5" /> Ajouter une remarque
-        </button>
-      </div>
-
+    <div className="border-y border-border py-3">
       {agencyStatus && (
-        <div className={cn("mb-3 flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-[12px]", agencyStatus.tile)}>
-          <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full", agencyStatus.disc)}><agencyStatus.icon className="h-3.5 w-3.5" /></span>
-          <span className="min-w-0 pt-0.5">
+        <div className={cn("mb-2.5 flex items-start gap-2 rounded-lg border px-2.5 py-2 text-[12px]", agencyStatus.tile)}>
+          <agencyStatus.icon className="mt-px h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0">
             <b>Statut de l'agence : {agencyStatus.label}</b>{when ? ` · ${when.replace(/\.$/, "")}` : ""}
-            <span className="block opacity-90">{AGENCY_STATUS_HINT[agencyStatus.value]}</span>
+            <span className="opacity-90"> · {AGENCY_STATUS_HINT[agencyStatus.value]}</span>
           </span>
         </div>
       )}
-      {forCreator && <p className="mb-1.5 text-[12px] font-semibold text-muted-foreground">Ton avis</p>}
-      <div role="radiogroup" aria-label={forCreator ? "Ton avis" : "Statut de l'échange"} className={cn("grid gap-2", tiles.length > 3 ? "grid-cols-3 sm:grid-cols-5" : "grid-cols-3")}>
-        {tiles.map((c) => {
-          const active = c.value === current;
-          const picked = c.value === pending;
-          const Icon = c.icon;
-          return (
-            <button
-              key={c.value}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              disabled={busy}
-              onClick={() => setPending(active ? null : c.value)}
-              className={cn(
-                "flex min-w-0 flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 text-center outline-none transition-colors focus-visible:ring-2 focus-visible:ring-foreground/20 disabled:opacity-60",
-                // Trois cases : icône à gauche sur ordinateur ; cinq cases : empilées, plus lisibles.
-                tiles.length <= 3 && "sm:flex-row sm:gap-3 sm:px-3.5 sm:py-3 sm:text-left",
-                active ? cn(c.tile, "cursor-default")
-                  : picked ? "border-foreground/40 bg-rowhover text-foreground"
-                  : "border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
-              )}
-            >
-              <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors", active || picked ? c.disc : "bg-muted text-muted-foreground")}>
-                <Icon className="h-4 w-4" />
-              </span>
-              <span className="flex min-w-0 max-w-full flex-col">
-                <span className="text-[14px] font-semibold leading-tight">{c.label}</span>
-                <span className="truncate text-[11px] opacity-80 sm:text-[12px]">{hintFor(c)}</span>
-              </span>
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+        <span className="pr-1 text-[12px] font-semibold text-muted-foreground">{forCreator ? "Ton avis" : "Statut"}</span>
+        <div role="radiogroup" aria-label={forCreator ? "Ton avis" : "Statut de l'échange"} className="flex flex-wrap gap-1.5">
+          {tiles.map((c) => {
+            const active = c.value === current;
+            const picked = c.value === pending;
+            const Icon = c.icon;
+            return (
+              <button
+                key={c.value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                disabled={busy}
+                title={hintFor(c)}
+                onClick={() => setPending(active ? null : c.value)}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-foreground/20 disabled:opacity-60",
+                  active ? cn(c.tile, "cursor-default")
+                    : picked ? "border-foreground/40 bg-rowhover text-foreground"
+                    : "border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" /> {c.label}
+              </button>
+            );
+          })}
+        </div>
+        <span className="flex-1" />
+        {feedCount > 0 && (
+          <button type="button" onClick={onShowFeed}
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <History className="h-3.5 w-3.5" /> Suivi ({feedCount})
+          </button>
+        )}
+        <button type="button" onClick={onWriteNote}
+          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <MessageSquarePlus className="h-3.5 w-3.5" /> Remarque
+        </button>
       </div>
+      {activeMeta && !pick && (
+        <p className="mt-1.5 text-[11.5px] text-muted-foreground">{activeMeta.label} : {hintFor(activeMeta)}</p>
+      )}
 
       {pick && (
         <div className="mt-3 rounded-xl border border-border bg-surface p-3">
@@ -936,7 +932,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
             badge={f.key === "tous" ? (mode === "creator" ? unseen.size : 0) || null : f.key === "atraiter" ? counts.atraiter || null : null}
             onClick={() => setFilter(f.key)}
           >
-            {f.dot ? <span aria-hidden className={cn("size-3.5 rounded-[4px]", f.dot)} /> : <Inbox className="h-[18px] w-[18px]" />}
+            <f.icon className="h-[18px] w-[18px]" />
           </RailButton>
         </Fragment>
       ))}
@@ -955,7 +951,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         return (
           <button key={f.key} type="button" onClick={() => setFilter(f.key)} aria-pressed={on}
             className={cn(pillCls, on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
-            {f.dot ? <span aria-hidden className={cn("size-2.5 rounded-[3px]", f.dot)} /> : <Inbox className="h-3.5 w-3.5" />}
+            <f.icon className="h-3.5 w-3.5" />
             {f.short}
             <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{counts[f.key]}</span>
           </button>
