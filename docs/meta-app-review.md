@@ -17,8 +17,24 @@ App Meta : « TTP Suite Scouting », ID `1085983370893343`, type Entreprise, por
 | 2 | Pages publiques `ttpcreators.pro/confidentialite/` et `/conditions/` (site vitrine) | assistant | ✅ en ligne (2026-10-14) |
 | 3 | Fiche de l'app (Paramètres de l'app → Général) : voir « Champs » ci-dessous | assistant + Marc | ✅ (2026-10-14) : domaines, confidentialité, conditions, suppression des données, catégorie « Entreprises et Pages », e-mail de contact partnerships@ttpcreators.pro ✅ enregistrés ; app rattachée au portefeuille « TTP Creators » ✅ ; ✅ icône (logo TTP) |
 | 4 | Réception en direct : déployer `ig-webhook` + secrets + Webhooks Meta (voir plus bas) | Marc + assistant | ✅ (2026-10-14) : `ig-webhook` + `ig-inbox` déployées, secrets `META_APP_SECRET` et `IG_WEBHOOK_VERIFY` posés, produit Webhooks ajouté, objet Instagram → URL de rappel vérifiée, champ **messages** abonné (v26.0), envoi test Meta = succès (donc signature et clé secrète OK). ⚠️ Meta : en mode Développement, seuls les envois test du tableau de bord arrivent ; pour recevoir de vrais DM (même des comptes ayant un rôle) et filmer la démo, l'app doit passer en mode **Live** |
-| 5 | Vidéo de démonstration (scénario ci-dessous) | Marc + assistant | ⏳ |
-| 6 | Contrôle app → Autorisations et fonctionnalités → `instagram_manage_messages` → « Demander un accès Avancé » (+ les autorisations liées que Meta propose) | Marc | ⏳ |
+| 5 | Vidéo de démonstration (scénario ci-dessous) | Marc + assistant | ✅ (2026-10-15) : 58 s, fichier « Enregistrement de l'écran 2026-10-15 à 01.42.10.mov » sur le Bureau de Marc ; relue image par image, minutage repris dans « Notes for the reviewer » |
+| 6 | Contrôle app → Autorisations et fonctionnalités → `instagram_manage_messages` → « Demander un accès Avancé » (+ les autorisations liées que Meta propose) | Marc + assistant | ✅ **Envoyée le 2026-10-15** (soumission `1087087250782955`), statut « Examen en cours », délai annoncé : 20 jours environ. Réponses données : voir « Formulaire envoyé » ci-dessous |
+
+## Formulaire envoyé (2026-10-15), pour une prochaine demande
+
+- **Usage autorisé** : `instagram_manage_messages` = texte anglais ci-dessous + vidéo + case « usage
+  autorisé » cochée. Meta exige `instagram_basic` dans le même envoi (ajouté depuis Autorisations et
+  fonctionnalités ; questions « intégration pour plusieurs clients professionnels ? » = Non,
+  « au nom d'un client individuel ? » = Non).
+- **Traitement des données** : sous-traitant = « Supabase, Inc. (database hosting and servers) »,
+  catégorie hébergement / stockage, pays Royaume-Uni (base `eu-west-2`, Londres), États-Unis,
+  Allemagne, Suisse (fonctions) ; responsable = « BOURAOUI MARC MAHER (entreprise individuelle),
+  trading as TTP Creators », France ; données données à une autorité publique = Non ; politiques
+  cochées : examen de légalité, minimisation, documentation des demandes.
+- **Instructions pour l'examen** : plateforme « Site web » ajoutée à l'app (Paramètres → Général,
+  URL `https://app.ttpcreators.pro/`) ; texte « Notes for the reviewer » ci-dessous ; pas
+  d'identifiants (outil interne) ; « Facebook Login intégré ? » = Non (accès par l'utilisateur
+  système « scoutingapi » du portefeuille) ; vidéo jointe aussi en document d'aide.
 
 ## Champs de la fiche de l'app (étape 3)
 
@@ -89,10 +105,10 @@ dans le champ « notes » de la demande.
 
 **pages_manage_metadata — How will your app use this permission?**
 
-> We use pages_manage_metadata only to subscribe our app to the webhooks of our own Facebook
-> Page "TTP Creators" (field: messages), so that new direct messages received on our linked
-> Instagram professional account appear in TTP Suite in real time. We do not modify any other
-> Page settings.
+> We use pages_manage_metadata only to install our app on our own Facebook Page "TTP Creators"
+> (subscribed_apps), which is required to receive the Instagram "messages" webhook of our linked
+> Instagram professional account @ttpcreators, so that new direct messages appear in TTP Suite
+> in real time. We do not modify any other Page settings.
 
 **instagram_basic — How will your app use this permission?**
 
@@ -102,9 +118,27 @@ dans le champ « notes » de la demande.
 
 **Notes for the reviewer**
 
-> TTP Suite is an internal tool: access is limited to our agency team (accounts are created by
-> us, no public sign-up). Test credentials for the reviewer are provided below. The interface is
-> in French; the screencast has English captions. Path: Relations → DM Instagram.
+> TTP Suite (https://app.ttpcreators.pro) is an internal business tool of our agency, not a
+> public app: there is no public sign-up, accounts are created by us for our team members only,
+> and the workspace holds confidential data about the creators we represent, so we cannot open
+> an account to outside parties. The screencast shows the complete flow, end to end, with a
+> real message sent to our account @ttpcreators by a test account (@tipsconcierge).
+> There is no Facebook Login in TTP Suite: the app only accesses our own Facebook Page and
+> Instagram account, through a system user of our business portfolio "TTP Creators".
+> The interface is in French. Walkthrough of the screencast:
+> 0:00 Our agency workspace, page "DM Instagram" (menu "Au quotidien"): conversations of
+> @ttpcreators (French labels: "conversations", "avec fiche" = with a contact card,
+> "emails trouvés" = emails found).
+> 0:12 Our team clicks "Actualiser" (Refresh).
+> 0:24 The new direct message "Hello TTP, we'd love to work with your creators. Contact:
+> demo-brand@example.com" appears in the list (received via the Instagram messages webhook).
+> 0:28 The conversation is opened: messages are displayed and the email address is detected.
+> 0:32 "Créer la fiche contact" (Create contact card): the sender becomes a business contact in
+> our CRM ("Fiche contact créée" = contact card created; the exchanges are logged on it).
+> 0:40 "Répondre sur Instagram" (Reply on Instagram) opens the conversation in Instagram: our team
+> writes the reply manually there. TTP Suite never sends messages.
+> 0:48 Back in TTP Suite, "Pipeline" adds the contact to our prospecting follow-up
+> ("Ajoutée au Pipeline" = added to the pipeline).
 
 ---
 
