@@ -255,11 +255,6 @@ export async function getAccessToken(sb: SupabaseClient): Promise<string> {
   return j.access_token as string;
 }
 
-/** Alias ergonomique (client optionnel). */
-export function getFreshAccessToken(sb: SupabaseClient = getServiceClient()): Promise<string> {
-  return getAccessToken(sb);
-}
-
 // ----------------------------------------------------------------------------
 // Client Google Calendar (retry 401 -> refresh forcé, backoff 429/5xx)
 // ----------------------------------------------------------------------------

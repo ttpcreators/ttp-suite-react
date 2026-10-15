@@ -182,13 +182,6 @@ export function docTitle(main: string, tail?: string): string {
   return esc(main) + (tail ? ` <i>${esc(tail)}</i>` : "");
 }
 
-/** Titre dont le DERNIER mot passe en italique bordeaux (« Cession de droits *UGC* »). */
-export function docTitleLastWord(title: string): string {
-  const words = title.trim().split(/\s+/);
-  if (words.length < 2) return esc(title);
-  return docTitle(words.slice(0, -1).join(" "), words[words.length - 1]);
-}
-
 /**
  * CONTRATS (Marque × Créateur, UGC, représentation) : mise en page de vrai document
  * juridique, plus sobre que les autres documents (demande de Marc, 2026-10-07 : « mal

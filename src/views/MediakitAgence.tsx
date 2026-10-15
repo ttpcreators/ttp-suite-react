@@ -298,7 +298,7 @@ export function AgencyTab() {
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {/* Couleurs du deck agence (web + PDF) */}
           <section className={`${CARD} xl:col-span-2`}>
-            <MediakitThemePicker kind="creator" value={kit.theme} onChange={(theme) => setKit((k) => ({ ...k, theme }))} previewBase="https://ttpcreators.pro/mediakit/agence/" />
+            <MediakitThemePicker value={kit.theme} onChange={(theme) => setKit((k) => ({ ...k, theme }))} previewBase="https://ttpcreators.pro/mediakit/agence/" />
           </section>
 
           {/* ---------------- INTRO ---------------- */}

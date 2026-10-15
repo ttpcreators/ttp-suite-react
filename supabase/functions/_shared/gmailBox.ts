@@ -13,7 +13,6 @@
 import { getAccessToken, getServiceClient } from "./google.ts";
 
 export type Box = "partnerships" | "talent";
-export const BOXES: Box[] = ["partnerships", "talent"];
 
 const SCOPE = {
   read: "https://www.googleapis.com/auth/gmail.readonly",

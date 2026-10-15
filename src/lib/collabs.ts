@@ -53,10 +53,6 @@ export function phaseOf(n: number): PhaseKey {
   return stepDef(n).phase;
 }
 
-export function phaseLabel(key: PhaseKey): string {
-  return PHASES.find((p) => p.key === key)?.label ?? "";
-}
-
 /** Une collab est terminée quand elle atteint la dernière étape (bilan). */
 export function isDone(step: number): boolean {
   return step >= STEP_COUNT;
