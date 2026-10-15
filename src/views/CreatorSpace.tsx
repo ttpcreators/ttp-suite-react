@@ -1695,7 +1695,7 @@ export function CreatorSpace({
           {/* Contenu des onglets — barrière d'erreur : un onglet qui plante
               n'emporte pas la navigation (la sidebar reste cliquable). */}
           <ErrorBoundary variant="inline" label="Cette page" resetKey={tab}>
-          <TabFrame title={tab === "accueil" ? null : TABS.find((t) => t.id === tab)?.label ?? null}>
+          <TabFrame title={tab === "accueil" || tab === "mails" ? null : TABS.find((t) => t.id === tab)?.label ?? null}>
           {/* Guide — comment utiliser l'app (mobile + ordi) + réflexe À faire */}
           {tab === "guide" && (
             <CreatorGuide firstName={firstName} onGoto={(t) => setTab(t as Tab)} onSendStats={() => setStatsModalOpen(true)} />

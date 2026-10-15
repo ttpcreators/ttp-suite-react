@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Loader2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X,
   type LucideIcon,
@@ -22,6 +22,7 @@ import {
 } from "@/lib/creatorMail";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
 import { BarButton, RailButton, SearchField, ToolButton, mailRowCls, pillCls } from "@/components/mail-shell";
+import { Tabs } from "@/components/ui/animated-tabs";
 
 /*
  * Section « Mails » (lecture seule) : les échanges de la boîte agence où apparaît
@@ -465,18 +466,16 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
       for (const t of r.threads) if (isAuto(t.status)) autoOf.current.set(t.id, t.status);
       setThreads(r.threads);
       if (mode === "creator") reportMailList(creator, r.threads, !!r.partial);
-      const first = firstLoad.current;
       firstLoad.current = false;
-      // Échange demandé par un lien (une seule fois), sinon sur ordinateur le premier (au premier chargement).
+      // Échange demandé par un lien (une seule fois) ; sinon rien d'ouvert d'office, comme la page Mails.
       const wanted = initialRef.current && r.threads.some((t) => t.id === initialRef.current) ? initialRef.current : null;
       initialRef.current = null;
-      const desktop = !isNarrow();
       setOpenId((cur) => {
         if (wanted) return wanted;
         // Échange ouvert absent d'une liste COMPLÈTE (supprimé dans Gmail…) : on le ferme.
         // Liste incomplète : il a peut-être seulement échoué à se charger, on le garde.
         if (cur && (r.partial || r.threads.some((t) => t.id === cur))) return cur;
-        return first && desktop && r.threads.length ? r.threads[0].id : null;
+        return null;
       });
       // Échange ouvert : relu dans Gmail s'il a un nouveau message (ou sur « Actualiser »),
       // sinon seul son suivi est relu en base.
@@ -922,20 +921,9 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   // ── Barre d'icônes (ordinateur) : les cinq rangements, avec leur nombre ──
   const rail = (
     <nav aria-label="Ranger les échanges" className="hidden min-h-0 flex-col items-center gap-1 border-r border-border py-3 lg:flex">
-      {FILTERS.map((f, i) => (
-        <Fragment key={f.key}>
-          {i === 1 && <span aria-hidden className="my-1 h-px w-8 shrink-0 bg-border" />}
-          <RailButton
-            label={`${f.label} · ${counts[f.key]}`}
-            caption={f.short}
-            active={filter === f.key}
-            badge={f.key === "tous" ? (mode === "creator" ? unseen.size : 0) || null : f.key === "atraiter" ? counts.atraiter || null : null}
-            onClick={() => setFilter(f.key)}
-          >
-            <f.icon className="h-[18px] w-[18px]" />
-          </RailButton>
-        </Fragment>
-      ))}
+      <RailButton label="Boîte de réception" caption="Reçus" active badge={(mode === "creator" ? unseen.size : counts.atraiter) || null} onClick={() => setFilter("tous")}>
+        <Inbox className="h-[18px] w-[18px]" />
+      </RailButton>
       <span className="flex-1" />
       <RailButton label={help ? "Masquer l'aide" : "Comment ça marche"} caption="Aide" active={help} bar={false} onClick={() => setHelp(!help)}>
         <Info className="h-[18px] w-[18px]" />
@@ -971,10 +959,19 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
       <div className="shrink-0 px-3 pb-2.5 pt-3 sm:px-4">
         <div className="flex items-center gap-1">
           <h2 className="min-w-0 flex-1 truncate pl-1 text-[17px] font-semibold tracking-tight text-foreground">
-            {cur.key === "tous" ? "Boîte de réception" : cur.label}
+            Boîte de réception
           </h2>
           <ToolButton icon={RefreshCw} label="Actualiser" spin={loading} disabled={loading} onClick={retry} className="h-8 w-8" />
         </div>
+        <Tabs
+          className="mt-2 max-lg:hidden"
+          size="sm"
+          fullWidth
+          label="Rangement affiché"
+          value={filter}
+          onValueChange={(v) => setFilter(v as typeof filter)}
+          items={FILTERS.map((f) => ({ value: f.key, label: f.short }))}
+        />
         <div className="mt-2">
           <SearchField size="sm" value={query} onChange={setQuery} placeholder="Rechercher une marque, un objet…" />
         </div>
@@ -1190,7 +1187,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     <section className="hidden min-h-0 min-w-0 flex-col items-center justify-center gap-3 px-6 text-center lg:flex">
       <span className="grid h-12 w-12 place-items-center rounded-full bg-muted"><Inbox className="h-5 w-5 text-muted-foreground" /></span>
       <p className="text-[14px] font-medium text-foreground">Aucun échange ouvert</p>
-      <p className="max-w-[300px] text-[13px] text-muted-foreground">Choisis un échange dans la liste pour lire la conversation avec la marque.</p>
+      <p className="max-w-[300px] text-[13px] text-muted-foreground">Choisis un échange dans la liste pour le lire ici.</p>
       {help && <div className="mt-2 w-full max-w-[460px]">{helpBanner}</div>}
     </section>
   );
