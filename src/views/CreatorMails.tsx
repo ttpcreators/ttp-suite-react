@@ -66,12 +66,12 @@ function StatusDot({ status, by }: { status: string; by?: string }) {
   );
 }
 
-const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse"; label: string; dot?: string; match: (s: MailStatus) => boolean }[] = [
-  { key: "tous", label: "Tous les échanges", match: () => true },
-  { key: "encours", label: "En cours", dot: "bg-amber-500", match: (s) => s === "nouvelle" || s === "negociation" },
-  { key: "atraiter", label: "À vérifier / valider", dot: "bg-orange-500", match: (s) => s === "a_verifier" || s === "a_valider" },
-  { key: "valide", label: "Validés", dot: "bg-emerald-500", match: (s) => s === "valide" },
-  { key: "refuse", label: "Refusés", dot: "bg-red-500", match: (s) => s === "refuse" },
+const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse"; label: string; short: string; dot?: string; match: (s: MailStatus) => boolean }[] = [
+  { key: "tous", label: "Tous les échanges", short: "Tous", match: () => true },
+  { key: "encours", label: "En cours", short: "En cours", dot: "bg-amber-500", match: (s) => s === "nouvelle" || s === "negociation" },
+  { key: "atraiter", label: "À vérifier / valider", short: "À traiter", dot: "bg-orange-500", match: (s) => s === "a_verifier" || s === "a_valider" },
+  { key: "valide", label: "Validés", short: "Validés", dot: "bg-emerald-500", match: (s) => s === "valide" },
+  { key: "refuse", label: "Refusés", short: "Refusés", dot: "bg-red-500", match: (s) => s === "refuse" },
 ];
 
 /**
@@ -925,17 +925,23 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
   // ── Barre d'icônes (ordinateur) : les cinq rangements, avec leur nombre ──
   const rail = (
-    <nav aria-label="Ranger les échanges" className="hidden min-h-0 flex-col items-center gap-1.5 border-r border-border py-3 lg:flex">
+    <nav aria-label="Ranger les échanges" className="hidden min-h-0 flex-col items-center gap-1 border-r border-border py-3 lg:flex">
       {FILTERS.map((f, i) => (
         <Fragment key={f.key}>
-          {i === 1 && <span aria-hidden className="my-1.5 h-px w-6 shrink-0 bg-border" />}
-          <RailButton label={`${f.label} · ${counts[f.key]}`} active={filter === f.key} count={counts[f.key]} onClick={() => setFilter(f.key)}>
+          {i === 1 && <span aria-hidden className="my-1 h-px w-8 shrink-0 bg-border" />}
+          <RailButton
+            label={`${f.label} · ${counts[f.key]}`}
+            caption={f.short}
+            active={filter === f.key}
+            badge={f.key === "tous" ? (mode === "creator" ? unseen.size : 0) || null : f.key === "atraiter" ? counts.atraiter || null : null}
+            onClick={() => setFilter(f.key)}
+          >
             {f.dot ? <span aria-hidden className={cn("size-3.5 rounded-[4px]", f.dot)} /> : <Inbox className="h-[18px] w-[18px]" />}
           </RailButton>
         </Fragment>
       ))}
       <span className="flex-1" />
-      <RailButton label={help ? "Masquer l'aide" : "Comment ça marche"} active={help} bar={false} onClick={() => setHelp(!help)}>
+      <RailButton label={help ? "Masquer l'aide" : "Comment ça marche"} caption="Aide" active={help} bar={false} onClick={() => setHelp(!help)}>
         <Info className="h-[18px] w-[18px]" />
       </RailButton>
     </nav>
@@ -950,7 +956,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           <button key={f.key} type="button" onClick={() => setFilter(f.key)} aria-pressed={on}
             className={cn(pillCls, on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
             {f.dot ? <span aria-hidden className={cn("size-2.5 rounded-[3px]", f.dot)} /> : <Inbox className="h-3.5 w-3.5" />}
-            {f.key === "tous" ? "Tous" : f.label}
+            {f.short}
             <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{counts[f.key]}</span>
           </button>
         );
@@ -966,21 +972,21 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const listBroken = !!err && threads.length === 0; // rien à montrer : l'erreur prend la place
   const list = (
     <section className={cn("flex min-h-0 min-w-0 flex-col bg-panel lg:border-r lg:border-border", openId && "max-lg:hidden")}>
-      <div className="px-4 pt-4 sm:px-5 sm:pt-5">
-        <div className="flex items-center gap-2">
-          <h2 className="min-w-0 flex-1 truncate text-[20px] font-semibold tracking-tight text-foreground sm:text-[22px]">
+      <div className="shrink-0 px-3 pb-2.5 pt-3 sm:px-4">
+        <div className="flex items-center gap-1">
+          <h2 className="min-w-0 flex-1 truncate pl-1 text-[17px] font-semibold tracking-tight text-foreground">
             {cur.key === "tous" ? "Boîte de réception" : cur.label}
           </h2>
-          <ToolButton icon={RefreshCw} label="Actualiser" spin={loading} disabled={loading} onClick={retry} />
+          <ToolButton icon={RefreshCw} label="Actualiser" spin={loading} disabled={loading} onClick={retry} className="h-8 w-8" />
         </div>
-        <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">
-          {cur.dot && <span aria-hidden className={cn("size-2.5 shrink-0 rounded-[3px]", cur.dot)} />}
+        <div className="mt-2">
+          <SearchField size="sm" value={query} onChange={setQuery} placeholder="Rechercher une marque, un objet…" />
+        </div>
+        <p className="mt-1.5 flex min-w-0 items-center gap-1.5 truncate pl-1 text-[11.5px] text-muted-foreground" aria-live="polite">
+          {cur.dot && <span aria-hidden className={cn("size-2 shrink-0 rounded-[3px]", cur.dot)} />}
           {q ? `${shown.length} sur ${counts[cur.key]}` : counts[cur.key]} échange{plural(q ? counts[cur.key] : shown.length)}
           {mode === "creator" && unseen.size > 0 && <span className="font-medium text-foreground">· {unseen.size} à voir</span>}
         </p>
-      </div>
-      <div className="px-4 pb-3 pt-3 sm:px-5">
-        <SearchField value={query} onChange={setQuery} placeholder="Rechercher une marque, un objet…" />
       </div>
       {help && <div className="px-4 pb-3 sm:px-5 lg:hidden">{helpBanner}</div>}
       {err && !listBroken && (
@@ -997,7 +1003,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           <button type="button" onClick={retry} disabled={loading} className="shrink-0 font-semibold text-foreground underline-offset-2 hover:underline disabled:opacity-50">Réessayer</button>
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto border-t border-border">
+      <div className="min-h-0 flex-1 overflow-y-auto border-t border-border" aria-busy={loading}>
         {listBroken ? (
           <StatePanel icon={CircleAlert} text={unavailable} action={{ label: "Réessayer", busy: loading, onClick: retry }} />
         ) : shown.length === 0 ? (
@@ -1009,20 +1015,21 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
               const fresh = unseen.has(t.id);
               return (
                 <li key={t.id}>
-                  <button type="button" aria-current={on || undefined} onClick={() => openFromList(t.id)} className={cn(mailRowCls(on), "py-4")}>
-                    <Initial name={prettyName(t.brand)} email={t.brandEmail} />
+                  <button type="button" aria-current={on || undefined} onClick={() => openFromList(t.id)} className={cn(mailRowCls(on), "items-center py-2.5")}>
+                    <Initial name={prettyName(t.brand)} email={t.brandEmail} size="md" />
                     <span className="min-w-0 flex-1">
-                      <span className="flex min-w-0 items-center gap-2">
+                      <span className="flex min-w-0 items-center gap-1.5">
                         {fresh && <span aria-label="Nouveau" className="size-2 shrink-0 rounded-full bg-primary" />}
-                        <span className={cn("min-w-0 flex-1 truncate text-[12.5px]", fresh ? "font-semibold text-foreground" : "font-medium text-muted-foreground")}>
+                        <span className={cn("min-w-0 truncate text-[12.5px] leading-4", fresh ? "font-semibold text-foreground" : "font-medium text-muted-foreground")}>
                           {prettyName(t.brand) || "Marque"}
-                          {t.count > 1 && <span className="ml-1.5 font-normal text-faint">{t.count}</span>}
                         </span>
-                        <span className={cn("shrink-0 text-[11px] tabular-nums", fresh ? "font-semibold text-foreground" : "text-faint")}>{fmtWhen(t.ts)}</span>
+                        {t.count > 1 && <span className="shrink-0 text-[11.5px] leading-4 text-faint">{t.count}</span>}
+                        <span className="flex-1" />
+                        <span className={cn("shrink-0 text-[11px] leading-4 tabular-nums", fresh ? "font-semibold text-foreground" : "text-faint")}>{fmtWhen(t.ts)}</span>
                       </span>
-                      <span className={cn("mt-1 block truncate text-[13.5px] text-foreground", fresh ? "font-bold" : "font-semibold")}>{t.subject}</span>
-                      <span className={cn("mt-1 line-clamp-2 text-[12.5px] leading-[1.45]", fresh ? "text-foreground/80" : "text-muted-foreground")}>{t.excerpt}</span>
-                      <span className="mt-2 flex min-w-0 items-center gap-3">
+                      <span className={cn("mt-0.5 block truncate text-[13px] leading-[18px] text-foreground", fresh ? "font-bold" : "font-medium")}>{t.subject || "(sans objet)"}</span>
+                      <span className="mt-0.5 block truncate text-[12.5px] leading-4 text-muted-foreground">{t.excerpt}</span>
+                      <span className="mt-1.5 flex min-w-0 items-center gap-3">
                         <StatusDot status={t.status} by={t.decidedBy ? authorName(t.decidedBy, mode, creatorName) : undefined} />
                         {t.notes > 0 && (
                           <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground" title="Remarques">
@@ -1071,7 +1078,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         ) : (
           <div className="px-4 py-6 sm:px-8">
             {help && <div className="mb-6 max-lg:hidden">{helpBanner}</div>}
-            <h1 className="text-[20px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere] [text-wrap:balance] sm:text-[22px]">{thread.subject}</h1>
+            <h1 className="text-[18px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere] [text-wrap:balance] sm:text-[20px]">{thread.subject}</h1>
             <p className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
               <span>{thread.brand ? `${prettyName(thread.brand)} · ` : ""}{thread.messages.length} message{plural(thread.messages.length)}</span>
               <StatusDot status={thread.status} by={thread.decidedBy ? authorName(thread.decidedBy, mode, creatorName) : undefined} />
@@ -1194,7 +1201,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
   // Messagerie en un seul panneau : barre d'icônes, liste, lecture (hauteur fixe sur ordinateur).
   return (
-    <div ref={rootRef} className="flex min-w-0 scroll-mt-[calc(env(safe-area-inset-top)+3.5rem)] flex-col overflow-hidden rounded-2xl border border-border bg-surface lg:grid lg:h-[min(900px,calc(100dvh-150px))] lg:min-h-[560px] lg:grid-cols-[64px_minmax(260px,300px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[64px_minmax(280px,320px)_minmax(0,1fr)] 2xl:grid-cols-[64px_minmax(300px,350px)_minmax(0,1fr)]">
+    <div ref={rootRef} className="flex min-w-0 scroll-mt-[calc(env(safe-area-inset-top)+3.5rem)] flex-col overflow-hidden rounded-2xl border border-border bg-surface lg:grid lg:h-[min(900px,calc(100dvh-150px))] lg:min-h-[560px] lg:grid-cols-[72px_minmax(300px,340px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[72px_minmax(330px,400px)_minmax(0,1fr)]">
       {rail}
       {pills}
       {list}
