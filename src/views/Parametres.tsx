@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check, MessageCircle, History } from "lucide-react";
+import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check, MessageCircle, History, PanelLeft, EyeOff } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
 import { ACCENT_PRESETS, ACCENT_GRADIENTS, getAccent, setAccent, isHex, parseGradient, getDarkStyle, setDarkStyle, type DarkStyle } from "@/lib/accent";
@@ -11,6 +11,8 @@ import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { myDisplayName, saveMyDisplayName } from "@/lib/team";
+import { NAV, type ViewId } from "@/lib/nav";
+import { ALWAYS_SHOWN, HIDDEN_PAGES_EVENT, HIDDEN_PAGES_KEY, hiddenPagesOf } from "@/lib/hiddenPages";
 
 /**
  * Préférences de notifications (agence) — stockées dans le blob `notifPrefs`.
@@ -134,6 +136,69 @@ function Section({ icon, title, hint, children }: { icon: ReactNode; title: stri
       </div>
       <div className="mt-2">{children}</div>
     </div>
+  );
+}
+
+/**
+ * Pages affichées dans le menu (pour toute l'agence). Une page décochée est rangée : hors du
+ * menu, de la recherche et des raccourcis, sans rien effacer. Un clic la remet.
+ */
+function PagesSection() {
+  const { data } = useAppState<ViewId[]>(hiddenPagesOf);
+  const [local, setLocal] = useState<ViewId[] | null>(null);
+  const parked = local ?? data ?? [];
+  const toggle = async (id: ViewId) => {
+    // Relecture fraîche : ne pas écraser ce qu'un collègue vient de changer.
+    invalidateAppState();
+    const fresh = hiddenPagesOf(await getAppState());
+    const next = fresh.includes(id) ? fresh.filter((x) => x !== id) : [...fresh, id];
+    setLocal(next);
+    window.dispatchEvent(new CustomEvent(HIDDEN_PAGES_EVENT, { detail: next }));
+    if (!(await saveAppStateKey(HIDDEN_PAGES_KEY, next))) {
+      setLocal(fresh);
+      window.dispatchEvent(new CustomEvent(HIDDEN_PAGES_EVENT, { detail: fresh }));
+      toast("Erreur d'enregistrement, réessaie");
+    }
+  };
+  return (
+    <Section
+      icon={<PanelLeft className="h-4 w-4" />}
+      title="Pages affichées"
+      hint="Clique une page pour la ranger ou la remettre dans le menu, pour toute l'équipe. Rien n'est effacé."
+    >
+      <div className="flex flex-col gap-3">
+        {NAV.map((f) => {
+          const items = f.items.filter((i) => !ALWAYS_SHOWN.includes(i.id));
+          if (!items.length) return null;
+          return (
+            <div key={f.id}>
+              <div className="mb-1.5 text-[11px] font-medium text-faint">{f.label}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {items.map((i) => {
+                  const shown = !parked.includes(i.id);
+                  const Icon = shown ? i.icon : EyeOff;
+                  return (
+                    <button
+                      key={i.id}
+                      type="button"
+                      onClick={() => void toggle(i.id)}
+                      aria-pressed={shown}
+                      title={shown ? "Ranger cette page" : "Remettre cette page dans le menu"}
+                      className={cn(
+                        "flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors",
+                        shown ? "border-border text-foreground hover:bg-rowhover" : "border-dashed border-border text-faint line-through hover:bg-rowhover",
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5" /> {i.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Section>
   );
 }
 
@@ -303,6 +368,8 @@ export function Parametres() {
           />
         </div>
       </Section>
+
+      <PagesSection />
 
       {/* Couleur d'accent (token --primary) — s'applique aussi en thème sombre */}
       <Section

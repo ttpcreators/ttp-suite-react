@@ -13,6 +13,7 @@ import { useNavBadges } from "@/lib/useNavBadges";
 import { markNavSeen } from "@/lib/navSeen";
 import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { DEFAULT_HIDDEN_PAGES, HIDDEN_PAGES_EVENT, hiddenPagesOf } from "@/lib/hiddenPages";
 import { maybeAutoRun } from "@/lib/diagnostics";
 import { getThemePref, setThemePref } from "@/lib/accent";
 import { Sidebar } from "@/components/Sidebar";
@@ -132,11 +133,9 @@ function ViewContent({
     <div className="grid min-h-[40vh] place-items-center rounded-xl border border-dashed border-border bg-surface/50">
       <div className="text-center">
         {item && <item.icon className="mx-auto h-8 w-8 text-muted-foreground" />}
-        <div className="mt-3 text-sm font-medium">
-          {item?.label} — migration en cours
-        </div>
+        <div className="mt-3 text-sm font-medium">Page introuvable</div>
         <div className="mt-1 text-xs text-muted-foreground">
-          Cette vue sera branchée sur tes vraies données très bientôt.
+          Elle a peut-être été renommée : choisis une page dans le menu.
         </div>
       </div>
     </div>
@@ -300,6 +299,16 @@ export default function App() {
     setLocalPins(next);
     if (!(await saveAppStateKey("pinnedPages", next))) setLocalPins(fresh);
   };
+  // Pages rangées (Paramètres → « Pages affichées ») : hors du menu, de la recherche et des
+  // raccourcis, mais toujours ouvrables. Paramètres prévient tout de suite par un événement.
+  const { data: parkedData } = useAppState<ViewId[]>(hiddenPagesOf);
+  const [localParked, setLocalParked] = useState<ViewId[] | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => setLocalParked((e as CustomEvent<ViewId[]>).detail);
+    window.addEventListener(HIDDEN_PAGES_EVENT, on);
+    return () => window.removeEventListener(HIDDEN_PAGES_EVENT, on);
+  }, []);
+  const parked = localParked ?? parkedData ?? DEFAULT_HIDDEN_PAGES;
   const [profile, setProfile] = useState<
     { role: string; creator_name: string | null } | null | undefined
   >(undefined);
@@ -527,25 +536,27 @@ export default function App() {
   const FOUNDER_ONLY: ViewId[] = ["facturation", "reversements", "relances", "echeances", "acces", "diagnostique", "agent"];
   const hiddenIds = isFounder ? [] : FOUNDER_ONLY;
   const canSee = (id: ViewId) => !hiddenIds.includes(id);
+  // Dans les menus : ni les pages fondateur (pour un membre), ni les pages rangées.
+  const navHidden = [...hiddenIds, ...parked];
+  const inNav = (id: ViewId) => !navHidden.includes(id);
   // Volet secondaire affiché SEULEMENT si la vue est autorisée (un volet restauré du
   // localStorage ne doit jamais montrer une page fondateur à un membre).
   const splitShown = splitView && canSee(splitView) ? splitView : null;
 
   // Raccourcis (pages épinglées), aussi en tête de l'écran « Plus » sur téléphone.
   const pinnedNavItems = pinned
-    .filter(canSee)
+    .filter(inNav)
     .map((id) => findPinnable(id))
     .filter((i): i is NavItem => !!i)
     .map((i) => ({ id: i.id, label: i.label, icon: i.icon, children: i.children }));
-  const navFiltered = NAV.map((f) => ({ ...f, items: f.items.filter((i) => canSee(i.id)) })).filter((f) => f.items.length > 0);
+  const navFiltered = NAV.map((f) => ({ ...f, items: f.items.filter((i) => inNav(i.id)) })).filter((f) => f.items.length > 0);
 
   const { items: notifs, dismiss: dismissNotifs } = useNotifications();
   // Pastilles du menu, des onglets iPhone et de l'écran « Plus » : nouveautés pas encore
   // vues + choses à traiter, par page. Une page ouverte compte comme vue (à l'ouverture,
   // en la quittant et quand l'app passe en arrière-plan).
   const seenUid = session?.user.id;
-  const pageKey = active === "whatsapp" && sub === "mails" ? "mails" : active;
-  const viewing = useMemo(() => [pageKey, splitShown].filter((x): x is ViewId => !!x), [pageKey, splitShown]);
+  const viewing = useMemo(() => [active, splitShown].filter((x): x is ViewId => !!x), [active, splitShown]);
   const navBadges = useNavBadges(seenUid, notifs, viewing);
   const viewingKey = viewing.join("|");
   useEffect(() => {
@@ -569,13 +580,13 @@ export default function App() {
   // Onglets du bas : Accueil + 3 pages (les Raccourcis d'abord, sinon les plus utiles) + Plus.
   const tabIds = [...new Set<ViewId>([
     "apercu",
-    ...pinned.filter((id) => canSee(id) && !!findPinnable(id)),
-    ...(["contacts", "roster", "planning", "mails", "todo"] as ViewId[]).filter(canSee),
+    ...pinned.filter((id) => inNav(id) && !!findPinnable(id)),
+    ...(["contacts", "roster", "planning", "mails", "todo"] as ViewId[]).filter(inNav),
   ])].slice(0, 4);
   const iosTabs: IosTab[] = [
     ...tabIds.map((id) => ({ id, label: id === "apercu" ? "Accueil" : findPinnable(id)?.label ?? viewTitle(id), icon: id === "apercu" ? House : findPinnable(id)?.icon ?? Star, badge: navBadges[id] })),
     // « Plus » : les notifications des pages qui n'ont pas leur onglet.
-    { id: "__more", label: "Plus", icon: CircleEllipsis, badge: Object.entries(navBadges).reduce((n, [id, c]) => (tabIds.includes(id as ViewId) || !canSee(id as ViewId) ? n : n + c), 0) },
+    { id: "__more", label: "Plus", icon: CircleEllipsis, badge: Object.entries(navBadges).reduce((n, [id, c]) => (tabIds.includes(id as ViewId) || !inNav(id as ViewId) ? n : n + c), 0) },
   ];
   const iosActive = phoneScreen === "more" ? "__more" : phoneScreen === "search" ? "" : tabIds.includes(active) ? active : "__more";
   // Chaque écran garde sa position de défilement, comme les onglets d'une app iOS.
@@ -727,7 +738,7 @@ export default function App() {
   const topBar = (
     <header className="flex items-center gap-4 px-4 pt-5 md:px-6">
       {/* recherche globale (filtre + navigation) */}
-      <GlobalSearch query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={hiddenIds} />
+      <GlobalSearch query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={navHidden} />
       {/* right cluster */}
       <div className="ml-auto flex shrink-0 items-center gap-2.5">
         <Notifications items={notifs} onDismiss={dismissNotifs} />
@@ -768,7 +779,7 @@ export default function App() {
   // (Le mode portail a déjà fait un return anticipé plus haut : ici space === "agency".)
   const primaryTitle = detailCreator ? titleCase(detailCreator) : canSee(active) ? title : "Accès réservé";
   // Accueil et Mails n'ont pas d'en-tête de page (Mails : client plein écran avec son propre en-tête).
-  const showPrimaryH1 = !detailCreator && active !== "apercu" && pageKey !== "mails";
+  const showPrimaryH1 = !detailCreator && active !== "apercu" && active !== "mails";
   // Multi-pages actif dès qu'il y a ≥ 2 onglets ou un volet latéral.
   // (Mode iPhone : toujours une seule page à la fois, comme une app.)
   const multi = !iosPhone && (tabs.length > 1 || splitShown != null);
@@ -795,9 +806,9 @@ export default function App() {
               space={space}
               onSpaceChange={changeSpace}
               onItemContext={onItemContext}
-              pinned={pinned.filter(canSee)}
+              pinned={pinned.filter(inNav)}
               onTogglePin={togglePin}
-              hidden={hiddenIds}
+              hidden={navHidden}
               userId={session.user.id}
               badges={navBadges}
               onItemSplit={(id) => {
@@ -867,7 +878,7 @@ export default function App() {
                         </PageFrame>
                       ) : iosPhone && phoneScreen === "search" ? (
                         <PageFrame title="Rechercher">
-                          <GlobalSearch inline autoFocus query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={hiddenIds} />
+                          <GlobalSearch inline autoFocus query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={navHidden} />
                         </PageFrame>
                       ) : showPrimaryH1 ? (
                         <PageFrame title={title} hint={VIEW_HINTS[active]}>{mainInner}</PageFrame>

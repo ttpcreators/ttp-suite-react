@@ -19,6 +19,7 @@ import {
   type PostStat,
   type EngTotals,
 } from "@/lib/engagement";
+import { FEATURES } from "@/lib/features";
 
 export type Shot = { path: string; name: string };
 export type ErBasis = "reach" | "followers";
@@ -411,24 +412,28 @@ export function DebriefCalculator({
           >
             {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} Instagram
           </button>
-          <button
-            type="button"
-            onClick={() => void fillFromTikTok()}
-            disabled={igBusy}
-            className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
-            title="Reprend les vidéos TikTok du créateur qui citent la marque (s'il a connecté son TikTok)"
-          >
-            {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} TikTok
-          </button>
-          <button
-            type="button"
-            onClick={() => void fillFromYouTube()}
-            disabled={igBusy}
-            className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
-            title="Reprend les vidéos YouTube du créateur qui citent la marque (s'il a connecté sa chaîne)"
-          >
-            {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} YouTube
-          </button>
+          {FEATURES.connect.tiktok && (
+            <button
+              type="button"
+              onClick={() => void fillFromTikTok()}
+              disabled={igBusy}
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+              title="Reprend les vidéos TikTok du créateur qui citent la marque (s'il a connecté son TikTok)"
+            >
+              {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} TikTok
+            </button>
+          )}
+          {FEATURES.connect.youtube && (
+            <button
+              type="button"
+              onClick={() => void fillFromYouTube()}
+              disabled={igBusy}
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+              title="Reprend les vidéos YouTube du créateur qui citent la marque (s'il a connecté sa chaîne)"
+            >
+              {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} YouTube
+            </button>
+          )}
         </div>
       )}
 

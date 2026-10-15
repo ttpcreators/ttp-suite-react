@@ -16,8 +16,6 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useAppState, type AppState } from "@/lib/appState";
 import { MailComposer, type ComposerContact } from "@/components/mail-composer";
-import { useNavSub } from "@/lib/navSub";
-import { Mails } from "./Mails";
 import { updateTouches, applyTouchChange, type TouchChange } from "@/lib/touchesDb";
 import {
   parseTouches, sortTouches, lastTouch, needsRelance, nextKind, lastActivityMs,
@@ -79,7 +77,6 @@ export function WhatsappView() {
   const { data: cfg } = useAppState<ProspectSettings>((s: AppState) => (s["prospectSettings"] as ProspectSettings) ?? {});
   const relanceDays = Math.max(1, Number(cfg?.relanceDays) || RELANCE_DAYS);
   const waMode: WaMode = cfg?.waMode === "web" ? "web" : "app";
-  const navSub = useNavSub();
 
   useEffect(() => {
     let active = true;
@@ -99,10 +96,6 @@ export function WhatsappView() {
       active = false;
     };
   }, [live]);
-
-  // Sous-page « Mails » (3e niveau de nav) : l'historique Gmail par contact.
-  // ⚠️ Après tous les hooks (leçon React #310 — jamais de hook sous un return).
-  if (navSub === "mails") return <Mails />;
 
   // ── journalisation (même logique que la page Contacts, patch partagé) ──
   // Relit la ligne avant d'écrire (updateTouches) : les touches ajoutées

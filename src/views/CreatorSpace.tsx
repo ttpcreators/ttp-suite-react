@@ -85,6 +85,7 @@ import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
 import { OfflineBanner } from "@/components/mobile/offline-banner";
 import { Delta, DashPanel, DashSectionTitle, DashWideLink } from "@/components/ui/dash";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { FEATURES } from "@/lib/features";
 
 
 type Creator = {
@@ -3112,118 +3113,124 @@ export function CreatorSpace({
         primaryDisabled={statsUploading}
       >
         {/* Le plus simple : connecter son Instagram (stats automatiques) */}
-        <div className="mb-3 rounded-xl border border-border bg-surface p-3.5">
-          {creator?.ig?.link ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] leading-relaxed text-foreground">
-              <span className="flex items-start gap-1.5">
-                <PlatformIcon platform="instagram" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
-                <span>
-                  <span className="font-semibold">Instagram connecté</span>
-                  {creator.ig.link.username ? ` (@${creator.ig.link.username})` : ""} : tes stats Instagram arrivent toutes seules. Les captures ne servent plus que pour tes autres réseaux.
+        {(FEATURES.connect.instagram || !!creator?.ig?.link) && (
+          <div className="mb-3 rounded-xl border border-border bg-surface p-3.5">
+            {creator?.ig?.link ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] leading-relaxed text-foreground">
+                <span className="flex items-start gap-1.5">
+                  <PlatformIcon platform="instagram" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    <span className="font-semibold">Instagram connecté</span>
+                    {creator.ig.link.username ? ` (@${creator.ig.link.username})` : ""} : tes stats Instagram arrivent toutes seules. Les captures ne servent plus que pour tes autres réseaux.
+                  </span>
                 </span>
-              </span>
-              {!preview && (
-                <button type="button" onClick={() => void disconnectIg()} disabled={igBusy} className="text-[11px] text-faint transition-colors hover:text-rose-500 disabled:opacity-50">
-                  Déconnecter
+                {!preview && (
+                  <button type="button" onClick={() => void disconnectIg()} disabled={igBusy} className="text-[11px] text-faint transition-colors hover:text-rose-500 disabled:opacity-50">
+                    Déconnecter
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
+                  <PlatformIcon platform="instagram" className="h-3.5 w-3.5" /> Encore plus simple : connecte ton Instagram
+                </div>
+                <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                  Tes stats Instagram (vues, comptes touchés, audience) arrivent toutes seules chaque jour, sans capture. Il faut un compte pro ou créateur. Tu peux déconnecter quand tu veux.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void connectIg()}
+                  disabled={igBusy || !!preview}
+                  title={preview ? "Le créateur le fait depuis son espace" : undefined}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground py-2.5 text-[12px] font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
+                >
+                  {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} Connecter mon Instagram
                 </button>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
-                <PlatformIcon platform="instagram" className="h-3.5 w-3.5" /> Encore plus simple : connecte ton Instagram
-              </div>
-              <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                Tes stats Instagram (vues, comptes touchés, audience) arrivent toutes seules chaque jour, sans capture. Il faut un compte pro ou créateur. Tu peux déconnecter quand tu veux.
-              </div>
-              <button
-                type="button"
-                onClick={() => void connectIg()}
-                disabled={igBusy || !!preview}
-                title={preview ? "Le créateur le fait depuis son espace" : undefined}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground py-2.5 text-[12px] font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
-              >
-                {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} Connecter mon Instagram
-              </button>
-            </>
-          )}
-        </div>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Pareil pour TikTok */}
-        <div className="mb-3 rounded-xl border border-border bg-surface p-3.5">
-          {creator?.tt?.link ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] leading-relaxed text-foreground">
-              <span className="flex items-start gap-1.5">
-                <PlatformIcon platform="tiktok" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
-                <span>
-                  <span className="font-semibold">TikTok connecté</span>
-                  {creator.tt.link.username ? ` (@${creator.tt.link.username})` : ""} : tes abonnés et les vues de tes vidéos arrivent tout seuls.
+        {(FEATURES.connect.tiktok || !!creator?.tt?.link) && (
+          <div className="mb-3 rounded-xl border border-border bg-surface p-3.5">
+            {creator?.tt?.link ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] leading-relaxed text-foreground">
+                <span className="flex items-start gap-1.5">
+                  <PlatformIcon platform="tiktok" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    <span className="font-semibold">TikTok connecté</span>
+                    {creator.tt.link.username ? ` (@${creator.tt.link.username})` : ""} : tes abonnés et les vues de tes vidéos arrivent tout seuls.
+                  </span>
                 </span>
-              </span>
-              {!preview && (
-                <button type="button" onClick={() => void disconnectTt()} disabled={ttBusy} className="text-[11px] text-faint transition-colors hover:text-rose-500 disabled:opacity-50">
-                  Déconnecter
+                {!preview && (
+                  <button type="button" onClick={() => void disconnectTt()} disabled={ttBusy} className="text-[11px] text-faint transition-colors hover:text-rose-500 disabled:opacity-50">
+                    Déconnecter
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
+                  <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" /> Connecte aussi ton TikTok
+                </div>
+                <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                  Tes abonnés, tes j'aime et les vues de chacune de tes vidéos (collabs comprises) arrivent tout seuls chaque jour. Tu peux déconnecter quand tu veux.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void connectTt()}
+                  disabled={ttBusy || !!preview}
+                  title={preview ? "Le créateur le fait depuis son espace" : undefined}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
+                >
+                  {ttBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} Connecter mon TikTok
                 </button>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
-                <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" /> Connecte aussi ton TikTok
-              </div>
-              <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                Tes abonnés, tes j'aime et les vues de chacune de tes vidéos (collabs comprises) arrivent tout seuls chaque jour. Tu peux déconnecter quand tu veux.
-              </div>
-              <button
-                type="button"
-                onClick={() => void connectTt()}
-                disabled={ttBusy || !!preview}
-                title={preview ? "Le créateur le fait depuis son espace" : undefined}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
-              >
-                {ttBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} Connecter mon TikTok
-              </button>
-            </>
-          )}
-        </div>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Et YouTube (stats YouTube Studio, lecture seule) */}
-        <div className="mb-3 rounded-xl border border-border bg-surface p-3.5">
-          {creator?.yt?.link ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] leading-relaxed text-foreground">
-              <span className="flex items-start gap-1.5">
-                <PlatformIcon platform="youtube" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
-                <span>
-                  <span className="font-semibold">YouTube connecté</span>
-                  {creator.yt.link.title ? ` (${creator.yt.link.title})` : ""} : tes vues, ton temps de visionnage et ton audience arrivent tout seuls.
+        {(FEATURES.connect.youtube || !!creator?.yt?.link) && (
+          <div className="mb-3 rounded-xl border border-border bg-surface p-3.5">
+            {creator?.yt?.link ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] leading-relaxed text-foreground">
+                <span className="flex items-start gap-1.5">
+                  <PlatformIcon platform="youtube" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    <span className="font-semibold">YouTube connecté</span>
+                    {creator.yt.link.title ? ` (${creator.yt.link.title})` : ""} : tes vues, ton temps de visionnage et ton audience arrivent tout seuls.
+                  </span>
                 </span>
-              </span>
-              {!preview && (
-                <button type="button" onClick={() => void disconnectYt()} disabled={ytBusy} className="text-[11px] text-faint transition-colors hover:text-rose-500 disabled:opacity-50">
-                  Déconnecter
+                {!preview && (
+                  <button type="button" onClick={() => void disconnectYt()} disabled={ytBusy} className="text-[11px] text-faint transition-colors hover:text-rose-500 disabled:opacity-50">
+                    Déconnecter
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
+                  <PlatformIcon platform="youtube" className="h-3.5 w-3.5" /> Tu as une chaîne YouTube ?
+                </div>
+                <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                  Connecte-la : tes stats YouTube Studio (vues, heures regardées, abonnés gagnés, audience) arrivent toutes seules. Lecture seule, on ne peut rien publier ni modifier. Tu peux déconnecter quand tu veux : tes données YouTube sont alors effacées.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void connectYt()}
+                  disabled={ytBusy || !!preview}
+                  title={preview ? "Le créateur le fait depuis son espace" : undefined}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
+                >
+                  {ytBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} Connecter mon YouTube
                 </button>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
-                <PlatformIcon platform="youtube" className="h-3.5 w-3.5" /> Tu as une chaîne YouTube ?
-              </div>
-              <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                Connecte-la : tes stats YouTube Studio (vues, heures regardées, abonnés gagnés, audience) arrivent toutes seules. Lecture seule, on ne peut rien publier ni modifier. Tu peux déconnecter quand tu veux : tes données YouTube sont alors effacées.
-              </div>
-              <button
-                type="button"
-                onClick={() => void connectYt()}
-                disabled={ytBusy || !!preview}
-                title={preview ? "Le créateur le fait depuis son espace" : undefined}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
-              >
-                {ytBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} Connecter mon YouTube
-              </button>
-            </>
-          )}
-        </div>
+              </>
+            )}
+          </div>
+        )}
 
         <div className="mb-3 flex items-start gap-2 rounded-xl bg-primary/5 px-3.5 py-2.5 text-[12px] leading-relaxed text-foreground">
           <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-primary" />

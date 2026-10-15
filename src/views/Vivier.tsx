@@ -17,6 +17,7 @@ import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus, Ta
 import { igWhyText, fmtEr, fmtPerWeek, noteQuota } from "@/lib/instagram";
 import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
 import { HashtagSearch } from "@/components/HashtagSearch";
+import { FEATURES } from "@/lib/features";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -371,13 +372,15 @@ export function Vivier() {
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <MetaQuotaBadge className="max-sm:hidden" />
-          <button type="button" onClick={() => setHashOpen((o) => !o)} className={cn("flex h-9 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors", hashOpen ? "border-primary text-primary" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
-            <Hash className="h-3.5 w-3.5" /> Hashtag
-          </button>
+          {FEATURES.hashtagSearch && (
+            <button type="button" onClick={() => setHashOpen((o) => !o)} className={cn("flex h-9 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors", hashOpen ? "border-primary text-primary" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+              <Hash className="h-3.5 w-3.5" /> Hashtag
+            </button>
+          )}
           <AddButton label="Créateur" onClick={openAdd} />
         </div>
       </PageHeaderRow>
-      {hashOpen && <HashtagSearch onClose={() => setHashOpen(false)} />}
+      {FEATURES.hashtagSearch && hashOpen && <HashtagSearch onClose={() => setHashOpen(false)} />}
 
       {/* Filtre par catégorie (menu déroulant, avec le nombre de créateurs) */}
       {tagList.length > 0 && (
