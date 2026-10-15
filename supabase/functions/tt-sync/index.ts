@@ -105,14 +105,22 @@ async function syncCreator(sb: SupabaseClient, acc: TtAccount, brandHandles: Map
   const { error } = await sb.from("creators").update(patch).eq("id", c.id);
   if (error) console.error("tt-sync creators", c.name, error.message);
 
-  // Collabs de la créatrice (étape 4 et plus) : ses vidéos qui citent la marque.
+  // Collabs de la créatrice (étape 4 et plus) : ses vidéos qui citent la marque. FUSION avec
+  // les vidéos déjà repérées : TikTok ne renvoie que les 20 dernières, une vidéo de collab
+  // plus ancienne doit garder ses derniers chiffres (le Debrief les lit), jamais disparaître.
   if (videos.length) {
-    const { data: cols } = await sb.from("collabs").select("id, brand, creator, step, created_at, tt").ilike("creator", c.name).gte("step", 4);
+    const { data: cols, error: colErr } = await sb.from("collabs").select("id, brand, creator, step, created_at, tt").ilike("creator", c.name).gte("step", 4);
+    if (colErr) console.error("tt-sync collabs", c.name, colErr.message);
     for (const col of (cols as CollabRow[] | null) ?? []) {
       const match = brandMatcher(col.brand, brandHandles.get(norm(col.brand).trim()) ?? []);
       const since = Date.parse(col.created_at) - 2 * 86400000;
-      const posts = videos.filter((x) => Date.parse(x.at) >= since && match(x.title))
-        .map((x) => ({ id: x.id, url: x.url, at: x.at, cover: x.cover, views: x.views, likes: x.likes, comments: x.comments, shares: x.shares }));
+      const known = (((col.tt ?? {}) as Json).posts as Json[] | undefined) ?? [];
+      const kept = new Map(known.map((p) => [String(p.id), p]));
+      for (const x of videos) {
+        if (Date.parse(x.at) < since || !match(x.title)) continue;
+        kept.set(x.id, { id: x.id, url: x.url, at: x.at, cover: x.cover, views: x.views, likes: x.likes, comments: x.comments, shares: x.shares });
+      }
+      const posts = [...kept.values()].sort((a, b) => String(a.at).localeCompare(String(b.at)));
       await sb.from("collabs").update({ tt: { at: now, posts } }).eq("id", col.id);
     }
   }

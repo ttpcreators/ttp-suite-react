@@ -981,10 +981,11 @@ begin
    limit 1;
   if v_id is null then
     insert into public.module_rows (module, a)
-      values ('__app_state__', jsonb_build_object(p_key, p_value)::text);
+      values ('__app_state__', jsonb_build_object(p_key, coalesce(p_value, 'null'::jsonb))::text);
   else
+    -- coalesce : jsonb_set(…, NULL) renverrait NULL et effacerait TOUT le blob (2026-10-15).
     update public.module_rows
-       set a = jsonb_set(coalesce(a, '{}')::jsonb, array[p_key], p_value, true)::text
+       set a = jsonb_set(coalesce(a, '{}')::jsonb, array[p_key], coalesce(p_value, 'null'::jsonb), true)::text
      where id = v_id;
   end if;
 end;
@@ -1224,10 +1225,18 @@ alter table public.creator_roadmap enable row level security;
 drop policy if exists creator_roadmap_read on public.creator_roadmap;
 create policy creator_roadmap_read on public.creator_roadmap for select to authenticated
   using (public.is_agency() or creator = public.my_creator());
+-- Agence : tout. Créateur : créer / mettre à jour SA ligne (cadence), jamais la supprimer
+-- (2026-10-15 ; avant, une seule policy FOR ALL lui permettait d'effacer la feuille de route).
 drop policy if exists creator_roadmap_write on public.creator_roadmap;
-create policy creator_roadmap_write on public.creator_roadmap for all to authenticated
-  using (public.is_agency() or creator = public.my_creator())
-  with check (public.is_agency() or creator = public.my_creator());
+drop policy if exists creator_roadmap_agency on public.creator_roadmap;
+drop policy if exists creator_roadmap_creator_ins on public.creator_roadmap;
+drop policy if exists creator_roadmap_creator_upd on public.creator_roadmap;
+create policy creator_roadmap_agency on public.creator_roadmap for all to authenticated
+  using (public.is_agency()) with check (public.is_agency());
+create policy creator_roadmap_creator_ins on public.creator_roadmap for insert to authenticated
+  with check (creator = public.my_creator());
+create policy creator_roadmap_creator_upd on public.creator_roadmap for update to authenticated
+  using (creator = public.my_creator()) with check (creator = public.my_creator());
 create or replace function public.creator_roadmap_guard() returns trigger
   language plpgsql security definer as $$
 begin
@@ -1568,11 +1577,17 @@ create or replace view public.public_mediakit
 with (security_invoker = false) as
   select name, handle, niche, platform, photo_url, sort_order,
          case when coalesce((mediakit->>'hideRates')::boolean, false)
-              then mediakit - 'rates' - 'ratesNote'
+              then mediakit - 'rates' - 'ratesNote' - 'ratesNoteEn'
               else mediakit end as mediakit
   from public.creators
   where coalesce(status, 'actif') <> 'inactif';
 grant select on public.public_mediakit to anon, authenticated;
+-- Vues publiques du site en LECTURE SEULE (2026-10-15) : elles tournent avec les droits du
+-- propriétaire, donc sans ce retrait la clé publique pourrait modifier ou supprimer des
+-- créateurs à travers elles (droits par défaut de Supabase sur les nouveaux objets).
+revoke insert, update, delete, truncate
+  on public.public_roster, public.public_mediakit, public.public_agency_mediakit
+  from anon, authenticated, public;
 
 -- 7) PIÈCES JOINTES DES TÂCHES : une créatrice ne pouvait ni ouvrir ni supprimer
 --    ses propres pièces jointes (ni celles que l'agence joint à SES tâches).
@@ -1584,6 +1599,8 @@ create policy documents_obj_creator_own_read on storage.objects for select to au
       or exists (
         select 1 from public.todos t, jsonb_array_elements(coalesce(t.attachments, '[]'::jsonb)) a
          where a->>'path' = storage.objects.name and t.creator = public.my_creator()
+           -- seulement un fichier rangé sous CETTE tâche (pas un chemin recopié, 2026-10-15)
+           and storage.objects.name like 'todo-attachments/' || t.id::text || '/%'
       )
     )
   );

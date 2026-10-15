@@ -302,9 +302,14 @@ export function CreatorDetail({
     }
     // Exclusivité : blob agence — relu FRAIS avant écriture (ne jamais réécrire
     // la map depuis un état local potentiellement périmé → flags des autres perdus).
-    invalidateAppState();
-    const freshEx = ((await getAppState())["creatorExclusive"] as Record<string, boolean>) ?? {};
-    const okEx = await saveAppStateKey("creatorExclusive", { ...freshEx, [exKey]: exclusive });
+    let okEx = false;
+    try {
+      invalidateAppState();
+      const freshEx = ((await getAppState())["creatorExclusive"] as Record<string, boolean>) ?? {};
+      okEx = await saveAppStateKey("creatorExclusive", { ...freshEx, [exKey]: exclusive });
+    } catch {
+      /* relecture impossible (réseau) : les infos sont enregistrées, pas l'exclusivité */
+    }
     if (!okEx) toast("Exclusivité non enregistrée — réessaie");
     setC({ ...c, ...patch });
     setEditing(false);
@@ -335,6 +340,9 @@ export function CreatorDetail({
     setSavingCt(true);
     try {
       await doSaveContract(months);
+    } catch {
+      // Relecture du blob impossible (réseau) : rien n'a été écrit.
+      toast("Lecture impossible : rien n'a été enregistré, réessaie");
     } finally {
       setSavingCt(false);
     }

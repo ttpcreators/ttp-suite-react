@@ -323,19 +323,30 @@ function Conversation({ t, q, contact, onBack, onChange }: { t: Thread; q: strin
 
   const createContact = async () => {
     setBusy("contact");
-    const created = await dbInsert("contacts", {
-      brand: t.name?.trim() || `@${t.username}`, instagram: t.username ? `@${t.username}` : null, email: t.emails?.[0] ?? null, tone: "cyan",
-    });
-    if (!created) {
+    try {
+      // Une fiche existe déjà avec ce @ ? On la relie au lieu d'en créer une deuxième.
+      const handle = t.username ? `@${t.username}` : null;
+      let id: string | null = null;
+      if (handle) {
+        const { data: same } = await supabase.from("contacts").select("id").ilike("instagram", esc(handle)).limit(1);
+        id = ((same as { id: string }[] | null) ?? [])[0]?.id ?? null;
+      }
+      if (!id) {
+        const created = await dbInsert("contacts", {
+          brand: t.name?.trim() || handle || "Instagram", instagram: handle, email: t.emails?.[0] ?? null, tone: "cyan",
+        });
+        if (!created) return toast("Erreur, réessaie");
+        id = created.id;
+      }
+      const { error } = await supabase.from("ig_threads").update({ contact_id: id }).eq("id", t.id);
+      if (error) return toast("Fiche prête, mais pas reliée à la conversation : réessaie");
+      toast("Fiche contact reliée ✓ : les échanges y sont notés");
+      onChange();
+      // Le journal de prospection se remplit au passage suivant : on le lance tout de suite.
+      void supabase.functions.invoke("ig-inbox", { body: {} }).then(() => onChange());
+    } finally {
       setBusy(null);
-      return toast("Erreur, réessaie");
     }
-    await supabase.from("ig_threads").update({ contact_id: created.id }).eq("id", t.id);
-    // Le journal de prospection se remplit au passage suivant : on le lance tout de suite.
-    void supabase.functions.invoke("ig-inbox", { body: {} }).then(() => onChange());
-    setBusy(null);
-    toast("Fiche contact créée ✓ : les échanges y sont notés");
-    onChange();
   };
   const toPipeline = async () => {
     setBusy("pipeline");
@@ -351,10 +362,14 @@ function Conversation({ t, q, contact, onBack, onChange }: { t: Thread; q: strin
     setBusy(null);
     toast(ok ? "Ajoutée au Pipeline ✓ (étape Contact)" : "Erreur, réessaie");
   };
-  const toggleHidden = async () => {
-    const { error } = await supabase.from("ig_threads").update({ hidden: !t.hidden }).eq("id", t.id);
+  // Valeur VOULUE envoyée telle quelle (jamais « l'inverse de ce qu'on croit ») : un double
+  // clic ne peut plus masquer une conversation qu'on voulait garder.
+  const setHidden = async (hide: boolean) => {
+    setBusy("hide");
+    const { error } = await supabase.from("ig_threads").update({ hidden: hide }).eq("id", t.id);
+    setBusy(null);
     if (error) return toast("Erreur, réessaie");
-    toast(t.hidden ? "Conversation affichée" : "Conversation masquée (filtre « Masquées »)");
+    toast(hide ? "Conversation masquée : elle reste dans le filtre « Masquées »" : "Conversation réaffichée ✓");
     onChange();
   };
   const copy = async (s: string) => {
@@ -400,9 +415,22 @@ function Conversation({ t, q, contact, onBack, onChange }: { t: Thread; q: strin
             <button type="button" onClick={() => void createContact()} disabled={!!busy} className={BTN}>{busy === "contact" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Contact className="h-3 w-3" />} Créer la fiche contact</button>
           )}
           <button type="button" onClick={() => void toPipeline()} disabled={!!busy} className={BTN}>{busy === "pipeline" ? <Loader2 className="h-3 w-3 animate-spin" /> : <AtSign className="h-3 w-3" />} Pipeline</button>
-          <button type="button" onClick={() => void toggleHidden()} className={cn(BTN, "text-muted-foreground")} title={t.hidden ? "Afficher" : "Masquer (spam, conversation sans intérêt)"}><EyeOff className="h-3 w-3" /></button>
+          {!t.hidden && (
+            <button type="button" onClick={() => void setHidden(true)} disabled={!!busy} className={cn(BTN, "text-muted-foreground")} title="Masquer (spam, conversation sans intérêt)">
+              {busy === "hide" ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />} Masquer
+            </button>
+          )}
         </div>
       </div>
+      {t.hidden && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/60 px-4 py-2 text-[12px] text-muted-foreground">
+          <EyeOff className="h-3.5 w-3.5 shrink-0" />
+          <span>Conversation masquée : elle n'apparaît plus dans « Toutes ».</span>
+          <button type="button" onClick={() => void setHidden(false)} disabled={!!busy} className="font-medium text-foreground underline-offset-2 hover:underline disabled:opacity-50">
+            Réafficher
+          </button>
+        </div>
+      )}
       {!!t.emails?.length && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-primary/[0.04] px-4 py-2 text-[12px]">
           <Mail className="h-3.5 w-3.5 text-primary" />

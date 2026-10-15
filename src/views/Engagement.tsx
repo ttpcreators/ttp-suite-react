@@ -246,17 +246,19 @@ export function Engagement() {
    * plus récente de sa plateforme principale, sinon efface er/stats. Utilisé par
    * l'édition ET la suppression pour garantir le même invariant.
    */
-  const reconcileFiche = async (cid: string, hist: HistEntry[]) => {
+  const reconcileFiche = async (cid: string, hist: HistEntry[]): Promise<boolean> => {
     const plat = creators.find((c) => c.id === cid)?.platform;
     const latest = hist.find((h) => h.creatorId === cid && isMainPlatform(plat, h.platform));
+    let ok: boolean;
     if (latest) {
       const patch: Record<string, unknown> = { er: latest.er, stats: statsFromEntry(latest) };
       if (num(latest.followers) > 0) patch.followers = fmtInt(num(latest.followers));
-      await dbUpdate("creators", cid, patch);
+      ok = await dbUpdate("creators", cid, patch);
     } else {
-      await dbUpdate("creators", cid, { er: null, stats: null });
+      ok = await dbUpdate("creators", cid, { er: null, stats: null });
     }
     invalidateCreators();
+    return ok;
   };
 
   const save = async () => {
@@ -266,7 +268,15 @@ export function Engagement() {
     //    fusion : sinon, sur un état local périmé (chargement échoué, autre poste),
     //    on écraserait/tronquerait tout l'historique. On fusionne sur `freshHist`.
     invalidateAppState();
-    const freshHist = ((await getAppState())["engagementHistory"] as HistEntry[]) ?? [];
+    let freshHist: HistEntry[];
+    try {
+      const raw = (await getAppState())["engagementHistory"];
+      freshHist = Array.isArray(raw) ? (raw as HistEntry[]) : [];
+    } catch {
+      setSaving(false);
+      toast("Lecture impossible : rien n'a été enregistré, réessaie");
+      return;
+    }
     const orig = editingId ? freshHist.find((h) => h.id === editingId) : undefined;
     const entry: HistEntry = {
       id: editingId ?? uid(),
@@ -296,10 +306,12 @@ export function Engagement() {
     const affected = new Set<string>();
     if (creatorId && updatesFiche) affected.add(creatorId);
     if (orig && entryIsMain(orig.creatorId, orig.platform)) affected.add(orig.creatorId!);
-    for (const cid of affected) await reconcileFiche(cid, nextHist);
+    let ficheOk = true;
+    for (const cid of affected) if (!(await reconcileFiche(cid, nextHist))) ficheOk = false;
     setSaving(false);
     setSavedOk(true);
     setEditingId(null);
+    if (!ficheOk) return toast("Mesure enregistrée, mais la fiche du créateur n'a pas pu être mise à jour : réessaie");
     toast(
       editingId
         ? "Mesure mise à jour ✓"

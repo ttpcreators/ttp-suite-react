@@ -27,7 +27,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4
 
 type Json = Record<string, unknown>;
 type CreatorRow = { id: string; name: string; platform: string | null; mediakit: Json | null; yt: Json | null };
-type CollabRow = { id: string; brand: string; creator: string | null; step: number; created_at: string };
+type CollabRow = { id: string; brand: string; creator: string | null; step: number; created_at: string; yt: Json | null };
 
 const today = () => new Date().toISOString().slice(0, 10);
 const fmtInt = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
@@ -126,13 +126,19 @@ async function syncCreator(sb: SupabaseClient, acc: YtAccount, brandHandles: Map
   const { error } = await sb.from("creators").update(patch).eq("id", c.id);
   if (error) console.error("yt-sync creators", c.name, error.message);
 
-  // Collabs de la créatrice (étape 4 et plus) : ses vidéos qui citent la marque.
+  // Collabs de la créatrice (étape 4 et plus) : ses vidéos qui citent la marque. FUSION avec
+  // les vidéos déjà repérées : YouTube ne renvoie que les 25 dernières, une vidéo de collab
+  // plus ancienne doit garder ses derniers chiffres (le Debrief les lit), jamais disparaître.
   if (videos.length) {
-    const { data: cols } = await sb.from("collabs").select("id, brand, creator, step, created_at").ilike("creator", c.name).gte("step", 4);
+    const { data: cols, error: colErr } = await sb.from("collabs").select("id, brand, creator, step, created_at, yt").ilike("creator", c.name).gte("step", 4);
+    if (colErr) console.error("yt-sync collabs", c.name, colErr.message);
     for (const col of (cols as CollabRow[] | null) ?? []) {
       const match = videoMatcher(col.brand, brandHandles.get(norm(col.brand).trim()) ?? []);
       const since = Date.parse(col.created_at) - 2 * 86400000;
-      const posts = videos.filter((x) => Date.parse(x.at) >= since && match(x.text)).map(lite);
+      const known = (((col.yt ?? {}) as Json).posts as Json[] | undefined) ?? [];
+      const kept = new Map(known.map((p) => [String(p.id), p]));
+      for (const x of videos) if (Date.parse(x.at) >= since && match(x.text)) kept.set(x.id, lite(x));
+      const posts = [...kept.values()].sort((a, b) => String(a.at).localeCompare(String(b.at)));
       const { error: e2 } = await sb.from("collabs").update({ yt: { at: now, posts } }).eq("id", col.id);
       if (e2) break; // colonne collabs.yt absente (SQL pas encore lancé) : on n'insiste pas
     }

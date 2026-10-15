@@ -37,7 +37,7 @@ const MSG_FIELDS = "id,created_time,from,to,message";
 type GraphError = { code?: number; error_subcode?: number; message?: string };
 type Person = { id?: string; username?: string; name?: string };
 type Conv = { id: string; updated_time?: string; participants?: { data?: Person[] }; messages?: { data?: (Person & { created_time?: string; message?: string; from?: Person })[] } };
-type ThreadRow = { id: string; username: string | null; contact_id: string | null; emails: string[] | null; picture: string | null; updated_at: string | null };
+type ThreadRow = { id: string; username: string | null; contact_id: string | null; emails: string[] | null; picture: string | null; updated_at: string | null; hidden?: boolean };
 type ContactRow = { id: string; instagram: string | null; email: string | null; touches: unknown; last_contacted: string | null };
 
 async function caller(req: Request, sb: SupabaseClient): Promise<"cron" | "agency" | null> {
@@ -117,7 +117,9 @@ Deno.serve(async (req: Request) => {
 
   // 2. Conversations récentes (liste seule, sans les messages : Meta met trop de temps
   //    à tout renvoyer d'un coup). On s'arrête dès qu'une page entière n'a rien de neuf.
-  const { data: knownRaw } = await sb.from("ig_threads").select("id, username, contact_id, emails, picture, updated_at");
+  const { data: knownRaw, error: knownErr } = await sb.from("ig_threads").select("id, username, contact_id, emails, picture, updated_at, hidden");
+  // Lecture ratée : on s'arrête (sinon les emails déjà notés seraient remplacés par les seuls nouveaux).
+  if (knownErr) return fail("reseau", `conversations connues illisibles : ${knownErr.message}`);
   const known = new Map(((knownRaw as ThreadRow[] | null) ?? []).map((t) => [t.id, t]));
   let url: string | null = targets.length ? null : `${GRAPH}/${page.pageId}/conversations?platform=instagram&limit=${PAGE_SIZE}&fields=${enc("id,updated_time,participants")}&access_token=${enc(page.token)}`;
   const todo: Conv[] = [];
@@ -196,7 +198,12 @@ Deno.serve(async (req: Request) => {
     const username = igUser(other.username).toLowerCase() || prev?.username || null;
     const last = [...msgs].sort((a, b) => b.at.localeCompare(a.at))[0];
     const emails = [...new Set([...(prev?.emails ?? []), ...msgs.filter((m) => !m.me).flatMap((m) => emailsIn(m.text))])].slice(0, 10);
+    // Conversation masquée qui reçoit un NOUVEAU message de l'interlocuteur : elle revient
+    // dans « Toutes » (une marque qui relance ne doit pas rester cachée).
+    const prevAt = prev?.updated_at ? Date.parse(prev.updated_at) : 0;
+    const unhide = !!prev?.hidden && msgs.some((m) => !m.me && Date.parse(m.at) > prevAt);
     const row = {
+      ...(unhide ? { hidden: false } : {}),
       id: conv.id, username, igsid: other.id ?? null,
       updated_at: conv.updated_time ? new Date(conv.updated_time).toISOString() : last?.at ?? now,
       last_text: last ? last.text.slice(0, 300) : null, last_from_me: last ? last.me : null,
@@ -205,7 +212,7 @@ Deno.serve(async (req: Request) => {
     const { error } = await sb.from("ig_threads").upsert(row);
     if (error) continue;
     if (msgs.length) await sb.from("ig_messages").upsert(msgs.map((m) => ({ id: m.id, thread_id: conv.id, at: m.at, me: m.me, text: m.text.slice(0, 4000) })));
-    known.set(conv.id, { id: conv.id, username, contact_id: prev?.contact_id ?? null, emails, picture: prev?.picture ?? null, updated_at: row.updated_at });
+    known.set(conv.id, { id: conv.id, username, contact_id: prev?.contact_id ?? null, emails, picture: prev?.picture ?? null, updated_at: row.updated_at, hidden: unhide ? false : prev?.hidden });
     saved++;
   }
 
@@ -232,8 +239,12 @@ Deno.serve(async (req: Request) => {
   }
   const byId = new Map(contacts.map((c) => [c.id, c]));
   const { data: allThreads } = await sb.from("ig_threads").select("id, username, contact_id, emails, picture, updated_at");
+  // Message reçu en direct (webhook) : seules les conversations lues à l'instant sont
+  // rapprochées des fiches (pas tout le carnet à chaque DM : moins d'écritures croisées).
+  const scope = targets.length ? new Set(changed.map(({ conv }) => conv.id)) : null;
   const pairs: { t: ThreadRow; c: ContactRow }[] = [];
   for (const t of (allThreads as ThreadRow[] | null) ?? []) {
+    if (scope && !scope.has(t.id)) continue;
     const c = (t.contact_id && byId.get(t.contact_id)) || (t.username ? byHandle.get(t.username) : undefined);
     if (c) pairs.push({ t, c });
   }

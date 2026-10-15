@@ -386,3 +386,17 @@ export function flushSend(id: number) {
   emit();
   void p.item.run();
 }
+
+// iPhone : l'app peut être fermée ou suspendue sans « beforeunload ». Dès qu'elle passe en
+// arrière-plan (ou que la page se ferme), les envois en attente partent tout de suite :
+// sinon ils seraient perdus sans trace. Sur ordinateur, changer d'onglet garde le délai.
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  const flushAll = () => {
+    for (const id of [...pending.keys()]) flushSend(id);
+  };
+  window.addEventListener("pagehide", flushAll);
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator as { standalone?: boolean }).standalone === true;
+  if (ios) document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushAll();
+  });
+}

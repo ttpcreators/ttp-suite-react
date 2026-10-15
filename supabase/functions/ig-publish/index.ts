@@ -274,7 +274,14 @@ Deno.serve(async (req: Request) => {
   if (body.mode === "now") {
     if (who !== "agency" || !body.id) return res({ error: "requete" }, 400);
     const at = new Date().toISOString();
-    // Après une erreur, on repart d'une préparation neuve chez Meta.
+    // Après une erreur, on repart d'une préparation neuve chez Meta. Mais d'abord : l'ancienne
+    // préparation a-t-elle été publiée malgré l'erreur (Meta en retard) ? Sinon doublon.
+    const { data: prev } = await sb.from("ig_planned").select("status, container_id").eq("id", body.id).maybeSingle<{ status: string; container_id: string | null }>();
+    if (prev?.status === "erreur" && prev.container_id && (await statusOf(token, prev.container_id)).code === "PUBLISHED") {
+      await save(sb, body.id, { status: "publie", published_at: at, error: null });
+      const { data } = await sb.from("ig_planned").select("status, error, permalink").eq("id", body.id).maybeSingle();
+      return res({ result: "publie", row: data, quota: await saveUsage(sb) });
+    }
     await sb.from("ig_planned").update({ status: "programme", scheduled_at: at, error: null, attempts: 0, container_id: null, children: null, started_at: null })
       .eq("id", body.id).eq("status", "erreur");
     await sb.from("ig_planned").update({ status: "programme", scheduled_at: at, error: null, attempts: 0 })
@@ -286,10 +293,11 @@ Deno.serve(async (req: Request) => {
     return res({ result, row: data, quota: await saveUsage(sb) });
   }
 
-  // Cron : posts à l'heure + préparations en cours, 6 max par passage.
+  // Cron : posts à l'heure + préparations en cours, 6 max par passage. Un essai reporté
+  // (retryLater : +5 min) attend vraiment son heure, même s'il a déjà une préparation.
   const nowIso = new Date().toISOString();
   const { data: due } = await sb.from("ig_planned").select("id")
-    .or(`and(status.eq.programme,scheduled_at.lte."${nowIso}"),status.eq.en_cours`)
+    .or(`and(status.eq.programme,scheduled_at.lte."${nowIso}"),and(status.eq.en_cours,or(scheduled_at.is.null,scheduled_at.lte."${nowIso}"))`)
     .order("scheduled_at", { ascending: true }).limit(6);
   const results: Record<string, number> = {};
   for (const { id } of (due as { id: string }[] | null) ?? []) {

@@ -256,11 +256,18 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
   const dismiss = (ids: string[]) => {
     if (!ids.length) return;
     setItems((prev) => prev.filter((n) => !ids.includes(n.id)));
+    // Chaque étape attrape sa propre erreur : un échec réseau ne bloque pas la
+    // file pour les effacements suivants (comme mutateBin dans trash.ts).
     dismissQueue = dismissQueue.then(async () => {
-      invalidateAppState();
-      const cur = (((await getAppState())["notifDismissed"] as string[]) ?? []);
-      const merged = [...new Set([...cur, ...ids])].slice(-300); // borne la liste
-      const ok = await saveAppStateKey("notifDismissed", merged);
+      let ok = false;
+      try {
+        invalidateAppState();
+        const cur = (((await getAppState())["notifDismissed"] as string[]) ?? []);
+        const merged = [...new Set([...cur, ...ids])].slice(-300); // borne la liste
+        ok = await saveAppStateKey("notifDismissed", merged);
+      } catch {
+        /* relecture impossible (réseau) : signalé ci-dessous */
+      }
       if (!ok) toast("Effacement non synchronisé — réessaie");
     });
   };

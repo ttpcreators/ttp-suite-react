@@ -98,8 +98,11 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
       .select("*")
       .order("sort_order")
       .then(({ data, error }) => {
+        // Rafraîchissement raté : on garde le roster déjà affiché (l'erreur ne
+        // s'affiche que si rien n'est encore chargé).
         if (error) setError(true);
         else {
+          setError(false);
           const list = ((data as CreatorRow[]) ?? []).map(mapCreator);
           setCache("roster", list);
           setRows(list);
@@ -156,7 +159,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
     return out;
   }, [engHist, igByName]);
 
-  if (error) {
+  if (error && !rows) {
     return (
       <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
         Impossible de charger le roster.

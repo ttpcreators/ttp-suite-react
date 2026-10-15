@@ -14,6 +14,7 @@ import { toast } from "@/components/ui/toast";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
 import { getCache, setCache } from "@/lib/viewCache";
+import { goToTab } from "@/lib/openLater";
 import { useEffect, useRef, useState } from "react";
 import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, Trash2, BarChart3, ChevronLeft, type LucideIcon } from "lucide-react";
 import { PageHeaderRow } from "@/components/ui/page-header";
@@ -207,9 +208,9 @@ export function Documents() {
       return;
     }
     const html = isHtmlPath(row.path);
-    // Pour un .html : on pré-ouvre l'onglet DANS le geste utilisateur (sinon le popup
-    // est bloqué après l'await du fetch).
-    const w = html ? window.open("", "_blank") : null;
+    // On pré-ouvre l'onglet DANS le geste utilisateur (sinon le popup est bloqué
+    // après l'await, surtout sur iPhone) : pour un .html comme pour les autres fichiers.
+    const w = window.open("", "_blank");
     if (html && !w) {
       // window.open a renvoyé null → bloqué par le navigateur. On prévient plutôt que
       // d'échouer en silence (l'utilisateur croirait que le bouton ne marche pas).
@@ -223,7 +224,7 @@ export function Documents() {
       return;
     }
     if (!html) {
-      window.open(data.signedUrl, "_blank");
+      goToTab(w, data.signedUrl); // onglet refusé : ouverture comme avant
       return;
     }
     // Supabase sert les .html en pièce/texte brut (sécurité anti-hébergement) → le

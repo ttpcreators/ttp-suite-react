@@ -225,6 +225,7 @@ export async function getAccessToken(sb: SupabaseClient): Promise<string> {
 
   const res = await fetch(GOOGLE_TOKEN_URL, {
     method: "POST",
+    signal: AbortSignal.timeout(15_000),
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
@@ -290,7 +291,7 @@ export async function gcalFetch(
       headers.set("Content-Type", "application/json");
     }
 
-    const res = await fetch(url, { ...init, headers });
+    const res = await fetch(url, { ...init, headers, signal: init.signal ?? AbortSignal.timeout(25_000) });
 
     if (res.status === 401 && !refreshedOnce) {
       refreshedOnce = true;
@@ -303,7 +304,7 @@ export async function gcalFetch(
     if ((res.status === 429 || res.status >= 500) && attempt < maxRetries) {
       const retryAfter = Number(res.headers.get("Retry-After"));
       const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
-        ? retryAfter * 1000
+        ? Math.min(retryAfter * 1000, 20_000) // Retry-After plafonné
         : Math.min(1000 * 2 ** attempt, 16_000);
       attempt++;
       await sleep(delayMs);
@@ -579,9 +580,11 @@ export function googleToEvent(g: GoogleEvent): {
 
 /**
  * Prend le verrou de sync si libre OU si le lease précédent a expiré
- * (isolate tué avant release). Renvoie true si acquis.
+ * (isolate tué avant release). Renvoie le jeton du verrou (son heure de prise),
+ * ou null s'il est déjà pris. Seul le détenteur du jeton peut le prolonger ou le
+ * libérer : un passage trop long ne libère plus le verrou d'un AUTRE passage.
  */
-export async function acquireLock(sb: SupabaseClient): Promise<boolean> {
+export async function acquireLock(sb: SupabaseClient): Promise<string | null> {
   await sb.from("sync_state").upsert({ id: 1 }, { onConflict: "id", ignoreDuplicates: true });
   const staleThreshold = new Date(Date.now() - LOCK_LEASE_MS).toISOString();
   const now = new Date().toISOString();
@@ -594,11 +597,19 @@ export async function acquireLock(sb: SupabaseClient): Promise<boolean> {
     .select("id");
 
   if (error) throw error;
-  return Array.isArray(data) && data.length === 1;
+  return Array.isArray(data) && data.length === 1 ? now : null;
 }
 
-export async function releaseLock(sb: SupabaseClient): Promise<void> {
-  await sb.from("sync_state").update({ syncing: false, syncing_at: null }).eq("id", 1);
+/** Prolonge le lease (entre deux étapes longues). Renvoie le nouveau jeton, ou null si perdu. */
+export async function renewLock(sb: SupabaseClient, token: string): Promise<string | null> {
+  const now = new Date().toISOString();
+  const { data, error } = await sb.from("sync_state").update({ syncing_at: now }).eq("id", 1).eq("syncing", true).eq("syncing_at", token).select("id");
+  if (error) return null;
+  return Array.isArray(data) && data.length === 1 ? now : null;
+}
+
+export async function releaseLock(sb: SupabaseClient, token: string): Promise<void> {
+  await sb.from("sync_state").update({ syncing: false, syncing_at: null }).eq("id", 1).eq("syncing_at", token);
 }
 
 // ============================================================================
@@ -837,8 +848,8 @@ export async function runSyncCycle(
   sb: SupabaseClient,
   mode: "incremental" | "full" = "incremental",
 ): Promise<SyncCounters | { skipped: "locked" }> {
-  const locked = await acquireLock(sb);
-  if (!locked) return { skipped: "locked" };
+  let lock = await acquireLock(sb);
+  if (!lock) return { skipped: "locked" };
 
   try {
     // Vérifie la connexion tôt (lève not_connected/invalid_grant si besoin).
@@ -855,6 +866,11 @@ export async function runSyncCycle(
 
     const ctx: Ctx = { sb };
     const push = await pushLocalChanges(ctx);
+    // Prolonge le lease avant le PULL ; verrou perdu (passage trop long, repris par un
+    // autre) = on s'arrête là plutôt que de synchroniser deux fois en parallèle.
+    const renewed = await renewLock(sb, lock);
+    if (!renewed) return { skipped: "locked" };
+    lock = renewed;
     const pull = await pullFromGoogle(ctx, currentSyncToken, mode !== "full");
 
     const stateUpdate: Record<string, unknown> = { last_sync_at: new Date().toISOString() };
@@ -868,6 +884,6 @@ export async function runSyncCycle(
       resynced: pull.resynced,
     };
   } finally {
-    await releaseLock(sb).catch(() => {});
+    await releaseLock(sb, lock).catch(() => {});
   }
 }

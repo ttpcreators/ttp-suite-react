@@ -130,9 +130,9 @@ export function RecipientPicker({
                 <Plus className="h-3.5 w-3.5 shrink-0" /> Ajouter «&nbsp;{typed}&nbsp;»
               </button>
             )}
-            {matches.map((c) => (
+            {matches.map((c, i) => (
               <button
-                key={c.email}
+                key={`${i}-${c.email}`}
                 type="button"
                 onMouseDown={(e) => {
                   e.preventDefault(); // avant le blur → ne perd pas le clic

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Info, Plus, Trash2, Copy, Users, Sparkles, Calculator, Tag, Lightbulb, SlidersHorizontal, RotateCcw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useCreators } from "@/lib/useCreators";
-import { formatEuro, saveAppStateKey, useAppState } from "@/lib/appState";
+import { formatEuro, getAppState, invalidateAppState, saveAppStateKey, useAppState } from "@/lib/appState";
 import { titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -464,14 +464,34 @@ export function Pricing() {
  */
 function RatesEditor({ rates, onClose }: { rates: RateOverrides; onClose: () => void }) {
   const [draft, setDraft] = useState<RateOverrides>(rates);
+  // Formats réellement modifiés ici : à l'enregistrement, on les fusionne dans le barème
+  // relu (un format changé par un collègue entre-temps n'est pas écrasé).
+  const [touched, setTouched] = useState<string[]>([]);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [saving, setSaving] = useState(false);
-  const set = (key: string, patch: { cpm?: [number, number]; rate?: number }) => setDraft((d) => ({ ...d, [key]: { ...(d[key] ?? {}), ...patch } }));
-  const save = async (next: RateOverrides) => {
+  const set = (key: string, patch: { cpm?: [number, number]; rate?: number }) => {
+    setDraft((d) => ({ ...d, [key]: { ...(d[key] ?? {}), ...patch } }));
+    setTouched((t) => (t.includes(key) ? t : [...t, key]));
+  };
+  const save = async (reset: boolean) => {
     setSaving(true);
-    const ok = await saveAppStateKey("pricingRates", next);
-    setSaving(false);
-    toast(ok ? "Barème enregistré pour toute l'équipe ✓" : "Erreur, réessaie");
-    if (ok) onClose();
+    try {
+      let next: RateOverrides = {};
+      if (!reset) {
+        invalidateAppState();
+        const raw = (await getAppState())["pricingRates"];
+        const fresh = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as RateOverrides) : {};
+        next = { ...fresh };
+        for (const k of touched) if (draft[k]) next[k] = draft[k];
+      }
+      const ok = await saveAppStateKey("pricingRates", next);
+      toast(ok ? (reset ? "Barème par défaut rétabli ✓" : "Barème enregistré pour toute l'équipe ✓") : "Erreur, réessaie");
+      if (ok) onClose();
+    } catch {
+      toast("Lecture impossible : rien n'a été enregistré, réessaie");
+    } finally {
+      setSaving(false);
+    }
   };
   const num = (v: string) => Math.max(0, parseFloat(v.replace(",", ".")) || 0);
   return (
@@ -497,9 +517,13 @@ function RatesEditor({ rates, onClose }: { rates: RateOverrides; onClose: () => 
         <span /> <span className="text-center">€ min</span> <span className="text-center">€ max</span> <span className="text-center">% vues</span>
       </div>
       <div className="mt-3 flex flex-wrap justify-end gap-2">
-        <button type="button" onClick={() => void save({})} disabled={saving} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover"><RotateCcw className="h-3 w-3" /> Barème par défaut</button>
+        {confirmReset ? (
+          <button type="button" onClick={() => void save(true)} disabled={saving} className="flex items-center gap-1 rounded-full bg-[#E5484D] px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"><RotateCcw className="h-3 w-3" /> Confirmer : effacer le barème de l'agence</button>
+        ) : (
+          <button type="button" onClick={() => setConfirmReset(true)} disabled={saving} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover"><RotateCcw className="h-3 w-3" /> Barème par défaut</button>
+        )}
         <button type="button" onClick={onClose} className="rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover">Annuler</button>
-        <button type="button" onClick={() => void save(draft)} disabled={saving} className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">Enregistrer</button>
+        <button type="button" onClick={() => void save(false)} disabled={saving} className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">Enregistrer</button>
       </div>
     </div>
   );

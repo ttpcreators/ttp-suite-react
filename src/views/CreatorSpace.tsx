@@ -52,6 +52,7 @@ import { PushCard } from "@/components/ui/push-card";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
+import { openLater } from "@/lib/openLater";
 import { consumeIgReturn, igConnect, igDisconnect, type IgCreator } from "@/lib/instagram";
 import { consumeTtReturn, ttConnect, ttDisconnect, type TtCreator } from "@/lib/tiktok";
 import { consumeYtReturn, ytConnect, ytDisconnect, type YtCreator } from "@/lib/youtube";
@@ -632,8 +633,15 @@ export function CreatorSpace({
     setContactView(null);
   }, [name]);
 
+  // Créateur dont les listes sont affichées. Sur un simple rafraîchissement, une
+  // requête ratée ne vide pas l'écran (on garde l'affichage). Au changement de
+  // créateur (aperçu agence), on écrit quand même : jamais les données d'un autre.
+  const shownFor = useRef(name);
   useEffect(() => {
     let alive = true;
+    const refresh = shownFor.current === name;
+    shownFor.current = name;
+    const apply = (error: unknown) => alive && !(error && refresh);
     supabase
       .from("creators")
       .select("*")
@@ -641,22 +649,22 @@ export function CreatorSpace({
       .limit(1)
       .then(({ data, error }) => {
         if (error) console.error("Espace créateur — chargement de la fiche échoué:", error);
-        if (alive) setCreator((data?.[0] as Creator) ?? null);
+        if (apply(error)) setCreator((data?.[0] as Creator) ?? null);
       });
-    supabase.from("todos").select("id,text,descr,due,priority,done,status,sort_order,subtasks,attachments").eq("creator", name).order("sort_order").then(({ data }) => alive && setTodos((data as Todo[]) ?? []));
-    supabase.from("ideas").select("id,text,status,sort_order,subtasks").eq("creator", name).order("sort_order").then(({ data }) => alive && setIdeas((data as Idea[]) ?? []));
-    supabase.from("briefs").select("id,brand,deliverables,due,status,consignes").eq("creator", name).order("created_at", { ascending: false }).then(({ data }) => alive && setBriefs((data as Brief[]) ?? []));
-    supabase.from("gifting").select(GIFT_COLS).eq("creator", name).order("sort_order", { ascending: false }).then(({ data }) => alive && setGifts((data as GiftRow[]) ?? []));
-    supabase.from("events").select("id,date,day,time,title,type,who,description").or("deleted.is.null,deleted.eq.false").then(({ data }) => {
-      if (!alive) return;
+    supabase.from("todos").select("id,text,descr,due,priority,done,status,sort_order,subtasks,attachments").eq("creator", name).order("sort_order").then(({ data, error }) => apply(error) && setTodos((data as Todo[]) ?? []));
+    supabase.from("ideas").select("id,text,status,sort_order,subtasks").eq("creator", name).order("sort_order").then(({ data, error }) => apply(error) && setIdeas((data as Idea[]) ?? []));
+    supabase.from("briefs").select("id,brand,deliverables,due,status,consignes").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => apply(error) && setBriefs((data as Brief[]) ?? []));
+    supabase.from("gifting").select(GIFT_COLS).eq("creator", name).order("sort_order", { ascending: false }).then(({ data, error }) => apply(error) && setGifts((data as GiftRow[]) ?? []));
+    supabase.from("events").select("id,date,day,time,title,type,who,description").or("deleted.is.null,deleted.eq.false").then(({ data, error }) => {
+      if (!apply(error)) return;
       const rows = (data as Ev[]) ?? [];
       setEvents(rows.filter((e) => (e.who ?? "").split(", ").includes(name)));
     });
-    supabase.from("documents").select("id,name,type,size,path,created_at").eq("creator", name).order("created_at", { ascending: false }).then(({ data }) => alive && setDocs((data as Doc[]) ?? []));
+    supabase.from("documents").select("id,name,type,size,path,created_at").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => apply(error) && setDocs((data as Doc[]) ?? []));
     // Plus récente d'abord (« Dernière facture » = invoices[0]) ; `date` est un texte, on trie sur created_at.
-    supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).order("created_at", { ascending: false }).then(({ data }) => alive && setInvoices((data as Invoice[]) ?? []));
+    supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => apply(error) && setInvoices((data as Invoice[]) ?? []));
     // Contacts propres au créateur (RLS : il ne voit QUE ses lignes, jamais celles de l'agence).
-    supabase.from("contacts").select("id,brand,person,role,email,phone,sort_order").eq("creator", name).order("sort_order").then(({ data }) => alive && setContacts((data as Contact[]) ?? []));
+    supabase.from("contacts").select("id,brand,person,role,email,phone,sort_order").eq("creator", name).order("sort_order").then(({ data, error }) => apply(error) && setContacts((data as Contact[]) ?? []));
     return () => {
       alive = false;
     };
@@ -940,17 +948,18 @@ export function CreatorSpace({
 
   /** Ouvre un document : lien externe (Drive/Canva…) tel quel, sinon URL signée du bucket. */
   const openDocFile = async (doc: Doc) => {
-    if (!doc.path) return;
-    if (/^https?:\/\//i.test(doc.path)) {
-      window.open(doc.path, "_blank");
+    const path = doc.path;
+    if (!path) return;
+    if (/^https?:\/\//i.test(path)) {
+      window.open(path, "_blank");
       return;
     }
-    const { data, error } = await supabase.storage.from("documents").createSignedUrl(doc.path, 3600);
-    if (error || !data?.signedUrl) {
-      toast("Lien indisponible — réessaie");
-      return;
-    }
-    window.open(data.signedUrl, "_blank");
+    // Onglet ouvert dans le clic, avant l'await (sinon bloqué sur iPhone).
+    const ok = await openLater(async () => {
+      const { data, error } = await supabase.storage.from("documents").createSignedUrl(path, 3600);
+      return error || !data?.signedUrl ? null : data.signedUrl;
+    });
+    if (!ok) toast("Lien indisponible — réessaie");
   };
   const resetGiftForm = () => {
     setGiOpen(false);
@@ -1439,9 +1448,12 @@ export function CreatorSpace({
   };
   const openAttachment = async (att: Attachment) => {
     if (/^https?:\/\//i.test(att.path)) { window.open(att.path, "_blank"); return; }
-    const { data, error } = await supabase.storage.from("documents").createSignedUrl(att.path, 3600);
-    if (error || !data?.signedUrl) { toast("Lien indisponible — réessaie"); return; }
-    window.open(data.signedUrl, "_blank");
+    // Onglet ouvert dans le clic, avant l'await (sinon bloqué sur iPhone).
+    const ok = await openLater(async () => {
+      const { data, error } = await supabase.storage.from("documents").createSignedUrl(att.path, 3600);
+      return error || !data?.signedUrl ? null : data.signedUrl;
+    });
+    if (!ok) toast("Lien indisponible — réessaie");
   };
   // Base d'abord, fichier ensuite : un échec ne laisse pas une pièce jointe pointant vers rien.
   const removeAttachment = async (todo: Todo, path: string) => {

@@ -447,6 +447,7 @@ export function Facturation() {
       .then(({ data, error }) => {
         if (error) setError(true);
         else {
+          setError(false);
           const list = (data as Row[]) ?? [];
           setCache("invoices", list);
           setRows(list);
@@ -454,8 +455,11 @@ export function Facturation() {
       });
   }, [live]);
 
+  // Réglages et détails suivis À CHAQUE rafraîchissement : une facture créée sur un autre
+  // poste après l'ouverture de la page a ses vrais détails (PDF, aperçu, modification),
+  // jamais des valeurs par défaut. Les saisies en cours vivent dans des brouillons à part.
   useEffect(() => {
-    if (inited.current || !appData) return;
+    if (!appData) return;
     inited.current = true;
     setIssuer((appData.invoiceIssuer as Issuer) ?? DEFAULT_ISSUER);
     setBanks((appData.invoiceBankAccounts as BankAccount[]) ?? []);
@@ -464,7 +468,8 @@ export function Facturation() {
   }, [appData]);
 
 
-  if (error) {
+  // Erreur seulement si rien n'est chargé : un raté de rafraîchissement garde la liste.
+  if (error && !rows) {
     return (
       <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
         Impossible de charger la facturation.
@@ -586,8 +591,20 @@ export function Facturation() {
     });
   }
 
-  function openEdit(r: Row) {
-    const d = detailsFor(r);
+  // Ouvre la modification sur les détails RELUS à l'instant (jamais sur une copie périmée
+  // ou pas encore chargée : enregistrer écraserait les vraies lignes de la facture).
+  async function openEdit(r: Row) {
+    let fresh: Record<string, Details>;
+    try {
+      invalidateAppState();
+      fresh = ((await getAppState())["invoiceDetails"] as Record<string, Details>) ?? {};
+    } catch {
+      toast("Lecture impossible : réessaie dans un instant");
+      return;
+    }
+    setDetails(fresh);
+    const existing = fresh[r.id];
+    const d = existing ? { ...existing, tpoRef: existing.tpoRef ?? "" } : detailsFor(r);
     const party = r.party ?? "";
     const brand = party.includes("×") ? party.split("×")[0].trim() : party;
     setDraft({ ...d, id: r.id, ref: r.ref, brand, creator: r.creator ?? "", status: r.status });
@@ -603,6 +620,8 @@ export function Facturation() {
     setSaving(true);
     try {
       await doSaveDraft(draft);
+    } catch {
+      toast("Erreur, réessaie");
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -610,6 +629,7 @@ export function Facturation() {
   }
 
   async function doSaveDraft(draft: Draft) {
+    const isNew = !draft.id;
     const t = totalsOf(draft.items, draft.franchise, draft.vatRate, draft.commissionRate);
     const party = draft.creator ? `${draft.brand.trim()} × ${firstName(draft.creator)}` : draft.brand.trim();
     const summary = {
@@ -647,6 +667,10 @@ export function Facturation() {
       }
       id = (created as unknown as Row).id;
       setRows([created as unknown as Row, ...invoices]);
+      // La facture existe : un nouveau clic sur « Enregistrer » la MODIFIE (jamais de doublon).
+      draft = { ...draft, id };
+      const createdId = id;
+      setDraft((d) => (d ? { ...d, id: createdId, ref: summary.ref } : d));
     }
     // Prévient le créateur (si notifs activées) quand SA facture passe à « Payée ».
     if (!wasPaid && draft.status === "payee" && draft.creator) {
@@ -673,7 +697,13 @@ export function Facturation() {
     // Relire FRAIS avant de fusionner : deux postes peuvent créer des factures en
     // parallèle → sinon l'instantané local périmé écrase les détails de l'autre.
     invalidateAppState();
-    const freshState = await getAppState();
+    let freshState: AppState;
+    try {
+      freshState = await getAppState();
+    } catch {
+      toast("Facture enregistrée, mais pas ses détails : clique de nouveau sur « Enregistrer »");
+      return;
+    }
     const freshDetails = (freshState["invoiceDetails"] as Record<string, Details>) ?? {};
     const nextDetails = { ...freshDetails, [id]: detailPart };
     setDetails(nextDetails);
@@ -688,11 +718,11 @@ export function Facturation() {
     }
 
     if (!okDetails) {
-      toast("Facture enregistrée, mais détails non synchronisés — réessaie");
-      setDraft(null);
+      // Fenêtre gardée ouverte : un nouveau clic réenregistre les détails (sans doublon).
+      toast("Facture enregistrée, mais pas ses détails : clique de nouveau sur « Enregistrer »");
       return;
     }
-    toast(draft.id ? "Facture modifiée ✓" : "Facture créée ✓");
+    toast(isNew ? "Facture créée ✓" : "Facture modifiée ✓");
     setDraft(null);
   }
 
@@ -888,7 +918,7 @@ export function Facturation() {
             };
             const openPreview = () => setPreview({ html: buildHTML(r), ref: r.ref, email: detailsFor(r).clientEmail, brand: r.party });
             const menuItems: ActionItem[] = [
-              { key: "edit", label: "Modifier", icon: Pencil, onClick: () => openEdit(r) },
+              { key: "edit", label: "Modifier", icon: Pencil, onClick: () => void openEdit(r) },
               { key: "preview", label: "Aperçu", icon: Eye, onClick: openPreview },
               { key: "send", label: "Envoyer au client", icon: Send, onClick: () => sendInvoice(r) },
               { key: "download", label: "Enregistrer en PDF", icon: Download, onClick: () => downloadInvoice(r) },
@@ -1127,7 +1157,7 @@ export function Facturation() {
             onClose={() => setFinView(null)}
             footer={
               <>
-                <button type="button" className={ghostBtn} onClick={() => { setFinView(null); openEdit(r); }}>Modifier</button>
+                <button type="button" className={ghostBtn} onClick={() => { setFinView(null); void openEdit(r); }}>Modifier</button>
                 <button type="button" className={ghostBtn} onClick={() => { setFinView(null); downloadInvoice(r); }}>Enregistrer en PDF</button>
                 <button type="button" className={ghostBtn} onClick={() => { setFinView(null); sendInvoice(r); }}>Envoyer au client</button>
                 <button type="button" className={primaryBtn} onClick={() => { setFinView(null); setPreview({ html: buildHTML(r), ref: r.ref, email: detailsFor(r).clientEmail, brand: r.party }); }}>Aperçu</button>

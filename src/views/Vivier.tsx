@@ -270,8 +270,11 @@ export function Vivier() {
     let alive = true;
     supabase.from("creator_pool").select("*").order("sort_order").then(({ data, error }) => {
       if (!alive) return;
-      if (error) { setError(true); setRows([]); return; }
+      // Rafraîchissement raté : on garde la liste déjà affichée (l'erreur ne
+      // s'affiche que si rien n'est encore chargé).
+      if (error) { setError(true); return; }
       const list = (data as Row[]) ?? [];
+      setError(false);
       setCache("vivier", list);
       setRows(list);
     });
@@ -352,7 +355,7 @@ export function Vivier() {
     }
   };
 
-  if (error) return <div className="rounded-2xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">Impossible de charger le Scouting.</div>;
+  if (error && rows === null) return <div className="rounded-2xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">Impossible de charger le Scouting.</div>;
   if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>;
 
   const filtered = rows.filter((r) => {

@@ -20,9 +20,11 @@
 
 import { getServiceClient, getAccessToken, corsHeaders, timingSafeEqualStr } from "../_shared/google.ts";
 import { boxToken, talentAddress } from "../_shared/gmailBox.ts";
+import { gfetch, mapPool } from "../_shared/gfetch.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
+const MAX_PAGES = 10; // 1 000 mails envoyés max par passage et par boîte
 type Sb = ReturnType<typeof getServiceClient>;
 type Header = { name: string; value: string };
 
@@ -40,8 +42,9 @@ async function authorized(req: Request, sb: Sb): Promise<boolean> {
 }
 
 /** Blob agence : lecture (ligne la plus récente) + écriture atomique d'une clé. */
-async function readBlob(sb: Sb): Promise<{ id: string | null; obj: Record<string, unknown> }> {
-  const { data } = await sb.from("module_rows").select("id,a").eq("module", "__app_state__").order("created_at", { ascending: false }).limit(1);
+async function readBlob(sb: Sb): Promise<{ id: string | null; obj: Record<string, unknown>; failed?: boolean }> {
+  const { data, error } = await sb.from("module_rows").select("id,a").eq("module", "__app_state__").order("created_at", { ascending: false }).limit(1);
+  if (error) return { id: null, obj: {}, failed: true };
   const row = data?.[0] as { id: string; a: string } | undefined;
   if (!row) return { id: null, obj: {} };
   try {
@@ -65,7 +68,8 @@ async function saveStateKey(sb: Sb, key: string, value: unknown) {
     console.error("gmail-reconcile app_state_set", error.message);
     return;
   }
-  const { id, obj } = await readBlob(sb);
+  const { id, obj, failed } = await readBlob(sb);
+  if (failed) return;
   const json = JSON.stringify({ ...obj, [key]: value });
   if (id) await sb.from("module_rows").update({ a: json }).eq("id", id);
   else await sb.from("module_rows").insert({ module: "__app_state__", a: json });
@@ -87,37 +91,73 @@ Deno.serve(async (req: Request) => {
   if (!(await authorized(req, sb))) return jsonRes({ error: "unauthorized" }, 401);
 
   type Sent = { id: string; ts: number; to: string[] };
+  type Scan = { sent: Sent[]; complete: boolean };
 
-  /** Mails ENVOYÉS depuis `lastTs` dans une boîte (null si la lecture échoue). */
-  async function scanSent(token: string, lastTs: number): Promise<Sent[] | null> {
+  /**
+   * Mails ENVOYÉS depuis `lastTs` dans une boîte (null si la liste est illisible). Toutes les
+   * pages de la liste sont lues. `complete` = tout a été lu : sinon le curseur ne bouge pas
+   * (le passage suivant relit la même période ; les touches « gm<id> » sont dédoublonnées).
+   */
+  async function scanSent(token: string, lastTs: number): Promise<Scan | null> {
     const q = encodeURIComponent(`in:sent after:${Math.floor(lastTs / 1000)}`);
-    const listRes = await fetch(`${GMAIL}/messages?q=${q}&maxResults=50`, { headers: { Authorization: `Bearer ${token}` } });
-    const list = await listRes.json().catch(() => ({}));
-    if (!listRes.ok) return null;
-    const ids: string[] = ((list as { messages?: { id: string }[] }).messages ?? []).map((m) => m.id);
-    const metas = await Promise.all(
-      ids.map(async (id): Promise<Sent | null> => {
-        const mr = await fetch(`${GMAIL}/messages/${id}?format=metadata&metadataHeaders=To&metadataHeaders=Cc`, { headers: { Authorization: `Bearer ${token}` } });
-        if (!mr.ok) return null;
-        const m = await mr.json().catch(() => null);
-        if (!m) return null;
+    const auth = { headers: { Authorization: `Bearer ${token}` } };
+    const ids: string[] = [];
+    let complete = true;
+    let pageToken = "";
+    for (let n = 0; ; n++) {
+      if (n >= MAX_PAGES) {
+        complete = false;
+        break;
+      }
+      let res: Response;
+      try {
+        res = await gfetch(`${GMAIL}/messages?q=${q}&maxResults=100${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`, auth);
+      } catch {
+        if (n === 0) return null;
+        complete = false;
+        break;
+      }
+      const list = await res.json().catch(() => null) as { messages?: { id: string }[]; nextPageToken?: string } | null;
+      if (!res.ok || !list) {
+        if (n === 0) return null;
+        complete = false;
+        break;
+      }
+      ids.push(...(list.messages ?? []).map((m) => m.id));
+      if (!list.nextPageToken) break;
+      pageToken = list.nextPageToken;
+    }
+    const metas = await mapPool(ids, 8, async (id): Promise<Sent | null> => {
+      try {
+        const mr = await gfetch(`${GMAIL}/messages/${id}?format=metadata&metadataHeaders=To&metadataHeaders=Cc`, auth);
+        if (mr.status === 404) return null; // supprimé entre-temps
+        const m = mr.ok ? await mr.json().catch(() => null) : null;
+        if (!m) {
+          complete = false;
+          return null;
+        }
         const ts = Number(m.internalDate ?? 0);
         if (!ts || ts <= lastTs) return null;
         const headers: Header[] = m.payload?.headers ?? [];
         const h = (n: string) => headers.find((x) => x.name.toLowerCase() === n)?.value ?? "";
         const to = [...parseEmails(h("to")), ...parseEmails(h("cc"))];
-        return to.length ? { id: m.id, ts, to } : null;
-      }),
-    );
-    return metas.filter((x): x is Sent => x !== null);
+        return to.length ? { id: String(m.id), ts, to } : null;
+      } catch {
+        complete = false;
+        return null;
+      }
+    });
+    return { sent: metas.filter((x): x is Sent => x !== null), complete };
   }
 
-  const { obj: blob } = await readBlob(sb);
+  const { obj: blob, failed: blobFailed } = await readBlob(sb);
+  if (blobFailed) return jsonRes({ ok: false, error: "etat_illisible" }, 500);
   const state = (blob.gmailReconcileState as { lastTs?: number; talentLastTs?: number }) ?? {};
   // 1er passage (par boîte) : petit amorçage de 24 h (jamais tout l'historique).
   const dayAgo = Date.now() - 24 * 3600e3;
-  const nextState: { lastTs?: number; talentLastTs?: number } = { ...state };
   const sent: Sent[] = [];
+  // Curseurs proposés, appliqués SEULEMENT si tout a été lu ET enregistré.
+  const cursors: { key: "lastTs" | "talentLastTs"; value: number }[] = [];
   let scanned = 0;
 
   // partnerships@ (connexion de l'app).
@@ -126,8 +166,8 @@ Deno.serve(async (req: Request) => {
     const got = await scanSent(await getAccessToken(sb), lastTs);
     if (got) {
       scanned++;
-      sent.push(...got);
-      nextState.lastTs = Math.max(lastTs, ...got.map((x) => x.ts));
+      sent.push(...got.sent);
+      if (got.complete) cursors.push({ key: "lastTs", value: Math.max(lastTs, ...got.sent.map((x) => x.ts)) });
     }
   } catch { /* Google non connecté : on passe à talent@ */ }
 
@@ -138,8 +178,8 @@ Deno.serve(async (req: Request) => {
       const got = await scanSent(await boxToken(sb, "talent", "read"), lastTs);
       if (got) {
         scanned++;
-        sent.push(...got);
-        nextState.talentLastTs = Math.max(lastTs, ...got.map((x) => x.ts));
+        sent.push(...got.sent);
+        if (got.complete) cursors.push({ key: "talentLastTs", value: Math.max(lastTs, ...got.sent.map((x) => x.ts)) });
       }
     } catch { /* compte de service indisponible : partnerships@ seul */ }
   }
@@ -147,29 +187,39 @@ Deno.serve(async (req: Request) => {
   if (!scanned) return jsonRes({ ok: true, skipped: "aucune_boite" });
   sent.sort((a, b) => a.ts - b.ts);
 
-  // Carnet : tous les contacts avec email, indexés par adresse.
-  const { data: contactsRaw } = await sb.from("contacts").select("id,email,last_contacted,touches");
-  const byEmail = new Map<string, { id: string; email: string; last_contacted: string | null; touches: unknown }>();
-  for (const c of (contactsRaw ?? []) as { id: string; email: string | null; last_contacted: string | null; touches: unknown }[]) {
+  // Carnet : tous les contacts avec email, indexés par adresse. Lecture ratée = on s'arrête
+  // AVANT de bouger les curseurs (sinon ces mails ne seraient jamais notés).
+  const { data: contactsRaw, error: ctErr } = await sb.from("contacts").select("id,email");
+  if (ctErr) return jsonRes({ ok: false, error: "contacts_illisibles" }, 500);
+  const byEmail = new Map<string, string>();
+  for (const c of (contactsRaw ?? []) as { id: string; email: string | null }[]) {
     const e = (c.email ?? "").trim().toLowerCase();
-    if (e) byEmail.set(e, { ...c, email: e });
+    if (e) byEmail.set(e, c.id);
   }
 
   // Regroupe les mails par contact, puis écrit une seule mise à jour par contact.
-  const perContact = new Map<string, { row: NonNullable<ReturnType<typeof byEmail.get>>; hits: Sent[] }>();
+  const perContact = new Map<string, Sent[]>();
   for (const s of sent) {
     for (const addr of s.to) {
-      const row = byEmail.get(addr);
-      if (!row) continue;
-      const entry = perContact.get(row.id) ?? { row, hits: [] };
-      entry.hits.push(s);
-      perContact.set(row.id, entry);
+      const id = byEmail.get(addr);
+      if (!id) continue;
+      const hits = perContact.get(id) ?? [];
+      if (!hits.some((h) => h.id === s.id)) hits.push(s);
+      perContact.set(id, hits);
     }
   }
 
   let updated = 0;
   let touchesAdded = 0;
-  for (const { row, hits } of perContact.values()) {
+  let allSaved = true;
+  for (const [contactId, hits] of perContact) {
+    // Relit la fiche JUSTE avant d'écrire : une touche ajoutée entre-temps (app, autre
+    // passage, DM Instagram) n'est pas écrasée.
+    const { data: row, error: re } = await sb.from("contacts").select("touches,last_contacted").eq("id", contactId).maybeSingle<{ touches: unknown; last_contacted: string | null }>();
+    if (re || !row) {
+      if (re) allSaved = false;
+      continue;
+    }
     const existing: Touch[] = Array.isArray(row.touches) ? (row.touches as Touch[]) : [];
     const known = new Set(existing.map((t) => t.id));
     let hasActivity = existing.length > 0 || !!row.last_contacted;
@@ -187,13 +237,20 @@ Deno.serve(async (req: Request) => {
     const patch: Record<string, unknown> = { touches: nextTouches };
     if (!row.last_contacted || newestMs > new Date(row.last_contacted).getTime())
       patch.last_contacted = new Date(newestMs).toISOString();
-    const { error } = await sb.from("contacts").update(patch).eq("id", row.id);
-    if (!error) {
-      updated++;
-      touchesAdded += additions.length;
+    const { error } = await sb.from("contacts").update(patch).eq("id", contactId);
+    if (error) {
+      allSaved = false;
+      continue;
     }
+    updated++;
+    touchesAdded += additions.length;
   }
 
-  await saveStateKey(sb, "gmailReconcileState", nextState);
-  return jsonRes({ ok: true, mails: sent.length, contacts: updated, touches: touchesAdded });
+  // Curseurs avancés seulement si tout est enregistré : sinon le prochain passage relit.
+  if (allSaved && cursors.length) {
+    const nextState: { lastTs?: number; talentLastTs?: number } = { ...state };
+    for (const c of cursors) nextState[c.key] = c.value;
+    await saveStateKey(sb, "gmailReconcileState", nextState);
+  }
+  return jsonRes({ ok: true, mails: sent.length, contacts: updated, touches: touchesAdded, complete: allSaved && cursors.length === scanned });
 });

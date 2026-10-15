@@ -55,9 +55,12 @@ Deno.serve(async (req: Request) => {
       .from("google_tokens").select("refresh_token").eq("id", 1)
       .maybeSingle<{ refresh_token: string | null }>();
     if (tok?.refresh_token) {
-      await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(tok.refresh_token)}`, {
+      // Jeton dans le CORPS (jamais dans l'adresse : une erreur réseau l'écrirait dans les logs).
+      await fetch("https://oauth2.googleapis.com/revoke", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ token: tok.refresh_token }),
+        signal: AbortSignal.timeout(10_000),
       });
     }
   } catch (e) {

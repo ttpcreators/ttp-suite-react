@@ -164,10 +164,13 @@ export function Collabs() {
         // 42P01 = table inexistante → la migration n'a pas encore été appliquée.
         if (res.error.code === "42P01" || /does not exist/i.test(res.error.message)) setMissing(true);
         else setError(true);
-        setRows([]);
+        // Rafraîchissement raté : on garde les collabs déjà affichées (l'erreur ne
+        // s'affiche que s'il n'y a rien à montrer).
+        setRows((prev) => prev ?? []);
         return;
       }
       const list = (res.data as Row[]) ?? [];
+      setError(false);
       setCache("collabs", list);
       setRows(list);
       // historique daté des étapes (best-effort ; sert aux dates + à la détection de stagnation)
@@ -715,7 +718,7 @@ export function Collabs() {
         Les collabs ne sont pas encore activées. Détails dans Réglages › Diagnostic.
       </div>
     );
-  } else if (error) {
+  } else if (error && rows.length === 0) {
     content = <div className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-sm">Erreur de chargement.</div>;
   } else if (rows.length === 0) {
     content = <div className="rounded-xl border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">Aucune collab pour le moment. Crée la première ✍️</div>;

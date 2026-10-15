@@ -99,15 +99,24 @@ Deno.serve(async (req: Request) => {
     }).then(() => {}, () => {});
   }
 
-  // 2) Push agence — seulement la 1re occurrence de ce message sur 30 min (anti-spam).
+  // 2) Push agence — seulement la 1re occurrence de ce message sur 30 min, ET au plus une
+  //    notification toutes les 10 min tous messages confondus (des messages tous différents
+  //    envoyés par un script ne doivent pas faire sonner les téléphones en boucle).
   const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
   const { count } = await sb.from("error_log")
     .select("id", { count: "exact", head: true })
     .eq("message", message).gte("created_at", since);
   const occurrences = count ?? 1;
+  const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const { count: anyRecent } = await sb.from("error_log")
+    .select("id", { count: "exact", head: true }).gte("created_at", tenMinAgo);
+  // Conservation : le journal ne garde que 90 jours (nettoyage de temps en temps).
+  if (Math.random() < 0.05) {
+    await sb.from("error_log").delete().lt("created_at", new Date(Date.now() - 90 * 86400_000).toISOString()).then(() => {}, () => {});
+  }
 
   let pushed = 0;
-  if (!flooding && occurrences <= 1 && VAPID_PRIVATE_KEY && (await pushErrorsEnabled(sb))) {
+  if (!flooding && occurrences <= 1 && (anyRecent ?? 1) <= 1 && VAPID_PRIVATE_KEY && (await pushErrorsEnabled(sb))) {
     // SÉCURITÉ (audit 2026-07-13) : endpoint non authentifié → NE PAS mettre de texte
     // contrôlé par l'appelant (message/page) dans la notif, sinon vecteur de phishing
     // vers les téléphones agence. Corps générique ; le détail reste dans error_log.

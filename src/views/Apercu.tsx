@@ -567,6 +567,7 @@ export function Apercu() {
           briefs: (br.data as Brief[]) ?? [],
           creators: (cr.data as Creator[]) ?? [],
         };
+        setErr(false);
         setCache("apercu", next);
         setData(next);
       })
@@ -579,8 +580,9 @@ export function Apercu() {
       .order("jour", { ascending: false })
       .limit(1)
       .then(
-        ({ data }) => {
-          if (alive) setCockpit(((data as { jour: string; contenu: string }[] | null) ?? [])[0] ?? null);
+        ({ data, error }) => {
+          // Requête ratée : on garde le cockpit déjà affiché.
+          if (alive && !error) setCockpit(((data as { jour: string; contenu: string }[] | null) ?? [])[0] ?? null);
         },
         () => {},
       );
@@ -589,7 +591,9 @@ export function Apercu() {
     };
   }, [live]);
 
-  if (err)
+  // Un rafraîchissement raté garde le tableau déjà affiché : l'erreur ne
+  // s'affiche que si rien n'est encore chargé.
+  if (err && !d)
     return (
       <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
         Impossible de charger le tableau de bord.

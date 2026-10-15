@@ -434,19 +434,18 @@ export function Contacts() {
           .select("*")
           .order("sort_order");
         if (!active) return;
+        // Rafraîchissement raté : on garde les contacts déjà affichés (l'erreur
+        // ne s'affiche que si rien n'est encore chargé).
         if (error) {
           setError(true);
-          setRows([]);
           return;
         }
         const list = (data as Row[]) ?? [];
+        setError(false);
         setCache("contacts", list);
         setRows(list);
       } catch {
-        if (active) {
-          setError(true);
-          setRows([]);
-        }
+        if (active) setError(true);
       }
     })();
     return () => {
@@ -486,7 +485,7 @@ export function Contacts() {
     return [...map.values()].sort((a, b) => a.localeCompare(b, "fr"));
   }, [rows]);
 
-  if (error) {
+  if (error && rows === null) {
     return (
       <div className="rounded-xl border border-border bg-card shadow-sm px-4 py-3">
         <AnimatedBadge status="danger" size="sm">
@@ -737,7 +736,8 @@ export function Contacts() {
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(url);
+    // Révocation différée : sinon le téléchargement peut être annulé (Safari).
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
     toast(`${toExport.length} contact${toExport.length > 1 ? "s" : ""} exporté${toExport.length > 1 ? "s" : ""} ✓`);
   };
 

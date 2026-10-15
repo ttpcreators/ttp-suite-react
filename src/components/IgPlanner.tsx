@@ -105,15 +105,20 @@ function videoInfo(file: File): Promise<{ w: number; h: number; dur: number }> {
   return new Promise((resolve) => {
     const v = document.createElement("video");
     const url = URL.createObjectURL(file);
+    // Une seule réponse : métadonnées, erreur ou délai dépassé (8 s). Sans ce délai,
+    // une vidéo qui ne répond jamais bloquait le compteur d'envoi.
+    let done = false;
+    const finish = (info: { w: number; h: number; dur: number }) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(info);
+      URL.revokeObjectURL(url);
+    };
+    const timer = setTimeout(() => finish({ w: 0, h: 0, dur: NaN }), 8000);
     v.preload = "metadata";
-    v.onloadedmetadata = () => {
-      resolve({ w: v.videoWidth, h: v.videoHeight, dur: Math.round(v.duration * 10) / 10 });
-      URL.revokeObjectURL(url);
-    };
-    v.onerror = () => {
-      resolve({ w: 0, h: 0, dur: NaN });
-      URL.revokeObjectURL(url);
-    };
+    v.onloadedmetadata = () => finish({ w: v.videoWidth, h: v.videoHeight, dur: Math.round(v.duration * 10) / 10 });
+    v.onerror = () => finish({ w: 0, h: 0, dur: NaN });
     v.src = url;
   });
 }

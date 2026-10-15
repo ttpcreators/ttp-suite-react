@@ -84,11 +84,13 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
       .order("sort_order")
       .then(({ data, error }) => {
         if (!alive) return;
+        // Rafraîchissement raté : on garde les événements déjà affichés (l'erreur
+        // ne s'affiche que si rien n'est encore chargé).
         if (error) {
           setError(true);
-          setRows([]);
           return;
         }
+        setError(false);
         const list = ((data as Record<string, unknown>[]) ?? []).map((r) => ({
           id: String(r.id),
           date: ((r.date as string) && (r.date as string).trim()) ? (r.date as string) : todayISO(),
@@ -178,7 +180,7 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
   // Vrais événements + échéances superposées (briefs/to-do).
   const allEvents = useMemo(() => [...(rows ?? []), ...overlays], [rows, overlays]);
 
-  if (error)
+  if (error && !rows)
     return (
       <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
         Impossible de charger le planning.

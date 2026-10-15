@@ -23,6 +23,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { toISODate, frDate } from "@/lib/dates";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
+import { openLater } from "@/lib/openLater";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import {
   Select,
@@ -265,9 +266,12 @@ export function Todo() {
   };
   const openAttachment = async (att: Attachment) => {
     if (/^https?:\/\//i.test(att.path)) { window.open(att.path, "_blank"); return; }
-    const { data, error } = await supabase.storage.from("documents").createSignedUrl(att.path, 3600);
-    if (error || !data?.signedUrl) { toast("Lien indisponible — réessaie"); return; }
-    window.open(data.signedUrl, "_blank");
+    // Onglet ouvert dans le clic, avant l'await (sinon bloqué sur iPhone).
+    const ok = await openLater(async () => {
+      const { data, error } = await supabase.storage.from("documents").createSignedUrl(att.path, 3600);
+      return error || !data?.signedUrl ? null : data.signedUrl;
+    });
+    if (!ok) toast("Lien indisponible — réessaie");
   };
   // Base d'abord, fichier ensuite : un échec ne laisse pas une pièce jointe pointant vers rien.
   const removeAttachment = async (todo: Row, path: string) => {
@@ -390,11 +394,14 @@ export function Todo() {
         .order("sort_order");
       if (!active) return;
       if (error) {
+        // Rafraîchissement raté : on garde les tâches déjà affichées (l'erreur ne
+        // s'affiche que s'il n'y a rien à montrer).
         setError(true);
-        setRows([]);
+        setRows((prev) => prev ?? []);
         return;
       }
       const list = (data as Row[]) ?? [];
+      setError(false);
       setCache("todos", list);
       setRows(list);
     })();
@@ -716,7 +723,7 @@ export function Todo() {
             Chargement…
           </AnimatedBadge>
         </div>
-      ) : error ? (
+      ) : error && rows.length === 0 ? (
         <div className="rounded-xl border border-border bg-card shadow-sm px-4 py-3">
           <p className="text-sm text-muted-foreground">
             Impossible de charger les tâches.

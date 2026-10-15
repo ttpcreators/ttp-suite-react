@@ -436,7 +436,8 @@ export function Debrief() {
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(url);
+    // Révocation différée : sinon le téléchargement peut être annulé (Safari).
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
     toast("Debrief téléchargé ✓");
   }
 

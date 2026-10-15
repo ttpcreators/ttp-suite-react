@@ -110,26 +110,31 @@ export function EditorialProfileCard({ name }: { name: string }) {
   const save = async () => {
     if (saving || loadedKey !== key) return;
     setSaving(true);
-    // Relit FRAIS avant de fusionner : ne jamais réécrire la map complète depuis un
-    // état local (sinon on efface les fiches des autres créateurs). Écriture atomique.
-    invalidateAppState();
-    const fresh = ((await getAppState())[PROFILES_KEY] as Record<string, EditorialProfile>) ?? {};
-    const ok = await saveAppStateKey(PROFILES_KEY, { ...fresh, [key]: cur });
-    // Miroir best-effort : recopie le partageable dans la table lue par le créateur.
-    // `creator` = nom EXACT (= my_creator()), pas normalisé. N'écrase pas self_cadence
-    // (upsert ne touche que les colonnes fournies). Une erreur ici (ex : SQL pas encore
-    // lancé) ne bloque pas l'agence — le blob reste la source de vérité.
-    if (ok) {
-      savedP.current = cur;
-      const { error } = await supabase.from(ROADMAP_TABLE).upsert({ creator: name, roadmap: roadmapFrom(cur) }, { onConflict: "creator" });
+    try {
+      // Relit FRAIS avant de fusionner : ne jamais réécrire la map complète depuis un
+      // état local (sinon on efface les fiches des autres créateurs). Écriture atomique.
+      invalidateAppState();
+      const fresh = ((await getAppState())[PROFILES_KEY] as Record<string, EditorialProfile>) ?? {};
+      const ok = await saveAppStateKey(PROFILES_KEY, { ...fresh, [key]: cur });
+      // Miroir best-effort : recopie le partageable dans la table lue par le créateur.
+      // `creator` = nom EXACT (= my_creator()), pas normalisé. N'écrase pas self_cadence
+      // (upsert ne touche que les colonnes fournies). Une erreur ici (ex : SQL pas encore
+      // lancé) ne bloque pas l'agence — le blob reste la source de vérité.
+      if (ok) {
+        savedP.current = cur;
+        const { error } = await supabase.from(ROADMAP_TABLE).upsert({ creator: name, roadmap: roadmapFrom(cur) }, { onConflict: "creator" });
+        setMode("view");
+        if (!error) notifyCreator("roadmap", name, "Ta feuille de route a été mise à jour — jette un œil ✨");
+        toast(error ? "Fiche enregistrée ✓ (pas encore visible dans son espace)" : "Fiche éditoriale enregistrée ✓");
+        return;
+      }
+      toast("Erreur — réessaie");
+    } catch {
+      // Relecture du blob impossible (réseau) : rien n'a été écrit.
+      toast("Lecture impossible : rien n'a été enregistré, réessaie");
+    } finally {
       setSaving(false);
-      setMode("view");
-      if (!error) notifyCreator("roadmap", name, "Ta feuille de route a été mise à jour — jette un œil ✨");
-      toast(error ? "Fiche enregistrée ✓ (pas encore visible dans son espace)" : "Fiche éditoriale enregistrée ✓");
-      return;
     }
-    setSaving(false);
-    toast("Erreur — réessaie");
   };
   // Annuler l'édition : revient à la dernière copie enregistrée et repasse en lecture.
   const cancel = () => { setP(savedP.current ?? normProfile(data?.[key])); setMode("view"); };
@@ -400,15 +405,21 @@ export function MonthlyTracking({ name }: { name: string }) {
   const save = async () => {
     if (saving || loadedKey !== key) return;
     setSaving(true);
-    invalidateAppState();
-    const fresh = ((await getAppState())[MONTHLY_KEY] as Record<string, MonthEntry[]>) ?? {};
-    const ok = await saveAppStateKey(MONTHLY_KEY, { ...fresh, [key]: list });
-    setSaving(false);
-    if (ok) {
-      savedList.current = list;
-      setMode("view");
+    try {
+      invalidateAppState();
+      const fresh = ((await getAppState())[MONTHLY_KEY] as Record<string, MonthEntry[]>) ?? {};
+      const ok = await saveAppStateKey(MONTHLY_KEY, { ...fresh, [key]: list });
+      if (ok) {
+        savedList.current = list;
+        setMode("view");
+      }
+      toast(ok ? "Suivi mensuel enregistré ✓" : "Erreur — réessaie");
+    } catch {
+      // Relecture du blob impossible (réseau) : rien n'a été écrit.
+      toast("Lecture impossible : rien n'a été enregistré, réessaie");
+    } finally {
+      setSaving(false);
     }
-    toast(ok ? "Suivi mensuel enregistré ✓" : "Erreur — réessaie");
   };
   const cancel = () => { setLocal(savedList.current.slice()); setMode("view"); };
 
@@ -625,15 +636,21 @@ export function JournalCard({ name }: { name: string }) {
   const save = async () => {
     if (saving || loadedKey !== key) return;
     setSaving(true);
-    invalidateAppState();
-    const fresh = ((await getAppState())[JOURNAL_KEY] as Record<string, JournalEntry[]>) ?? {};
-    const ok = await saveAppStateKey(JOURNAL_KEY, { ...fresh, [key]: list });
-    setSaving(false);
-    if (ok) {
-      savedJ.current = list;
-      setMode("view");
+    try {
+      invalidateAppState();
+      const fresh = ((await getAppState())[JOURNAL_KEY] as Record<string, JournalEntry[]>) ?? {};
+      const ok = await saveAppStateKey(JOURNAL_KEY, { ...fresh, [key]: list });
+      if (ok) {
+        savedJ.current = list;
+        setMode("view");
+      }
+      toast(ok ? "Journal enregistré ✓" : "Erreur — réessaie");
+    } catch {
+      // Relecture du blob impossible (réseau) : rien n'a été écrit.
+      toast("Lecture impossible : rien n'a été enregistré, réessaie");
+    } finally {
+      setSaving(false);
     }
-    toast(ok ? "Journal enregistré ✓" : "Erreur — réessaie");
   };
   const cancel = () => { setLocal(savedJ.current.slice()); setMode("view"); };
 

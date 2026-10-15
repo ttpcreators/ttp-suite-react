@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { KeyRound, Eye, EyeOff, Copy, Plus, Trash2, Save } from "lucide-react";
-import { useAppState, saveAppStateKey, invalidateAppState, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, invalidateAppState, getAppState, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
 
 /**
@@ -16,31 +16,57 @@ const cid = () => `c${Date.now().toString(36)}${(_cid += 1)}`;
 const CIN = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15";
 
 export function CredentialVault() {
-  const { data, loading } = useAppState<CredEntry[]>((s: AppState) => (s[CRED_KEY] as CredEntry[]) ?? []);
+  const { data, loading, error } = useAppState<CredEntry[]>((s: AppState) => (Array.isArray(s[CRED_KEY]) ? (s[CRED_KEY] as CredEntry[]) : []));
   const [list, setList] = useState<CredEntry[] | null>(null);
+  // Copie telle que chargée + suppressions : à l'enregistrement, seules MES modifications
+  // sont fusionnées dans la liste relue (celles d'un collègue entre-temps sont gardées).
+  const [base, setBase] = useState<CredEntry[]>([]);
+  const [deleted, setDeleted] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [reveal, setReveal] = useState<Record<string, boolean>>({});
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   // Initialisée UNE fois (ne pas écraser une saisie en cours à chaque rafraîchissement).
   useEffect(() => {
-    if (!loading && list === null) setList((data ?? []).slice());
-  }, [loading, data, list]);
+    if (!loading && !error && list === null) {
+      setList((data ?? []).slice());
+      setBase((data ?? []).slice());
+    }
+  }, [loading, error, data, list]);
 
   const rows = list ?? [];
   const add = () => setList([{ id: cid(), label: "", email: "", password: "", note: "" }, ...rows]);
   const edit = (id: string, patch: Partial<CredEntry>) => setList(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const del = (id: string) => { setList(rows.filter((r) => r.id !== id)); setConfirmDel(null); };
+  const del = (id: string) => { setList(rows.filter((r) => r.id !== id)); setDeleted((d) => [...d, id]); setConfirmDel(null); };
   const copy = async (text: string, what: string) => {
     if (!text) return;
     try { await navigator.clipboard.writeText(text); toast(`${what} copié ✓`); } catch { toast("Copie impossible"); }
   };
   const save = async () => {
-    if (saving) return;
+    if (saving || list === null) return; // jamais d'écriture tant que la liste n'est pas chargée
     setSaving(true);
-    invalidateAppState(); // ce blob-clé porte TOUTE la liste : on écrit l'état courant.
-    const ok = await saveAppStateKey(CRED_KEY, rows);
-    setSaving(false);
-    toast(ok ? "Coffre enregistré ✓" : "Erreur — réessaie");
+    try {
+      // Relit la liste À JOUR, puis n'y applique que mes changements (ajouts, modifs, suppressions).
+      invalidateAppState();
+      const raw = (await getAppState())[CRED_KEY];
+      const fresh: CredEntry[] = Array.isArray(raw) ? (raw as CredEntry[]) : [];
+      const before = new Map(base.map((r) => [r.id, JSON.stringify(r)]));
+      const mine = rows.filter((r) => before.get(r.id) !== JSON.stringify(r)); // nouveaux ou modifiés
+      const mineIds = new Set(mine.map((r) => r.id));
+      const merged = [
+        ...mine.filter((r) => !fresh.some((f) => f.id === r.id)), // mes ajouts, en tête
+        ...fresh.filter((f) => !deleted.includes(f.id)).map((f) => (mineIds.has(f.id) ? mine.find((r) => r.id === f.id)! : f)),
+      ];
+      const ok = await saveAppStateKey(CRED_KEY, merged);
+      if (!ok) return toast("Erreur, réessaie");
+      setList(merged);
+      setBase(merged);
+      setDeleted([]);
+      toast("Coffre enregistré ✓");
+    } catch {
+      toast("Lecture impossible : rien n'a été enregistré, réessaie");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -57,14 +83,18 @@ export function CredentialVault() {
           <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             <Plus className="h-3.5 w-3.5" /> Ajouter
           </button>
-          <button type="button" onClick={save} disabled={saving || loading} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+          <button type="button" onClick={save} disabled={saving || loading || list === null} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
             <Save className="h-3.5 w-3.5" /> {saving ? "…" : "Enregistrer"}
           </button>
         </div>
       </div>
 
       <div className="mt-4">
-        {rows.length === 0 ? (
+        {error && list === null ? (
+          <div className="rounded-xl border border-dashed border-border bg-panel/40 px-4 py-8 text-center text-[13px] text-muted-foreground">
+            Lecture du coffre impossible pour l'instant. Recharge la page (rien n'a été modifié).
+          </div>
+        ) : rows.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border bg-panel/40 px-4 py-8 text-center text-[13px] text-muted-foreground">
             Aucun identifiant enregistré. « Ajouter » crée une entrée (créateur, e-mail, mot de passe).
           </div>

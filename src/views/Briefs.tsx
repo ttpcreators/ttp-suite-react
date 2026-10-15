@@ -19,6 +19,7 @@ import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { toISODate, frDate } from "@/lib/dates";
 import { getCache, setCache } from "@/lib/viewCache";
+import { openLater } from "@/lib/openLater";
 import { notifyCreator } from "@/lib/push";
 import { PageHeaderRow } from "@/components/ui/page-header";
 
@@ -135,11 +136,14 @@ export function Briefs() {
         .order("sort_order");
       if (!active) return;
       if (error) {
+        // Rafraîchissement raté : on garde les briefs déjà affichés (l'erreur ne
+        // s'affiche que s'il n'y a rien à montrer).
         setError(true);
-        setRows([]);
+        setRows((prev) => prev ?? []);
         return;
       }
       const list = (data as Row[]) ?? [];
+      setError(false);
       setCache("briefs", list);
       setRows(list);
     })();
@@ -300,10 +304,14 @@ export function Briefs() {
   };
 
   const openPdf = async (row: Row) => {
-    if (!row.pdf?.path) return;
-    const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.pdf.path, 3600);
-    if (error || !data?.signedUrl) return toast("Lien indisponible — réessaie");
-    window.open(data.signedUrl, "_blank");
+    const path = row.pdf?.path;
+    if (!path) return;
+    // Onglet ouvert dans le clic, avant l'await (sinon bloqué sur iPhone).
+    const ok = await openLater(async () => {
+      const { data, error } = await supabase.storage.from("documents").createSignedUrl(path, 3600);
+      return error || !data?.signedUrl ? null : data.signedUrl;
+    });
+    if (!ok) toast("Lien indisponible — réessaie");
   };
 
   const removePdf = async (row: Row) => {
@@ -450,7 +458,7 @@ export function Briefs() {
         <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>
       </div>
     );
-  } else if (error) {
+  } else if (error && rows.length === 0) {
     content = <div className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-sm">Erreur de chargement.</div>;
   } else if (rows.length === 0) {
     content = <div className="rounded-xl border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">Aucun brief pour le moment. Ajoute le premier 📋</div>;

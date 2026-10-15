@@ -8,6 +8,7 @@ import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
+import { openLater } from "@/lib/openLater";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { RecipientPicker } from "@/components/ui/recipient-picker";
 import { SignaturePicker } from "@/components/ui/signature-picker";
@@ -272,9 +273,8 @@ function MediakitFiles() {
   };
 
   const open = async (row: ArchiveRow) => {
-    const url = await resolveUrl(row, 3600);
-    if (!url) return toast("Lien indisponible — réessaie");
-    window.open(url, "_blank");
+    // Onglet ouvert dans le clic, avant l'await (sinon bloqué sur iPhone).
+    if (!(await openLater(() => resolveUrl(row, 3600)))) toast("Lien indisponible — réessaie");
   };
 
   const remove = async (row: ArchiveRow) => {
