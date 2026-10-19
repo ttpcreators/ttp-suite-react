@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 import { pokeTeam } from "./team";
-import { getAppState, invalidateAppState, saveAppStateKey } from "./appState";
+import { getAppState, invalidateAppState, listAppStateKey } from "./appState";
 
 /**
  * Corbeille GLOBALE de l'app. Toute suppression « douce » (via dbTrash) copie la
@@ -48,19 +48,19 @@ async function readBin(): Promise<TrashEntry[]> {
   return (state.trashBin as TrashEntry[]) ?? [];
 }
 
-// Sérialise les modifications du blob `trashBin` (read-modify-write). Sans ça, deux
-// opérations concurrentes (deux suppressions rapides, ou une suppression pendant la
-// purge auto au montage de la Corbeille) lisent la même liste et s'écrasent : une
-// entrée corbeille est perdue ALORS QUE la ligne source est déjà supprimée → perte
-// irrécupérable. `fn` reçoit la liste FRAÎCHE et renvoie la nouvelle (ou null = ne
-// rien écrire). Renvoie le succès de l'écriture. (Sérialisation intra-onglet ; les
-// écritures cross-onglets restent last-writer-wins, borne acceptable ici.)
+// Modifications du blob `trashBin` : seules les entrées ajoutées / retirées sont
+// envoyées (écriture partielle côté base, sous verrou) → deux postes qui mettent à la
+// corbeille en même temps ne s'effacent plus, même entre onglets. Les appels restent
+// sérialisés dans l'onglet. `change` est soit le changement direct, soit une fonction
+// qui reçoit la liste FRAÎCHE (relue) et renvoie le changement (ou null = ne rien
+// écrire). Renvoie le succès de l'écriture.
+type BinChange = { add?: TrashEntry[]; remove?: string[] };
 let _binChain: Promise<unknown> = Promise.resolve();
-function mutateBin(fn: (bin: TrashEntry[]) => TrashEntry[] | null): Promise<boolean> {
+function mutateBin(change: BinChange | ((bin: TrashEntry[]) => BinChange | null)): Promise<boolean> {
   const run = _binChain.then(async () => {
-    const next = fn(await readBin());
-    if (next === null) return true; // rien à écrire
-    return saveAppStateKey("trashBin", next);
+    const c = typeof change === "function" ? change(await readBin()) : change;
+    if (c === null) return true; // rien à écrire
+    return listAppStateKey("trashBin", c.add ?? [], c.remove ?? [], true);
   });
   _binChain = run.catch(() => {});
   return run;
@@ -88,7 +88,7 @@ export async function dbTrash(table: string, id: string, label: string, sub?: st
   //    on NE supprime PAS (sinon la ligne disparaît sans copie récupérable — perte
   //    silencieuse avec un faux « déplacé dans la corbeille ✓»).
   const entry: TrashEntry = { id: uid(), table, label, sub, data: row, deletedAt: new Date().toISOString() };
-  const saved = await mutateBin((bin) => [entry, ...bin]);
+  const saved = await mutateBin({ add: [entry] });
   if (!saved) {
     console.warn(`[trash] écriture corbeille échouée (${table}) → suppression annulée`);
     return false;
@@ -100,7 +100,7 @@ export async function dbTrash(table: string, id: string, label: string, sub?: st
     console.warn(`[trash] delete ${table}:`, error.message);
     // La ligne existe toujours : on retire l'entrée corbeille qu'on venait d'ajouter
     // (best-effort) pour éviter un doublon fantôme dans la corbeille.
-    await mutateBin((bin) => bin.filter((e) => e.id !== entry.id));
+    await mutateBin({ remove: [entry.id] });
     return false;
   }
   pokeTeam(table); // prévient l'équipe agence (« Marc a supprimé… »)
@@ -124,18 +124,18 @@ export async function restoreEntry(entry: TrashEntry): Promise<RestoreResult> {
     console.warn(`[trash] restore ${entry.table}:`, error.message);
     return "failed";
   }
-  const removed = await mutateBin((bin) => bin.filter((e) => e.id !== entry.id)).catch(() => false);
+  const removed = await mutateBin({ remove: [entry.id] }).catch(() => false);
   return removed ? "ok" : "partial";
 }
 
 /** Supprime définitivement une entrée de la corbeille. Renvoie true si OK. */
 export async function purgeEntry(id: string): Promise<boolean> {
-  return mutateBin((bin) => bin.filter((e) => e.id !== id)).catch(() => false);
+  return mutateBin({ remove: [id] }).catch(() => false);
 }
 
-/** Vide toute la corbeille. Renvoie true si OK. */
+/** Vide toute la corbeille (les entrées relues à l'instant). Renvoie true si OK. */
 export async function emptyTrash(): Promise<boolean> {
-  return mutateBin(() => []).catch(() => false);
+  return mutateBin((bin) => ({ remove: bin.map((e) => e.id) })).catch(() => false);
 }
 
 /** Jours restants avant purge automatique (0 = à purger). */
@@ -152,10 +152,11 @@ export async function purgeExpired(_bin: TrashEntry[]): Promise<TrashEntry[] | n
   const now = Date.now();
   let result: TrashEntry[] | null = null;
   await mutateBin((fresh) => {
-    const kept = fresh.filter((e) => (now - new Date(e.deletedAt).getTime()) / 86400000 < TRASH_TTL_DAYS);
+    const keep = (e: TrashEntry) => (now - new Date(e.deletedAt).getTime()) / 86400000 < TRASH_TTL_DAYS;
+    const kept = fresh.filter(keep);
     if (kept.length === fresh.length) return null; // rien à purger → pas d'écriture
     result = kept;
-    return kept;
+    return { remove: fresh.filter((e) => !keep(e)).map((e) => e.id) };
   });
   return result;
 }

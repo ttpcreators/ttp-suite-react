@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
 import { useCreators, invalidateCreators } from "@/lib/useCreators";
 import { dbUpdate } from "@/lib/db";
-import { useAppState, saveAppStateKey, getAppState, invalidateAppState } from "@/lib/appState";
+import { useAppState, listAppStateKey, getAppState, invalidateAppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
 import { SelectField } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
@@ -279,7 +279,9 @@ export function Engagement() {
     }
     const orig = editingId ? freshHist.find((h) => h.id === editingId) : undefined;
     const entry: HistEntry = {
-      id: editingId ?? uid(),
+      // Toujours un nouvel id (même en modification) : l'entrée remonte en tête en UNE
+      // écriture partielle (ancien id retiré + nouvelle entrée ajoutée en tête), comme avant.
+      id: uid(),
       // Modification d'un relevé existant : on garde sa date d'origine.
       date: orig?.date ?? new Date().toLocaleDateString("fr-FR"),
       creator: selectedCreator ? titleCase(selectedCreator.name) : "Calcul libre",
@@ -292,8 +294,11 @@ export function Engagement() {
       vals: { ...vals },
       followers,
     };
-    const nextHist = [entry, ...freshHist.filter((h) => h.id !== entry.id)].slice(0, 100);
-    const okBlob = await saveAppStateKey("engagementHistory", nextHist);
+    const rest = freshHist.filter((h) => h.id !== editingId);
+    const nextHist = [entry, ...rest].slice(0, 100);
+    // N'envoie QUE la mesure (et les ids retirés : l'ancienne version, le dépassement du plafond de 100).
+    const removed = [...(editingId ? [editingId] : []), ...rest.slice(99).map((h) => h.id)];
+    const okBlob = await listAppStateKey("engagementHistory", [entry], removed, true);
     if (!okBlob) {
       setSaving(false);
       toast("Erreur d'enregistrement — réessaie");
@@ -330,7 +335,7 @@ export function Engagement() {
     const freshHist = ((await getAppState())["engagementHistory"] as HistEntry[]) ?? [];
     const target = freshHist.find((h) => h.id === id);
     const next = freshHist.filter((h) => h.id !== id);
-    const okBlob = await saveAppStateKey("engagementHistory", next);
+    const okBlob = await listAppStateKey("engagementHistory", [], [id]);
     if (!okBlob) {
       toast("Erreur — réessaie");
       return;

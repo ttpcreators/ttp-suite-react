@@ -11,7 +11,7 @@ import { AddButton, InlineForm, TextField, AutoGrowTextField } from "@/component
 import { ActionMenu } from "@/components/ui/action-menu";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
-import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import GlassStatChart from "@/components/ui/glass-stat-chart";
 import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus, Tag, Camera, Loader2, Hash, Globe } from "lucide-react";
 import { igWhyText, fmtEr, fmtPerWeek, noteQuota } from "@/lib/instagram";
@@ -269,6 +269,7 @@ function ScoutingList({ kind }: { kind: Kind }) {
         invalidateAppState();
         const fresh = ((await getAppState())[K.track] as Tracking) ?? {};
         const next = { ...fresh };
+        const set: Tracking = {}; // seules les fiches relues ici sont envoyées
         const at = todayISO();
         for (const x of want) {
           if (!(x.h in photos)) continue;
@@ -280,10 +281,10 @@ function ScoutingList({ kind }: { kind: Kind }) {
           const figures = st
             ? { igEr: st.er, igPw: st.perWeek, igBio: st.bio, igSite: st.website, igPosts: st.posts, igNiche: guessNiche([st.name, st.bio, st.captions].filter(Boolean).join(" \n "), NICHES) }
             : {};
-          next[x.id] = { ...cur, ...figures, snaps, igPhoto: photos[x.h], igFor: x.h, igAt: at, igWhy: res?.why?.[x.h], igV: IG_V };
+          next[x.id] = set[x.id] = { ...cur, ...figures, snaps, igPhoto: photos[x.h], igFor: x.h, igAt: at, igWhy: res?.why?.[x.h], igV: IG_V };
         }
         setLocalTrack(next);
-        await saveAppStateKey(K.track, next);
+        await mergeAppStateKey(K.track, set);
       } catch {
         /* les initiales restent */
       }
@@ -327,9 +328,11 @@ function ScoutingList({ kind }: { kind: Kind }) {
     try {
       invalidateAppState();
       const fresh = ((await getAppState())[K.track] as Tracking) ?? {};
-      const next = { ...fresh, [id]: fn(fresh[id] ?? {}) };
+      const entry = fn(fresh[id] ?? {});
+      const next = { ...fresh, [id]: entry };
       setLocalTrack(next);
-      if (await saveAppStateKey(K.track, next)) {
+      // N'envoie QUE la fiche de ce profil (fusion côté base).
+      if (await mergeAppStateKey(K.track, { [id]: entry })) {
         if (okMsg) toast(okMsg);
         return;
       }

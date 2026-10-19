@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Copy, Mail, BellRing, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useAppState, saveAppStateKey, getAppState, invalidateAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";
+import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";
 import { titleCase } from "@/lib/utils";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -135,8 +135,10 @@ export function Relances() {
       invalidateAppState();
       const fresh = ((await getAppState())["invoiceReminders"] as Reminders) ?? {};
       const cur = fresh[id];
-      next = { ...fresh, [id]: { last: todayISO(), count: (cur?.count ?? 0) + 1 } };
-      ok = await saveAppStateKey("invoiceReminders", next);
+      const entry: Reminder = { last: todayISO(), count: (cur?.count ?? 0) + 1 };
+      next = { ...fresh, [id]: entry };
+      // N'envoie QUE la facture relancée (fusion côté base).
+      ok = await mergeAppStateKey("invoiceReminders", { [id]: entry });
     } catch {
       ok = false;
     }

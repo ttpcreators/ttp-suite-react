@@ -116,6 +116,66 @@ export async function saveAppStateKey(key: string, value: unknown): Promise<bool
   return ok;
 }
 
+/**
+ * Écriture PARTIELLE d'une clé-objet { id: valeur } (factures, versements, notes…) :
+ * seules les entrées `set` sont posées et `remove` retirées, côté base et sous verrou
+ * (fonction app_state_merge). Deux postes qui enregistrent en même temps ne
+ * s'effacent plus : chacun ne touche que SES entrées.
+ * Filet : fonction SQL absente → relecture fraîche + réécriture de la clé (ancien chemin).
+ */
+export async function mergeAppStateKey(key: string, set: Record<string, unknown>, remove: string[] = []): Promise<boolean> {
+  _writeGen++;
+  const { error } = await supabase.rpc("app_state_merge", { p_key: key, p_set: set, p_remove: remove });
+  _writeGen++;
+  if (!error) {
+    if (_cache) {
+      const cur = { ...((_cache[key] as Record<string, unknown> | undefined) ?? {}) };
+      for (const k of remove) delete cur[k];
+      _cache = { ..._cache, [key]: { ...cur, ...set } } as AppState;
+    }
+    return true;
+  }
+  if (!isMissingFunction(error)) {
+    console.warn("[blob] app_state_merge", key, error.message);
+    return false;
+  }
+  invalidateAppState();
+  const fresh = { ...(((await getAppState())[key] as Record<string, unknown> | undefined) ?? {}) };
+  for (const k of remove) delete fresh[k];
+  return saveAppStateKey(key, { ...fresh, ...set });
+}
+
+/**
+ * Écriture PARTIELLE d'une clé-liste d'objets ayant un `id` (historiques) : `upsert`
+ * remplace sur place ou ajoute (en tête si `prepend`), `remove` retire par id.
+ * Même garantie que mergeAppStateKey (fonction app_state_list).
+ */
+export async function listAppStateKey(key: string, upsert: { id: string }[], remove: string[] = [], prepend = false): Promise<boolean> {
+  _writeGen++;
+  const { error } = await supabase.rpc("app_state_list", { p_key: key, p_upsert: upsert, p_remove: remove, p_prepend: prepend });
+  _writeGen++;
+  const apply = (cur: { id: string }[]) => {
+    const ups = new Map(upsert.map((u) => [u.id, u]));
+    const kept = cur.filter((x) => !remove.includes(x.id)).map((x) => ups.get(x.id) ?? x);
+    const added = upsert.filter((u) => !cur.some((x) => x.id === u.id));
+    return prepend ? [...added, ...kept] : [...kept, ...added];
+  };
+  if (!error) {
+    if (_cache) {
+      const cur = Array.isArray(_cache[key]) ? (_cache[key] as { id: string }[]) : [];
+      _cache = { ..._cache, [key]: apply(cur) } as AppState;
+    }
+    return true;
+  }
+  if (!isMissingFunction(error)) {
+    console.warn("[blob] app_state_list", key, error.message);
+    return false;
+  }
+  invalidateAppState();
+  const fresh = (await getAppState())[key];
+  return saveAppStateKey(key, apply(Array.isArray(fresh) ? (fresh as { id: string }[]) : []));
+}
+
 /** Fonction Postgres absente : 42883 (Postgres) ou PGRST202 (cache PostgREST). */
 export function isMissingFunction(err: { code?: string; message?: string } | null | undefined): boolean {
   if (!err) return false;

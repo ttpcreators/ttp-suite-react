@@ -72,6 +72,7 @@ import { SuiviPanel, type SuiviEntry } from "@/views/EngagementSuivi";
 import { CreatorRoadmap } from "@/views/CreatorTracking";
 import { CreatorGuide } from "@/views/CreatorGuide";
 import { MonthlyReport } from "@/components/MonthlyReport";
+import { siteSlugs, type MkRow } from "@/lib/mediakitSlug";
 import { ScaledPreview } from "@/components/ui/scaled-preview";
 import { WelcomeModal } from "@/components/ui/welcome-modal";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
@@ -691,19 +692,27 @@ export function CreatorSpace({
   }, [name, live]);
 
   const firstName = titleCase(name).split(" ")[0];
-  // Media kit public du créateur : adresse construite UNIQUEMENT depuis le slug
-  // enregistré (champ « Lien », même règle que le build du site : minuscule, sans
-  // accent, non-alphanum → tiret). Plus de repli sur le prénom : il pouvait ouvrir le
-  // kit d'un autre créateur du même prénom. On n'affiche le lien que si la page répond
+  // Media kit public du créateur : adresse calculée EXACTEMENT comme le build du site
+  // (champ « Lien », sinon le prénom ; doublons -2, -3 dans l'ordre du roster), à partir
+  // de la vue publique public_mediakit. On n'affiche le lien que si la page répond
   // réellement (HEAD 200) : un kit pas encore généré par le build horaire n'affiche
   // pas de lien mort.
-  const slugify = (s: string) =>
-    (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  const mkSlug = slugify((creator?.mediakit?.slug ?? "").trim()) || null;
+  const [mkSlug, setMkSlug] = useState<string | null | undefined>(undefined); // undefined = calcul en cours
+  useEffect(() => {
+    let alive = true;
+    supabase.from("public_mediakit").select("name, mediakit, sort_order").order("sort_order")
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (error || !data) return setMkSlug(null);
+        const rows = data as MkRow[];
+        const me = rows.find((r) => (r.name ?? "").trim().toLowerCase() === name.trim().toLowerCase());
+        setMkSlug(me ? siteSlugs(rows).get(me.name ?? "") ?? null : null);
+      });
+    return () => { alive = false; };
+  }, [name, live]);
   const mkUrl = mkSlug ? `https://ttpcreators.pro/mediakit/${mkSlug}/` : null;
-  // Fiche chargée mais aucun slug enregistré : le media kit n'est pas encore publié.
-  const mkUnpublished = !!creator && !mkSlug;
+  // Calcul fini mais créateur absent des media kits : pas encore publié.
+  const mkUnpublished = mkSlug === null;
   const [mkLive, setMkLive] = useState<boolean | null>(null); // null = vérification en cours
   useEffect(() => {
     if (!mkUrl) { setMkLive(false); return; }

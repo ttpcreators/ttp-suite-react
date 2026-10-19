@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Picker } from "@/components/ui/form";
 import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle, MessageSquare, Pencil, X, Phone, MessageCircle, Users, Compass, Mic, Flag, Film, GalleryHorizontalEnd, CircleDashed, Music2, MonitorPlay, Check, ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
-import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { useAppState, mergeAppStateKey, type AppState } from "@/lib/appState";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import { PlatformIcon } from "@/components/ui/platform-icon";
@@ -116,11 +116,9 @@ export function EditorialProfileCard({ name }: { name: string }) {
     if (loadedKey !== key) return toast("Fiche pas encore chargée — patiente ou recharge");
     setSaving(true);
     try {
-      // Relit FRAIS avant de fusionner : ne jamais réécrire la map complète depuis un
-      // état local (sinon on efface les fiches des autres créateurs). Écriture atomique.
-      invalidateAppState();
-      const fresh = ((await getAppState())[PROFILES_KEY] as Record<string, EditorialProfile>) ?? {};
-      const ok = await saveAppStateKey(PROFILES_KEY, { ...fresh, [key]: cur });
+      // N'envoie QUE la fiche de ce créateur (fusion côté base, sous verrou) : jamais
+      // la map complète (sinon on efface les fiches des autres créateurs).
+      const ok = await mergeAppStateKey(PROFILES_KEY, { [key]: cur });
       // Miroir best-effort : recopie le partageable dans la table lue par le créateur.
       // `creator` = nom EXACT (= my_creator()), pas normalisé. N'écrase pas self_cadence
       // (upsert ne touche que les colonnes fournies). Une erreur ici (ex : SQL pas encore
@@ -135,7 +133,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
       }
       toast("Erreur — réessaie");
     } catch {
-      // Relecture du blob impossible (réseau) : rien n'a été écrit.
+      // Relecture du blob impossible (repli sans fonction SQL, réseau) : rien n'a été écrit.
       toast("Lecture impossible : rien n'a été enregistré, réessaie");
     } finally {
       setSaving(false);
@@ -414,16 +412,15 @@ export function MonthlyTracking({ name }: { name: string }) {
     if (loadedKey !== key) return toast("Suivi pas encore chargé — patiente ou recharge");
     setSaving(true);
     try {
-      invalidateAppState();
-      const fresh = ((await getAppState())[MONTHLY_KEY] as Record<string, MonthEntry[]>) ?? {};
-      const ok = await saveAppStateKey(MONTHLY_KEY, { ...fresh, [key]: list });
+      // N'envoie QUE le suivi de ce créateur (fusion côté base).
+      const ok = await mergeAppStateKey(MONTHLY_KEY, { [key]: list });
       if (ok) {
         savedList.current = list;
         setMode("view");
       }
       toast(ok ? "Suivi mensuel enregistré ✓" : "Erreur — réessaie");
     } catch {
-      // Relecture du blob impossible (réseau) : rien n'a été écrit.
+      // Relecture du blob impossible (repli sans fonction SQL, réseau) : rien n'a été écrit.
       toast("Lecture impossible : rien n'a été enregistré, réessaie");
     } finally {
       setSaving(false);
@@ -648,16 +645,15 @@ export function JournalCard({ name }: { name: string }) {
     if (loadedKey !== key) return toast("Journal pas encore chargé — patiente ou recharge");
     setSaving(true);
     try {
-      invalidateAppState();
-      const fresh = ((await getAppState())[JOURNAL_KEY] as Record<string, JournalEntry[]>) ?? {};
-      const ok = await saveAppStateKey(JOURNAL_KEY, { ...fresh, [key]: list });
+      // N'envoie QUE le journal de ce créateur (fusion côté base).
+      const ok = await mergeAppStateKey(JOURNAL_KEY, { [key]: list });
       if (ok) {
         savedJ.current = list;
         setMode("view");
       }
       toast(ok ? "Journal enregistré ✓" : "Erreur — réessaie");
     } catch {
-      // Relecture du blob impossible (réseau) : rien n'a été écrit.
+      // Relecture du blob impossible (repli sans fonction SQL, réseau) : rien n'a été écrit.
       toast("Lecture impossible : rien n'a été enregistré, réessaie");
     } finally {
       setSaving(false);

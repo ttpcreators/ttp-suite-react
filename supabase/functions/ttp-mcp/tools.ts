@@ -676,8 +676,12 @@ const statutScouting: Tool = {
     const k = athletes ? "athleteTracking" : "poolTracking";
     const cur = ((await appState(sb))[k] ?? {}) as Record<string, Json>;
     const id = String(list[0].id);
-    const next = { ...cur, [id]: { ...(cur[id] ?? {}), status } };
-    const { error } = await sb.rpc("app_state_set", { p_key: k, p_value: next });
+    // Seule l'entrée de CE profil est réécrite (app_state_merge, sous verrou) : un statut
+    // changé en même temps dans l'app pour un autre profil n'est jamais effacé.
+    let { error } = await sb.rpc("app_state_merge", { p_key: k, p_set: { [id]: { ...(cur[id] ?? {}), status } }, p_remove: [] });
+    if (error && /app_state_merge|PGRST202|42883/.test(`${error.code ?? ""} ${error.message}`)) {
+      ({ error } = await sb.rpc("app_state_set", { p_key: k, p_value: { ...cur, [id]: { ...(cur[id] ?? {}), status } } }));
+    }
     return error ? fail(`Statut non changé : ${error.message}`) : ok(`${list[0].name} : ${SCOUT_STATUS[status]}.`);
   },
 };

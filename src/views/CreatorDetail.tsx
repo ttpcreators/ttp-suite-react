@@ -11,7 +11,7 @@ import { dbUpdate } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useLiveKey } from "@/lib/useLive";
-import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { useAppState, mergeAppStateKey, listAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 
 const CreatorMailsAgency = lazy(() => import("./CreatorMails").then((m) => ({ default: m.CreatorMailsAgency })));
 import { parseAmount, formatEuro } from "@/lib/money";
@@ -301,15 +301,13 @@ export function CreatorDetail({
       toast("Erreur — réessaie");
       return;
     }
-    // Exclusivité : blob agence — relu FRAIS avant écriture (ne jamais réécrire
-    // la map depuis un état local potentiellement périmé → flags des autres perdus).
+    // Exclusivité : blob agence — n'envoie QUE l'entrée de ce créateur (fusion côté
+    // base) : les flags des autres créateurs ne sont jamais réécrits.
     let okEx = false;
     try {
-      invalidateAppState();
-      const freshEx = ((await getAppState())["creatorExclusive"] as Record<string, boolean>) ?? {};
-      okEx = await saveAppStateKey("creatorExclusive", { ...freshEx, [exKey]: exclusive });
+      okEx = await mergeAppStateKey("creatorExclusive", { [exKey]: exclusive });
     } catch {
-      /* relecture impossible (réseau) : les infos sont enregistrées, pas l'exclusivité */
+      /* réseau : les infos sont enregistrées, pas l'exclusivité */
     }
     if (!okEx) toast("Exclusivité non enregistrée — réessaie");
     setC({ ...c, ...patch });
@@ -355,9 +353,14 @@ export function CreatorDetail({
     invalidateAppState();
     const list = (((await getAppState())["contractDeadlines"] as CtDeadline[]) ?? []).slice();
     const idx = contractEntry?.id ? list.findIndex((d) => d.id === contractEntry!.id) : -1;
-    if (idx >= 0) list[idx] = { ...list[idx], creator: list[idx].creator || name, type: ctType, start, months };
-    else list.push({ id: uid(), creator: name, type: ctType, start, months });
-    const ok = await saveAppStateKey("contractDeadlines", list);
+    const entry: CtDeadline & { id: string } =
+      idx >= 0
+        ? { ...list[idx], id: contractEntry!.id!, creator: list[idx].creator || name, type: ctType, start, months }
+        : { id: uid(), creator: name, type: ctType, start, months };
+    if (idx >= 0) list[idx] = entry;
+    else list.push(entry);
+    // N'envoie QUE cette échéance (remplacée sur place ou ajoutée en fin, côté base).
+    const ok = await listAppStateKey("contractDeadlines", [entry]);
     if (!ok) {
       toast("Erreur — réessaie");
       return;

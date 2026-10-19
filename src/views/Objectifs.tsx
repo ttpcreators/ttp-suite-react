@@ -3,7 +3,7 @@ import { Target, Pencil, TrendingUp } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import {
   useAppState,
-  saveAppStateKey,
+  mergeAppStateKey,
   getAppState,
   invalidateAppState,
   parseAmount,
@@ -223,10 +223,12 @@ export function Objectifs() {
       const freshObj = ((await getAppState())["objByMonth"] as ObjByMonth) ?? {};
       const useLegacy = selectedMonth === CURRENT_KEY && freshObj[selectedMonth] === undefined && Array.isArray(freshObj["0"]);
       const freshList = withIds(freshObj[selectedMonth] ?? (useLegacy ? freshObj["0"] : []) ?? []);
-      const nextObj: ObjByMonth = { ...freshObj, [selectedMonth]: mutate(freshList) };
+      const monthList = mutate(freshList);
+      const nextObj: ObjByMonth = { ...freshObj, [selectedMonth]: monthList };
       if (useLegacy) delete nextObj["0"]; // migre l'ancien format vers la clé absolue
       setLocal(nextObj);
-      const ok = await saveAppStateKey("objByMonth", nextObj);
+      // N'envoie QUE le mois modifié (et retire l'ancienne clé "0" migrée), fusion côté base.
+      const ok = await mergeAppStateKey("objByMonth", { [selectedMonth]: monthList }, useLegacy ? ["0"] : []);
       if (!ok) setLocal(null); // rollback sur les données live
       return ok;
     } catch {

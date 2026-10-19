@@ -3,7 +3,7 @@ import { Copy, Check, Plus, Trash2, FileText, FileDown, Eye, X, Maximize2 } from
 import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { printHtml } from "@/lib/printPdf";
-import { useAppState, saveAppStateKey, getAppState, invalidateAppState, parseAmount, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, listAppStateKey, getAppState, invalidateAppState, parseAmount, type AppState } from "@/lib/appState";
 import { TextField } from "@/components/ui/form";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
@@ -593,13 +593,17 @@ export function Contrats() {
     if (ok) toast("Modèle supprimé");
   };
 
-  // ── Historique des contrats (blob) — relecture fraîche avant merge ──
-  const mutateHistory = async (fn: (fresh: ContractHistoryEntry[]) => ContractHistoryEntry[]) => {
+  // ── Historique des contrats (blob) — relecture fraîche (affichage) ; seules les
+  // entrées ajoutées / retirées sont envoyées (deux postes ne s'effacent plus). ──
+  type HistChange = { upsert?: ContractHistoryEntry[]; remove?: string[] };
+  const mutateHistory = async (fn: (fresh: ContractHistoryEntry[]) => HistChange) => {
     try {
       invalidateAppState();
       const fresh = ((await getAppState())["brandContractHistory"] as ContractHistoryEntry[]) ?? [];
-      const next = fn(fresh);
-      const ok = await saveAppStateKey("brandContractHistory", next);
+      const { upsert = [], remove = [] } = fn(fresh);
+      // Ajouts en tête (le plus récent d'abord), comme avant.
+      const next = [...upsert.filter((u) => !fresh.some((h) => h.id === u.id)), ...fresh.filter((h) => !remove.includes(h.id)).map((h) => upsert.find((u) => u.id === h.id) ?? h)];
+      const ok = await listAppStateKey("brandContractHistory", upsert, remove, true);
       if (ok) setLocalHist(next);
       else toast("Erreur — réessaie");
       return ok;
@@ -613,9 +617,11 @@ export function Contrats() {
   const archiveContract = async (html: string): Promise<boolean> => {
     let entry: ContractHistoryEntry | null = null;
     const ok = await mutateHistory((fresh) => {
-      if (fresh.some((h) => h.html === html)) return fresh; // déjà archivé à l'identique
-      entry = { id: uid(), ts: Date.now(), ctType, ctName, brand, ref, title: meta.title, html };
-      return [entry, ...fresh].slice(0, 100);
+      if (fresh.some((h) => h.html === html)) return {}; // déjà archivé à l'identique
+      const e: ContractHistoryEntry = { id: uid(), ts: Date.now(), ctType, ctName, brand, ref, title: meta.title, html };
+      entry = e;
+      // Plafond de 100 : l'ajout en tête pousse dehors les plus anciennes.
+      return { upsert: [e], remove: fresh.slice(99).map((h) => h.id) };
     });
     const added = entry as ContractHistoryEntry | null;
     // Réimpression d'un contrat déjà archivé : on ne touche pas à son échéance.
@@ -638,19 +644,21 @@ export function Contrats() {
       try {
         invalidateAppState();
         const fresh = ((await getAppState())["contractDeadlines"] as Dl[]) ?? [];
-        const kept = fresh.filter((d) => !sameContract(d));
+        // Remplace l'échéance de CE contrat : seules l'ancienne (retirée) et la nouvelle
+        // (ajoutée en tête) sont envoyées, les autres échéances ne sont pas réécrites.
+        const replaced = fresh.filter(sameContract).map((d) => d.id);
         const now = new Date();
         const p = (n: number) => String(n).padStart(2, "0");
         const start = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
         const dl: Dl = { id: uid(), creator: ctName, type: ctType, start, months, note: `Auto · ${meta.label.toLowerCase()}${dlBrand ? ` · ${dlBrand}` : ""}`, brand: dlBrand, contractId: added.id };
-        if (!(await saveAppStateKey("contractDeadlines", [dl, ...kept]))) toast("Contrat enregistré, mais sa fin de contrat n'est pas suivie. Réessaie");
+        if (!(await listAppStateKey("contractDeadlines", [dl], replaced, true))) toast("Contrat enregistré, mais sa fin de contrat n'est pas suivie. Réessaie");
       } catch {
         toast("Contrat enregistré, mais sa fin de contrat n'est pas suivie. Réessaie");
       }
     }
     return ok;
   };
-  const deleteHistory = (id: string) => mutateHistory((fresh) => fresh.filter((h) => h.id !== id));
+  const deleteHistory = (id: string) => mutateHistory(() => ({ remove: [id] }));
 
   const [openSec, setOpenSec] = useState<Record<string, boolean>>({ conditions: true, figure: true, clauses: false });
   const toggleSec = (k: string) => setOpenSec((o) => ({ ...o, [k]: !o[k] }));

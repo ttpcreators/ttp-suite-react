@@ -720,7 +720,7 @@ function CreatorFinder() {
 
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[12px] text-muted-foreground">
             <span className="flex flex-wrap items-center gap-1.5">
-              <span className="font-medium text-foreground">{last.label}</span> · {shown.length} profil{shown.length > 1 ? "s" : ""}
+              <span className="font-medium text-foreground">{last.label.replace(/^Créatrices citées/, "Créateurs cités")}</span> · {shown.length} profil{shown.length > 1 ? "s" : ""}
               {shown.length > 0 && (
                 <span className="text-muted-foreground">
                   {" "}· {shown.filter((x) => x.p.score >= 70).length} pépite{shown.filter((x) => x.p.score >= 70).length > 1 ? "s" : ""} · {shown.filter((x) => x.c.data?.email).length} avec email · {shown.filter((x) => !x.c.data?.agency).length} sans agence

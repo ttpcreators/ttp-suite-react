@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { printHtml } from "@/lib/printPdf";
-import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, listAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { TextField, SelectField } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
@@ -276,8 +276,9 @@ export function RepresentationContract() {
       try {
         invalidateAppState();
         const fresh = ((await getAppState())["contractHistory"] as ContractHist[]) ?? [];
-        next = [entry, ...fresh];
-        ok = await saveAppStateKey("contractHistory", next);
+        next = [entry, ...fresh.filter((x) => x?.id !== entry.id)];
+        // N'envoie QUE la nouvelle entrée (ajoutée en tête côté base).
+        ok = await listAppStateKey("contractHistory", [entry], [], true);
       } catch {
         ok = false;
       }
@@ -299,9 +300,10 @@ export function RepresentationContract() {
           invalidateAppState();
           const freshDl = ((await getAppState())["contractDeadlines"] as Dl[]) ?? [];
           // Remplace l'éventuelle échéance « représentation » existante du même créateur (pas de doublon).
-          const kept = freshDl.filter((d) => !(d.type === "représentation" && d.creator.trim().toLowerCase() === dlCreator.trim().toLowerCase()));
+          // Seules l'ancienne (retirée) et la nouvelle (ajoutée en tête) sont envoyées.
+          const replaced = freshDl.filter((d) => d.type === "représentation" && d.creator.trim().toLowerCase() === dlCreator.trim().toLowerCase()).map((d) => d.id);
           const dl: Dl = { id: uid(), creator: dlCreator, type: "représentation", start, months, note: "Auto — contrat de représentation" };
-          deadlineOk = await saveAppStateKey("contractDeadlines", [dl, ...kept]);
+          deadlineOk = await listAppStateKey("contractDeadlines", [dl], replaced, true);
         }
       } catch { /* échéance = bonus, on ignore l'erreur */ }
 
@@ -355,7 +357,7 @@ export function RepresentationContract() {
       invalidateAppState();
       const fresh = ((await getAppState())["contractHistory"] as ContractHist[]) ?? [];
       next = fresh.filter((x) => x.id !== e.id);
-      ok = await saveAppStateKey("contractHistory", next);
+      ok = await listAppStateKey("contractHistory", [], [e.id]);
     } catch {
       ok = false;
     }

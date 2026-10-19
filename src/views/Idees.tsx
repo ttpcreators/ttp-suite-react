@@ -21,7 +21,7 @@ import { StatsBento } from "@/components/ui/stats-bento";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useEffect, useRef, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
-import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
@@ -95,7 +95,11 @@ export function Idees() {
       if (value.trim()) next[id] = value.trim();
       else delete next[id];
       setNotes(next);
-      if (await saveAppStateKey("itemNotes", next)) return true;
+      // N'envoie QUE ce commentaire (posé ou retiré), fusionné côté base.
+      const ok = value.trim()
+        ? await mergeAppStateKey("itemNotes", { [id]: value.trim() })
+        : await mergeAppStateKey("itemNotes", {}, [id]);
+      if (ok) return true;
     } catch {
       /* traité ci-dessous */
     }

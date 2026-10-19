@@ -21,7 +21,7 @@ import { notifyCreator } from "@/lib/push";
 import { myDisplayName } from "@/lib/team";
 import { useLiveKey } from "@/lib/useLive";
 import { toISODate, frDate } from "@/lib/dates";
-import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
 import { openLater } from "@/lib/openLater";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
@@ -175,7 +175,11 @@ export function Todo() {
       const next = { ...fresh };
       if (value.trim()) next[id] = value.trim();
       else delete next[id];
-      if (!(await saveAppStateKey("itemNotes", next))) return false;
+      // N'envoie QUE ce commentaire (posé ou retiré), fusionné côté base.
+      const ok = value.trim()
+        ? await mergeAppStateKey("itemNotes", { [id]: value.trim() })
+        : await mergeAppStateKey("itemNotes", {}, [id]);
+      if (!ok) return false;
       setNotes(next);
       return true;
     } catch {

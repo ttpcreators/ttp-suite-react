@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Pencil, CalendarClock, RefreshCw } from "lucide-react";
-import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { useAppState, listAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/components/ui/form";
@@ -21,6 +21,14 @@ const TYPE_OPTIONS = [
   { value: "marque", label: "Marque" },
   { value: "ugc", label: "UGC" },
 ];
+
+/** Même règle que listAppStateKey : remplace sur place, retire par id, ajoute le reste. */
+function applyChange(cur: Deadline[], upsert: Deadline[], remove: string[], prepend: boolean): Deadline[] {
+  const ups = new Map(upsert.map((u) => [u.id, u]));
+  const kept = cur.filter((x) => !remove.includes(x.id)).map((x) => ups.get(x.id) ?? x);
+  const added = upsert.filter((u) => !cur.some((x) => x.id === u.id));
+  return prepend ? [...added, ...kept] : [...kept, ...added];
+}
 
 let _uid = 0;
 /** Libellé lisible du type (« Représentation », « Marque », « UGC »). */
@@ -88,15 +96,18 @@ export function Echeances() {
       .sort((a, b) => (a.left ?? 1e9) - (b.left ?? 1e9));
   }, [list]);
 
-  // Mutation sûre : relit le blob FRAIS avant de fusionner (la clé contractDeadlines
-  // est aussi écrite par la fiche créateur → ne jamais partir de l'état local périmé).
-  const mutate = async (fn: (fresh: Deadline[]) => Deadline[]): Promise<boolean> => {
+  // Mutation sûre : relit le blob FRAIS (pour l'affichage) et n'envoie QUE les échéances
+  // touchées (la clé contractDeadlines est aussi écrite par la fiche créateur et les
+  // contrats → deux postes qui enregistrent en même temps ne s'effacent plus).
+  type Change = { upsert?: Deadline[]; remove?: string[]; prepend?: boolean };
+  const mutate = async (fn: (fresh: Deadline[]) => Change): Promise<boolean> => {
     invalidateAppState();
     const fresh = ((await getAppState())["contractDeadlines"] as Deadline[]) ?? [];
-    const next = fn(fresh);
+    const { upsert = [], remove = [], prepend = false } = fn(fresh);
+    const next = applyChange(fresh, upsert, remove, prepend);
     const before = local;
     setLocal(next);
-    const ok = await saveAppStateKey("contractDeadlines", next);
+    const ok = await listAppStateKey("contractDeadlines", upsert, remove, prepend);
     if (!ok) {
       setLocal(before); // rollback : l'écran reflète la base
       toast("Erreur, réessaie");
@@ -131,10 +142,12 @@ export function Echeances() {
     const wasEdit = !!editId;
     let missing = false;
     const ok = await mutate((fresh) => {
-      if (!wasEdit) return [entry, ...fresh];
-      missing = !fresh.some((x) => x.id === entry.id);
+      if (!wasEdit) return { upsert: [entry], prepend: true };
+      const cur = fresh.find((x) => x.id === entry.id);
+      missing = !cur;
+      if (!cur) return {};
       // Garde les champs annexes (marque, id de contrat) posés par l'auto-échéance
-      return fresh.map((x) => (x.id === entry.id ? { ...x, ...entry } : x));
+      return { upsert: [{ ...cur, ...entry }] };
     });
     // Échec : le formulaire reste ouvert pour réessayer
     if (!ok) return;
@@ -144,7 +157,7 @@ export function Echeances() {
     else toast(wasEdit ? "Contrat mis à jour ✓" : "Contrat ajouté ✓");
   };
   const remove = async (id: string) => {
-    const ok = await mutate((fresh) => fresh.filter((x) => x.id !== id));
+    const ok = await mutate(() => ({ remove: [id] }));
     if (ok) toast("Contrat retiré du suivi");
   };
 
@@ -190,7 +203,8 @@ export function Echeances() {
       }
       const next = [...added, ...existing];
       setLocal(next);
-      const ok = await saveAppStateKey("contractDeadlines", next);
+      // N'envoie QUE les échéances importées (ajoutées en tête, côté base).
+      const ok = await listAppStateKey("contractDeadlines", added, [], true);
       toast(ok ? `${added.length} contrat${added.length > 1 ? "s" : ""} importé${added.length > 1 ? "s" : ""} ✓` : "Erreur, réessaie");
     } finally {
       setSyncing(false);

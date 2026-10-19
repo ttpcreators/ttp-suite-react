@@ -75,7 +75,7 @@ export function Diagnostique() {
   const incidents = (history ?? []).filter((s) => s.overall !== "ok");
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4">
+    <div className="flex max-w-3xl flex-col gap-4">
       {/* Bandeau global */}
       <div className={cn("rounded-2xl border p-5 shadow-sm", overall === "ok" ? "border-signal/25 bg-signal/[0.06]" : overall === "warn" ? "border-border bg-foreground/[0.06]" : "border-danger/25 bg-danger/[0.06]")}>
         <div className="flex flex-wrap items-center justify-between gap-3">

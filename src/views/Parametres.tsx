@@ -124,9 +124,13 @@ function TeamNameField() {
   );
 }
 
+/** Ancre d'une section (sommaire) à partir de son titre. */
+const sectionId = (title: string) =>
+  "reglage-" + title.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
 function Section({ icon, title, hint, children }: { icon: ReactNode; title: string; hint?: string; children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+    <div id={sectionId(title)} className="scroll-mt-6 rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="mb-1 flex items-center gap-2">
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">{icon}</span>
         <div className="min-w-0 flex-1">
@@ -333,6 +337,70 @@ function NotifTextRow({ field, value, onChange, onSave }: { field: NotifTextFiel
   );
 }
 
+/** Sommaire des réglages (ordinateur) : groupes et sections, suit le défilement. */
+const SETTINGS_NAV: { group: string; items: string[] }[] = [
+  { group: "Général", items: ["Apparence", "Pages affichées", "Couleur d'accent"] },
+  { group: "Prospection et Claude", items: ["Prospection", "Claude"] },
+  {
+    group: "Notifications",
+    items: ["Textes des notifications", "Cet appareil", "Résumé du matin", "Point de mi-journée", "Résumé de la semaine", "Données créateurs à jour", "Alertes techniques", "Équipe agence", "Activité des créateurs", "Emails"],
+  },
+  { group: "Compte", items: ["Compte"] },
+];
+
+function SettingsNav() {
+  const [active, setActive] = useState<string>(sectionId("Apparence"));
+  useEffect(() => {
+    const els = SETTINGS_NAV.flatMap((g) => g.items).map((t) => document.getElementById(sectionId(t))).filter((e): e is HTMLElement => !!e);
+    const io = new IntersectionObserver(
+      (entries) => {
+        const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (vis) setActive(vis.target.id);
+      },
+      { rootMargin: "-15% 0px -70% 0px" },
+    );
+    els.forEach((e) => io.observe(e));
+    return () => io.disconnect();
+  }, []);
+  return (
+    <nav aria-label="Sommaire des réglages" className="hidden xl:block">
+      <div className="sticky top-6 flex flex-col gap-4">
+        {SETTINGS_NAV.map((g) => (
+          <div key={g.group}>
+            <div className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-faint">{g.group}</div>
+            <div className="flex flex-col">
+              {g.items.map((t) => {
+                const id = sectionId(t);
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    className={cn(
+                      "rounded-lg px-3 py-1.5 text-left text-[13px] transition-colors",
+                      active === id ? "bg-surface font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {t}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+function GroupTitle({ id, first, children }: { id: string; first?: boolean; children: ReactNode }) {
+  return (
+    <h2 id={`groupe-${id}`} className={cn("px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-muted-foreground", !first && "pt-4")}>
+      {children}
+    </h2>
+  );
+}
+
 export function Parametres() {
   const { data: stored } = useAppState<NotifPrefs>((s: AppState) => (s["notifPrefs"] as NotifPrefs) ?? {});
   const [prefs, setPrefs] = useState<NotifPrefs>({});
@@ -450,7 +518,10 @@ export function Parametres() {
   };
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4">
+    <div className="grid gap-6 xl:grid-cols-[210px_minmax(0,1fr)]">
+    <SettingsNav />
+    <div className="flex max-w-3xl flex-col gap-4">
+      <GroupTitle id="general" first>Général</GroupTitle>
       {/* Apparence (thème) — pratique surtout sur mobile où l'icône a quitté le bandeau */}
       <Section
         icon={dark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
@@ -486,7 +557,6 @@ export function Parametres() {
 
       <PagesSection />
 
-      <ClaudeSection />
 
       {/* Couleur d'accent (token --primary) — s'applique aussi en thème sombre */}
       <Section
@@ -555,6 +625,7 @@ export function Parametres() {
       </Section>
 
       {/* Prospection : rythme de recontact + ouverture WhatsApp (blob prospectSettings) */}
+      <GroupTitle id="prospection-claude">Prospection et Claude</GroupTitle>
       <Section
         icon={<MessageCircle className="h-4 w-4" />}
         title="Prospection"
@@ -609,6 +680,9 @@ export function Parametres() {
       </Section>
 
       {/* Textes des notifications (titres personnalisables — blob notifTexts) */}
+      <ClaudeSection />
+
+      <GroupTitle id="notifications">Notifications</GroupTitle>
       <Section
         icon={<BellRing className="h-4 w-4" />}
         title="Textes des notifications"
@@ -866,6 +940,7 @@ export function Parametres() {
       </Section>
 
       {/* Compte */}
+      <GroupTitle id="compte">Compte</GroupTitle>
       <Section
         icon={<LogOut className="h-4 w-4" />}
         title="Compte"
@@ -879,6 +954,7 @@ export function Parametres() {
           <LogOut className="h-3.5 w-3.5" /> Se déconnecter
         </button>
       </Section>
+    </div>
     </div>
   );
 }

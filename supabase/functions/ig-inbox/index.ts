@@ -28,6 +28,18 @@ import { dmTouches, NO_TEXT, type DmMsg, type Touch } from "../_shared/inbox.ts"
 import { emailsIn } from "../_shared/signals.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
+/** Lit TOUTES les lignes par pages de 1 000 (au-delà, Supabase coupe sans prévenir). */
+async function readAll<T>(page: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<{ data: T[]; error: { message: string } | null }> {
+  const out: T[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await page(from, from + 999);
+    if (error) return { data: out, error };
+    const rows = (data as T[] | null) ?? [];
+    out.push(...rows);
+    if (rows.length < 1000) return { data: out, error: null };
+  }
+}
+
 const PAGE_SIZE = 25; // conversations par demande (liste seule : rapide)
 const MAX_PAGES = 6; // 150 conversations max par passage
 const PROFILES_PER_RUN = 20; // fiches (nom, photo, abonnés) lues par passage
@@ -117,7 +129,7 @@ Deno.serve(async (req: Request) => {
 
   // 2. Conversations récentes (liste seule, sans les messages : Meta met trop de temps
   //    à tout renvoyer d'un coup). On s'arrête dès qu'une page entière n'a rien de neuf.
-  const { data: knownRaw, error: knownErr } = await sb.from("ig_threads").select("id, username, contact_id, emails, picture, updated_at, hidden");
+  const { data: knownRaw, error: knownErr } = await readAll<ThreadRow>((a, b) => sb.from("ig_threads").select("id, username, contact_id, emails, picture, updated_at, hidden").order("id").range(a, b));
   // Lecture ratée : on s'arrête (sinon les emails déjà notés seraient remplacés par les seuls nouveaux).
   if (knownErr) return fail("reseau", `conversations connues illisibles : ${knownErr.message}`);
   const known = new Map(((knownRaw as ThreadRow[] | null) ?? []).map((t) => [t.id, t]));
@@ -238,7 +250,8 @@ Deno.serve(async (req: Request) => {
     if (u && !byHandle.has(u)) byHandle.set(u, c);
   }
   const byId = new Map(contacts.map((c) => [c.id, c]));
-  const { data: allThreads } = await sb.from("ig_threads").select("id, username, contact_id, emails, picture, updated_at");
+  const { data: allThreads, error: allErr } = await readAll<ThreadRow>((a, b) => sb.from("ig_threads").select("id, username, contact_id, emails, picture, updated_at").order("id").range(a, b));
+  if (allErr) return fail("reseau", `conversations illisibles : ${allErr.message}`);
   // Message reçu en direct (webhook) : seules les conversations lues à l'instant sont
   // rapprochées des fiches (pas tout le carnet à chaque DM : moins d'écritures croisées).
   const scope = targets.length ? new Set(changed.map(({ conv }) => conv.id)) : null;
@@ -253,7 +266,11 @@ Deno.serve(async (req: Request) => {
   let emailsAdded = 0;
   for (let i = 0; i < pairs.length; i += 50) {
     const chunk = pairs.slice(i, i + 50);
-    const { data: msgRaw } = await sb.from("ig_messages").select("id, thread_id, at, me, text").in("thread_id", chunk.map((p) => p.t.id)).order("at");
+    // Lu par pages : 50 conversations peuvent dépasser 1 000 messages, et la coupure
+    // silencieuse retirait les PLUS RÉCENTS (tri par date) du suivi des contacts.
+    const { data: msgRaw, error: msgErr } = await readAll<DmMsg & { thread_id: string }>((a, b) =>
+      sb.from("ig_messages").select("id, thread_id, at, me, text").in("thread_id", chunk.map((p) => p.t.id)).order("at").order("id").range(a, b));
+    if (msgErr) continue; // ce lot sera repris au prochain passage
     const msgsOf = new Map<string, DmMsg[]>();
     for (const m of (msgRaw as (DmMsg & { thread_id: string })[] | null) ?? []) {
       const l = msgsOf.get(m.thread_id) ?? [];

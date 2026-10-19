@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { siteSlugify, siteSlugs, type MkRow } from "@/lib/mediakitSlug";
 import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon, Check, Sparkles, Euro, UserRound, Users, BarChart3, Share2, ListChecks, Store, Languages, type LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { ImageField } from "@/components/ui/image-field";
@@ -401,7 +402,17 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
   const setRates = (rates: RateRow[]) => patch({ rates });
   const setCasting = (casting: Record<string, string>) => patch({ casting });
 
-  const publicUrl = mk.slug ? `https://ttpcreators.pro/mediakit/${mk.slug}/` : null;
+  // Adresse publique : même calcul que le build du site (« Lien » sinon prénom, doublons
+  // -2, -3 dans l'ordre du roster). Sans « Lien », le kit existe quand même sous le prénom.
+  const [siteMap, setSiteMap] = useState<Map<string, string> | null>(null);
+  useEffect(() => {
+    let alive = true;
+    supabase.from("public_mediakit").select("name, mediakit, sort_order").order("sort_order")
+      .then(({ data, error }) => { if (alive && !error && data) setSiteMap(siteSlugs(data as MkRow[])); });
+    return () => { alive = false; };
+  }, [selId]);
+  const siteSlug = mk.slug?.trim() ? siteSlugify(mk.slug) : selected ? siteMap?.get(selected.name) : undefined;
+  const publicUrl = siteSlug ? `https://ttpcreators.pro/mediakit/${siteSlug}/` : null;
 
   return (
     <div className="space-y-4">

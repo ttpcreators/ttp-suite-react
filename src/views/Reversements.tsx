@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2, Check, Wallet } from "lucide-react";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { supabase } from "@/lib/supabase";
-import { useAppState, saveAppStateKey, getAppState, invalidateAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";
+import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";
 import { useCreators } from "@/lib/useCreators";
 import { commissionMap } from "@/lib/commission";
 import { totalsOf, type LineItem } from "@/lib/invoice";
@@ -152,8 +152,10 @@ export function Reversements() {
     try {
       invalidateAppState();
       const fresh = ((await getAppState())["creatorPayouts"] as PayoutsMap) ?? {};
-      next = { ...fresh, [creator]: fn(fresh[creator] ?? []) };
-      ok = await saveAppStateKey("creatorPayouts", next);
+      const list = fn(fresh[creator] ?? []);
+      next = { ...fresh, [creator]: list };
+      // N'envoie QUE l'entrée de ce créateur (fusion côté base, sous verrou).
+      ok = await mergeAppStateKey("creatorPayouts", { [creator]: list });
     } catch {
       ok = false;
     }

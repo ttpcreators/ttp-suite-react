@@ -17,7 +17,7 @@ import { StatsBento } from "@/components/ui/stats-bento";
 import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { cn, titleCase } from "@/lib/utils";
-import { parseAmount, formatEuro, useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { parseAmount, formatEuro, useAppState, saveAppStateKey, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import type { AnimatedBadgeStatus } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
@@ -717,14 +717,16 @@ export function Facturation() {
     const freshDetails = (freshState["invoiceDetails"] as Record<string, Details>) ?? {};
     const nextDetails = { ...freshDetails, [id]: detailPart };
     setDetails(nextDetails);
-    const okDetails = await saveAppStateKey("invoiceDetails", nextDetails);
+    // N'envoie QUE la facture concernée : un autre poste qui enregistre au même moment
+    // une autre facture ne perd pas la sienne.
+    const okDetails = await mergeAppStateKey("invoiceDetails", { [id]: detailPart });
 
-    // Mémorise la commission par créateur (même relecture fraîche)
+    // Mémorise la commission par créateur (même relecture fraîche, écriture de SA seule entrée)
     if (draft.creator) {
       const freshCom = (freshState["creatorCommission"] as Record<string, number>) ?? {};
       const nextCom = { ...freshCom, [draft.creator]: draft.commissionRate };
       setCommissions(nextCom);
-      await saveAppStateKey("creatorCommission", nextCom);
+      await mergeAppStateKey("creatorCommission", { [draft.creator]: draft.commissionRate });
     }
 
     if (!okDetails) {
