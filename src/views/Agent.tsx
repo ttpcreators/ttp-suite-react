@@ -3,7 +3,7 @@ import { cn, titleCase } from "@/lib/utils";
 import {
   Gauge, Send, Search, HeartHandshake, BookOpen, GraduationCap, ScrollText,
   Mail, MessageCircle, BriefcaseBusiness, AtSign, TriangleAlert, Copy, Check, X,
-  ChevronDown, Trash2, Plus, AlarmClock, ExternalLink, UserRound,
+  ChevronDown, Trash2, Plus, AlarmClock, ExternalLink, UserRound, Settings2,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -13,13 +13,16 @@ import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useLiveKey } from "@/lib/useLive";
 import { frDate } from "@/lib/dates";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { AgentEditor, type AgentDraft, type AgentRow } from "@/components/AgentEditor";
 
 /**
- * Page « Agent » (Espace Agence, fondateurs) — pilote l'agent IA branché sur le
- * schéma `agent` (Phase 6 de la spec). Blocs dans l'ordre : cockpit du jour,
- * file d'attente d'actions, prospection, cercle, mémoire créatrices, leçons,
- * journal (replié). Les validations de Marc écrivent dans les MÊMES tables :
- * l'agent les relit à son passage suivant.
+ * Section « Agents » (Espace Agence, fondateurs) : les agents de TTP, créés et réglés
+ * dans l'app (agent.agents : nom, emoji, rôle, consignes, routines, en pause ou non).
+ * « Joué par Claude » = Claude via le connecteur TTP Suite (il relit ses consignes avec
+ * lire_agent) ; « Programme externe » = Megan (rôle ttp_agent). Onglets : vue d'ensemble,
+ * à valider (file commune, avec l'agent qui propose), agents, Megan (cockpit, prospection,
+ * cercle), mémoire (créateurs + leçons), journal. Les validations de Marc écrivent dans
+ * les MÊMES tables : l'agent les relit à son passage suivant.
  *
  * Textes visibles : ponctuation française propre, pas de tirets (spec).
  */
@@ -28,7 +31,7 @@ type Cockpit = { id: string; jour: string; contenu: string; cree_le: string };
 type Action = {
   id: string; type: string; cible: string | null; contexte: string | null;
   contenu: string | null; lien_spark: string | null; statut: string;
-  cree_le: string; traite_le: string | null;
+  cree_le: string; traite_le: string | null; agent_id?: string | null;
 };
 type Prospect = {
   id: string; marque: string; signal: string | null; signal_date: string | null;
@@ -46,8 +49,10 @@ type Memoire = {
   id: string; creatrice: string; categorie: string; info: string;
   date: string | null; source: string | null; cree_le: string;
 };
-type Lecon = { id: string; module: string | null; lecon: string; cree_le: string };
-type Journal = { id: string; action: string; detail: string | null; cree_le: string };
+type Lecon = { id: string; module: string | null; lecon: string; cree_le: string; agent_id?: string | null };
+type Journal = { id: string; action: string; detail: string | null; cree_le: string; agent_id?: string | null };
+type Tab = "apercu" | "valider" | "agents" | "megan" | "memoire" | "journal";
+const NEW_AGENT: AgentDraft = { nom: "", emoji: "🤖", role: "", moteur: "claude", consignes: "", routines: [], actif: true };
 
 const ACTION_META: Record<string, { label: string; icon: LucideIcon }> = {
   brouillon_mail: { label: "Brouillon mail", icon: Mail },
@@ -90,6 +95,10 @@ const JOURNAL_LABELS: Record<string, string> = {
   marc_cercle_retire: "Retiré du cercle",
   marc_memoire_suppr: "Info supprimée",
   marc_lecon: "Nouvelle leçon",
+  agent_session: "Consignes relues",
+  proposition: "Proposition déposée",
+  lecon: "Leçon retenue",
+  marc_agent: "Agent modifié",
 };
 /** Code inconnu : « mon_code » → « Mon code ». */
 function journalLabel(code: string): string {
@@ -189,6 +198,14 @@ export function AgentView() {
   const [leconBusy, setLeconBusy] = useState(false);
   const [leconModule, setLeconModule] = useState("");
   const [leconTexte, setLeconTexte] = useState("");
+  const [leconAgent, setLeconAgent] = useState<string>("");
+
+  // Agents configurables (agent.agents) : absents tant que le SQL n'est pas lancé.
+  const [agents, setAgents] = useState<AgentRow[]>([]);
+  const [agentsMissing, setAgentsMissing] = useState(false);
+  const [tab, setTab] = useState<Tab>("apercu");
+  const [agentFilter, setAgentFilter] = useState<string>("tous");
+  const [editing, setEditing] = useState<AgentDraft | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -203,7 +220,10 @@ export function AgentView() {
         db.from("lecons").select("*").order("cree_le", { ascending: false }).limit(200),
         db.from("journal").select("*").order("cree_le", { ascending: false }).limit(120),
       ]);
+      const ag = await db.from("agents").select("*").order("sort_order");
       if (!active) return;
+      setAgentsMissing(!!ag.error);
+      if (!ag.error) setAgents((ag.data as AgentRow[]) ?? []);
       const firstErr = [ck, ac, pr, ce, me, le, jo].find((r) => r.error)?.error;
       if (firstErr) {
         if (firstErr.code === "PGRST106") setNotExposed(true);
@@ -340,7 +360,7 @@ export function AgentView() {
   const ajouterLecon = async () => {
     if (leconBusy) return; // garde anti double envoi (Entrée + clic)
     if (!leconTexte.trim()) return toast("Écris la leçon d'abord");
-    const row = { module: leconModule.trim() || null, lecon: leconTexte.trim() };
+    const row = { module: leconModule.trim() || null, lecon: leconTexte.trim(), ...(leconAgent && !agentsMissing ? { agent_id: leconAgent } : {}) };
     setLeconBusy(true);
     const { data, error } = await supabase.schema("agent").from("lecons").insert(row).select();
     setLeconBusy(false);
@@ -355,6 +375,42 @@ export function AgentView() {
     setLecons((xs) => xs.filter((x) => x.id !== l.id));
     if (!(await del("lecons", l.id))) setLecons((xs) => [l, ...xs]);
   };
+
+  // ── agents ──
+  const agentOf = (id: string | null | undefined) => (id ? agents.find((a) => a.id === id) ?? null : null);
+  const megan = agents.find((a) => a.slug === "megan") ?? null;
+  const slugify = (n: string) => n.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "agent";
+  const saveAgent = async (a: AgentDraft): Promise<boolean> => {
+    const row = { nom: a.nom, emoji: a.emoji, role: a.role?.trim() || null, moteur: a.moteur, consignes: a.consignes, routines: a.routines, actif: a.actif };
+    const db = supabase.schema("agent").from("agents");
+    if (a.id) {
+      const { data, error } = await db.update(row).eq("id", a.id).select("*");
+      if (error || !data?.length) { toast("Erreur, réessaie"); return false; }
+      setAgents((xs) => xs.map((x) => (x.id === a.id ? (data[0] as AgentRow) : x)));
+      setEditing(data[0] as AgentRow);
+    } else {
+      const slug = `${slugify(a.nom)}-${Date.now().toString(36).slice(-4)}`;
+      const { data, error } = await db.insert({ ...row, slug, sort_order: (agents.at(-1)?.sort_order ?? 0) + 1 }).select("*");
+      if (error || !data?.length) { toast("Erreur, réessaie"); return false; }
+      setAgents((xs) => [...xs, data[0] as AgentRow]);
+      setEditing(data[0] as AgentRow);
+    }
+    supabase.schema("agent").from("journal").insert({ action: "marc_agent", detail: a.nom, agent_id: a.id ?? null }).then(() => {}, () => {});
+    return true;
+  };
+  const deleteAgent = async (id: string) => {
+    if (!(await del("agents", id))) return;
+    setAgents((xs) => xs.filter((x) => x.id !== id));
+    setEditing(null);
+    toast("Agent supprimé ✓");
+  };
+  const lastActivity = (a: AgentRow) => {
+    const own = journal.find((j) => j.agent_id === a.id && !j.action.startsWith("marc_"))?.cree_le;
+    // Megan écrivait avant les fiches agents : ses traces sans agent comptent pour elle.
+    if (a.slug === "megan") return own ?? journal.find((j) => !j.agent_id && !j.action.startsWith("marc_"))?.cree_le ?? null;
+    return own ?? null;
+  };
+  const queueOf = (a: AgentRow) => actions.filter((x) => x.statut === "a_valider" && (x.agent_id === a.id || (a.slug === "megan" && !x.agent_id))).length;
 
   // ── rendus ──
   if (!loaded) {
@@ -378,15 +434,199 @@ export function AgentView() {
 
   const relanceDepassee = (d: string | null) => !!d && d < todayISO();
 
+  const shownQueue = agentFilter === "tous" ? queue : queue.filter((a) => (a.agent_id ?? megan?.id ?? "") === agentFilter);
+
+  const overview = (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {agents.map((a) => {
+        const last = lastActivity(a);
+        const recent = !!last && Date.now() - new Date(last).getTime() < 26 * 3600e3;
+        const n = queueOf(a);
+        return (
+          <button key={a.id} type="button" onClick={() => { setEditing(a); setTab("agents"); }}
+            className="flex flex-col gap-2 rounded-[20px] bg-card p-4 text-left shadow-sm transition-colors hover:bg-rowhover">
+            <div className="flex items-center gap-3">
+              <span className="grid h-11 w-11 place-items-center rounded-[14px] bg-muted text-[22px]">{a.emoji}</span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[15px] font-semibold text-foreground">{a.nom}</div>
+                <div className="text-[11px] text-muted-foreground">{a.moteur === "claude" ? "Joué par Claude" : "Programme externe"}</div>
+              </div>
+              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", !a.actif ? "bg-muted text-muted-foreground" : recent ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>
+                {!a.actif ? "En pause" : recent ? "Actif" : "En veille"}
+              </span>
+            </div>
+            {a.role && <p className="line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">{a.role}</p>}
+            <div className="mt-auto flex items-center gap-3 text-[11px] text-faint">
+              <span>{last ? `Dernière activité : ${fmtDT(last)}` : "Pas encore d'activité"}</span>
+              {n > 0 && <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 font-semibold text-primary">{n} à valider</span>}
+            </div>
+          </button>
+        );
+      })}
+      <button type="button" onClick={() => { setEditing({ ...NEW_AGENT }); setTab("agents"); }}
+        className="flex min-h-[130px] flex-col items-center justify-center gap-2 rounded-[20px] border border-dashed border-border text-[13px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+        <Plus className="h-5 w-5" /> Créer un agent
+      </button>
+    </div>
+  );
+
+  const agentsTab = agentsMissing ? (
+    <div className="rounded-2xl border border-dashed border-border px-5 py-10 text-center text-sm text-muted-foreground">
+      La configuration des agents n'est pas encore activée : une mise à jour est en attente.
+    </div>
+  ) : editing ? (
+    <AgentEditor
+      agent={editing}
+      onSave={saveAgent}
+      onDelete={editing.id ? () => deleteAgent(editing.id!) : undefined}
+      onClose={() => setEditing(null)}
+    />
+  ) : (
+    <div className="flex flex-col gap-2">
+      {agents.map((a) => (
+        <button key={a.id} type="button" onClick={() => setEditing(a)}
+          className="flex items-center gap-3 rounded-[14px] bg-card px-4 py-3 text-left shadow-sm transition-colors hover:bg-rowhover">
+          <span className="text-[22px]">{a.emoji}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[14px] font-semibold text-foreground">{a.nom}{!a.actif && <span className="ml-2 text-[11px] font-normal text-faint">en pause</span>}</span>
+            <span className="block truncate text-[12px] text-muted-foreground">{a.role || "Sans rôle"}</span>
+          </span>
+          <span className="shrink-0 text-[11px] text-faint">{a.routines?.length ?? 0} routine{(a.routines?.length ?? 0) > 1 ? "s" : ""}</span>
+          <Settings2 className="h-4 w-4 shrink-0 text-faint" />
+        </button>
+      ))}
+      <button type="button" onClick={() => setEditing({ ...NEW_AGENT })}
+        className="flex h-10 items-center justify-center gap-1.5 rounded-full border border-dashed border-border text-[12px] font-medium text-muted-foreground hover:bg-rowhover hover:text-foreground">
+        <Plus className="h-4 w-4" /> Créer un agent
+      </button>
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-4">
+      <Tabs
+        label="Sous-pages Agents"
+        wrap
+        value={tab}
+        onValueChange={(v) => setTab(v as Tab)}
+        items={[
+          { value: "apercu", label: "Vue d'ensemble" },
+          { value: "valider", label: "À valider", count: queue.length || undefined },
+          { value: "agents", label: "Agents", count: agents.length || undefined },
+          { value: "megan", label: "Megan" },
+          { value: "memoire", label: "Mémoire" },
+          { value: "journal", label: "Journal" },
+        ]}
+      />
+
+      {tab === "apercu" && (
+        <>
+          {agentsMissing ? (
+            <div className="rounded-2xl border border-dashed border-border px-5 py-6 text-center text-[13px] text-muted-foreground">
+              La configuration des agents n'est pas encore activée : une mise à jour est en attente.
+            </div>
+          ) : overview}
+      {/* 1) Le cockpit du jour */}
+      <Section icon={Gauge} title="Cockpit du jour">
+        {dernierCockpit ? (
+          <div>
+            {!cockpitJour && (
+              <div className="mb-2 text-[11px] text-amber">Pas encore de cockpit aujourd'hui, voici le dernier ({frDate(dernierCockpit.jour)}).</div>
+            )}
+            <div className="whitespace-pre-wrap rounded-xl bg-panel px-4 py-3 text-[13px] leading-relaxed text-foreground">{dernierCockpit.contenu}</div>
+          </div>
+        ) : (
+          <Empty text="L'agent n'a pas encore déposé de cockpit. Il apparaîtra ici à son premier passage." />
+        )}
+      </Section>
+
+        </>
+      )}
+
+      {tab === "valider" && (
+        <>
+          {agents.length > 1 && (
+            <Tabs
+              size="sm"
+              wrap
+              label="Agent"
+              value={agentFilter}
+              onValueChange={setAgentFilter}
+              items={[{ value: "tous", label: "Tous", count: queue.length || undefined }, ...agents.map((a) => ({ value: a.id, label: `${a.emoji} ${a.nom}`, count: queueOf(a) || undefined }))]}
+            />
+          )}
+      {/* 2) La file d'attente */}
+      <Section icon={Send} title="File d'attente" count={shownQueue.length}>
+        {shownQueue.length === 0 ? (
+          <Empty text={traiteesSemaine > 0 ? `Rien à valider. ${traiteesSemaine} action${traiteesSemaine > 1 ? "s" : ""} traitée${traiteesSemaine > 1 ? "s" : ""} ces 7 derniers jours.` : "Rien à valider pour le moment."} />
+        ) : (
+          <div className="flex flex-col gap-3">
+            {shownQueue.map((a) => {
+              const meta = ACTION_META[a.type] ?? { label: a.type, icon: Send };
+              const MIcon = meta.icon;
+              return (
+                <div key={a.id} className={cn("rounded-xl border border-border bg-surface p-3", a.type === "alerte" && "border-amber/40")}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={cn("flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold", a.type === "alerte" ? "bg-amber/15 text-amber" : "bg-primary/10 text-primary")}>
+                      <MIcon className="h-3 w-3" /> {meta.label}
+                    </span>
+                    {a.cible && <span className="text-[12px] font-semibold uppercase tracking-wide text-foreground">{a.cible}</span>}
+                    {(agentOf(a.agent_id) ?? (!a.agent_id ? megan : null)) && (
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        {(agentOf(a.agent_id) ?? megan)!.emoji} {(agentOf(a.agent_id) ?? megan)!.nom}
+                      </span>
+                    )}
+                    <span className="ml-auto text-[10px] text-faint">{fmtDT(a.cree_le)}</span>
+                  </div>
+                  {a.contexte && <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{a.contexte}</p>}
+                  {a.contenu && (
+                    <div className="mt-2 whitespace-pre-wrap rounded-lg bg-panel px-3 py-2.5 text-[12px] leading-relaxed text-foreground">{a.contenu}</div>
+                  )}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {a.contenu && (
+                      <button type="button" onClick={() => copier(a)}
+                        className="flex h-[34px] items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                        {copied === a.id ? <Check className="h-3.5 w-3.5 text-signal" /> : <Copy className="h-3.5 w-3.5" />} Copier le message
+                      </button>
+                    )}
+                    {a.lien_spark && (
+                      <a href={a.lien_spark} target="_blank" rel="noreferrer"
+                        className="flex h-[34px] items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                        <ExternalLink className="h-3.5 w-3.5" /> {a.agent_id && agentOf(a.agent_id)?.slug !== "megan" ? "Ouvrir le lien" : "Ouvrir le brouillon (Spark)"}
+                      </a>
+                    )}
+                    <div className="ml-auto flex items-center gap-2">
+                      <button type="button" onClick={() => traiter(a, "ecarte")}
+                        className="flex h-[34px] items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                        <X className="h-3.5 w-3.5" /> Écarter
+                      </button>
+                      <button type="button" onClick={() => traiter(a, "envoye")}
+                        className="flex h-[34px] items-center gap-1.5 rounded-full bg-primary px-4 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                        <Check className="h-3.5 w-3.5" /> Marquer envoyé
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Section>
+
+        </>
+      )}
+
+      {tab === "agents" && agentsTab}
+
+      {tab === "megan" && (
+        <>
       {/* En-tête : état de l'agent */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm">
         <span className="relative flex h-2.5 w-2.5">
           {agentActif && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-signal opacity-60 motion-reduce:hidden" />}
           <span className={cn("relative inline-flex h-2.5 w-2.5 rounded-full", agentActif ? "bg-signal" : "bg-muted-foreground/50")} />
         </span>
-        <span className="text-[13px] font-semibold text-foreground">{agentActif ? "Agent actif" : "Agent en veille"}</span>
+        <span className="text-[13px] font-semibold text-foreground">{agentActif ? "Megan active" : "Megan en veille"}</span>
         {lastAct && <span className="text-[11px] text-muted-foreground">Dernière activité : {fmtDT(lastAct)}</span>}
         <span className="ml-auto flex items-center gap-3 text-[11px] tabular-nums text-muted-foreground">
           <span>{queue.length} à valider</span>
@@ -405,59 +645,6 @@ export function AgentView() {
           </div>
         ) : (
           <Empty text="L'agent n'a pas encore déposé de cockpit. Il apparaîtra ici à son premier passage." />
-        )}
-      </Section>
-
-      {/* 2) La file d'attente */}
-      <Section icon={Send} title="File d'attente" count={queue.length}>
-        {queue.length === 0 ? (
-          <Empty text={traiteesSemaine > 0 ? `Rien à valider. ${traiteesSemaine} action${traiteesSemaine > 1 ? "s" : ""} traitée${traiteesSemaine > 1 ? "s" : ""} ces 7 derniers jours.` : "Rien à valider pour le moment."} />
-        ) : (
-          <div className="flex flex-col gap-3">
-            {queue.map((a) => {
-              const meta = ACTION_META[a.type] ?? { label: a.type, icon: Send };
-              const MIcon = meta.icon;
-              return (
-                <div key={a.id} className={cn("rounded-xl border border-border bg-surface p-3", a.type === "alerte" && "border-amber/40")}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={cn("flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold", a.type === "alerte" ? "bg-amber/15 text-amber" : "bg-primary/10 text-primary")}>
-                      <MIcon className="h-3 w-3" /> {meta.label}
-                    </span>
-                    {a.cible && <span className="text-[12px] font-semibold uppercase tracking-wide text-foreground">{a.cible}</span>}
-                    <span className="ml-auto text-[10px] text-faint">{fmtDT(a.cree_le)}</span>
-                  </div>
-                  {a.contexte && <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{a.contexte}</p>}
-                  {a.contenu && (
-                    <div className="mt-2 whitespace-pre-wrap rounded-lg bg-panel px-3 py-2.5 text-[12px] leading-relaxed text-foreground">{a.contenu}</div>
-                  )}
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {a.contenu && (
-                      <button type="button" onClick={() => copier(a)}
-                        className="flex h-[34px] items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                        {copied === a.id ? <Check className="h-3.5 w-3.5 text-signal" /> : <Copy className="h-3.5 w-3.5" />} Copier le message
-                      </button>
-                    )}
-                    {a.lien_spark && (
-                      <a href={a.lien_spark} target="_blank" rel="noreferrer"
-                        className="flex h-[34px] items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                        <ExternalLink className="h-3.5 w-3.5" /> Ouvrir le brouillon (Spark)
-                      </a>
-                    )}
-                    <div className="ml-auto flex items-center gap-2">
-                      <button type="button" onClick={() => traiter(a, "ecarte")}
-                        className="flex h-[34px] items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                        <X className="h-3.5 w-3.5" /> Écarter
-                      </button>
-                      <button type="button" onClick={() => traiter(a, "envoye")}
-                        className="flex h-[34px] items-center gap-1.5 rounded-full bg-primary px-4 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
-                        <Check className="h-3.5 w-3.5" /> Marquer envoyé
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         )}
       </Section>
 
@@ -563,6 +750,11 @@ export function AgentView() {
         )}
       </Section>
 
+        </>
+      )}
+
+      {tab === "memoire" && (
+        <>
       {/* 5) La mémoire créatrices */}
       <Section icon={BookOpen} title="Mémoire créateurs" count={memoire.length}>
         {memoire.length === 0 ? (
@@ -612,6 +804,16 @@ export function AgentView() {
                 <input value={leconModule} onChange={(e) => setLeconModule(e.target.value)} placeholder="ex Prospection"
                   className="h-[36px] rounded-md border border-border bg-panel px-3 text-[12px] text-foreground outline-none focus:border-primary" />
               </label>
+              {!agentsMissing && agents.length > 0 && (
+                <label className="flex flex-col gap-1 sm:w-44">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Pour</span>
+                  <select value={leconAgent} onChange={(e) => setLeconAgent(e.target.value)}
+                    className="h-[36px] rounded-md border border-border bg-panel px-2 text-[12px] text-foreground outline-none focus:border-primary">
+                    <option value="">Tous les agents</option>
+                    {agents.map((a) => <option key={a.id} value={a.id}>{a.emoji} {a.nom}</option>)}
+                  </select>
+                </label>
+              )}
               <label className="flex flex-1 flex-col gap-1">
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">La leçon</span>
                 <input value={leconTexte} onChange={(e) => setLeconTexte(e.target.value)} placeholder="Ce que l'agent doit retenir…"
@@ -628,7 +830,7 @@ export function AgentView() {
           ) : (
             <button type="button" onClick={() => setLeconOpen(true)}
               className="flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-              <Plus className="h-3.5 w-3.5" /> Corriger l'agent (nouvelle leçon)
+              <Plus className="h-3.5 w-3.5" /> Corriger un agent (nouvelle leçon)
             </button>
           )}
         </div>
@@ -639,6 +841,7 @@ export function AgentView() {
             {lecons.map((l) => (
               <div key={l.id} className="flex items-start gap-2.5 rounded-lg bg-panel px-3 py-2">
                 {l.module && <span className="mt-0.5 shrink-0 rounded-full bg-rowhover px-2 py-0.5 text-[9px] font-semibold text-muted-foreground">{titleCase(l.module)}</span>}
+                {agentOf(l.agent_id) && <span className="mt-0.5 shrink-0 text-[11px]" title={agentOf(l.agent_id)!.nom}>{agentOf(l.agent_id)!.emoji}</span>}
                 <div className="min-w-0 flex-1">
                   <div className="text-[12px] leading-relaxed text-foreground">{l.lecon}</div>
                   <div className="mt-0.5 text-[10px] text-faint">{fmtDT(l.cree_le)}</div>
@@ -655,8 +858,13 @@ export function AgentView() {
         )}
       </Section>
 
+        </>
+      )}
+
+      {tab === "journal" && (
+        <>
       {/* 7) L'historique de l'agent (replié par défaut) */}
-      <Section icon={ScrollText} title="Historique de l'agent" count={journal.length} collapsible defaultOpen={false}>
+      <Section icon={ScrollText} title="Journal des agents" count={journal.length}>
         {journal.length === 0 ? (
           <Empty text="Le journal est vide. Chaque action de l'agent y laissera une trace." />
         ) : (
@@ -664,6 +872,7 @@ export function AgentView() {
             {journal.map((j) => (
               <div key={j.id} className="flex items-baseline gap-2.5 rounded-md px-2 py-1.5 text-[11px] hover:bg-rowhover">
                 <span className="shrink-0 tabular-nums text-faint">{fmtDT(j.cree_le)}</span>
+                {agentOf(j.agent_id) && <span className="shrink-0" title={agentOf(j.agent_id)!.nom}>{agentOf(j.agent_id)!.emoji}</span>}
                 <span className="shrink-0 font-semibold text-foreground">{journalLabel(j.action)}</span>
                 {j.detail && <span className="min-w-0 truncate text-muted-foreground">{j.detail}</span>}
               </div>
@@ -671,6 +880,8 @@ export function AgentView() {
           </div>
         )}
       </Section>
+        </>
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import type { ViewId } from "./nav";
  */
 export const VIEW_HINTS: Partial<Record<ViewId, string>> = {
   activite: "Qui a fait quoi dans l'agence, et quand : chaque ajout, « Fait », suppression ou avancée.",
-  agent: "Ton assistant : ce qui stagne et les prochaines actions à mener.",
+  agent: "Tes agents : ce qu'ils proposent, leurs consignes et leurs routines.",
   stats: "Les chiffres de l'agence sur une période, comparés à la période d'avant.",
   objectifs: "Tes objectifs du mois (CA, signatures…) et où tu en es.",
   roster: "Tes créateurs : abonnés, engagement, CA, et qui doit mettre ses chiffres à jour.",

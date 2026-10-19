@@ -109,7 +109,7 @@ export const NAV: NavFamily[] = [
       { id: "apercu", label: "Aperçu", icon: LayoutDashboard },
       { id: "stats", label: "Stats", icon: TrendingUp },
       { id: "objectifs", label: "Objectifs", icon: Target },
-      { id: "agent", label: "Agent", icon: Bot },
+      { id: "agent", label: "Agents", icon: Bot },
       { id: "activite", label: "Activité", icon: History },
     ],
   },

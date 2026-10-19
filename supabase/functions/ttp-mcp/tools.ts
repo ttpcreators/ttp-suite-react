@@ -662,9 +662,148 @@ const avancerCollab: Tool = {
   },
 };
 
+// ── Agents (section Agents de l'app) ────────────────────────────────────────
+type AgentRow = { id: string; slug: string; nom: string; emoji: string; role: string | null; moteur: string; consignes: string; routines: { nom: string; quand: string; consigne: string }[]; actif: boolean };
+async function findAgent(sb: SupabaseClient, key: string): Promise<AgentRow | null> {
+  const db = sb.schema("agent");
+  const k = key.trim();
+  if (!k) return null;
+  const { data } = /^[0-9a-f-]{36}$/i.test(k)
+    ? await db.from("agents").select("*").eq("id", k).limit(1)
+    : await db.from("agents").select("*").or(`slug.eq.${JSON.stringify(k.toLowerCase())},nom.ilike.${JSON.stringify(like(k))}`).order("sort_order").limit(1);
+  return ((data as AgentRow[] | null) ?? [])[0] ?? null;
+}
+const agentJournal = (sb: SupabaseClient, agentId: string | null, action: string, detail: string) =>
+  sb.schema("agent").from("journal").insert({ action, detail: detail.slice(0, 300), agent_id: agentId }).then(() => {}, () => {});
+
+const mesAgents: Tool = {
+  name: "mes_agents",
+  title: "Agents de TTP",
+  description: "Liste les agents configurés dans l'app TTP Suite (nom, rôle, en service ou en pause). Pour jouer un agent, appeler ensuite lire_agent.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  founder: true,
+  run: async (sb) => {
+    const { data, error } = await sb.schema("agent").from("agents").select("nom, emoji, role, moteur, actif").order("sort_order");
+    if (error) return fail("Section Agents pas encore activée.");
+    return ok([`# Agents de TTP`, ...((data as Json[]) ?? []).map((a) => `- ${a.emoji} ${a.nom}${a.actif ? "" : " (en pause)"} · ${a.moteur === "claude" ? "joué par Claude" : "programme externe"} · ${a.role ?? ""}`)].join("\n"));
+  },
+};
+
+const lireAgent: Tool = {
+  name: "lire_agent",
+  title: "Consignes d'un agent",
+  description: "À appeler EN PREMIER quand tu joues un agent de TTP (ex. « Talent manager ») : renvoie ses consignes à jour (rôle, ton, règles), ses routines et les leçons apprises (corrections de Marc). Applique-les pendant toute la conversation.",
+  inputSchema: { type: "object", properties: { agent: { type: "string", description: "Nom de l'agent (ex. Talent manager)" } }, required: ["agent"], additionalProperties: false },
+  founder: true,
+  run: async (sb, _c, a) => {
+    const ag = await findAgent(sb, str(a.agent, 80));
+    if (!ag) return fail(`Agent « ${str(a.agent, 80)} » introuvable (outil mes_agents pour la liste).`);
+    if (!ag.actif) return ok(`${ag.emoji} ${ag.nom} est en pause dans l'app : préviens Marc avant d'agir en son nom.`);
+    const { data: lec } = await sb.schema("agent").from("lecons").select("module, lecon, agent_id, cree_le").or(`agent_id.eq.${ag.id},agent_id.is.null`).order("cree_le", { ascending: false }).limit(60);
+    const { count } = await sb.schema("agent").from("actions").select("id", { count: "exact", head: true }).eq("statut", "a_valider").eq("agent_id", ag.id);
+    await agentJournal(sb, ag.id, "agent_session", "Consignes relues");
+    return ok([
+      `# ${ag.emoji} ${ag.nom}`,
+      ag.role ? `Rôle : ${ag.role}` : "",
+      `\n${ag.consignes || "(Pas encore de consignes : demande à Marc de les écrire dans l'app, section Agents.)"}`,
+      `\n## Leçons apprises (à respecter)`,
+      lines(((lec as Json[] | null) ?? []).map((l) => `- ${l.module ? `[${l.module}] ` : ""}${l.lecon}`), "Aucune pour l'instant."),
+      ag.routines?.length ? `\n## Routines\n${ag.routines.map((r) => `- ${r.nom} (${r.quand}) : ${r.consigne}`).join("\n")}` : "",
+      `\n${count ?? 0} proposition(s) de cet agent attendent la validation de Marc.`,
+    ].filter(Boolean).join("\n"));
+  },
+};
+
+const proposerAction: Tool = {
+  name: "proposer_action",
+  title: "Proposer une action à valider",
+  description: "Dépose une proposition dans la file « À valider » de l'app (section Agents) : message WhatsApp, DM Instagram, message LinkedIn, alerte, ou mail (préférer creer_brouillon_mail pour un mail). Marc la copie, l'ouvre et l'envoie lui-même, ou l'écarte.",
+  write: true,
+  founder: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      agent: { type: "string", description: "Nom de l'agent qui propose (ex. Talent manager)" },
+      type: { type: "string", enum: ["whatsapp", "instagram", "linkedin", "brouillon_mail", "alerte"] },
+      cible: { type: "string", description: "À qui (marque, créateur, @, numéro)" },
+      contexte: { type: "string", description: "Pourquoi, en une ou deux phrases" },
+      contenu: { type: "string", description: "Le message prêt à envoyer (ou le texte de l'alerte)" },
+      lien: { type: "string", description: "Lien utile (profil, fil, document) facultatif" },
+    },
+    required: ["agent", "type", "contenu"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const ag = await findAgent(sb, str(a.agent, 80));
+    const type = ["whatsapp", "instagram", "linkedin", "brouillon_mail", "alerte"].includes(str(a.type)) ? str(a.type) : "alerte";
+    const lien = /^https?:\/\//i.test(str(a.lien, 500)) ? str(a.lien, 500) : null;
+    const { error } = await sb.schema("agent").from("actions").insert({
+      type, cible: str(a.cible, 200) || null, contexte: str(a.contexte, 1000) || null, contenu: str(a.contenu, 6000), lien_spark: lien, statut: "a_valider", agent_id: ag?.id ?? null,
+    });
+    if (error) return fail(`Proposition non déposée : ${error.message}`);
+    await agentJournal(sb, ag?.id ?? null, "proposition", `${type} · ${str(a.cible, 120)}`);
+    return ok(`Déposé dans « À valider » (${type}${str(a.cible) ? ` pour ${str(a.cible, 120)}` : ""}). Marc le verra dans l'app, section Agents.`);
+  },
+};
+
+const noterLecon: Tool = {
+  name: "noter_lecon",
+  title: "Retenir une leçon",
+  description: "Enregistre une correction ou une préférence de Marc pour qu'un agent (ou tous) ne refasse pas l'erreur. Ex. « Jamais de reel de Léa sous 800 € ».",
+  write: true,
+  founder: true,
+  inputSchema: {
+    type: "object",
+    properties: { agent: { type: "string", description: "Nom de l'agent, ou « tous »" }, lecon: { type: "string" }, sujet: { type: "string", description: "Ex. Tarifs, Ton, Prospection" } },
+    required: ["lecon"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const key = str(a.agent, 80);
+    const ag = key && key.toLowerCase() !== "tous" ? await findAgent(sb, key) : null;
+    const { error } = await sb.schema("agent").from("lecons").insert({ module: str(a.sujet, 60) || null, lecon: str(a.lecon, 1000), agent_id: ag?.id ?? null });
+    if (error) return fail(`Leçon non enregistrée : ${error.message}`);
+    await agentJournal(sb, ag?.id ?? null, "lecon", str(a.lecon, 120));
+    return ok(`Leçon retenue${ag ? ` pour ${ag.nom}` : " pour tous les agents"} : « ${str(a.lecon, 200)} ».`);
+  },
+};
+
+const MEM_CATS = ["anniversaire", "projet", "voyage", "examen", "objectif", "preference_tournage", "disponibilite"];
+const memoireCreateur: Tool = {
+  name: "memoire_createur",
+  title: "Mémoire d'un créateur",
+  description: "Ce que l'agence sait d'un créateur au-delà des chiffres : anniversaire, projets, voyages, objectifs, préférences de tournage, disponibilités. Avec « info », ajoute une nouvelle note (jamais de santé ni de vie privée).",
+  founder: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      createur: { type: "string" },
+      info: { type: "string", description: "Pour AJOUTER une note (facultatif)" },
+      categorie: { type: "string", enum: MEM_CATS },
+      date: { type: "string", description: "AAAA-MM-JJ si la note a une date" },
+    },
+    required: ["createur"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const who = str(a.createur, 80).toLowerCase();
+    if (!who) return fail("Créateur manquant.");
+    const db = sb.schema("agent");
+    if (str(a.info)) {
+      const cat = MEM_CATS.includes(str(a.categorie)) ? str(a.categorie) : "projet";
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(str(a.date)) ? str(a.date) : null;
+      const { error } = await db.from("memoire_createurs").insert({ creatrice: who, categorie: cat, info: str(a.info, 1000), date, source: "Claude" });
+      return error ? fail(`Note non ajoutée : ${error.message}`) : ok(`Noté pour ${titleCase(who)} (${cat}).`);
+    }
+    const { data } = await db.from("memoire_createurs").select("categorie, info, date, cree_le").ilike("creatrice", like(who)).order("cree_le", { ascending: false }).limit(40);
+    return ok([`# Mémoire · ${titleCase(who)}`, lines(((data as Json[] | null) ?? []).map((m) => `- [${m.categorie}] ${m.info}${m.date ? ` (${m.date})` : ""}`), "Rien en mémoire.")].join("\n"));
+  },
+};
+
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, rechercherMails, lireMail, dmInstagram, scouting, contacts, pipeline, collabs, planning, taches, factures,
   creerTache, creerEvenement, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
+  mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
 ];
 
 /** Liste MCP (les outils fondateurs n'apparaissent pas pour un membre). */

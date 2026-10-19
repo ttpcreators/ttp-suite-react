@@ -34,7 +34,9 @@ const INSTRUCTIONS =
   "TTP Suite est l'outil de gestion de l'agence de talents TTP Creators (créateurs de contenu et sportifs). " +
   "Réponds en français. Commence par point_du_jour pour une question sur la journée, rechercher pour un nom ou une marque, " +
   "rechercher_mails puis lire_mail pour les mails. Les actions (tâche, rendez-vous, brouillon, contact, scouting, collab) " +
-  "écrivent dans l'app : confirme toujours avec l'utilisateur avant. Les mails ne sont jamais envoyés, seulement préparés en brouillon.";
+  "écrivent dans l'app : confirme toujours avec l'utilisateur avant. Les mails ne sont jamais envoyés, seulement préparés en brouillon. " +
+  "Si on te demande d'être un agent de TTP (ex. « Talent manager »), appelle d'abord lire_agent pour lire ses consignes et ses leçons à jour, et applique-les. " +
+  "Les messages WhatsApp, Instagram ou LinkedIn préparés vont dans la file « À valider » (proposer_action).";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
