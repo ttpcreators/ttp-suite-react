@@ -39,6 +39,7 @@ import {
   Share2,
   Plus,
   FileChartColumn,
+  FileBarChart,
   HelpCircle,
   Eye,
   ArrowLeft,
@@ -70,6 +71,7 @@ import { AvatarUpload } from "@/components/ui/avatar-upload";
 import { SuiviPanel, type SuiviEntry } from "@/views/EngagementSuivi";
 import { CreatorRoadmap } from "@/views/CreatorTracking";
 import { CreatorGuide } from "@/views/CreatorGuide";
+import { MonthlyReport } from "@/components/MonthlyReport";
 import { ScaledPreview } from "@/components/ui/scaled-preview";
 import { WelcomeModal } from "@/components/ui/welcome-modal";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
@@ -137,7 +139,7 @@ type Invoice = { ref: string; party: string; amount: string | null; date: string
 type Contact = { id: string; brand: string; person: string | null; role: string | null; email: string | null; phone: string | null; sort_order?: number };
 
 type Tab =
-  | "accueil" | "guide" | "evolution" | "debrief" | "roadmap"
+  | "accueil" | "guide" | "evolution" | "rapport" | "debrief" | "roadmap"
   | "todo" | "ideas" | "briefs" | "mails" | "gifting" | "planning"
   | "mediakit" | "documents" | "contacts" | "facturation";
 
@@ -162,6 +164,7 @@ const CREATOR_GROUPS: {
       { id: "accueil", label: "Accueil", icon: LayoutDashboard },
       { id: "guide", label: "Guide", icon: HelpCircle },
       { id: "evolution", label: "Évolution", icon: TrendingUp },
+      { id: "rapport", label: "Mon rapport", icon: FileBarChart },
       { id: "debrief", label: "Bilans", icon: FileChartColumn },
       { id: "roadmap", label: "Ma feuille de route", icon: Target },
     ],
@@ -2164,6 +2167,9 @@ export function CreatorSpace({
                 <SuiviPanel entries={mySuivi} lockedCreator={name} />
               </div>
             ))}
+
+          {/* Rapport mensuel : gains, collabs, chiffres et apport de l'agence */}
+          {tab === "rapport" && <MonthlyReport name={name} agencyView={!!preview} />}
 
           {/* Debrief (bilans de campagne de l'agence — lecture seule) */}
           {tab === "debrief" &&

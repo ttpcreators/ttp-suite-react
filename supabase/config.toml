@@ -58,6 +58,10 @@ verify_jwt = true
 [functions.debrief-history]
 verify_jwt = true
 
+# creator-report : JWT requis (créateur → son rapport mensuel ; agence → le créateur demandé).
+[functions.creator-report]
+verify_jwt = true
+
 # create-access : JWT agence requis — crée un compte via l'API admin.
 [functions.create-access]
 verify_jwt = true

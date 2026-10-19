@@ -54,6 +54,7 @@ function numOf(v: string | undefined): number {
 }
 import { AvatarUpload } from "@/components/ui/avatar-upload";
 import { EditorialProfileCard, MonthlyTracking, JournalCard, CreatorAlerts } from "@/views/CreatorTracking";
+import { MonthlyReport } from "@/components/MonthlyReport";
 import { DateInput } from "@/components/ui/date-range-picker";
 import { SelectField } from "@/components/ui/form";
 import { InstagramCard } from "@/components/InstagramCard";
@@ -648,6 +649,7 @@ export function CreatorDetail({
         <CreatorAlerts name={name} />
         <EditorialProfileCard name={name} />
         <MonthlyTracking name={name} />
+        <MonthlyReport name={name} agencyView />
         <JournalCard name={name} />
       </div>
       <div className="flex min-w-0 flex-col gap-4 xl:col-span-4">
