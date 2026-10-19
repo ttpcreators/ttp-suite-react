@@ -65,6 +65,8 @@ export function Pricing() {
     if (creatorId === EXTERNAL) {
       setPlatMap({});
       setFallback(NO_AUD);
+      // Pas de niche héritée du créateur précédent : retour au neutre (Lifestyle, ×1).
+      setNiche("lifestyle");
       // Créateur externe : on vide l'audience héritée du créateur précédent.
       setInfRows((rows) => rows.map((r) => ({ ...r, followers: "", er: "", views: "", src: "", erBase: "followers" })));
       return;
@@ -112,11 +114,10 @@ export function Pricing() {
       setPlatMap(map);
       const fb: Aud = { ...NO_AUD, followers: String(row.followers ?? ""), er: String(row.er ?? ""), src: "fiche", erBase: "views" };
       setFallback(fb);
-      if (row.niche) {
-        const n = row.niche.toLowerCase();
-        const match = NICHES.find((x) => x.label.toLowerCase().includes(n) || n.includes(x.value));
-        if (match) setNiche(match.value);
-      }
+      // Niche du créateur, sinon Lifestyle (×1) : jamais celle du créateur précédent.
+      const n = (row.niche ?? "").toLowerCase().trim();
+      const match = n ? NICHES.find((x) => x.label.toLowerCase().includes(n) || n.includes(x.value)) : undefined;
+      setNiche(match?.value ?? "lifestyle");
       // Changement de créateur : ÉCRASE l'audience de chaque ligne par celle du nouveau créateur.
       setInfRows((rows) => rows.map((r) => fill({ ...r, followers: "", er: "", views: "", src: "" }, map, fb, true)));
     });
@@ -167,31 +168,50 @@ export function Pricing() {
     }));
   const addInf = () => setInfRows((rows) => [...rows, fill({ id: rid(), platform: "instagram", format: "reel", qty: 1, followers: "", er: "", views: "", src: "", erBase: "followers" }, platMap, fallback)]);
 
+  /**
+   * Proposition copiée pour la marque : lignes à 0 € exclues, sous-total = somme des
+   * lignes, puis options et remise en euros, puis le total. Mêmes chiffres qu'à l'écran
+   * (quoteTotals), à l'euro près, tout HT.
+   */
   const copyQuote = () => {
     const who = creatorId !== EXTERNAL && selName ? titleCase(selName) : "Créateur";
-    let txt = "";
+    const rng = (r: { min: number; max: number }) => (r.min === r.max ? formatEuro(r.min) : `${formatEuro(r.min)} à ${formatEuro(r.max)}`);
+    const sign = (r: { min: number; max: number }, s: string) => (r.min === r.max ? `${s}${formatEuro(r.min)}` : `${s}${formatEuro(r.min)} à ${s}${formatEuro(r.max)}`);
+    const lines: string[] = [];
+    let optLabels: string[] = [];
     if (mode === "influence") {
-      txt = `Proposition tarifaire : ${who}\n\n`;
-      inf.itemsPriced.forEach(({ item, min, max, views, estimated }) => {
+      inf.itemsPriced.filter((r) => r.max > 0).forEach(({ item, min, max, views, estimated, capped }) => {
         const fmt = infFormat(item.platform, item.format);
-        const v = views > 0 ? ` (${estimated ? "≈ " : ""}${fmtCompact(views)} vues par contenu)` : "";
-        txt += `• ${INF_PLATFORMS.find((p) => p.key === item.platform)?.label}, ${fmt?.label} ×${item.qty}${v} : ${formatEuro(min)}–${formatEuro(max)}\n`;
+        // Vues plafonnées : on annonce les vues RETENUES pour le prix, pas une moyenne virale.
+        const v = views > 0 ? ` (${estimated ? "≈ " : ""}${fmtCompact(views)} vues ${capped ? "retenues " : ""}par contenu)` : "";
+        lines.push(`• ${INF_PLATFORMS.find((p) => p.key === item.platform)?.label}, ${fmt?.label} ×${item.qty}${v} : ${rng({ min, max })}`);
       });
       const ex = EXCLUSIVITY.find((x) => x.value === infOpts.exclusivite);
-      if (ex && ex.value !== "none") txt += `• Exclusivité ${ex.label}\n`;
+      if (ex && ex.value !== "none") optLabels.push(`exclusivité ${ex.label}`);
       const us = USAGE_RIGHTS.find((x) => x.value === infOpts.droitsUsage);
-      if (us && us.value !== "none") txt += `• Droits d'usage : ${us.label}\n`;
-      if (infOpts.whitelisting) txt += "• Diffusion en pub depuis le compte du créateur\n";
-      txt += `\nTotal : ${formatEuro(inf.min)} – ${formatEuro(inf.max)} HT (cible ${formatEuro(inf.mid)}).`;
+      if (us && us.value !== "none") optLabels.push(`droits d'usage : ${us.label}`);
+      if (infOpts.whitelisting) optLabels.push("pub depuis le compte du créateur");
     } else {
-      txt = `Proposition UGC : ${who}\n\n`;
-      ugc.itemsPriced.forEach(({ item, min, max }) => {
-        txt += `• ${UGC_TYPES.find((t) => t.key === item.type)?.label} ×${item.qty} : ${formatEuro(min)}–${formatEuro(max)}\n`;
+      ugc.itemsPriced.filter((r) => r.max > 0).forEach(({ item, min, max }) => {
+        lines.push(`• ${UGC_TYPES.find((t) => t.key === item.type)?.label} ×${item.qty} : ${rng({ min, max })}`);
       });
       const u = UGC_USAGE.find((x) => x.value === ugcOpts.usage);
-      if (u && u.value !== "none") txt += `• Droits : ${u.label}\n`;
-      txt += `\nTotal : ${formatEuro(ugc.min)} – ${formatEuro(ugc.max)} HT (cible ${formatEuro(ugc.mid)}).`;
+      optLabels = [
+        u && u.value !== "none" ? `droits : ${u.label}` : "",
+        ugcOpts.exclusivite ? "exclusivité" : "",
+        ugcOpts.rushes ? "fichiers bruts" : "",
+        ugcOpts.montage ? "montage avancé" : "",
+        ugcOpts.express ? "livraison express" : "",
+      ].filter(Boolean);
     }
+    const q = mode === "influence" ? inf : ugc;
+    let txt = `${mode === "influence" ? "Proposition tarifaire" : "Proposition UGC"} : ${who} (montants HT)\n\n${lines.join("\n")}\n`;
+    if (q.options.max > 0 || q.discount.max > 0) {
+      txt += `\nSous-total : ${rng(q.sub)}\n`;
+      if (q.options.max > 0) txt += `• Options${optLabels.length ? ` (${optLabels.join(", ")})` : ""} : +${q.optionsPct} % soit ${sign(q.options, "+")}\n`;
+      if (q.discount.max > 0) txt += `• Remise pack −${q.discountPct} % : ${sign(q.discount, "−")}\n`;
+    }
+    txt += `\nTotal : ${rng(q)} HT (cible ${formatEuro(q.mid)} HT).`;
     navigator.clipboard?.writeText(txt).then(() => toast("Proposition copiée ✓")).catch(() => toast("Copie impossible"));
   };
 
@@ -267,11 +287,11 @@ export function Pricing() {
                         title="Vues attendues par contenu : vraies vues moyennes si tu les as, sinon laisse vide (estimées depuis les abonnés)"
                         className="w-32 rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none focus:border-primary"
                       />
-                      <input value={r.er} onChange={(e) => setInf(r.id, { er: e.target.value })} placeholder="engagement %" title={r.erBase === "views" ? "Engagement calculé sur les vues" : "Engagement calculé sur les abonnés"} className="w-28 rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none focus:border-primary" />
+                      <input value={r.er} onChange={(e) => setInf(r.id, { er: e.target.value })} placeholder="engagement %" title={r.erBase === "views" ? "Taux d'engagement (sur les vues)" : "Taux d'engagement (sur les abonnés)"} className="w-28 rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none focus:border-primary" />
                     </div>
                     <div className="mt-1.5 text-[11px] leading-snug text-faint">
                       {r.views ? (r.src === "saisie" ? "Vues saisies à la main" : `Vues : ${SRC_LABEL[r.src] ?? "données du créateur"}`) : estimate ? `Vues estimées : ${Math.round((fmtOf?.rate ?? 0) * 100)} % des abonnés (habituel pour ce format)` : "Renseigne les abonnés ou les vues"}
-                      {" · engagement sur les "}{r.erBase === "views" ? "vues" : "abonnés"}
+                      {" · taux d'engagement "}{r.erBase === "views" ? "(sur les vues)" : "(sur les abonnés)"}
                     </div>
                   </div>
                 );
@@ -381,7 +401,7 @@ export function Pricing() {
             <div className="mt-4">
               <div className="text-[12px] text-muted-foreground">Fourchette conseillée (HT)</div>
               <div className="mt-2 text-[28px] font-semibold leading-tight tracking-tight tabular-nums text-foreground xl:text-[34px]">
-                {formatEuro(result.min)} <span className="text-faint">–</span> {formatEuro(result.max)}
+                {formatEuro(result.min)} <span className="text-faint">à</span> {formatEuro(result.max)}
               </div>
               <div className="mt-3 flex items-baseline gap-2">
                 <span className="text-[13px] text-muted-foreground">Prix cible</span>
@@ -396,15 +416,17 @@ export function Pricing() {
                     <div key={i} className="py-2">
                       <div className="flex justify-between gap-3">
                         <span className="min-w-0 truncate text-muted-foreground">{`${INF_PLATFORMS.find((p) => p.key === r.item.platform)?.label} · ${infFormat(r.item.platform, r.item.format)?.label} ×${r.item.qty}`}</span>
-                        <span className="shrink-0 font-medium tabular-nums text-foreground">{r.max > 0 ? `${formatEuro(r.min)}–${formatEuro(r.max)}` : "—"}</span>
+                        <span className="shrink-0 font-medium tabular-nums text-foreground">{r.max > 0 ? `${formatEuro(r.min)} à ${formatEuro(r.max)}` : "—"}</span>
                       </div>
                       {r.explain && <div className="mt-0.5 text-[11px] leading-snug text-faint">{r.explain}</div>}
                     </div>
                   ))
                 : ugc.itemsPriced.map((r, i) => (
-                    <Line key={i} l={`${UGC_TYPES.find((t) => t.key === r.item.type)?.label} ×${r.item.qty}`} v={r.max > 0 ? `${formatEuro(r.min)}–${formatEuro(r.max)}` : "—"} />
+                    <Line key={i} l={`${UGC_TYPES.find((t) => t.key === r.item.type)?.label} ×${r.item.qty}`} v={r.max > 0 ? `${formatEuro(r.min)} à ${formatEuro(r.max)}` : "—"} />
                   ))}
-              {result.addon > 1 && <Line l="× Options" v={`×${result.addon.toFixed(2)}`} />}
+              {/* Options et remise en euros : lignes + options − remise = fourchette affichée. */}
+              {result.options.max > 0 && <Line l={`Options +${result.optionsPct} %`} v={`+${formatEuro(result.options.min)} à +${formatEuro(result.options.max)}`} />}
+              {result.discount.max > 0 && <Line l={`Remise pack −${result.discountPct} %`} v={`−${formatEuro(result.discount.min)} à −${formatEuro(result.discount.max)}`} />}
               {mode === "influence" && inf.itemsPriced[0] && (
                 <Line l="Palier (1re plateforme)" v={tier(parseFollowers(infRows[0]?.followers))} />
               )}
@@ -414,7 +436,7 @@ export function Pricing() {
               <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>
                 {mode === "influence"
-                  ? <>Ne descends pas sous <span className="font-semibold text-foreground">{formatEuro(result.min)}</span> sans contrepartie. Le prix se défend avec les vues : montre à la marque le coût pour 1000 vues, c'est la façon dont elle compare avec la pub.</>
+                  ? <>Ne descends pas sous <span className="font-semibold text-foreground">{formatEuro(result.min)}</span> sans contrepartie.</>
                   : <>Le prix monte surtout avec les <span className="font-semibold text-foreground">droits d'exploitation</span> : un contenu diffusé en ads pendant 6 mois vaut bien plus qu'un post organique.</>}
               </span>
             </div>
@@ -455,7 +477,20 @@ function RatesEditor({ rates, onClose }: { rates: RateOverrides; onClose: () => 
     setDraft((d) => ({ ...d, [key]: { ...(d[key] ?? {}), ...patch } }));
     setTouched((t) => (t.includes(key) ? t : [...t, key]));
   };
+  // Ligne invalide (min à 0, min > max, part des abonnés hors 1 à 300 %) : avant, elle
+  // était ignorée en silence par le calcul. Maintenant : erreur sous la ligne, rien enregistré.
+  const errOf = (key: string): string => {
+    const o = draft[key];
+    if (!o) return "";
+    if (o.cpm && !(o.cpm[0] > 0 && o.cpm[1] >= o.cpm[0])) return "Fourchette invalide : le minimum doit être supérieur à 0 et ne pas dépasser le maximum.";
+    if (o.rate !== undefined && !(o.rate > 0 && o.rate <= 3)) return "Part des abonnés invalide : entre 1 et 300 %.";
+    return "";
+  };
   const save = async (reset: boolean) => {
+    if (!reset && touched.some((k) => errOf(k))) {
+      toast("Corrige les lignes en erreur : rien n'a été enregistré");
+      return;
+    }
     setSaving(true);
     try {
       let next: RateOverrides = {};
@@ -479,18 +514,25 @@ function RatesEditor({ rates, onClose }: { rates: RateOverrides; onClose: () => 
   return (
     <div className="mt-4 rounded-xl border border-border bg-panel/50 p-3">
       <div className="mb-2 text-[12px] font-semibold text-foreground">Barème de l'agence</div>
-      <div className="mb-2 text-[11px] leading-snug text-muted-foreground">€ pour 1000 abonnés (fourchette) et part habituelle des abonnés qui voient un contenu. Le CPM en € pour 1000 vues s'en déduit.</div>
+      <div className="mb-2 text-[11px] leading-snug text-muted-foreground">€ pour 1000 abonnés (fourchette) et part habituelle des abonnés qui voient un contenu. Le coût pour 1000 vues qui s'en déduit sert au calcul interne : il n'est pas comparable à un CPM publicitaire, ne pas le présenter à la marque.</div>
       <div className="max-h-[320px] space-y-1.5 overflow-y-auto pr-1">
         {INF_PLATFORMS.flatMap((p) => p.formats.map((f) => {
           const key = `${p.key}.${f.key}`;
           const cur = infFormat(p.key, f.key, draft)!;
           const cv = cpmViews(cur);
+          // Valeurs SAISIES (même invalides) : modifier le max ne doit pas effacer le min tapé.
+          const raw = { cpm: draft[key]?.cpm ?? cur.cpm, rate: draft[key]?.rate ?? cur.rate };
+          const err = errOf(key);
+          const box = `rounded-md border bg-surface px-1.5 py-1 text-center tabular-nums outline-none focus:border-primary ${err ? "border-[#E5484D]" : "border-border"}`;
           return (
-            <div key={key} className="grid grid-cols-[minmax(0,1fr)_56px_56px_52px] items-center gap-1.5 text-[11px]">
-              <span className="truncate text-foreground">{p.label} · {f.label}<span className="block text-faint">{Math.round(cv[0])}–{Math.round(cv[1])} € / 1000 vues</span></span>
-              <input defaultValue={cur.cpm[0]} onBlur={(e) => set(key, { cpm: [num(e.target.value), cur.cpm[1]] })} title="€ / 1000 abonnés (min)" className="rounded-md border border-border bg-surface px-1.5 py-1 text-center tabular-nums outline-none focus:border-primary" />
-              <input defaultValue={cur.cpm[1]} onBlur={(e) => set(key, { cpm: [cur.cpm[0], num(e.target.value)] })} title="€ / 1000 abonnés (max)" className="rounded-md border border-border bg-surface px-1.5 py-1 text-center tabular-nums outline-none focus:border-primary" />
-              <input defaultValue={Math.round(cur.rate * 100)} onBlur={(e) => set(key, { rate: num(e.target.value) / 100 })} title="% des abonnés qui voient habituellement ce format" className="rounded-md border border-border bg-surface px-1.5 py-1 text-center tabular-nums outline-none focus:border-primary" />
+            <div key={key}>
+              <div className="grid grid-cols-[minmax(0,1fr)_56px_56px_52px] items-center gap-1.5 text-[11px]">
+                <span className="truncate text-foreground">{p.label} · {f.label}<span className="block text-faint">{Math.round(cv[0])} à {Math.round(cv[1])} € / 1000 vues (calcul interne)</span></span>
+                <input defaultValue={raw.cpm[0]} onBlur={(e) => set(key, { cpm: [num(e.target.value), raw.cpm[1]] })} title="€ / 1000 abonnés (min)" className={box} />
+                <input defaultValue={raw.cpm[1]} onBlur={(e) => set(key, { cpm: [raw.cpm[0], num(e.target.value)] })} title="€ / 1000 abonnés (max)" className={box} />
+                <input defaultValue={Math.round(raw.rate * 100)} onBlur={(e) => set(key, { rate: num(e.target.value) / 100 })} title="% des abonnés qui voient habituellement ce format" className={box} />
+              </div>
+              {err && <div className="mt-0.5 text-[10px] leading-snug text-[#E5484D]">{err}</div>}
             </div>
           );
         }))}

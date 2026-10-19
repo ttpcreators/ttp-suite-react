@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseNum, totalsOf, fmtCompact, fmtPct, emptyStat, type PostStat } from "./engagement";
+import { parseNum, totalsOf, fmtCompact, fmtPct, emptyStat, erVerdict, reliableEr, platformOfKind, allHaveReach, singlePlatform, GOOD_ER_REACH, type PostStat } from "./engagement";
 
 const post = (o: Partial<PostStat>): PostStat => ({ ...emptyStat("x"), ...o });
 
@@ -102,5 +102,46 @@ describe("formats", () => {
     expect(fmtPct(6.42)).toBe("6,4 %");
     expect(fmtPct(5)).toBe("5 %");
     expect(fmtPct(null)).toBe("—");
+  });
+});
+
+describe("parseNum tolère les approximations", () => {
+  it("« ~12k », « ≈ 12 000 », « 45K abonnés »", () => {
+    expect(parseNum("~12k")).toBe(12_000);
+    expect(parseNum("≈ 12 000")).toBe(12_000);
+    expect(parseNum("45K abonnés")).toBe(45_000);
+    expect(parseNum("1,2 M")).toBe(1_200_000); // « m » seul reste un suffixe
+  });
+});
+
+describe("taux global sur une base homogène", () => {
+  const s = (kind: string, p: Partial<PostStat>): PostStat => ({ ...emptyStat(kind + Math.random(), kind), ...p });
+  it("réseau d'une publication d'après son type", () => {
+    expect(platformOfKind("Reel")).toBe("instagram");
+    expect(platformOfKind("Carrousel")).toBe("instagram");
+    expect(platformOfKind("TikTok")).toBe("tiktok");
+    expect(platformOfKind("Short")).toBe("youtube");
+    expect(platformOfKind("YouTube")).toBe("youtube");
+  });
+  it("couverture partout → taux sur la couverture", () => {
+    const st = [s("Reel", { reach: 10_000, likes: 500 }), s("Post", { reach: 10_000, likes: 300 })];
+    expect(allHaveReach(st)).toBe(true);
+    expect(reliableEr(st, { instagram: 1000 })).toEqual({ er: 4, basis: "reach", followers: 0 });
+  });
+  it("un seul réseau sans couverture → abonnés de CE réseau", () => {
+    const st = [s("TikTok", { likes: 900, comments: 100 })];
+    expect(singlePlatform(st)).toBe("tiktok");
+    expect(reliableEr(st, { instagram: 10_000, tiktok: 50_000 })).toEqual({ er: 2, basis: "followers", followers: 50_000 });
+    expect(reliableEr(st, { instagram: 10_000 }).er).toBeNull();
+  });
+  it("Instagram + TikTok sans couverture partout → pas de taux global", () => {
+    const st = [s("Reel", { reach: 50_000, likes: 5000 }), s("TikTok", { likes: 9000 })];
+    expect(singlePlatform(st)).toBeNull();
+    expect(reliableEr(st, { instagram: 30_000, tiktok: 200_000 })).toEqual({ er: null, basis: null, followers: 0 });
+  });
+  it("repère « bon taux » unique", () => {
+    expect(GOOD_ER_REACH).toBe(4);
+    expect(erVerdict(GOOD_ER_REACH)?.label).toBe("Bon");
+    expect(erVerdict(GOOD_ER_REACH - 0.1)?.label).toBe("Correct");
   });
 });

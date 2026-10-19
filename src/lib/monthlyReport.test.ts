@@ -72,4 +72,15 @@ describe("rapport mensuel créateur", () => {
   it("mois vide", () => {
     expect(buildMonthlyReport(data, "2025-06").empty).toBe(true);
   });
+
+  it("cachet ambigu ignoré dans le total, jamais additionné en chiffres collés (F2)", () => {
+    // Avant : « 800 € x 2 » lu 8002 → « 9 502 € de cachets ».
+    const d: ReportData = { ...data, collabs: [...data.collabs, { id: "c4", brand: "Asics", cachet: "800 € x 2", step: 2, created_at: "2026-10-05T09:00:00Z" }] };
+    const r = buildMonthlyReport(d, "2026-10", new Date("2026-11-03T12:00:00Z"));
+    expect(r.agency[0]).toMatch(/pour au moins 1\s500 € de cachets/);
+    expect(r.agency[0]).not.toContain("9");
+    // Cachet en « k » : 1,5k€ + 1 500 € = 3 000 €
+    const k: ReportData = { ...data, collabs: [...data.collabs, { id: "c5", brand: "Asics", cachet: "1,5k€", step: 2, created_at: "2026-10-05T09:00:00Z" }] };
+    expect(buildMonthlyReport(k, "2026-10").agency[0]).toMatch(/pour 3\s000 € de cachets/);
+  });
 });

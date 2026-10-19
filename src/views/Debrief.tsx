@@ -6,10 +6,10 @@ import {
   saveAppStateKey,
   getAppState,
   invalidateAppState,
-  parseAmount,
   formatEuro,
   type AppState,
 } from "@/lib/appState";
+import { parseAmountStrict } from "@/lib/money";
 import { supabase } from "@/lib/supabase";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
@@ -22,7 +22,7 @@ import { titleCase } from "@/lib/utils";
 import { DebriefCalculator, ShotStrip, useShotUrls, resolveShots, type CalcState } from "@/views/DebriefCalculator";
 import { printHtml } from "@/lib/printPdf";
 import { pdfShell, pdfHeading, pdfMeta, pdfSection, pdfKpis, pdfTicks, pdfShots } from "@/lib/pdfDoc";
-import { totalsOf as engTotals, parseNum as engParse, fmtCompact, fmtPct } from "@/lib/engagement";
+import { totalsOf as engTotals, parseNum as engParse, fmtCompact, fmtPct, allHaveReach, singlePlatform } from "@/lib/engagement";
 import { campaignCosts } from "@/lib/pricing";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -33,8 +33,20 @@ import { todayISO } from "@/lib/dates";
 
 /** Une petite statistique de campagne (label / valeur). */
 type Kpi = { l: string; v: string };
-/** Libellé affiché d'un indicateur : « Reach » (gardé tel quel dans les données) s'affiche « Couverture ». */
-const kpiLabel = (l: string) => (l === "Reach" ? "Couverture" : l);
+/** Nombre de contenus derrière les chiffres du calculateur (0 = inconnu, bilan saisi à la main). */
+function contentCount(calc: CalcState | undefined): number {
+  if (!calc) return 0;
+  return calc.mode === "global" ? Math.max(calc.stats.length ? 1 : 0, Math.round(engParse(calc.postsCount))) : calc.stats.length;
+}
+/** Libellé affiché d'un indicateur : « Reach » (gardé tel quel dans les données) s'affiche
+ *  « Couverture », ou « Couverture cumulée » quand elle additionne plusieurs contenus
+ *  (une même personne y compte plusieurs fois). */
+const kpiLabel = (l: string, d?: { calc?: CalcState }) => (l === "Reach" ? (contentCount(d?.calc) > 1 ? "Couverture cumulée" : "Couverture") : l);
+/** « CA généré / budget » (ex-« ROI ») : c'est un ratio CA ÷ budget (ROAS), pas un retour
+ *  sur investissement. Champ `roi` gardé dans les données, seul le libellé change. */
+const roasText = (roi: string) => (roi && roi !== "—" ? `${roi} le budget` : "—");
+/** Montant d'un bilan pour les totaux : ambigu ou illisible → 0 (ignoré), jamais un nombre faux. */
+const amountOf = (s: string) => parseAmountStrict(s) ?? 0;
 
 /** État vierge du calculateur d'engagement. */
 const CALC_EMPTY: CalcState = { mode: "global", stats: [], followers: "", postsCount: "", basis: "reach", shots: [] };
@@ -51,7 +63,7 @@ function normCalc(c: Partial<CalcState> | undefined): CalcState {
   };
 }
 
-/** Un debrief de campagne : bilan marque × créateur avec ROI et points forts. */
+/** Un debrief de campagne : bilan marque × créateur avec CA généré / budget et points forts. */
 type Debrief = {
   brand: string;
   creator: string;
@@ -78,7 +90,7 @@ function debriefToText(d: Debrief): string {
   lines.push(`${d.brand} × ${titleCase(d.creator)}`);
   if (d.period && d.period !== "—") lines.push(d.period);
   lines.push("");
-  lines.push(`Budget : ${d.budget}  →  CA généré : ${d.revenue}   (ROI ${d.roi})`);
+  lines.push(`Budget HT : ${d.budget}  →  CA généré : ${d.revenue}${d.roi && d.roi !== "—" ? `   (CA généré / budget : ${roasText(d.roi)})` : ""}`);
   if (d.summary && d.summary !== "—") {
     lines.push("");
     lines.push(d.summary);
@@ -91,7 +103,7 @@ function debriefToText(d: Debrief): string {
   if (d.kpis.length > 0) {
     lines.push("");
     lines.push("Indicateurs :");
-    d.kpis.forEach((k) => lines.push(`  • ${kpiLabel(k.l)} : ${k.v}`));
+    d.kpis.forEach((k) => lines.push(`  • ${kpiLabel(k.l, d)} : ${k.v}`));
   }
   if (d.renewal?.trim()) {
     lines.push("");
@@ -126,7 +138,7 @@ function debriefHTML(d: Debrief, shotUrls: Record<string, string> = {}): string 
   const kpis = d.kpis.filter((k) => k.v && k.v !== "—");
   const cell = (k: Kpi) =>
     `<td width="50%" style="padding:6px;vertical-align:top"><div style="border:1px solid #ececec;border-radius:12px;padding:12px 14px">` +
-    `<div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#8a8a8a">${escHtml(kpiLabel(k.l))}</div>` +
+    `<div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#8a8a8a">${escHtml(kpiLabel(k.l, d))}</div>` +
     `<div style="font-size:20px;font-weight:800;color:#111;margin-top:2px">${escHtml(k.v)}</div></div></td>`;
   let kpiRows = "";
   for (let i = 0; i < kpis.length; i += 2) {
@@ -157,8 +169,8 @@ function debriefHTML(d: Debrief, shotUrls: Record<string, string> = {}): string 
     (d.period && d.period !== "—" ? `<div style="opacity:.85;margin-top:2px">${escHtml(d.period)}</div>` : "") +
     `</div><div style="padding:24px 26px">` +
     `<table style="width:100%"><tr>` +
-    `<td style="font-size:15px;color:#333">Budget <b>${escHtml(d.budget)}</b> &nbsp;→&nbsp; CA généré <b style="color:#16a34a">${escHtml(d.revenue)}</b></td>` +
-    (d.roi && d.roi !== "—" ? `<td align="right"><span style="background:#dcfce7;color:#15803d;font-weight:800;border-radius:999px;padding:6px 14px;font-size:14px">ROI ${escHtml(d.roi)}</span></td>` : "") +
+    `<td style="font-size:15px;color:#333">Budget HT <b>${escHtml(d.budget)}</b> &nbsp;→&nbsp; CA généré <b style="color:#16a34a">${escHtml(d.revenue)}</b></td>` +
+    (d.roi && d.roi !== "—" ? `<td align="right"><span style="background:#dcfce7;color:#15803d;font-weight:800;border-radius:999px;padding:6px 14px;font-size:14px">CA généré : ${escHtml(roasText(d.roi))}</span></td>` : "") +
     `</tr></table>` +
     (d.deliverables && d.deliverables !== "—" ? `<div style="margin-top:10px;font-size:13px;color:#666">Livrables : ${escHtml(d.deliverables)}</div>` : "") +
     (d.summary && d.summary !== "—" ? `<p style="margin:16px 0;font-size:14px;line-height:1.6;color:#222">${escHtml(d.summary)}</p>` : "") +
@@ -179,9 +191,9 @@ function debriefHTML(d: Debrief, shotUrls: Record<string, string> = {}): string 
  */
 function debriefPdfHTML(d: Debrief, shotUrls: Record<string, string> = {}): string {
   const money =
-    `<div class="money"><span><span class="k">Budget</span><b>${escHtml(d.budget)}</b></span>` +
+    `<div class="money"><span><span class="k">Budget HT</span><b>${escHtml(d.budget)}</b></span>` +
     `<span class="arrow">→</span><span><span class="k">CA généré</span><b>${escHtml(d.revenue)}</b></span>` +
-    (d.roi && d.roi !== "—" ? `<span class="roi"><span class="k">Retour sur investissement</span><b>${escHtml(d.roi)}</b></span>` : "") +
+    (d.roi && d.roi !== "—" ? `<span class="roi"><span class="k">CA généré / budget</span><b>${escHtml(roasText(d.roi))}</b></span>` : "") +
     `</div>`;
   const shots = (d.calc?.shots ?? []).map((s) => shotUrls[s.path]).filter(Boolean);
   const body =
@@ -192,7 +204,7 @@ function debriefPdfHTML(d: Debrief, shotUrls: Record<string, string> = {}): stri
       ["Livrables", d.deliverables],
     ]) +
     (d.summary && d.summary !== "—" ? pdfSection("Synthèse", `<p class="lede">${escHtml(d.summary)}</p>`) : "") +
-    (d.kpis.length ? pdfSection("Indicateurs", pdfKpis(d.kpis.map((k) => ({ ...k, l: kpiLabel(k.l) })))) : "") +
+    (d.kpis.length ? pdfSection("Indicateurs", pdfKpis(d.kpis.map((k) => ({ ...k, l: kpiLabel(k.l, d) })))) : "") +
     (d.highlights.length ? pdfSection("Points forts", pdfTicks(d.highlights)) : "") +
     (d.renewal?.trim() ? pdfSection("Et ensuite ?", `<p class="lede">${escHtml(d.renewal.trim())}</p>`) : "") +
     (shots.length ? pdfSection("Captures des statistiques", pdfShots(shots)) : "");
@@ -362,13 +374,17 @@ export function Debrief() {
   async function prepareFromCollab(c: CollabForRecap & { pub: string | null }) {
     resetForm();
     const cr = creators.find((x) => x.name.toLowerCase() === (c.creator ?? "").toLowerCase());
-    let followers = 0;
+    // Abonnés PAR réseau : un taux sur les abonnés n'a de sens qu'avec ceux du réseau des
+    // contenus (les abonnés Instagram ne valent pas pour une vidéo TikTok).
+    const followersBy: { instagram?: number; tiktok?: number; youtube?: number } = {};
     if (cr) {
-      const { data } = await supabase.from("creators").select("followers, ig").eq("id", cr.id).maybeSingle();
-      const row = data as { followers?: string | null; ig?: { followers?: number } | null } | null;
-      followers = row?.ig?.followers || engParse(String(row?.followers ?? "")) || 0;
+      const { data } = await supabase.from("creators").select("ig, tt, yt").eq("id", cr.id).maybeSingle();
+      const row = data as { ig?: { followers?: number | null } | null; tt?: { followers?: number | null } | null; yt?: { subscribers?: number | null } | null } | null;
+      followersBy.instagram = row?.ig?.followers || 0;
+      followersBy.tiktok = row?.tt?.followers || 0;
+      followersBy.youtube = row?.yt?.subscribers || 0;
     }
-    const r = buildRecap(c, c.pub, followers);
+    const r = buildRecap(c, c.pub, followersBy);
     setBrand(c.brand);
     setCreator(cr?.name ?? c.creator ?? "");
     setPeriod(r.period);
@@ -379,7 +395,7 @@ export function Debrief() {
     setEngagement(r.engagement);
     setHighlightsText(r.highlights.join("\n"));
     setRenewal(r.renewal);
-    setCalc({ ...CALC_EMPTY, mode: "detail", stats: r.stats, followers: followers ? String(followers) : "", basis: r.basis });
+    setCalc({ ...CALC_EMPTY, mode: "detail", stats: r.stats, followers: r.followers ? String(r.followers) : "", basis: r.basis });
     setFromCollab(c.id);
     setFormOpen(true);
     toast("Bilan pré-rempli avec les chiffres des posts : vérifie, complète le CA, puis enregistre");
@@ -391,13 +407,18 @@ export function Debrief() {
       toast("Indique la marque / campagne");
       return;
     }
-    const budN = parseAmount(budget);
-    const revN = parseAmount(revenue);
-    const roi = budN > 0 ? (revN / budN).toFixed(1).replace(".", ",") + "×" : "—";
+    // Montant ambigu (« 800 € x 2 ») : gardé tel que saisi, mais AUCUN calcul (ratio, coûts).
+    const budN = parseAmountStrict(budget);
+    const revN = parseAmountStrict(revenue);
+    if ((budget.trim() && budN === null) || (revenue.trim() && revN === null)) {
+      toast("Montant à plusieurs nombres : enregistré tel quel, sans calcul. Indique un seul montant pour avoir les coûts");
+    }
+    const roi = budN && budN > 0 && revN !== null ? (revN / budN).toFixed(1).replace(".", ",") + "×" : "—";
     // Coûts réels de la campagne (budget ÷ chiffres du calculateur) : ce que la marque compare.
     const calcStats = calc.mode === "global" ? calc.stats.slice(0, 1) : calc.stats;
     const tot = engTotals(calcStats, engParse(calc.followers), calc.mode === "global" ? engParse(calc.postsCount) : undefined);
-    const costs = campaignCosts(budN, tot);
+    // Coût pour 1000 vues / personnes touchées seulement si CHAQUE contenu a ses vues / sa couverture.
+    const costs = campaignCosts(budN, tot, calcStats);
     const eur = (n: number | null, dec = false) => (n == null ? "" : dec ? `${n.toFixed(2).replace(".", ",")} €` : formatEuro(Math.round(n)));
     const kpis: Kpi[] = [
       { l: "Reach", v: reach.trim() },
@@ -405,7 +426,8 @@ export function Debrief() {
       { l: "Clics", v: clics.trim() },
       { l: "Ventes attribuées", v: ventes.trim() },
       { l: "Coût pour 1000 vues (CPM)", v: eur(costs.cpm, true) },
-      { l: "Coût pour 1000 personnes touchées", v: eur(costs.cpmReach, true) },
+      // Couverture de plusieurs contenus additionnée : une personne peut compter plusieurs fois.
+      { l: tot.posts > 1 ? "Coût pour 1000 de couverture cumulée" : "Coût pour 1000 personnes touchées", v: eur(costs.cpmReach, true) },
       { l: "Coût par interaction", v: eur(costs.cpe, true) },
     ].filter((k) => k.v);
     const highlights = highlightsText.split("\n").map((h) => h.trim()).filter(Boolean);
@@ -418,8 +440,8 @@ export function Debrief() {
       creator: creator.trim(),
       period: period.trim() || "—",
       deliverables: deliv,
-      budget: budN ? formatEuro(budN) : "—",
-      revenue: revN ? formatEuro(revN) : "—",
+      budget: budN ? formatEuro(budN) : budN === null && budget.trim() ? budget.trim() : "—",
+      revenue: revN ? formatEuro(revN) : revN === null && revenue.trim() ? revenue.trim() : "—",
       roi,
       tone: original?.tone ?? "cyan",
       summary: summary.trim() || "—",
@@ -608,13 +630,13 @@ export function Debrief() {
 
       {/* Synthèse (bento) */}
       {list.length > 0 && (() => {
-        const sumRevenue = list.reduce((s, d) => s + parseAmount(d.revenue), 0);
-        const sumBudget = list.reduce((s, d) => s + parseAmount(d.budget), 0);
+        const sumRevenue = list.reduce((s, d) => s + amountOf(d.revenue), 0);
+        const sumBudget = list.reduce((s, d) => s + amountOf(d.budget), 0);
         const roiStr = sumBudget > 0 ? (sumRevenue / sumBudget).toFixed(1).replace(".", ",") + "×" : "—";
         return (
           <StatsBento
-            primary={{ eyebrow: "CA généré · bilans", value: formatEuro(sumRevenue), caption: `${list.length} campagne${list.length > 1 ? "s" : ""} · budget ${formatEuro(sumBudget)}` }}
-            bars={{ label: "CA par campagne", value: `ROI ${roiStr}`, series: list.map((d) => parseAmount(d.revenue)) }}
+            primary={{ eyebrow: "CA généré · bilans", value: formatEuro(sumRevenue), caption: `${list.length} campagne${list.length > 1 ? "s" : ""} · budget HT ${formatEuro(sumBudget)}` }}
+            bars={{ label: "CA par campagne", value: `CA : ${roasText(roiStr)}`, series: list.map((d) => amountOf(d.revenue)) }}
             small={{ value: String(list.length), label: "Campagnes" }}
             accent={{ value: String(needsDebrief.length), label: "À débriefer", icon: Activity }}
           />
@@ -653,7 +675,7 @@ export function Debrief() {
           className="sm:min-w-[130px] flex-1"
         />
         <TextField
-          label="Budget"
+          label="Budget HT"
           value={budget}
           onChange={setBudget}
           placeholder="3 000 €"
@@ -688,7 +710,7 @@ export function Debrief() {
             setEngagement(e);
           }}
         />
-        <TextField label="Couverture" value={reach} onChange={setReach} placeholder="480 K" className="sm:min-w-[110px] flex-1" />
+        <TextField label={contentCount(calc) > 1 ? "Couverture cumulée" : "Couverture"} value={reach} onChange={setReach} placeholder="480 K" className="sm:min-w-[110px] flex-1" />
         <TextField label="Engagement" value={engagement} onChange={setEngagement} placeholder="6,4 %" className="sm:min-w-[110px] flex-1" />
         <TextField label="Clics" value={clics} onChange={setClics} placeholder="9 200" className="sm:min-w-[110px] flex-1" />
         <TextField label="Ventes attribuées" value={ventes} onChange={setVentes} placeholder="310" className="sm:min-w-[130px] flex-1" />
@@ -806,7 +828,7 @@ export function Debrief() {
               key={`${d.brand}-${index}`}
               className="flex flex-col rounded-2xl border border-border bg-surface p-5 shadow-sm"
             >
-              {/* Titre + ROI + actions */}
+              {/* Titre + CA généré / budget + actions */}
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold text-foreground">
@@ -817,13 +839,13 @@ export function Debrief() {
                   )}
                 </div>
                 <span className="shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext">
-                  ROI {d.roi}
+                  CA : {roasText(d.roi)}
                 </span>
               </div>
 
-              {/* Budget → CA */}
+              {/* Budget HT → CA */}
               <div className="mt-3 flex items-center gap-2 text-xs">
-                <span className="text-muted-foreground">{d.budget}</span>
+                <span className="text-muted-foreground">Budget HT {d.budget}</span>
                 <span className="text-faint">→</span>
                 <span className="font-semibold text-signaltext">{d.revenue}</span>
               </div>
@@ -851,7 +873,7 @@ export function Debrief() {
                   {d.kpis.map((k, i) => (
                     <div key={i} className="rounded-xl bg-panel px-3 py-2.5">
                       <div className="text-[10px] font-medium text-muted-foreground">
-                        {kpiLabel(k.l)}
+                        {kpiLabel(k.l, d)}
                       </div>
                       <div className="mt-1 text-lg font-bold leading-none tracking-tight text-foreground">
                         {k.v}
@@ -886,13 +908,13 @@ export function Debrief() {
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-faint">
                   {d.period && d.period !== "—" && <span>{d.period}</span>}
                   <span className="text-muted-foreground">
-                    {d.budget} <span className="text-faint">→</span>{" "}
+                    Budget HT {d.budget} <span className="text-faint">→</span>{" "}
                     <span className="font-semibold text-signaltext">{d.revenue}</span>
                   </span>
                 </div>
               </div>
               <span className="hidden shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext sm:inline">
-                ROI {d.roi}
+                CA : {roasText(d.roi)}
               </span>
               <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>{actions(d)}</div>
             </div>
@@ -906,9 +928,9 @@ export function Debrief() {
                 <th className="px-4 py-3">Campagne</th>
                 <th className="px-4 py-3">Créateur</th>
                 <th className="px-4 py-3">Période</th>
-                <th className="px-4 py-3 text-right">Budget</th>
+                <th className="px-4 py-3 text-right">Budget HT</th>
                 <th className="px-4 py-3 text-right">CA</th>
-                <th className="px-4 py-3 text-center">ROI</th>
+                <th className="px-4 py-3 text-center">CA / budget</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -1033,7 +1055,8 @@ function DebriefDetail({
   // Même règle que le calculateur : en mode global, seule la 1re ligne (totaux) compte.
   const calcStats = calc ? (calc.mode === "global" ? calc.stats.slice(0, 1) : calc.stats) : [];
   const t = hasCalc ? engTotals(calcStats, engParse(calc!.followers), override) : null;
-  const er = t ? (calc!.basis === "followers" ? t.erFollowers : t.erReach) : null;
+  // Même règle que le calculateur : pas de taux sur une base mélangée.
+  const er = t ? (calc!.basis === "followers" ? (singlePlatform(calcStats) ? t.erFollowers : null) : allHaveReach(calcStats) ? t.erReach : null) : null;
 
   return (
     <Overlay className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-6" onClose={onClose}>
@@ -1049,7 +1072,7 @@ function DebriefDetail({
           <div className="flex items-center gap-2">
             {d.roi && d.roi !== "—" && (
               <span className="shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext">
-                ROI {d.roi}
+                CA : {roasText(d.roi)}
               </span>
             )}
             <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground">
@@ -1061,7 +1084,7 @@ function DebriefDetail({
         <div className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-4">
           {/* Budget → CA */}
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Budget <b className="text-foreground">{d.budget}</b></span>
+            <span className="text-muted-foreground">Budget HT <b className="text-foreground">{d.budget}</b></span>
             <span className="text-faint">→</span>
             <span className="text-muted-foreground">CA généré <b className="text-signaltext">{d.revenue}</b></span>
             {d.deliverables && d.deliverables !== "—" && <span className="text-[12px] text-faint">· {d.deliverables}</span>}
@@ -1081,7 +1104,7 @@ function DebriefDetail({
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {[
                   ["Taux retenu", fmtPct(er)],
-                  ["Couverture", fmtCompact(t.reach)],
+                  [t.posts > 1 ? "Couverture cumulée" : "Couverture", fmtCompact(t.reach)],
                   ["Interactions", fmtCompact(t.interactions)],
                   ["Vues", fmtCompact(t.views)],
                 ].map(([l, v]) => (
@@ -1101,7 +1124,7 @@ function DebriefDetail({
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {kpis.map((k, i) => (
                   <div key={i} className="rounded-xl bg-panel px-3 py-2.5">
-                    <div className="text-[10px] font-medium text-muted-foreground">{kpiLabel(k.l)}</div>
+                    <div className="text-[10px] font-medium text-muted-foreground">{kpiLabel(k.l, d)}</div>
                     <div className="mt-1 text-lg font-bold leading-none tracking-tight text-foreground">{k.v}</div>
                   </div>
                 ))}

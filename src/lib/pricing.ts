@@ -22,18 +22,18 @@
  * Toujours une FOURCHETTE (min–max) pour ne pas sous-vendre ; « cible » = milieu.
  */
 
+import { parseNum } from "./engagement";
+
 // ─────────────────────────────── communs ───────────────────────────────
 
-/** « 45K », « 1,2M », « 45 000 » → nombre. Renvoie 0 si illisible (jamais NaN). */
+/**
+ * « 45K », « 1,2M », « 45 000 », « 12.000 », « 12,000 », « ~12k » → nombre entier.
+ * Même analyseur que le calculateur d'engagement (parseNum) : un seul lecteur de
+ * chiffres dans l'app. Renvoie 0 si illisible (jamais NaN).
+ */
 export function parseFollowers(s: string | number | null | undefined): number {
   if (typeof s === "number") return Number.isFinite(s) ? Math.max(0, s) : 0;
-  const str = String(s ?? "").trim().replace(/\s/g, "").replace(",", ".").toLowerCase();
-  const m = /^([\d.]+)\s*([km])?/.exec(str);
-  if (!m) return 0;
-  let n = parseFloat(m[1]) || 0;
-  if (m[2] === "k") n *= 1000;
-  else if (m[2] === "m") n *= 1_000_000;
-  return Math.max(0, Math.round(n));
+  return Math.max(0, Math.round(parseNum(s)));
 }
 
 /** « 3,5 % » → 3.5. Renvoie 0 si illisible. */
@@ -43,8 +43,10 @@ export function parseEr(s: string | number | null | undefined): number {
   return m ? Math.max(0, parseFloat(m[1].replace(",", ".")) || 0) : 0;
 }
 
-/** Multiplicateur d'engagement SUR LES ABONNÉS (barème marché) : <1 % pénalisé, >8 % survalorisé. */
+/** Multiplicateur d'engagement SUR LES ABONNÉS (barème marché) : <1 % pénalisé, >8 % survalorisé.
+ *  Engagement inconnu (vide, 0) : neutre (×1), comme engMultViews, pas une pénalité. */
 export function engMult(er: number): number {
+  if (!(er > 0)) return 1;
   if (er < 1) return 0.7;
   if (er < 2) return 0.85;
   if (er < 3.5) return 1.0;
@@ -170,15 +172,21 @@ export function cpmViews(fmt: InfFormat): [number, number] {
 export type InfItem = { platform: PlatKey; format: string; qty: number; followers: number; er: number; views?: number; erBase?: "views" | "followers" };
 
 export type PricedItem = Range & {
-  /** Vues attendues par contenu, et si elles sont estimées (pas de vraies vues). */
+  /** Vues RETENUES par contenu, et si elles sont estimées (pas de vraies vues). */
   views: number;
   estimated: boolean;
+  /** Vraies vues ramenées au plafond (1,5 × les vues habituelles d'après les abonnés). */
+  capped: boolean;
   /** CPM vues appliqué (€ / 1000 vues), multiplicateurs, et la phrase d'explication. */
   cpm: [number, number];
   nicheM: number;
   engM: number;
   explain: string;
 };
+
+/** Plafond des vraies vues : 1,5 × les vues habituelles du format d'après les abonnés.
+ *  Une vidéo virale isolée ne doit pas faire tripler le prix de la suivante. */
+export const VIEWS_CAP = 1.5;
 
 const fmtK = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).replace(".0", "").replace(".", ",")}M` : n >= 1000 ? `${(n / 1000).toFixed(1).replace(".0", "").replace(".", ",")}K` : String(Math.round(n)));
 
@@ -188,17 +196,22 @@ export function infItemRange(item: InfItem, nicheM: number, rates?: RateOverride
   const f = Math.max(0, item.followers || 0);
   const q = Math.max(1, Math.round(item.qty || 1));
   const real = Math.max(0, item.views || 0);
-  const views = real > 0 ? real : fmt ? Math.round(f * fmt.rate) : 0;
-  const empty: PricedItem = { min: 0, max: 0, mid: 0, views, estimated: real <= 0, cpm: [0, 0], nicheM, engM: 1, explain: "" };
+  const usual = fmt ? Math.round(f * fmt.rate) : 0;
+  // Vraies vues plafonnées à 1,5 × l'habituel (seulement si les abonnés sont connus).
+  const cap = usual > 0 ? Math.round(usual * VIEWS_CAP) : 0;
+  const capped = real > 0 && cap > 0 && real > cap;
+  const views = real > 0 ? (capped ? cap : real) : usual;
+  const empty: PricedItem = { min: 0, max: 0, mid: 0, views, estimated: real <= 0, capped, cpm: [0, 0], nicheM, engM: 1, explain: "" };
   if (!fmt || views <= 0) return empty;
   const er = Math.max(0, item.er || 0);
   const em = item.erBase === "views" ? engMultViews(er) : engMult(er);
   const cpm = cpmViews(fmt);
   const unit = (c: number) => (views / 1000) * c * nicheM * em;
   const rng = asRange(unit(cpm[0]) * q, unit(cpm[1]) * q);
-  const explain = `${fmtK(views)} vues ${real > 0 ? "attendues" : "estimées"}${q > 1 ? ` × ${q}` : ""} × ${Math.round(cpm[0])}–${Math.round(cpm[1])} € / 1000 vues` +
+  const what = capped ? `vues retenues (vues plafonnées : ${fmtK(real)} mesurées, plafond 1,5 × l'habituel)` : real > 0 ? "vues attendues" : "vues estimées";
+  const explain = `${fmtK(views)} ${what}${q > 1 ? ` × ${q}` : ""} × ${Math.round(cpm[0])} à ${Math.round(cpm[1])} € / 1000 vues` +
     `${nicheM !== 1 ? ` × niche ${String(nicheM).replace(".", ",")}` : ""}${em !== 1 ? ` × engagement ${String(em).replace(".", ",")}` : ""}`;
-  return { ...rng, views, estimated: real <= 0, cpm, nicheM, engM: em, explain };
+  return { ...rng, views, estimated: real <= 0, capped, cpm, nicheM, engM: em, explain };
 }
 
 /** Exclusivité et droits d'usage : durées (anciennes cases à cocher acceptées). */
@@ -220,26 +233,68 @@ export type InfOptions = { exclusivite: boolean | string; droitsUsage: boolean |
 const pick = (list: { value: string; m: number }[], v: boolean | string, legacy: number) =>
   typeof v === "boolean" ? (v ? legacy : 0) : list.find((x) => x.value === v)?.m ?? 0;
 
-/** Package cross-plateforme : somme des livrables × options × (1 − remise). */
-export function computeInfluence(items: InfItem[], nicheM: number, opts: InfOptions, rates?: RateOverrides): Range & { addon: number; itemsPriced: (PricedItem & { item: InfItem })[] } {
+/**
+ * Total d'un devis, TRANSPARENT : somme des lignes affichées (déjà arrondies), puis
+ * options en € (+X %), puis remise en € (−Y %), chaque montant arrondi à l'euro.
+ * Le total est EXACTEMENT sous-total + options − remise : ce qu'affiche l'écran et ce
+ * que lit la marque dans la proposition copiée tombent juste, à l'euro près.
+ */
+export type QuoteTotals = Range & {
+  /** Somme des lignes. */
+  sub: Range;
+  /** Montant des options (en €) et leur pourcentage (arrondi). */
+  options: Range;
+  optionsPct: number;
+  /** Montant de la remise (en €, positif) et son pourcentage. */
+  discount: Range;
+  discountPct: number;
+};
+
+export function quoteTotals(lines: Range[], addon: number, remisePct = 0): QuoteTotals {
+  const d = Math.min(0.5, Math.max(0, (remisePct || 0) / 100));
+  const extra = Math.max(0, addon - 1);
+  const one = (k: keyof Range) => {
+    const sub = lines.reduce((s, r) => s + r[k], 0);
+    const opt = Math.round(sub * extra);
+    const disc = Math.round((sub + opt) * d);
+    return { sub, opt, disc, total: sub + opt - disc };
+  };
+  const [a, b, c] = [one("min"), one("max"), one("mid")];
+  return {
+    min: a.total, max: b.total, mid: c.total,
+    sub: { min: a.sub, max: b.sub, mid: c.sub },
+    options: { min: a.opt, max: b.opt, mid: c.opt },
+    optionsPct: Math.round(extra * 100),
+    discount: { min: a.disc, max: b.disc, mid: c.disc },
+    discountPct: Math.round(d * 100),
+  };
+}
+
+/** Package cross-plateforme : somme des livrables, + options, − remise (voir quoteTotals). */
+export function computeInfluence(items: InfItem[], nicheM: number, opts: InfOptions, rates?: RateOverrides): QuoteTotals & { addon: number; itemsPriced: (PricedItem & { item: InfItem })[] } {
   const itemsPriced = items.map((item) => ({ ...infItemRange(item, nicheM, rates), item }));
-  const sumMin = itemsPriced.reduce((s, r) => s + r.min, 0);
-  const sumMax = itemsPriced.reduce((s, r) => s + r.max, 0);
   // Pub depuis le compte de la créatrice (« whitelisting », Spark Ads, pubs partenaires) : +20 %.
   const addon = 1 + pick(EXCLUSIVITY, opts.exclusivite, 0.25) + pick(USAGE_RIGHTS, opts.droitsUsage, 0.3) + (opts.whitelisting ? 0.2 : 0);
-  const disc = 1 - Math.min(0.5, Math.max(0, (opts.remisePct || 0) / 100));
-  return { ...asRange(sumMin * addon * disc, sumMax * addon * disc), addon, itemsPriced };
+  return { ...quoteTotals(itemsPriced, addon, opts.remisePct), addon, itemsPriced };
 }
 
 /**
  * Bilan de campagne : ce que la marque a réellement payé par 1000 vues, par personne
  * touchée et par interaction. null quand la donnée manque (jamais de faux chiffre).
+ * `stats` (une ligne par contenu) : coût pour 1000 vues seulement si CHAQUE contenu a
+ * ses vues, coût pour 1000 personnes touchées seulement si CHACUN a sa couverture ;
+ * sinon le budget de toute la campagne serait divisé par les chiffres d'une partie.
  */
-export function campaignCosts(budget: number, t: { views: number; reach: number; interactions: number }) {
+export function campaignCosts(
+  budget: number | null,
+  t: { views: number; reach: number; interactions: number },
+  stats?: { views: number; reach: number }[],
+) {
   const b = Math.max(0, budget || 0);
+  const every = (f: (s: { views: number; reach: number }) => number) => !stats || (stats.length > 0 && stats.every((s) => f(s) > 0));
   return {
-    cpm: b > 0 && t.views > 0 ? (b / t.views) * 1000 : null,
-    cpmReach: b > 0 && t.reach > 0 ? (b / t.reach) * 1000 : null,
+    cpm: b > 0 && t.views > 0 && every((s) => s.views) ? (b / t.views) * 1000 : null,
+    cpmReach: b > 0 && t.reach > 0 && every((s) => s.reach) ? (b / t.reach) * 1000 : null,
     cpe: b > 0 && t.interactions > 0 ? b / t.interactions : null,
   };
 }
@@ -251,9 +306,9 @@ export type UgcType = { key: string; label: string; base: [number, number] };
 /** Forfaits UGC 2026 (€ par livrable, production incluant un montage simple). */
 export const UGC_TYPES: UgcType[] = [
   { key: "video_court", label: "Vidéo courte (≤ 30s)", base: [120, 280] },
-  { key: "video_long", label: "Vidéo longue (30–60s)", base: [180, 400] },
+  { key: "video_long", label: "Vidéo longue (30 à 60 s)", base: [180, 400] },
   { key: "photo", label: "Photo", base: [50, 130] },
-  { key: "carrousel", label: "Carrousel photos (3–5)", base: [120, 250] },
+  { key: "carrousel", label: "Carrousel photos (3 à 5)", base: [120, 250] },
   { key: "unboxing", label: "Unboxing / démo produit", base: [150, 320] },
   { key: "hook", label: "Hook / variante suppl.", base: [40, 90] },
 ];
@@ -279,16 +334,15 @@ export const ugcUsageMult = (v: string): number => UGC_USAGE.find((u) => u.value
 export type UgcItem = { type: string; qty: number };
 export type UgcOptions = { usage: string; exclusivite: boolean; rushes: boolean; montage: boolean; express: boolean };
 
-/** Package UGC : Σ(base × qté) × niveau × (1 + droits + options). */
-export function computeUgc(items: UgcItem[], levelM: number, opts: UgcOptions): Range & { addon: number; itemsPriced: (Range & { item: UgcItem })[] } {
+/** Package UGC : Σ(base × qté × niveau) par ligne, + droits et options (voir quoteTotals).
+ *  Le niveau est DANS chaque ligne : la somme des lignes affichées = le sous-total. */
+export function computeUgc(items: UgcItem[], levelM: number, opts: UgcOptions): QuoteTotals & { addon: number; itemsPriced: (Range & { item: UgcItem })[] } {
   const itemsPriced = items.map((item) => {
     const base = ugcBase(item.type);
     const q = Math.max(1, Math.round(item.qty || 1));
-    return base ? { ...asRange(base[0] * q, base[1] * q), item } : { min: 0, max: 0, mid: 0, item };
+    return base ? { ...asRange(base[0] * q * levelM, base[1] * q * levelM), item } : { min: 0, max: 0, mid: 0, item };
   });
-  const sumMin = itemsPriced.reduce((s, r) => s + r.min, 0);
-  const sumMax = itemsPriced.reduce((s, r) => s + r.max, 0);
   const addon =
     1 + ugcUsageMult(opts.usage) + (opts.exclusivite ? 0.25 : 0) + (opts.rushes ? 0.15 : 0) + (opts.montage ? 0.2 : 0) + (opts.express ? 0.2 : 0);
-  return { ...asRange(sumMin * levelM * addon, sumMax * levelM * addon), addon, itemsPriced };
+  return { ...quoteTotals(itemsPriced, addon), addon, itemsPriced };
 }

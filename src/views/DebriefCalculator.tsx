@@ -17,6 +17,9 @@ import {
   fmtPct,
   emptyStat,
   erVerdict,
+  allHaveReach,
+  singlePlatform,
+  GOOD_ER_REACH,
   type PostStat,
   type EngTotals,
 } from "@/lib/engagement";
@@ -233,14 +236,21 @@ export function DebriefCalculator({
   const stats = (mode === "global" ? rows.slice(0, 1) : rows).map(rowToStat);
   const override = mode === "global" ? parseNum(postsCount) : undefined;
   const t: EngTotals = totalsOf(stats, parseNum(followers), override);
-  const er = basis === "reach" ? t.erReach : t.erFollowers;
-  const verdict = erVerdict(t.erReach);
+  // Taux seulement sur une base homogène : couverture sur CHAQUE publication ; abonnés
+  // d'UN seul réseau (des abonnés Instagram ne valent pas pour une vidéo TikTok).
+  const reachOk = allHaveReach(stats);
+  const oneNetwork = !!singlePlatform(stats);
+  const erReach = reachOk ? t.erReach : null;
+  const erFollowers = oneNetwork ? t.erFollowers : null;
+  const er = basis === "reach" ? erReach : erFollowers;
+  const verdict = erVerdict(erReach);
   const hasData = t.reach > 0 || t.interactions > 0;
 
   const apply = () => {
     if (!hasData) return toast("Renseigne au moins la couverture ou les interactions");
     if (er === null) {
-      toast(basis === "followers" ? "Indique le nombre d'abonnés" : "Indique la couverture");
+      if (basis === "followers") toast(oneNetwork ? "Indique le nombre d'abonnés" : "Publications sur plusieurs réseaux : pas de taux global sur les abonnés");
+      else toast(t.reach > 0 && !reachOk ? "Couverture manquante sur au moins une publication : pas de taux sur la couverture" : "Indique la couverture");
       return;
     }
     onApply({ reach: t.reach > 0 ? fmtCompact(t.reach) : "", engagement: fmtPct(er) });
@@ -501,7 +511,7 @@ export function DebriefCalculator({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
             ["Publications", String(t.posts)],
-            ["Couverture", fmtCompact(t.reach)],
+            [t.posts > 1 ? "Couverture cumulée" : "Couverture", fmtCompact(t.reach)],
             ["Interactions", fmtCompact(t.interactions)],
             ["Vues", fmtCompact(t.views)],
           ].map(([l, v]) => (
@@ -516,8 +526,8 @@ export function DebriefCalculator({
         <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {(
             [
-              ["reach", "Sur la couverture", t.erReach, "interactions ÷ comptes touchés — le taux que regarde la marque"],
-              ["followers", "Sur les abonnés", t.erFollowers, "interactions par publication ÷ abonnés — le taux « media kit »"],
+              ["reach", "Sur la couverture", erReach, "interactions ÷ comptes touchés : le taux que regarde la marque (seulement si chaque publication a sa couverture)"],
+              ["followers", "Sur les abonnés", erFollowers, "interactions par publication ÷ abonnés : le taux « media kit » (seulement pour des publications d'un même réseau)"],
             ] as [ErBasis, string, number | null, string][]
           ).map(([b, label, val, hint]) => (
             <button
@@ -539,9 +549,15 @@ export function DebriefCalculator({
           ))}
         </div>
 
-        {verdict && t.erReach !== null && (
+        {verdict && erReach !== null && (
           <div className="mt-2 text-[10px] text-faint">
-            Repère : {verdict.label.toLowerCase()} — sur la couverture, le secteur situe un bon taux au-dessus de 4 %.
+            Repère : {verdict.label.toLowerCase()}. Sur la couverture, le secteur situe un bon taux au-dessus de {GOOD_ER_REACH} %.
+          </div>
+        )}
+        {mode === "detail" && (!oneNetwork || (t.reach > 0 && !reachOk)) && (
+          <div className="mt-2 text-[10px] text-faint">
+            {!oneNetwork ? "Publications sur plusieurs réseaux : pas de taux global sur les abonnés. " : ""}
+            {t.reach > 0 && !reachOk ? "Couverture manquante sur au moins une publication : pas de taux sur la couverture." : ""}
           </div>
         )}
 

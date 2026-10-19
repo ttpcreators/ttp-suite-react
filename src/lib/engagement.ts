@@ -70,7 +70,13 @@ export const emptyStat = (id: string, kind = "Reel"): PostStat => ({
 export function parseNum(input: string | number | null | undefined): number {
   if (typeof input === "number") return Number.isFinite(input) ? input : 0;
   if (!input) return 0;
-  const raw = String(input).trim().toLowerCase();
+  // Tolère « ~12k », « ≈ 12 000 », « +12k » et un mot après le nombre (« 45K abonnés »).
+  const raw = String(input)
+    .trim()
+    .toLowerCase()
+    .replace(/^[~≈≃+\s]+/, "")
+    .replace(/\s+[a-zà-ÿ]{2,}\.?$/, "")
+    .trim();
   if (!raw) return 0;
   // Suffixe multiplicateur K / M (accepté collé ou espacé : « 480k », « 1,2 M »).
   const m = /^([\d\s.,  ]+)\s*([km])?$/.exec(raw);
@@ -134,6 +140,47 @@ export function totalsOf(stats: PostStat[], followers = 0, postsOverride?: numbe
   };
 }
 
+// ───────────── Taux global : seulement sur une base HOMOGÈNE ─────────────
+
+export type EngPlatform = "instagram" | "tiktok" | "youtube";
+
+/** Réseau d'une publication d'après son type (« TikTok », « Short », « YouTube » ; le reste = Instagram). */
+export function platformOfKind(kind: string): EngPlatform {
+  const k = (kind || "").toLowerCase();
+  if (k.includes("tiktok")) return "tiktok";
+  if (k.includes("short") || k.includes("youtube")) return "youtube";
+  return "instagram";
+}
+
+/** Couverture connue sur CHAQUE publication (TikTok et YouTube n'en donnent pas). */
+export function allHaveReach(stats: PostStat[]): boolean {
+  return stats.length > 0 && stats.every((s) => s.reach > 0);
+}
+
+/** Le réseau commun à toutes les publications, ou null si elles en mélangent plusieurs. */
+export function singlePlatform(stats: PostStat[]): EngPlatform | null {
+  const set = new Set(stats.map((s) => platformOfKind(s.kind)));
+  return set.size === 1 ? [...set][0] : null;
+}
+
+/**
+ * Taux d'engagement global d'une campagne, calculé SEULEMENT sur une base homogène :
+ *  1. chaque publication a une couverture → taux sur la couverture ;
+ *  2. sinon, toutes sur UN seul réseau et ses abonnés connus → taux sur les abonnés DE CE réseau ;
+ *  3. sinon → pas de taux global (null). Diviser des interactions TikTok par des abonnés
+ *     Instagram donnait des taux 4 à 5 fois trop hauts.
+ */
+export function reliableEr(
+  stats: PostStat[],
+  followersBy: Partial<Record<EngPlatform, number>>,
+): { er: number | null; basis: "reach" | "followers" | null; followers: number } {
+  if (allHaveReach(stats)) return { er: totalsOf(stats).erReach, basis: "reach", followers: 0 };
+  const p = singlePlatform(stats);
+  const fol = p ? Math.max(0, followersBy[p] || 0) : 0;
+  if (p && fol > 0) return { er: totalsOf(stats, fol).erFollowers, basis: "followers", followers: fol };
+  return { er: null, basis: null, followers: 0 };
+}
+
 /** Grands nombres : même règle partout (« 1,3K », « 480K », « 1,2M », « 1Md »), voir timeSeries. */
 export { fmtCompact } from "./timeSeries";
 
@@ -148,6 +195,14 @@ function trimZeros(s: string): string {
 }
 
 /**
+ * Seuils « bon taux » : UNE seule source pour toute l'app (repère du calculateur, bilan
+ * automatique, proposition de renouvellement). Ordres de grandeur usuels du secteur,
+ * indicatifs : ~4 % sur la couverture, ~3 % sur les abonnés.
+ */
+export const GOOD_ER_REACH = 4;
+export const GOOD_ER_FOLLOWERS = 3;
+
+/**
  * Repère de lecture du taux d'engagement (base couverture). Sert à afficher un avis
  * honnête à côté du chiffre plutôt que de laisser l'utilisateur deviner si c'est bon.
  * Ordres de grandeur usuels du secteur — indicatifs, pas une vérité absolue.
@@ -155,7 +210,7 @@ function trimZeros(s: string): string {
 export function erVerdict(er: number | null): { label: string; tone: "good" | "ok" | "low" } | null {
   if (er === null) return null;
   if (er >= 8) return { label: "Excellent", tone: "good" };
-  if (er >= 4) return { label: "Bon", tone: "good" };
+  if (er >= GOOD_ER_REACH) return { label: "Bon", tone: "good" };
   if (er >= 2) return { label: "Correct", tone: "ok" };
   return { label: "Faible", tone: "low" };
 }

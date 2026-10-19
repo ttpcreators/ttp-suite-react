@@ -6,7 +6,7 @@
  * (totalsOf : commission sur le HT, rien sous le seuil).
  */
 import { totalsOf, type LineItem } from "./invoice";
-import { parseAmount, formatEuro } from "./money";
+import { parseAmount, parseAmountStrict, formatEuro } from "./money";
 import { toISODate } from "./dates";
 import { DEFAULT_COMMISSION, parseCommissionPct } from "./commission";
 import { fmtCompact } from "./timeSeries";
@@ -153,8 +153,12 @@ export function buildMonthlyReport(data: ReportData, month: string, now = new Da
   // ── Ce que l'agence t'a apporté (phrases simples, seulement ce qui existe).
   const agency: string[] = [];
   if (newCollabs.length) {
-    const total = newCollabs.reduce((s, c) => s + parseAmount(c.cachet), 0);
-    agency.push(`${newCollabs.length} nouvelle${newCollabs.length > 1 ? "s" : ""} collab${newCollabs.length > 1 ? "s" : ""} décrochée${newCollabs.length > 1 ? "s" : ""} et négociée${newCollabs.length > 1 ? "s" : ""} pour toi (${newCollabs.map((c) => c.brand).join(", ")})${total ? `, pour ${formatEuro(Math.round(total))} de cachets` : ""}`);
+    // Cachet ambigu (« 800 € x 2 ») ou illisible : ignoré dans le total, jamais un nombre
+    // faux. S'il en manque, le total devient un minimum (« au moins »).
+    const amounts = newCollabs.map((c) => parseAmountStrict(c.cachet));
+    const total = amounts.reduce<number>((s, a) => s + (a ?? 0), 0);
+    const partial = amounts.some((a) => a === null);
+    agency.push(`${newCollabs.length} nouvelle${newCollabs.length > 1 ? "s" : ""} collab${newCollabs.length > 1 ? "s" : ""} décrochée${newCollabs.length > 1 ? "s" : ""} et négociée${newCollabs.length > 1 ? "s" : ""} pour toi (${newCollabs.map((c) => c.brand).join(", ")})${total ? `, pour ${partial ? "au moins " : ""}${formatEuro(Math.round(total))} de cachets` : ""}`);
   }
   if (earnings.share) agency.push(`${formatEuro(earnings.share)} facturés et suivis pour toi : devis, factures et relances, tu n'as rien eu à gérer`);
   if (published.length) agency.push(`${published.length} campagne${published.length > 1 ? "s" : ""} publiée${published.length > 1 ? "s" : ""} et suivie${published.length > 1 ? "s" : ""} jusqu'au bilan envoyé à la marque`);
