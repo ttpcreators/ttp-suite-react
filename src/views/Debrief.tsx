@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pencil, Share2, Download, LayoutGrid, List, Table2, Trash2, Send, Eye, X, FileText, Activity } from "lucide-react";
+import { Pencil, Share2, Download, LayoutGrid, List, Table2, Trash2, Send, Eye, X, FileText, Activity, Sparkles } from "lucide-react";
 import { FileCard } from "@/components/ui/file-card-collections";
 import {
   useAppState,
@@ -27,6 +27,8 @@ import { campaignCosts } from "@/lib/pricing";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { buildRecap, publicationDate, readyForRecap, type CollabForRecap, type StepRow } from "@/lib/campaignRecap";
+import { dbUpdate } from "@/lib/db";
 
 /** Une petite statistique de campagne (label / valeur). */
 type Kpi = { l: string; v: string };
@@ -63,6 +65,10 @@ type Debrief = {
   highlights: string[];
   /** Saisie du calculateur d'engagement + captures jointes (optionnel : blobs legacy). */
   calc?: CalcState;
+  /** Proposition de renouvellement adressée à la marque (fin du bilan). */
+  renewal?: string;
+  /** Collab d'origine (bilan préparé automatiquement à J+7). */
+  collabId?: string;
 };
 
 /** Formate un debrief en texte lisible (partage / téléchargement). */
@@ -85,6 +91,11 @@ function debriefToText(d: Debrief): string {
     lines.push("");
     lines.push("Indicateurs :");
     d.kpis.forEach((k) => lines.push(`  • ${kpiLabel(k.l)} : ${k.v}`));
+  }
+  if (d.renewal?.trim()) {
+    lines.push("");
+    lines.push("Et ensuite ?");
+    lines.push(d.renewal.trim());
   }
   lines.push("");
   lines.push("— TTP Suite · Trust the Process");
@@ -152,6 +163,7 @@ function debriefHTML(d: Debrief, shotUrls: Record<string, string> = {}): string 
     (d.summary && d.summary !== "—" ? `<p style="margin:16px 0;font-size:14px;line-height:1.6;color:#222">${escHtml(d.summary)}</p>` : "") +
     (kpis.length ? `<table style="width:100%;border-collapse:collapse;margin:8px 0">${kpiRows}</table>` : "") +
     (highlights ? `<div style="margin-top:16px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8a8a8a;margin-bottom:6px">Points forts</div>${highlights}</div>` : "") +
+    (d.renewal?.trim() ? `<div style="margin-top:18px;border-radius:12px;background:#f7f3ee;padding:14px 16px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:${burgundy};margin-bottom:6px;font-weight:700">Et ensuite ?</div><div style="font-size:14px;line-height:1.6;color:#222">${escHtml(d.renewal.trim())}</div></div>` : "") +
     shotsBlock +
     `</div>` +
     `<div style="border-top:1px solid #ececec;padding:16px 26px;font-size:12px;color:#8a8a8a">TTP Creators · Trust the Process · partnerships@ttpcreators.pro · ttpcreators.pro</div>` +
@@ -181,6 +193,7 @@ function debriefPdfHTML(d: Debrief, shotUrls: Record<string, string> = {}): stri
     (d.summary && d.summary !== "—" ? pdfSection("Synthèse", `<p class="lede">${escHtml(d.summary)}</p>`) : "") +
     (d.kpis.length ? pdfSection("Indicateurs", pdfKpis(d.kpis.map((k) => ({ ...k, l: kpiLabel(k.l) })))) : "") +
     (d.highlights.length ? pdfSection("Points forts", pdfTicks(d.highlights)) : "") +
+    (d.renewal?.trim() ? pdfSection("Et ensuite ?", `<p class="lede">${escHtml(d.renewal.trim())}</p>`) : "") +
     (shots.length ? pdfSection("Captures des statistiques", pdfShots(shots)) : "");
   return pdfShell({
     title: `Debrief ${d.brand}${d.creator ? " x " + titleCase(d.creator) : ""}`,
@@ -258,7 +271,22 @@ export function Debrief() {
   const [ventes, setVentes] = useState("");
   const [highlightsText, setHighlightsText] = useState("");
   const [calc, setCalc] = useState<CalcState>(CALC_EMPTY);
+  const [renewal, setRenewal] = useState("");
+  const [fromCollab, setFromCollab] = useState<string | null>(null); // bilan préparé depuis une collab
 
+  // Bilans automatiques : collabs publiées depuis 7 jours, pas encore débriefées.
+  const [recapCollabs, setRecapCollabs] = useState<(CollabForRecap & { pub: string | null })[]>([]);
+  useEffect(() => {
+    void (async () => {
+      const { data: cols } = await supabase.from("collabs").select("id, brand, creator, deliverables, cachet, step, status, created_at, ig, tt, yt")
+        .in("step", [6, 7]).neq("status", "archivee").limit(200);
+      const list = (cols as (CollabForRecap & { status: string })[] | null) ?? [];
+      if (!list.length) return setRecapCollabs([]);
+      const { data: st } = await supabase.from("collab_steps").select("collab_id, step, reached_at").in("collab_id", list.map((c) => c.id)).gte("step", 6);
+      const steps = (st as StepRow[] | null) ?? [];
+      setRecapCollabs(list.map((c) => ({ ...c, pub: publicationDate(c, steps) })).filter((c) => readyForRecap(c.pub)));
+    })();
+  }, []);
   // Partage à la marque (email)
   const [shareD, setShareD] = useState<Debrief | null>(null);
   const [shareTo, setShareTo] = useState("");
@@ -288,6 +316,8 @@ export function Debrief() {
     setVentes("");
     setHighlightsText("");
     setCalc(CALC_EMPTY);
+    setRenewal("");
+    setFromCollab(null);
     setEditIndex(null);
   }
   const kpiVal = (d: Debrief, label: string) => d.kpis.find((k) => k.l.toLowerCase().startsWith(label.toLowerCase().slice(0, 5)))?.v ?? "";
@@ -321,7 +351,36 @@ export function Debrief() {
     setVentes(kpiVal(d, "Ventes"));
     setHighlightsText(d.highlights.join("\n"));
     setCalc(normCalc(d.calc));
+    setRenewal(d.renewal ?? "");
+    setFromCollab(d.collabId ?? null);
     setFormOpen(true);
+  }
+
+  // Bilan pré-rempli à partir des chiffres d'une collab publiée depuis 7 jours.
+  async function prepareFromCollab(c: CollabForRecap & { pub: string | null }) {
+    resetForm();
+    const cr = creators.find((x) => x.name.toLowerCase() === (c.creator ?? "").toLowerCase());
+    let followers = 0;
+    if (cr) {
+      const { data } = await supabase.from("creators").select("followers, ig").eq("id", cr.id).maybeSingle();
+      const row = data as { followers?: string | null; ig?: { followers?: number } | null } | null;
+      followers = row?.ig?.followers || engParse(String(row?.followers ?? "")) || 0;
+    }
+    const r = buildRecap(c, c.pub, followers);
+    setBrand(c.brand);
+    setCreator(cr?.name ?? c.creator ?? "");
+    setPeriod(r.period);
+    setBudget(r.budget);
+    setDeliverables(r.deliverables);
+    setSummary(r.summary);
+    setReach(r.reach);
+    setEngagement(r.engagement);
+    setHighlightsText(r.highlights.join("\n"));
+    setRenewal(r.renewal);
+    setCalc({ ...CALC_EMPTY, mode: "detail", stats: r.stats, followers: followers ? String(followers) : "", basis: r.basis });
+    setFromCollab(c.id);
+    setFormOpen(true);
+    toast("Bilan pré-rempli avec les chiffres des posts : vérifie, complète le CA, puis enregistre");
   }
 
   async function save() {
@@ -365,6 +424,8 @@ export function Debrief() {
       kpis,
       highlights,
       calc,
+      renewal: renewal.trim() || undefined,
+      collabId: fromCollab ?? original?.collabId,
     };
     // Relecture FRAÎCHE + fusion par signature (le tableau est partagé entre postes).
     // Le formulaire ne se ferme qu'une fois l'écriture réussie (sinon la saisie reste).
@@ -385,6 +446,12 @@ export function Debrief() {
         return;
       }
       setLocal(next);
+      // Bilan d'une collab : elle passe à l'étape « Statistiques à sept jours » si elle n'y est pas encore.
+      if (fromCollab) {
+        const c = recapCollabs.find((x) => x.id === fromCollab);
+        if (c && c.step < 7) void dbUpdate("collabs", c.id, { step: 7 });
+        setRecapCollabs((xs) => xs.filter((x) => x.id !== fromCollab));
+      }
       resetForm();
       setFormOpen(false);
       if (!wasEdit && built.creator) notifyCreator("debrief", built.creator, built.brand); // push au créateur à la création
@@ -628,7 +695,53 @@ export function Debrief() {
             className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
           />
         </label>
+        <label className="flex min-w-full flex-col gap-1.5">
+          <span className="text-[11px] font-medium text-muted-foreground">Et ensuite ? Proposition de renouvellement (fin du bilan, facultatif)</span>
+          <textarea
+            value={renewal}
+            onChange={(e) => setRenewal(e.target.value)}
+            rows={3}
+            placeholder="Nous vous proposons de prolonger le partenariat sur trois mois…"
+            className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+          />
+        </label>
       </InlineForm>
+
+      {/* Bilans prêts : collabs publiées depuis 7 jours, chiffres disponibles */}
+      {(() => {
+        // Déjà débriefée : bilan lié à la collab, ou bilan saisi à la main pour la même marque et le même créateur.
+        const pair = (b: string | null, c: string | null) => `${brandKey(b)}|${(c ?? "").toLowerCase().trim()}`;
+        const done = new Set(list.flatMap((d) => (d.collabId ? [d.collabId] : [pair(d.brand, d.creator)])));
+        const ready = recapCollabs.filter((c) => !done.has(c.id) && !done.has(pair(c.brand, c.creator)));
+        if (!ready.length) return null;
+        return (
+          <div className="mb-4 rounded-2xl border border-border bg-foreground/[0.06] p-4">
+            <div className="mb-1 flex items-center gap-2 text-[13px] font-semibold text-primary">
+              <Sparkles className="h-4 w-4 shrink-0" /> {ready.length} bilan{ready.length > 1 ? "s" : ""} prêt{ready.length > 1 ? "s" : ""} à préparer
+            </div>
+            <p className="mb-2.5 text-[12px] text-muted-foreground">Collabs publiées depuis 7 jours : le bilan se remplit tout seul avec les chiffres des posts, et se termine par une proposition de renouvellement.</p>
+            <div className="flex flex-col gap-2">
+              {ready.map((c) => {
+                const posts = (c.ig?.posts?.length ?? 0) + (c.tt?.posts?.length ?? 0) + (c.yt?.posts?.length ?? 0);
+                return (
+                  <div key={c.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3.5 py-2.5">
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-semibold text-foreground">{c.brand} × {titleCase(c.creator ?? "")}</div>
+                      <div className="truncate text-[11px] text-faint">
+                        Publiée le {c.pub ? new Date(c.pub).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : "?"} · {posts ? `${posts} contenu${posts > 1 ? "s" : ""} repéré${posts > 1 ? "s" : ""}` : "aucun contenu repéré (chiffres à saisir)"}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => void prepareFromCollab(c)}
+                      className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+                      Préparer le bilan
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Rappel : campagnes (briefs) terminées sans débrief → à débriefer */}
       {needsDebrief.length > 0 && (
