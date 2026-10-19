@@ -13,7 +13,7 @@ const NOUN: Record<string, [string, string]> = {
   ideas: ["une idée", "l'idée"],
   events: ["un évènement", "l'évènement"],
   contacts: ["un contact", "le contact"],
-  creators: ["une créatrice", "la créatrice"],
+  creators: ["un créateur", "le créateur"],
   collabs: ["une collab", "la collab"],
   briefs: ["un brief", "le brief"],
   invoices: ["une facture", "la facture"],

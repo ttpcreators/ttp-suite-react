@@ -50,7 +50,21 @@ const int = (v: unknown, def: number, min: number, max: number) => {
   const n = Number(v);
   return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : def;
 };
-const like = (s: string) => `%${s.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+const esc = (s: string) => s.replace(/[%_\\]/g, (c) => `\\${c}`);
+const like = (s: string) => `%${esc(s)}%`;
+/** Motif ilike EXACT (insensible à la casse) : un « _ » dans un nom ne sert pas de joker. */
+const exact = esc;
+
+/** Nom officiel d'un créateur du roster (tel qu'en base) : exact d'abord, sinon partiel unique. */
+async function rosterName(sb: SupabaseClient, n: string): Promise<{ name: string } | { error: string }> {
+  const { data: same, error } = await sb.from("creators").select("name").ilike("name", exact(n)).limit(1);
+  if (error) return { error: `Lecture du roster impossible : ${error.message}` };
+  if (same?.[0]) return { name: String((same[0] as Json).name) };
+  const { data: part } = await sb.from("creators").select("name").ilike("name", like(n)).limit(3);
+  const list = (part as Json[] | null) ?? [];
+  if (list.length === 1) return { name: String(list[0].name) };
+  return { error: list.length ? `Plusieurs créateurs correspondent à « ${n} » : ${list.map((x) => titleCase(String(x.name))).join(", ")}. Précise le nom.` : `Aucun créateur du roster ne correspond à « ${n} ».` };
+}
 const orLike = (cols: string[], q: string) => cols.map((c) => `${c}.ilike.${JSON.stringify(like(q))}`).join(",");
 const ok = (text: string): ToolResult => ({ text });
 const fail = (text: string): ToolResult => ({ text, isError: true });
@@ -64,14 +78,16 @@ const COLLAB_STEPS = [
 const SCOUT_STATUS: Record<string, string> = { observation: "En observation", contacter: "À contacter", discussion: "En discussion", signe: "Signé", ecarte: "Pas intéressé" };
 const INVOICE_STATUS: Record<string, string> = { brouillon: "Brouillon", attente: "En attente", retard: "En retard", payee: "Payée", annulee: "Annulée" };
 
+// FAIL-CLOSED : une lecture ratée ou illisible lève une erreur. Renvoyer {} ferait
+// réécrire une clé entière à partir de rien (ex. tout le suivi du scouting effacé).
 async function appState(sb: SupabaseClient): Promise<Json> {
-  const { data } = await sb.from("module_rows").select("a").eq("module", "__app_state__").order("created_at", { ascending: false }).limit(1);
-  try {
-    const o = JSON.parse((data?.[0] as { a?: string } | undefined)?.a ?? "{}");
-    return o && typeof o === "object" ? o : {};
-  } catch {
-    return {};
-  }
+  const { data, error } = await sb.from("module_rows").select("a").eq("module", "__app_state__").order("created_at", { ascending: false }).limit(1);
+  if (error) throw new Error(`lecture des réglages impossible (${error.message})`);
+  const raw = (data?.[0] as { a?: string } | undefined)?.a;
+  if (!raw) return {};
+  const o = JSON.parse(raw);
+  if (!o || typeof o !== "object") throw new Error("réglages illisibles");
+  return o;
 }
 
 // ── Lecture ────────────────────────────────────────────────────────────────
@@ -90,6 +106,8 @@ const pointDuJour: Tool = {
       sb.from("collabs").select("brand, creator, step, updated_at").eq("status", "active").lt("updated_at", new Date(Date.now() - 7 * 86400000).toISOString()).order("updated_at").limit(10),
       ctx.founder ? sb.from("invoices").select("ref, party, amount, date, status").in("status", ["retard", "attente"]).limit(50) : Promise.resolve({ data: [] }),
     ]);
+    const bad = [ev, todos, dms, collabs, inv].find((r) => (r as { error?: { message: string } | null }).error);
+    if (bad) return fail(`Lecture impossible (${(bad as { error: { message: string } }).error.message}) : réessaie dans un instant.`);
     const mails = await unreadCounts(sb).catch(() => []);
     const evs = (ev.data as Json[] | null) ?? [];
     const late = ((inv.data as Json[] | null) ?? []).filter((r) => r.status === "retard" || (/^\d{4}-\d{2}-\d{2}/.test(String(r.date)) && String(r.date) < today));
@@ -172,17 +190,23 @@ const ficheCreateur: Tool = {
   inputSchema: { type: "object", properties: { nom: { type: "string", description: "Nom du créateur (même partiel)" } }, required: ["nom"], additionalProperties: false },
   run: async (sb, ctx, a) => {
     const n = str(a.nom, 80);
-    const { data: list } = await sb.from("creators").select("*").ilike("name", like(n)).limit(2);
+    const found = await rosterName(sb, n);
+    if ("error" in found) return fail(found.error);
+    const { data: list, error: cErr } = await sb.from("creators").select("*").eq("name", found.name).limit(1);
+    if (cErr) return fail(`Lecture impossible : ${cErr.message}`);
     const c = (list as Json[] | null)?.[0];
     if (!c) return fail(`Aucun créateur du roster ne correspond à « ${n} ».`);
     const name = String(c.name);
+    const pat = exact(name);
     const today = isoDay();
     const [col, ev, td, inv] = await Promise.all([
-      sb.from("collabs").select("id, brand, step, status, cachet, deliverables").ilike("creator", name).neq("status", "archivee").order("updated_at", { ascending: false }).limit(15),
-      sb.from("events").select("date, time, title, type").ilike("who", name).gte("date", today).eq("deleted", false).order("date").limit(10),
-      sb.from("todos").select("text, due, priority").ilike("creator", name).eq("done", false).limit(15),
-      ctx.founder ? sb.from("invoices").select("ref, party, amount, date, status").ilike("creator", name).order("created_at", { ascending: false }).limit(10) : Promise.resolve({ data: [] }),
+      sb.from("collabs").select("id, brand, step, status, cachet, deliverables").ilike("creator", pat).neq("status", "archivee").order("updated_at", { ascending: false }).limit(15),
+      sb.from("events").select("date, time, title, type").ilike("who", pat).gte("date", today).eq("deleted", false).order("date").limit(10),
+      sb.from("todos").select("text, due, priority").ilike("creator", pat).eq("done", false).limit(15),
+      ctx.founder ? sb.from("invoices").select("ref, party, amount, date, status").ilike("creator", pat).order("created_at", { ascending: false }).limit(10) : Promise.resolve({ data: [] }),
     ]);
+    const badF = [col, ev, td, inv].find((r) => (r as { error?: unknown }).error);
+    if (badF) return fail("Lecture impossible : réessaie dans un instant.");
     const ig = c.ig as Json | null;
     const tt = c.tt as Json | null;
     const yt = c.yt as Json | null;
@@ -425,10 +449,17 @@ const creerTache: Tool = {
     const titre = str(a.titre, 200);
     if (!titre) return fail("Titre manquant.");
     const due = /^\d{4}-\d{2}-\d{2}$/.test(str(a.echeance)) ? str(a.echeance) : null;
+    // Nom officiel du roster : l'app et la RLS comparent le nom EXACT (sinon tâche invisible chez le créateur).
+    let who: string | null = null;
+    if (str(a.createur)) {
+      const found = await rosterName(sb, str(a.createur, 80));
+      if ("error" in found) return fail(found.error);
+      who = found.name;
+    }
     const { data: top } = await sb.from("todos").select("sort_order").order("sort_order", { ascending: true }).limit(1);
     const order = ((top as { sort_order: number }[] | null)?.[0]?.sort_order ?? 0) - 1;
     const { error } = await sb.from("todos").insert({
-      text: titre, descr: str(a.details, 2000) || null, due: due ?? "—", creator: str(a.createur, 80).toLowerCase() || null,
+      text: titre, descr: str(a.details, 2000) || null, due: due ?? "—", creator: who,
       priority: ["haute", "moyenne", "basse"].includes(str(a.priorite)) ? str(a.priorite) : "moyenne",
       source: "agency", status: "À faire", sort_order: order, tag: ctx.name ? `Claude · ${ctx.name}` : "Claude",
     });
@@ -458,9 +489,15 @@ const creerEvenement: Tool = {
     const date = str(a.date);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("Date attendue au format AAAA-MM-JJ.");
     const time = /^\d{2}:\d{2}$/.test(str(a.heure)) ? str(a.heure) : "";
+    let who: string | null = null;
+    if (str(a.createur)) {
+      const found = await rosterName(sb, str(a.createur, 80));
+      if ("error" in found) return fail(found.error);
+      who = found.name;
+    }
     const { error } = await sb.from("events").insert({
       date, time, title: str(a.titre, 200), type: ["call", "reunion", "collab", "shoot", "event", "voyage", "deadline"].includes(str(a.type)) ? str(a.type) : "call",
-      who: str(a.createur, 80).toLowerCase() || null, description: str(a.details, 2000) || null, source: "agency", sync_source: "agence",
+      who, description: str(a.details, 2000) || null, source: "agency", sync_source: "agence",
     });
     if (error) return fail(`Rendez-vous non créé : ${error.message}`);
     try {
@@ -774,6 +811,7 @@ const memoireCreateur: Tool = {
   title: "Mémoire d'un créateur",
   description: "Ce que l'agence sait d'un créateur au-delà des chiffres : anniversaire, projets, voyages, objectifs, préférences de tournage, disponibilités. Avec « info », ajoute une nouvelle note (jamais de santé ni de vie privée).",
   founder: true,
+  write: true, // ajoute une note quand « info » est fourni : Claude demande l'accord
   inputSchema: {
     type: "object",
     properties: {

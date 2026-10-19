@@ -28,6 +28,9 @@ import { accountTotals, audience, freshToken, loginReady, postInsights, recentRe
 import { citesHandle } from "../_shared/mentions.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
+// Motif ilike EXACT : « _ » et « % » d'un nom ne servent pas de jokers.
+const exactName = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
+
 type Json = Record<string, unknown>;
 type CreatorRow = { id: string; name: string; handle: string | null; platform: string | null; instagram: string | null; status: string | null; mediakit: Json | null; ig: Json | null };
 type CollabRow = { id: string; brand: string; creator: string | null; step: number; status: string; created_at: string; ig: Json | null };
@@ -340,7 +343,7 @@ Deno.serve(async (req: Request) => {
   if (body.scope === "collab" && id) {
     const { data: col, error } = await sb.from("collabs").select(COLLAB_COLS).eq("id", id).maybeSingle<CollabRow>();
     if (error || !col) return res({ error: error ? "migration_manquante" : "introuvable" }, error ? 500 : 404);
-    const { data: cs } = await sb.from("creators").select(CREATOR_COLS).ilike("name", (col.creator ?? "").trim() || "∅");
+    const { data: cs } = await sb.from("creators").select(CREATOR_COLS).ilike("name", exactName((col.creator ?? "").trim()) || "∅");
     const ig = await syncCollab(ctx, col, ((cs as CreatorRow[] | null) ?? [])[0]);
     return res({ ig, stopped: ctx.stop || undefined, quota: await saveUsage(sb) });
   }

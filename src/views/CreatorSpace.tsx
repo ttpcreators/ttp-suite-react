@@ -691,16 +691,19 @@ export function CreatorSpace({
   }, [name, live]);
 
   const firstName = titleCase(name).split(" ")[0];
-  // Media kit public de la créatrice. Le site génère une page pour CHAQUE créatrice :
-  // slug = champ « Lien » s'il est rempli, sinon le prénom — même règle exacte que le
-  // build du site (minuscule, sans accent, non-alphanum → tiret). On n'affiche le lien
-  // que si la page répond réellement (HEAD 200) : une créatrice tout juste créée, pas
-  // encore générée par le build horaire, voit « Bientôt disponible » et non un lien mort.
+  // Media kit public du créateur : adresse construite UNIQUEMENT depuis le slug
+  // enregistré (champ « Lien », même règle que le build du site : minuscule, sans
+  // accent, non-alphanum → tiret). Plus de repli sur le prénom : il pouvait ouvrir le
+  // kit d'un autre créateur du même prénom. On n'affiche le lien que si la page répond
+  // réellement (HEAD 200) : un kit pas encore généré par le build horaire n'affiche
+  // pas de lien mort.
   const slugify = (s: string) =>
     (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
       .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  const mkSlug = slugify((creator?.mediakit?.slug ?? "").trim() || firstName) || null;
+  const mkSlug = slugify((creator?.mediakit?.slug ?? "").trim()) || null;
   const mkUrl = mkSlug ? `https://ttpcreators.pro/mediakit/${mkSlug}/` : null;
+  // Fiche chargée mais aucun slug enregistré : le media kit n'est pas encore publié.
+  const mkUnpublished = !!creator && !mkSlug;
   const [mkLive, setMkLive] = useState<boolean | null>(null); // null = vérification en cours
   useEffect(() => {
     if (!mkUrl) { setMkLive(false); return; }
@@ -1234,7 +1237,7 @@ export function CreatorSpace({
 
   const saveInfos = async () => {
     if (!creator) return;
-    const patch = {
+    const patch: Partial<Creator> = {
       ville: (form.ville ?? "").trim(),
       phone: (form.phone ?? "").trim(),
       email: (form.email ?? "").trim(),
@@ -1250,6 +1253,9 @@ export function CreatorSpace({
       // ca/commission/status/exclu NON envoyés : colonnes agence (CA calculé depuis
       // les factures). Verrouillées aussi côté base par le trigger creators_guard.
     };
+    // Date de naissance legacy en texte libre illisible (« 12 mars 1998 ») : le champ
+    // date arrive vide (toISODate a renvoyé "") → on la PRÉSERVE au lieu de l'effacer.
+    if (!patch.birth && creator.birth && !toISODate(creator.birth)) delete patch.birth;
     if (!(await dbUpdate("creators", creator.id, patch))) {
       toast("Erreur — réessaie");
       return;
@@ -1821,7 +1827,22 @@ export function CreatorSpace({
                         </Suspense>
                       ) : (
                         <div className="grid h-[180px] place-items-center rounded-xl border border-dashed border-border px-4 text-center text-[12px] text-faint">
-                          {mySuivi === null ? "Chargement…" : "La courbe apparaîtra dès que ton agence aura enregistré 2 relevés d'abonnés."}
+                          {mySuivi === null && suiviErr ? (
+                            // creator-history en échec : on le dit (sinon « Chargement… » à vie) + Réessayer.
+                            <div>
+                              Ton évolution n'a pas pu être récupérée.
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSuiviErr(false);
+                                  setSuiviRetry((n) => n + 1);
+                                }}
+                                className="mx-auto mt-2 block rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                              >
+                                Réessayer
+                              </button>
+                            </div>
+                          ) : mySuivi === null ? "Chargement…" : "La courbe apparaîtra dès que ton agence aura enregistré 2 relevés d'abonnés."}
                         </div>
                       )}
                     </div>
@@ -1894,7 +1915,7 @@ export function CreatorSpace({
                   <div className="border-t border-border px-5 py-5">
                     <div className="text-[13px] text-muted-foreground">Mon media kit</div>
                     <div className="mt-1 text-[12px] text-faint">
-                      {mkLive === true ? "Ta page publique, à partager aux marques." : mkLive === null ? "Vérification de ta page…" : "En préparation avec ton agence."}
+                      {mkUnpublished ? "Ton media kit n'est pas encore publié." : mkLive === true ? "Ta page publique, à partager aux marques." : mkLive === null ? "Vérification de ta page…" : "En préparation avec ton agence."}
                     </div>
                     {mkLive === true && mkUrl && (
                       <div className="mt-3 flex items-center gap-2">
@@ -2860,11 +2881,13 @@ export function CreatorSpace({
                 <div className="min-w-0">
                   <div className="text-sm font-semibold">Mon media kit</div>
                   <div className="mt-0.5 text-[11px] text-faint">
-                    {mkLive === true
-                      ? "Ta page publique — à partager aux marques"
-                      : mkLive === null
-                        ? "Vérification de ta page…"
-                        : "En préparation avec ton agence"}
+                    {mkUnpublished
+                      ? "Ton media kit n'est pas encore publié"
+                      : mkLive === true
+                        ? "Ta page publique — à partager aux marques"
+                        : mkLive === null
+                          ? "Vérification de ta page…"
+                          : "En préparation avec ton agence"}
                   </div>
                 </div>
                 {mkLive === true && mkUrl && (
@@ -2916,7 +2939,7 @@ export function CreatorSpace({
                 <div className="rounded-2xl border border-dashed border-border bg-surface px-6 py-12 text-center shadow-sm">
                   <ImageIcon className="mx-auto h-8 w-8 text-faint" />
                   <div className="mt-3 text-sm font-medium text-foreground">
-                    {mkLive === null ? "Vérification de ta page…" : "Media kit en préparation"}
+                    {mkUnpublished ? "Ton media kit n'est pas encore publié" : mkLive === null ? "Vérification de ta page…" : "Media kit en préparation"}
                   </div>
                   <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
                     Ton agence prépare ta page. Elle s'affichera ici dès qu'elle sera en ligne.

@@ -189,10 +189,16 @@ Deno.serve(async (req: Request) => {
 
   // Carnet : tous les contacts avec email, indexés par adresse. Lecture ratée = on s'arrête
   // AVANT de bouger les curseurs (sinon ces mails ne seraient jamais notés).
-  const { data: contactsRaw, error: ctErr } = await sb.from("contacts").select("id,email");
-  if (ctErr) return jsonRes({ ok: false, error: "contacts_illisibles" }, 500);
+  // Lu par pages de 1 000 : au-delà, Supabase coupe en silence et des mails ne seraient jamais notés.
+  const contactsRaw: { id: string; email: string | null }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data: page, error: ctErr } = await sb.from("contacts").select("id,email").not("email", "is", null).order("id").range(from, from + 999);
+    if (ctErr) return jsonRes({ ok: false, error: "contacts_illisibles" }, 500);
+    contactsRaw.push(...((page ?? []) as { id: string; email: string | null }[]));
+    if (!page || page.length < 1000) break;
+  }
   const byEmail = new Map<string, string>();
-  for (const c of (contactsRaw ?? []) as { id: string; email: string | null }[]) {
+  for (const c of contactsRaw) {
     const e = (c.email ?? "").trim().toLowerCase();
     if (e) byEmail.set(e, c.id);
   }

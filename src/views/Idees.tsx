@@ -19,7 +19,7 @@ import { notifyCreator } from "@/lib/push";
 import { Trash2, MessageSquarePlus, Check, X, Pencil, UserRound, Sparkles } from "lucide-react";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -195,16 +195,35 @@ export function Idees() {
   };
 
   // Sous-tâches (checklist interne à l'idée) — persiste base + cache.
-  const saveSubtasks = async (id: string, subtasks: Subtask[]) => {
-    const prev = rows;
-    const next = (rows ?? []).map((r) => (r.id === id ? { ...r, subtasks } : r));
-    setRows(next);
-    setCache("ideas", next);
-    if (!(await dbUpdate("ideas", id, { subtasks }))) {
-      setRows(prev);
-      if (prev) setCache("ideas", prev);
+  // Même principe que Todo (todoQueue) : affichage optimiste depuis la DERNIÈRE version de
+  // la ligne (ref à jour sans attendre le rendu), écritures d'une même idée sérialisées, et
+  // retour arrière seulement si rien n'a bougé depuis → deux coches rapides ne se contredisent plus.
+  const rowsRef = useRef<Row[] | null>(rows);
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
+  const subtaskQueue = useRef<Record<string, Promise<boolean>>>({});
+  const saveSubtasks = (id: string, subtasks: Subtask[]): Promise<boolean> => {
+    const cur = (rowsRef.current ?? []).find((r) => r.id === id);
+    if (!cur) return Promise.resolve(false);
+    const back = cur.subtasks ?? null;
+    const apply = (fn: (r: Row) => Row) => {
+      const next = (rowsRef.current ?? []).map((r) => (r.id === id ? fn(r) : r));
+      rowsRef.current = next;
+      setRows(next);
+      setCache("ideas", next);
+    };
+    apply((r) => ({ ...r, subtasks }));
+    const run = async () => {
+      if (await dbUpdate("ideas", id, { subtasks })) return true;
+      // Échec : retour arrière seulement si aucune coche plus récente n'a remplacé celle-ci
+      apply((r) => (r.subtasks === subtasks ? { ...r, subtasks: back } : r));
       toast("Sous-tâche non enregistrée, réessaie");
-    }
+      return false;
+    };
+    const p = (subtaskQueue.current[id] ?? Promise.resolve(true)).then(run, run);
+    subtaskQueue.current[id] = p;
+    return p;
   };
 
   const removeRow = async (id: string) => {

@@ -93,15 +93,18 @@ export function EditorialProfileCard({ name }: { name: string }) {
   // Ouvre en LECTURE si la fiche a du contenu, sinon directement en édition.
   // Dernière copie enregistrée (le `data` du hook reste périmé jusqu'au tick suivant).
   const savedP = useRef<EditorialProfile | null>(null);
+  // N'initialise que sur de VRAIES données lues (data !== null) : si la première lecture
+  // échoue, on attend le tick suivant au lieu de partir d'une fiche vide (sinon
+  // « Enregistrer » écraserait la fiche existante).
   useEffect(() => {
-    if (!loading && loadedKey !== key) {
+    if (data !== null && loadedKey !== key) {
       const np = normProfile(data?.[key]);
       savedP.current = np;
       setP(np);
       setLoadedKey(key);
       setMode(profileIsEmpty(np) ? "edit" : "view");
     }
-  }, [loading, data, key, loadedKey]);
+  }, [data, key, loadedKey]);
 
   const cur = p ?? emptyProfile();
   const set = (patch: Partial<EditorialProfile>) => setP({ ...cur, ...patch });
@@ -109,7 +112,8 @@ export function EditorialProfileCard({ name }: { name: string }) {
   const togglePlat = (pl: PlatPrio) => set({ plateformes: cur.plateformes.includes(pl) ? cur.plateformes.filter((x) => x !== pl) : [...cur.plateformes, pl] });
 
   const save = async () => {
-    if (saving || loadedKey !== key) return;
+    if (saving) return;
+    if (loadedKey !== key) return toast("Fiche pas encore chargée — patiente ou recharge");
     setSaving(true);
     try {
       // Relit FRAIS avant de fusionner : ne jamais réécrire la map complète depuis un
@@ -373,15 +377,17 @@ export function MonthlyTracking({ name }: { name: string }) {
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("view");
   const savedList = useRef<MonthEntry[]>([]); // dernière copie enregistrée (pour Annuler)
+  // N'initialise que sur de VRAIES données lues (monthlyMap !== null) : sur un échec de
+  // lecture, partir d'une liste vide puis enregistrer effacerait l'historique.
   useEffect(() => {
-    if (!loading && loadedKey !== key) {
-      const arr = (monthlyMap?.[key] ?? []).map((m) => ({ ...emptyMonth(m.month), ...m }));
+    if (monthlyMap !== null && loadedKey !== key) {
+      const arr = (monthlyMap[key] ?? []).map((m) => ({ ...emptyMonth(m.month), ...m }));
       savedList.current = arr;
       setLocal(arr);
       setLoadedKey(key);
       setMode(arr.length === 0 ? "edit" : "view");
     }
-  }, [loading, monthlyMap, key, loadedKey]);
+  }, [monthlyMap, key, loadedKey]);
 
   // Cadence RÉELLE auto-déclarée par le créateur (table creator_roadmap) — lecture seule
   // ici, pour la comparer à l'évaluation de l'agence. Best-effort (table peut manquer).
@@ -404,7 +410,8 @@ export function MonthlyTracking({ name }: { name: string }) {
   };
 
   const save = async () => {
-    if (saving || loadedKey !== key) return;
+    if (saving) return;
+    if (loadedKey !== key) return toast("Suivi pas encore chargé — patiente ou recharge");
     setSaving(true);
     try {
       invalidateAppState();
@@ -619,15 +626,17 @@ export function JournalCard({ name }: { name: string }) {
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("view");
   const savedJ = useRef<JournalEntry[]>([]); // dernière copie enregistrée (pour Annuler)
+  // N'initialise que sur de VRAIES données lues (map !== null) : sur un échec de
+  // lecture, partir d'un journal vide puis enregistrer effacerait l'historique.
   useEffect(() => {
-    if (!loading && loadedKey !== key) {
-      const arr = (map?.[key] ?? []).slice();
+    if (map !== null && loadedKey !== key) {
+      const arr = (map[key] ?? []).slice();
       savedJ.current = arr;
       setLocal(arr);
       setLoadedKey(key);
       setMode(arr.length === 0 ? "edit" : "view");
     }
-  }, [loading, map, key, loadedKey]);
+  }, [map, key, loadedKey]);
 
   const list = local ?? [];
   const sorted = [...list].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
@@ -635,7 +644,8 @@ export function JournalCard({ name }: { name: string }) {
   const add = () => setLocal((l) => [{ id: jid(), date: todayISO(), type: "appel", resume: "", decisions: "", actions: "", prochainPoint: "" }, ...(l ?? [])]);
 
   const save = async () => {
-    if (saving || loadedKey !== key) return;
+    if (saving) return;
+    if (loadedKey !== key) return toast("Journal pas encore chargé — patiente ou recharge");
     setSaving(true);
     try {
       invalidateAppState();
@@ -902,21 +912,39 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
   const [roadmap, setRoadmap] = useState<Record<string, unknown> | null>(null);
   const [selfCad, setSelfCad] = useState<SelfCadence>({});
   const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState(false);
+  const [retry, setRetry] = useState(0); // « Réessayer » relance le chargement
   const [month, setMonth] = useState<string>(currentMonth());
   const [draft, setDraft] = useState<Cadence>(emptyCadence());
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let alive = true;
+    // Repart de zéro à chaque créateur : ne jamais montrer (ni réenregistrer) la
+    // feuille de route du précédent pendant le chargement.
+    setLoading(true);
+    setLoadErr(false);
+    setRoadmap(null);
+    setSelfCad({});
     supabase.from("creator_roadmap").select("roadmap, self_cadence").eq("creator", name).maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (!alive) return;
+        // Erreur de lecture ≠ « pas encore définie » : on affiche l'erreur + Réessayer.
+        if (error) {
+          setLoadErr(true);
+          setLoading(false);
+          return;
+        }
         setRoadmap((data?.roadmap as Record<string, unknown>) ?? null);
         setSelfCad(normSelfCadence((data?.self_cadence as SelfCadence) ?? {}));
         setLoading(false);
+      }, () => {
+        if (!alive) return;
+        setLoadErr(true);
+        setLoading(false);
       });
     return () => { alive = false; };
-  }, [name]);
+  }, [name, retry]);
 
   // À chaque changement de mois sélectionné, précharge la cadence déjà déclarée.
   useEffect(() => { setDraft(selfCad[month] ? { ...selfCad[month] } : emptyCadence()); }, [month, selfCad]);
@@ -945,6 +973,20 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
   };
 
   if (loading) return <div className="rounded-2xl border border-border bg-surface p-8 text-center text-[13px] text-muted-foreground">Chargement…</div>;
+  if (loadErr)
+    return (
+      <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
+        <div className="text-sm font-medium text-foreground">Chargement impossible</div>
+        <p className="mt-1 text-xs text-muted-foreground">Ta feuille de route n'a pas pu être récupérée.</p>
+        <button
+          type="button"
+          onClick={() => setRetry((n) => n + 1)}
+          className="mt-3 rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+        >
+          Réessayer
+        </button>
+      </div>
+    );
 
   const recoTot = cadenceTotal(rm.cadenceReco);
   const draftTot = cadenceTotal(draft);

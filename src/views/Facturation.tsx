@@ -133,14 +133,21 @@ function daysSinceDue(d: Date): number {
   const today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
   return Math.floor((today.getTime() - d.getTime()) / 86400000);
 }
-/** Badge AFFICHÉ (rien n'est enregistré) : « En attente » dont l'échéance est passée
- *  s'affiche « En retard », même règle que la page Relances. */
+/** Facture en retard : statut « retard », ou « En attente » dont l'échéance est passée
+ *  (même règle que la page Relances). Règle UNIQUE du badge, du filtre et du compteur. */
+function isLate(r: { status: string; date: string | null }): boolean {
+  if (r.status === "retard") return true;
+  if (r.status !== "attente") return false;
+  const d = parseDueDate(r.date);
+  return !!d && daysSinceDue(d) > 0;
+}
+/** Statut AFFICHÉ (rien n'est enregistré) : « En attente » échue → « retard ». */
+function shownStatusOf(r: { status: string; date: string | null }): string {
+  return isLate(r) ? "retard" : r.status;
+}
+/** Badge AFFICHÉ : « En attente » dont l'échéance est passée s'affiche « En retard ». */
 function shownMetaOf(r: { status: string; date: string | null }): { badge: AnimatedBadgeStatus; label: string } {
-  if (r.status === "attente") {
-    const d = parseDueDate(r.date);
-    if (d && daysSinceDue(d) > 0) return metaOf("retard");
-  }
-  return metaOf(r.status);
+  return metaOf(shownStatusOf(r));
 }
 
 const STATUS_OPTIONS: { value: InvoiceStatus; label: string }[] = [
@@ -179,9 +186,10 @@ function uid(): string {
   return `f${Date.now().toString(36)}${_uid}`;
 }
 
+/** Saisie numérique (quantité, prix, taux) : même lecture que les montants
+ *  (« 1.500 » = 1500, « 1 250,50 » = 1250,5), cf. `parseAmount`. */
 function num(s: unknown): number {
-  const n = parseFloat(String(s ?? "").replace(/\s/g, "").replace(",", ".").replace(/[^0-9.\-]/g, ""));
-  return Number.isFinite(n) ? n : 0;
+  return parseAmount(s);
 }
 /** Prochain numéro de facture à partir des réfs existantes (« AAAA-NNN »). */
 function nextRefFrom(refs: string[]): string {
@@ -435,6 +443,8 @@ export function Facturation() {
   const [banksDraft, setBanksDraft] = useState<BankAccount[]>([]);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false); // garde synchrone contre le double clic
+  // Comptes bancaires : après un échec d'enregistrement, fermer (croix, Échap) annule au lieu de bloquer.
+  const banksFailed = useRef(false);
   const [preview, setPreview] = useState<{ html: string; ref: string; email: string; brand: string } | null>(null);
   // Fiche « marge » ouverte au clic sur une facture (détail HT / TVA / commission).
   const [finView, setFinView] = useState<Row | null>(null);
@@ -519,7 +529,7 @@ export function Facturation() {
 
   const periods = periodsFrom(rows.map((r) => r.date));
   const filtered = rows.filter(
-    (r) => matchQuery(query, r.ref, r.party, r.creator, r.status) && (statusFilter === "Tous" || r.status === statusFilter) && inPeriod(r.date, period),
+    (r) => matchQuery(query, r.ref, r.party, r.creator, r.status) && (statusFilter === "Tous" || shownStatusOf(r) === statusFilter) && inPeriod(r.date, period),
   );
   const statusChips: { value: InvoiceStatus | "Tous"; label: string }[] = [{ value: "Tous", label: "Tous" }, ...STATUS_OPTIONS];
 
@@ -564,7 +574,7 @@ export function Facturation() {
   const margePct = finBilled.ht > 0 ? (finBilled.commission / finBilled.ht) * 100 : 0;
   const unpaid = scope.filter((r) => r.status === "attente" || r.status === "retard");
   const aEncaisser = unpaid.reduce((s, r) => s + parseAmount(r.amount), 0);
-  const nbRetard = scope.filter((r) => r.status === "retard").length;
+  const nbRetard = scope.filter(isLate).length; // même règle que le badge « En retard »
 
   // ── Éditeur ──
   function openCreate() {
@@ -762,10 +772,15 @@ export function Facturation() {
 
   async function saveIssuer() {
     if (!issuerDraft) return;
+    const ok = await saveAppStateKey("invoiceIssuer", issuerDraft).catch(() => false);
+    // Échec : la fenêtre reste ouverte avec la saisie, rien n'est appliqué
+    if (!ok) {
+      toast("Erreur — réessaie");
+      return;
+    }
     setIssuer(issuerDraft);
-    const ok = await saveAppStateKey("invoiceIssuer", issuerDraft);
     setIssuerDraft(null);
-    toast(ok ? "Émetteur enregistré ✓" : "Erreur — réessaie");
+    toast("Émetteur enregistré ✓");
   }
 
   function openBanks() {
@@ -775,20 +790,36 @@ export function Facturation() {
 
   // Enregistre les comptes à la fermeture : relecture FRAÎCHE puis fusion par id
   // (sinon un instantané périmé écrase les comptes saisis sur un autre poste).
-  async function commitBanks() {
+  // La fenêtre ne se ferme qu'après écriture réussie (échec : la saisie reste, on peut réessayer).
+  function closeBanks() {
+    if (!banksFailed.current) return void commitBanks();
+    banksFailed.current = false;
     setBanksOpen(false);
+    toast("Modifications des comptes annulées");
+  }
+  async function commitBanks() {
     const draftIds = new Set(banksDraft.map((b) => b.id));
     const removed = new Set(banks.filter((b) => !draftIds.has(b.id)).map((b) => b.id));
     const changed = banksDraft.filter((b) => JSON.stringify(b) !== JSON.stringify(banks.find((x) => x.id === b.id)));
-    if (!removed.size && !changed.length) return;
-    invalidateAppState();
-    const fresh = ((await getAppState())["invoiceBankAccounts"] as BankAccount[]) ?? [];
-    const byId = new Map(changed.map((b) => [b.id, b]));
-    const merged = fresh.filter((b) => !removed.has(b.id)).map((b) => byId.get(b.id) ?? b);
-    for (const b of changed) if (!fresh.some((x) => x.id === b.id)) merged.push(b);
-    const ok = await saveAppStateKey("invoiceBankAccounts", merged);
-    if (ok) setBanks(merged);
-    toast(ok ? "Comptes enregistrés ✓" : "Erreur, comptes non enregistrés. Réessaie");
+    if (!removed.size && !changed.length) {
+      setBanksOpen(false);
+      return;
+    }
+    try {
+      invalidateAppState();
+      const fresh = ((await getAppState())["invoiceBankAccounts"] as BankAccount[]) ?? [];
+      const byId = new Map(changed.map((b) => [b.id, b]));
+      const merged = fresh.filter((b) => !removed.has(b.id)).map((b) => byId.get(b.id) ?? b);
+      for (const b of changed) if (!fresh.some((x) => x.id === b.id)) merged.push(b);
+      if (!(await saveAppStateKey("invoiceBankAccounts", merged))) throw new Error("save");
+      setBanks(merged);
+      banksFailed.current = false;
+      setBanksOpen(false);
+      toast("Comptes enregistrés ✓");
+    } catch {
+      banksFailed.current = true;
+      toast("Erreur, comptes non enregistrés. Réessaie, ou ferme pour annuler");
+    }
   }
 
   const draftTotals = draft ? totalsOf(draft.items, draft.franchise, draft.vatRate, draft.commissionRate) : null;
@@ -1007,7 +1038,15 @@ export function Facturation() {
                 <SelectField
                   label="Créateur"
                   value={draft.creator}
-                  onChange={(v) => setDraft({ ...draft, creator: v, commissionRate: v ? commissionFor(v) : draft.commissionRate })}
+                  onChange={(v) =>
+                    // Taux du roster appliqué : la saisie brute de commission est oubliée (sinon l'ancien taux resterait affiché)
+                    setDraft({
+                      ...draft,
+                      creator: v,
+                      commissionRate: v ? commissionFor(v) : draft.commissionRate,
+                      raw: v ? Object.fromEntries(Object.entries(draft.raw ?? {}).filter(([k]) => k !== "commission")) : draft.raw,
+                    })
+                  }
                   options={creatorOptions}
                 />
               </div>
@@ -1219,7 +1258,7 @@ export function Facturation() {
       {banksOpen && (
         <Modal
           title="Comptes bancaires"
-          onClose={commitBanks}
+          onClose={closeBanks}
           footer={<button type="button" className={primaryBtn} onClick={commitBanks}>Terminé</button>}
         >
           <div className="flex flex-col gap-3">

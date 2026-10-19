@@ -17,6 +17,7 @@ import {
   representationHTML,
 } from "@/lib/representationContract";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { todayISO } from "@/lib/dates";
 import { CasesBar, ContractDocument, FoldSection, HistoryPanel, PanelSection, SettingsPanel, SwitchRow, docBtn, docIconBtn, docPrimaryBtn } from "@/components/contracts/contract-ui";
 
 type Cfg = Record<string, string>;
@@ -89,6 +90,13 @@ export function RepresentationContract() {
   // Défensif : n'affiche que les entrées BIEN formées (le blob a pu contenir un temps
   // des entrées d'un autre format — cf. fix collision brandContractHistory).
   const hist = (localHist ?? histData ?? []).filter((e): e is ContractHist => !!e && typeof e.path === "string" && !!e.config);
+  // Copies locales (après une écriture réussie) : le blob live redevient la source dès qu'il change.
+  useEffect(() => {
+    setLocalCfg(null);
+  }, [cfgData]);
+  useEffect(() => {
+    setLocalHist(null);
+  }, [histData]);
   const [saving, setSaving] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -97,8 +105,16 @@ export function RepresentationContract() {
   const isExternal = ctName === EXT;
 
   // Au changement de créateur : préremplit les infos Talent + charge le 1er cas enregistré.
+  // Relancé aussi quand les modèles arrivent APRÈS les créateurs (sinon le modèle enregistré
+  // était raté) ; garde : une seule fois par créateur une fois les modèles chargés, pour
+  // qu'un rafraîchissement live n'écrase jamais la saisie en cours.
+  const cfgLoaded = cfgData != null;
+  const prefilledRef = useRef<{ ct: string; withCfg: boolean } | null>(null);
   useEffect(() => {
     if (!ctName) return;
+    const done = prefilledRef.current;
+    if (done && done.ct === ctName && (done.withCfg || !cfgLoaded)) return;
+    prefilledRef.current = { ct: ctName, withCfg: cfgLoaded };
     if (skipPrefillRef.current) {
       skipPrefillRef.current = false;
       return;
@@ -145,7 +161,7 @@ export function RepresentationContract() {
     });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctName]);
+  }, [ctName, cfgLoaded]);
 
   const set = (k: string, v: string) => setConfig((c) => ({ ...c, [k]: v }));
   const changeVariant = (variant: string) => setConfig((c) => ({ ...c, ...RC_VARIANTS.find((x) => x.key === variant)?.defaults, variante: variant }));
@@ -169,14 +185,20 @@ export function RepresentationContract() {
   };
 
   // Relecture fraîche avant merge : ne pas écraser les cas d'autres créateurs.
+  // Copie locale appliquée SEULEMENT après écriture réussie (pas d'affichage fantôme).
   const mutateConfigs = async (fn: (fresh: Configs) => Configs) => {
-    invalidateAppState();
-    const fresh = ((await getAppState())["representationConfigs"] as Configs) ?? {};
-    const next = fn(fresh);
-    setLocalCfg(next);
-    const ok = await saveAppStateKey("representationConfigs", next);
-    if (!ok) toast("Erreur — réessaie");
-    return ok;
+    try {
+      invalidateAppState();
+      const fresh = ((await getAppState())["representationConfigs"] as Configs) ?? {};
+      const next = fn(fresh);
+      const ok = await saveAppStateKey("representationConfigs", next);
+      if (ok) setLocalCfg(next);
+      else toast("Erreur — réessaie");
+      return ok;
+    } catch {
+      toast("Erreur — réessaie");
+      return false;
+    }
   };
   const saveCase = async () => {
     if (!ctName) {
@@ -249,14 +271,21 @@ export function RepresentationContract() {
         createdAt: new Date().toISOString(),
         path,
       };
-      invalidateAppState();
-      const fresh = ((await getAppState())["contractHistory"] as ContractHist[]) ?? [];
-      const ok = await saveAppStateKey("contractHistory", [entry, ...fresh]);
+      let next: ContractHist[] = [];
+      let ok = false;
+      try {
+        invalidateAppState();
+        const fresh = ((await getAppState())["contractHistory"] as ContractHist[]) ?? [];
+        next = [entry, ...fresh];
+        ok = await saveAppStateKey("contractHistory", next);
+      } catch {
+        ok = false;
+      }
       if (!ok) {
         toast("Contrat stocké, mais pas ajouté aux contrats enregistrés. Réessaie");
         return;
       }
-      setLocalHist([entry, ...hist]);
+      setLocalHist(next); // liste FRAÎCHE (pas l'affichage du moment, possiblement périmé)
 
       // Auto-échéance : crée/actualise le suivi d'échéance (Marc risque d'oublier).
       // Bonus best-effort : n'empêche JAMAIS l'enregistrement du contrat s'il échoue.
@@ -264,7 +293,7 @@ export function RepresentationContract() {
       try {
         const dlCreator = (creator ?? config.talentNom.trim()) || "";
         if (dlCreator) {
-          const start = toISO(config.dateDebut) || toISO(config.dateSignature) || new Date().toISOString().slice(0, 10);
+          const start = toISO(config.dateDebut) || toISO(config.dateSignature) || todayISO(); // date LOCALE (pas d'UTC)
           const months = Math.max(1, parseInt(config.dureeMois, 10) || 12);
           type Dl = { id: string; creator: string; type: string; start: string; months: number; note?: string };
           invalidateAppState();
@@ -320,14 +349,21 @@ export function RepresentationContract() {
     window.prompt("Copie le lien du contrat (valable 7 jours) :", url);
   };
   const deleteContract = async (e: ContractHist) => {
-    invalidateAppState();
-    const fresh = ((await getAppState())["contractHistory"] as ContractHist[]) ?? [];
-    const ok = await saveAppStateKey("contractHistory", fresh.filter((x) => x.id !== e.id));
+    let next: ContractHist[] = [];
+    let ok = false;
+    try {
+      invalidateAppState();
+      const fresh = ((await getAppState())["contractHistory"] as ContractHist[]) ?? [];
+      next = fresh.filter((x) => x.id !== e.id);
+      ok = await saveAppStateKey("contractHistory", next);
+    } catch {
+      ok = false;
+    }
     if (!ok) {
       toast("Erreur — réessaie");
       return;
     }
-    setLocalHist(hist.filter((x) => x.id !== e.id));
+    setLocalHist(next);
     const { error: docErr } = await supabase.from("documents").delete().eq("id", e.id);
     await supabase.storage.from("documents").remove([e.path]).catch(() => {});
     toast(docErr ? "Contrat retiré des contrats enregistrés, mais toujours visible dans Documents. Supprime-le là-bas" : "Contrat supprimé");

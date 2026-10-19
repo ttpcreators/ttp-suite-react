@@ -13,20 +13,36 @@ export type CreatorLite = {
 };
 
 let _cache: CreatorLite[] | null = null;
+let _last: CreatorLite[] | null = null; // dernière liste lue avec succès (repli si erreur)
 let _promise: Promise<CreatorLite[]> | null = null;
 
-async function load(): Promise<CreatorLite[]> {
+/** null = lecture en échec (≠ liste vide). */
+async function load(): Promise<CreatorLite[] | null> {
   const { data, error } = await supabase
     .from("creators")
     .select("id,name,handle,photo_url,status,commission,platform")
     .order("sort_order");
-  if (error) return [];
+  if (error) return null;
   return (data as CreatorLite[]) ?? [];
 }
 
 export function getCreators(): Promise<CreatorLite[]> {
   if (_cache) return Promise.resolve(_cache);
-  if (!_promise) _promise = load().then((c) => (_cache = c));
+  if (!_promise) {
+    const p: Promise<CreatorLite[]> = load()
+      .catch(() => null)
+      .then((c) => {
+        // Échec : rien en cache (le prochain appel réessaie) et on garde l'ancienne
+        // liste plutôt que de vider les sélecteurs.
+        if (c === null) {
+          if (_promise === p) _promise = null;
+          return _last ?? [];
+        }
+        _last = c;
+        return (_cache = c);
+      });
+    _promise = p;
+  }
   return _promise;
 }
 

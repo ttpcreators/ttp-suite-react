@@ -29,6 +29,7 @@ import { Tabs } from "@/components/ui/animated-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { buildRecap, publicationDate, readyForRecap, type CollabForRecap, type StepRow } from "@/lib/campaignRecap";
 import { dbUpdate } from "@/lib/db";
+import { todayISO } from "@/lib/dates";
 
 /** Une petite statistique de campagne (label / valeur). */
 type Kpi = { l: string; v: string };
@@ -247,7 +248,7 @@ export function Debrief() {
     let iso = "";
     if (/^\d{4}-\d{2}-\d{2}/.test(t)) iso = t.slice(0, 10);
     else { const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(t); if (m) iso = `${m[3]}-${m[2]}-${m[1]}`; }
-    return iso ? iso < new Date().toISOString().slice(0, 10) : false;
+    return iso ? iso < todayISO() : false; // date LOCALE (pas d'UTC : décalage en soirée)
   };
   const briefDone = (b: { status: string; due: string | null }) =>
     (b.status || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").includes("termin") || duePast(b.due);
@@ -257,7 +258,9 @@ export function Debrief() {
   const [view, setView] = useState<DebriefView>("cards");
   const [viewD, setViewD] = useState<Debrief | null>(null); // fiche détail (clic sur une ligne)
   const [formOpen, setFormOpen] = useState(false);
-  const [editIndex, setEditIndex] = useState<number | null>(null);
+  // Bilan en cours d'édition, mémorisé tel qu'ouvert (pas son index : la liste peut se
+  // recharger pendant l'édition). Retrouvé par signature dans la liste fraîche à l'enregistrement.
+  const [editing, setEditing] = useState<Debrief | null>(null);
   const [brand, setBrand] = useState("");
   const [creator, setCreator] = useState("");
   const [period, setPeriod] = useState("");
@@ -318,7 +321,7 @@ export function Debrief() {
     setCalc(CALC_EMPTY);
     setRenewal("");
     setFromCollab(null);
-    setEditIndex(null);
+    setEditing(null);
   }
   const kpiVal = (d: Debrief, label: string) => d.kpis.find((k) => k.l.toLowerCase().startsWith(label.toLowerCase().slice(0, 5)))?.v ?? "";
 
@@ -335,9 +338,8 @@ export function Debrief() {
     setFormOpen(true);
   }
 
-  function startEdit(index: number) {
-    const d = list[index];
-    setEditIndex(index);
+  function startEdit(d: Debrief) {
+    setEditing(d);
     setBrand(d.brand === "—" ? "" : d.brand);
     setCreator(d.creator);
     setPeriod(d.period === "—" ? "" : d.period);
@@ -408,8 +410,8 @@ export function Debrief() {
     ].filter((k) => k.v);
     const highlights = highlightsText.split("\n").map((h) => h.trim()).filter(Boolean);
     const deliv = deliverables.trim() || "—";
-    const wasEdit = editIndex !== null && !!list[editIndex];
-    const original = wasEdit ? list[editIndex] : null;
+    const original = editing;
+    const wasEdit = !!original;
     const built: Debrief = {
       ...(original ?? { tone: "cyan" }),
       brand: b,
@@ -437,7 +439,12 @@ export function Debrief() {
       if (original) {
         const os = debriefSig(original);
         const idx = fresh.findIndex((d) => debriefSig(d) === os);
-        next = idx >= 0 ? fresh.map((d, i) => (i === idx ? built : d)) : [built, ...fresh];
+        // Disparu (supprimé ou modifié sur un autre poste) : on n'écrase rien, la saisie reste.
+        if (idx < 0) {
+          toast("Ce bilan a été modifié ou supprimé ailleurs : ferme et rouvre-le pour reprendre");
+          return;
+        }
+        next = fresh.map((d, i) => (i === idx ? built : d));
       } else {
         next = [built, ...fresh];
       }
@@ -552,11 +559,11 @@ export function Debrief() {
     }
   }
 
-  const actions = (d: Debrief, index: number) => (
+  const actions = (d: Debrief) => (
     <ActionMenu
       items={[
         { key: "view", label: "Voir la fiche", icon: Eye, onClick: () => setViewD(d) },
-        { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(index) },
+        { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(d) },
         { key: "sharebrand", label: "Partager à la marque", icon: Send, onClick: () => openShare(d) },
         { key: "preview", label: "Aperçu / PDF", icon: Eye, onClick: () => printDebrief(d) },
         { key: "copy", label: "Copier le texte", icon: Share2, onClick: () => shareDebrief(d) },
@@ -616,13 +623,13 @@ export function Debrief() {
 
       <InlineForm
         open={formOpen}
-        title={editIndex !== null ? "Modifier le debrief" : "Nouveau debrief"}
+        title={editing ? "Modifier le debrief" : "Nouveau debrief"}
         onClose={() => {
           setFormOpen(false);
           resetForm();
         }}
         onSubmit={save}
-        submitLabel={editIndex !== null ? "Enregistrer" : "Créer le debrief"}
+        submitLabel={editing ? "Enregistrer" : "Créer le debrief"}
       >
         <TextField
           label="Marque / campagne"
@@ -671,7 +678,7 @@ export function Debrief() {
           // Remonte le composant quand on change de debrief édité SANS fermer le
           // formulaire (ex : « Modifier » sur une autre ligne). Sinon la copie locale
           // des lignes (`rows`, initialisée une seule fois) reste celle du précédent.
-          key={editIndex ?? "new"}
+          key={editing ? debriefSig(editing) : "new"}
           slug={safeName(creator || brand)}
           state={calc}
           onChange={setCalc}
@@ -859,7 +866,7 @@ export function Debrief() {
 
               {/* Barre d'actions */}
               <div className="mt-4 flex items-center justify-end gap-1 border-t border-border pt-3">
-                {actions(d, index)}
+                {actions(d)}
               </div>
             </article>
           ))}
@@ -887,7 +894,7 @@ export function Debrief() {
               <span className="hidden shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext sm:inline">
                 ROI {d.roi}
               </span>
-              <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>{actions(d, index)}</div>
+              <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>{actions(d)}</div>
             </div>
           ))}
         </div>
@@ -923,7 +930,7 @@ export function Debrief() {
                     </span>
                   </td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-1">{actions(d, index)}</div>
+                    <div className="flex items-center justify-end gap-1">{actions(d)}</div>
                   </td>
                 </tr>
               ))}
@@ -988,9 +995,9 @@ export function Debrief() {
           d={viewD}
           onClose={() => setViewD(null)}
           onEdit={() => {
-            const i = list.findIndex((x) => debriefSig(x) === debriefSig(viewD));
+            const d = viewD;
             setViewD(null);
-            if (i >= 0) startEdit(i);
+            startEdit(d);
           }}
           onShare={() => {
             const d = viewD;

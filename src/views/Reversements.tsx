@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2, Check, Wallet } from "lucide-react";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { supabase } from "@/lib/supabase";
@@ -71,6 +71,7 @@ export function Reversements() {
       .select("id,amount,status,creator")
       .then(({ data, error }) => {
         if (!alive) return;
+        // Échec d'un rafraîchissement : on garde la liste déjà affichée (pas de vidage)
         if (error) {
           setError(true);
           return;
@@ -78,6 +79,7 @@ export function Reversements() {
         const next = (data as Inv[]) ?? [];
         setCache("revInvoices", next);
         setInvoices(next);
+        setError(false); // un chargement réussi efface l'erreur précédente
       });
     return () => {
       alive = false;
@@ -145,10 +147,16 @@ export function Reversements() {
   // Relit FRAIS le blob et ne fusionne QUE le créateur modifié (paiements = argent :
   // deux postes ne doivent jamais s'écraser). Renvoie le booléen d'écriture.
   const mutatePayouts = async (creator: string, fn: (arr: Payout[]) => Payout[]): Promise<boolean> => {
-    invalidateAppState();
-    const fresh = ((await getAppState())["creatorPayouts"] as PayoutsMap) ?? {};
-    const next: PayoutsMap = { ...fresh, [creator]: fn(fresh[creator] ?? []) };
-    const ok = await saveAppStateKey("creatorPayouts", next);
+    let ok = false;
+    let next: PayoutsMap = {};
+    try {
+      invalidateAppState();
+      const fresh = ((await getAppState())["creatorPayouts"] as PayoutsMap) ?? {};
+      next = { ...fresh, [creator]: fn(fresh[creator] ?? []) };
+      ok = await saveAppStateKey("creatorPayouts", next);
+    } catch {
+      ok = false;
+    }
     // État local appliqué SEULEMENT après écriture réussie (argent : pas d'affichage fantôme)
     if (ok) setLocalPayouts(next);
     else toast("Erreur, réessaie");
@@ -160,6 +168,8 @@ export function Reversements() {
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState("");
   const [pendingDel, setPendingDel] = useState<null | { message: string; run: () => void }>(null);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false); // garde synchrone contre le double clic (pas de paiement en double)
 
   const openAdd = (creator: string, reste: number) => {
     setOpenFor(creator);
@@ -168,17 +178,25 @@ export function Reversements() {
     setNote("");
   };
   const submitPayout = async (creator: string) => {
+    if (busyRef.current) return;
     const n = parseAmount(amt);
     if (n <= 0) {
       toast("Montant invalide");
       return;
     }
     const entry: Payout = { id: uid(), date: date || todayISO(), amount: n, note: note.trim() || undefined };
-    const ok = await mutatePayouts(creator, (arr) => [entry, ...arr]);
-    // Échec : le formulaire reste ouvert (saisie conservée)
-    if (ok) {
-      setOpenFor(null);
-      toast("Paiement enregistré ✓");
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const ok = await mutatePayouts(creator, (arr) => [entry, ...arr]);
+      // Échec : le formulaire reste ouvert (saisie conservée)
+      if (ok) {
+        setOpenFor(null);
+        toast("Paiement enregistré ✓");
+      }
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   };
   const removePayout = async (creator: string, id: string) => {
@@ -186,7 +204,8 @@ export function Reversements() {
     if (ok) toast("Paiement supprimé");
   };
 
-  if (error)
+  // Erreur affichée seulement s'il n'y a rien à montrer (sinon on garde les données en place)
+  if (error && !invoices)
     return (
       <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
         Impossible de charger les reversements.
@@ -289,8 +308,8 @@ export function Reversements() {
                     <span className="text-[11px] font-medium text-muted-foreground">Note (optionnel)</span>
                     <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Virement, espèces…" className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary" />
                   </label>
-                  <button type="button" onClick={() => submitPayout(r.creator)} className="h-[38px] shrink-0 rounded-full bg-primary px-4 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
-                    Enregistrer
+                  <button type="button" onClick={() => submitPayout(r.creator)} disabled={busy} className="h-[38px] shrink-0 rounded-full bg-primary px-4 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60">
+                    {busy ? "Enregistrement…" : "Enregistrer"}
                   </button>
                   <button type="button" onClick={() => setOpenFor(null)} className="h-[38px] shrink-0 rounded-lg border border-border px-3 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover">
                     Annuler

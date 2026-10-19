@@ -65,11 +65,16 @@ function mapCreator(r: CreatorRow): Creator {
   };
 }
 
-/** Mois courant "YYYY-MM" (fuseau local agence) + libellé "juillet 2026". */
-const NOW_MONTH = new Intl.DateTimeFormat("fr-CA", { year: "numeric", month: "2-digit" }).format(new Date());
-const MONTH_LABEL = new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" }).format(new Date());
-/** « de mars » mais « d'octobre » (élision devant une voyelle). */
-const MONTH_PREP = /^[aeiouyàâéèêîôû]/i.test(MONTH_LABEL) ? "d'" : "de ";
+/** Mois courant "YYYY-MM" (fuseau local agence) + libellé "juillet 2026" + « de mars »
+ *  mais « d'octobre » (élision devant une voyelle). Calculé au RENDU, pas au chargement
+ *  du module : l'app peut rester ouverte d'un mois à l'autre. */
+function currentMonthInfo() {
+  const now = new Date();
+  const NOW_MONTH = new Intl.DateTimeFormat("fr-CA", { year: "numeric", month: "2-digit" }).format(now);
+  const MONTH_LABEL = new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" }).format(now);
+  const MONTH_PREP = /^[aeiouyàâéèêîôû]/i.test(MONTH_LABEL) ? "d'" : "de ";
+  return { NOW_MONTH, MONTH_LABEL, MONTH_PREP };
+}
 
 const STATUS_LABEL: Record<string, string> = {
   live: "LIVE",
@@ -86,6 +91,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
   const [error, setError] = useState(false);
   const { query } = useSearch();
   const live = useLiveKey();
+  const { NOW_MONTH, MONTH_LABEL, MONTH_PREP } = currentMonthInfo();
 
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
@@ -113,7 +119,9 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
   // CA par créateur = somme de SES factures payées (auto, plus de saisie manuelle).
   const [caByCreator, setCaByCreator] = useState<Record<string, number>>(() => getCache<Record<string, number>>("rosterCA") ?? {});
   useEffect(() => {
-    supabase.from("invoices").select("amount,status,creator").eq("status", "payee").then(({ data }) => {
+    supabase.from("invoices").select("amount,status,creator").eq("status", "payee").then(({ data, error }) => {
+      // Erreur réseau : on garde le CA déjà affiché (et le cache) plutôt que « — » partout.
+      if (error) return;
       const m: Record<string, number> = {};
       for (const iv of (data as { amount: string | null; creator: string | null }[]) ?? []) {
         const c = (iv.creator ?? "").trim();

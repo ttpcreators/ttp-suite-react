@@ -79,14 +79,16 @@ export function Prospection() {
       .order("sort_order")
       .then(({ data, error }) => {
         if (!active) return;
+        // Échec d'un rafraîchissement : on garde la liste déjà affichée (jamais vidée)
         if (error) {
           setError(true);
-          setRows([]);
+          setRows((r) => r ?? []);
           return;
         }
         const list = (data as Row[]) ?? [];
         setCache("prospects", list);
         setRows(list);
+        setError(false); // un chargement réussi efface l'erreur précédente
       });
     return () => {
       active = false;
@@ -151,10 +153,13 @@ export function Prospection() {
     resetForm();
   };
 
+  // Erreur affichée seulement s'il n'y a rien à montrer
+  const showError = error && !rows?.length;
+
   const header = (
     <PageHeaderRow>
       <div className="text-sm text-muted-foreground">
-        {rows === null || error
+        {rows === null || showError
           ? null
           : `${rows.length} marque${rows.length > 1 ? "s" : ""} en cours`}
       </div>
@@ -201,15 +206,15 @@ export function Prospection() {
     );
   }
 
-  if (error || rows.length === 0) {
+  if (showError || rows.length === 0) {
     return (
       <div>
         {header}
         {form}
         <div className="rounded-2xl border border-border bg-surface shadow-sm px-4 py-10 text-center">
-          <p className="text-sm font-medium text-foreground">{error ? "Chargement impossible" : "Pipeline vide"}</p>
+          <p className="text-sm font-medium text-foreground">{showError ? "Chargement impossible" : "Pipeline vide"}</p>
           <p className="text-xs text-muted-foreground mt-1.5">
-            {error
+            {showError
               ? "Les marques n'ont pas pu être chargées. Réessaie dans un instant."
               : "Ajoute ta première marque à prospecter avec « + Prospect »."}
           </p>

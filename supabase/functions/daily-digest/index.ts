@@ -194,7 +194,9 @@ function tidyPayload(payload: string): string {
   }
 }
 
-async function sendToAll(sb: ReturnType<typeof getServiceClient>, payload: string) {
+// audience : « founders » = fondateurs seuls (messages avec de l'argent, la Finance
+// leur est réservée), « members » = les autres comptes agence, défaut = tous.
+async function sendToAll(sb: ReturnType<typeof getServiceClient>, payload: string, audience: "all" | "founders" | "members" = "all") {
   payload = tidyPayload(payload);
   const { data: subsRaw } = await sb.from("push_subscriptions").select("id,endpoint,p256dh,auth,user_id");
   const all = ((subsRaw ?? []) as (Sub & { user_id: string | null })[]);
@@ -203,9 +205,11 @@ async function sendToAll(sb: ReturnType<typeof getServiceClient>, payload: strin
   const userIds = [...new Set(all.map((s) => s.user_id).filter(Boolean))] as string[];
   const agencyIds = new Set<string>();
   if (userIds.length) {
-    const { data: profs } = await sb.from("profiles").select("user_id,role").in("user_id", userIds);
-    for (const pr of (profs ?? []) as { user_id: string; role: string }[]) {
-      if (pr.role !== "creator") agencyIds.add(pr.user_id);
+    const { data: profs } = await sb.from("profiles").select("user_id,role,agency_role").in("user_id", userIds);
+    for (const pr of (profs ?? []) as { user_id: string; role: string; agency_role: string | null }[]) {
+      if (pr.role === "creator") continue;
+      const founder = pr.agency_role === "founder";
+      if (audience === "all" || (audience === "founders") === founder) agencyIds.add(pr.user_id);
     }
   }
   const subs = all.filter((s) => s.user_id && agencyIds.has(s.user_id));
@@ -434,10 +438,9 @@ Deno.serve(async (req: Request) => {
     const stale = active.filter((c) => String((c as { stats_month?: string | null }).stats_month ?? "") !== month);
     if (stale.length === 0) return jsonRes({ ok: true, sent: 0, reason: "tous à jour", month });
     const names = stale.slice(0, 8).map((c) => capName(String((c as { name?: string }).name ?? "")));
-    const extra = stale.length > 8 ? ` +${stale.length - 8}` : "";
     const payloadS = JSON.stringify({
       title: "Données à mettre à jour",
-      body: stale.length <= 3 ? `${names.join(", ")} · ${parisMonthLabel()}` : `${stale.length} créatrices pas à jour pour ${parisMonthLabel()}`,
+      body: stale.length <= 3 ? `${names.join(", ")} · ${parisMonthLabel()}` : `${stale.length} créateurs pas à jour pour ${parisMonthLabel()}`,
       url: "/",
       tag: `ttp-stats-${today}`, // tag daté → relance chaque jour tant que c'est stale
     });
@@ -453,7 +456,7 @@ Deno.serve(async (req: Request) => {
   if (afternoon) {
     // Point de MI-JOURNÉE : ce qu'il reste à traiter aujourd'hui (coupe la journée en 2).
     if (!prefOn(prefs, "digestAfternoon")) return jsonRes({ ok: true, skipped: "pref_off_afternoon" });
-    const { data: tA } = await sb.from("todos").select("due,done");
+    const { data: tA } = await sb.from("todos").select("due,done").or("done.is.null,done.eq.false");
     const todosLeft = (tA ?? []).filter((t) => t.done !== true && dueOrPast(t.due, today)).length;
     const { data: bA } = await sb.from("briefs").select("due");
     const briefsLeft = (bA ?? []).filter((b) => dueOrPast(b.due, today)).length;
@@ -484,7 +487,7 @@ Deno.serve(async (req: Request) => {
     const { data: evW } = await sb.from("events").select("date")
       .or("deleted.is.null,deleted.eq.false").gte("date", monday).lte("date", sunday);
     const eventsWeek = (evW ?? []).length;
-    const { data: tW } = await sb.from("todos").select("due,done");
+    const { data: tW } = await sb.from("todos").select("due,done").or("done.is.null,done.eq.false");
     const todosWeek = (tW ?? []).filter((t) => t.done !== true && dueInRange(t.due, monday, sunday)).length;
     const { data: bW } = await sb.from("briefs").select("due");
     const briefsWeek = (bW ?? []).filter((b) => dueInRange(b.due, monday, sunday)).length;
@@ -530,7 +533,7 @@ Deno.serve(async (req: Request) => {
   }
 
   // 3) To-do + 4) Briefs à échéance aujourd'hui ou en retard
-  const { data: todos } = await sb.from("todos").select("due,done");
+  const { data: todos } = await sb.from("todos").select("due,done").or("done.is.null,done.eq.false");
   const todosDue = (todos ?? []).filter((t) => t.done !== true && dueOrPast(t.due, today)).length;
   const { data: briefs } = await sb.from("briefs").select("due");
   const briefsDue = (briefs ?? []).filter((b) => dueOrPast(b.due, today)).length;
@@ -620,19 +623,18 @@ Deno.serve(async (req: Request) => {
   if (rdvTomorrow && prefOn(prefs, "digestRdvTomorrow")) lines.push(`${rdvTomorrow} RDV demain`);
   if (tasksDue && prefOn(prefs, "digestTasks")) lines.push(`${tasksDue} tâche${tasksDue > 1 ? "s" : ""} à échéance`);
   if (contractsSoon && prefOn(prefs, "digestContracts")) lines.push(`${contractsSoon} contrat${contractsSoon > 1 ? "s" : ""} à renouveler`);
-  if (overdue && prefOn(prefs, "digestInvoices")) lines.push(`${overdue} facture${overdue > 1 ? "s" : ""} en retard`);
-  if (reverseCount && prefOn(prefs, "digestPayouts")) lines.push(`${euro(reverseSum)} à reverser`);
   if (birthdays.length && prefOn(prefs, "digestBirthdays")) lines.push(`anniversaire de ${birthdays.join(", ")}`);
-  if (monthlyLine && prefOn(prefs, "digestMonthly")) lines.push(monthlyLine);
+  // Argent : seulement dans la version des fondateurs (la Finance leur est réservée).
+  const money: string[] = [];
+  if (overdue && prefOn(prefs, "digestInvoices")) money.push(`${overdue} facture${overdue > 1 ? "s" : ""} en retard`);
+  if (reverseCount && prefOn(prefs, "digestPayouts")) money.push(`${euro(reverseSum)} à reverser`);
+  if (monthlyLine && prefOn(prefs, "digestMonthly")) money.push(monthlyLine);
 
-  if (lines.length === 0) return jsonRes({ ok: true, sent: 0, reason: "rien à signaler", today });
+  const full = [...lines, ...money];
+  if (full.length === 0) return jsonRes({ ok: true, sent: 0, reason: "rien à signaler", today });
 
-  const payload = JSON.stringify({
-    title: "Ta journée",
-    body: lines.join(" · "),
-    url: "/",
-    tag: `ttp-daily-${today}`,
-  });
-  const r = await sendToAll(sb, payload);
-  return jsonRes({ ok: true, ...r, digest: lines.join(" · "), today });
+  const make = (body: string[]) => JSON.stringify({ title: "Ta journée", body: body.join(" · "), url: "/", tag: `ttp-daily-${today}` });
+  const rF = await sendToAll(sb, make(full), "founders");
+  const rM = lines.length ? await sendToAll(sb, make(lines), "members") : { sent: 0 };
+  return jsonRes({ ok: true, founders: rF, members: rM, digest: full.join(" · "), today });
 });

@@ -238,6 +238,9 @@ function ScoutingList({ kind }: { kind: Kind }) {
   // Scouting : statut + historique d'abonnés (blob app_state — pas de SQL).
   const { data: trackData } = useAppState<Tracking>((s: AppState) => (s[K.track] as Tracking) ?? {});
   const [localTrack, setLocalTrack] = useState<Tracking | null>(null);
+  // La copie locale (optimiste) cède dès que la donnée live change (tick suivant, qui
+  // inclut l'écriture) : sinon les changements faits ailleurs resteraient masqués.
+  useEffect(() => { setLocalTrack(null); }, [trackData]);
   const tracking = localTrack ?? trackData ?? {};
   const [statusFilter, setStatusFilter] = useState<ScoutStatus | "__all__">("__all__");
   const [snapDate, setSnapDate] = useState(() => todayISO()); // date locale (pas UTC)

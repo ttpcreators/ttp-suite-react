@@ -78,6 +78,11 @@ export function Relances() {
   const { data: app } = useAppState<AppState>();
   const [localRem, setLocalRem] = useState<Reminders | null>(null);
   const reminders: Reminders = localRem ?? ((app?.invoiceReminders as Reminders) ?? {});
+  // Le blob live a changé (autre poste, realtime) : il redevient la source de vérité
+  const liveRem = app?.invoiceReminders;
+  useEffect(() => {
+    setLocalRem(null);
+  }, [liveRem]);
 
   useEffect(() => {
     let alive = true;
@@ -86,6 +91,7 @@ export function Relances() {
       .select("id,ref,party,amount,date,status,creator")
       .then(({ data, error }) => {
         if (!alive) return;
+        // Échec d'un rafraîchissement : on garde la liste déjà affichée (pas de vidage)
         if (error) {
           setError(true);
           return;
@@ -93,6 +99,7 @@ export function Relances() {
         const next = (data as Inv[]) ?? [];
         setCache("relanceInvoices", next);
         setInvoices(next);
+        setError(false); // un chargement réussi efface l'erreur précédente
       });
     return () => {
       alive = false;
@@ -120,24 +127,26 @@ export function Relances() {
 
   const totalDue = overdue.reduce((s, o) => s + parseAmount(o.iv.amount), 0);
 
-  const saveReminders = async (next: Reminders): Promise<boolean> => {
-    const before = localRem;
-    setLocalRem(next);
-    const ok = await saveAppStateKey("invoiceReminders", next);
-    if (!ok) {
-      setLocalRem(before); // rollback : pas de relance affichée si non enregistrée
-      toast("Erreur, relance non enregistrée. Réessaie");
-    }
-    return ok;
-  };
-
   const markReminded = async (id: string) => {
-    // Relecture fraîche : ne pas écraser les compteurs de relance d'autres factures.
-    invalidateAppState();
-    const fresh = ((await getAppState())["invoiceReminders"] as Reminders) ?? {};
-    const cur = fresh[id];
-    const next: Reminders = { ...fresh, [id]: { last: todayISO(), count: (cur?.count ?? 0) + 1 } };
-    if (await saveReminders(next)) toast("Relance enregistrée ✓");
+    let ok = false;
+    let next: Reminders = {};
+    try {
+      // Relecture fraîche : ne pas écraser les compteurs de relance d'autres factures.
+      invalidateAppState();
+      const fresh = ((await getAppState())["invoiceReminders"] as Reminders) ?? {};
+      const cur = fresh[id];
+      next = { ...fresh, [id]: { last: todayISO(), count: (cur?.count ?? 0) + 1 } };
+      ok = await saveAppStateKey("invoiceReminders", next);
+    } catch {
+      ok = false;
+    }
+    // Copie locale appliquée SEULEMENT après écriture réussie : pas de relance affichée si non enregistrée
+    if (!ok) {
+      toast("Erreur, relance non enregistrée. Réessaie");
+      return;
+    }
+    setLocalRem(next);
+    toast("Relance enregistrée ✓");
   };
 
   const copyEmail = async (inv: Inv) => {
@@ -158,7 +167,8 @@ export function Relances() {
     window.location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
-  if (error)
+  // Erreur affichée seulement s'il n'y a rien à montrer (sinon on garde les données en place)
+  if (error && !invoices)
     return (
       <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
         Impossible de charger les factures.

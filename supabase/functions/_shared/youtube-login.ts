@@ -19,6 +19,9 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { tidySecret } from "./instagram.ts";
 
+// Motif ilike EXACT : « _ » et « % » d'un nom ne servent pas de jokers.
+const exactName = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
+
 export const YT_CLIENT_ID = tidySecret(Deno.env.get("YT_CLIENT_ID"));
 export const YT_CLIENT_SECRET = tidySecret(Deno.env.get("YT_CLIENT_SECRET"));
 export const YT_REDIRECT_URI = tidySecret(Deno.env.get("YT_REDIRECT_URI")) || "https://app.ttpcreators.pro/yt-callback/";
@@ -276,5 +279,5 @@ export async function ytForget(sb: SupabaseClient, creatorId: string, why: strin
   await sb.from("yt_accounts").delete().eq("creator_id", creatorId);
   const { data: c } = await sb.from("creators").select("name").eq("id", creatorId).maybeSingle<{ name: string }>();
   await sb.from("creators").update({ yt: why ? { link: null, why, at: new Date().toISOString() } : null }).eq("id", creatorId);
-  if (c?.name) await sb.from("collabs").update({ yt: null }).ilike("creator", c.name).not("yt", "is", null);
+  if (c?.name) await sb.from("collabs").update({ yt: null }).ilike("creator", exactName(c.name)).not("yt", "is", null);
 }

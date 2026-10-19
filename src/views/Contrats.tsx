@@ -16,6 +16,7 @@ import { useNavSub, useSetNavSub } from "@/lib/navSub";
 import { CONTRACT_CSS, contractHead, contractTitle, docHead, docToday } from "@/lib/pdfDoc";
 import { nbspFr } from "@/lib/representationContract";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { durationToMonths } from "@/lib/contractDuration";
 
 type CtType = "marque" | "repr" | "ugc";
 
@@ -339,6 +340,13 @@ export function Contrats() {
   const { data: histData } = useAppState<ContractHistoryEntry[]>((s: AppState) => (s["brandContractHistory"] as ContractHistoryEntry[]) ?? []);
   const [localHist, setLocalHist] = useState<ContractHistoryEntry[] | null>(null);
   const history = localHist ?? histData ?? [];
+  // Copies locales (après une écriture réussie) : le blob live redevient la source dès qu'il change.
+  useEffect(() => {
+    setLocalCfg(null);
+  }, [cfgData]);
+  useEffect(() => {
+    setLocalHist(null);
+  }, [histData]);
 
   const [ctType, setCtType] = useState<CtType>("marque");
   // Sous-page demandée depuis la sidebar (Contrats → Marque × Créateur / Représentation / UGC).
@@ -397,6 +405,25 @@ export function Contrats() {
     setDefraiement(cs.defraiement ?? SCENARIO_DEFAULT.defraiement);
   };
 
+  // Formulaire vierge (créateur sans modèle) : rien ne reste du créateur précédent.
+  const resetForm = () => {
+    setBrand("");
+    setValue("");
+    setCommission("20");
+    setDuration("");
+    setDeliverables("");
+    setExtra([]);
+    setCaseName("Standard");
+    setCollab(SCENARIO_DEFAULT.collab);
+    setRights(SCENARIO_DEFAULT.rights);
+    setRightsDuration(SCENARIO_DEFAULT.rightsDuration);
+    setTerritory(SCENARIO_DEFAULT.territory);
+    setPayment(SCENARIO_DEFAULT.payment);
+    setTva(SCENARIO_DEFAULT.tva);
+    setExclScope(SCENARIO_DEFAULT.exclScope);
+    setDefraiement(SCENARIO_DEFAULT.defraiement);
+  };
+
   // Au changement de créateur (ou à l'arrivée des configs), charge son 1er cas s'il en a un,
   // une seule fois par créateur. Sans cas enregistré : on remet les valeurs par défaut.
   const appliedFor = useRef<string | null>(null);
@@ -414,10 +441,7 @@ export function Contrats() {
       applyCase(cs);
       appliedFor.current = ctName;
     } else if (switched) {
-      setBrand("");
-      setValue("");
-      setCommission("20");
-      setCaseName("Standard");
+      resetForm();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctName, configs]);
@@ -521,24 +545,30 @@ export function Contrats() {
     }
   };
 
-  const downloadPDF = () => {
+  const downloadPDF = async () => {
     // Ouvre la boîte d'impression → « Enregistrer au format PDF » (vrai PDF, texte net).
     const html = buildHTML();
-    void archiveContract(html);
     printHtml(html);
-    toast("PDF prêt, contrat ajouté aux contrats enregistrés");
+    // Annoncé seulement une fois l'archivage réussi (sinon mutateHistory a déjà signalé l'erreur)
+    if (await archiveContract(html)) toast("PDF prêt, contrat ajouté aux contrats enregistrés ✓");
   };
 
   // ── Cas de configuration (par créateur) ──
   // Relecture fraîche avant merge : ne pas écraser les cas d'autres créateurs.
+  // Copie locale appliquée SEULEMENT après écriture réussie (pas d'affichage fantôme).
   const mutateConfigs = async (fn: (fresh: ContractConfigs) => ContractConfigs) => {
-    invalidateAppState();
-    const fresh = ((await getAppState())["contractConfigs"] as ContractConfigs) ?? {};
-    const next = fn(fresh);
-    setLocalCfg(next);
-    const ok = await saveAppStateKey("contractConfigs", next);
-    if (!ok) toast("Erreur — réessaie");
-    return ok;
+    try {
+      invalidateAppState();
+      const fresh = ((await getAppState())["contractConfigs"] as ContractConfigs) ?? {};
+      const next = fn(fresh);
+      const ok = await saveAppStateKey("contractConfigs", next);
+      if (ok) setLocalCfg(next);
+      else toast("Erreur — réessaie");
+      return ok;
+    } catch {
+      toast("Erreur — réessaie");
+      return false;
+    }
   };
 
   const saveCase = async () => {
@@ -565,17 +595,22 @@ export function Contrats() {
 
   // ── Historique des contrats (blob) — relecture fraîche avant merge ──
   const mutateHistory = async (fn: (fresh: ContractHistoryEntry[]) => ContractHistoryEntry[]) => {
-    invalidateAppState();
-    const fresh = ((await getAppState())["brandContractHistory"] as ContractHistoryEntry[]) ?? [];
-    const next = fn(fresh);
-    setLocalHist(next);
-    const ok = await saveAppStateKey("brandContractHistory", next);
-    if (!ok) toast("Erreur — réessaie");
-    return ok;
+    try {
+      invalidateAppState();
+      const fresh = ((await getAppState())["brandContractHistory"] as ContractHistoryEntry[]) ?? [];
+      const next = fn(fresh);
+      const ok = await saveAppStateKey("brandContractHistory", next);
+      if (ok) setLocalHist(next);
+      else toast("Erreur — réessaie");
+      return ok;
+    } catch {
+      toast("Erreur — réessaie");
+      return false;
+    }
   };
   /** Archive le contrat courant. Dédoublonne (même HTML que le dernier archivé) et
-   *  plafonne à 100 entrées pour borner la taille du blob. */
-  const archiveContract = async (html: string) => {
+   *  plafonne à 100 entrées pour borner la taille du blob. Renvoie true si l'archivage a réussi. */
+  const archiveContract = async (html: string): Promise<boolean> => {
     let entry: ContractHistoryEntry | null = null;
     const ok = await mutateHistory((fresh) => {
       if (fresh.some((h) => h.html === html)) return fresh; // déjà archivé à l'identique
@@ -584,11 +619,14 @@ export function Contrats() {
     });
     const added = entry as ContractHistoryEntry | null;
     // Réimpression d'un contrat déjà archivé : on ne touche pas à son échéance.
-    if (!ok || !added) return;
+    if (!ok || !added) return ok;
     // Auto-échéance de FIN de contrat : renseigne la page Échéances sans saisie manuelle.
-    // Début = date de génération (locale), durée = champ « Durée » du contrat.
-    const months = parseInt(String(duration).replace(/[^0-9]/g, ""), 10);
-    if (ctName && ctName !== "[Créateur]" && months > 0) {
+    // Début = date de génération (locale), durée = champ « Durée » lu avec son unité (an, mois, semaine, jour).
+    const months = durationToMonths(duration);
+    if (duration.trim() && months === null && ctName && ctName !== "[Créateur]") {
+      toast(`Attention : durée « ${duration.trim()} » non comprise, aucune fin de contrat suivie (écris par ex. 12 mois ou 1 an)`);
+    }
+    if (ctName && ctName !== "[Créateur]" && months !== null) {
       type Dl = { id: string; creator: string; type: string; start: string; months: number; note?: string; brand?: string; contractId?: string };
       const dlBrand = ctType === "repr" ? "" : brand.trim();
       const sameContract = (d: Dl) =>
@@ -610,6 +648,7 @@ export function Contrats() {
         toast("Contrat enregistré, mais sa fin de contrat n'est pas suivie. Réessaie");
       }
     }
+    return ok;
   };
   const deleteHistory = (id: string) => mutateHistory((fresh) => fresh.filter((h) => h.id !== id));
 

@@ -9,7 +9,9 @@
 //
 // AUTH (config.toml -> verify_jwt = true) : JWT requis.
 //   créateur → toujours lui-même (le nom envoyé est ignoré) ;
-//   agence   → le créateur demandé dans { creator }.
+//   agence   → le créateur demandé dans { creator } ; l'argent (factures,
+//              détails, versements) seulement pour les fondateurs, comme en base
+//              (invoices_agency exige is_founder()).
 // ============================================================================
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
@@ -34,8 +36,8 @@ Deno.serve(async (req: Request) => {
   if (error || !data?.user) return jsonRes({ error: "unauthorized" }, 401);
   // FAIL-CLOSED : profil illisible ou absent → refus.
   const { data: prof, error: profErr } = await sb
-    .from("profiles").select("role,creator_name").eq("user_id", data.user.id)
-    .maybeSingle<{ role: string; creator_name: string | null }>();
+    .from("profiles").select("role,creator_name,agency_role").eq("user_id", data.user.id)
+    .maybeSingle<{ role: string; creator_name: string | null; agency_role: string | null }>();
   if (profErr || !prof) return jsonRes({ error: "forbidden" }, 403);
 
   const body = (await req.json().catch(() => ({}))) as Json;
@@ -44,11 +46,15 @@ Deno.serve(async (req: Request) => {
   else if (prof.role === "agency") name = String(body.creator ?? "").trim();
   else return jsonRes({ error: "forbidden" }, 403);
   if (!name) return jsonRes({ error: "creator manquant" }, 400);
+  // Le créateur voit SES gains ; côté agence, seuls les fondateurs voient l'argent.
+  const money = prof.role === "creator" || prof.agency_role === "founder";
   const pat = exact(name);
 
   const [cr, inv, col, gif, blob] = await Promise.all([
     sb.from("creators").select("name,commission,ig,tt,yt").ilike("name", pat).limit(1).maybeSingle(),
-    sb.from("invoices").select("id,ref,party,amount,date,status,created_at").ilike("creator", pat),
+    money
+      ? sb.from("invoices").select("id,ref,party,amount,date,status,created_at").ilike("creator", pat)
+      : Promise.resolve({ data: [], error: null }),
     sb.from("collabs").select("id,brand,deliverables,cachet,step,status,created_at").ilike("creator", pat),
     sb.from("gifting").select("brand,product,value,received_on,created_at").ilike("creator", pat),
     sb.from("module_rows").select("a").eq("module", "__app_state__").order("created_at", { ascending: false }).limit(1),
@@ -77,7 +83,7 @@ Deno.serve(async (req: Request) => {
     if (d) details[i.id] = { items: d.items, franchise: d.franchise, vatRate: d.vatRate, commissionRate: d.commissionRate, issueDate: d.issueDate };
   }
   const payMap = (state.creatorPayouts ?? {}) as Record<string, unknown[]>;
-  const payouts = Object.entries(payMap).filter(([k]) => lc(k) === lc(name)).flatMap(([, v]) => (Array.isArray(v) ? v : []));
+  const payouts = !money ? [] : Object.entries(payMap).filter(([k]) => lc(k) === lc(name)).flatMap(([, v]) => (Array.isArray(v) ? v : []));
   const engagement = (Array.isArray(state.engagementHistory) ? (state.engagementHistory as Json[]) : [])
     .filter((e) => lc(e?.creator) === lc(name))
     .map((e) => ({ date: e.date, platform: e.platform, platformLabel: e.platformLabel, er: e.er }));
@@ -89,6 +95,7 @@ Deno.serve(async (req: Request) => {
     return Object.fromEntries(keys.filter((k) => k in o).map((k) => [k, o[k]]));
   };
   return jsonRes({
+    money,
     creator: {
       name: (c?.name as string) ?? name,
       commission: c?.commission ?? null,

@@ -723,7 +723,10 @@ export default function App() {
     }
     return (
       <Suspense fallback={<div className="grid min-h-screen place-items-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+        {/* key : changer de créateur repart d'un espace neuf (formulaires, listes,
+            infos) au lieu d'enregistrer les données du précédent sur le suivant. */}
         <CreatorSpace
+          key={pc}
           name={pc}
           dark={dark}
           onToggleTheme={toggleTheme}
@@ -768,7 +771,7 @@ export default function App() {
   );
   const mainInner =
     detailCreator ? (
-      <CreatorDetail name={detailCreator} onBack={() => setDetailCreator(null)} onOpenPortal={openPortal} />
+      <CreatorDetail key={detailCreator} name={detailCreator} onBack={() => setDetailCreator(null)} onOpenPortal={openPortal} />
     ) : !canSee(active) ? (
       accessDenied
     ) : (

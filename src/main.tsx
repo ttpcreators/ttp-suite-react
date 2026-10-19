@@ -6,6 +6,7 @@ import { ErrorBoundary, recoverStaleApp } from './components/ErrorBoundary.tsx'
 import { initAccent } from './lib/accent'
 import { initIosUi } from './lib/iosUi'
 import { installGlobalErrorReporting } from './lib/errorReport'
+import { Tooltips } from './components/ui/tooltips'
 
 // Couleur d'accent personnalisée (localStorage) posée AVANT le rendu → pas de flash.
 initAccent()
@@ -36,6 +37,8 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary variant="full">
       <App />
+      {/* Bulles d'aide aux couleurs de l'app pour tous les `title` (agence et créateur). */}
+      <Tooltips />
     </ErrorBoundary>
   </StrictMode>,
 )

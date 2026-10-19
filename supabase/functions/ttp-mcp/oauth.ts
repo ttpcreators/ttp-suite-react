@@ -83,6 +83,13 @@ export async function register(sb: SupabaseClient, body: Json): Promise<Out> {
   if (!uris.length || uris.length > 10 || !uris.every(allowedRedirect)) {
     return oauthErr("invalid_redirect_uri", "Adresse de retour non autorisée (Claude uniquement).");
   }
+  // Ménage : les enregistrements de plus de 24 h jamais utilisés (aucune connexion)
+  // ne doivent pas remplir le plafond et bloquer les vraies connexions.
+  const { data: used } = await sb.from("mcp_grants").select("client_id").not("client_id", "is", null);
+  const keep = [...new Set(((used as { client_id: string }[] | null) ?? []).map((g) => g.client_id))];
+  let purge = sb.from("mcp_clients").delete().lt("created_at", new Date(Date.now() - 86400000).toISOString());
+  if (keep.length) purge = purge.not("client_id", "in", `(${keep.map((k) => JSON.stringify(k)).join(",")})`);
+  await purge.then(() => {}, () => {});
   const { count } = await sb.from("mcp_clients").select("client_id", { count: "exact", head: true });
   if ((count ?? 0) > 1000) return oauthErr("temporarily_unavailable", "Trop d'enregistrements.", 429);
   const method = ["client_secret_post", "client_secret_basic"].includes(String(body.token_endpoint_auth_method)) ? String(body.token_endpoint_auth_method) : "none";
@@ -149,13 +156,15 @@ export async function approve(sb: SupabaseClient, jwt: string, body: Json): Prom
   return { status: 200, body: { redirect: url.toString() } };
 }
 
-async function issue(sb: SupabaseClient, grantId: string, clientId: string): Promise<Json> {
+async function issue(sb: SupabaseClient, grantId: string, clientId: string): Promise<Json | null> {
   const access = randomToken("ttp_at_");
   const refresh = randomToken("ttp_rt_");
-  await sb.from("mcp_tokens").insert([
+  // Jetons renvoyés seulement s'ils sont bien enregistrés (sinon 401 au premier appel).
+  const { error } = await sb.from("mcp_tokens").insert([
     { token_hash: await sha256hex(access), kind: "access", grant_id: grantId, client_id: clientId, expires_at: inSeconds(ACCESS_TTL) },
     { token_hash: await sha256hex(refresh), kind: "refresh", grant_id: grantId, client_id: clientId, expires_at: inSeconds(REFRESH_TTL) },
   ]);
+  if (error) return null;
   return { access_token: access, token_type: "Bearer", expires_in: ACCESS_TTL, refresh_token: refresh, scope: "ttp" };
 }
 
@@ -194,7 +203,8 @@ export async function token(sb: SupabaseClient, form: URLSearchParams, basic: st
     if (form.get("redirect_uri") && form.get("redirect_uri") !== row.redirect_uri) return oauthErr("invalid_grant", "Adresse de retour différente.");
     if (!verifier || (await sha256b64url(verifier)) !== row.code_challenge) return oauthErr("invalid_grant", "Vérification PKCE échouée.");
     if (!(await grantAlive(sb, row.grant_id))) return oauthErr("invalid_grant", "Connexion coupée.");
-    return { status: 200, body: await issue(sb, row.grant_id, c.client_id) };
+    const out = await issue(sb, row.grant_id, c.client_id);
+    return out ? { status: 200, body: out } : oauthErr("server_error", "Jetons non enregistrés, réessaie.", 500);
   }
   if (grantType === "refresh_token") {
     const rt = form.get("refresh_token") ?? "";
@@ -204,7 +214,13 @@ export async function token(sb: SupabaseClient, form: URLSearchParams, basic: st
     const row = (rows as { grant_id: string; client_id: string }[] | null)?.[0];
     if (!row || row.client_id !== c.client_id) return oauthErr("invalid_grant", "Jeton de renouvellement invalide.");
     if (!(await grantAlive(sb, row.grant_id))) return oauthErr("invalid_grant", "Connexion coupée.");
-    return { status: 200, body: await issue(sb, row.grant_id, c.client_id) };
+    const out = await issue(sb, row.grant_id, c.client_id);
+    if (!out) {
+      // Le renouvellement a échoué : on rend l'ancien jeton utilisable pour réessayer.
+      await sb.from("mcp_tokens").update({ revoked_at: null }).eq("token_hash", await sha256hex(rt)).then(() => {}, () => {});
+      return oauthErr("server_error", "Jetons non enregistrés, réessaie.", 500);
+    }
+    return { status: 200, body: out };
   }
   return oauthErr("unsupported_grant_type", "Type de demande non pris en charge.");
 }

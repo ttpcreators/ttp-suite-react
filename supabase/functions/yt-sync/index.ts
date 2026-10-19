@@ -25,6 +25,9 @@ import { brandKey, domainLabel } from "../_shared/youtube.ts";
 import { ytAnalytics, ytForget, ytFreshToken, ytLoginReady, ytMyChannel, ytMyVideos, ytStats, type YtAccount, type YtVideo } from "../_shared/youtube-login.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
+// Motif ilike EXACT : « _ » et « % » d'un nom ne servent pas de jokers.
+const exactName = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
+
 type Json = Record<string, unknown>;
 type CreatorRow = { id: string; name: string; platform: string | null; mediakit: Json | null; yt: Json | null };
 type CollabRow = { id: string; brand: string; creator: string | null; step: number; created_at: string; yt: Json | null };
@@ -130,7 +133,7 @@ async function syncCreator(sb: SupabaseClient, acc: YtAccount, brandHandles: Map
   // les vidéos déjà repérées : YouTube ne renvoie que les 25 dernières, une vidéo de collab
   // plus ancienne doit garder ses derniers chiffres (le Debrief les lit), jamais disparaître.
   if (videos.length) {
-    const { data: cols, error: colErr } = await sb.from("collabs").select("id, brand, creator, step, created_at, yt").ilike("creator", c.name).gte("step", 4);
+    const { data: cols, error: colErr } = await sb.from("collabs").select("id, brand, creator, step, created_at, yt").ilike("creator", exactName(c.name)).gte("step", 4);
     if (colErr) console.error("yt-sync collabs", c.name, colErr.message);
     for (const col of (cols as CollabRow[] | null) ?? []) {
       const match = videoMatcher(col.brand, brandHandles.get(norm(col.brand).trim()) ?? []);
