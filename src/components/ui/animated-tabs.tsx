@@ -29,7 +29,7 @@ export type TabItem = {
   disabled?: boolean;
   /** Compteur affiché après le libellé (ex. nombre d'éléments filtrés). */
   count?: number;
-  /** Pastille de couleur avant le libellé (classe Tailwind, ex. "bg-emerald-500"). */
+  /** Pastille de couleur avant le libellé (classe Tailwind, ex. "bg-signal"). */
   dot?: string;
   /** Masque le libellé (l'icône reste) : toujours, ou seulement sur mobile. */
   hideLabel?: "always" | "mobile";

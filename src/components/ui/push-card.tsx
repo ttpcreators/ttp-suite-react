@@ -49,7 +49,7 @@ export function PushCard() {
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-3.5 shadow-sm">
         <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
           <BellRing className="h-4 w-4 text-primary" /> Notifications
-          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", enabled ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-panel text-faint")}>
+          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", enabled ? "bg-signal/10 text-signaltext" : "bg-panel text-faint")}>
             {enabled ? "Activées" : "Désactivées"}
           </span>
         </div>
@@ -77,13 +77,13 @@ export function PushCard() {
         <ul className="flex flex-col gap-2">
           {["Nouveaux briefs & deals", "Cadeaux / gifting reçus", "Tâches et documents ajoutés"].map((t) => (
             <li key={t} className="flex items-center gap-2 text-[13px] text-muted-foreground">
-              <Check className="h-4 w-4 shrink-0 text-emerald-500" /> {t}
+              <Check className="h-4 w-4 shrink-0 text-signaltext" /> {t}
             </li>
           ))}
         </ul>
         {enabled && (
           <div className="mt-4 flex items-center justify-between gap-2 rounded-lg bg-panel/50 px-3 py-2.5">
-            <span className="text-[12px] font-medium text-emerald-600 dark:text-emerald-400">✓ Activées sur ce téléphone</span>
+            <span className="text-[12px] font-medium text-signaltext">✓ Activées sur ce téléphone</span>
             <button type="button" onClick={disable} disabled={busy} className="text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50">
               Désactiver
             </button>

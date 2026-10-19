@@ -363,9 +363,9 @@ function ErrorBanner({ text, onRetry, onReconnect, tone = "error" }: { text: str
   return (
     <div role={tone === "error" ? "alert" : "status"} className={cn(
       "flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-4 py-2.5 text-[12.5px] sm:px-5",
-      tone === "error" ? "bg-red-500/[0.06] text-foreground" : "bg-muted/50 text-muted-foreground",
+      tone === "error" ? "bg-danger/[0.06] text-foreground" : "bg-muted/50 text-muted-foreground",
     )}>
-      <CircleAlert className={cn("h-3.5 w-3.5 shrink-0", tone === "error" ? "text-red-500" : "text-muted-foreground")} />
+      <CircleAlert className={cn("h-3.5 w-3.5 shrink-0", tone === "error" ? "text-dangertext" : "text-muted-foreground")} />
       <span className="min-w-0 flex-1">{text}</span>
       {onReconnect && (
         <button type="button" onClick={onReconnect} className="shrink-0 rounded-full bg-primary px-2.5 py-1 text-[12px] font-semibold text-primary-foreground hover:opacity-90">
@@ -384,7 +384,7 @@ function ErrorBanner({ text, onRetry, onReconnect, tone = "error" }: { text: str
 function ErrorCard({ text, onRetry, onReconnect }: { text: string; onRetry: () => void; onReconnect?: () => void }) {
   return (
     <div role="alert" className="mx-auto mt-6 flex max-w-md flex-col items-center gap-3 rounded-xl border border-border bg-muted/40 px-5 py-6 text-center">
-      <CircleAlert className="h-5 w-5 text-red-500" />
+      <CircleAlert className="h-5 w-5 text-dangertext" />
       <p className="text-[13px] text-foreground">{text}</p>
       <div className="flex flex-wrap justify-center gap-2">
         {onReconnect && (
@@ -414,7 +414,7 @@ function RowAction({ icon: Icon, label, shortcut, onClick, danger, side = "botto
       aria-label={label}
       className={cn(
         "group/tip relative grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground",
-        danger && "hover:text-red-600 dark:hover:text-red-400",
+        danger && "hover:text-dangertext dark:hover:text-dangertext",
       )}
     >
       <Icon className="h-[15px] w-[15px]" />
@@ -460,7 +460,7 @@ function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhot
                   <CreatorAvatar name={creator} photoUrl={creatorPhoto} className="h-4 w-4 rounded-full text-[7px]" />
                 </span>
               )}
-              {draft && <span className="shrink-0 text-[11.5px] italic leading-4 text-red-600 dark:text-red-400">Brouillon</span>}
+              {draft && <span className="shrink-0 text-[11.5px] italic leading-4 text-dangertext">Brouillon</span>}
               <span className="flex-1" />
               <span className={cn("shrink-0 text-[11px] leading-4 tabular-nums lg:group-focus-within:invisible lg:group-hover:invisible", t.unread ? "font-semibold text-foreground" : "text-faint")}>
                 {fmtWhen(t.ts)}
@@ -1723,7 +1723,7 @@ export function Mails() {
                   <span className="min-w-0 flex-1">
                     <span className="flex min-w-0 items-center gap-1.5">
                       <span className="truncate text-[13px] font-semibold text-foreground" title={c.label}>{c.brand || c.label}</span>
-                      {contacted(c) && <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà échangé" />}
+                      {contacted(c) && <span className="size-1.5 shrink-0 rounded-full bg-signal" title="Déjà échangé" />}
                     </span>
                     <span className="block truncate text-[12px] text-muted-foreground">{c.person || c.email}</span>
                   </span>

@@ -79,7 +79,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 /** Point de couleur du statut (remplace le badge « Actif » : vert = actif). */
 const statusDot = (status: string): string =>
-  status === "inactif" ? "bg-neutral-400" : status === "pause" ? "bg-amber" : status === "live" ? "bg-rose-500" : "bg-emerald-500";
+  status === "inactif" ? "bg-neutral-400" : status === "pause" ? "bg-amber" : status === "live" ? "bg-danger" : "bg-signal";
 
 export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
   const [rows, setRows] = useState<Creator[] | null>(() => getCache<Creator[]>("roster"));
@@ -404,7 +404,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                           type="button"
                           title={`Données à jour · ${MONTH_LABEL} (clique pour annuler)`}
                           onClick={(e) => { e.stopPropagation(); markUpToDate(c, false); }}
-                          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-emerald-600 transition-colors hover:bg-emerald-500/25 dark:text-emerald-400"
+                          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-signal/15 text-signaltext transition-colors hover:bg-signal/25"
                         >
                           <Check className="h-4 w-4" />
                         </button>

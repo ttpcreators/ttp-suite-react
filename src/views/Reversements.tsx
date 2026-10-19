@@ -265,7 +265,7 @@ export function Reversements() {
                       <button
                         type="button"
                         onClick={() => setPendingDel({ message: `Supprimer ce paiement de ${formatEuro(p.amount)} ?`, run: () => removePayout(r.creator, p.id) })}
-                        className="ml-auto grid h-7 w-7 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-rose-500"
+                        className="ml-auto grid h-7 w-7 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-dangertext"
                         title="Supprimer"
                       >
                         <Trash2 className="h-3.5 w-3.5" />

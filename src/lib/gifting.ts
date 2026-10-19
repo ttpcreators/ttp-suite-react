@@ -35,8 +35,8 @@ export const DEFAULT_MENTIONS =
 export const GIFT_STATUS: StatusOption[] = [
   { value: "recu", label: "Reçu", dot: "bg-cyan" },
   { value: "attente", label: "Contenu en attente", dot: "bg-amber" },
-  { value: "publie", label: "Contenu publié", dot: "bg-emerald-500" },
-  { value: "refuse", label: "Refusé", dot: "bg-rose-500" },
+  { value: "publie", label: "Contenu publié", dot: "bg-signal" },
+  { value: "refuse", label: "Refusé", dot: "bg-danger" },
   { value: "clos", label: "Clôturé", dot: "bg-faint" },
 ];
 

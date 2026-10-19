@@ -121,7 +121,7 @@ function RevenueChart({ points }: { points: RevenuePoint[] }) {
           <span
             className={cn(
               "flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-              delta >= 0 ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/12 text-rose-500",
+              delta >= 0 ? "bg-signal/12 text-signaltext" : "bg-danger/12 text-dangertext",
             )}
           >
             {delta >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
@@ -192,7 +192,7 @@ function CompareCard({ label, current, previous, delta, curLbl, prevLbl }: { lab
           <span
             className={
               "flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold " +
-              (delta >= 0 ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/12 text-rose-500")
+              (delta >= 0 ? "bg-signal/12 text-signaltext" : "bg-danger/12 text-dangertext")
             }
           >
             {delta >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}

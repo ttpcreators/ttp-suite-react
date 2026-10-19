@@ -62,6 +62,10 @@
   --signal: #16a34a;
   --signaltext: #15803d;
   --signalsoft: #f0fdf4;
+  /* Rouge = retard, erreur, suppression : une seule nuance partout. */
+  --danger: #dc2626;
+  --dangertext: #dc2626;
+  --dangersoft: #fef2f2;
   /* Code couleur de l’Aperçu : encre + gris, vert = bon, rouge = retard, bleu =
      action. Les anciens jetons décoratifs deviennent des niveaux d’encre :
      indigo = encre forte, cyan et amber = gris neutre (plus d’orange). */
@@ -103,6 +107,9 @@
   --signal: #16a34a;
   --signaltext: #4ade80;
   --signalsoft: #052e16;
+  --danger: #ef4444;
+  --dangertext: #f87171;
+  --dangersoft: #2a0c0c;
   --indigo: #e5e5e5;
   --amber: #a3a3a3;
   --cyan: #a3a3a3;
@@ -164,6 +171,9 @@
   --color-signal: var(--signal);
   --color-signaltext: var(--signaltext);
   --color-signalsoft: var(--signalsoft);
+  --color-danger: var(--danger);
+  --color-dangertext: var(--dangertext);
+  --color-dangersoft: var(--dangersoft);
   --color-indigo: var(--indigo);
   --color-amber: var(--amber);
   --color-cyan: var(--cyan);

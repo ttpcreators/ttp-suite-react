@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Picker } from "@/components/ui/form";
 import {
   AtSign, Binoculars, Bookmark, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Loader2, Mail, PhoneOutgoing, Plus, Radar, Search, Send, SlidersHorizontal, Users, Wallet, EyeOff, RotateCcw, X,
 } from "lucide-react";
@@ -596,7 +597,7 @@ function CreatorFinder() {
           />
           {isYt && ytQuota && (
             <span className="text-[11px] text-faint" title="Google offre 10 000 unités par jour : une recherche par thème ou par marque en coûte environ 150, une chaîne de la liste environ 3">
-              Quota YouTube du jour : <span className={cn("font-semibold", ytQuota.used / ytQuota.limit > 0.85 ? "text-rose-500" : "text-foreground")}>{ytQuota.used.toLocaleString("fr-FR")}</span> / {ytQuota.limit.toLocaleString("fr-FR")}
+              Quota YouTube du jour : <span className={cn("font-semibold", ytQuota.used / ytQuota.limit > 0.85 ? "text-dangertext" : "text-foreground")}>{ytQuota.used.toLocaleString("fr-FR")}</span> / {ytQuota.limit.toLocaleString("fr-FR")}
             </span>
           )}
         </div>
@@ -632,9 +633,7 @@ function CreatorFinder() {
             ) : (
               <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void runYt(); }}>
                 <input aria-label={ytSource === "search" ? "Thème" : "Marque"} value={ytQ} onChange={(e) => setYtQ(e.target.value)} placeholder={ytSource === "search" ? "fitness lyon, maman bébé, recettes healthy…" : "nom de la marque (ex : gymshark)"} className={cn(IN, "min-w-[200px] flex-1 py-2 text-[13px]")} />
-                <select aria-label="Pays" value={ytRegion} onChange={(e) => setYtRegion(e.target.value)} className={cn(IN, "w-36")}>
-                  {REGIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
+                <Picker size="sm" ariaLabel="Pays" className="w-36" value={ytRegion} onChange={setYtRegion} options={REGIONS.map(([v, l]) => ({ value: v, label: l }))} />
                 {runBtn(ytSource === "search" ? "Trouver des chaînes" : "Trouver ses créateurs", () => void runYt())}
               </form>
             )}
@@ -702,22 +701,17 @@ function CreatorFinder() {
             <Field label="Engagement min (%)" help={<><p>Likes + commentaires moyens de ses 12 derniers posts, divisés par ses abonnés.</p><p>Repère : de 1 à 3 % c'est la moyenne, au-dessus de 3 % c'est bon. Les petits comptes ont souvent un taux plus haut.</p></>}><input aria-label="Engagement minimum" value={minEr} onChange={(e) => setMinEr(e.target.value)} placeholder="2" inputMode="decimal" className={cn(IN, "w-24")} /></Field>
             <Field label="Mot dans la bio" className="min-w-[140px] flex-1" help={<p>Pour cibler une ville (Lyon), une niche (running, maman, vegan) ou une langue. L'app cherche le mot dans la bio et le nom.</p>}><input aria-label="Mot dans la bio" value={bioWord} onChange={(e) => setBioWord(e.target.value)} placeholder="Lyon, running, maman…" className={IN} /></Field>
             <Field label="Email" help={<p>L'app cherche un email dans la bio, puis sur le lien du créateur (Linktree, son site). « Avec email » : tu peux lui écrire tout de suite depuis l'app.</p>}>
-              <select aria-label="Email" value={emailF} onChange={(e) => setEmailF(e.target.value as typeof emailF)} className={cn(IN, "w-28")}>
-                <option value="tous">Tous</option><option value="avec">Avec email</option><option value="sans">Sans email</option>
-              </select>
+              <Picker size="sm" ariaLabel="Email" className="w-36" value={emailF} onChange={(v) => setEmailF(v as typeof emailF)}
+                options={[{ value: "tous", label: "Tous" }, { value: "avec", label: "Avec email" }, { value: "sans", label: "Sans email" }]} />
             </Field>
             <Field label="Agence" help={<><p>L'app cherche dans la bio et sur le lien des indices comme « management », « agence », « représentée par », « booking », ou un email d'agence.</p><p>C'est un indice, pas une certitude : vérifie avant d'écrire.</p></>}>
-              <select aria-label="Agence" value={agencyF} onChange={(e) => setAgencyF(e.target.value as typeof agencyF)} className={cn(IN, "w-32")}>
-                <option value="toutes">Toutes</option><option value="sans">Sans agence</option><option value="avec">Déjà en agence</option>
-              </select>
+              <Picker size="sm" ariaLabel="Agence" className="w-40" value={agencyF} onChange={(v) => setAgencyF(v as typeof agencyF)}
+                options={[{ value: "toutes", label: "Toutes" }, { value: "sans", label: "Sans agence" }, { value: "avec", label: "Déjà en agence" }]} />
             </Field>
             <Field label="Trier par">
-              <select aria-label="Trier par" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className={cn(IN, "w-36")}>
-                <option value="score">Potentiel</option>
-                <option value="followers">Abonnés</option>
-                <option value="er">Engagement</option>
-                {last.mode !== "liste" && last.mode !== "yt-list" && <option value="count">{last.mode === "similaire" ? "Marques en commun" : last.mode === "yt-brand" ? "Vidéos sur la marque" : last.mode === "yt-search" ? "Pertinence" : "Citations"}</option>}
-              </select>
+              <Picker size="sm" ariaLabel="Trier par" className="w-44" value={sort} onChange={(v) => setSort(v as typeof sort)}
+                options={[{ value: "score", label: "Potentiel" }, { value: "followers", label: "Abonnés" }, { value: "er", label: "Engagement" },
+                  ...(last.mode !== "liste" && last.mode !== "yt-list" ? [{ value: "count", label: last.mode === "similaire" ? "Marques en commun" : last.mode === "yt-brand" ? "Vidéos sur la marque" : last.mode === "yt-search" ? "Pertinence" : "Citations" }] : [])]} />
             </Field>
             <div className="pb-2 text-[12px] text-muted-foreground">
               <Check2 label="Comptes perso, marques, introuvables" checked={showOthers} onChange={setShowOthers} help={<p>Cachés par défaut : les comptes perso (Meta ne donne pas leurs chiffres), les marques citées, et les @ introuvables. Coche pour les voir.</p>} />
@@ -792,7 +786,7 @@ function CreatorFinder() {
                       <div className="relative">
                         <Pic src={d?.picture} name={d?.name || c.username} />
                         {ok && (
-                          <span title={`Potentiel ${p.score} / 100`} className={cn("absolute -bottom-1 -right-1.5 rounded-full border-2 border-surface px-1 text-[9px] font-bold tabular-nums leading-[14px]", p.score >= 70 ? "bg-emerald-500 text-white" : p.score >= 45 ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground")}>
+                          <span title={`Potentiel ${p.score} / 100`} className={cn("absolute -bottom-1 -right-1.5 rounded-full border-2 border-surface px-1 text-[9px] font-bold tabular-nums leading-[14px]", p.score >= 70 ? "bg-signal text-white" : p.score >= 45 ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground")}>
                             {p.score}
                           </span>
                         )}
@@ -803,7 +797,7 @@ function CreatorFinder() {
                             {yt && <PlatformIcon platform="youtube" className="h-3.5 w-3.5 shrink-0" />}{yt ? d?.name || `@${c.username}` : `@${c.username}`}
                           </a>
                           {d?.name && <span className="truncate text-[12px] text-muted-foreground">{yt ? `@${d.handle || c.username}` : d.name}</span>}
-                          {ok && p.score >= 70 && <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Pépite</span>}
+                          {ok && p.score >= 70 && <span className="rounded-full bg-signal/10 px-2 py-0.5 text-[10px] font-semibold text-signaltext">Pépite</span>}
                           {c.count && last.mode !== "yt-search" ? (
                             <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                               {last.mode === "similaire" ? `${c.count} marque${c.count > 1 ? "s" : ""} en commun` : last.mode === "yt-brand" ? `${c.count} vidéo${c.count > 1 ? "s" : ""} sur la marque` : `cité ${c.count}×`}
@@ -828,7 +822,7 @@ function CreatorFinder() {
                         {!!c.via?.length && (
                           <div className="mt-1 text-[10px] text-faint">Marques en commun : {c.via.map((b) => `@${b}`).join(", ")}</div>
                         )}
-                        {p.flags.length > 0 && <div className="mt-1 text-[10px] font-medium text-rose-500">⚠︎ {p.flags.join(" · ")}</div>}
+                        {p.flags.length > 0 && <div className="mt-1 text-[10px] font-medium text-dangertext">⚠︎ {p.flags.join(" · ")}</div>}
                         {c.why && <div className="mt-0.5 text-[11px] text-faint">{igWhyText(c.why)}</div>}
                       </div>
                     </div>
@@ -860,27 +854,21 @@ function CreatorFinder() {
                       ) : (
                         /* Déjà trié : son statut, et de quoi le changer de section. */
                         <>
-                          <span className={cn("flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium", sec === "pas" ? "bg-panel text-muted-foreground" : sec === "contacter" ? "bg-primary/10 text-primary" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400")}>
+                          <span className={cn("flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium", sec === "pas" ? "bg-panel text-muted-foreground" : sec === "contacter" ? "bg-primary/10 text-primary" : "bg-signal/10 text-signaltext")}>
                             {sec === "pas" ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
                             {scoutSt ? SCOUT_LABEL[scoutSt] : "Pas intéressé"}
                           </span>
-                          <select
-                            aria-label={`Changer de section ${c.username}`}
-                            value=""
-                            disabled={adding === c.username}
-                            onChange={(e) => {
-                              const v = e.target.value;
+                          <Picker size="xs" ariaLabel={`Changer de section ${c.username}`} className="w-[130px]" pill placeholder="Déplacer…" value="" disabled={adding === c.username}
+                            onChange={(v) => {
                               if (v === "trier") void untriage(c);
                               else if (v === "scouting" || v === "contacter" || v === "pas") void triage(c, v);
                             }}
-                            className="h-7 rounded-full border border-border bg-surface px-2.5 text-[11px] text-muted-foreground outline-none hover:bg-rowhover"
-                          >
-                            <option value="" disabled>Déplacer…</option>
-                            {sec !== "scouting" && <option value="scouting">Scouting</option>}
-                            {sec !== "contacter" && <option value="contacter">À contacter</option>}
-                            {sec !== "pas" && <option value="pas">Pas intéressé</option>}
-                            {sec === "pas" && !inPool && <option value="trier">Remettre à trier</option>}
-                          </select>
+                            options={[
+                              ...(sec !== "scouting" ? [{ value: "scouting", label: "Scouting" }] : []),
+                              ...(sec !== "contacter" ? [{ value: "contacter", label: "À contacter" }] : []),
+                              ...(sec !== "pas" ? [{ value: "pas", label: "Pas intéressé" }] : []),
+                              ...(sec === "pas" && !inPool ? [{ value: "trier", label: "Remettre à trier" }] : []),
+                            ]} />
                         </>
                       )}
                       {sec !== "roster" && sec !== "pas" && (
@@ -945,7 +933,7 @@ function postType(p: RadarPost): PostType {
 const TYPE_META: Record<PostType, { label: string; cls: string; tip: string }> = {
   paye: { label: "Payé", cls: "bg-primary/10 text-primary", tip: "Le post dit #ad, publicité, collaboration commerciale, sponsorisé…" },
   offert: { label: "Offert / code", cls: "bg-amber/15 text-amber", tip: "Produit offert, code promo ou réduction : la marque envoie des produits ou rémunère à la vente" },
-  spontane: { label: "Spontané", cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", tip: "Aucun signe de partenariat dans le texte" },
+  spontane: { label: "Spontané", cls: "bg-signal/10 text-signaltext", tip: "Aucun signe de partenariat dans le texte" },
 };
 /** Extrait du texte centré sur la marque, avec la marque en évidence. */
 function Excerpt({ text, brand, name }: { text: string; brand: string; name?: string }) {
@@ -1235,7 +1223,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
 
   const TILES = [
     { v: "clients" as const, icon: Wallet, title: "Clients potentiels", short: "Clients", n: counts.clients, text: "Elles paient ou offrent des produits à des créateurs de ta niche.", on: "border-primary bg-primary/[0.04]", dot: "bg-primary text-primary-foreground" },
-    { v: "chauds" as const, icon: Flame, title: "Contacts chauds", short: "Chauds", n: counts.chauds, text: "Tes créateurs en parlent déjà, sans être payés.", on: "border-emerald-500 bg-emerald-500/[0.05]", dot: "bg-emerald-500 text-white" },
+    { v: "chauds" as const, icon: Flame, title: "Contacts chauds", short: "Chauds", n: counts.chauds, text: "Tes créateurs en parlent déjà, sans être payés.", on: "border-signal bg-signal/[0.05]", dot: "bg-signal text-white" },
     { v: "tous" as const, icon: Radar, title: "Toutes les marques", short: "Toutes", n: counts.tous, text: "Tout ce que le radar a repéré.", on: "border-foreground/40 bg-panel/60", dot: "bg-foreground text-background" },
   ];
   const toggleRow = (b: string) => setOpenRows((cur) => { const n = new Set(cur); if (n.has(b)) n.delete(b); else n.add(b); return n; });
@@ -1319,9 +1307,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
 
         <Field label="# ou mots dans le post" className="min-w-[180px] flex-1" help={<><p>Ne garde que les posts qui contiennent TOUS ces mots ou hashtags.</p><p>Exemple : « #running #ad » = les partenariats payés dans le running. « lyon » = les posts qui parlent de Lyon.</p><p>L'app lit le texte sous le post : les # mis en commentaire ne sont pas visibles.</p></>}><input aria-label="Hashtags ou mots" value={words} onChange={(e) => setWords(e.target.value)} placeholder="#running #ad" className={IN} /></Field>
         <label className="flex flex-col gap-1 text-[10px] font-medium text-faint">Période
-          <select value={period} onChange={(e) => setPeriod(e.target.value)} className={cn(IN, "w-28")}>
-            {PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-          </select>
+          <Picker size="sm" ariaLabel="Période" className="w-32" value={period} onChange={setPeriod} options={PERIODS.map((p) => ({ value: p.value, label: p.label }))} />
         </label>
         <Field label="Créateur : abonnés min" help={<p>La taille du créateur qui a fait le post. Utile pour trouver les marques qui travaillent avec des comptes de la taille des tiens.</p>}><input aria-label="Abonnés minimum du créateur" value={minF} onChange={(e) => setMinF(e.target.value)} placeholder="10k" className={cn(IN, "w-28")} /></Field>
         <Field label="max"><input aria-label="Abonnés maximum du créateur" value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-24")} /></Field>
@@ -1369,7 +1355,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
           {view.map(({ row, posts, types, warm, creators, lastAt, known, prof }) => {
             const open = openRows.has(row.brand);
             const list = dedupe(posts);
-            const verdict = types.paye || types.offert ? { t: "Client potentiel", c: "bg-primary/10 text-primary" } : warm ? { t: "Contact chaud", c: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" } : { t: "Citée", c: "bg-panel text-muted-foreground" };
+            const verdict = types.paye || types.offert ? { t: "Client potentiel", c: "bg-primary/10 text-primary" } : warm ? { t: "Contact chaud", c: "bg-signal/10 text-signaltext" } : { t: "Citée", c: "bg-panel text-muted-foreground" };
             const unsure = !prof?.isBrand;
             const summary = [
               types.paye ? `${types.paye} payé${types.paye > 1 ? "s" : ""}` : "",
@@ -1409,7 +1395,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
                         <Plus className="h-3.5 w-3.5" /> Pipeline
                       </button>
                     ) : (
-                      <span className="flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"><Check className="h-3.5 w-3.5" /> Au Pipeline</span>
+                      <span className="flex items-center gap-1 rounded-lg bg-signal/10 px-2.5 py-1.5 text-[11px] font-medium text-signaltext"><Check className="h-3.5 w-3.5" /> Au Pipeline</span>
                     )}
                     <button type="button" onClick={() => setMailFor({ row, post: posts.find((p) => p.roster && postType(p) === "spontane") ?? posts[0] })} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover">
                       <Send className="h-3.5 w-3.5" /> Contacter

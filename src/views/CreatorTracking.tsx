@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Picker } from "@/components/ui/form";
 import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle, MessageSquare, Pencil, X, Phone, MessageCircle, Users, Compass, Mic, Flag, Film, GalleryHorizontalEnd, CircleDashed, Music2, MonitorPlay, Check, ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { supabase } from "@/lib/supabase";
@@ -205,7 +206,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
               {cur.conformite && (
                 <ReadBlock label="Conformité (loi 2023-451)">
                   {(() => { const ok = ["ok", "conforme", "à jour", "a jour"].includes(norm(cur.conformite)); return (
-                    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold", ok ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-foreground/[0.06] text-amber")}>
+                    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold", ok ? "bg-signal/10 text-signaltext" : "bg-foreground/[0.06] text-amber")}>
                       {ok ? "✓ " : <AlertTriangle className="h-3 w-3" />} {cur.conformite}
                     </span>
                   ); })()}
@@ -461,7 +462,7 @@ export function MonthlyTracking({ name }: { name: string }) {
             {sorted.map((m) => {
               const realTotal = cadenceTotal(m.cadence);
               const ratio = recoTotal > 0 ? realTotal / recoTotal : 1;
-              const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : ratio >= 0.7 ? "bg-foreground/[0.06] text-amber" : "bg-rose-500/10 text-rose-600 dark:text-rose-400";
+              const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-signal/10 text-signaltext" : ratio >= 0.7 ? "bg-foreground/[0.06] text-amber" : "bg-danger/10 text-dangertext";
               return (
                 <div key={m.month} className="rounded-xl border border-border bg-panel/40 p-4">
                   <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -509,7 +510,7 @@ export function MonthlyTracking({ name }: { name: string }) {
           {sorted.map((m) => {
             const realTotal = cadenceTotal(m.cadence);
             const ratio = recoTotal > 0 ? realTotal / recoTotal : 1;
-            const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : ratio >= 0.7 ? "bg-foreground/[0.06] text-amber" : "bg-rose-500/10 text-rose-600 dark:text-rose-400";
+            const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-signal/10 text-signaltext" : ratio >= 0.7 ? "bg-foreground/[0.06] text-amber" : "bg-danger/10 text-dangertext";
             return (
               <div key={m.month} className="rounded-xl border border-border bg-panel/40 p-3.5">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -725,9 +726,8 @@ export function JournalCard({ name }: { name: string }) {
               <span className="absolute left-0 top-3.5 h-[calc(100%-1.75rem)] w-[3px] rounded-full bg-primary/40" />
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <DateInput value={e.date} onChange={(v) => edit(e.id, { date: v })} clearable={false} className="rounded-md border border-border bg-surface px-2 py-1 text-[12px] outline-none focus:border-primary" />
-                <select value={e.type} onChange={(ev) => edit(e.id, { type: ev.target.value as ExchangeType })} className="rounded-md border border-border bg-surface px-2 py-1 text-[12px] font-semibold outline-none focus:border-primary">
-                  {(Object.keys(EXCHANGE_META) as ExchangeType[]).map((t) => <option key={t} value={t}>{EXCHANGE_META[t].label}</option>)}
-                </select>
+                <Picker size="xs" ariaLabel="Type d'échange" className="min-w-[140px]" value={e.type} onChange={(v) => edit(e.id, { type: v as ExchangeType })}
+                  options={(Object.keys(EXCHANGE_META) as ExchangeType[]).map((t) => ({ value: t, label: EXCHANGE_META[t].label }))} />
                 <div className="flex-1" />
                 <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.id !== e.id))} className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
                   <Trash2 className="h-3.5 w-3.5" />
@@ -789,7 +789,7 @@ export function CreatorAlerts({ name }: { name: string }) {
       </span>
       {alerts.length > 0 && <span className="text-faint">·</span>}
       {alerts.map((a, i) => (
-        <span key={i} className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold", a.level === "danger" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-foreground/[0.06] text-amber")}>
+        <span key={i} className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold", a.level === "danger" ? "bg-danger/10 text-dangertext" : "bg-foreground/[0.06] text-amber")}>
           <AlertTriangle className="h-3 w-3" /> {a.label}
         </span>
       ))}
@@ -864,7 +864,7 @@ export function RosterTracking({ onOpen }: { onOpen?: (name: string) => void }) 
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {r.alerts.map((a, i) => (
-                          <span key={i} className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", a.level === "danger" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-muted text-muted-foreground")}>
+                          <span key={i} className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", a.level === "danger" ? "bg-danger/10 text-dangertext" : "bg-muted text-muted-foreground")}>
                             {a.label}
                           </span>
                         ))}
@@ -1062,10 +1062,10 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
                   {reco > 0 ? (
                     <>
                       <span className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                        <span className={cn("block h-full rounded-full transition-all", reached ? "bg-emerald-500" : "bg-foreground/60")} style={{ width: `${pct}%` }} />
+                        <span className={cn("block h-full rounded-full transition-all", reached ? "bg-signal" : "bg-foreground/60")} style={{ width: `${pct}%` }} />
                       </span>
                       <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        {reached && <Check className="h-3 w-3 text-emerald-500" />}objectif {reco}
+                        {reached && <Check className="h-3 w-3 text-signaltext" />}objectif {reco}
                       </span>
                     </>
                   ) : (

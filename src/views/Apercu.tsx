@@ -376,7 +376,7 @@ export function ApercuView({
                 segments={[
                   { label: "Payé", value: paidSum, className: "bg-foreground/70" },
                   { label: "En attente", value: waitSum, className: "bg-foreground/30" },
-                  { label: "En retard", value: lateSum, className: "bg-rose-500/80" },
+                  { label: "En retard", value: lateSum, className: "bg-danger/80" },
                 ]}
               />
             </div>

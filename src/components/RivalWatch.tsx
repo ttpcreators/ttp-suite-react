@@ -46,7 +46,7 @@ function Growth({ r, days }: { r: Rival; days: number }) {
   if (!g) return <span className="text-faint">—</span>;
   const Icon = g.abs > 0 ? TrendingUp : g.abs < 0 ? TrendingDown : Minus;
   return (
-    <span className={cn("inline-flex items-center gap-0.5 font-semibold tabular-nums", g.abs > 0 ? "text-emerald-600" : g.abs < 0 ? "text-rose-500" : "text-muted-foreground")}>
+    <span className={cn("inline-flex items-center gap-0.5 font-semibold tabular-nums", g.abs > 0 ? "text-signaltext" : g.abs < 0 ? "text-dangertext" : "text-muted-foreground")}>
       <Icon className="h-3 w-3" />
       {g.abs > 0 ? "+" : ""}{fmtCompact(g.abs)} ({g.pct > 0 ? "+" : ""}{String(g.pct).replace(".", ",")} %)
     </span>
@@ -298,7 +298,7 @@ function RivalCard({ r, busy, pool, roster, known, onRefresh, onRemove, onScouti
           <button type="button" onClick={onRefresh} disabled={busy} className="grid h-8 w-8 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50" aria-label="Actualiser">
             <RefreshCw className={cn("h-3.5 w-3.5", busy && "animate-spin")} />
           </button>
-          <button type="button" onClick={onRemove} className="grid h-8 w-8 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:text-rose-500" aria-label="Ne plus suivre">
+          <button type="button" onClick={onRemove} className="grid h-8 w-8 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:text-dangertext" aria-label="Ne plus suivre">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>

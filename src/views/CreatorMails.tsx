@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Picker } from "@/components/ui/form";
 import {
   ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Loader2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X,
   type LucideIcon,
@@ -71,8 +72,8 @@ const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse"; lab
   { key: "tous", label: "Tous les échanges", short: "Tous", icon: Inbox, match: () => true },
   { key: "encours", label: "En cours", short: "En cours", icon: Hourglass, dot: "bg-amber-500", match: (s) => s === "nouvelle" || s === "negociation" },
   { key: "atraiter", label: "À vérifier / valider", short: "À traiter", icon: SearchCheck, dot: "bg-orange-500", match: (s) => s === "a_verifier" || s === "a_valider" },
-  { key: "valide", label: "Validés", short: "Validés", icon: Check, dot: "bg-emerald-500", match: (s) => s === "valide" },
-  { key: "refuse", label: "Refusés", short: "Refusés", icon: X, dot: "bg-red-500", match: (s) => s === "refuse" },
+  { key: "valide", label: "Validés", short: "Validés", icon: Check, dot: "bg-signal", match: (s) => s === "valide" },
+  { key: "refuse", label: "Refusés", short: "Refusés", icon: X, dot: "bg-danger", match: (s) => s === "refuse" },
 ];
 
 /**
@@ -97,13 +98,13 @@ const CHOICES: { value: MailChoice; label: string; hint: string; icon: LucideIco
   },
   {
     value: "valide", label: "Validé", hint: "C'est oui", icon: Check,
-    tile: "border-emerald-600/70 bg-emerald-500/[0.09] text-emerald-800 dark:text-emerald-300",
-    disc: "bg-emerald-600 text-white", confirm: "bg-emerald-600 text-white",
+    tile: "border-signal/70 bg-signal/[0.09] text-signaltext",
+    disc: "bg-signal text-white", confirm: "bg-signal text-white",
   },
   {
     value: "refuse", label: "Refusé", hint: "C'est non", icon: X,
-    tile: "border-red-500/70 bg-red-500/[0.08] text-red-700 dark:text-red-300",
-    disc: "bg-red-600 text-white", confirm: "bg-red-600 text-white",
+    tile: "border-danger/70 bg-danger/[0.08] text-dangertext",
+    disc: "bg-danger text-white", confirm: "bg-danger text-white",
   },
 ];
 const choiceMeta = (c: MailChoice) => CHOICES.find((x) => x.value === c) ?? CHOICES[0];
@@ -983,7 +984,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
       </div>
       {help && <div className="px-4 pb-3 sm:px-5 lg:hidden">{helpBanner}</div>}
       {err && !listBroken && (
-        <div className="flex items-center gap-2 border-t border-border px-4 py-2.5 text-[12px] text-red-600 sm:px-5 dark:text-red-400">
+        <div className="flex items-center gap-2 border-t border-border px-4 py-2.5 text-[12px] text-dangertext sm:px-5">
           <CircleAlert className="h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0 flex-1">{err}</span>
           <button type="button" onClick={retry} disabled={loading} className="shrink-0 font-semibold underline-offset-2 hover:underline disabled:opacity-50">Réessayer</button>
@@ -1326,12 +1327,12 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
               </label>
               <label className="flex flex-col gap-1.5">
                 <span className="text-[11px] font-medium text-muted-foreground">Libellé Gmail (facultatif, en plus de l'alias)</span>
-                <select value={labelId} onChange={(e) => setLabelId(e.target.value)}
-                  className="h-9 rounded-md border border-border bg-surface px-2.5 text-[13px] text-foreground outline-none focus:border-primary">
-                  <option value="">Aucun</option>
-                  {labels === null && labelId && <option value={labelId}>{settings?.label_name ?? labelId}</option>}
-                  {(labels ?? []).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
+                <Picker size="sm" ariaLabel="Libellé Gmail" className="w-full" value={labelId} onChange={setLabelId}
+                  options={[
+                    { value: "", label: "Aucun" },
+                    ...(labels === null && labelId ? [{ value: labelId, label: settings?.label_name ?? labelId }] : []),
+                    ...(labels ?? []).map((l) => ({ value: l.id, label: l.name })),
+                  ]} />
               </label>
             </div>
             <p className="text-[12px] text-muted-foreground">

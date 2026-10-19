@@ -519,7 +519,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
               <div>
                 <label className={cn(LBL, "flex items-baseline justify-between gap-2")}>
                   <span>Bio (2 phrases)</span>
-                  <span className={cn("tabular-nums", (mk.bio ?? "").length > BIO_MAX ? "text-red-600 dark:text-red-400" : "text-faint")}>
+                  <span className={cn("tabular-nums", (mk.bio ?? "").length > BIO_MAX ? "text-dangertext" : "text-faint")}>
                     {(mk.bio ?? "").length} / {BIO_MAX}
                   </span>
                 </label>
@@ -534,7 +534,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
               <div>
                 <label className={cn(LBL, "flex items-baseline justify-between gap-2")}>
                   <span>Bio en anglais (version pour les marques étrangères)</span>
-                  <span className={cn("tabular-nums", (mk.bioEn ?? "").length > BIO_MAX ? "text-red-600 dark:text-red-400" : "text-faint")}>
+                  <span className={cn("tabular-nums", (mk.bioEn ?? "").length > BIO_MAX ? "text-dangertext" : "text-faint")}>
                     {(mk.bioEn ?? "").length} / {BIO_MAX}
                   </span>
                 </label>

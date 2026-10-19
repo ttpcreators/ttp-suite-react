@@ -138,10 +138,10 @@ export function YouTubeCard({ creatorId, name, yt, onChange, className }: {
       <div className="mt-4 border-t border-border pt-3">
         {linked ? (
           <div className="flex items-center justify-between gap-2">
-            <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-medium text-signaltext">
               <Link2 className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">Chaîne connectée{yt?.link?.title ? ` (${yt.link.title})` : ""}</span>
             </span>
-            <button type="button" onClick={disconnect} disabled={!!busy} className="flex shrink-0 items-center gap-1 text-[11px] text-faint transition-colors hover:text-rose-500 disabled:opacity-50">
+            <button type="button" onClick={disconnect} disabled={!!busy} className="flex shrink-0 items-center gap-1 text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
               <Unlink className="h-3 w-3" /> Déconnecter
             </button>
           </div>

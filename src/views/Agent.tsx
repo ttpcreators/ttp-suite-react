@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { Picker } from "@/components/ui/form";
 import { cn, titleCase } from "@/lib/utils";
 import {
   Gauge, Send, Search, HeartHandshake, BookOpen, GraduationCap, ScrollText,
@@ -166,12 +167,12 @@ function DeleteButton({ armed, onArm, onConfirm, title }: {
 }) {
   return armed ? (
     <button type="button" onClick={onConfirm}
-      className="shrink-0 rounded-full bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-500 transition-colors hover:bg-red-500/20">
+      className="shrink-0 rounded-full bg-danger/10 px-2 py-1 text-[10px] font-semibold text-dangertext transition-colors hover:bg-danger/20">
       Supprimer ?
     </button>
   ) : (
     <button type="button" onClick={onArm} title={title}
-      className="shrink-0 rounded-md p-1 text-faint transition-colors hover:bg-rowhover hover:text-red-500">
+      className="shrink-0 rounded-md p-1 text-faint transition-colors hover:bg-rowhover hover:text-dangertext">
       <Trash2 className="h-3.5 w-3.5" />
     </button>
   );
@@ -451,7 +452,7 @@ export function AgentView() {
                 <div className="truncate text-[15px] font-semibold text-foreground">{a.nom}</div>
                 <div className="text-[11px] text-muted-foreground">{a.moteur === "claude" ? "Joué par Claude" : "Programme externe"}</div>
               </div>
-              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", !a.actif ? "bg-muted text-muted-foreground" : recent ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>
+              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", !a.actif ? "bg-muted text-muted-foreground" : recent ? "bg-signal/12 text-signaltext" : "bg-muted text-muted-foreground")}>
                 {!a.actif ? "En pause" : recent ? "Actif" : "En veille"}
               </span>
             </div>
@@ -806,11 +807,8 @@ export function AgentView() {
               {!agentsMissing && agents.length > 0 && (
                 <label className="flex flex-col gap-1 sm:w-44">
                   <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Pour</span>
-                  <select value={leconAgent} onChange={(e) => setLeconAgent(e.target.value)}
-                    className="h-[36px] rounded-md border border-border bg-panel px-2 text-[12px] text-foreground outline-none focus:border-primary">
-                    <option value="">Tous les agents</option>
-                    {agents.map((a) => <option key={a.id} value={a.id}>{a.emoji} {a.nom}</option>)}
-                  </select>
+                  <Picker size="sm" ariaLabel="Agent concerné" className="w-full" value={leconAgent} onChange={setLeconAgent}
+                    options={[{ value: "", label: "Tous les agents" }, ...agents.map((a) => ({ value: a.id, label: `${a.emoji} ${a.nom}` }))]} />
                 </label>
               )}
               <label className="flex flex-1 flex-col gap-1">

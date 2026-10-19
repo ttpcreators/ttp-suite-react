@@ -25,7 +25,7 @@ export type PlanTask = {
 };
 
 function StatusIcon({ status, className }: { status: string; className?: string }) {
-  if (status === "Fait") return <CheckCircle2 className={cn("text-emerald-500", className)} />;
+  if (status === "Fait") return <CheckCircle2 className={cn("text-signaltext", className)} />;
   if (status === "En cours") return <CircleDotDashed className={cn("text-foreground/70", className)} />;
   return <Circle className={cn("text-faint", className)} />;
 }
@@ -133,7 +133,7 @@ export function AgentPlan({
                     {subs.map((s) => (
                       <div key={s.id} className="group flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-rowhover/60">
                         <button type="button" onClick={() => onToggleSubtask(task.id, s.id)} className="shrink-0 rounded-full transition-transform hover:scale-110" aria-label={s.done ? "Décocher" : "Cocher"}>
-                          {s.done ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Circle className="h-4 w-4 text-faint" />}
+                          {s.done ? <CheckCircle2 className="h-4 w-4 text-signaltext" /> : <Circle className="h-4 w-4 text-faint" />}
                         </button>
                         <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
                         <button type="button" onClick={() => onDelSubtask(task.id, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label="Supprimer">

@@ -1077,7 +1077,7 @@ export function Facturation() {
                     <button
                       type="button"
                       onClick={() => setDraft({ ...draft, items: draft.items.length > 1 ? draft.items.filter((x) => x.id !== it.id) : draft.items })}
-                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-rose-500"
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-dangertext"
                       title="Supprimer la ligne"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -1235,7 +1235,7 @@ export function Facturation() {
                   <button
                     type="button"
                     onClick={() => setBanksDraft(banksDraft.filter((x) => x.id !== b.id))}
-                    className="grid h-[42px] w-10 shrink-0 place-items-center rounded-lg border border-border text-faint transition-colors hover:bg-rowhover hover:text-rose-500"
+                    className="grid h-[42px] w-10 shrink-0 place-items-center rounded-lg border border-border text-faint transition-colors hover:bg-rowhover hover:text-dangertext"
                     title="Supprimer le compte"
                   >
                     <Trash2 className="h-4 w-4" />

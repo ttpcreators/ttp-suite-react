@@ -199,8 +199,8 @@ export function Echeances() {
 
   const badgeFor = (left: number | null) => {
     if (left == null) return { cls: "bg-rowhover text-muted-foreground", label: "Date invalide" };
-    if (left < 0) return { cls: "bg-rose-500/15 text-rose-500", label: `Expiré depuis ${-left} j` };
-    if (left <= 30) return { cls: "bg-rose-500/15 text-rose-500", label: `Expire dans ${left} j` };
+    if (left < 0) return { cls: "bg-danger/15 text-dangertext", label: `Expiré depuis ${-left} j` };
+    if (left <= 30) return { cls: "bg-danger/15 text-dangertext", label: `Expire dans ${left} j` };
     if (left <= 60) return { cls: "bg-amber/15 text-amber", label: `Expire dans ${left} j` };
     return { cls: "bg-signal/15 text-signaltext", label: `${left} j restants` };
   };

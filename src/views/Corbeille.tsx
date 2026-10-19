@@ -90,7 +90,7 @@ export function Corbeille() {
           <button
             type="button"
             onClick={() => setConfirmEmpty(true)}
-            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-rose-500 transition-colors hover:bg-rose-500/10"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-dangertext transition-colors hover:bg-danger/10"
           >
             <Trash2 className="h-3.5 w-3.5" /> Vider la corbeille
           </button>
@@ -127,7 +127,7 @@ export function Corbeille() {
                     {[e.sub, `supprimé le ${fmtDate(e.deletedAt)}`].filter(Boolean).join(" · ")}
                   </div>
                 </div>
-                <span className={cn("hidden shrink-0 whitespace-nowrap text-[10px] font-semibold sm:inline", left <= 3 ? "text-rose-500" : "text-faint")}>
+                <span className={cn("hidden shrink-0 whitespace-nowrap text-[10px] font-semibold sm:inline", left <= 3 ? "text-dangertext" : "text-faint")}>
                   {left} j restant{left > 1 ? "s" : ""}
                 </span>
                 <button

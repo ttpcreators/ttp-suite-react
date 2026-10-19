@@ -53,13 +53,13 @@ export function Delta({ value, suffix = "vs période préc." }: { value: number 
       <span
         className={cn(
           "grid size-[17px] shrink-0 place-items-center rounded-full text-white dark:text-black",
-          up ? "bg-emerald-500" : "bg-rose-500",
+          up ? "bg-signal" : "bg-danger",
         )}
         aria-hidden
       >
         {up ? <ArrowUp className="size-3" strokeWidth={3} /> : <ArrowDown className="size-3" strokeWidth={3} />}
       </span>
-      <span className={cn("font-medium tabular-nums", up ? "text-emerald-500" : "text-rose-500")}>
+      <span className={cn("font-medium tabular-nums", up ? "text-signaltext" : "text-dangertext")}>
         <span className="sr-only">{up ? "Hausse de " : "Baisse de "}</span>
         {pctFr(value)}
       </span>

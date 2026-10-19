@@ -23,7 +23,7 @@ export function MetaQuotaBadge({ className }: { className?: string }) {
           type="button"
           className={cn(
             "flex h-9 items-center gap-2 rounded-full border px-3 text-[12px] font-medium transition-colors hover:bg-rowhover",
-            tone === "red" ? "border-rose-500/30 text-rose-600 dark:text-rose-400" : tone === "amber" ? "border-amber/40 text-amber" : "border-border text-muted-foreground",
+            tone === "red" ? "border-danger/30 text-dangertext" : tone === "amber" ? "border-amber/40 text-amber" : "border-border text-muted-foreground",
             className,
           )}
           title="Combien de demandes Instagram il te reste"
@@ -32,7 +32,7 @@ export function MetaQuotaBadge({ className }: { className?: string }) {
           <span className="whitespace-nowrap">{label}</span>
           {!r.blockedMin && q && (
             <span className="h-1.5 w-12 overflow-hidden rounded-full bg-panel">
-              <span className={cn("block h-full rounded-full", tone === "red" ? "bg-rose-500" : tone === "amber" ? "bg-amber" : "bg-emerald-500")} style={{ width: `${Math.min(100, Math.max(3, r.pct))}%` }} />
+              <span className={cn("block h-full rounded-full", tone === "red" ? "bg-danger" : tone === "amber" ? "bg-amber" : "bg-signal")} style={{ width: `${Math.min(100, Math.max(3, r.pct))}%` }} />
             </span>
           )}
         </button>
@@ -44,7 +44,7 @@ export function MetaQuotaBadge({ className }: { className?: string }) {
         ) : (
           <div className="flex flex-col gap-1.5 text-muted-foreground">
             {r.blockedMin ? (
-              <p className="font-medium text-rose-600 dark:text-rose-400">Meta a mis les demandes en pause. Reprise estimée dans {r.blockedMin} min.</p>
+              <p className="font-medium text-dangertext">Meta a mis les demandes en pause. Reprise estimée dans {r.blockedMin} min.</p>
             ) : (
               <p>
                 <span className="font-medium text-foreground">{r.pct} %</span> du quota utilisé

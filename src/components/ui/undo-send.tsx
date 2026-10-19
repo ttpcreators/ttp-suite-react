@@ -88,7 +88,7 @@ export function UndoSendBar() {
       })}
       {shownFailed.map((f) => (
         <div key={f.id} role="alert" className={card}>
-          <CircleAlert className="h-4 w-4 shrink-0 text-red-500" />
+          <CircleAlert className="h-4 w-4 shrink-0 text-dangertext" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-medium text-foreground">Envoi échoué · {f.label}</span>
             <span className="block truncate text-[11.5px] text-muted-foreground" title={sendErrorText(f.error)}>

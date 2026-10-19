@@ -66,7 +66,7 @@ const STATUS_CLASS: Record<AnimatedBadgeStatus, string> = {
   neutral: "border-border bg-card text-muted-foreground",
   info: "border-foreground/20 bg-surface text-foreground",
   success:
-    "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    "border-signal/30 bg-signal/10 text-signaltext",
   warning: "border-border bg-muted text-muted-foreground",
   danger: "border-destructive/30 bg-destructive/10 text-destructive",
   loading: "border-border bg-muted text-muted-foreground",

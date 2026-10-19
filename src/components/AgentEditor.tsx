@@ -87,7 +87,7 @@ export function AgentEditor({ agent, onSave, onDelete, onClose }: {
         ))}
         <span className="flex-1" />
         <button type="button" aria-pressed={d.actif} onClick={() => set("actif", !d.actif)}
-          className={cn("h-8 rounded-full px-3 text-[12px] font-semibold transition-colors", d.actif ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>
+          className={cn("h-8 rounded-full px-3 text-[12px] font-semibold transition-colors", d.actif ? "bg-signal/12 text-signaltext" : "bg-muted text-muted-foreground")}>
           {d.actif ? "● En service" : "○ En pause"}
         </button>
       </div>
@@ -110,7 +110,7 @@ export function AgentEditor({ agent, onSave, onDelete, onClose }: {
               <input value={r.nom} onChange={(e) => setRoutine(i, { nom: e.target.value })} placeholder="Nom (ex. Le point du matin)" className={cn(FIELD, "min-w-[160px] flex-1")} />
               <input value={r.quand} onChange={(e) => setRoutine(i, { quand: e.target.value })} placeholder="Quand (ex. Chaque jour à 8 h)" className={cn(FIELD, "min-w-[160px] flex-1")} />
               <button type="button" onClick={() => set("routines", d.routines.filter((_, j) => j !== i))} aria-label="Retirer la routine"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint hover:bg-rowhover hover:text-red-500"><Trash2 className="h-4 w-4" /></button>
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint hover:bg-rowhover hover:text-dangertext"><Trash2 className="h-4 w-4" /></button>
             </div>
             <textarea value={r.consigne} onChange={(e) => setRoutine(i, { consigne: e.target.value })} rows={3} placeholder="Ce qu'il doit faire" className={cn(FIELD, "resize-y")} />
             {d.moteur === "claude" && d.nom.trim() && (
@@ -146,9 +146,9 @@ export function AgentEditor({ agent, onSave, onDelete, onClose }: {
 
       <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
         {onDelete && (armDel ? (
-          <button type="button" onClick={() => void onDelete()} className="h-9 rounded-full bg-red-500/10 px-3 text-[12px] font-semibold text-red-600">Supprimer l'agent ?</button>
+          <button type="button" onClick={() => void onDelete()} className="h-9 rounded-full bg-danger/10 px-3 text-[12px] font-semibold text-dangertext">Supprimer l'agent ?</button>
         ) : (
-          <button type="button" onClick={() => setArmDel(true)} className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium text-faint hover:bg-rowhover hover:text-red-500">
+          <button type="button" onClick={() => setArmDel(true)} className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium text-faint hover:bg-rowhover hover:text-dangertext">
             <Trash2 className="h-3.5 w-3.5" /> Supprimer
           </button>
         ))}

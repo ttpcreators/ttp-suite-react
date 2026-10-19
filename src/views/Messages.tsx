@@ -251,7 +251,7 @@ export function Messages() {
                       {hit ? <Rich text={hit} q={q} /> : <>{t.last_from_me ? "Toi : " : ""}{t.last_text}</>}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1">
-                      {t.contact_id && <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/10 px-1.5 py-px text-[10px] font-medium text-emerald-600"><Check className="h-2.5 w-2.5" /> Fiche</span>}
+                      {t.contact_id && <span className="inline-flex items-center gap-0.5 rounded-full bg-signal/10 px-1.5 py-px text-[10px] font-medium text-signaltext"><Check className="h-2.5 w-2.5" /> Fiche</span>}
                       {!!t.emails?.length && <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary"><Mail className="h-2.5 w-2.5" /> Email</span>}
                     </div>
                   </div>
@@ -410,7 +410,7 @@ function Conversation({ t, q, contact, onBack, onChange }: { t: Thread; q: strin
             <a href={`https://ig.me/m/${encodeURIComponent(t.username)}`} target="_blank" rel="noreferrer" className={BTN}><Send className="h-3 w-3" /> Répondre sur Instagram</a>
           )}
           {contact ? (
-            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "contacts" }))} className={cn(BTN, "border-emerald-500/40 text-emerald-600")}><Check className="h-3 w-3" /> Fiche : {contact.brand}</button>
+            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "contacts" }))} className={cn(BTN, "border-signal/40 text-signaltext")}><Check className="h-3 w-3" /> Fiche : {contact.brand}</button>
           ) : (
             <button type="button" onClick={() => void createContact()} disabled={!!busy} className={BTN}>{busy === "contact" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Contact className="h-3 w-3" />} Créer la fiche contact</button>
           )}
@@ -438,7 +438,7 @@ function Conversation({ t, q, contact, onBack, onChange }: { t: Thread; q: strin
           {t.emails.map((e) => (
             <button key={e} type="button" onClick={() => void copy(e)} className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">{e}<Copy className="h-3 w-3" /></button>
           ))}
-          {contact && (contact.email?.toLowerCase() === t.emails[0].toLowerCase() ? <span className="text-emerald-600">· sur la fiche ✓</span> : contact.email ? <span className="text-faint">· la fiche a déjà {contact.email}</span> : null)}
+          {contact && (contact.email?.toLowerCase() === t.emails[0].toLowerCase() ? <span className="text-signaltext">· sur la fiche ✓</span> : contact.email ? <span className="text-faint">· la fiche a déjà {contact.email}</span> : null)}
         </div>
       )}
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-background/40 px-4 py-4">

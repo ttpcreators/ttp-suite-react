@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { Picker } from "@/components/ui/form";
 import { Plus, Trash2, Camera, Loader2, Calculator, ArrowUp, Rows3, Layers } from "lucide-react";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { postKind, type IgCollab, type IgCreator, type IgPostLite } from "@/lib/instagram";
@@ -452,15 +453,8 @@ export function DebriefCalculator({
             <div className="mb-2 flex items-center gap-2">
               {mode === "detail" ? (
                 <>
-                  <select
-                    value={r.kind}
-                    onChange={(e) => patchRow(r.id, { kind: e.target.value })}
-                    className="rounded-md border border-border bg-surface px-2 py-1 text-[11px] font-semibold outline-none focus:border-primary"
-                  >
-                    {KINDS.map((k) => (
-                      <option key={k} value={k}>{k}</option>
-                    ))}
-                  </select>
+                  <Picker size="xs" ariaLabel="Type de publication" className="min-w-[120px]" value={r.kind} onChange={(v) => patchRow(r.id, { kind: v })}
+                    options={KINDS.map((k) => ({ value: k, label: k }))} />
                   <span className="text-[10px] text-faint">Publication {i + 1}</span>
                   <div className="flex-1" />
                   {rows.length > 1 && (

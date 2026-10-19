@@ -211,7 +211,7 @@ export function TikTokRadar({ platformTabs }: { platformTabs?: ReactNode } = {})
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="truncate text-[14px] font-semibold text-foreground">{b.name}</span>
                         <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">Payé</span>
-                        {mine.length > 0 && <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">Chez {mine.length} de tes créateurs</span>}
+                        {mine.length > 0 && <span className="rounded-full bg-signal/10 px-2 py-0.5 text-[10px] font-semibold text-signaltext">Chez {mine.length} de tes créateurs</span>}
                         {isKnown && <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Déjà en contact</span>}
                       </div>
                       <div className="mt-0.5 text-[11px] text-muted-foreground">

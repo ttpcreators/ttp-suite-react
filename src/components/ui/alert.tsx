@@ -12,8 +12,8 @@ const alertVariants = cva("relative rounded-lg border", {
     variant: {
       default: "border-border bg-surface text-foreground",
       warning: "border-border bg-surface text-foreground",
-      error: "border-red-500/40 bg-surface text-foreground",
-      success: "border-emerald-500/40 bg-surface text-foreground",
+      error: "border-danger/40 bg-surface text-foreground",
+      success: "border-signal/40 bg-surface text-foreground",
       info: "border-border bg-surface text-foreground",
     },
     size: {

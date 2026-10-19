@@ -176,7 +176,7 @@ function KeepDraftBar({ onKeep, onDiscard }: { onKeep: () => void; onDiscard: ()
   return (
     <div role="alertdialog" aria-label="Garder ce mail en brouillon ?" className="flex flex-wrap items-center gap-2 border-t border-border bg-muted/60 px-5 py-3">
       <span className="min-w-0 flex-1 text-[13px] font-medium text-foreground">Garder ce mail en brouillon ?</span>
-      <button type="button" onClick={onDiscard} className="h-8 rounded-full px-3 text-[12.5px] font-semibold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-400">
+      <button type="button" onClick={onDiscard} className="h-8 rounded-full px-3 text-[12.5px] font-semibold text-dangertext transition-colors hover:bg-danger/10">
         Supprimer
       </button>
       <button type="button" onClick={onKeep} autoFocus className="h-8 rounded-full bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">

@@ -15,8 +15,8 @@ export const MAIL_STATUS: { value: MailStatus; label: string; short: string; dot
   { value: "negociation", short: "Négociation", label: "En négociation", dot: "bg-amber-500", badge: "bg-amber-500/10 text-amber-700 dark:text-amber-400" },
   { value: "a_verifier", short: "À vérifier", label: "À vérifier", dot: "bg-orange-500", badge: "bg-orange-500/10 text-orange-700 dark:text-orange-400" },
   { value: "a_valider", short: "À valider", label: "À valider", dot: "bg-indigo-500", badge: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" },
-  { value: "valide", short: "Validés", label: "Validé", dot: "bg-emerald-500", badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" },
-  { value: "refuse", short: "Refusés", label: "Refusé", dot: "bg-red-500", badge: "bg-red-500/10 text-red-600 dark:text-red-400" },
+  { value: "valide", short: "Validés", label: "Validé", dot: "bg-signal", badge: "bg-signal/10 text-signaltext" },
+  { value: "refuse", short: "Refusés", label: "Refusé", dot: "bg-danger", badge: "bg-danger/10 text-dangertext" },
 ];
 export const statusMeta = (s: string) => MAIL_STATUS.find((x) => x.value === s) ?? MAIL_STATUS[0];
 

@@ -13,6 +13,8 @@ import { fmtCompact } from "./timeSeries";
 
 type Hist = { d: string; f: number }[];
 export type ReportData = {
+  /** false : membre de l'agence non fondateur, l'argent n'est pas transmis. */
+  money?: boolean;
   creator: {
     name: string;
     commission?: string | null;

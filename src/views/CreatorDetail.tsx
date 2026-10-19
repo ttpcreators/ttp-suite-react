@@ -924,7 +924,7 @@ export function CreatorDetail({
                 className={
                   "mt-0.5 text-sm font-semibold " +
                   (contractLeft != null && contractLeft <= 30
-                    ? "text-rose-500"
+                    ? "text-dangertext"
                     : contractLeft != null && contractLeft <= 60
                       ? "text-amber"
                       : "text-foreground")

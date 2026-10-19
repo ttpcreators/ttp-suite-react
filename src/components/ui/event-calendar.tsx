@@ -42,7 +42,7 @@ const TYPE_BG: Record<string, string> = {
   shoot: "bg-indigo",
   event: "bg-cyan",
   voyage: "bg-amber",
-  deadline: "bg-rose-500",
+  deadline: "bg-danger",
 };
 
 const TYPE_TEXT: Record<string, string> = {
@@ -52,7 +52,7 @@ const TYPE_TEXT: Record<string, string> = {
   shoot: "text-indigo",
   event: "text-cyan",
   voyage: "text-amber",
-  deadline: "text-rose-500",
+  deadline: "text-dangertext",
 };
 
 function typeBg(t: string) {
@@ -74,7 +74,7 @@ function evKind(e: Ev): Kind {
 function chipBg(e: Ev) {
   if (e.kind === "brief") return "bg-amber";
   if (e.kind === "todo") return "bg-indigo";
-  if (e.kind === "facture") return "bg-emerald-500";
+  if (e.kind === "facture") return "bg-signal";
   if (e.kind === "post") return "bg-pink-500";
   return typeBg(e.type);
 }
@@ -91,7 +91,7 @@ function chipFg(e: Ev) {
 function chipText(e: Ev) {
   if (e.kind === "brief") return "text-amber";
   if (e.kind === "todo") return "text-indigo";
-  if (e.kind === "facture") return "text-emerald-500";
+  if (e.kind === "facture") return "text-signaltext";
   if (e.kind === "post") return "text-pink-500";
   return typeText(e.type);
 }
@@ -107,7 +107,7 @@ const KIND_META: { id: Kind; label: string; dot: string }[] = [
   { id: "event", label: "Événements", dot: "bg-primary" },
   { id: "brief", label: "Briefs", dot: "bg-amber" },
   { id: "todo", label: "To-do", dot: "bg-indigo" },
-  { id: "facture", label: "Factures", dot: "bg-emerald-500" },
+  { id: "facture", label: "Factures", dot: "bg-signal" },
   { id: "post", label: "Posts Instagram", dot: "bg-pink-500" },
 ];
 

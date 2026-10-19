@@ -178,7 +178,7 @@ export function Relances() {
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border">
         <div className="min-w-0 bg-surface px-5 py-5">
           <div className="text-[13px] text-muted-foreground">Total en retard</div>
-          <div className="mt-2 truncate text-[26px] font-semibold leading-none tracking-tight tabular-nums text-rose-500">{formatEuro(totalDue)}</div>
+          <div className="mt-2 truncate text-[26px] font-semibold leading-none tracking-tight tabular-nums text-dangertext">{formatEuro(totalDue)}</div>
         </div>
         <div className="min-w-0 bg-surface px-5 py-5">
           <div className="text-[13px] text-muted-foreground">Factures à relancer</div>
@@ -207,7 +207,7 @@ export function Relances() {
                   <div className="flex shrink-0 flex-col items-end text-right">
                     <div className="whitespace-nowrap text-lg font-bold tracking-tight text-foreground">{formatEuro(parseAmount(iv.amount))}</div>
                     {late != null && late > 0 && (
-                      <div className="mt-0.5 whitespace-nowrap rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-500">En retard de {late} j</div>
+                      <div className="mt-0.5 whitespace-nowrap rounded-full bg-danger/10 px-2 py-0.5 text-[10px] font-bold text-dangertext">En retard de {late} j</div>
                     )}
                   </div>
                 </div>

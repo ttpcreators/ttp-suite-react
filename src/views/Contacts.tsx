@@ -20,6 +20,7 @@ import {
   InlineForm,
   TextField,
   SelectField,
+  Picker,
 } from "@/components/ui/form";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
@@ -61,7 +62,7 @@ type Row = {
 // Suivi du sur-contact : en-deçà de ce seuil (jours), on alerte de ne pas relancer.
 const RECENT_DAYS = 30;
 // Couleurs du suivi : rouge = trop tôt pour relancer, vert = on peut y aller.
-const TOO_SOON = "bg-red-500/10 text-red-600 dark:text-red-400";
+const TOO_SOON = "bg-danger/10 text-dangertext";
 const GOOD_TO_GO = "bg-signalsoft text-signaltext";
 /** Nombre de jours depuis une date ISO (null si absente/invalide). */
 function daysSince(iso?: string | null): number | null {
@@ -925,17 +926,8 @@ export function Contacts() {
           extra={cityList.length > 0 ? (
             <div className="flex flex-col gap-2">
               <span className="px-1 text-[13px] font-medium uppercase tracking-[0.02em] text-muted-foreground">Ville</span>
-              <select
-                value={cityFilter}
-                onChange={(e) => setCityFilter(e.target.value)}
-                className="h-11 rounded-md border border-border bg-surface px-3 text-foreground outline-none focus:border-primary"
-                aria-label="Filtrer par ville"
-              >
-                <option value="">Toutes les villes</option>
-                {cityList.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              <Picker ariaLabel="Filtrer par ville" className="w-full" value={cityFilter} onChange={setCityFilter}
+                options={[{ value: "", label: "Toutes les villes" }, ...cityList.map((c) => ({ value: c, label: c }))]} />
             </div>
           ) : undefined}
         />
@@ -974,17 +966,8 @@ export function Contacts() {
         {cityList.length > 0 && (
           <div className="flex items-center gap-1.5">
             <MapPin className="h-3.5 w-3.5 shrink-0 text-faint" />
-            <select
-              value={cityFilter}
-              onChange={(e) => setCityFilter(e.target.value)}
-              className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-[12px] font-medium text-foreground outline-none focus:border-primary"
-              aria-label="Filtrer par ville"
-            >
-              <option value="">Toutes les villes</option>
-              {cityList.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+            <Picker size="sm" ariaLabel="Filtrer par ville" className="min-w-[170px]" value={cityFilter} onChange={setCityFilter}
+              options={[{ value: "", label: "Toutes les villes" }, ...cityList.map((c) => ({ value: c, label: c }))]} />
           </div>
         )}
       </div>
@@ -1217,7 +1200,7 @@ export function Contacts() {
               const lastDays = lastMs ? Math.floor((Date.now() - lastMs) / 86400000) : null;
               const recent = lastDays != null && lastDays < RECENT_DAYS;
               return (
-                <div className={cn("mt-4 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[12px]", recent ? cn("border-red-500/25", TOO_SOON) : cn("border-signal/25", GOOD_TO_GO))}>
+                <div className={cn("mt-4 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[12px]", recent ? cn("border-danger/25", TOO_SOON) : cn("border-signal/25", GOOD_TO_GO))}>
                   {recent ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <Check className="h-4 w-4 shrink-0" />}
                   <span>
                     <span className="font-semibold">{lastContactLabel(lastDays)}</span>
@@ -1291,12 +1274,12 @@ export function Contacts() {
                             <button
                               type="button"
                               onClick={() => { setTouchDel(null); void saveTouches(selected, { remove: t.id }); }}
-                              className="shrink-0 rounded bg-red-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-red-500"
+                              className="shrink-0 rounded bg-danger/10 px-1.5 py-0.5 text-[9px] font-semibold text-dangertext"
                             >
                               Supprimer ?
                             </button>
                           ) : (
-                            <button type="button" onClick={() => setTouchDel(t.id)} className="shrink-0 text-faint transition-colors hover:text-red-500" title="Supprimer cette entrée">
+                            <button type="button" onClick={() => setTouchDel(t.id)} className="shrink-0 text-faint transition-colors hover:text-dangertext" title="Supprimer cette entrée">
                               <X className="h-3 w-3" />
                             </button>
                           )}

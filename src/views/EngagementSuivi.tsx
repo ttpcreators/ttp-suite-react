@@ -206,7 +206,7 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
           </div>
           <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{last ? `${String(last.er).replace(".", ",")} %` : "—"}</div>
           {dEr !== null && (
-            <div className={cn("mt-1 flex items-center gap-1 text-[11px] font-semibold", dEr >= 0 ? "text-signaltext" : "text-rose-500")}>
+            <div className={cn("mt-1 flex items-center gap-1 text-[11px] font-semibold", dEr >= 0 ? "text-signaltext" : "text-dangertext")}>
               {dEr >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
               {dEr >= 0 ? "+" : ""}{String(dEr).replace(".", ",")} pt vs mesure précédente
             </div>
@@ -218,7 +218,7 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
           </div>
           <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{last && last.followers > 0 ? fmtCompact(last.followers) : "—"}</div>
           {dFol !== null && dFol !== 0 && (
-            <div className={cn("mt-1 flex items-center gap-1 text-[11px] font-semibold", dFol >= 0 ? "text-signaltext" : "text-rose-500")}>
+            <div className={cn("mt-1 flex items-center gap-1 text-[11px] font-semibold", dFol >= 0 ? "text-signaltext" : "text-dangertext")}>
               {dFol >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
               {dFol >= 0 ? "+" : ""}{fmtCompact(Math.abs(dFol))}
             </div>
@@ -536,7 +536,7 @@ function AllCreatorsPanel({ entries, onOpen, period, setPeriod }: { entries: Sui
             <div className="flex shrink-0 flex-col items-end">
               <span className="text-base font-bold tabular-nums text-foreground">{String(r.lastEr).replace(".", ",")} %</span>
               {r.dEr !== null && r.dEr !== 0 && (
-                <span className={cn("flex items-center gap-0.5 text-[10px] font-semibold", r.dEr > 0 ? "text-signaltext" : "text-rose-500")}>
+                <span className={cn("flex items-center gap-0.5 text-[10px] font-semibold", r.dEr > 0 ? "text-signaltext" : "text-dangertext")}>
                   {r.dEr > 0 ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}{r.dEr > 0 ? "+" : ""}{String(r.dEr).replace(".", ",")}
                 </span>
               )}
@@ -571,7 +571,7 @@ function AllCreatorsPanel({ entries, onOpen, period, setPeriod }: { entries: Sui
                   <div className="flex flex-col items-end">
                     <span className="text-sm font-bold tabular-nums text-foreground">{String(r.lastEr).replace(".", ",")} %</span>
                     {r.dEr !== null && r.dEr !== 0 && (
-                      <span className={cn("flex items-center gap-0.5 text-[10px] font-semibold", r.dEr > 0 ? "text-signaltext" : "text-rose-500")}>
+                      <span className={cn("flex items-center gap-0.5 text-[10px] font-semibold", r.dEr > 0 ? "text-signaltext" : "text-dangertext")}>
                         {r.dEr > 0 ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}{r.dEr > 0 ? "+" : ""}{String(r.dEr).replace(".", ",")}
                       </span>
                     )}

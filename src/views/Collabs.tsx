@@ -14,7 +14,7 @@ import { useEffect, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
-import { AddButton, InlineForm, TextField, AutoGrowTextField, SelectField } from "@/components/ui/form";
+import { AddButton, InlineForm, TextField, AutoGrowTextField, SelectField, Picker } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useCreators } from "@/lib/useCreators";
@@ -48,7 +48,7 @@ type StepRow = { collab_id: string; step: number; reached_at: string };
 const STATUS_OPTS = [
   { value: "active", label: "En cours", dot: "bg-cyan" },
   { value: "gagnee", label: "Gagnée", dot: "bg-signal" },
-  { value: "perdue", label: "Perdue", dot: "bg-rose-500" },
+  { value: "perdue", label: "Perdue", dot: "bg-danger" },
   { value: "archivee", label: "Archivée", dot: "bg-muted-foreground" },
 ];
 /** Une collab stagne si elle est restée trop longtemps sur l'étape courante. */
@@ -212,7 +212,7 @@ export function Collabs() {
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <PlatformIcon platform="instagram" className="h-3 w-3" /> Publications repérées
             {(expected > 0 || total > 0) && (
-              <span className={cn("font-semibold", expected > 0 && total >= expected ? "text-emerald-600 dark:text-emerald-400" : "text-foreground")}>
+              <span className={cn("font-semibold", expected > 0 && total >= expected ? "text-signaltext" : "text-foreground")}>
                 · {total}{expected > 0 ? ` / ${expected}` : ""}
               </span>
             )}
@@ -265,7 +265,7 @@ export function Collabs() {
                 </span>
               </a>
             ))}
-            {row.step < 6 && <div className="mt-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">C'est en ligne : tu peux passer à l'étape « Publication ».</div>}
+            {row.step < 6 && <div className="mt-0.5 text-[10px] font-medium text-signaltext">C'est en ligne : tu peux passer à l'étape « Publication ».</div>}
           </div>
         ) : (
           <div className="mt-1 text-[11px] text-faint">
@@ -676,17 +676,17 @@ export function Collabs() {
             <div className="mt-1.5">{progressFor(row)}</div>
             {reached && <div className="mt-1 text-[10px] text-faint">Depuis le {frDate(reached)}</div>}
             {(igCollabs[row.id]?.posts?.length ?? 0) > 0 && (
-              <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-signaltext">
                 <PlatformIcon platform="instagram" className="h-3 w-3" /> {igCollabs[row.id]?.posts?.length} publication{(igCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""} repérée{(igCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""}
               </div>
             )}
             {(ttCollabs[row.id]?.posts?.length ?? 0) > 0 && (
-              <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-signaltext">
                 <PlatformIcon platform="tiktok" className="h-3 w-3" /> {ttCollabs[row.id]?.posts?.length} vidéo{(ttCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""} TikTok repérée{(ttCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""}
               </div>
             )}
             {(ytCollabs[row.id]?.posts?.length ?? 0) > 0 && (
-              <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-signaltext">
                 <PlatformIcon platform="youtube" className="h-3 w-3" /> {ytCollabs[row.id]?.posts?.length} vidéo{(ytCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""} YouTube repérée{(ytCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""}
               </div>
             )}
@@ -811,16 +811,8 @@ export function Collabs() {
                 <span className="text-[12px] font-medium text-muted-foreground">Créateur</span>
                 <div className="flex items-center gap-2">
                   <UserRound className="h-4 w-4 shrink-0 text-faint" />
-                  <select
-                    value={creatorFilter}
-                    onChange={(e) => setCreatorFilter(e.target.value)}
-                    className="rounded-md border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
-                  >
-                    <option value="">Tous les créateurs</option>
-                    {creators.map((c) => (
-                      <option key={c.id} value={c.name}>{titleCase(c.name)}</option>
-                    ))}
-                  </select>
+                  <Picker size="sm" ariaLabel="Filtrer par créateur" className="min-w-[200px]" value={creatorFilter} onChange={setCreatorFilter}
+                    options={[{ value: "", label: "Tous les créateurs" }, ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url }))]} />
                 </div>
               </div>
             ) : undefined}

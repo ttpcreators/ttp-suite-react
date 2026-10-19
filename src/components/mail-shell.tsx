@@ -114,7 +114,7 @@ export function ToolButton({ icon: Icon, label, onClick, disabled, busy, spin, d
       className={cn(
         "group/tip relative grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:pointer-events-none disabled:opacity-35",
         text && "@4xl:flex @4xl:w-auto @4xl:items-center @4xl:gap-1.5 @4xl:px-3",
-        danger && "hover:bg-red-500/[0.08] hover:text-red-600 dark:hover:text-red-400",
+        danger && "hover:bg-danger/[0.08] hover:text-dangertext dark:hover:text-dangertext",
         className,
       )}
     >
@@ -141,7 +141,7 @@ export function BarButton({ icon: Icon, label, onClick, disabled, busy, danger }
       disabled={disabled}
       className={cn(
         "inline-flex h-9 shrink-0 items-center gap-2 rounded-full px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50",
-        danger && "hover:bg-red-500/[0.08] hover:text-red-600 dark:hover:text-red-400",
+        danger && "hover:bg-danger/[0.08] hover:text-dangertext dark:hover:text-dangertext",
       )}
     >
       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}

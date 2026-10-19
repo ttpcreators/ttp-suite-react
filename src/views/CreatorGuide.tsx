@@ -93,7 +93,7 @@ export function CreatorGuide({
             <ul className="mt-4 divide-y divide-border border-y border-border text-[13px] text-foreground">
               {["On le voit en direct, rien ne se perd.", "Tu suis l'avancement\u00A0: À faire, En cours, Fait.", "Tu peux découper en sous-tâches et joindre le contexte."].map((t) => (
                 <li key={t} className="flex items-center gap-2.5 py-2.5">
-                  <Check className="h-4 w-4 shrink-0 text-emerald-500" /> <span>{t}</span>
+                  <Check className="h-4 w-4 shrink-0 text-signaltext" /> <span>{t}</span>
                 </li>
               ))}
             </ul>

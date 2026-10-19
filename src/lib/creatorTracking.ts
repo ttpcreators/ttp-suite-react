@@ -137,9 +137,9 @@ export const JOURNAL_KEY = "creatorJournal"; // Record<norm(name), JournalEntry[
 
 export type Trajectory = "bonne" | "surveiller" | "difficulte";
 export const TRAJECTORY_META: Record<Trajectory, { label: string; dot: string }> = {
-  bonne: { label: "Sur la bonne trajectoire", dot: "bg-emerald-500" },
+  bonne: { label: "Sur la bonne trajectoire", dot: "bg-signal" },
   surveiller: { label: "À surveiller", dot: "bg-amber" },
-  difficulte: { label: "En difficulté", dot: "bg-rose-500" },
+  difficulte: { label: "En difficulté", dot: "bg-danger" },
 };
 
 export type Alert = { kind: "sousperf" | "derive" | "renouvellement" | "conformite"; label: string; level: "warn" | "danger" };

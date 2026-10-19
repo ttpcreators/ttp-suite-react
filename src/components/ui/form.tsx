@@ -313,6 +313,61 @@ export function SelectField({
   );
 }
 
+/**
+ * Sélecteur sans libellé (filtres, lignes de tableau, petits réglages) : le menu de
+ * l'app à la place du <select> natif du navigateur, pour le même rendu partout
+ * (clair, sombre, iPhone). L'option de valeur "" sert de texte par défaut.
+ */
+export function Picker({
+  value,
+  onChange,
+  options,
+  className,
+  size = "md",
+  ariaLabel,
+  disabled,
+  placeholder,
+  pill,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string; img?: string | null }[];
+  className?: string;
+  /** md : 42 px (formulaires) ; sm : 36 px (filtres, lignes) ; xs : 30 px (dans une ligne dense). */
+  size?: "md" | "sm" | "xs";
+  ariaLabel?: string;
+  disabled?: boolean;
+  /** Texte quand rien n'est choisi (sinon le libellé de l'option ""). */
+  placeholder?: string;
+  /** Bouton en pilule (dans une ligne d'actions). */
+  pill?: boolean;
+}) {
+  const empty = options.find((o) => o.value === "")?.label;
+  // La largeur (w-…, flex-1, min-w-…) se règle sur l'enveloppe ; le bouton la remplit.
+  return (
+    <div className={cn("min-w-0", className)}>
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger
+        aria-label={ariaLabel}
+        placeholder={placeholder ?? empty ?? "Sélectionner…"}
+        className={cn(
+          "w-full min-w-0 bg-surface",
+          pill ? "rounded-full" : "rounded-lg",
+          size === "md" ? "h-[42px]" : size === "sm" ? "h-9" : "h-[30px] px-2.5 text-[12px]",
+        )}
+      />
+      <SelectContent>
+        {options.map((o, i) => (
+          <SelectItem key={o.value || "__vide"} index={i} value={o.value} img={o.img}>
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+    </div>
+  );
+}
+
 /** Formulaire en ligne (carte) qui s'ouvre au-dessus d'une liste. */
 export function InlineForm({
   open,

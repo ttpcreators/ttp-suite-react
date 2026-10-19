@@ -173,7 +173,7 @@ export function CasesBar({
             return (
               <span key={cs.id} className={cn("flex h-7 items-center gap-1 rounded-full border pl-3 pr-1.5 text-[12px] font-medium transition-colors", on ? "border-foreground bg-foreground text-background" : "border-border bg-surface text-muted-foreground hover:text-foreground")}>
                 <button type="button" onClick={() => onLoad(cs.id)}>{cs.name}</button>
-                <button type="button" onClick={() => onDelete(cs.id)} title="Supprimer ce modèle" aria-label={`Supprimer le modèle ${cs.name}`} className={cn("grid h-5 w-5 place-items-center rounded-full transition-colors", on ? "text-background/70 hover:text-background" : "text-faint hover:text-rose-500")}>
+                <button type="button" onClick={() => onDelete(cs.id)} title="Supprimer ce modèle" aria-label={`Supprimer le modèle ${cs.name}`} className={cn("grid h-5 w-5 place-items-center rounded-full transition-colors", on ? "text-background/70 hover:text-background" : "text-faint hover:text-dangertext")}>
                   <X className="h-3 w-3" />
                 </button>
               </span>

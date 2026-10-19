@@ -132,7 +132,7 @@ function App() {
               className="h-11 rounded-[10px] border border-input bg-surface px-3 text-[16px] outline-none focus:border-foreground" />
             <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mot de passe"
               className="h-11 rounded-[10px] border border-input bg-surface px-3 text-[16px] outline-none focus:border-foreground" />
-            {err && <p className="text-[13px] text-red-600">{err}</p>}
+            {err && <p className="text-[13px] text-dangertext">{err}</p>}
             <button type="submit" className="mt-1 h-11 rounded-full bg-primary text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">Se connecter</button>
           </form>
         ) : (
@@ -141,17 +141,17 @@ function App() {
             <div className="rounded-xl bg-muted/60 p-4">
               <div className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold"><ShieldCheck className="h-4 w-4" /> {client} pourra</div>
               <ul className="flex flex-col gap-1.5">
-                {CAN.map((t) => <li key={t} className="flex gap-2 text-[13px] leading-snug"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />{t}</li>)}
+                {CAN.map((t) => <li key={t} className="flex gap-2 text-[13px] leading-snug"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-signaltext" />{t}</li>)}
               </ul>
               <div className="mb-2 mt-3 text-[13px] font-semibold">Jamais</div>
               <ul className="flex flex-col gap-1.5">
-                {NEVER.map((t) => <li key={t} className="flex gap-2 text-[13px] leading-snug"><X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600" />{t}</li>)}
+                {NEVER.map((t) => <li key={t} className="flex gap-2 text-[13px] leading-snug"><X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-dangertext" />{t}</li>)}
               </ul>
             </div>
             <p className="text-[12px] leading-relaxed text-muted-foreground">
               Chaque consultation et chaque action sont notées. Tu peux couper cet accès à tout moment dans Paramètres → Claude.
             </p>
-            {err && <p className="text-[13px] text-red-600">{err}</p>}
+            {err && <p className="text-[13px] text-dangertext">{err}</p>}
             <div className="flex flex-col-reverse gap-2 sm:flex-row">
               <button type="button" onClick={deny} className="h-11 flex-1 rounded-full border border-border text-[14px] font-semibold transition-colors hover:bg-rowhover">Refuser</button>
               <button type="button" onClick={() => void allow()} className="h-11 flex-1 rounded-full bg-primary text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">Autoriser</button>

@@ -140,11 +140,11 @@ export function IosRow({ icon: Icon, label, detail, onClick, chevron = true, des
   const body = (
     <>
       {leading ?? (Icon ? (
-        <span className={cn("grid h-[29px] w-[29px] shrink-0 place-items-center rounded-[8px]", destructive ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-muted text-foreground")}>
+        <span className={cn("grid h-[29px] w-[29px] shrink-0 place-items-center rounded-[8px]", destructive ? "bg-danger/10 text-dangertext" : "bg-muted text-foreground")}>
           <Icon className="h-[17px] w-[17px]" strokeWidth={1.9} />
         </span>
       ) : null)}
-      {label && <span className={cn("min-w-0 flex-1 truncate text-[16px]", destructive ? "text-red-600 dark:text-red-400" : indent ? "text-muted-foreground" : "text-foreground")}>{label}</span>}
+      {label && <span className={cn("min-w-0 flex-1 truncate text-[16px]", destructive ? "text-dangertext" : indent ? "text-muted-foreground" : "text-foreground")}>{label}</span>}
       {detail != null && <span className="max-w-[45%] shrink-0 truncate text-[15px] text-muted-foreground">{detail}</span>}
       {right}
       {chevron && onClick && <ChevronRight className="h-[18px] w-[18px] shrink-0 text-faint" strokeWidth={2.2} />}

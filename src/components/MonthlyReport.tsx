@@ -154,7 +154,7 @@ export function MonthlyReport({ name, agencyView = false }: { name: string; agen
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          <Block icon={Wallet} title="Gains">
+          {data?.money !== false && <Block icon={Wallet} title="Gains">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <div className="text-[11px] text-muted-foreground">Ta part, après commission</div>
@@ -183,7 +183,7 @@ export function MonthlyReport({ name, agencyView = false }: { name: string; agen
                 ))}
               </ul>
             )}
-          </Block>
+          </Block>}
 
           <Block icon={Handshake} title="Collabs">
             <div className="grid grid-cols-3 gap-2">

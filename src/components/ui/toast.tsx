@@ -29,8 +29,8 @@ function inferVariant(message: string): AlertVariant {
 }
 
 const ICONS: Record<AlertVariant, ReactNode> = {
-  success: <CircleCheck className="text-emerald-500" size={16} strokeWidth={2} />,
-  error: <CircleAlert className="text-red-500" size={16} strokeWidth={2} />,
+  success: <CircleCheck className="text-signaltext" size={16} strokeWidth={2} />,
+  error: <CircleAlert className="text-dangertext" size={16} strokeWidth={2} />,
   warning: <TriangleAlert className="text-muted-foreground" size={16} strokeWidth={2} />,
   info: <Info className="text-muted-foreground" size={16} strokeWidth={2} />,
   default: <Info className="text-muted-foreground" size={16} strokeWidth={2} />,

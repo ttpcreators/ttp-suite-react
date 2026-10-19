@@ -732,7 +732,7 @@ export function Contrats() {
                   <div key={e.id} className="p-3">
                     <div className="flex items-center gap-2">
                       <input value={e.l} onChange={(ev) => setExtra(extra.map((x) => (x.id === e.id ? { ...x, l: ev.target.value } : x)))} placeholder="Titre de la clause" aria-label="Titre de la clause" className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-[13px] font-medium outline-none focus:border-primary" />
-                      <button type="button" onClick={() => setExtra(extra.filter((x) => x.id !== e.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-rose-500" title="Supprimer la clause" aria-label="Supprimer la clause"><Trash2 className="h-4 w-4" /></button>
+                      <button type="button" onClick={() => setExtra(extra.filter((x) => x.id !== e.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-dangertext" title="Supprimer la clause" aria-label="Supprimer la clause"><Trash2 className="h-4 w-4" /></button>
                     </div>
                     <textarea value={e.v} onChange={(ev) => setExtra(extra.map((x) => (x.id === e.id ? { ...x, v: ev.target.value } : x)))} rows={3} placeholder="Contenu de la clause…" aria-label="Contenu de la clause" className="mt-2 w-full resize-y rounded-md border border-border bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-primary" />
                   </div>
@@ -787,7 +787,7 @@ export function Contrats() {
                 <button type="button" onClick={() => printHtml(h.html)} title="Enregistrer en PDF" aria-label="Enregistrer en PDF" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                   <FileDown className="h-4 w-4" />
                 </button>
-                <button type="button" onClick={() => setPendingDel({ title: "Supprimer définitivement", message: `Retirer « ${h.title} » (${h.ref}) des contrats enregistrés ? Cette action est irréversible.`, run: () => deleteHistory(h.id) })} title="Supprimer définitivement" aria-label="Supprimer définitivement" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-rose-500">
+                <button type="button" onClick={() => setPendingDel({ title: "Supprimer définitivement", message: `Retirer « ${h.title} » (${h.ref}) des contrats enregistrés ? Cette action est irréversible.`, run: () => deleteHistory(h.id) })} title="Supprimer définitivement" aria-label="Supprimer définitivement" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-dangertext">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>

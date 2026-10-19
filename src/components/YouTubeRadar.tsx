@@ -201,7 +201,7 @@ export function YouTubeRadar({ platformTabs }: { platformTabs?: ReactNode } = {}
                         ) : (
                           <span className="rounded-full bg-amber/15 px-2 py-0.5 text-[10px] font-semibold text-amber" title="Code promo, #ad ou partenariat dans la description">Code / #ad</span>
                         )}
-                        {mine > 0 && <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">Chez {mine} de tes créateurs</span>}
+                        {mine > 0 && <span className="rounded-full bg-signal/10 px-2 py-0.5 text-[10px] font-semibold text-signaltext">Chez {mine} de tes créateurs</span>}
                         {known.has(b.brand) && <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Déjà en contact</span>}
                       </div>
                       <div className="mt-0.5 text-[11px] text-muted-foreground">

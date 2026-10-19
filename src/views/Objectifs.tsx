@@ -336,7 +336,7 @@ export function Objectifs() {
                   ? { ind: "bg-primary", track: "bg-primary/15", text: "text-primary" }
                   : pct >= 50
                     ? { ind: "bg-amber", track: "bg-amber/15", text: "text-amber" }
-                    : { ind: "bg-rose-500", track: "bg-rose-500/15", text: "text-rose-500" };
+                    : { ind: "bg-danger", track: "bg-danger/15", text: "text-dangertext" };
               return (
                 <li
                   key={o.id ?? `${o.name}-${index}`}

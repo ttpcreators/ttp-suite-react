@@ -110,7 +110,7 @@ export function IosActionSheet({ title, message, actions, onCancel, cancelLabel 
               className={cn(
                 "flex h-[57px] w-full items-center justify-center gap-2.5 px-4 text-[19px]",
                 i > 0 && "border-t border-foreground/10",
-                a.danger ? "text-red-600 dark:text-red-500" : "text-primary",
+                a.danger ? "text-dangertext" : "text-primary",
               )}
             >
               {a.icon && <a.icon className="h-[19px] w-[19px] shrink-0" strokeWidth={1.9} />}

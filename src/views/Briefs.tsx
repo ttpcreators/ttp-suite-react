@@ -12,7 +12,7 @@ import { dbTrash } from "@/lib/trash";
 import { printHtml } from "@/lib/printPdf";
 import { pdfShell, pdfHeading, pdfMeta, pdfSection } from "@/lib/pdfDoc";
 import { toast } from "@/components/ui/toast";
-import { AddButton, InlineForm, TextField, AutoGrowTextField, SelectField } from "@/components/ui/form";
+import { AddButton, InlineForm, TextField, AutoGrowTextField, SelectField, Picker } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useCreators } from "@/lib/useCreators";
@@ -558,16 +558,8 @@ export function Briefs() {
                 <span className="text-[12px] font-medium text-muted-foreground">Créateur</span>
                 <div className="flex items-center gap-2">
                   <UserRound className="h-4 w-4 shrink-0 text-faint" />
-                  <select
-                    value={creatorFilter}
-                    onChange={(e) => setCreatorFilter(e.target.value)}
-                    className="rounded-md border border-border bg-surface px-3 py-2 text-[13px] font-medium text-foreground outline-none focus:border-primary"
-                  >
-                    <option value="">Tous les créateurs</option>
-                    {creators.map((c) => (
-                      <option key={c.id} value={c.name}>{titleCase(c.name)}</option>
-                    ))}
-                  </select>
+                  <Picker size="sm" ariaLabel="Filtrer par créateur" className="min-w-[200px]" value={creatorFilter} onChange={setCreatorFilter}
+                    options={[{ value: "", label: "Tous les créateurs" }, ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url }))]} />
                 </div>
               </div>
             ) : undefined}

@@ -41,9 +41,9 @@ export function Initial({ name, agency, size = "md", email }: { name: string; ag
 
 /** Pastille du type de fichier (PDF rouge, tableur vert…), comme dans les clients mail. */
 const FILE_TONE: [RegExp, string][] = [
-  [/^pdf$/, "bg-red-500"],
+  [/^pdf$/, "bg-danger"],
   [/^(docx?|odt|rtf|pages)$/, "bg-blue-500"],
-  [/^(xlsx?|csv|ods|numbers)$/, "bg-emerald-600"],
+  [/^(xlsx?|csv|ods|numbers)$/, "bg-signal"],
   [/^(pptx?|key|odp)$/, "bg-orange-500"],
   [/^(zip|rar|7z|tar|gz)$/, "bg-violet-500"],
   [/^(png|jpe?g|gif|webp|heic|svg)$/, "bg-pink-500"],

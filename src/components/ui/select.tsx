@@ -119,6 +119,8 @@ interface SelectContextValue {
   disabled: boolean;
   triggerRef: React.RefObject<HTMLButtonElement | null>;
   labelMap: React.MutableRefObject<Map<string, string>>;
+  /** Redessine le bouton quand le libellé de la valeur choisie arrive (options chargées après coup). */
+  refreshLabel: () => void;
 }
 
 const SelectContext = createContext<SelectContextValue | null>(null);
@@ -154,8 +156,9 @@ function Select({ children, value, defaultValue, onValueChange, disabled = false
   const currentValue = value !== undefined ? value : internalValue;
   const triggerRef = useRef<HTMLButtonElement>(null);
   const labelMap = useRef(new Map<string, string>());
-  const [, setReady] = useState(false);
-  useEffect(() => setReady(true), []);
+  const [, setReady] = useState(0);
+  useEffect(() => setReady(1), []);
+  const refreshLabel = useCallback(() => setReady((n) => n + 1), []);
 
   const onChange = useCallback((v: string) => {
     if (value === undefined) setInternalValue(v);
@@ -165,7 +168,7 @@ function Select({ children, value, defaultValue, onValueChange, disabled = false
   }, [value, onValueChange]);
 
   return (
-    <SelectContext.Provider value={{ value: currentValue, onChange, open, setOpen, disabled, triggerRef, labelMap }}>
+    <SelectContext.Provider value={{ value: currentValue, onChange, open, setOpen, disabled, triggerRef, labelMap, refreshLabel }}>
       {children}
       {name && <input type="hidden" name={name} value={currentValue} required={required} />}
     </SelectContext.Provider>
@@ -399,7 +402,13 @@ const SelectItem = forwardRef<HTMLDivElement, SelectItemProps>(
     const hasMounted = useRef(false);
 
     useEffect(() => { hasMounted.current = true; }, []);
-    useEffect(() => { if (typeof children === "string") selectCtx.labelMap.current.set(value, children); }, [value, children, selectCtx.labelMap]);
+    const isCurrent = selectCtx.value === value;
+    const { labelMap, refreshLabel } = selectCtx;
+    useEffect(() => {
+      if (typeof children !== "string" || labelMap.current.get(value) === children) return;
+      labelMap.current.set(value, children);
+      if (isCurrent) refreshLabel();
+    }, [value, children, labelMap, refreshLabel, isCurrent]);
     useEffect(() => { contentCtx?.registerItem(index, internalRef.current); return () => contentCtx?.registerItem(index, null); }, [index, contentCtx]);
 
     const isActive = contentCtx?.activeIndex === index;

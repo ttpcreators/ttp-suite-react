@@ -508,7 +508,7 @@ export function RepresentationContract() {
                   onClick={() => setPendingDel({ title: "Supprimer définitivement", message: `Supprimer « ${e.title} » ?${e.creator ? " Il sera aussi retiré de l'espace du créateur." : ""} Cette action est irréversible.`, run: () => deleteContract(e) })}
                   title="Supprimer définitivement"
                   aria-label="Supprimer définitivement"
-                  className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-rose-500"
+                  className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-dangertext"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Picker } from "@/components/ui/form";
 import { Check, ChevronDown, Circle, Clock, Pencil, Plus, Repeat, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -27,15 +28,8 @@ const todayIndex = () => ((new Date().getDay() + 6) % 7) + 1;
 
 function DaySelect({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
   return (
-    <select
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
-      className="h-9 rounded-md border border-border bg-surface px-2.5 text-[13px] text-foreground outline-none focus:border-primary"
-      aria-label="Jour"
-    >
-      <option value="">N'importe quel jour</option>
-      {DAYS.map((d, i) => <option key={d} value={i + 1}>{d}</option>)}
-    </select>
+    <Picker size="sm" ariaLabel="Jour" className="min-w-[170px]" value={value == null ? "" : String(value)} onChange={(v) => onChange(v ? Number(v) : null)}
+      options={[{ value: "", label: "N'importe quel jour" }, ...DAYS.map((d, i) => ({ value: String(i + 1), label: d }))]} />
   );
 }
 
@@ -202,7 +196,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                             <button type="button" onClick={() => void toggle(r)} disabled={busy === r.id}
                               aria-label={done ? "Annuler le « Fait » de cette semaine" : "Marquer fait cette semaine"}
                               className="mt-0.5 shrink-0 transition-transform active:scale-90 disabled:opacity-50">
-                              {done ? <span className="grid h-5 w-5 place-items-center rounded-full bg-emerald-500 text-white"><Check className="h-3.5 w-3.5" /></span>
+                              {done ? <span className="grid h-5 w-5 place-items-center rounded-full bg-signal text-white"><Check className="h-3.5 w-3.5" /></span>
                                 : <Circle className="h-5 w-5 text-faint hover:text-foreground" />}
                             </button>
                             <div className="min-w-0 flex-1">

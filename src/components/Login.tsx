@@ -223,7 +223,7 @@ export function Login() {
             </div>
 
             {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-[13px] text-destructive">{error}</div>}
-            {notice && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-[13px] text-emerald-700 dark:text-emerald-400">{notice}</div>}
+            {notice && <div className="rounded-lg border border-signal/30 bg-signal/10 px-3 py-2.5 text-[13px] text-signaltext">{notice}</div>}
 
             <button
               type="submit"

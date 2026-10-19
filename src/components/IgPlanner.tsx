@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Picker } from "@/components/ui/form";
 import {
   AlertTriangle, CalendarClock, Clapperboard, ExternalLink, GalleryHorizontal, Handshake, Image as ImageIcon, ImagePlus, Loader2, Pencil,
   Plus, RefreshCw, RotateCcw, Send, Smartphone, Trash2, UserPlus, X, ArrowLeft, ArrowRight, Sparkles,
@@ -32,8 +33,8 @@ const STATUS_CLS: Record<PlanStatus, string> = {
   brouillon: "bg-panel text-muted-foreground",
   programme: "bg-primary/10 text-primary",
   en_cours: "bg-amber/15 text-amber",
-  publie: "bg-emerald-500/10 text-emerald-600",
-  erreur: "bg-rose-500/10 text-rose-500",
+  publie: "bg-signal/10 text-signaltext",
+  erreur: "bg-danger/10 text-dangertext",
 };
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const fmtWhen = (iso: string | null) =>
@@ -302,7 +303,7 @@ export function IgPlanner({ focusId, onFocused }: { focusId?: string | null; onF
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-5">
-          {groups.errors.length > 0 && <Section title="À corriger" hint="Instagram a refusé ces posts : la raison est indiquée. Corrige puis reprogramme." tone="text-rose-500">{groups.errors.map(card)}</Section>}
+          {groups.errors.length > 0 && <Section title="À corriger" hint="Instagram a refusé ces posts : la raison est indiquée. Corrige puis reprogramme." tone="text-dangertext">{groups.errors.map(card)}</Section>}
           <Section title="À venir" hint="Publiés tout seuls à l'heure prévue, même app fermée.">
             {groups.upcoming.length ? groups.upcoming.map(card) : (
               <Empty onNew={() => setEditing("new")} />
@@ -376,7 +377,7 @@ function PlanCard({ r, busy, onEdit, onNow, onDraft, onDelete }: { r: Planned; b
   const Icon = KIND_ICON[r.kind];
   const locked = r.status === "en_cours" || busy;
   return (
-    <div className={cn("flex gap-3 rounded-2xl border bg-surface p-3", r.status === "erreur" ? "border-rose-500/40" : "border-border")}>
+    <div className={cn("flex gap-3 rounded-2xl border bg-surface p-3", r.status === "erreur" ? "border-danger/40" : "border-border")}>
       <button type="button" onClick={onEdit} disabled={locked || r.status === "publie"} className="relative h-[84px] w-[68px] shrink-0 overflow-hidden rounded-xl">
         <Thumb m={r.media[0]} className="h-full w-full" />
         {r.media.length > 1 && <span className="absolute right-1 top-1 rounded bg-black/60 px-1 text-[9px] font-bold text-white">{r.media.length}</span>}
@@ -389,7 +390,7 @@ function PlanCard({ r, busy, onEdit, onNow, onDraft, onDelete }: { r: Planned; b
         </div>
         <p className="mt-1 line-clamp-2 whitespace-pre-line text-[12px] leading-snug text-muted-foreground">{r.kind === "story" ? "Story (sans légende)" : r.caption || "Sans légende"}</p>
         {r.collaborators.length > 0 && <p className="mt-1 truncate text-[11px] text-faint">Avec {r.collaborators.map((c) => `@${c}`).join(", ")}</p>}
-        {r.status === "erreur" && r.error && <p className="mt-1 flex items-start gap-1 text-[11px] font-medium text-rose-500"><AlertTriangle className="mt-px h-3 w-3 shrink-0" />{r.error}</p>}
+        {r.status === "erreur" && r.error && <p className="mt-1 flex items-start gap-1 text-[11px] font-medium text-dangertext"><AlertTriangle className="mt-px h-3 w-3 shrink-0" />{r.error}</p>}
         {r.status === "en_cours" && <p className="mt-1 text-[11px] text-amber">Instagram prépare le fichier (une vidéo peut prendre quelques minutes).</p>}
         <div className="mt-2 flex flex-wrap gap-1.5">
           {r.status === "publie" ? (
@@ -402,7 +403,7 @@ function PlanCard({ r, busy, onEdit, onNow, onDraft, onDelete }: { r: Planned; b
             </>
           )}
           {busy && <span className={cn(BTN, "pointer-events-none")}><Loader2 className="h-3 w-3 animate-spin" /> Envoi…</span>}
-          {!locked && <button type="button" onClick={onDelete} className={cn(BTN, "text-muted-foreground hover:text-rose-500")} aria-label="Supprimer"><Trash2 className="h-3 w-3" /></button>}
+          {!locked && <button type="button" onClick={onDelete} className={cn(BTN, "text-muted-foreground hover:text-dangertext")} aria-label="Supprimer"><Trash2 className="h-3 w-3" /></button>}
         </div>
       </div>
     </div>
@@ -496,6 +497,8 @@ function PlanEditor({ initial, account, onClose, onSaved }: { initial: Planned |
   const [collabs, setCollabs] = useState<CollabOpt[]>([]);
   const [brandIg, setBrandIg] = useState<Map<string, string>>(new Map());
   const [tpl, setTpl] = useState<"signature" | "collab" | null>(null);
+  const [pickedCreator, setPickedCreator] = useState("");
+  const [pickedCollab, setPickedCollab] = useState("");
   const lastTemplate = useRef<string>(initial?.template ? initial.caption : "");
   const fileRef = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
@@ -724,16 +727,12 @@ function PlanEditor({ initial, account, onClose, onSaved }: { initial: Planned |
                   <button type="button" onClick={() => setTpl(tpl === "collab" ? null : "collab")} className={cn(CHIP, tpl === "collab" && CHIP_ON)}><Handshake className="h-3.5 w-3.5" /> Collab réussie</button>
                 </div>
                 {tpl === "signature" && (
-                  <select className={cn(IN, "mt-2")} defaultValue="" onChange={(e) => pickCreator(e.target.value)}>
-                    <option value="" disabled>Quel créateur ?</option>
-                    {creators.map((c) => <option key={c.id} value={c.id}>{c.name}{c.handle ? ` (@${c.handle})` : ""}</option>)}
-                  </select>
+                  <Picker ariaLabel="Quel créateur ?" className="mt-2 w-full" value={pickedCreator} onChange={(v) => { setPickedCreator(v); pickCreator(v); }}
+                    options={[{ value: "", label: "Quel créateur ?" }, ...creators.map((c) => ({ value: c.id, label: `${c.name}${c.handle ? ` (@${c.handle})` : ""}` }))]} />
                 )}
                 {tpl === "collab" && (
-                  <select className={cn(IN, "mt-2")} defaultValue="" onChange={(e) => pickCollab(e.target.value)}>
-                    <option value="" disabled>Quelle collab ?</option>
-                    {collabs.map((c) => <option key={c.id} value={c.id}>{c.brand} × {c.creator}</option>)}
-                  </select>
+                  <Picker ariaLabel="Quelle collab ?" className="mt-2 w-full" value={pickedCollab} onChange={(v) => { setPickedCollab(v); pickCollab(v); }}
+                    options={[{ value: "", label: "Quelle collab ?" }, ...collabs.map((c) => ({ value: c.id, label: `${c.brand} × ${c.creator}` }))]} />
                 )}
                 {tpl && <p className="mt-1.5 text-[11px] text-muted-foreground">La légende et les collaborateurs se remplissent : tout reste modifiable.</p>}
               </Step>
@@ -789,7 +788,7 @@ function PlanEditor({ initial, account, onClose, onSaved }: { initial: Planned |
                   {d.cover_url ? (
                     <span className="inline-flex items-center gap-2 text-[11px] text-foreground">
                       <img src={d.cover_url} alt="" className="h-10 w-8 rounded object-cover" /> Couverture choisie
-                      <button type="button" onClick={() => set({ cover_url: null })} className="text-faint hover:text-rose-500" aria-label="Retirer la couverture"><X className="h-3.5 w-3.5" /></button>
+                      <button type="button" onClick={() => set({ cover_url: null })} className="text-faint hover:text-dangertext" aria-label="Retirer la couverture"><X className="h-3.5 w-3.5" /></button>
                     </span>
                   ) : (
                     <button type="button" onClick={() => coverRef.current?.click()} className={CHIP}><ImagePlus className="h-3.5 w-3.5" /> Couverture (facultatif)</button>
@@ -806,7 +805,7 @@ function PlanEditor({ initial, account, onClose, onSaved }: { initial: Planned |
             {!isStory && (
               <Step n={4} title="La légende">
                 <textarea value={d.caption} onChange={(e) => set({ caption: e.target.value })} rows={7} maxLength={LIMITS.caption + 200} placeholder="Écris la légende… (@ pour citer, # pour les hashtags)" className={cn(IN, "resize-y leading-relaxed")} />
-                <p className={cn("mt-1 text-[11px]", d.caption.length > LIMITS.caption ? "text-rose-500" : "text-muted-foreground")}>
+                <p className={cn("mt-1 text-[11px]", d.caption.length > LIMITS.caption ? "text-dangertext" : "text-muted-foreground")}>
                   {d.caption.length} / {LIMITS.caption} caractères · {countHashtags(d.caption)} / {LIMITS.hashtags} # · {countMentions(d.caption)} @
                 </p>
                 <div className="mt-3">
@@ -889,7 +888,7 @@ function PlanEditor({ initial, account, onClose, onSaved }: { initial: Planned |
 
         <div className="flex flex-col gap-3 border-t border-border px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-h-[18px] text-[11px]">
-            {problems.length > 0 ? <span className="flex items-start gap-1 font-medium text-rose-500"><AlertTriangle className="mt-px h-3 w-3 shrink-0" />{problems[0]}</span> : <span className="text-emerald-600">Prêt à partir ✓</span>}
+            {problems.length > 0 ? <span className="flex items-start gap-1 font-medium text-dangertext"><AlertTriangle className="mt-px h-3 w-3 shrink-0" />{problems[0]}</span> : <span className="text-signaltext">Prêt à partir ✓</span>}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button type="button" disabled={saving || uploading > 0} onClick={() => void save("draft")} className="h-9 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">Brouillon</button>

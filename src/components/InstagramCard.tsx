@@ -93,10 +93,10 @@ export function InstagramCard({ creatorId, name, ig, onChange, className }: {
         {ig?.link ? (
           <>
             <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-1.5 text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
+              <span className="flex items-center gap-1.5 text-[12px] font-medium text-signaltext">
                 <Link2 className="h-3.5 w-3.5" /> Compte connecté{ig.link.username ? ` (@${ig.link.username})` : ""}
               </span>
-              <button type="button" onClick={disconnect} disabled={!!busy} className="flex items-center gap-1 text-[11px] text-faint transition-colors hover:text-rose-500 disabled:opacity-50">
+              <button type="button" onClick={disconnect} disabled={!!busy} className="flex items-center gap-1 text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
                 <Unlink className="h-3 w-3" /> Déconnecter
               </button>
             </div>

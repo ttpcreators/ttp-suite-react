@@ -57,7 +57,7 @@ import { openLater } from "@/lib/openLater";
 import { consumeIgReturn, igConnect, igDisconnect, type IgCreator } from "@/lib/instagram";
 import { consumeTtReturn, ttConnect, ttDisconnect, type TtCreator } from "@/lib/tiktok";
 import { consumeYtReturn, ytConnect, ytDisconnect, type YtCreator } from "@/lib/youtube";
-import { AddButton, InlineForm, TextField, SelectField, AutoGrowTextField } from "@/components/ui/form";
+import { AddButton, InlineForm, TextField, SelectField, AutoGrowTextField, Picker } from "@/components/ui/form";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
@@ -124,8 +124,8 @@ type Todo = { id: string; text: string; descr: string | null; due: string | null
 let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
 // Priorité : barre d'accent (bord gauche de la carte) + pilule.
-const PRIO_ACCENT: Record<string, string> = { haute: "bg-rose-500", moyenne: "bg-foreground/50", basse: "bg-foreground/30" };
-const PRIO_PILL: Record<string, string> = { haute: "bg-rose-500/10 text-rose-600 dark:text-rose-400", moyenne: "bg-muted text-muted-foreground", basse: "border border-border text-muted-foreground" };
+const PRIO_ACCENT: Record<string, string> = { haute: "bg-danger", moyenne: "bg-foreground/50", basse: "bg-foreground/30" };
+const PRIO_PILL: Record<string, string> = { haute: "bg-danger/10 text-dangertext", moyenne: "bg-muted text-muted-foreground", basse: "border border-border text-muted-foreground" };
 const prioAccent = (p: string | null) => PRIO_ACCENT[p ?? "moyenne"] ?? PRIO_ACCENT.moyenne;
 const prioPill = (p: string | null) => PRIO_PILL[p ?? "moyenne"] ?? PRIO_PILL.moyenne;
 type Idea = { id: string; text: string; status: string | null; sort_order?: number; subtasks?: Subtask[] | null };
@@ -1557,16 +1557,8 @@ export function CreatorSpace({
             <Eye className="h-4 w-4" /> Mode agence · tu visualises l'espace de {firstName}
           </div>
           <div className="flex items-center gap-2">
-            <select
-              value={name}
-              onChange={(e) => preview.onPick(e.target.value)}
-              className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-[12px] font-medium text-foreground outline-none focus:border-primary"
-              aria-label="Changer de créateur"
-            >
-              {preview.creators.map((cr) => (
-                <option key={cr.id} value={cr.name}>{titleCase(cr.name)}</option>
-              ))}
-            </select>
+            <Picker size="sm" ariaLabel="Changer de créateur" className="min-w-[170px]" value={name} onChange={preview.onPick}
+              options={preview.creators.map((cr) => ({ value: cr.name, label: titleCase(cr.name) }))} />
             <button
               type="button"
               onClick={preview.onExit}
@@ -3160,7 +3152,7 @@ export function CreatorSpace({
                   </span>
                 </span>
                 {!preview && (
-                  <button type="button" onClick={() => void disconnectIg()} disabled={igBusy} className="text-[11px] text-faint transition-colors hover:text-rose-500 disabled:opacity-50">
+                  <button type="button" onClick={() => void disconnectIg()} disabled={igBusy} className="text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
                     Déconnecter
                   </button>
                 )}
@@ -3200,7 +3192,7 @@ export function CreatorSpace({
                   </span>
                 </span>
                 {!preview && (
-                  <button type="button" onClick={() => void disconnectTt()} disabled={ttBusy} className="text-[11px] text-faint transition-colors hover:text-rose-500 disabled:opacity-50">
+                  <button type="button" onClick={() => void disconnectTt()} disabled={ttBusy} className="text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
                     Déconnecter
                   </button>
                 )}
@@ -3240,7 +3232,7 @@ export function CreatorSpace({
                   </span>
                 </span>
                 {!preview && (
-                  <button type="button" onClick={() => void disconnectYt()} disabled={ytBusy} className="text-[11px] text-faint transition-colors hover:text-rose-500 disabled:opacity-50">
+                  <button type="button" onClick={() => void disconnectYt()} disabled={ytBusy} className="text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
                     Déconnecter
                   </button>
                 )}

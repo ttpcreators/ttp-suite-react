@@ -139,7 +139,7 @@ const STATUSES: { v: ScoutStatus; label: string; dot: string; pill: string }[] =
   { v: "observation", label: "En observation", dot: "bg-indigo", pill: "bg-indigo/10 text-indigo" },
   { v: "contacter", label: "À contacter", dot: "bg-amber", pill: "bg-foreground/[0.06] text-amber" },
   { v: "discussion", label: "En discussion", dot: "bg-primary", pill: "bg-primary/10 text-primary" },
-  { v: "signe", label: "Signé", dot: "bg-emerald-500", pill: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+  { v: "signe", label: "Signé", dot: "bg-signal", pill: "bg-signal/10 text-signaltext" },
   { v: "ecarte", label: "Pas intéressé", dot: "bg-neutral-400", pill: "bg-panel text-faint" },
 ];
 const statusMeta = (v: ScoutStatus) => STATUSES.find((s) => s.v === v) ?? STATUSES[0];
@@ -565,7 +565,7 @@ function ScoutingList({ kind }: { kind: Kind }) {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-[13px] font-semibold text-foreground">{r.name}</span>
-                  {r.last_contacted && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà contacté" />}
+                  {r.last_contacted && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-signal" title="Déjà contacté" />}
                   {r.tag?.trim() ? (
                     <span className="shrink-0 rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{r.tag.trim()}</span>
                   ) : autoTag(r) ? (
@@ -593,7 +593,7 @@ function ScoutingList({ kind }: { kind: Kind }) {
                 <div className="hidden shrink-0 text-right sm:block">
                   <div className="text-[13px] font-bold tabular-nums text-foreground">{fmtCompact(latestFollowers(r.id)!)}</div>
                   {growthOf(r.id) !== 0 && (
-                    <div className={cn("text-[10px] font-semibold", growthOf(r.id) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500")}>
+                    <div className={cn("text-[10px] font-semibold", growthOf(r.id) >= 0 ? "text-signaltext" : "text-dangertext")}>
                       {growthOf(r.id) >= 0 ? "+" : "−"}{fmtCompact(Math.abs(growthOf(r.id)))}
                     </div>
                   )}
@@ -639,7 +639,7 @@ function ScoutingList({ kind }: { kind: Kind }) {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-base font-bold text-foreground">{selected.name}</span>
-                  {selected.last_contacted && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà contacté" />}
+                  {selected.last_contacted && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-signal" title="Déjà contacté" />}
                 </div>
                 {(effTag(selected) || (athletes && (selected.club || selected.level))) && (
                   <div className="mt-0.5 text-[12px] font-medium text-muted-foreground">
@@ -727,7 +727,7 @@ function ScoutingList({ kind }: { kind: Kind }) {
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[12px] font-medium text-muted-foreground">Évolution des abonnés</span>
                 {growthOf(selected.id) !== 0 && (
-                  <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-semibold", growthOf(selected.id) >= 0 ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/12 text-rose-500")}>
+                  <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-semibold", growthOf(selected.id) >= 0 ? "bg-signal/12 text-signaltext" : "bg-danger/12 text-dangertext")}>
                     {growthOf(selected.id) >= 0 ? "+" : "−"}{fmtCompact(Math.abs(growthOf(selected.id)))} depuis le relevé précédent
                   </span>
                 )}
@@ -763,7 +763,7 @@ function ScoutingList({ kind }: { kind: Kind }) {
                     <div key={s.date} className="group flex items-center gap-2 rounded-lg bg-panel/40 px-2.5 py-1.5 text-[12px]">
                       <span className="text-faint">{frShort(s.date)}</span>
                       <span className="ml-auto font-semibold tabular-nums text-foreground">{s.value.toLocaleString("fr-FR")}</span>
-                      <button type="button" onClick={() => delSnap(selected.id, s.date)} className="text-faint opacity-0 transition-opacity hover:text-rose-500 group-hover:opacity-100" title="Supprimer ce relevé"><X className="h-3.5 w-3.5" /></button>
+                      <button type="button" onClick={() => delSnap(selected.id, s.date)} className="text-faint opacity-0 transition-opacity hover:text-dangertext group-hover:opacity-100" title="Supprimer ce relevé"><X className="h-3.5 w-3.5" /></button>
                     </div>
                   ))}
                 </div>

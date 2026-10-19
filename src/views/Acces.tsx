@@ -539,7 +539,7 @@ export function Acces() {
             </button>
           </div>
           {pendingEntry && (
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-rose-500">
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-dangertext">
               Compte créé mais pas encore ajouté à la liste.
               <button
                 type="button"
@@ -554,7 +554,7 @@ export function Acces() {
         </div>
       )}
       {!created && pendingEntry && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-4 text-[12px] text-rose-500 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-4 text-[12px] text-dangertext shadow-sm">
           Compte {pendingEntry.email} créé mais pas encore ajouté à la liste.
           <button
             type="button"

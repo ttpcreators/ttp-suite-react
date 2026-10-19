@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Picker } from "@/components/ui/form";
 import { X, Send, Loader2, Settings2, Plus, Trash2, ArrowLeft, ExternalLink } from "lucide-react";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { MailAvatar } from "@/components/mail-avatar";
@@ -430,14 +431,8 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
                       placeholder="Nom du modèle"
                       className="rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                     />
-                    <select
-                      value={editing.kind}
-                      onChange={(e) => patchEditing({ kind: e.target.value as MailTemplateKind })}
-                      className="rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
-                    >
-                      <option value="prospection">Prospection</option>
-                      <option value="relance">Relance</option>
-                    </select>
+                    <Picker size="sm" ariaLabel="Type de modèle" className="min-w-[150px]" value={editing.kind} onChange={(v) => patchEditing({ kind: v as MailTemplateKind })}
+                      options={[{ value: "prospection", label: "Prospection" }, { value: "relance", label: "Relance" }]} />
                   </div>
                   <input
                     value={editing.subject}

@@ -6,6 +6,7 @@ import { formatEuro, getAppState, invalidateAppState, saveAppStateKey, useAppSta
 import { titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { Picker } from "@/components/ui/form";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import {
   INF_PLATFORMS, NICHES, nicheMult, infFormat, tier, computeInfluence, parseFollowers, parseEr, cpmViews, EXCLUSIVITY, USAGE_RIGHTS,
@@ -18,8 +19,6 @@ const EXTERNAL = "__external__";
 let _rid = 0;
 const rid = () => `p${Date.now().toString(36)}${(_rid += 1)}`;
 
-const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15";
-const SEL = IN;
 const LBL = "text-[12px] font-medium text-muted-foreground";
 
 type Mode = "influence" | "ugc";
@@ -223,12 +222,8 @@ export function Pricing() {
 
           <div className="mt-4 flex flex-col gap-1.5">
             <span className={LBL}>Créateur</span>
-            <select value={creatorId} onChange={(e) => setCreatorId(e.target.value)} className={SEL}>
-              <option value={EXTERNAL}>Autre créateur (saisie libre)</option>
-              {creators.map((c) => (
-                <option key={c.id} value={c.id}>{titleCase(c.name)}</option>
-              ))}
-            </select>
+            <Picker ariaLabel="Créateur" value={creatorId} onChange={setCreatorId}
+              options={[{ value: EXTERNAL, label: "Autre créateur (saisie libre)" }, ...creators.map((c) => ({ value: c.id, label: titleCase(c.name), img: c.photo_url }))]} />
           </div>
         </div>
 
@@ -238,9 +233,7 @@ export function Pricing() {
             <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
               <label className="flex flex-1 flex-col gap-1.5" style={{ minWidth: 160 }}>
                 <span className={LBL}>Niche (du créateur)</span>
-                <select value={niche} onChange={(e) => setNiche(e.target.value)} className={SEL}>
-                  {NICHES.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
-                </select>
+                <Picker ariaLabel="Niche" value={niche} onChange={setNiche} options={NICHES.map((n) => ({ value: n.value, label: n.label }))} />
               </label>
             </div>
 
@@ -253,12 +246,8 @@ export function Pricing() {
                 return (
                   <div key={r.id} className="rounded-xl border border-border bg-panel p-2.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <select value={r.platform} onChange={(e) => setInf(r.id, { platform: e.target.value as PlatKey })} className="rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none focus:border-primary">
-                        {INF_PLATFORMS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
-                      </select>
-                      <select value={r.format} onChange={(e) => setInf(r.id, { format: e.target.value })} className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none focus:border-primary">
-                        {plat.formats.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
-                      </select>
+                      <Picker size="sm" ariaLabel="Plateforme" className="w-[130px]" value={r.platform} onChange={(v) => setInf(r.id, { platform: v as PlatKey })} options={INF_PLATFORMS.map((p) => ({ value: p.key, label: p.label }))} />
+                      <Picker size="sm" ariaLabel="Format" className="flex-1" value={r.format} onChange={(v) => setInf(r.id, { format: v })} options={plat.formats.map((f) => ({ value: f.key, label: f.label }))} />
                       <input type="number" min={1} value={r.qty} onChange={(e) => setInf(r.id, { qty: Math.max(1, parseInt(e.target.value, 10) || 1) })} title="Quantité" className="w-14 rounded-md border border-border bg-surface px-2 py-1.5 text-center text-[13px] tabular-nums outline-none focus:border-primary" />
                       {infRows.length > 1 && (
                         <button type="button" onClick={() => setInfRows((rows) => rows.filter((x) => x.id !== r.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
@@ -295,15 +284,13 @@ export function Pricing() {
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">
                 <span className={LBL}>Exclusivité (pas de marque concurrente)</span>
-                <select value={infOpts.exclusivite} onChange={(e) => setInfOpts((o) => ({ ...o, exclusivite: e.target.value }))} className={SEL}>
-                  {EXCLUSIVITY.map((x) => <option key={x.value} value={x.value}>{x.label}{x.m ? ` (+${Math.round(x.m * 100)} %)` : ""}</option>)}
-                </select>
+                <Picker ariaLabel="Exclusivité" value={infOpts.exclusivite} onChange={(v) => setInfOpts((o) => ({ ...o, exclusivite: v }))}
+                  options={EXCLUSIVITY.map((x) => ({ value: x.value, label: `${x.label}${x.m ? ` (+${Math.round(x.m * 100)} %)` : ""}` }))} />
               </label>
               <label className="flex flex-col gap-1.5">
                 <span className={LBL}>Droits d'usage par la marque</span>
-                <select value={infOpts.droitsUsage} onChange={(e) => setInfOpts((o) => ({ ...o, droitsUsage: e.target.value }))} className={SEL}>
-                  {USAGE_RIGHTS.map((x) => <option key={x.value} value={x.value}>{x.label}{x.m ? ` (+${Math.round(x.m * 100)} %)` : ""}</option>)}
-                </select>
+                <Picker ariaLabel="Droits d'usage" value={infOpts.droitsUsage} onChange={(v) => setInfOpts((o) => ({ ...o, droitsUsage: v }))}
+                  options={USAGE_RIGHTS.map((x) => ({ value: x.value, label: `${x.label}${x.m ? ` (+${Math.round(x.m * 100)} %)` : ""}` }))} />
               </label>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-4">
@@ -324,15 +311,12 @@ export function Pricing() {
             <div className="mb-3 flex flex-wrap items-end gap-3">
               <label className="flex flex-1 flex-col gap-1.5" style={{ minWidth: 160 }}>
                 <span className={LBL}>Niveau du créateur UGC</span>
-                <select value={level} onChange={(e) => setLevel(e.target.value)} className={SEL}>
-                  {UGC_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label} (×{l.m})</option>)}
-                </select>
+                <Picker ariaLabel="Niveau UGC" value={level} onChange={setLevel} options={UGC_LEVELS.map((l) => ({ value: l.value, label: `${l.label} (×${l.m})` }))} />
               </label>
               <label className="flex flex-1 flex-col gap-1.5" style={{ minWidth: 160 }}>
                 <span className={LBL}>Droits d'exploitation</span>
-                <select value={ugcOpts.usage} onChange={(e) => setUgcOpts((o) => ({ ...o, usage: e.target.value }))} className={SEL}>
-                  {UGC_USAGE.map((u) => <option key={u.value} value={u.value}>{u.label}{u.m ? ` (+${Math.round(u.m * 100)} %)` : ""}</option>)}
-                </select>
+                <Picker ariaLabel="Droits d'exploitation" value={ugcOpts.usage} onChange={(v) => setUgcOpts((o) => ({ ...o, usage: v }))}
+                  options={UGC_USAGE.map((u) => ({ value: u.value, label: `${u.label}${u.m ? ` (+${Math.round(u.m * 100)} %)` : ""}` }))} />
               </label>
             </div>
 
@@ -340,9 +324,7 @@ export function Pricing() {
             <div className="mt-2 flex flex-col gap-2">
               {ugcRows.map((r) => (
                 <div key={r.id} className="flex items-center gap-2 rounded-xl border border-border bg-panel p-2.5">
-                  <select value={r.type} onChange={(e) => setUgcRows((rows) => rows.map((x) => (x.id === r.id ? { ...x, type: e.target.value } : x)))} className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none focus:border-primary">
-                    {UGC_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-                  </select>
+                  <Picker size="sm" ariaLabel="Type de livrable" className="flex-1" value={r.type} onChange={(v) => setUgcRows((rows) => rows.map((x) => (x.id === r.id ? { ...x, type: v } : x)))} options={UGC_TYPES.map((t) => ({ value: t.key, label: t.label }))} />
                   <input type="number" min={1} value={r.qty} onChange={(e) => setUgcRows((rows) => rows.map((x) => (x.id === r.id ? { ...x, qty: Math.max(1, parseInt(e.target.value, 10) || 1) } : x)))} title="Quantité" className="w-14 rounded-md border border-border bg-surface px-2 py-1.5 text-center text-[13px] tabular-nums outline-none focus:border-primary" />
                   {ugcRows.length > 1 && (
                     <button type="button" onClick={() => setUgcRows((rows) => rows.filter((x) => x.id !== r.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">

@@ -302,7 +302,7 @@ function ClaudeSection() {
                 <ul className="flex flex-col divide-y divide-border">
                   {log.map((l) => (
                     <li key={l.id} className="flex items-center gap-2 py-1.5 text-[12px]">
-                      <span className={cn("size-1.5 shrink-0 rounded-full", l.ok ? "bg-emerald-500" : "bg-red-500")} />
+                      <span className={cn("size-1.5 shrink-0 rounded-full", l.ok ? "bg-signal" : "bg-danger")} />
                       <span className="min-w-0 flex-1 truncate text-foreground">{TOOL_LABELS[l.tool] ?? l.tool}</span>
                       <span className="shrink-0 tabular-nums text-faint">{fmtWhen(l.at)}</span>
                     </li>
