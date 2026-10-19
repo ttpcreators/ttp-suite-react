@@ -151,7 +151,15 @@ export const NAV: NavFamily[] = [
           { id: "files", label: "Fichiers" },
         ],
       },
-      { id: "vivier", label: "Scouting", icon: UserPlus },
+      {
+        id: "vivier",
+        label: "Scouting",
+        icon: UserPlus,
+        children: [
+          { id: "createurs", label: "Créateurs" },
+          { id: "sportifs", label: "Sportifs" },
+        ],
+      },
     ],
   },
   {

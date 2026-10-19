@@ -24,6 +24,7 @@ import { Tabs } from "@/components/ui/animated-tabs";
 import { DateInput } from "@/components/ui/date-range-picker";
 import { todayISO } from "@/lib/dates";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { useNavSub, useSetNavSub } from "@/lib/navSub";
 
 /**
  * VIVIER créateurs (hors roster) : répertoire de créateurs à SOLLICITER pour des
@@ -38,11 +39,39 @@ type Row = {
   name: string;
   handle: string | null;
   email: string | null;
-  tag: string | null;
+  tag: string | null; // créateurs : catégorie ; sportifs : sport
   note: string | null;
   last_contacted: string | null;
   sort_order: number;
+  club?: string | null; // sportifs seulement
+  level?: string | null; // sportifs seulement (Pro, Espoir…)
 };
+
+/**
+ * Deux scoutings séparés : les créateurs (table creator_pool, utilisée aussi par le
+ * Sourcing et les radars) et les sportifs (table athlete_pool : sport, club, niveau).
+ * Même page, mêmes outils (statut, photo et chiffres Instagram, relevés d'abonnés, mail).
+ */
+type Kind = "createurs" | "sportifs";
+const KIND = {
+  createurs: {
+    table: "creator_pool", cache: "vivier", track: "poolTracking",
+    one: "créateur", many: "créateurs", add: "Créateur",
+    catLabel: "Catégorie", catPh: "Ex : Mode, Sport, Beauté", allCats: "Toutes les catégories",
+    namePh: "Ex : Léna Marchand", handlePh: "@lena.mrchd", emailPh: "lena@email.com",
+    newTitle: "Nouveau créateur à suivre", editTitle: "Modifier le créateur",
+    empty: "Ton scouting est vide. Ajoute des créateurs à repérer / solliciter le jour où tu en as besoin ✨",
+  },
+  sportifs: {
+    table: "athlete_pool", cache: "vivier-sportifs", track: "athleteTracking",
+    one: "sportif", many: "sportifs", add: "Sportif",
+    catLabel: "Sport", catPh: "Ex : Football, Tennis, Boxe", allCats: "Tous les sports",
+    namePh: "Ex : Yanis Benali", handlePh: "@yanis.bnl", emailPh: "yanis@email.com",
+    newTitle: "Nouveau sportif à suivre", editTitle: "Modifier le sportif",
+    empty: "Aucun sportif pour l'instant. Ajoute ceux que tu repères : sport, club, niveau, Instagram.",
+  },
+} as const;
+const LEVELS = ["Pro", "Semi-pro", "Espoir", "Amateur"];
 
 const ALL = "__all__";
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -143,9 +172,37 @@ const parseFol = (s: string) => {
   return Math.round(n);
 };
 
+/** Scouting : sous-pages Créateurs / Sportifs (choix remonté à la sidebar). */
 export function Vivier() {
-  const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("vivier"));
+  const sub = useNavSub();
+  const setNavSub = useSetNavSub();
+  const [kind, setKind] = useState<Kind>(sub === "sportifs" ? "sportifs" : "createurs");
+  useEffect(() => {
+    if (sub === "createurs" || sub === "sportifs") setKind(sub);
+  }, [sub]);
+  return (
+    <>
+      <Tabs
+        className="mb-4"
+        label="Sous-pages Scouting"
+        value={kind}
+        onValueChange={(v) => {
+          setKind(v as Kind);
+          setNavSub(v);
+        }}
+        items={[{ value: "createurs", label: "Créateurs" }, { value: "sportifs", label: "Sportifs" }]}
+      />
+      <ScoutingList key={kind} kind={kind} />
+    </>
+  );
+}
+
+function ScoutingList({ kind }: { kind: Kind }) {
+  const K = KIND[kind];
+  const athletes = kind === "sportifs";
+  const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>(K.cache));
   const [error, setError] = useState(false);
+  const [missing, setMissing] = useState(false); // table pas encore créée (mise à jour SQL en attente)
   const { query } = useSearch();
   const live = useLiveKey();
 
@@ -160,6 +217,8 @@ export function Vivier() {
   const [fEmail, setFEmail] = useState("");
   const [fTag, setFTag] = useState("");
   const [fNote, setFNote] = useState("");
+  const [fClub, setFClub] = useState("");
+  const [fLevel, setFLevel] = useState("");
 
   // Fiche (détail au clic sur une ligne)
   const [selected, setSelected] = useState<Row | null>(null);
@@ -171,7 +230,7 @@ export function Vivier() {
   const [sending, setSending] = useState(false);
 
   // Scouting : statut + historique d'abonnés (blob app_state — pas de SQL).
-  const { data: trackData } = useAppState<Tracking>((s: AppState) => (s["poolTracking"] as Tracking) ?? {});
+  const { data: trackData } = useAppState<Tracking>((s: AppState) => (s[K.track] as Tracking) ?? {});
   const [localTrack, setLocalTrack] = useState<Tracking | null>(null);
   const tracking = localTrack ?? trackData ?? {};
   const [statusFilter, setStatusFilter] = useState<ScoutStatus | "__all__">("__all__");
@@ -199,7 +258,7 @@ export function Vivier() {
       if (fnErr || !photos) return;
       try {
         invalidateAppState();
-        const fresh = ((await getAppState())["poolTracking"] as Tracking) ?? {};
+        const fresh = ((await getAppState())[K.track] as Tracking) ?? {};
         const next = { ...fresh };
         const at = todayISO();
         for (const x of want) {
@@ -213,7 +272,7 @@ export function Vivier() {
           next[x.id] = { ...cur, ...figures, snaps, igPhoto: photos[x.h], igFor: x.h, igAt: at, igWhy: res?.why?.[x.h], igV: IG_V };
         }
         setLocalTrack(next);
-        await saveAppStateKey("poolTracking", next);
+        await saveAppStateKey(K.track, next);
       } catch {
         /* les initiales restent */
       }
@@ -247,10 +306,10 @@ export function Vivier() {
     const prev = localTrack;
     try {
       invalidateAppState();
-      const fresh = ((await getAppState())["poolTracking"] as Tracking) ?? {};
+      const fresh = ((await getAppState())[K.track] as Tracking) ?? {};
       const next = { ...fresh, [id]: fn(fresh[id] ?? {}) };
       setLocalTrack(next);
-      if (await saveAppStateKey("poolTracking", next)) {
+      if (await saveAppStateKey(K.track, next)) {
         if (okMsg) toast(okMsg);
         return;
       }
@@ -268,17 +327,23 @@ export function Vivier() {
 
   useEffect(() => {
     let alive = true;
-    supabase.from("creator_pool").select("*").order("sort_order").then(({ data, error }) => {
+    supabase.from(K.table).select("*").order("sort_order").then(({ data, error }) => {
       if (!alive) return;
       // Rafraîchissement raté : on garde la liste déjà affichée (l'erreur ne
       // s'affiche que si rien n'est encore chargé).
-      if (error) { setError(true); return; }
+      if (error) {
+        setError(true);
+        if (error.code === "42P01" || error.code === "PGRST205") setMissing(true);
+        return;
+      }
       const list = (data as Row[]) ?? [];
       setError(false);
-      setCache("vivier", list);
+      setMissing(false);
+      setCache(K.cache, list);
       setRows(list);
     });
     return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live]);
 
   // Catégories (niche) : « Mode » et « mode » comptent pour une seule, la plus fréquente d'abord.
@@ -295,41 +360,45 @@ export function Vivier() {
     return [...m.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "fr"));
   }, [rows]);
 
-  const openAdd = () => { setEditId(null); setFName(""); setFHandle(""); setFEmail(""); setFTag(""); setFNote(""); setFormOpen(true); };
-  const openEdit = (r: Row) => { setEditId(r.id); setFName(r.name); setFHandle(r.handle ?? ""); setFEmail(r.email ?? ""); setFTag(r.tag ?? ""); setFNote(r.note ?? ""); setFormOpen(true); };
+  const openAdd = () => { setEditId(null); setFName(""); setFHandle(""); setFEmail(""); setFTag(""); setFNote(""); setFClub(""); setFLevel(""); setFormOpen(true); };
+  const openEdit = (r: Row) => { setEditId(r.id); setFName(r.name); setFHandle(r.handle ?? ""); setFEmail(r.email ?? ""); setFTag(r.tag ?? ""); setFNote(r.note ?? ""); setFClub(r.club ?? ""); setFLevel(r.level ?? ""); setFormOpen(true); };
 
   const submit = async () => {
-    if (!fName.trim()) { toast("Renseigne le nom du créateur"); return; }
-    const payload = { name: fName.trim(), handle: fHandle.trim() || null, email: fEmail.trim() || null, tag: fTag.trim() || null, note: fNote.trim() || null };
+    if (!fName.trim()) { toast(`Renseigne le nom du ${K.one}`); return; }
+    const payload: Record<string, string | null> = { name: fName.trim(), handle: fHandle.trim() || null, email: fEmail.trim() || null, tag: fTag.trim() || null, note: fNote.trim() || null };
+    if (athletes) {
+      payload.club = fClub.trim() || null;
+      payload.level = fLevel.trim() || null;
+    }
     if (editId) {
       // Écriture d'abord : la fiche ne se ferme et la liste ne change qu'en cas de succès.
-      if (!(await dbUpdate("creator_pool", editId, payload))) { toast("Erreur — réessaie"); return; }
+      if (!(await dbUpdate(K.table, editId, payload))) { toast("Erreur — réessaie"); return; }
       setRows((prev) => {
         const next = (prev ?? []).map((r) => (r.id === editId ? { ...r, ...payload } : r));
-        setCache("vivier", next);
+        setCache(K.cache, next);
         return next;
       });
       setFormOpen(false);
-      toast("Créateur mis à jour ✓");
+      toast(`${K.add} mis à jour ✓`);
       return;
     }
-    const created = await dbInsert("creator_pool", { ...payload, sort_order: nextOrder(rows ?? []) });
+    const created = await dbInsert(K.table, { ...payload, sort_order: nextOrder(rows ?? []) });
     if (!created) { toast("Erreur — réessaie"); return; }
     const next = [created as unknown as Row, ...(rows ?? [])];
-    setRows(next); setCache("vivier", next); setFormOpen(false);
-    toast("Créateur ajouté au scouting ✓");
+    setRows(next); setCache(K.cache, next); setFormOpen(false);
+    toast(`${K.add} ajouté au scouting ✓`);
   };
 
   const remove = async (r: Row) => {
-    if (await dbTrash("creator_pool", r.id, r.name, undefined)) {
+    if (await dbTrash(K.table, r.id, r.name, undefined)) {
       const next = (rows ?? []).filter((x) => x.id !== r.id);
-      setRows(next); setCache("vivier", next);
+      setRows(next); setCache(K.cache, next);
       toast("Déplacé dans la corbeille");
     } else toast("Erreur, réessaie");
   };
 
   const openMail = (r: Row) => {
-    if (!r.email || !EMAIL_RE.test(r.email)) { toast("Ce créateur n'a pas d'email valide"); return; }
+    if (!r.email || !EMAIL_RE.test(r.email)) { toast(`Ce ${K.one} n'a pas d'email valide`); return; }
     setMailRow(r);
     setSubject("Collaboration avec TTP Creators ✨");
     setMessage(`Bonjour ${r.name.split(" ")[0] || ""},\n\n`);
@@ -346,8 +415,8 @@ export function Vivier() {
       if (error || !res?.ok) { toast(res?.detail ? `Échec : ${res.detail}` : "Envoi échoué — réessaie"); return; }
       const when = new Date().toISOString();
       const next = (rows ?? []).map((r) => (r.id === mailRow.id ? { ...r, last_contacted: when } : r));
-      setRows(next); setCache("vivier", next);
-      const saved = await dbUpdate("creator_pool", mailRow.id, { last_contacted: when }).catch(() => false);
+      setRows(next); setCache(K.cache, next);
+      const saved = await dbUpdate(K.table, mailRow.id, { last_contacted: when }).catch(() => false);
       toast(saved ? `Email envoyé à ${mailRow.name} ✓` : `Email envoyé à ${mailRow.name}, mais le suivi n'a pas été enregistré`);
       setMailRow(null);
     } finally {
@@ -355,6 +424,7 @@ export function Vivier() {
     }
   };
 
+  if (missing && rows === null) return <div className="rounded-2xl border border-dashed border-border bg-surface px-6 py-10 text-center text-sm text-muted-foreground">Le scouting des {K.many} n'est pas encore activé : une mise à jour est en attente.</div>;
   if (error && rows === null) return <div className="rounded-2xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">Impossible de charger le Scouting.</div>;
   if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>;
 
@@ -363,14 +433,14 @@ export function Vivier() {
     if (statusFilter !== "__all__" && statusOf(r.id) !== statusFilter) return false;
     if (contactFilter === "contacted" && !r.last_contacted) return false;
     if (contactFilter === "never" && r.last_contacted) return false;
-    return matchQuery(query, r.name, r.handle, r.email, r.tag, r.note);
+    return matchQuery(query, r.name, r.handle, r.email, r.tag, r.note, r.club, r.level);
   });
 
   return (
     <>
       <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
-          {filtered.length} créateur{filtered.length > 1 ? "s" : ""}
+          {filtered.length} {K.one}{filtered.length > 1 ? "s" : ""}
           {(tagFilter !== ALL || contactFilter !== "all" || statusFilter !== "__all__" || query.trim()) && <span className="text-faint"> / {rows.length}</span>}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -380,7 +450,7 @@ export function Vivier() {
               <Hash className="h-3.5 w-3.5" /> Hashtag
             </button>
           )}
-          <AddButton label="Créateur" onClick={openAdd} />
+          <AddButton label={K.add} onClick={openAdd} />
         </div>
       </PageHeaderRow>
       {FEATURES.hashtagSearch && hashOpen && <HashtagSearch onClose={() => setHashOpen(false)} />}
@@ -389,9 +459,9 @@ export function Vivier() {
       {tagList.length > 0 && (
         <div className="mb-2 w-full sm:max-w-[300px]">
           <Select value={tagFilter} onValueChange={setTagFilter}>
-            <SelectTrigger icon={Tag} className="h-10 w-auto min-w-[220px] rounded-lg bg-surface text-[12px]" placeholder="Toutes les catégories" />
+            <SelectTrigger icon={Tag} className="h-10 w-auto min-w-[220px] rounded-lg bg-surface text-[12px]" placeholder={K.allCats} />
             <SelectContent>
-              <SelectItem index={0} value={ALL}>{`Toutes les catégories · ${rows.length}`}</SelectItem>
+              <SelectItem index={0} value={ALL}>{`${K.allCats} · ${rows.length}`}</SelectItem>
               {tagList.map((t, i) => (
                 <SelectItem key={t.key} index={i + 1} value={t.key}>{`${t.label} · ${t.count}`}</SelectItem>
               ))}
@@ -423,17 +493,33 @@ export function Vivier() {
         ]}
       />
 
-      <InlineForm open={formOpen} title={editId ? "Modifier le créateur" : "Nouveau créateur à suivre"} onClose={() => setFormOpen(false)} onSubmit={submit} submitLabel={editId ? "Enregistrer" : "Ajouter"}>
-        <TextField label="Nom" value={fName} onChange={setFName} placeholder="Ex : Léna Marchand" className="min-w-[200px] flex-[2]" />
-        <TextField label="Compte Instagram ou YouTube" value={fHandle} onChange={setFHandle} placeholder="@lena.mrchd" className="min-w-[150px] flex-1" />
-        <TextField label="Email" value={fEmail} onChange={setFEmail} type="email" placeholder="lena@email.com" className="min-w-[180px] flex-1" />
-        <TextField label="Catégorie" value={fTag} onChange={setFTag} placeholder="Ex : Mode, Sport, Beauté" className="min-w-[150px] flex-1" />
+      <InlineForm open={formOpen} title={editId ? K.editTitle : K.newTitle} onClose={() => setFormOpen(false)} onSubmit={submit} submitLabel={editId ? "Enregistrer" : "Ajouter"}>
+        <TextField label="Nom" value={fName} onChange={setFName} placeholder={K.namePh} className="min-w-[200px] flex-[2]" />
+        <TextField label="Compte Instagram ou YouTube" value={fHandle} onChange={setFHandle} placeholder={K.handlePh} className="min-w-[150px] flex-1" />
+        <TextField label="Email" value={fEmail} onChange={setFEmail} type="email" placeholder={K.emailPh} className="min-w-[180px] flex-1" />
+        <TextField label={K.catLabel} value={fTag} onChange={setFTag} placeholder={K.catPh} className="min-w-[150px] flex-1" />
+        {athletes && (
+          <>
+            <TextField label="Club / équipe" value={fClub} onChange={setFClub} placeholder="Ex : PSG, Stade Toulousain" className="min-w-[180px] flex-1" />
+            <div className="flex min-w-[220px] flex-1 flex-col gap-1">
+              <span className="text-[12px] font-medium text-muted-foreground">Niveau</span>
+              <div className="flex flex-wrap gap-1.5">
+                {LEVELS.map((l) => (
+                  <button key={l} type="button" aria-pressed={fLevel === l} onClick={() => setFLevel(fLevel === l ? "" : l)}
+                    className={cn("h-9 rounded-full border px-3 text-[12px] font-medium transition-colors", fLevel === l ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
         <AutoGrowTextField label="Note (tarif, dispo, remarques…)" value={fNote} onChange={setFNote} className="min-w-full" />
       </InlineForm>
 
       {filtered.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface px-6 py-10 text-center text-sm text-muted-foreground shadow-sm">
-          {rows.length === 0 ? "Ton scouting est vide. Ajoute des créateurs à repérer / solliciter le jour où tu en as besoin ✨" : "Aucun créateur pour ces filtres."}
+          {rows.length === 0 ? K.empty : `Aucun ${K.one} pour ces filtres.`}
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-surface divide-y divide-border">
@@ -456,6 +542,9 @@ export function Vivier() {
                   ))}
                   {r.email && <span className="truncate">{r.email}</span>}
                 </div>
+                {athletes && (r.club?.trim() || r.level?.trim()) && (
+                  <div className="mt-0.5 truncate text-[11px] font-medium text-muted-foreground">{[r.club?.trim(), r.level?.trim()].filter(Boolean).join(" · ")}</div>
+                )}
                 {r.note && <div className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{r.note}</div>}
               </div>
               {latestFollowers(r.id) != null && (
@@ -510,7 +599,11 @@ export function Vivier() {
                   <span className="truncate text-base font-bold text-foreground">{selected.name}</span>
                   {selected.last_contacted && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà contacté" />}
                 </div>
-                {selected.tag && <div className="mt-0.5 text-[12px] font-medium text-muted-foreground">{selected.tag}</div>}
+                {(selected.tag || (athletes && (selected.club || selected.level))) && (
+                  <div className="mt-0.5 text-[12px] font-medium text-muted-foreground">
+                    {[selected.tag?.trim(), athletes ? selected.club?.trim() : null, athletes ? selected.level?.trim() : null].filter(Boolean).join(" · ")}
+                  </div>
+                )}
                 {!tracking[selected.id]?.photo && !tracking[selected.id]?.igPhoto && tracking[selected.id]?.igWhy && (
                   <div className="mt-0.5 text-[11px] text-faint">Photo Instagram : {igWhyText(tracking[selected.id]?.igWhy)}. Touche le rond pour en ajouter une.</div>
                 )}
