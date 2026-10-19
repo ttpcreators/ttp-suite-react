@@ -4,7 +4,7 @@
 // Entrée (POST JSON) : { handles: string[] } (20 max par appel).
 // Pour chaque @ PRO, via l'outil officiel de Meta (_shared/instagram.ts) : photo
 // de profil copiée dans le bucket « avatars », abonnés, engagement public moyen
-// (12 derniers posts), posts par semaine, bio et site.
+// (12 derniers posts), posts par semaine, bio, site et légendes (pour deviner la niche).
 // Les comptes personnels ne sont pas visibles par cet outil → « compte_perso ».
 // (Lire la page Instagram directement ne marche pas : Instagram bloque les
 // serveurs de Supabase, réponse 429.)
@@ -17,7 +17,7 @@
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 import { discover, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, storePicture } from "../_shared/instagram.ts";
 
-type Stats = { er: number | null; perWeek: number | null; posts: number; bio: string; website: string; name: string };
+type Stats = { er: number | null; perWeek: number | null; posts: number; bio: string; website: string; name: string; captions: string };
 
 Deno.serve(async (req: Request) => {
   const cors = corsHeaders(req.headers.get("Origin"));
@@ -71,7 +71,9 @@ Deno.serve(async (req: Request) => {
     }
     const p = r.profile;
     followers[h] = p.followers;
-    stats[h] = { er: engagementRate(p.media, p.followers), perWeek: postsPerWeek(p.media), posts: p.posts, bio: p.bio, website: p.website, name: p.name };
+    // Légendes des derniers posts (sert à deviner la niche dans l'app, rien n'est stocké).
+    const captions = p.media.map((m) => m.caption).join(" \n ").slice(0, 2000);
+    stats[h] = { er: engagementRate(p.media, p.followers), perWeek: postsPerWeek(p.media), posts: p.posts, bio: p.bio, website: p.website, name: p.name, captions };
     const pic = await storePicture(sb, igUser(h), p.picture);
     photos[h] = pic.url;
     if (pic.why) why[h] = pic.why;

@@ -25,6 +25,7 @@ import { DateInput } from "@/components/ui/date-range-picker";
 import { todayISO } from "@/lib/dates";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
+import { CREATOR_NICHES, SPORTS, guessNiche } from "@/lib/niche";
 
 /**
  * VIVIER créateurs (hors roster) : répertoire de créateurs à SOLLICITER pour des
@@ -124,6 +125,7 @@ const igStale = (t: Track | undefined, handle: string) => {
   if (!t?.igAt || t.igFor !== handle) return true;
   if (!t.igPhoto && t.igV !== IG_V) return true;
   if (t.igV !== IG_V && t.igEr === undefined) return true; // chiffres (engagement, rythme…) jamais demandés
+  if (t.igV !== IG_V && t.igNiche === undefined) return true; // niche jamais devinée
   if (!t.igPhoto && IG_RETRY_NOW.has(t.igWhy ?? "")) return true;
   const days = (Date.now() - new Date(t.igAt + "T00:00:00").getTime()) / 86400000;
   return days > (t.igPhoto || t.igWhy === "compte_perso" ? 30 : 1);
@@ -150,10 +152,12 @@ type Track = {
   status?: ScoutStatus; snaps?: Snap[]; photo?: string;
   igPhoto?: string | null; igFor?: string; igAt?: string; igWhy?: string; igV?: number;
   igEr?: number | null; igPw?: number | null; igBio?: string; igSite?: string; igPosts?: number;
+  /** Niche devinée par l'app (bio, nom, légendes) quand aucune catégorie n'est saisie ; null = rien de clair. */
+  igNiche?: string | null;
 };
-type IgStats = { er: number | null; perWeek: number | null; posts: number; bio: string; website: string };
+type IgStats = { er: number | null; perWeek: number | null; posts: number; bio: string; website: string; name?: string; captions?: string };
 /** Version de la recherche Instagram : la monter refait les recherches ratées (et sans chiffres). */
-const IG_V = 4;
+const IG_V = 5; // 5 : légendes des posts lues pour deviner la niche
 type Tracking = Record<string, Track>;
 
 /** ISO « 2026-08-12 » → « 12 août ». */
@@ -200,6 +204,7 @@ export function Vivier() {
 function ScoutingList({ kind }: { kind: Kind }) {
   const K = KIND[kind];
   const athletes = kind === "sportifs";
+  const NICHES = athletes ? SPORTS : CREATOR_NICHES;
   const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>(K.cache));
   const [error, setError] = useState(false);
   const [missing, setMissing] = useState(false); // table pas encore créée (mise à jour SQL en attente)
@@ -218,6 +223,7 @@ function ScoutingList({ kind }: { kind: Kind }) {
   const [fTag, setFTag] = useState("");
   const [fNote, setFNote] = useState("");
   const [fClub, setFClub] = useState("");
+  const [otherCat, setOtherCat] = useState(false); // champ libre « Autre » ouvert
   const [fLevel, setFLevel] = useState("");
 
   // Fiche (détail au clic sur une ligne)
@@ -268,7 +274,9 @@ function ScoutingList({ kind }: { kind: Kind }) {
           const n = res?.followers?.[x.h];
           const snaps = typeof n === "number" && !(cur.snaps ?? []).some((sn) => sn.date === at) ? [...(cur.snaps ?? []), { date: at, value: n }] : cur.snaps;
           const st = res?.stats?.[x.h];
-          const figures = st ? { igEr: st.er, igPw: st.perWeek, igBio: st.bio, igSite: st.website, igPosts: st.posts } : {};
+          const figures = st
+            ? { igEr: st.er, igPw: st.perWeek, igBio: st.bio, igSite: st.website, igPosts: st.posts, igNiche: guessNiche([st.name, st.bio, st.captions].filter(Boolean).join(" \n "), NICHES) }
+            : {};
           next[x.id] = { ...cur, ...figures, snaps, igPhoto: photos[x.h], igFor: x.h, igAt: at, igWhy: res?.why?.[x.h], igV: IG_V };
         }
         setLocalTrack(next);
@@ -298,6 +306,15 @@ function ScoutingList({ kind }: { kind: Kind }) {
     await mutateTracking(r.id, (t) => ({ ...t, photo: url }), "Photo enregistrée ✓");
     setPhotoBusy(false);
   };
+  /** Niche devinée via Instagram (sans catégorie saisie) ; ancienne fiche : devinée sur la bio seule. */
+  const autoTag = (r: Row): string | null => {
+    if (r.tag?.trim()) return null;
+    const t = tracking[r.id];
+    if (!t) return null;
+    if (t.igNiche !== undefined) return t.igNiche;
+    return t.igBio ? guessNiche(t.igBio, NICHES) : null;
+  };
+  const effTag = (r: Row) => r.tag?.trim() || autoTag(r) || "";
   const snapsOf = (id: string): Snap[] => [...(tracking[id]?.snaps ?? [])].sort((a, b) => a.date.localeCompare(b.date));
   const latestFollowers = (id: string): number | null => { const s = snapsOf(id); return s.length ? s[s.length - 1].value : null; };
   const growthOf = (id: string): number => { const s = snapsOf(id); return s.length >= 2 ? s[s.length - 1].value - s[s.length - 2].value : 0; };
@@ -350,7 +367,7 @@ function ScoutingList({ kind }: { kind: Kind }) {
   const tagList = useMemo(() => {
     const m = new Map<string, { key: string; label: string; count: number }>();
     for (const r of rows ?? []) {
-      const label = (r.tag ?? "").trim();
+      const label = effTag(r);
       if (!label) continue;
       const key = tagKey(label);
       const cur = m.get(key);
@@ -358,10 +375,11 @@ function ScoutingList({ kind }: { kind: Kind }) {
       else m.set(key, { key, label, count: 1 });
     }
     return [...m.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "fr"));
-  }, [rows]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, tracking]);
 
-  const openAdd = () => { setEditId(null); setFName(""); setFHandle(""); setFEmail(""); setFTag(""); setFNote(""); setFClub(""); setFLevel(""); setFormOpen(true); };
-  const openEdit = (r: Row) => { setEditId(r.id); setFName(r.name); setFHandle(r.handle ?? ""); setFEmail(r.email ?? ""); setFTag(r.tag ?? ""); setFNote(r.note ?? ""); setFClub(r.club ?? ""); setFLevel(r.level ?? ""); setFormOpen(true); };
+  const openAdd = () => { setEditId(null); setFName(""); setFHandle(""); setFEmail(""); setFTag(""); setFNote(""); setFClub(""); setFLevel(""); setOtherCat(false); setFormOpen(true); };
+  const openEdit = (r: Row) => { setOtherCat(false); setEditId(r.id); setFName(r.name); setFHandle(r.handle ?? ""); setFEmail(r.email ?? ""); setFTag(r.tag ?? ""); setFNote(r.note ?? ""); setFClub(r.club ?? ""); setFLevel(r.level ?? ""); setFormOpen(true); };
 
   const submit = async () => {
     if (!fName.trim()) { toast(`Renseigne le nom du ${K.one}`); return; }
@@ -429,7 +447,7 @@ function ScoutingList({ kind }: { kind: Kind }) {
   if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>;
 
   const filtered = rows.filter((r) => {
-    if (tagFilter !== ALL && tagKey(r.tag ?? "") !== tagFilter) return false;
+    if (tagFilter !== ALL && tagKey(effTag(r)) !== tagFilter) return false;
     if (statusFilter !== "__all__" && statusOf(r.id) !== statusFilter) return false;
     if (contactFilter === "contacted" && !r.last_contacted) return false;
     if (contactFilter === "never" && r.last_contacted) return false;
@@ -497,7 +515,25 @@ function ScoutingList({ kind }: { kind: Kind }) {
         <TextField label="Nom" value={fName} onChange={setFName} placeholder={K.namePh} className="min-w-[200px] flex-[2]" />
         <TextField label="Compte Instagram ou YouTube" value={fHandle} onChange={setFHandle} placeholder={K.handlePh} className="min-w-[150px] flex-1" />
         <TextField label="Email" value={fEmail} onChange={setFEmail} type="email" placeholder={K.emailPh} className="min-w-[180px] flex-1" />
-        <TextField label={K.catLabel} value={fTag} onChange={setFTag} placeholder={K.catPh} className="min-w-[150px] flex-1" />
+        <div className="flex min-w-full flex-col gap-1">
+          <span className="text-[12px] font-medium text-muted-foreground">{K.catLabel} <span className="font-normal text-faint">(vide : l'app la devine via Instagram)</span></span>
+          <div className="flex flex-wrap gap-1.5">
+            {[...NICHES.map((n) => n.label), ...tagList.map((t) => t.label).filter((l) => !NICHES.some((n) => tagKey(n.label) === tagKey(l)))].map((l) => {
+              const on = tagKey(fTag) === tagKey(l);
+              return (
+                <button key={l} type="button" aria-pressed={on} onClick={() => { setFTag(on ? "" : l); setOtherCat(false); }}
+                  className={cn("h-8 rounded-full border px-3 text-[12px] font-medium transition-colors", on ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+                  {l}
+                </button>
+              );
+            })}
+            <button type="button" aria-pressed={otherCat} onClick={() => { setOtherCat(!otherCat); if (!otherCat) setFTag(""); }}
+              className={cn("h-8 rounded-full border border-dashed px-3 text-[12px] font-medium transition-colors", otherCat ? "border-foreground text-foreground" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+              Autre…
+            </button>
+          </div>
+          {otherCat && <TextField label="" value={fTag} onChange={setFTag} placeholder={K.catPh} className="mt-1 max-w-[320px]" />}
+        </div>
         {athletes && (
           <>
             <TextField label="Club / équipe" value={fClub} onChange={setFClub} placeholder="Ex : PSG, Stade Toulousain" className="min-w-[180px] flex-1" />
@@ -530,7 +566,13 @@ function ScoutingList({ kind }: { kind: Kind }) {
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-[13px] font-semibold text-foreground">{r.name}</span>
                   {r.last_contacted && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà contacté" />}
-                  {r.tag?.trim() && <span className="shrink-0 rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{r.tag.trim()}</span>}
+                  {r.tag?.trim() ? (
+                    <span className="shrink-0 rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{r.tag.trim()}</span>
+                  ) : autoTag(r) ? (
+                    <span title="Devinée via Instagram (bio et derniers posts). Modifie la fiche pour la fixer." className="inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      <Sparkles className="h-2.5 w-2.5" />{autoTag(r)}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-faint">
                   {r.handle && (igUrl(r.handle) ? (
@@ -599,9 +641,10 @@ function ScoutingList({ kind }: { kind: Kind }) {
                   <span className="truncate text-base font-bold text-foreground">{selected.name}</span>
                   {selected.last_contacted && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Déjà contacté" />}
                 </div>
-                {(selected.tag || (athletes && (selected.club || selected.level))) && (
+                {(effTag(selected) || (athletes && (selected.club || selected.level))) && (
                   <div className="mt-0.5 text-[12px] font-medium text-muted-foreground">
-                    {[selected.tag?.trim(), athletes ? selected.club?.trim() : null, athletes ? selected.level?.trim() : null].filter(Boolean).join(" · ")}
+                    {[effTag(selected), athletes ? selected.club?.trim() : null, athletes ? selected.level?.trim() : null].filter(Boolean).join(" · ")}
+                    {autoTag(selected) && <span className="font-normal text-faint"> (devinée via Instagram)</span>}
                   </div>
                 )}
                 {!tracking[selected.id]?.photo && !tracking[selected.id]?.igPhoto && tracking[selected.id]?.igWhy && (
