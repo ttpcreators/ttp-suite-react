@@ -270,7 +270,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
   // Dernière piste FIXE (72px) et non `auto` : sinon l'en-tête (col vide) et les
   // lignes (flèches + menu ≈ 64px) répartissent différemment l'espace fr → décalage.
   const cols =
-    "grid-cols-[2.4fr_1fr_0.9fr_0.8fr_1.1fr_0.9fr_72px] gap-3";
+    "grid-cols-[2.2fr_1fr_0.9fr_0.9fr_1.1fr_1.5fr_72px] gap-3";
 
   return (
     <>
@@ -415,7 +415,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
                           onClick={(e) => { e.stopPropagation(); markUpToDate(c, true); }}
                           className="flex shrink-0 items-center gap-1 rounded-full border border-border bg-foreground/[0.06] px-2 py-1 text-[10px] font-semibold text-amber transition-colors hover:bg-foreground/[0.06] dark:text-amber"
                         >
-                          <RefreshCw className="h-3 w-3" /><span className="hidden sm:inline"> Marquer à jour</span>
+                          <RefreshCw className="h-3 w-3" /><span className="hidden xl:inline"> Marquer à jour</span>
                         </button>
                       ))}
                     <span className="flex items-center gap-1.5" title={titleCase(label.toLowerCase())}>

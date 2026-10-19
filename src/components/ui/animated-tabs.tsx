@@ -160,10 +160,15 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
     read();
     const row = rowRef.current;
     if (!row) return;
+    // Barre qui défile : l'onglet actif reste visible (sans faire défiler la page).
+    if (!wrap && row.scrollWidth > row.clientWidth) {
+      const left = node.offsetLeft - (row.clientWidth - node.offsetWidth) / 2;
+      row.scrollTo({ left: Math.max(0, left), behavior: reduced ? "auto" : "smooth" });
+    }
     const observer = new ResizeObserver(read);
     observer.observe(row);
     return () => observer.disconnect();
-  }, [selectedIndex, items]);
+  }, [selectedIndex, items, wrap, reduced]);
 
   return (
     <div className={className}>
@@ -172,8 +177,9 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
         ref={rowRef}
         aria-label={label}
         className={cn(
-          "relative flex max-w-full flex-wrap gap-0.5 overflow-x-auto rounded-3xl border border-border bg-surface [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-          !wrap && "sm:flex-nowrap",
+          "relative flex max-w-full gap-0.5 overflow-x-auto overscroll-x-contain rounded-3xl border border-border bg-surface [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          // Une seule ligne qui défile au doigt (iOS) ; `wrap` pour les filtres à nombreuses options.
+          wrap ? "flex-wrap" : "flex-nowrap",
           sm ? "p-0.5" : "p-1",
           fullWidth ? "w-full" : "w-fit",
         )}

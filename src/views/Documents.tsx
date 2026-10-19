@@ -415,12 +415,13 @@ export function Documents() {
       </InlineForm>
 
       {rows !== null && rows.length > 1 && (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
           <FilterBar value={sort} options={SORT_OPTIONS} onChange={setSort} placeholder="Trier" />
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Mobile : les deux filtres côte à côte, même largeur ; ≥ sm : à droite. */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
             {docCreators.length > 0 && (
               <Select value={creatorFilter} onValueChange={setCreatorFilter}>
-                <SelectTrigger className="h-10 w-auto min-w-[200px] rounded-xl bg-surface" placeholder="Tous les créateurs" />
+                <SelectTrigger className="h-10 w-full min-w-0 rounded-xl bg-surface sm:w-auto sm:min-w-[200px]" placeholder="Tous les créateurs" />
                 <SelectContent>
                   <SelectItem index={0} value="">Tous les créateurs</SelectItem>
                   {docCreators.map((c, i) => (
@@ -429,7 +430,7 @@ export function Documents() {
                 </SelectContent>
               </Select>
             )}
-            {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} />}
+            {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} className="w-full sm:w-auto" />}
           </div>
         </div>
       )}

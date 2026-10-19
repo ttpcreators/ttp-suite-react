@@ -214,8 +214,7 @@ export function Gifting() {
     <div className="space-y-4">
       {/* En-tête */}
       <PageHeaderRow>
-        {/* Mobile : compteur + « + Gifting » sur la même ligne ; ≥ sm : disposition d'origine. */}
-        <div className="flex w-full items-center justify-between gap-2 sm:contents">
+        <div className="flex w-full items-center justify-between gap-3 sm:w-auto">
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {loading ? (
             <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>
@@ -231,11 +230,14 @@ export function Gifting() {
             </>
           )}
         </div>
-        <span className="sm:hidden">
-          <AddButton label="Gifting" onClick={openCreate} />
-        </span>
+        <AddButton label="Gifting" onClick={openCreate} />
         </div>
-        <div className="flex items-center gap-2">
+      </PageHeaderRow>
+
+      {/* Affichage + période : barre sous l'en-tête (comme Briefs et Collabs) */}
+      {(list.length > 0 || periods.length > 0) && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {periods.length > 0 ? <PeriodFilter value={period} onChange={setPeriod} periods={periods} /> : <span />}
           {list.length > 0 && (
             <Tabs
               label="Affichage des giftings"
@@ -247,12 +249,8 @@ export function Gifting() {
               ]}
             />
           )}
-          {periods.length > 0 && <PeriodFilter value={period} onChange={setPeriod} periods={periods} />}
-          <span className="hidden sm:contents">
-            <AddButton navBar={false} label="Gifting" onClick={openCreate} />
-          </span>
         </div>
-      </PageHeaderRow>
+      )}
 
       <InlineForm
         open={formOpen}

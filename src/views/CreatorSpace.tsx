@@ -281,9 +281,26 @@ function greetingWord(): string {
   return "Bonsoir";
 }
 
+/** À quoi sert chaque onglet, en une phrase (comme les pages agence, viewHints.ts). */
+const TAB_HINTS: Partial<Record<Tab, string>> = {
+  evolution: "Tes abonnés et ton taux d'engagement dans le temps, d'après les mesures de ton agence.",
+  rapport: "Ton mois en un coup d'œil : tes gains, tes collabs, tes chiffres et ce que l'agence t'a apporté.",
+  debrief: "Les bilans de tes campagnes envoyés aux marques : chiffres et points forts.",
+  roadmap: "Ta stratégie définie avec ton agence, et ce que tu publies chaque mois.",
+  todo: "Ce que tu as à faire, et tout ce dont tu as besoin de la part de l'agence.",
+  ideas: "Tes idées de contenus et de collabs : l'agence les voit et peut rebondir.",
+  briefs: "Les campagnes des marques : livrables, échéances et ton script.",
+  gifting: "Les produits que les marques t'ont offerts, et ce qu'ils attendent en retour.",
+  planning: "Tes rendez-vous, tournages, briefs et échéances au même endroit.",
+  mediakit: "Ta page publique à partager aux marques, toujours à jour.",
+  documents: "Tes fichiers : contrats, briefs, factures et media kits.",
+  contacts: "Les marques et agences avec qui tu travailles.",
+  facturation: "Tes factures : envoie les tiennes et suis ce qui est payé.",
+};
+
 /** Titre de page des onglets (hors accueil) : même en-tête que côté agence. */
-function TabFrame({ title, children }: { title: string | null; children: ReactNode }) {
-  return title ? <PageFrame title={title}>{children}</PageFrame> : <>{children}</>;
+function TabFrame({ title, hint, children }: { title: string | null; hint?: string; children: ReactNode }) {
+  return title ? <PageFrame title={title} hint={hint}>{children}</PageFrame> : <>{children}</>;
 }
 
 /** Debrief (lecture seule côté créateur). */
@@ -1698,7 +1715,7 @@ export function CreatorSpace({
           {/* Contenu des onglets — barrière d'erreur : un onglet qui plante
               n'emporte pas la navigation (la sidebar reste cliquable). */}
           <ErrorBoundary variant="inline" label="Cette page" resetKey={tab}>
-          <TabFrame title={tab === "accueil" || tab === "mails" ? null : TABS.find((t) => t.id === tab)?.label ?? null}>
+          <TabFrame title={tab === "accueil" || tab === "mails" ? null : TABS.find((t) => t.id === tab)?.label ?? null} hint={TAB_HINTS[tab]}>
           {/* Guide — comment utiliser l'app (mobile + ordi) + réflexe À faire */}
           {tab === "guide" && (
             <CreatorGuide firstName={firstName} onGoto={(t) => setTab(t as Tab)} onSendStats={() => setStatsModalOpen(true)} />

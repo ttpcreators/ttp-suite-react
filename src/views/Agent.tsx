@@ -506,7 +506,6 @@ export function AgentView() {
     <div className="flex flex-col gap-4">
       <Tabs
         label="Sous-pages Agents"
-        wrap
         value={tab}
         onValueChange={(v) => setTab(v as Tab)}
         items={[

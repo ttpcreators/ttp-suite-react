@@ -233,7 +233,6 @@ export function Prospection() {
     <Tabs
       className="mb-4"
       label="Filtrer par étape"
-      wrap
       items={stageChips.map((chip) => ({ value: chip, label: stageLabel(chip) }))}
       value={effStage}
       onValueChange={setStageFilter}

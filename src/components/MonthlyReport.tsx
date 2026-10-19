@@ -112,12 +112,15 @@ export function MonthlyReport({ name, agencyView = false }: { name: string; agen
   return (
     <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <FileBarChart className="h-4 w-4 text-muted-foreground" /> Rapport du mois
+        {/* Côté créateur, le titre de la page suffit : on garde seulement le choix du mois. */}
+        {agencyView && (
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <FileBarChart className="h-4 w-4 text-muted-foreground" /> Rapport du mois
+            </div>
+            <div className="mt-0.5 text-[11px] text-faint">Ce que {titleCase(name)} voit dans son espace</div>
           </div>
-          {agencyView && <div className="mt-0.5 text-[11px] text-faint">Ce que {titleCase(name)} voit dans son espace</div>}
-        </div>
+        )}
         <div className="flex w-full items-center gap-1.5 sm:w-auto">
           <button type="button" aria-label="Mois précédent" onClick={() => setMonth((m) => shiftMonth(m, -1))}
             className="grid h-8 w-8 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
