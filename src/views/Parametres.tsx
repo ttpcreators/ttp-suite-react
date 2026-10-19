@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check, MessageCircle, History, PanelLeft, EyeOff } from "lucide-react";
+import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check, MessageCircle, History, PanelLeft, EyeOff, Bot, Copy, Unplug } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
 import { ACCENT_PRESETS, ACCENT_GRADIENTS, getAccent, setAccent, isHex, parseGradient, getDarkStyle, setDarkStyle, type DarkStyle } from "@/lib/accent";
@@ -202,6 +202,121 @@ function PagesSection() {
   );
 }
 
+/**
+ * Connecteur Claude : adresse à ajouter dans Claude, connexions actives de CE compte
+ * (coupables en un clic) et journal de ce que Claude a consulté ou fait.
+ */
+const MCP_URL = "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ttp-mcp";
+type Grant = { id: string; client_name: string | null; created_at: string; last_used_at: string | null };
+type McpLog = { id: number; tool: string; ok: boolean; at: string };
+const TOOL_LABELS: Record<string, string> = {
+  point_du_jour: "Point du jour", rechercher: "Recherche", lister_createurs: "Roster", fiche_createur: "Fiche créateur",
+  rechercher_mails: "Recherche de mails", lire_mail: "Lecture d'un mail", dm_instagram: "DM Instagram", scouting: "Scouting",
+  contacts: "Contacts", pipeline: "Pipeline", collabs: "Collabs", planning: "Planning", taches: "Tâches", factures: "Factures",
+  creer_tache: "Tâche créée", creer_evenement: "Rendez-vous ajouté", creer_brouillon_mail: "Brouillon de mail",
+  ajouter_contact: "Contact ajouté", noter_echange_contact: "Échange noté", ajouter_au_scouting: "Ajout au scouting",
+  changer_statut_scouting: "Statut de scouting", avancer_collab: "Étape de collab",
+};
+const fmtWhen = (iso: string) => new Date(iso).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+function ClaudeSection() {
+  const [grants, setGrants] = useState<Grant[] | null>(null);
+  const [log, setLog] = useState<McpLog[]>([]);
+  const [off, setOff] = useState(false); // tables pas encore créées
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = async () => {
+    const [g, l] = await Promise.all([
+      supabase.from("mcp_grants").select("id, client_name, created_at, last_used_at").is("revoked_at", null).order("created_at", { ascending: false }),
+      supabase.from("mcp_log").select("id, tool, ok, at").order("at", { ascending: false }).limit(15),
+    ]);
+    if (g.error) {
+      setOff(true);
+      return;
+    }
+    setGrants((g.data as Grant[]) ?? []);
+    setLog((l.data as McpLog[]) ?? []);
+  };
+  useEffect(() => {
+    void load();
+  }, []);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(MCP_URL);
+      toast("Adresse copiée ✓");
+    } catch {
+      toast("Copie impossible");
+    }
+  };
+  const cut = async (id: string) => {
+    setBusy(id);
+    const { error } = await supabase.from("mcp_grants").update({ revoked_at: new Date().toISOString() }).eq("id", id);
+    setBusy(null);
+    if (error) return toast("Erreur, réessaie");
+    toast("Accès coupé ✓");
+    void load();
+  };
+  return (
+    <Section icon={<Bot className="h-4 w-4" />} title="Claude" hint="Branche TTP Suite sur ton compte Claude (ordinateur et téléphone). Claude lit tes données et agit avec ton accord.">
+      <div className="flex flex-col gap-3">
+        <div>
+          <div className="mb-1 text-[12px] font-medium text-foreground">Adresse du connecteur</div>
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded-[10px] bg-muted px-3 py-2 text-[12px]">{MCP_URL}</code>
+            <button type="button" onClick={() => void copy()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium hover:bg-rowhover">
+              <Copy className="h-3.5 w-3.5" /> Copier
+            </button>
+          </div>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-faint">
+            Dans Claude (sur claude.ai) : Paramètres → Connecteurs → Ajouter un connecteur personnalisé, colle l'adresse, puis « Se connecter » et « Autoriser ». Il est ensuite disponible aussi sur l'app Claude du téléphone.
+          </p>
+        </div>
+        {off ? (
+          <p className="text-[12px] text-muted-foreground">Pas encore activé : une mise à jour est en attente.</p>
+        ) : (
+          <>
+            <div>
+              <div className="mb-1.5 text-[12px] font-medium text-foreground">Connexions actives</div>
+              {grants === null ? (
+                <p className="text-[12px] text-faint">Chargement…</p>
+              ) : grants.length === 0 ? (
+                <p className="text-[12px] text-faint">Aucune pour l'instant.</p>
+              ) : (
+                <ul className="flex flex-col gap-1.5">
+                  {grants.map((g) => (
+                    <li key={g.id} className="flex items-center gap-3 rounded-[10px] bg-muted/60 px-3 py-2">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-medium text-foreground">{g.client_name || "Claude"}</span>
+                        <span className="block text-[11px] text-faint">Depuis le {fmtWhen(g.created_at)}{g.last_used_at ? ` · utilisé le ${fmtWhen(g.last_used_at)}` : ""}</span>
+                      </span>
+                      <button type="button" onClick={() => void cut(g.id)} disabled={busy === g.id} className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-[#E5484D] hover:bg-rowhover disabled:opacity-50">
+                        <Unplug className="h-3.5 w-3.5" /> Couper l'accès
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {log.length > 0 && (
+              <div>
+                <div className="mb-1.5 text-[12px] font-medium text-foreground">Dernières utilisations</div>
+                <ul className="flex flex-col divide-y divide-border">
+                  {log.map((l) => (
+                    <li key={l.id} className="flex items-center gap-2 py-1.5 text-[12px]">
+                      <span className={cn("size-1.5 shrink-0 rounded-full", l.ok ? "bg-emerald-500" : "bg-red-500")} />
+                      <span className="min-w-0 flex-1 truncate text-foreground">{TOOL_LABELS[l.tool] ?? l.tool}</span>
+                      <span className="shrink-0 tabular-nums text-faint">{fmtWhen(l.at)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </Section>
+  );
+}
+
 function NotifTextRow({ field, value, onChange, onSave }: { field: NotifTextField; value: string; onChange: (v: string) => void; onSave: () => void }) {
   return (
     <div className="flex flex-col gap-1">
@@ -370,6 +485,8 @@ export function Parametres() {
       </Section>
 
       <PagesSection />
+
+      <ClaudeSection />
 
       {/* Couleur d'accent (token --primary) — s'applique aussi en thème sombre */}
       <Section

@@ -14,6 +14,11 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
+      // Deux pages : l'app, et l'accord du connecteur Claude (/connecteur/).
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        connecteur: path.resolve(__dirname, "connecteur/index.html"),
+      },
       output: {
         // Vendors STABLES isolés du code applicatif : comme on déploie en continu sur
         // `main`, chaque push n'invalide plus le gros socle React/motion en cache

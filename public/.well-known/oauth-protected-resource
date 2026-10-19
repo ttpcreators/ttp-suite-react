@@ -1,0 +1,7 @@
+{
+  "resource": "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ttp-mcp",
+  "authorization_servers": ["https://app.ttpcreators.pro"],
+  "scopes_supported": ["ttp"],
+  "bearer_methods_supported": ["header"],
+  "resource_name": "TTP Suite"
+}

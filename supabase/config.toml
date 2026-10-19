@@ -192,3 +192,9 @@ verify_jwt = false
 # auth dans le code.
 [functions.yt-sync]
 verify_jwt = false
+
+# ttp-mcp : connecteur Claude (serveur MCP + OAuth, validé par Marc le 2026-10-19). Claude n'a
+# pas de session Supabase → verify_jwt=false ; l'accès est contrôlé dans le code par nos propres
+# jetons (hachés, 1 h, révocables dans Paramètres → Claude).
+[functions.ttp-mcp]
+verify_jwt = false

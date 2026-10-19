@@ -1,0 +1,13 @@
+{
+  "issuer": "https://app.ttpcreators.pro",
+  "authorization_endpoint": "https://app.ttpcreators.pro/connecteur/",
+  "token_endpoint": "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ttp-mcp/token",
+  "registration_endpoint": "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ttp-mcp/register",
+  "revocation_endpoint": "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ttp-mcp/revoke",
+  "response_types_supported": ["code"],
+  "grant_types_supported": ["authorization_code", "refresh_token"],
+  "code_challenge_methods_supported": ["S256"],
+  "token_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
+  "scopes_supported": ["ttp"],
+  "service_documentation": "https://app.ttpcreators.pro/"
+}
