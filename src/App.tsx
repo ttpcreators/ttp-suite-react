@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
+import { SIGNATURE_KEY, setCurrentSignature, validSig } from "@/lib/agencySignature";
 import { Loader } from "@/components/ui/loader";
 import { Moon, Sun, X, Columns2, SquareArrowRight, Plus, LogOut, Pin, PinOff, Star, House, CircleEllipsis, Search, Trash2 } from "lucide-react";
 import { cn, titleCase } from "@/lib/utils";
@@ -229,6 +230,13 @@ function TabBar({
       </button>
     </div>
   );
+}
+
+/** Tient à jour la signature de l'agence que posent les contrats (lib/agencySignature.ts). */
+function AgencySignatureSync() {
+  const { data } = useAppState<unknown>((st) => st[SIGNATURE_KEY] ?? null);
+  useEffect(() => setCurrentSignature(validSig(data)), [data]);
+  return null;
 }
 
 export default function App() {
@@ -1064,6 +1072,7 @@ export default function App() {
         )}
       </div>
       <Toaster />
+      <AgencySignatureSync />
       <UndoSendBar />
     </NavSubSetContext.Provider>
     </SearchContext.Provider>

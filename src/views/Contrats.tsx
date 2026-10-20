@@ -19,6 +19,7 @@ import { CONTRACT_CSS, contractHead, contractTitle, docHead, docToday } from "@/
 import { nbspFr } from "@/lib/representationContract";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { durationToMonths } from "@/lib/contractDuration";
+import { sigImgHtml } from "@/lib/agencySignature";
 
 type CtType = "marque" | "repr" | "ugc";
 
@@ -296,7 +297,7 @@ ${contractTitle(meta.title, `${ctName} × ${brand || "[Marque]"}`)}
 <section class="ct-art"><h2>Conditions particulières</h2><dl class="ct-terms">${termRows}</dl></section>
 ${clauseBlocks}
 <div class="ct-sign"><div class="cols">
-  <div><div class="who">Pour TTP Creators</div><div class="box"></div><div class="cap">Date et signature, précédées de « Lu et approuvé »</div></div>
+  <div><div class="who">Pour TTP Creators</div><div class="box">${sigImgHtml()}</div><div class="cap">Date et signature, précédées de « Lu et approuvé »</div></div>
   <div><div class="who">Pour ${esc(ctName)}</div><div class="box"></div><div class="cap">Date et signature, précédées de « Lu et approuvé »</div></div>
 </div></div>
 <div class="ct-legal">Contrat régi par le droit français · Conforme RGPD (UE 2016/679) · Directive 2011/83/UE · Fait à Lyon. Document généré par TTP Suite.</div>

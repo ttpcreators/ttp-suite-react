@@ -1,4 +1,5 @@
 import { CONTRACT_CSS, contractHead, contractTitle, docHead, docToday } from "@/lib/pdfDoc";
+import { sigImgHtml } from "./agencySignature";
 /**
  * Générateur de CONTRAT DE REPRÉSENTATION (agence × créateur) — data-driven.
  * Spec produite + revue juridique/complétude par un workflow multi-agents,
@@ -318,7 +319,9 @@ function signaturesHTML(text: string): string {
   const note = paras.find((p) => /\(signature/i.test(p))?.replace(/^_{3,}\s*/, "").trim() ?? "";
   const col = (p: string, withNote: boolean) => {
     const [who, ...rest] = p.split("\n");
-    return `<div><div class="who">${esc(who)}</div>${rest.length ? `<div class="det">${esc(rest.join("\n"))}</div>` : ""}<div class="box"></div>${withNote && note ? `<div class="cap">${esc(note)}</div>` : ""}</div>`;
+    // Cadre de l'agence : signature posée d'office (Paramètres → Signature).
+    const sig = /TTP|agence/i.test(who) ? sigImgHtml() : "";
+    return `<div><div class="who">${esc(who)}</div>${rest.length ? `<div class="det">${esc(rest.join("\n"))}</div>` : ""}<div class="box">${sig}</div>${withNote && note ? `<div class="cap">${esc(note)}</div>` : ""}</div>`;
   };
   return `<div class="ct-sign">${place.map((p) => `<p class="place">${esc(p)}</p>`).join("")}<div class="cols">${col(parties[0], false)}${col(parties[1], true)}</div></div>`;
 }

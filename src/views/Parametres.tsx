@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check, MessageCircle, History, PanelLeft, EyeOff, Bot, Copy, Unplug } from "lucide-react";
+import { SIGNATURE_KEY, scribble, validSig, type SignatureData } from "@/lib/agencySignature";
+import { SignaturePad } from "@/components/signature-pad";
+import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check, MessageCircle, History, PanelLeft, EyeOff, Bot, Copy, Unplug, PenLine, Sparkles } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
 import { ACCENT_PRESETS, ACCENT_GRADIENTS, getAccent, setAccent, isHex, parseGradient, getDarkStyle, setDarkStyle, type DarkStyle } from "@/lib/accent";
@@ -337,9 +339,63 @@ function NotifTextRow({ field, value, onChange, onSave }: { field: NotifTextFiel
   );
 }
 
+/**
+ * Signature de l'agence, posée d'office dans le cadre « Pour TTP Creators » de tous les
+ * contrats (lib/agencySignature.ts). Gribouillée à la main ou par l'app.
+ */
+function SignatureSection() {
+  const { data } = useAppState<SignatureData | null>((s) => validSig(s[SIGNATURE_KEY]));
+  const [draft, setDraft] = useState<SignatureData | null | undefined>(undefined); // undefined = rien de modifié
+  const shown = draft === undefined ? data ?? null : draft;
+  const [busy, setBusy] = useState(false);
+  const save = async (next: SignatureData | null) => {
+    setBusy(true);
+    const ok = await saveAppStateKey(SIGNATURE_KEY, next ? { ...next, at: new Date().toISOString() } : null);
+    setBusy(false);
+    if (!ok) return toast("Erreur, signature non enregistrée");
+    setDraft(undefined);
+    toast(next ? (next.on === false ? "Signature gardée, mais plus posée sur les contrats" : "Signature enregistrée : elle sera posée sur les contrats ✓") : "Signature retirée");
+  };
+  const on = shown?.on !== false;
+  return (
+    <Section icon={<PenLine className="h-4 w-4" />} title="Signature" hint="Posée d'office dans le cadre « Pour TTP Creators » de tous les contrats. Le cadre du créateur ou de la marque reste vide.">
+      <div className="flex flex-col gap-3">
+        <SignaturePad value={shown} onChange={setDraft} />
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => setDraft({ ...scribble(Math.floor(Math.random() * 1e9)), on })}
+            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
+            <Sparkles className="h-3.5 w-3.5 text-primary" /> Gribouiller pour moi
+          </button>
+          <button type="button" onClick={() => setDraft(null)} disabled={!shown}
+            className="rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover disabled:opacity-40">
+            Effacer
+          </button>
+          <span className="flex-1" />
+          {draft !== undefined && (
+            <button type="button" onClick={() => void save(draft)} disabled={busy}
+              className="rounded-full bg-primary px-4 py-1.5 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+              Enregistrer
+            </button>
+          )}
+        </div>
+        {shown && (
+          <label className="flex cursor-pointer items-center justify-between gap-3 border-t border-border pt-3">
+            <span>
+              <span className="block text-[13px] font-medium text-foreground">Signer automatiquement les contrats</span>
+              <span className="block text-[11px] text-faint">Désactivé : les contrats sortent avec le cadre vide, à signer à la main.</span>
+            </span>
+            <input type="checkbox" checked={on} disabled={busy} onChange={(e) => void save({ ...shown, on: e.target.checked })} className="h-4 w-4 accent-[var(--primary)]" />
+          </label>
+        )}
+        <p className="text-[11px] leading-snug text-faint">Dessine à la souris ou au doigt dans le cadre (plusieurs traits possibles), ou laisse l'app gribouiller une signature. Les contrats déjà enregistrés gardent la version du jour où ils ont été faits.</p>
+      </div>
+    </Section>
+  );
+}
+
 /** Sommaire des réglages (ordinateur) : groupes et sections, suit le défilement. */
 const SETTINGS_NAV: { group: string; items: string[] }[] = [
-  { group: "Général", items: ["Apparence", "Pages affichées", "Couleur d'accent"] },
+  { group: "Général", items: ["Apparence", "Pages affichées", "Couleur d'accent", "Signature"] },
   { group: "Prospection et Claude", items: ["Prospection", "Claude"] },
   {
     group: "Notifications",
@@ -625,6 +681,8 @@ export function Parametres() {
       </Section>
 
       {/* Prospection : rythme de recontact + ouverture WhatsApp (blob prospectSettings) */}
+      <SignatureSection />
+
       <GroupTitle id="prospection-claude">Prospection et Claude</GroupTitle>
       <Section
         icon={<MessageCircle className="h-4 w-4" />}

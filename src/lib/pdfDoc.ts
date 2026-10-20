@@ -226,7 +226,8 @@ export const CONTRACT_CSS = `
 .ct-sign .cols{display:grid;grid-template-columns:1fr 1fr;gap:12mm}
 .ct-sign .who{font-weight:600;color:var(--ink)}
 .ct-sign .det{margin-top:.6mm;min-height:9.6mm;font-size:8.8pt;line-height:1.45;color:var(--grey);white-space:pre-line}
-.ct-sign .box{margin-top:3mm;height:25mm;border:.5pt solid #cfcfca;border-radius:1mm}
+.ct-sign .box{position:relative;margin-top:3mm;height:25mm;border:.5pt solid #cfcfca;border-radius:1mm}
+.ct-sign .box img.sig{position:absolute;inset:1.5mm 3mm;width:calc(100% - 6mm);height:calc(100% - 3mm);object-fit:contain;object-position:left center}
 .ct-sign .cap{margin-top:1.6mm;font-size:7.8pt;line-height:1.4;color:var(--grey)}
 .ct-signtext{margin-top:9mm;white-space:pre-line;break-inside:avoid}
 .ct-legal{margin-top:8mm;padding-top:3mm;border-top:.5pt solid var(--soft);font-size:7.6pt;line-height:1.5;color:var(--faint)}
