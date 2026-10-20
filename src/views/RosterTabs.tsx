@@ -1,20 +1,19 @@
 import { useStickyState } from "@/lib/useStickyState";
-import { Users, Clapperboard, Radar } from "lucide-react";
+import { Users, Radar } from "lucide-react";
 import { Roster } from "./Roster";
-import { Ugc } from "./Ugc";
 import { RosterTracking } from "./CreatorTracking";
 import { MotionTabs, MotionTabsList, MotionTabsTrigger } from "@/components/ui/motion-tabs";
 
-// Engagement et Tarifs ont leur propre page dans le menu (Créateurs) : plus d'onglet en double ici.
-type Tab = "roster" | "suivi" | "ugc";
+// Engagement et Tarifs ont leur propre page dans le menu (Talents) : plus d'onglet en double ici.
+// L'onglet UGC est retiré à la demande de Marc (2026-10-20) ; la page Ugc.tsx reste dans le code.
+type Tab = "roster" | "suivi";
 const TABS: { id: Tab; label: string; icon: typeof Users }[] = [
   { id: "roster", label: "Liste", icon: Users },
   { id: "suivi", label: "Accompagnement", icon: Radar },
-  { id: "ugc", label: "UGC", icon: Clapperboard },
 ];
 
 export function RosterTabs({ onOpen }: { onOpen?: (name: string) => void }) {
-  const [tab, setTab] = useStickyState<Tab>("roster:section", ["roster", "suivi", "ugc"], "roster");
+  const [tab, setTab] = useStickyState<Tab>("roster:section", ["roster", "suivi"], "roster");
   return (
     <div>
       {/* Onglets animés : la pastille glisse, le texte change de couleur à son passage,
@@ -37,7 +36,6 @@ export function RosterTabs({ onOpen }: { onOpen?: (name: string) => void }) {
       </MotionTabs>
       {tab === "roster" && <Roster onOpen={onOpen} />}
       {tab === "suivi" && <RosterTracking onOpen={onOpen} />}
-      {tab === "ugc" && <Ugc />}
     </div>
   );
 }
