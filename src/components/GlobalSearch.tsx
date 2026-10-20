@@ -1,51 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { Users, Contact, ListChecks, Receipt, FileText, Search as SearchIcon, X, Trash2, type LucideIcon } from "lucide-react";
+import { Search as SearchIcon, X, Trash2, type LucideIcon } from "lucide-react";
 import { useGlobalSearch, type SearchHit } from "@/lib/useGlobalSearch";
 import { titleCase } from "@/lib/utils";
 import { ALL_ITEMS, type ViewId } from "@/lib/nav";
-
-const KIND_META: Record<SearchHit["kind"], { icon: LucideIcon; label: string; view: ViewId | null }> = {
-  creator: { icon: Users, label: "Créateur", view: null },
-  contact: { icon: Contact, label: "Contact", view: "contacts" },
-  todo: { icon: ListChecks, label: "À faire", view: "todo" },
-  invoice: { icon: Receipt, label: "Facture", view: "facturation" },
-  brief: { icon: FileText, label: "Brief", view: "briefs" },
-  prospect: { icon: SearchIcon, label: "Prospect", view: "prospection" },
-};
+import { PAGE_ALIASES, normSearch } from "@/lib/pageAliases";
+import { KIND_META } from "@/lib/searchKinds";
 
 // Pages navigables depuis la recherche (nav agence + Corbeille).
 const PAGES: { id: ViewId; label: string; icon: LucideIcon }[] = [
   ...ALL_ITEMS,
   { id: "corbeille", label: "Corbeille", icon: Trash2 },
 ];
-// Synonymes pour retrouver une page même sans taper son nom exact.
-const PAGE_ALIASES: Partial<Record<ViewId, string[]>> = {
-  apercu: ["dashboard", "accueil", "tableau de bord"],
-  reversements: ["paie", "paiement", "reverser", "reversement", "salaire createur"],
-  relances: ["impaye", "retard", "relancer", "relance facture"],
-  facturation: ["facture", "devis"],
-  planning: ["agenda", "calendrier", "rendez-vous", "rdv", "posts instagram", "programmer un post", "publier"],
-  mediakit: ["media kit", "kit"],
-  contrats: ["contrat"],
-  prospection: ["prospect", "deal", "pipeline"],
-  whatsapp: ["a contacter", "prospection", "relancer une marque", "whatsapp"],
-  pricing: ["prix", "tarif", "tarifs", "devis", "cpm", "pricing", "combien facturer"],
-  suivi: ["evolution", "suivi engagement", "courbe abonnes"],
-  mails: ["mail", "email", "boite mail", "gmail"],
-  templates: ["modele", "modeles", "template"],
-  echeances: ["echeance", "echeances", "expiration", "renouvellement contrat", "fin de contrat"],
-  diagnostique: ["diagnostic", "bug", "panne"],
-  sourcing: ["sourcing", "radar", "trouver", "recruter", "marques instagram", "concurrents", "agences concurrentes", "veille"],
-  messages: ["dm", "messages", "messagerie", "inbox", "instagram"],
-  roster: ["createurs", "talents"],
-  objectifs: ["objectif", "goal"],
-  stats: ["statistiques", "analytics"],
-  debrief: ["bilan", "rapport"],
-  acces: ["mot de passe", "identifiants", "login"],
-  corbeille: ["poubelle", "supprime"],
-};
-const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const norm = normSearch;
 
 export function GlobalSearch({
   query,
@@ -56,6 +23,7 @@ export function GlobalSearch({
   inline = false,
   autoFocus = false,
   variant = "bar",
+  onActivate,
   className,
 }: {
   query: string;
@@ -69,14 +37,17 @@ export function GlobalSearch({
   autoFocus?: boolean;
   /** « sidebar » : champ compact en tête du menu (⌘K pour y aller), résultats sur le côté. */
   variant?: "bar" | "sidebar";
+  /** Sidebar : le champ devient un bouton qui ouvre la palette ⌘K (qui gère alors ⌘K). */
+  onActivate?: () => void;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const side = variant === "sidebar";
-  // ⌘K / Ctrl+K : place le curseur dans la recherche, où que l'on soit.
+  // ⌘K / Ctrl+K : place le curseur dans la recherche, où que l'on soit (sauf si la
+  // palette ⌘K est branchée : c'est elle qui s'ouvre).
   useEffect(() => {
-    if (!side) return;
+    if (!side || onActivate) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -86,7 +57,7 @@ export function GlobalSearch({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [side]);
+  }, [side, onActivate]);
   // Texte d'aide court sur mobile (le long était tronqué au milieu d'un mot).
   const [narrow] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
   const { hits: rawHits, loading } = useGlobalSearch(query);
@@ -116,6 +87,22 @@ export function GlobalSearch({
       if (v) onGoto(v); // garde la requête → la vue cible filtre dessus
     }
   };
+
+  // Menu (ordinateur) avec la palette : un faux champ qui l'ouvre, même allure.
+  if (side && onActivate) {
+    return (
+      <button
+        type="button"
+        onClick={onActivate}
+        className={cn("flex h-9 w-full items-center gap-2.5 rounded-[10px] bg-field px-3 text-left text-foreground transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30", className)}
+        aria-label="Rechercher ou lancer une action (⌘K)"
+      >
+        <SearchIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-[14px] text-muted-foreground">Rechercher</span>
+        <kbd className="shrink-0 font-sans text-[12px] font-medium text-muted-foreground">⌘K</kbd>
+      </button>
+    );
+  }
 
   return (
     <div className={cn("relative w-full", !inline && !side && "max-w-[220px] sm:max-w-md md:max-w-xl", className)}>

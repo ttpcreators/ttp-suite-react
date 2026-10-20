@@ -23,7 +23,8 @@ import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { SwipeRow } from "@/components/mobile/swipe-row";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
-import { myDisplayName } from "@/lib/team";
+import { writeTodoStatus } from "@/lib/todoStatus";
+import { useIntent } from "@/lib/openIntent";
 import { useLiveKey } from "@/lib/useLive";
 import { useIsPhone } from "@/lib/iosUi";
 import { toISODate, todayISO } from "@/lib/dates";
@@ -229,6 +230,11 @@ export function Todo() {
   // Bouton dédié « Tâche agence » : ouvre le formulaire verrouillé sur l'agence
   // (creator vide) et masque le champ « Pour qui » → tâche interne, sans créateur.
   const [forceAgency, setForceAgency] = useState(false);
+  // « + » d'Aujourd'hui ou « Nouvelle tâche » de la palette ⌘K : ouvre le formulaire.
+  useIntent("todo:new", () => {
+    setForceAgency(false);
+    setFormOpen(true);
+  });
 
   // Commentaires (agence) stockés dans le blob __app_state__, indexés par id de tâche.
   const { data: notesData } = useAppState<Record<string, string>>(
@@ -396,15 +402,7 @@ export function Todo() {
    * Écrit le statut d'une tâche + la trace du « Fait » (date et auteur). Repli sans la
    * trace tant que le SQL équipe n'est pas lancé. Renvoie ce qui a été enregistré.
    */
-  const writeStatus = async (id: string, status: string): Promise<Partial<Row> | null> => {
-    const isDone = status === "Fait";
-    const traced: Partial<Row> = isDone
-      ? { status, done: true, done_at: new Date().toISOString(), done_by: await myDisplayName() }
-      : { status, done: false, done_at: null, done_by: null };
-    if (await dbUpdate("todos", id, traced)) return traced;
-    const plain: Partial<Row> = { status, done: isDone };
-    return (await dbUpdate("todos", id, plain)) ? plain : null;
-  };
+  const writeStatus = (id: string, status: string): Promise<Partial<Row> | null> => writeTodoStatus(id, status);
 
   // Statut d'une tâche (rond à cocher, fiche, colonnes, ou glisser « Fait » / « Rouvrir » sur iPhone).
   const setStatusTo = async (id: string, status: string) => {

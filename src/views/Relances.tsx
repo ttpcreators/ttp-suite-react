@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Copy, Mail, BellRing, Check } from "lucide-react";
-import { supabase } from "@/lib/supabase";
-import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";
+import { useAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";
 import { titleCase } from "@/lib/utils";
-import { useLiveKey } from "@/lib/useLive";
-import { getCache, setCache } from "@/lib/viewCache";
+import { overdueInvoices, parseDueDate, relanceEmail, relanceMailto, type RelanceInvoice, type Reminders } from "@/lib/relance";
+import { recordReminder, useRelanceInvoices } from "@/lib/useRelanceInvoices";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
 
@@ -12,69 +11,17 @@ import { toast } from "@/components/ui/toast";
  * Relances de factures impayées : liste des factures « en retard » (+ « en attente »
  * dont l'échéance est passée), avec un email de relance pré-rédigé (ton qui monte
  * selon le nombre de relances) et le suivi de la dernière relance (blob `invoiceReminders`).
+ * Règles et email partagés avec « Aujourd'hui » et la palette ⌘K : lib/relance.ts.
  */
 
-type Inv = { id: string; ref: string; party: string; amount: string; date: string | null; status: string; creator: string | null };
-type Reminder = { last: string; count: number };
-type Reminders = Record<string, Reminder>;
+type Inv = RelanceInvoice;
 
-// Date LOCALE (toISOString = UTC → la veille entre minuit et 2 h en France)
-const todayISO = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
-
-function parseDate(s: string | null): Date | null {
-  if (!s) return null;
-  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s.trim());
-  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
-  const dm = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/.exec(s.trim());
-  if (dm) {
-    let y = dm[3] ?? String(new Date().getFullYear());
-    if (y.length === 2) y = "20" + y;
-    return new Date(Number(y), Number(dm[2]) - 1, Number(dm[1]));
-  }
-  return null;
-}
-function daysSince(d: Date): number {
-  const t = new Date();
-  const today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
-  return Math.floor((today.getTime() - d.getTime()) / 86400000);
-}
 function frDate(d: Date): string {
   return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-/** Email de relance, ton qui s'adapte au nombre de relances déjà envoyées. */
-function relanceEmail(inv: Inv, count: number): { subject: string; body: string } {
-  const montant = formatEuro(parseAmount(inv.amount));
-  const subject = `Relance — Facture ${inv.ref} · ${montant}`;
-  const opener =
-    count <= 0
-      ? "Je me permets de revenir vers vous concernant le règlement de"
-      : count === 1
-        ? "Sauf erreur de notre part, nous n'avons pas encore reçu le règlement de"
-        : "Malgré nos précédentes relances, la facture suivante demeure impayée :";
-  const closing =
-    count <= 1
-      ? "Pourriez-vous nous indiquer la date de règlement prévue ? Si le paiement a déjà été effectué, merci de ne pas tenir compte de ce message."
-      : "Nous vous remercions de bien vouloir procéder au règlement dans les meilleurs délais, ou de nous communiquer une date précise.";
-  const body = `Bonjour,
-
-${opener} la facture ${inv.ref}${inv.party ? ` (${inv.party})` : ""} d'un montant de ${montant}.
-
-${closing}
-
-Bien cordialement,
-TTP Creators
-partnerships@ttpcreators.pro`;
-  return { subject, body };
-}
-
 export function Relances() {
-  const [invoices, setInvoices] = useState<Inv[] | null>(() => getCache<Inv[]>("relanceInvoices"));
-  const [error, setError] = useState(false);
-  const live = useLiveKey();
+  const { invoices, error } = useRelanceInvoices();
   const { data: app } = useAppState<AppState>();
   const [localRem, setLocalRem] = useState<Reminders | null>(null);
   const reminders: Reminders = localRem ?? ((app?.invoiceReminders as Reminders) ?? {});
@@ -84,66 +31,14 @@ export function Relances() {
     setLocalRem(null);
   }, [liveRem]);
 
-  useEffect(() => {
-    let alive = true;
-    supabase
-      .from("invoices")
-      .select("id,ref,party,amount,date,status,creator")
-      .then(({ data, error }) => {
-        if (!alive) return;
-        // Échec d'un rafraîchissement : on garde la liste déjà affichée (pas de vidage)
-        if (error) {
-          setError(true);
-          return;
-        }
-        const next = (data as Inv[]) ?? [];
-        setCache("relanceInvoices", next);
-        setInvoices(next);
-        setError(false); // un chargement réussi efface l'erreur précédente
-      });
-    return () => {
-      alive = false;
-    };
-  }, [live]);
-
-  const overdue = useMemo(() => {
-    if (!invoices) return [];
-    const out = invoices
-      .filter((iv) => {
-        if (iv.status === "retard") return true;
-        // "en attente" dont l'échéance est dépassée
-        if (iv.status === "attente") {
-          const d = parseDate(iv.date);
-          return d ? daysSince(d) > 0 : false;
-        }
-        return false;
-      })
-      .map((iv) => {
-        const d = parseDate(iv.date);
-        return { iv, late: d ? Math.max(0, daysSince(d)) : null };
-      });
-    return out.sort((a, b) => (b.late ?? 0) - (a.late ?? 0));
-  }, [invoices]);
+  const overdue = useMemo(() => (invoices ? overdueInvoices(invoices) : []), [invoices]);
 
   const totalDue = overdue.reduce((s, o) => s + parseAmount(o.iv.amount), 0);
 
   const markReminded = async (id: string) => {
-    let ok = false;
-    let next: Reminders = {};
-    try {
-      // Relecture fraîche : ne pas écraser les compteurs de relance d'autres factures.
-      invalidateAppState();
-      const fresh = ((await getAppState())["invoiceReminders"] as Reminders) ?? {};
-      const cur = fresh[id];
-      const entry: Reminder = { last: todayISO(), count: (cur?.count ?? 0) + 1 };
-      next = { ...fresh, [id]: entry };
-      // N'envoie QUE la facture relancée (fusion côté base).
-      ok = await mergeAppStateKey("invoiceReminders", { [id]: entry });
-    } catch {
-      ok = false;
-    }
+    const next = await recordReminder(id);
     // Copie locale appliquée SEULEMENT après écriture réussie : pas de relance affichée si non enregistrée
-    if (!ok) {
+    if (!next) {
       toast("Erreur, relance non enregistrée. Réessaie");
       return;
     }
@@ -165,8 +60,7 @@ export function Relances() {
     const { subject, body } = relanceEmail(inv, reminders[inv.id]?.count ?? 0);
     // Destinataire = email client saisi sur la facture (blob invoiceDetails), si connu
     const details = (app?.invoiceDetails as Record<string, { clientEmail?: string }> | undefined) ?? {};
-    const to = encodeURIComponent((details[inv.id]?.clientEmail ?? "").trim());
-    window.location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = relanceMailto(details[inv.id]?.clientEmail ?? "", subject, body);
   };
 
   // Erreur affichée seulement s'il n'y a rien à montrer (sinon on garde les données en place)
@@ -230,7 +124,7 @@ export function Relances() {
                     <span className="whitespace-nowrap">
                       {" · échéance "}
                       {(() => {
-                        const d = parseDate(iv.date);
+                        const d = parseDueDate(iv.date);
                         return d ? frDate(d) : iv.date;
                       })()}
                     </span>
@@ -249,7 +143,7 @@ export function Relances() {
                   </button>
                   {rem ? (
                     <span className="flex items-center gap-1 text-[11px] text-faint">
-                      <Check className="h-3.5 w-3.5 text-signaltext" /> Relancé le {frDate(parseDate(rem.last) ?? new Date())} · {rem.count}×
+                      <Check className="h-3.5 w-3.5 text-signaltext" /> Relancé le {frDate(parseDueDate(rem.last) ?? new Date())} · {rem.count}×
                     </span>
                   ) : (
                     <span className="text-[11px] text-faint">Jamais relancé</span>

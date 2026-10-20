@@ -24,6 +24,7 @@ import { frDate } from "@/lib/dates";
 import { getCache, setCache } from "@/lib/viewCache";
 import { STEPS, STEP_COUNT, PHASES, stepDef, phaseOf, isDone, type PhaseKey } from "@/lib/collabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { useIntent } from "@/lib/openIntent";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { fmtCompact } from "@/lib/timeSeries";
 import { igRefresh, igWhyText, postKind, useIgColumn, type IgCollab } from "@/lib/instagram";
@@ -161,6 +162,8 @@ export function Collabs() {
 
   // formulaire de création
   const [formOpen, setFormOpen] = useState(false);
+  // « Nouvelle collab » de la palette ⌘K : ouvre le formulaire de création.
+  useIntent("collab:new", () => setFormOpen(true));
   const [brand, setBrand] = useState("");
   const [creator, setCreator] = useState("");
   const [contact, setContact] = useState("");
