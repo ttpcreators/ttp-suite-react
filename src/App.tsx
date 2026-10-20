@@ -43,7 +43,6 @@ import { OfflineBanner } from "@/components/mobile/offline-banner";
 // Vues chargées à la demande (code-splitting → démarrage plus léger, mobile compris).
 const RosterTabs = lazy(() => import("@/views/RosterTabs").then((m) => ({ default: m.RosterTabs })));
 const Aujourdhui = lazy(() => import("@/views/Aujourdhui").then((m) => ({ default: m.Aujourdhui })));
-const Apercu = lazy(() => import("@/views/Apercu").then((m) => ({ default: m.Apercu })));
 const Stats = lazy(() => import("@/views/Stats").then((m) => ({ default: m.Stats })));
 const Facturation = lazy(() => import("@/views/Facturation").then((m) => ({ default: m.Facturation })));
 const Briefs = lazy(() => import("@/views/Briefs").then((m) => ({ default: m.Briefs })));
@@ -84,7 +83,6 @@ const Pricing = lazy(() => import("@/views/Pricing").then((m) => ({ default: m.P
 
 const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   aujourdhui: Aujourdhui,
-  apercu: Apercu,
   agent: AgentView,
   stats: Stats,
   facturation: Facturation,
@@ -148,6 +146,9 @@ function ViewContent({
     </div>
   );
 }
+
+/** Vues sans en-tête de page posé par App (elles affichent leur propre titre, ou aucun). */
+const NO_PAGE_HEADER: ViewId[] = ["mails", "parametres"];
 
 const PANE_FALLBACK = (
   <div className="grid min-h-[50vh] place-items-center">
@@ -247,14 +248,14 @@ function AgencySignatureSync() {
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [active, setActive] = useState<ViewId>(() => {
-    // Restaure la dernière page ouverte (évite de retomber sur l'Aperçu à chaque refresh).
+    // Restaure la dernière page ouverte (évite de retomber sur l'accueil à chaque refresh).
     try {
       const saved = localStorage.getItem("ttp:view");
       if (saved && isNavView(saved)) return saved as ViewId;
     } catch {
       /* localStorage indisponible */
     }
-    return "apercu";
+    return "aujourdhui";
   });
   // Onglets ouverts (façon navigateur). L'onglet actif = `active`.
   const [tabs, setTabs] = useState<ViewId[]>(() => {
@@ -538,7 +539,7 @@ export default function App() {
     if (res.active !== active) setActive(res.active as ViewId);
     if (splitView === id) setSplitView(null);
   };
-  const newTab = () => openInNewTab("apercu");
+  const newTab = () => openInNewTab("aujourdhui");
   // Clic sur un onglet : bascule dessus (et referme un éventuel drill-down).
   const switchTab = (id: ViewId) => {
     setActive(id);
@@ -629,12 +630,12 @@ export default function App() {
   const scrollRef = useRef<HTMLDivElement>(null);
   // Onglets du bas : Accueil + 3 pages (les favoris ajoutés d'abord, sinon les plus utiles) + Plus.
   const tabIds = [...new Set<ViewId>([
-    "apercu",
+    "aujourdhui",
     ...pinned.filter((id) => inNav(id) && !!findPinnable(id)),
     ...(["contacts", "roster", "planning", "mails", "todo"] as ViewId[]).filter(inNav),
   ])].slice(0, 4);
   const iosTabs: IosTab[] = [
-    ...tabIds.map((id) => ({ id, label: id === "apercu" ? "Accueil" : findPinnable(id)?.label ?? viewTitle(id), icon: id === "apercu" ? House : findPinnable(id)?.icon ?? Star, badge: navBadges[id] })),
+    ...tabIds.map((id) => ({ id, label: id === "aujourdhui" ? "Accueil" : findPinnable(id)?.label ?? viewTitle(id), icon: id === "aujourdhui" ? House : findPinnable(id)?.icon ?? Star, badge: navBadges[id] })),
     // « Plus » : les notifications des pages qui n'ont pas leur onglet.
     { id: "__more", label: "Plus", icon: CircleEllipsis, badge: Object.entries(navBadges).reduce((n, [id, c]) => (tabIds.includes(id as ViewId) || !inNav(id as ViewId) ? n : n + c), 0) },
   ];
@@ -713,6 +714,8 @@ export default function App() {
   // Espace CRÉATEUR : vue dédiée quand un créateur se connecte
   if (profile?.role === "creator" && profile.creator_name) {
     return (
+      // Thème partagé (Profil → Thème : Clair, Verre, Noir, Auto), comme côté agence.
+      <ThemeContext.Provider value={{ dark, toggle: toggleTheme, theme, setTheme }}>
       <Suspense fallback={<div className="grid min-h-screen place-items-center bg-background"><Loader variant="dot-matrix" size={26} className="text-muted-foreground" /></div>}>
         <CreatorSpace
           name={profile.creator_name}
@@ -721,6 +724,7 @@ export default function App() {
           onLogout={logout}
         />
       </Suspense>
+      </ThemeContext.Provider>
     );
   }
 
@@ -772,6 +776,7 @@ export default function App() {
       );
     }
     return (
+      <ThemeContext.Provider value={{ dark, toggle: toggleTheme, theme, setTheme }}>
       <Suspense fallback={<div className="grid min-h-screen place-items-center bg-background"><Loader variant="dot-matrix" size={26} className="text-muted-foreground" /></div>}>
         {/* key : changer de créateur repart d'un espace neuf (formulaires, listes,
             infos) au lieu d'enregistrer les données du précédent sur le suivant. */}
@@ -784,6 +789,7 @@ export default function App() {
           preview={{ onExit: () => setSpace("agency"), onPick: setPortalCreator, creators }}
         />
       </Suspense>
+      </ThemeContext.Provider>
     );
   }
 
@@ -796,7 +802,7 @@ export default function App() {
       <GlobalSearch query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={navHidden} />
       {/* right cluster */}
       <div className="ml-auto flex shrink-0 items-center gap-2.5">
-        <Notifications items={notifs} onDismiss={dismissNotifs} />
+        <Notifications items={notifs} onDismiss={dismissNotifs} onOpenPage={(p) => select(p as ViewId)} />
         {/* Thème : desktop uniquement (sur mobile → Paramètres → Apparence, gain de place) */}
         <button
           type="button"
@@ -833,8 +839,9 @@ export default function App() {
     );
   // (Le mode portail a déjà fait un return anticipé plus haut : ici space === "agency".)
   const primaryTitle = detailCreator ? titleCase(detailCreator) : canSee(active) ? title : "Accès réservé";
-  // Accueil et Mails n'ont pas d'en-tête de page (Mails : client plein écran avec son propre en-tête).
-  const showPrimaryH1 = !detailCreator && active !== "apercu" && active !== "mails";
+  // Accueil, Mails et Paramètres n'ont pas d'en-tête de page (Mails : client plein écran avec son
+  // propre en-tête ; Paramètres : le titre vit en tête de sa colonne de réglages).
+  const showPrimaryH1 = !detailCreator && !NO_PAGE_HEADER.includes(active);
   // Multi-pages actif dès qu'il y a ≥ 2 onglets ou un volet latéral.
   // (Mode iPhone : toujours une seule page à la fois, comme une app.)
   const multi = !iosPhone && (tabs.length > 1 || splitShown != null);
@@ -870,7 +877,7 @@ export default function App() {
               search={<GlobalSearch variant="sidebar" query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={navHidden} onActivate={openCommandPalette} />}
               tools={
                 <>
-                  <Notifications variant="sidebar" items={notifs} onDismiss={dismissNotifs} />
+                  <Notifications variant="sidebar" items={notifs} onDismiss={dismissNotifs} onOpenPage={(p) => select(p as ViewId)} />
                   <button
                     type="button"
                     onClick={toggleTheme}
@@ -914,7 +921,7 @@ export default function App() {
                       ) : (
                         <>
                           <IosBarIcon icon={Search} label="Rechercher" onClick={() => setPhoneScreen("search")} />
-                          <Notifications items={notifs} onDismiss={dismissNotifs} variant="bar" />
+                          <Notifications items={notifs} onDismiss={dismissNotifs} onOpenPage={(p) => select(p as ViewId)} variant="bar" />
                         </>
                       )
                     }
@@ -1008,7 +1015,7 @@ export default function App() {
                             <ErrorBoundary variant="inline" label="Cette page" resetKey={`tab:${id}`}>
                               <Suspense fallback={PANE_FALLBACK}>
                                 <NavSubContext.Provider value={id === active ? sub : null}>
-                                  {id !== "apercu" && id !== "mails" ? (
+                                  {!NO_PAGE_HEADER.includes(id) ? (
                                     <PageFrame title={tabTitle} hint={VIEW_HINTS[id]}>
                                       <ViewContent active={id} onOpenCreator={openDetail} />
                                     </PageFrame>

@@ -1,5 +1,4 @@
 import {
-  LayoutDashboard,
   Target,
   Receipt,
   Users,
@@ -47,7 +46,6 @@ import {
 
 export type ViewId =
   | "aujourdhui"
-  | "apercu"
   | "activite"
   | "agent"
   | "stats"
@@ -113,7 +111,6 @@ export const NAV: NavFamily[] = [
     fixed: true,
     items: [
       { id: "aujourdhui", label: "Aujourd'hui", icon: Sun },
-      { id: "apercu", label: "Aperçu", icon: LayoutDashboard },
       { id: "todo", label: "To-do", icon: ListChecks },
       { id: "mails", label: "Mails", icon: Mail },
       { id: "collabs", label: "Collabs", icon: Milestone },
@@ -279,10 +276,10 @@ export function findPinnable(id: ViewId): NavItem | undefined {
 
 /** Titre affiché d'une vue : entrée de nav, sinon SOUS-PAGE portant le même id
  *  (ex. Mails, sous-page de Prospection), sinon libellés fixes. Sans ce repli, une
- *  vue devenue sous-page s'affichait avec le titre « Aperçu ». */
+ *  vue devenue sous-page s'affichait avec le titre de l'accueil. */
 export function viewTitle(id: string): string {
   const it = ALL_ITEMS.find((i) => i.id === id);
   if (it) return it.label;
   for (const i of ALL_ITEMS) for (const c of i.children ?? []) if (c.id === id) return c.label;
-  return id === "corbeille" ? "Corbeille" : "Aperçu";
+  return id === "corbeille" ? "Corbeille" : "Aujourd'hui";
 }

@@ -384,6 +384,19 @@
   }
 }
 
+/* Icônes (direction « BlackYak », choix de Marc) : trait fin et régulier, bouts
+   carrés, angles vifs. Appliqué à toutes les icônes lucide, sans toucher aux
+   icônes pleines (étoile des favoris, logos). */
+svg.lucide {
+  stroke-width: var(--icon-stroke);
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  stroke-miterlimit: 4;
+}
+:root {
+  --icon-stroke: 1.5px;
+}
+
 /* Couleur de bordure PAR DÉFAUT. En @layer base pour que les utilitaires
    (border-red-500/40, border-foreground, focus:border-primary…) gardent la main :
    hors couche, cette règle repeignait en gris TOUTES les bordures colorées. */
@@ -533,7 +546,7 @@ body {
 @media (max-width: 767px) {
   /* Grand titre iOS (34 pt) en tête de chaque page. */
   .ios-ui .page-title {
-    font-size: 32px;
+    font-size: 28px;
     font-weight: 700;
     letter-spacing: -0.025em;
     line-height: 1.1;
@@ -607,17 +620,18 @@ body {
   }
 }
 
-/* Mode iPhone : textes à la taille de lecture iOS (l'app est réglée en 13 px pour
-   l'ordinateur). Seulement dans les pages et les feuilles, pas dans les barres. */
+/* Mode iPhone : textes un cran au-dessus de l'ordinateur (réglé en 13 px), sans
+   gonfler l'écran : retour de Marc, « les textes sont peut-être trop gros ».
+   Seulement dans les pages et les feuilles, pas dans les barres. */
 @media (max-width: 767px) {
-  .ios-ui :is(main, .ios-sheet) .text-\[11px\] { font-size: 12px; }
-  .ios-ui :is(main, .ios-sheet) .text-\[12px\] { font-size: 13px; }
-  .ios-ui :is(main, .ios-sheet) .text-\[12\.5px\] { font-size: 14px; }
-  .ios-ui :is(main, .ios-sheet) .text-\[13px\] { font-size: 15px; }
-  .ios-ui :is(main, .ios-sheet) .text-\[13\.5px\] { font-size: 15.5px; }
-  .ios-ui :is(main, .ios-sheet) .text-\[14px\] { font-size: 16px; }
-  .ios-ui :is(main, .ios-sheet) .text-xs { font-size: 13px; }
-  .ios-ui :is(main, .ios-sheet) .text-sm { font-size: 15px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[11px\] { font-size: 11.5px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[12px\] { font-size: 12.5px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[12\.5px\] { font-size: 13px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[13px\] { font-size: 14px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[13\.5px\] { font-size: 14px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[14px\] { font-size: 14.5px; }
+  .ios-ui :is(main, .ios-sheet) .text-xs { font-size: 12.5px; }
+  .ios-ui :is(main, .ios-sheet) .text-sm { font-size: 14px; }
 }
 @media (max-width: 767px) {
   /* Aperçu : les trois chiffres côte à côte, compacts (au lieu d'un par ligne). */

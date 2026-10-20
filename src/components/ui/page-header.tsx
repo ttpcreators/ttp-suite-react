@@ -26,7 +26,7 @@ export function PageFrame({ title, hint, children }: { title: ReactNode; hint?: 
         <div className="min-w-0">
           <h1 className="page-title text-[28px] font-bold leading-tight tracking-[-0.025em] md:text-title">{title}</h1>
           {/* À quoi sert la page, en une phrase (src/lib/viewHints.ts). */}
-          {hint && <p className="page-hint mt-1.5 max-w-[46rem] text-[14px] leading-snug text-muted-foreground md:text-[15px]">{hint}</p>}
+          {hint && <p className="page-hint mt-1 max-w-[46rem] text-[13px] leading-snug text-muted-foreground md:mt-1.5 md:text-[15px]">{hint}</p>}
         </div>
         {/* Mobile : pleine largeur sous le titre, compteur à gauche / actions à
             droite, et les groupes d'actions passent à la ligne au lieu de déborder.

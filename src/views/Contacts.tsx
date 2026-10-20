@@ -1,10 +1,12 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { supabase } from "@/lib/supabase";
-import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, Clock, AlertTriangle, MapPin, MessageCircle, AtSign, Phone, BriefcaseBusiness, Check, type LucideIcon } from "lucide-react";
+import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, MapPin, MessageCircle, AtSign, Phone, BriefcaseBusiness, Check, Plus, ChevronDown, ClipboardList, NotebookPen, type LucideIcon } from "lucide-react";
 import {
   parseTouches, sortTouches, lastTouch, needsRelance, nextKind, waLink, waHref, touchId, buildTouchesPatch,
   CANAL_LABELS, KIND_LABELS, RELANCE_DAYS, type Touch, type TouchCanal, type TouchKind, type WaMode, type ProspectSettings,
 } from "@/lib/touches";
+import { relanceInfo, agoLabel, agoShort, relanceCountdown } from "@/lib/contactRelance";
+import { TONE_DOT, TONE_SOFT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
 import { updateTouches, applyTouchChange, type TouchChange } from "@/lib/touchesDb";
 import { useAppState, type AppState } from "@/lib/appState";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
@@ -23,20 +25,19 @@ import {
   SelectField,
   Picker,
 } from "@/components/ui/form";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { RecipientPicker, type PickContact } from "@/components/ui/recipient-picker";
-import { FilterBar } from "@/components/ui/filter-bar";
 import { FilterPanel } from "@/components/ui/filter-panel";
 import { useIosPhone } from "@/components/mobile/ios-sheet";
-import { StatsBento } from "@/components/ui/stats-bento";
 import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { DEFAULT_TEMPLATES, mailtoHref, readProspectTemplates, suggestedMail, type MailTemplate } from "@/lib/mailTemplates";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BrandIgInline, BrandIgPanel } from "@/components/BrandInstagram";
 import type { IgBrand } from "@/lib/instagram";
 
@@ -62,24 +63,93 @@ type Row = {
 
 // Suivi du sur-contact : en-deçà de ce seuil (jours), on alerte de ne pas relancer.
 const RECENT_DAYS = 30;
-// Couleurs du suivi : orange = trop tôt pour relancer, vert = on peut y aller.
-const TOO_SOON = "bg-wait-soft text-wait";
-const GOOD_TO_GO = "bg-ok-soft text-ok";
-/** Nombre de jours depuis une date ISO (null si absente/invalide). */
-function daysSince(iso?: string | null): number | null {
-  if (!iso) return null;
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return null;
-  return Math.floor((Date.now() - t) / 86400000);
+
+// Écran large (≥ 1024 px) : liste + fiche à droite. En dessous, la fiche s'ouvre en feuille.
+const desktopMq = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(min-width: 1024px)") : null;
+function useIsDesktop(): boolean {
+  return useSyncExternalStore(
+    (fn) => {
+      desktopMq?.addEventListener("change", fn);
+      return () => desktopMq?.removeEventListener("change", fn);
+    },
+    () => !!desktopMq?.matches,
+    () => true,
+  );
 }
-/** Libellé « dernier contact » lisible. */
-function lastContactLabel(d: number | null): string {
-  if (d == null) return "Jamais contacté";
-  if (d <= 0) return "Contacté aujourd'hui";
-  if (d === 1) return "Contacté hier";
-  if (d < 30) return `Contacté il y a ${d} j`;
-  if (d < 60) return "Contacté il y a ~1 mois";
-  return `Contacté il y a ${Math.round(d / 30)} mois`;
+
+/** « Personne · rôle » sans les champs vides ni le tiret de remplissage. */
+function personRole(r: { person?: string | null; role?: string | null }): string {
+  return [r.person, r.role].map((x) => (x ?? "").trim()).filter((x) => x && x !== "—").join(" · ");
+}
+/** Prénom pour « Écrire à … » (prénom saisi, sinon 1er mot de la personne, sinon la marque). */
+function firstNameOf(r: { first_name?: string | null; person?: string | null; brand?: string | null }): string {
+  const p = (r.person ?? "").trim();
+  const b = (r.brand ?? "").trim();
+  return (r.first_name ?? "").trim() || (p && p !== "—" ? p.split(" ")[0] : "") || (b !== "—" ? b : "");
+}
+/** Initiales de la tuile : la marque d'abord, sinon la personne. */
+function tileInitials(r: { brand?: string | null; person?: string | null }): string {
+  return initials(r.brand && r.brand !== "—" ? r.brand : r.person) || "?";
+}
+
+// Couleur d'un échange dans la frise : envoyé (contact, relance) ou réponse reçue.
+const KIND_TONE: Record<TouchKind, StatusTone> = { contact: "progress", relance: "progress", reponse: "ok" };
+
+type ContactFilter = "all" | "contacted" | "never" | "relancer";
+const CONTACT_FILTER_LABELS: Record<ContactFilter, string> = {
+  all: "tous",
+  contacted: "déjà contactés",
+  never: "jamais contactés",
+  relancer: "à relancer",
+};
+
+type MenuOpt = { value: string; label: string };
+/** Pilule à menu (filtres « Contact : tous », « Toutes les villes »). */
+function PillMenu({ label, icon, value, options, onChange, ariaLabel, active }: {
+  label: string; icon?: ReactNode; value: string; options: MenuOpt[]; onChange: (v: string) => void; ariaLabel: string; active?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={ariaLabel}
+          className={cn(
+            "flex h-9 min-w-0 max-w-full shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium transition-colors",
+            active ? "bg-primary/[0.08] text-primary" : "bg-surface text-foreground hover:bg-rowhover",
+          )}
+        >
+          {icon}
+          <span className="truncate">{label}</span>
+          <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 opacity-60 transition-transform motion-reduce:transition-none", open && "rotate-180")} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[min(16rem,calc(100vw-2rem))] p-1.5">
+        <div className="flex flex-col gap-0.5" role="listbox" aria-label={ariaLabel}>
+          {options.map((o) => {
+            const on = o.value === value;
+            return (
+              <button
+                key={o.value || "__vide"}
+                type="button"
+                role="option"
+                aria-selected={on}
+                onClick={() => {
+                  onChange(o.value);
+                  setOpen(false);
+                }}
+                className={cn("flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover", on && "bg-field")}
+              >
+                <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                {on && <Check className="h-4 w-4 shrink-0 text-primary" />}
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 /** Un message Gmail de l'historique avec un contact. */
@@ -240,12 +310,13 @@ function composeEmailHtml(message: string, sig?: MailSignature | null): string {
 }
 
 function CopyField({ label, value }: { label: string; value: string }) {
-  const v = value && value.trim() ? value.trim() : "";
+  // « — » = champ de remplissage en base : affiché comme vide.
+  const v = value && value.trim() && value.trim() !== "—" ? value.trim() : "";
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg bg-panel px-3 py-2.5">
+    <div className="flex items-center justify-between gap-3 rounded-[12px] bg-panel px-3 py-2">
       <div className="min-w-0">
         <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
-        <div className="truncate text-sm text-foreground">{v || "—"}</div>
+        <div className={cn("truncate text-[13px]", v ? "text-foreground" : "text-faint")}>{v || "Non renseigné"}</div>
       </div>
       {v && (
         <button
@@ -276,7 +347,11 @@ export function Contacts() {
   const relanceDays = Math.max(1, Number(prospectCfg?.relanceDays) || RELANCE_DAYS);
   const waMode: WaMode = prospectCfg?.waMode === "web" ? "web" : "app";
 
-  const [selected, setSelected] = useState<Row | null>(null);
+  // Sélection : la fiche à droite (grand écran) ou en feuille (téléphone, tablette).
+  const isDesktop = useIsDesktop();
+  const [selId, setSelId] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false); // volet « Noter un échange » de la fiche
   const [formOpen, setFormOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [brand, setBrand] = useState("");
@@ -340,7 +415,6 @@ export function Contacts() {
     const set = new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean));
     if (!set.size) return;
     setRows((prev) => (prev ? prev.map((r) => (r.email && set.has(r.email.trim().toLowerCase()) ? { ...r, last_contacted: when } : r)) : prev));
-    setSelected((prev) => (prev && prev.email && set.has(prev.email.trim().toLowerCase()) ? { ...prev, last_contacted: when } : prev));
     const targets = (rows ?? []).filter((r) => r.email && set.has(r.email.trim().toLowerCase()));
     await Promise.all(targets.map((r) => dbUpdate("contacts", r.id, { last_contacted: when }).catch(() => false)));
   };
@@ -356,7 +430,6 @@ export function Contacts() {
     const set = (vals: Partial<Row>) => {
       const apply = (r: Row): Row => (r.id === row.id ? ({ ...r, ...vals } as Row) : r);
       setRows((prev) => (prev ? prev.map(apply) : prev));
-      setSelected((prev) => (prev && prev.id === row.id ? apply(prev) : prev));
     };
     set({ touches: local, ...(buildTouchesPatch(local, row.last_contacted) as Partial<Row>) });
     const res = await updateTouches(row.id, change);
@@ -396,10 +469,41 @@ export function Contacts() {
     logTouch(row, "whatsapp");
   };
 
+  // Le filtre par tag se combine avec la recherche existante.
+  // NB : calcul simple (pas de hook) placé AVANT les retours anticipés, car la fiche
+  // affichée (et donc l'historique Gmail chargé) en dépend.
+  const filtered = (rows ?? []).filter((row) => {
+    if (tagFilter === CREATOR_FILTER) {
+      if (!(row.creator ?? "").trim()) return false;
+    } else {
+      const tagOk = tagFilter === ALL_TAGS || (row.tag ?? "").trim() === tagFilter;
+      if (!tagOk) return false;
+    }
+    // Filtre « déjà échangé » (dernier mail suivi OU touche manuelle).
+    if (contactFilter !== "all") {
+      const list = parseTouches(row.touches);
+      const contacted = !!row.last_contacted || list.length > 0;
+      if (contactFilter === "contacted" && !contacted) return false;
+      if (contactFilter === "never" && contacted) return false;
+      if (contactFilter === "relancer" && !needsRelance(list, row.last_contacted, relanceDays)) return false;
+    }
+    // Filtre par ville.
+    if (cityFilter && (row.city ?? "").trim().toLowerCase() !== cityFilter.toLowerCase()) return false;
+    return matchQuery(query, row.brand, row.person, row.role, row.email, row.tag);
+  });
+
+  // Fiche affichée : grand écran = le contact choisi (sinon le 1er de la liste) ;
+  // téléphone / tablette = le contact touché, dans une feuille.
+  const showInspector = isDesktop && (rows?.length ?? 0) > 0;
+  const inspected = showInspector ? filtered.find((r) => r.id === selId) ?? filtered[0] ?? null : null;
+  const sheetRow = !isDesktop && sheetOpen ? (rows ?? []).find((r) => r.id === selId) ?? null : null;
+  const selected = inspected ?? sheetRow;
+
   const [history, setHistory] = useState<MailMsg[] | null>(null);
   const [historyBusy, setHistoryBusy] = useState(false);
   useEffect(() => {
     setHistory(null);
+    setHistoryBusy(false);
     const email = selected?.email?.trim().toLowerCase();
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
     let alive = true;
@@ -425,7 +529,7 @@ export function Contacts() {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id]);
+  }, [selected?.id, selected?.email]);
 
   useEffect(() => {
     let active = true;
@@ -552,7 +656,7 @@ export function Contacts() {
     setAttachments([]);
     setMailSeed((n) => n + 1);
     setMailOpen(true);
-    setSelected(null);
+    setSheetOpen(false); // la feuille (téléphone) laisse place au composeur ; la fiche du grand écran reste
   };
 
   // Bascule le mail rédigé vers Spark (destinataires, objet, texte ; les pièces
@@ -630,7 +734,7 @@ export function Contacts() {
         if (okList.length === 0) {
           if (firstErr === "google_non_connecte" || firstErr === "gmail_scope_manquant")
             toast("Reconnecte Google (avec les droits Gmail) dans l'app.");
-          else toast("Envoi Gmail échoué — réessaie");
+          else toast("Envoi Gmail échoué, réessaie");
           return;
         }
         // Seuls les envois réussis comptent comme « contactés ».
@@ -651,7 +755,7 @@ export function Contacts() {
           const d = (res?.detail ?? "").toLowerCase();
           if (d.includes("domain") || d.includes("verif") || d.includes("testing"))
             toast("L'envoi automatique TTP n'est pas encore prêt (domaine à vérifier). Envoie via Gmail en attendant.");
-          else toast(res?.detail ? `Échec : ${res.detail}` : "Envoi échoué — réessaie");
+          else toast(res?.detail ? `Échec : ${res.detail}` : "Envoi échoué, réessaie");
           return;
         }
         toast(`Email envoyé ✓ (${res.sent}/${res.total} destinataire${(res.total ?? 0) > 1 ? "s" : ""})`);
@@ -699,7 +803,7 @@ export function Contacts() {
     if (editId) {
       const ok = await dbUpdate("contacts", editId, payload);
       if (!ok) {
-        toast("Erreur — réessaie");
+        toast("Erreur, réessaie");
         return;
       }
       const next = currentRows.map((r) => (r.id === editId ? ({ ...r, ...payload } as Row) : r));
@@ -709,7 +813,7 @@ export function Contacts() {
     } else {
       const created = await dbInsert("contacts", { ...payload, tone: "indigo", sort_order: nextOrder(currentRows) });
       if (!created) {
-        toast("Erreur — réessaie");
+        toast("Erreur, réessaie");
         return;
       }
       const next = [created as unknown as Row, ...currentRows];
@@ -780,7 +884,7 @@ export function Contacts() {
         .insert(payload)
         .select("*");
       if (error) {
-        toast("Échec de l'import — vérifie le fichier");
+        toast("Échec de l'import, vérifie le fichier");
         return;
       }
       const inserted = (data as Row[]) ?? [];
@@ -796,28 +900,493 @@ export function Contacts() {
     }
   };
 
-  // Le filtre par tag se combine avec la recherche existante.
   const hasCreatorContacts = currentRows.some((r) => (r.creator ?? "").trim());
-  const filtered = currentRows.filter((row) => {
-    if (tagFilter === CREATOR_FILTER) {
-      if (!(row.creator ?? "").trim()) return false;
-    } else {
-      const tagOk = tagFilter === ALL_TAGS || (row.tag ?? "").trim() === tagFilter;
-      if (!tagOk) return false;
-    }
-    // Filtre « déjà échangé » (dernier mail suivi OU touche manuelle).
-    if (contactFilter !== "all") {
-      const list = parseTouches(row.touches);
-      const contacted = !!row.last_contacted || list.length > 0;
-      if (contactFilter === "contacted" && !contacted) return false;
-      if (contactFilter === "never" && contacted) return false;
-      if (contactFilter === "relancer" && !needsRelance(list, row.last_contacted, relanceDays)) return false;
-    }
-    // Filtre par ville.
-    if (cityFilter && (row.city ?? "").trim().toLowerCase() !== cityFilter.toLowerCase()) return false;
-    return matchQuery(query, row.brand, row.person, row.role, row.email, row.tag);
-  });
 
+  // Choisir un contact : fiche de droite (grand écran) ou feuille (téléphone, tablette).
+  const pick = (id: string) => {
+    if (id !== selId) {
+      setLogOpen(false);
+      setTouchDel(null);
+    }
+    setSelId(id);
+    if (!isDesktop) setSheetOpen(true);
+  };
+  const closeSheet = () => {
+    setSheetOpen(false);
+    setLogOpen(false);
+    setTouchDel(null);
+  };
+  // Modifier depuis la feuille : on la ferme pour laisser voir le formulaire.
+  const editRow = (r: Row) => {
+    setSheetOpen(false);
+    startEdit(r);
+  };
+  const trashRow = async (row: Row) => {
+    if (await dbTrash("contacts", row.id, row.brand, row.person)) {
+      setRows(currentRows.filter((r) => r.id !== row.id));
+      if (selId === row.id) closeSheet();
+      toast("Déplacé dans la corbeille");
+    } else toast("Erreur, réessaie");
+  };
+  const copyCard = (r: Row) => {
+    const text = [r.brand, personRole(r), r.email, r.phone].filter((s) => s && s.trim() && s.trim() !== "—").join("\n");
+    navigator.clipboard?.writeText(text);
+    toast("Fiche copiée ✓");
+  };
+  const copyEmail = (r: Row) => {
+    navigator.clipboard?.writeText(r.email);
+    toast("Email copié ✓");
+  };
+  // Menu ⋯ : toutes les actions d'un contact (ligne et fiche).
+  const rowActions = (row: Row, withCard = false) => [
+    ...(waLink(row.phone) ? [{ key: "wa", label: "WhatsApp (note le contact)", icon: MessageCircle, onClick: () => openWhatsApp(row) }] : []),
+    ...(row.email
+      ? [
+          { key: "email", label: "Envoyer un email", icon: Mail, onClick: () => openMail(row) },
+          { key: "spark", label: "Mail pré-rempli dans Spark", icon: Send, onClick: () => openSpark(row) },
+          { key: "copy", label: "Copier l'email", icon: Copy, onClick: () => copyEmail(row) },
+        ]
+      : []),
+    ...(withCard ? [{ key: "card", label: "Copier la fiche", icon: ClipboardList, onClick: () => copyCard(row) }] : []),
+    { key: "edit", label: "Modifier", icon: Pencil, onClick: () => editRow(row) },
+    {
+      key: "delete",
+      label: "Supprimer",
+      icon: Trash2,
+      danger: true,
+      onClick: () => void trashRow(row),
+      confirm: { title: "Supprimer le contact", message: `Supprimer « ${row.brand} » ? Tu pourras le restaurer depuis la corbeille.` },
+    },
+  ];
+
+  // Synthèse (4 cases) : mêmes comptes que l'ancien bento.
+  const total = currentRows.length;
+  const contactedCount = currentRows.filter((r) => r.last_contacted || parseTouches(r.touches).length > 0).length;
+  const relancerCount = currentRows.filter((r) => needsRelance(parseTouches(r.touches), r.last_contacted, relanceDays)).length;
+  const withEmail = currentRows.filter((r) => (r.email ?? "").trim()).length;
+  const neverRows = currentRows.filter((r) => !r.last_contacted && parseTouches(r.touches).length === 0);
+  const neverCats = new Set(neverRows.map((r) => (r.tag ?? "").trim()).filter(Boolean)).size;
+
+  // ── Ligne de la liste ──
+  // Largeur suivie par conteneur (@…) : la colonne principale rétrécit quand la fiche est ouverte à droite.
+  const renderRow = (row: Row) => {
+    const info = relanceInfo(parseTouches(row.touches), row.last_contacted, relanceDays);
+    const on = showInspector && inspected?.id === row.id;
+    const sub = personRole(row);
+    const wa = waLink(row.phone);
+    // Action de la ligne : « Relancer » quand le cycle est écoulé, sinon « Écrire » ; WhatsApp sans email.
+    const act = row.email
+      ? info.due
+        ? { label: "Relancer", title: "Ouvre un mail de relance pré-rempli dans Spark et note la relance", run: () => openSpark(row), filled: true }
+        : { label: "Écrire", title: "Écrire un email à ce contact", run: () => openMail(row), filled: on }
+      : wa
+        ? { label: info.due ? "Relancer" : "WhatsApp", title: "Ouvre WhatsApp et note le contact", run: () => openWhatsApp(row), filled: info.due || on }
+        : null;
+    const last =
+      info.days == null ? (
+        <span className="text-muted-foreground">{info.contacted ? "Contacté" : "Jamais contacté"}</span>
+      ) : info.due ? (
+        <span className={cn("font-semibold", TONE_TEXT.wait)}>{agoShort(info.days)} · à relancer</span>
+      ) : (
+        <span className="font-semibold text-foreground">{agoLabel(info.days)}</span>
+      );
+    return (
+      <li key={row.id}>
+        <div
+          role="button"
+          tabIndex={0}
+          aria-current={on ? "true" : undefined}
+          onClick={() => pick(row.id)}
+          onKeyDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              pick(row.id);
+            }
+          }}
+          className={cn(
+            "flex cursor-pointer items-center gap-3 rounded-[16px] px-2.5 py-2.5 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 sm:px-3",
+            on ? "bg-primary/[0.06] ring-[1.5px] ring-inset ring-primary" : "hover:bg-rowhover",
+          )}
+        >
+          {/* Tuile : logo de la marque (trouvé automatiquement), sinon initiales */}
+          <MailAvatar
+            name={row.person}
+            email={row.email}
+            brand={row.brand}
+            brandDomain={brandDomainFrom(currentRows, row.brand)}
+            className="h-10 w-10 rounded-[10px]"
+            fallback={tileInitials(row)}
+            fallbackClassName="bg-field text-[12px] font-bold text-foreground"
+          />
+
+          {/* Marque + personne · rôle */}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[14px] font-semibold text-foreground">{row.brand}</div>
+            {sub && <div className="mt-0.5 truncate text-[12px] text-muted-foreground">{sub}</div>}
+            <BrandIgInline ig={row.ig} className="mt-0.5 block truncate text-[11px] text-faint" />
+            {/* Colonne étroite : dernier échange et catégorie passent sous le nom */}
+            <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[12px] @2xl:hidden">
+              <span className="min-w-0 truncate @lg:hidden">{last}</span>
+              {row.tag && <span className="max-w-[45%] shrink-0 truncate rounded-full bg-field px-2 py-0.5 text-[11px] font-medium text-muted-foreground">{row.tag}</span>}
+            </div>
+          </div>
+
+          {/* Attribution : contact ajouté par un créateur */}
+          {row.creator && (
+            <span
+              className="hidden shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[11px] font-medium text-signaltext @3xl:inline"
+              title={`Ajouté par ${titleCase(row.creator)}`}
+            >
+              ↳ {titleCase(row.creator)}
+            </span>
+          )}
+
+          {/* Dernier échange */}
+          <div className="hidden shrink-0 whitespace-nowrap text-right text-[12px] @lg:block">{last}</div>
+
+          {/* Catégorie */}
+          {row.tag && (
+            <span className="hidden max-w-[120px] shrink-0 truncate whitespace-nowrap rounded-full bg-field px-2.5 py-1 text-[11px] font-medium text-muted-foreground @2xl:inline">
+              {row.tag}
+            </span>
+          )}
+
+          {/* Écrire / Relancer */}
+          {act && (
+            <button
+              type="button"
+              title={act.title}
+              onClick={(e) => {
+                e.stopPropagation();
+                act.run();
+              }}
+              className={cn(
+                "hidden h-8 shrink-0 items-center rounded-full px-3.5 text-[12px] font-semibold transition-colors @lg:inline-flex",
+                act.filled ? "bg-primary text-primary-foreground hover:opacity-90" : "bg-field text-foreground hover:bg-rowhover",
+              )}
+            >
+              {act.label}
+            </button>
+          )}
+
+          {/* Toutes les actions (le clic ne sélectionne pas la ligne) */}
+          <span className="-mr-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <ActionMenu items={rowActions(row)} />
+          </span>
+        </div>
+      </li>
+    );
+  };
+
+  // ── Fiche du contact (colonne de droite ou feuille) ──
+  const renderInspector = (row: Row, inSheet: boolean) => {
+    const list = sortTouches(parseTouches(row.touches));
+    const info = relanceInfo(list, row.last_contacted, relanceDays);
+    const kindNext = nextKind(list, row.last_contacted);
+    const last = lastTouch(list);
+    const sub = personRole(row);
+    const fn = firstNameOf(row);
+    const wa = waLink(row.phone);
+    const CANAL_BTNS: { canal: TouchCanal; icon: LucideIcon }[] = [
+      { canal: "whatsapp", icon: MessageCircle },
+      { canal: "instagram", icon: AtSign },
+      { canal: "tel", icon: Phone },
+      { canal: "linkedin", icon: BriefcaseBusiness },
+    ];
+    const infoRow = "flex min-h-11 items-center justify-between gap-3 px-3.5 py-2";
+    const chip = "flex h-8 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium transition-colors";
+    // Action principale : écrire un mail, sinon WhatsApp, sinon compléter la fiche.
+    const primary = row.email
+      ? { label: fn ? `Écrire à ${fn}` : "Écrire un mail", icon: Mail, run: () => openMail(row) }
+      : wa
+        ? { label: fn ? `WhatsApp à ${fn}` : "WhatsApp", icon: MessageCircle, run: () => openWhatsApp(row) }
+        : { label: "Ajouter un email", icon: Pencil, run: () => editRow(row) };
+    return (
+      <>
+        <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-1 [&>*]:shrink-0">
+          {/* En-tête : tuile, marque, personne · rôle, menu ⋯ */}
+          <div className="flex items-start gap-3">
+            <MailAvatar
+              name={row.person}
+              email={row.email}
+              brand={row.brand}
+              brandDomain={brandDomainFrom(currentRows, row.brand)}
+              className="h-14 w-14 rounded-[16px]"
+              fallback={tileInitials(row)}
+              fallbackClassName="bg-field text-[18px] font-bold text-foreground"
+            />
+            <div className="min-w-0 flex-1 pt-0.5">
+              <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-foreground [overflow-wrap:anywhere]">{row.brand}</h2>
+              {sub && <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{sub}</p>}
+              <BrandIgInline ig={row.ig} className="mt-0.5 block truncate text-[12px] text-faint" />
+            </div>
+            <div className="-mr-1.5 -mt-1 flex shrink-0 items-center">
+              <ActionMenu items={rowActions(row, true)} />
+              {inSheet && (
+                <button
+                  type="button"
+                  onClick={closeSheet}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                  aria-label="Fermer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* L'essentiel */}
+          <div className="divide-y divide-border rounded-[16px] bg-panel text-[13px]">
+            <div className={infoRow}>
+              <span className="text-muted-foreground">Email</span>
+              {row.email ? (
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate font-medium text-foreground" title={row.email}>Disponible</span>
+                  <button
+                    type="button"
+                    onClick={() => copyEmail(row)}
+                    title={`Copier ${row.email}`}
+                    className="h-7 shrink-0 rounded-full bg-field px-2.5 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover"
+                  >
+                    Copier
+                  </button>
+                </span>
+              ) : (
+                <span className="text-faint">Non renseigné</span>
+              )}
+            </div>
+            <div className={infoRow}>
+              <span className="text-muted-foreground">Catégorie</span>
+              <span className="truncate font-medium text-foreground">{row.tag || "Aucune"}</span>
+            </div>
+            <div className={infoRow}>
+              <span className="text-muted-foreground">Dernier échange</span>
+              <span className={cn("truncate font-medium", info.due ? TONE_TEXT.wait : "text-foreground")}>
+                {info.days == null ? (info.contacted ? "Contacté" : "Jamais contacté") : agoLabel(info.days)}
+              </span>
+            </div>
+            {row.creator && (
+              <div className={infoRow}>
+                <span className="text-muted-foreground">Ajouté par</span>
+                <span className="truncate font-medium text-signaltext">{titleCase(row.creator)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Prochaine relance : avancement du cycle de recontact */}
+          <section>
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="text-[13px] font-semibold text-foreground">Prochaine relance</h3>
+              <span className={cn("text-right text-[13px] font-semibold", info.due ? TONE_TEXT.wait : info.daysLeft == null ? "text-muted-foreground" : "text-foreground")}>
+                {info.daysLeft == null ? "Après le premier contact" : info.due ? "À relancer" : relanceCountdown(info.daysLeft)}
+              </span>
+            </div>
+            <div
+              className="mt-2 h-1.5 overflow-hidden rounded-full bg-field"
+              role="progressbar"
+              aria-label="Cycle de relance"
+              aria-valuemin={0}
+              aria-valuemax={relanceDays}
+              aria-valuenow={Math.min(relanceDays, info.days ?? 0)}
+            >
+              <div
+                className={cn("h-full rounded-full transition-[width] duration-500 motion-reduce:transition-none", info.due ? TONE_DOT.wait : "bg-primary")}
+                style={{ width: `${Math.round(info.progress * 100)}%` }}
+              />
+            </div>
+            <p className="mt-2 text-[12px] leading-snug text-muted-foreground">
+              Le contact passe dans « À relancer » après {relanceDays} jours sans échange.
+            </p>
+            {info.days != null && !info.due && info.days < Math.min(RECENT_DAYS, relanceDays) && (
+              <p className={cn("mt-1 text-[12px] font-medium", TONE_TEXT.wait)}>Échange récent : évite de relancer trop vite.</p>
+            )}
+          </section>
+
+          {/* Échanges : journal multi-canal, du plus récent au plus ancien */}
+          <section>
+            <h3 className="mb-2.5 text-[13px] font-semibold text-foreground">Échanges</h3>
+            {list.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">Aucun échange noté pour l'instant.</p>
+            ) : (
+              <ol className="flex flex-col">
+                {list.map((t, i) => (
+                  <li key={t.id} className="relative flex items-start gap-3 pb-3 last:pb-0">
+                    {i < list.length - 1 && <span aria-hidden className="absolute bottom-0 left-[4px] top-4 w-px bg-border" />}
+                    <span aria-hidden className={cn("relative mt-[5px] h-[9px] w-[9px] shrink-0 rounded-full", TONE_DOT[KIND_TONE[t.kind]])} />
+                    <div className="min-w-0 flex-1 text-[13px] leading-snug">
+                      <span className="font-medium text-foreground">{KIND_LABELS[t.kind]}</span>
+                      <span className="text-muted-foreground"> · {CANAL_LABELS[t.canal]}</span>
+                      {t.note && <div className="text-[12px] text-muted-foreground">{t.note}</div>}
+                    </div>
+                    <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">{fmtMailDate(t.date)}</span>
+                    {touchDel === t.id ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTouchDel(null);
+                          void saveTouches(row, { remove: t.id });
+                        }}
+                        className="shrink-0 rounded-full bg-danger/10 px-2 py-0.5 text-[11px] font-semibold text-dangertext"
+                      >
+                        Supprimer ?
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setTouchDel(t.id)}
+                        className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-faint transition-colors hover:text-dangertext"
+                        aria-label="Supprimer cet échange"
+                        title="Supprimer cet échange"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+
+          {/* Historique Gmail */}
+          {row.email && (
+            <section>
+              <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-foreground">Historique email</h3>
+              {historyBusy ? (
+                <p className="text-[12px] text-muted-foreground">Chargement des mails…</p>
+              ) : !history ? null : history.length === 0 ? (
+                <p className="text-[12px] text-muted-foreground">Aucun échange trouvé dans Gmail.</p>
+              ) : (
+                <div className="flex max-h-52 flex-col gap-1.5 overflow-y-auto pr-1">
+                  {history.map((m) => (
+                    <div key={m.id} className="rounded-[12px] bg-panel px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={cn("inline-flex items-center gap-1 text-[11px] font-semibold", m.direction === "in" ? "text-signaltext" : "text-primary")}>
+                          {m.direction === "in" ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
+                          {m.direction === "in" ? "Reçu" : "Envoyé"}
+                        </span>
+                        <span className="shrink-0 text-[11px] text-faint">{fmtMailDate(m.date)}</span>
+                      </div>
+                      <div className="mt-0.5 truncate text-[12px] font-medium text-foreground">{m.subject || "(sans objet)"}</div>
+                      <div className="truncate text-[11px] text-faint">{m.snippet}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Instagram de la marque */}
+          {row.instagram?.trim() && !row.creator && (
+            <BrandIgPanel
+              contactId={row.id}
+              ig={row.ig}
+              onChange={(ig) => setRows((prev) => (prev ? prev.map((r) => (r.id === row.id ? { ...r, ig } : r)) : prev))}
+            />
+          )}
+
+          {/* Coordonnées (copiables) */}
+          <section>
+            <h3 className="mb-2 text-[13px] font-semibold text-foreground">Coordonnées</h3>
+            <div className="flex flex-col gap-1.5">
+              <CopyField label="Marque / Entreprise" value={row.brand} />
+              {row.first_name || row.last_name ? (
+                <>
+                  {row.first_name && <CopyField label="Prénom" value={row.first_name} />}
+                  {row.last_name && <CopyField label="Nom de famille" value={row.last_name} />}
+                </>
+              ) : (
+                <CopyField label="Personne" value={row.person} />
+              )}
+              <CopyField label="Rôle" value={row.role} />
+              <CopyField label="Email" value={row.email} />
+              <CopyField label="Téléphone" value={row.phone} />
+              {row.instagram && <CopyField label="Instagram" value={row.instagram} />}
+              {row.city && <CopyField label="Ville" value={row.city} />}
+            </div>
+          </section>
+        </div>
+
+        {/* Actions, collées en bas de la fiche */}
+        <div className="mt-4 flex shrink-0 flex-col gap-2 border-t border-border pt-4">
+          {logOpen && (
+            <div className="flex flex-col gap-2 rounded-[14px] bg-panel p-3">
+              <span className="text-[12px] font-medium text-muted-foreground">
+                Noter {kindNext === "contact" ? "le premier contact" : "une relance"} à aujourd'hui
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {row.email && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLogOpen(false);
+                      openSpark(row);
+                    }}
+                    title={`Ouvre un mail pré-rempli (${kindNext === "contact" ? "premier contact" : "relance"}) dans Spark et le note`}
+                    className={cn(chip, "bg-primary text-primary-foreground hover:opacity-90")}
+                  >
+                    <Mail className="h-3.5 w-3.5" /> Spark
+                  </button>
+                )}
+                {CANAL_BTNS.map(({ canal, icon: CI }) => (
+                  <button
+                    key={canal}
+                    type="button"
+                    onClick={() => {
+                      setLogOpen(false);
+                      if (canal === "whatsapp" && wa) openWhatsApp(row);
+                      else logTouch(row, canal);
+                    }}
+                    title={`Noter : ${kindNext === "contact" ? "premier contact" : "relance"} via ${CANAL_LABELS[canal]}`}
+                    className={cn(chip, "bg-surface text-foreground hover:bg-rowhover")}
+                  >
+                    <CI className="h-3.5 w-3.5" /> {CANAL_LABELS[canal]}
+                  </button>
+                ))}
+                {list.length > 0 && last?.kind !== "reponse" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLogOpen(false);
+                      logTouch(row, last?.canal ?? "autre", "reponse");
+                    }}
+                    className={cn(chip, "font-semibold", TONE_SOFT.ok)}
+                  >
+                    <Check className="h-3.5 w-3.5" /> Réponse reçue
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] leading-snug text-faint">Spark ouvre un mail pré-rempli, WhatsApp la conversation.</p>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={primary.run}
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            <primary.icon className="h-4 w-4 shrink-0" />
+            <span className="truncate">{primary.label}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setLogOpen((v) => !v)}
+            aria-expanded={logOpen}
+            className={cn(
+              "flex h-11 w-full items-center justify-center gap-2 rounded-full px-4 text-[14px] font-semibold transition-colors",
+              logOpen ? "bg-primary/[0.08] text-primary" : "bg-field text-foreground hover:bg-rowhover",
+            )}
+          >
+            <NotebookPen className="h-4 w-4 shrink-0" /> Noter un échange
+          </button>
+        </div>
+      </>
+    );
+  };
+
+  const kpiCell = "flex min-w-0 flex-col gap-1 p-4 sm:p-5";
+  const kpiLabel = "text-[12px] font-medium text-muted-foreground";
+  const kpiValue = "text-[26px] font-bold leading-tight tracking-[-0.02em] tabular-nums text-foreground";
+  const contactedPct = total ? Math.round((contactedCount / total) * 100) : 0;
 
   return (
     <>
@@ -841,534 +1410,241 @@ export function Contacts() {
           />
           <button
             type="button"
-            onClick={() => csvInputRef.current?.click()}
-            disabled={importing}
-            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
-            title="Importer un fichier CSV"
-          >
-            <Upload className="h-3.5 w-3.5" />
-            <span>{importing ? "Import…" : "Importer"}</span>
-          </button>
-          <button
-            type="button"
-            onClick={exportCsv}
-            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-            title="Exporter en CSV"
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span>Exporter</span>
-          </button>
-          <button
-            type="button"
             onClick={() => openMail()}
-            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="flex h-10 items-center gap-1.5 rounded-full bg-surface px-4 text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover"
             title="Écrire un email (choisir les destinataires)"
           >
-            <Mail className="h-3.5 w-3.5" />
+            <Mail className="h-4 w-4" />
             <span>Écrire un mail</span>
           </button>
-          <AddButton label="Contact" onClick={openAdd} />
+          {/* Importer / Exporter (CSV) */}
+          <ActionMenu
+            buttonClassName="h-10 w-10 bg-surface text-foreground hover:bg-rowhover"
+            items={[
+              {
+                key: "import",
+                label: importing ? "Import…" : "Importer un CSV",
+                icon: Upload,
+                onClick: () => {
+                  if (!importing) csvInputRef.current?.click();
+                },
+              },
+              { key: "export", label: "Exporter en CSV", icon: Download, onClick: exportCsv },
+            ]}
+          />
+          {iosPhone ? (
+            <AddButton label="Contact" onClick={openAdd} />
+          ) : (
+            <button
+              type="button"
+              onClick={openAdd}
+              aria-label="Ajouter un contact"
+              title="Ajouter un contact"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              <Plus className="h-5 w-5" />
+            </button>
+          )}
         </div>
       </PageHeaderRow>
 
-      {/* Synthèse (bento) */}
-      {currentRows.length > 0 && (() => {
-        const total = currentRows.length;
-        const contacted = currentRows.filter((r) => r.last_contacted || parseTouches(r.touches).length > 0).length;
-        const relancer = currentRows.filter((r) => needsRelance(parseTouches(r.touches), r.last_contacted, relanceDays)).length;
-        const withEmail = currentRows.filter((r) => (r.email ?? "").trim()).length;
-        const tagCounts = tagList.map((t) => currentRows.filter((r) => (r.tag ?? "").trim() === t).length);
-        return (
-          <StatsBento
-            className="mb-5"
-            primary={{ eyebrow: "Répertoire", value: String(total), caption: `${withEmail} avec email · ${contacted} déjà contacté${contacted > 1 ? "s" : ""}.` }}
-            bars={{ label: "Par catégorie", value: `${tagList.length} catégorie${tagList.length > 1 ? "s" : ""}`, series: tagCounts.length ? tagCounts : [0] }}
-            small={{ value: String(relancer), label: `À relancer (${relanceDays} j+)` }}
-            accent={{ value: String(total - contacted), label: "Jamais contactés", icon: Mail }}
-          />
-        );
-      })()}
-
-      {/* Mode iPhone : les trois filtres dans une feuille « Filtres » */}
-      {iosPhone ? (
-        <FilterPanel
-          className="mb-4"
-          activeCount={(tagFilter !== ALL_TAGS ? 1 : 0) + (contactFilter !== "all" ? 1 : 0) + (cityFilter ? 1 : 0)}
-          onClear={() => {
-            setTagFilter(ALL_TAGS);
-            setContactFilter("all");
-            setCityFilter("");
-          }}
-          groups={[
-            {
-              id: "tag",
-              label: "Catégorie",
-              value: tagFilter,
-              onChange: setTagFilter,
-              options: [
-                { value: ALL_TAGS, label: "Tous" },
-                ...tagList.map((t) => ({ value: t, label: t })),
-                ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "Ajoutés par les créateurs" }] : []),
-              ],
-            },
-            {
-              id: "suivi",
-              label: "Suivi",
-              value: contactFilter,
-              onChange: (v) => setContactFilter(v as "all" | "contacted" | "never" | "relancer"),
-              options: [
-                { value: "all", label: "Tous" },
-                { value: "contacted", label: "Déjà contactés" },
-                { value: "never", label: "Jamais contactés" },
-                { value: "relancer", label: "À relancer" },
-              ],
-            },
-          ]}
-          extra={cityList.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              <span className="px-1 text-[13px] font-medium uppercase tracking-[0.02em] text-muted-foreground">Ville</span>
-              <Picker ariaLabel="Filtrer par ville" className="w-full" value={cityFilter} onChange={setCityFilter}
-                options={[{ value: "", label: "Toutes les villes" }, ...cityList.map((c) => ({ value: c, label: c }))]} />
+      <div className={cn(showInspector && "grid grid-cols-[minmax(0,1fr)_320px] items-start gap-5")}>
+        {/* Colonne principale */}
+        <div className="@container min-w-0">
+          {/* Synthèse : quatre cases dans un seul panneau */}
+          {total > 0 && (
+            <div className="mb-5 grid grid-cols-2 overflow-hidden rounded-[20px] bg-surface @2xl:grid-cols-4">
+              <div className={cn(kpiCell, "border-b border-r border-border @2xl:border-b-0")}>
+                <span className={kpiLabel}>Répertoire</span>
+                <span className={kpiValue}>{total}</span>
+                <span className="text-[12px] text-muted-foreground">{withEmail} avec email</span>
+              </div>
+              <div className={cn(kpiCell, "border-b border-border @2xl:border-b-0 @2xl:border-r")}>
+                <span className={kpiLabel}>Déjà contactés</span>
+                <span className={kpiValue}>{contactedCount}</span>
+                <div
+                  className="mt-1 h-1 overflow-hidden rounded-full bg-field"
+                  role="progressbar"
+                  aria-label="Part du répertoire déjà contactée"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={contactedPct}
+                >
+                  <div className="h-full rounded-full bg-primary transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${contactedPct}%` }} />
+                </div>
+                <span className="text-[12px] text-muted-foreground">{contactedPct} % du répertoire</span>
+              </div>
+              <div className={cn(kpiCell, "border-r border-border", TONE_SOFT.wait)}>
+                <span className="text-[12px] font-medium">À relancer, {relanceDays} j et plus</span>
+                <span className={cn(kpiValue, TONE_TEXT.wait)}>{relancerCount}</span>
+                <button
+                  type="button"
+                  onClick={() => setContactFilter(contactFilter === "relancer" ? "all" : "relancer")}
+                  aria-pressed={contactFilter === "relancer"}
+                  className="self-start text-[12px] font-semibold underline-offset-2 hover:underline"
+                >
+                  {contactFilter === "relancer" ? "Tout afficher" : "Voir la liste"}
+                </button>
+              </div>
+              <div className={kpiCell}>
+                <span className={kpiLabel}>Jamais contactés</span>
+                <span className={kpiValue}>{neverRows.length}</span>
+                <span className="text-[12px] text-muted-foreground">
+                  {neverCats > 0 ? `dans ${neverCats} catégorie${neverCats > 1 ? "s" : ""}` : `${tagList.length} catégorie${tagList.length > 1 ? "s" : ""}`}
+                </span>
+              </div>
             </div>
-          ) : undefined}
-        />
-      ) : (<>
-      {/* Barre de filtres par tag (pastilles desktop · sélecteur mobile) */}
-      <FilterBar
-        className="mb-4"
-        value={tagFilter}
-        onChange={setTagFilter}
-        options={[
-          { value: ALL_TAGS, label: "Tous" },
-          ...tagList.map((t) => ({ value: t, label: t })),
-          ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "Ajoutés par les créateurs" }] : []),
-        ]}
-      />
+          )}
 
-      {/* Filtres : « déjà échangé » (suivi de contact) + ville */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex min-w-0 max-w-full items-start gap-1.5 md:items-center">
-          {/* Mobile : icône alignée sur la 1re rangée de pastilles (pas centrée sur les deux) */}
-          <Clock className="mt-[13px] h-3.5 w-3.5 shrink-0 text-faint sm:mt-0 sm:self-center" />
-          {/* Mobile : les onglets passent à la ligne (rien ne sort de l’écran) ; desktop : une seule ligne */}
-          <Tabs
-            className="min-w-0 max-w-full"
-            label="Filtrer par suivi de contact"
-            items={[
-              { value: "all", label: "Tous" },
-              { value: "contacted", label: "Déjà contactés" },
-              { value: "never", label: "Jamais contactés" },
-              { value: "relancer", label: "À relancer" },
-            ]}
-            value={contactFilter}
-            onValueChange={(v) => setContactFilter(v as "all" | "contacted" | "never" | "relancer")}
-          />
-        </div>
-        {cityList.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <MapPin className="h-3.5 w-3.5 shrink-0 text-faint" />
-            <Picker size="sm" ariaLabel="Filtrer par ville" className="min-w-[170px]" value={cityFilter} onChange={setCityFilter}
-              options={[{ value: "", label: "Toutes les villes" }, ...cityList.map((c) => ({ value: c, label: c }))]} />
-          </div>
-        )}
-      </div>
-      </>)}
-
-      <InlineForm
-        open={formOpen}
-        title={editId ? "Modifier le contact" : "Nouveau contact"}
-        onClose={() => {
-          setFormOpen(false);
-          setEditId(null);
-        }}
-        onSubmit={submit}
-        submitLabel={editId ? "Enregistrer" : "Ajouter"}
-      >
-        <TextField
-          label="Marque / Entreprise"
-          value={brand}
-          onChange={setBrand}
-        />
-        <TextField label="Prénom" value={firstName} onChange={setFirstName} className="sm:min-w-[130px]" />
-        <TextField label="Nom de famille" value={lastName} onChange={setLastName} className="sm:min-w-[130px]" />
-        <TextField label="Rôle" value={role} onChange={setRole} />
-        <SelectField
-          label="Catégorie"
-          value={tag}
-          onChange={setTag}
-          options={TAG_OPTIONS}
-        />
-        <TextField label="Email" value={email} onChange={setEmail} type="email" />
-        <TextField label="Téléphone" value={phone} onChange={setPhone} />
-        <TextField label="Instagram" value={insta} onChange={setInsta} placeholder="@lamarque" className="sm:min-w-[150px]" />
-        <TextField label="Ville" value={city} onChange={setCity} placeholder="Paris" className="sm:min-w-[130px]" />
-      </InlineForm>
-
-      {currentRows.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-surface p-6 text-center text-sm text-muted-foreground shadow-sm">
-          Aucun contact pour l'instant. Ajoute ta première marque avec « + Contact », ou « Importer » un fichier CSV.
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-surface p-6 text-center text-sm text-muted-foreground shadow-sm">
-          {query.trim()
-            ? `Aucun résultat pour « ${query} »`
-            : "Aucun contact pour ce filtre"}
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-2xl border border-border bg-surface divide-y divide-border">
-          {filtered.map((row) => (
-            <div
-              key={row.id}
-              onClick={() => setSelected(row)}
-              className="flex cursor-pointer items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-rowhover"
-            >
-              {/* Avatar : photo ou logo de la marque (trouvé automatiquement), sinon initiales */}
-              <MailAvatar
-                name={row.person}
-                email={row.email}
-                brand={row.brand}
-                brandDomain={brandDomainFrom(currentRows ?? [], row.brand)}
-                className="h-[38px] w-[38px] rounded-[9px]"
-                fallback={initials(row.person)}
-                fallbackClassName="bg-panel text-[11px] font-bold text-foreground"
-              />
-
-              {/* Marque + person · role */}
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-semibold text-foreground">
-                  {row.brand}
+          {/* Mode iPhone : les trois filtres dans une feuille « Filtres » */}
+          {iosPhone ? (
+            <FilterPanel
+              className="mb-4"
+              activeCount={(tagFilter !== ALL_TAGS ? 1 : 0) + (contactFilter !== "all" ? 1 : 0) + (cityFilter ? 1 : 0)}
+              onClear={() => {
+                setTagFilter(ALL_TAGS);
+                setContactFilter("all");
+                setCityFilter("");
+              }}
+              groups={[
+                {
+                  id: "tag",
+                  label: "Catégorie",
+                  value: tagFilter,
+                  onChange: setTagFilter,
+                  options: [
+                    { value: ALL_TAGS, label: "Tous" },
+                    ...tagList.map((t) => ({ value: t, label: t })),
+                    ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "Ajoutés par les créateurs" }] : []),
+                  ],
+                },
+                {
+                  id: "suivi",
+                  label: "Suivi",
+                  value: contactFilter,
+                  onChange: (v) => setContactFilter(v as ContactFilter),
+                  options: [
+                    { value: "all", label: "Tous" },
+                    { value: "contacted", label: "Déjà contactés" },
+                    { value: "never", label: "Jamais contactés" },
+                    { value: "relancer", label: "À relancer" },
+                  ],
+                },
+              ]}
+              extra={cityList.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  <span className="px-1 text-[13px] font-medium uppercase tracking-[0.02em] text-muted-foreground">Ville</span>
+                  <Picker ariaLabel="Filtrer par ville" className="w-full" value={cityFilter} onChange={setCityFilter}
+                    options={[{ value: "", label: "Toutes les villes" }, ...cityList.map((c) => ({ value: c, label: c }))]} />
                 </div>
-                <div className="mt-0.5 truncate text-[11px] font-normal text-faint">
-                  {row.person} · {row.role}
-                </div>
-                <BrandIgInline ig={row.ig} className="mt-0.5 block truncate text-[10px] text-faint" />
-                {/* Mobile : le tag passe sous le nom pour libérer la largeur du sous-titre */}
-                {row.tag && (
-                  <span className="mt-1 inline-block max-w-full truncate rounded-full bg-rowhover px-2 py-0.5 align-top text-[10px] font-medium text-muted-foreground sm:hidden">
-                    {row.tag}
-                  </span>
-                )}
-              </div>
-
-              {/* Email — masqué sur mobile */}
-              <div className="hidden max-w-[200px] truncate text-[11px] font-medium text-muted-foreground sm:block">
-                {row.email}
-              </div>
-
-              {/* Attribution : contact ajouté par un créateur */}
-              {row.creator && (
-                <span
-                  className="hidden shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[10px] font-medium text-signaltext sm:inline"
-                  title={`Ajouté par ${titleCase(row.creator)}`}
-                >
-                  ↳ {titleCase(row.creator)}
-                </span>
-              )}
-
-              {/* Récence de contact (dernier email sortant) */}
-              {row.last_contacted && (() => {
-                const d = daysSince(row.last_contacted);
-                if (d == null) return null;
-                const recent = d < RECENT_DAYS;
-                const short = d <= 0 ? "auj." : d === 1 ? "1 j" : d < 30 ? `${d} j` : `${Math.round(d / 30)} m`;
-                return (
-                  <span
-                    title={lastContactLabel(d)}
-                    className={cn(
-                      "hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-medium sm:inline-flex",
-                      recent ? TOO_SOON : GOOD_TO_GO,
-                    )}
-                  >
-                    <Clock className="h-2.5 w-2.5" /> {short}
-                  </span>
-                );
-              })()}
-
-              {/* À relancer : le cycle de recontact est écoulé */}
-              {needsRelance(parseTouches(row.touches), row.last_contacted, relanceDays) && (
-                <span
-                  title={`Dernier échange il y a ${relanceDays} jours ou plus : le cycle de recontact est écoulé`}
-                  className={cn("hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-medium sm:inline-flex", GOOD_TO_GO)}
-                >
-                  <Send className="h-2.5 w-2.5" /> Relancer
-                </span>
-              )}
-
-              {/* Pastille tag */}
-              <span className="hidden shrink-0 whitespace-nowrap rounded-full bg-rowhover px-2.5 py-1 text-[10px] font-medium text-muted-foreground sm:inline">
-                {row.tag}
-              </span>
-
-              {/* Actions */}
-              <ActionMenu
+              ) : undefined}
+            />
+          ) : (
+            /* Catégorie (segments) + suivi de contact + ville */
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <Tabs
+                className="min-w-0 max-w-full"
+                label="Filtrer par catégorie"
                 items={[
-                  ...(waLink(row.phone)
-                    ? [{ key: "wa", label: "WhatsApp (note le contact)", icon: MessageCircle, onClick: () => openWhatsApp(row) }]
-                    : []),
-                  ...(row.email
-                    ? [
-                        { key: "email", label: "Envoyer un email", icon: Mail, onClick: () => openMail(row) },
-                        { key: "copy", label: "Copier l'email", icon: Copy, onClick: () => { navigator.clipboard?.writeText(row.email); toast("Email copié ✓"); } },
-                      ]
-                    : []),
-                  { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(row) },
-                  {
-                    key: "delete",
-                    label: "Supprimer",
-                    icon: Trash2,
-                    danger: true,
-                    onClick: async () => {
-                      if (await dbTrash("contacts", row.id, row.brand, row.person)) {
-                        setRows(currentRows.filter((r) => r.id !== row.id));
-                        toast("Déplacé dans la corbeille");
-                      } else toast("Erreur, réessaie");
-                    },
-                    confirm: { title: "Supprimer le contact", message: `Supprimer « ${row.brand} » ? Tu pourras le restaurer depuis la corbeille.` },
-                  },
+                  { value: ALL_TAGS, label: "Tous" },
+                  ...tagList.map((t) => ({ value: t, label: t })),
+                  ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "Ajoutés par les créateurs" }] : []),
+                ]}
+                value={tagFilter}
+                onValueChange={setTagFilter}
+              />
+              <PillMenu
+                ariaLabel="Filtrer par suivi de contact"
+                label={`Contact : ${CONTACT_FILTER_LABELS[contactFilter]}`}
+                value={contactFilter}
+                active={contactFilter !== "all"}
+                onChange={(v) => setContactFilter(v as ContactFilter)}
+                options={[
+                  { value: "all", label: "Tous" },
+                  { value: "contacted", label: "Déjà contactés" },
+                  { value: "never", label: "Jamais contactés" },
+                  { value: "relancer", label: "À relancer" },
                 ]}
               />
+              {cityList.length > 0 && (
+                <PillMenu
+                  ariaLabel="Filtrer par ville"
+                  icon={<MapPin className="h-3.5 w-3.5 shrink-0 opacity-70" />}
+                  label={cityFilter || "Toutes les villes"}
+                  value={cityFilter}
+                  active={!!cityFilter}
+                  onChange={setCityFilter}
+                  options={[{ value: "", label: "Toutes les villes" }, ...cityList.map((c) => ({ value: c, label: c }))]}
+                />
+              )}
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
-      {/* Fiche détail contact */}
-      {selected && (
-        <Overlay className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClose={() => setSelected(null)}>
+          <InlineForm
+            open={formOpen}
+            title={editId ? "Modifier le contact" : "Nouveau contact"}
+            onClose={() => {
+              setFormOpen(false);
+              setEditId(null);
+            }}
+            onSubmit={submit}
+            submitLabel={editId ? "Enregistrer" : "Ajouter"}
+          >
+            <TextField
+              label="Marque / Entreprise"
+              value={brand}
+              onChange={setBrand}
+            />
+            <TextField label="Prénom" value={firstName} onChange={setFirstName} className="sm:min-w-[130px]" />
+            <TextField label="Nom de famille" value={lastName} onChange={setLastName} className="sm:min-w-[130px]" />
+            <TextField label="Rôle" value={role} onChange={setRole} />
+            <SelectField
+              label="Catégorie"
+              value={tag}
+              onChange={setTag}
+              options={TAG_OPTIONS}
+            />
+            <TextField label="Email" value={email} onChange={setEmail} type="email" />
+            <TextField label="Téléphone" value={phone} onChange={setPhone} />
+            <TextField label="Instagram" value={insta} onChange={setInsta} placeholder="@lamarque" className="sm:min-w-[150px]" />
+            <TextField label="Ville" value={city} onChange={setCity} placeholder="Paris" className="sm:min-w-[130px]" />
+          </InlineForm>
+
+          {currentRows.length === 0 ? (
+            <div className="rounded-[20px] bg-surface p-6 text-center text-sm text-muted-foreground">
+              Aucun contact pour l'instant. Ajoute ta première marque avec « + », ou importe un fichier CSV.
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-[20px] bg-surface p-6 text-center text-sm text-muted-foreground">
+              {query.trim() ? `Aucun résultat pour « ${query} »` : "Aucun contact pour ce filtre"}
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-0.5 rounded-[20px] bg-surface p-1.5">{filtered.map(renderRow)}</ul>
+          )}
+        </div>
+
+        {/* Fiche du contact sélectionné (grand écran) */}
+        {showInspector && (
+          <aside aria-label="Fiche du contact" className="sticky top-5 flex h-[calc(100dvh-4.5rem)] flex-col rounded-[22px] bg-surface p-5">
+            {inspected ? (
+              renderInspector(inspected, false)
+            ) : (
+              <p className="m-auto text-center text-[13px] text-muted-foreground">Aucun contact pour ce filtre.</p>
+            )}
+          </aside>
+        )}
+      </div>
+
+      {/* Fiche en feuille : téléphone et tablette */}
+      {sheetRow && (
+        <Overlay className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" label={sheetRow.brand} onClose={closeSheet}>
           <div
-            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-xl"
+            role="dialog"
+            aria-label={`Fiche ${sheetRow.brand}`}
+            className="flex max-h-[88vh] w-full max-w-md flex-col rounded-[22px] bg-surface p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-4 flex items-start gap-3">
-              <MailAvatar
-                name={selected.person}
-                email={selected.email}
-                brand={selected.brand}
-                brandDomain={brandDomainFrom(currentRows ?? [], selected.brand)}
-                className="h-11 w-11 rounded-xl"
-                fallback={initials(selected.person)}
-                fallbackClassName="bg-muted text-sm font-bold text-foreground"
-              />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-base font-semibold">{selected.brand}</div>
-                <div className="truncate text-xs text-faint">
-                  {selected.person} · {selected.role}
-                </div>
-              </div>
-              <span className="shrink-0 rounded-full bg-rowhover px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
-                {selected.tag}
-              </span>
-              <button
-                type="button"
-                onClick={() => setSelected(null)}
-                className="shrink-0 text-faint transition-colors hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <CopyField label="Marque / Entreprise" value={selected.brand} />
-              {selected.first_name || selected.last_name ? (
-                <>
-                  {selected.first_name && <CopyField label="Prénom" value={selected.first_name} />}
-                  {selected.last_name && <CopyField label="Nom de famille" value={selected.last_name} />}
-                </>
-              ) : (
-                <CopyField label="Personne" value={selected.person} />
-              )}
-              <CopyField label="Rôle" value={selected.role} />
-              <CopyField label="Email" value={selected.email} />
-              <CopyField label="Téléphone" value={selected.phone} />
-              {selected.instagram && <CopyField label="Instagram" value={selected.instagram} />}
-              {selected.city && <CopyField label="Ville" value={selected.city} />}
-            </div>
-
-            {selected.instagram?.trim() && !selected.creator && (
-              <BrandIgPanel
-                contactId={selected.id}
-                ig={selected.ig}
-                onChange={(ig) => {
-                  setSelected((s) => (s && s.id === selected.id ? { ...s, ig } : s));
-                  setRows((prev) => (prev ? prev.map((r) => (r.id === selected.id ? { ...r, ig } : r)) : prev));
-                }}
-              />
-            )}
-
-            {selected.email && (() => {
-              const histOut = (history ?? []).filter((m) => m.direction === "out").map((m) => new Date(m.date).getTime()).filter((t) => Number.isFinite(t));
-              const lastMs = Math.max(selected.last_contacted ? new Date(selected.last_contacted).getTime() : 0, histOut.length ? Math.max(...histOut) : 0);
-              const lastDays = lastMs ? Math.floor((Date.now() - lastMs) / 86400000) : null;
-              const recent = lastDays != null && lastDays < RECENT_DAYS;
-              return (
-                <div className={cn("mt-4 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[12px]", recent ? cn("border-danger/25", TOO_SOON) : cn("border-signal/25", GOOD_TO_GO))}>
-                  {recent ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <Check className="h-4 w-4 shrink-0" />}
-                  <span>
-                    <span className="font-semibold">{lastContactLabel(lastDays)}</span>
-                    {recent ? " : évite de le relancer trop vite" : lastDays == null ? " : tu peux le contacter" : lastDays >= relanceDays ? " : à relancer" : ""}
-                  </span>
-                </div>
-              );
-            })()}
-
-            {/* Suivi prospection : journal multi-canal (WhatsApp, insta, tél, LinkedIn) */}
-            {(() => {
-              const list = sortTouches(parseTouches(selected.touches));
-              const kindNext = nextKind(list, selected.last_contacted);
-              const last = lastTouch(list);
-              const CANAL_BTNS: { canal: TouchCanal; icon: LucideIcon }[] = [
-                { canal: "whatsapp", icon: MessageCircle },
-                { canal: "instagram", icon: AtSign },
-                { canal: "tel", icon: Phone },
-                { canal: "linkedin", icon: BriefcaseBusiness },
-              ];
-              return (
-                <div className="mt-4">
-                  <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
-                    <MessageCircle className="h-3 w-3" /> Suivi prospection
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {selected.email && (
-                      <button
-                        type="button"
-                        onClick={() => openSpark(selected)}
-                        title={`Ouvre un mail pré-rempli (${kindNext === "contact" ? "premier contact" : "relance"}) dans Spark et le note`}
-                        className="flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
-                      >
-                        <Mail className="h-3.5 w-3.5" /> Spark
-                      </button>
-                    )}
-                    {CANAL_BTNS.map(({ canal, icon: CI }) => (
-                      <button
-                        key={canal}
-                        type="button"
-                        onClick={() => (canal === "whatsapp" && waLink(selected.phone) ? openWhatsApp(selected) : logTouch(selected, canal))}
-                        title={`Noter : ${kindNext === "contact" ? "premier contact" : "relance"} via ${CANAL_LABELS[canal]}`}
-                        className="flex items-center gap-1.5 rounded-full border border-border bg-panel px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-                      >
-                        <CI className="h-3.5 w-3.5" /> {CANAL_LABELS[canal]}
-                      </button>
-                    ))}
-                    {list.length > 0 && last?.kind !== "reponse" && (
-                      <button
-                        type="button"
-                        onClick={() => logTouch(selected, last?.canal ?? "autre", "reponse")}
-                        className="flex items-center gap-1.5 rounded-full border border-signal/30 bg-signal/[0.08] px-2.5 py-1.5 text-[11px] font-semibold text-signal transition-colors hover:bg-signal/15"
-                      >
-                        <Check className="h-3.5 w-3.5" /> Réponse reçue
-                      </button>
-                    )}
-                  </div>
-                  <p className="mt-1.5 text-[10px] text-faint">
-                    Un clic note {kindNext === "contact" ? "le premier contact" : "une relance"} à aujourd'hui. Spark ouvre un mail pré-rempli, WhatsApp la conversation.
-                  </p>
-                  {list.length > 0 && (
-                    <div className="mt-2 max-h-40 space-y-1 overflow-y-auto pr-1">
-                      {list.map((t) => (
-                        <div key={t.id} className="flex items-center gap-2 rounded-lg bg-panel px-3 py-1.5 text-[11px]">
-                          <span className={cn("shrink-0 font-semibold", t.kind === "reponse" ? "text-signaltext" : t.kind === "contact" ? "text-primary" : "text-foreground")}>
-                            {KIND_LABELS[t.kind]}
-                          </span>
-                          <span className="truncate text-muted-foreground">{CANAL_LABELS[t.canal]}</span>
-                          <span className="ml-auto shrink-0 tabular-nums text-faint">{fmtMailDate(t.date)}</span>
-                          {touchDel === t.id ? (
-                            <button
-                              type="button"
-                              onClick={() => { setTouchDel(null); void saveTouches(selected, { remove: t.id }); }}
-                              className="shrink-0 rounded bg-danger/10 px-1.5 py-0.5 text-[9px] font-semibold text-dangertext"
-                            >
-                              Supprimer ?
-                            </button>
-                          ) : (
-                            <button type="button" onClick={() => setTouchDel(t.id)} className="shrink-0 text-faint transition-colors hover:text-dangertext" title="Supprimer cette entrée">
-                              <X className="h-3 w-3" />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {selected.email && (
-              <div className="mt-4">
-                <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
-                  <Mail className="h-3 w-3" /> Historique email
-                </div>
-                {historyBusy ? (
-                  <div className="text-[11px] text-faint">Chargement des mails…</div>
-                ) : !history ? null : history.length === 0 ? (
-                  <div className="text-[11px] text-faint">Aucun échange trouvé dans Gmail.</div>
-                ) : (
-                  <div className="max-h-52 space-y-1.5 overflow-y-auto pr-1">
-                    {history.map((m) => (
-                      <div key={m.id} className="rounded-lg border border-border bg-panel px-3 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1 text-[10px] font-semibold",
-                              m.direction === "in" ? "text-signaltext" : "text-primary",
-                            )}
-                          >
-                            {m.direction === "in" ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
-                            {m.direction === "in" ? "Reçu" : "Envoyé"}
-                          </span>
-                          <span className="shrink-0 text-[10px] text-faint">{fmtMailDate(m.date)}</span>
-                        </div>
-                        <div className="mt-0.5 truncate text-[12px] font-medium text-foreground">{m.subject || "(sans objet)"}</div>
-                        <div className="truncate text-[11px] text-faint">{m.snippet}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {waLink(selected.phone) && (
-                <button
-                  type="button"
-                  onClick={() => openWhatsApp(selected)}
-                  className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-signal py-2.5 text-[12px] font-medium text-onsignal transition-opacity hover:opacity-90"
-                >
-                  <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
-                </button>
-              )}
-              {selected.email && (
-                <button
-                  type="button"
-                  onClick={() => openMail(selected)}
-                  className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-full bg-primary py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
-                >
-                  <Mail className="h-3.5 w-3.5" /> Écrire un mail
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  const text = [
-                    selected.brand,
-                    `${selected.person} · ${selected.role}`,
-                    selected.email,
-                    selected.phone,
-                  ]
-                    .filter((s) => s && s.trim() && s.trim() !== "·")
-                    .join("\n");
-                  navigator.clipboard?.writeText(text);
-                  toast("Fiche copiée ✓");
-                }}
-                className={cn(
-                  "flex flex-1 items-center justify-center rounded-lg py-2.5 text-[12px] font-medium transition-colors",
-                  selected.email
-                    ? "border border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground"
-                    : "bg-primary text-primary-foreground hover:opacity-90",
-                )}
-              >
-                Copier la fiche
-              </button>
-            </div>
+            {renderInspector(sheetRow, true)}
           </div>
         </Overlay>
       )}
@@ -1483,7 +1759,7 @@ export function Contacts() {
                   onValueChange={(v) => setSendVia(v as "gmail" | "resend")}
                 />
                 <span className="text-[10px] text-faint">
-                  {sendVia === "gmail" ? "Depuis ta boîte Gmail — réponses dans tes fils" : "Les réponses n'apparaîtront pas dans Mails."}
+                  {sendVia === "gmail" ? "Depuis ta boîte Gmail : réponses dans tes fils" : "Les réponses n'apparaîtront pas dans Mails."}
                 </span>
               </div>
               <div className="flex gap-2">

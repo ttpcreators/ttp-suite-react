@@ -5,8 +5,7 @@ import type { ViewId } from "./nav";
  * recherche globale (téléphone) et la palette ⌘K.
  */
 export const PAGE_ALIASES: Partial<Record<ViewId, string[]>> = {
-  aujourdhui: ["aujourd'hui", "journee", "a traiter", "today", "inbox zero"],
-  apercu: ["dashboard", "accueil", "tableau de bord"],
+  aujourdhui: ["aujourd'hui", "journee", "a traiter", "today", "inbox zero", "accueil", "dashboard", "tableau de bord", "apercu"],
   reversements: ["paie", "paiement", "reverser", "reversement", "salaire createur"],
   relances: ["impaye", "retard", "relancer", "relance facture"],
   facturation: ["facture", "devis"],

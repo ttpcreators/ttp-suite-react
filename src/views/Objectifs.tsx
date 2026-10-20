@@ -1,6 +1,5 @@
-import { useEffect, useState, lazy, Suspense } from "react";
-import { Target, Pencil, TrendingUp } from "lucide-react";
-import { Progress } from "@/components/ui/progress";
+import { useEffect, useState } from "react";
+import { Target, Pencil, ChevronLeft, ChevronRight, Euro, Handshake, PiggyBank, PenLine, type LucideIcon } from "lucide-react";
 import {
   useAppState,
   mergeAppStateKey,
@@ -15,7 +14,20 @@ import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, DeleteButton } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { PageHeaderRow } from "@/components/ui/page-header";
-import { MonthPicker } from "@/components/ui/date-range-picker";
+import { IconTile } from "@/components/ui/icon-tile";
+import { StatusPill } from "@/components/ui/status-pill";
+import type { StatusTone } from "@/lib/statusTone";
+import {
+  averagePct,
+  bestMonth,
+  clampPct,
+  monthlyAverages,
+  objectiveStatus,
+  trendBars,
+  type ObjectiveStatus,
+} from "@/lib/objectivesTrend";
+import { cn } from "@/lib/utils";
+import ObjectivesTrend from "./charts/ObjectivesTrend";
 
 /** Un objectif du mois : intitulé, CA réalisé, cible, progression (%) et ton. */
 type Objective = {
@@ -46,11 +58,8 @@ const objLabel = (o: Objective) => o.name || o.label || o.creator || "Sans intit
  */
 type ObjByMonth = Record<string, Objective[]>;
 
-const ObjectivesTrend = lazy(() => import("./charts/ObjectivesTrend"));
-
 const monthKeyOf = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 const CURRENT_KEY = monthKeyOf();
-const isMonthKey = (k: string) => /^\d{4}-\d{2}$/.test(k);
 /** Valeur saisie brute ("20000") → "20 000 €" si monétaire, sinon "20 000" ; texte libre laissé tel quel. */
 const fmtAmount = (v: string, money = true) =>
   /^\s*\d+(?:[.,]\d+)?\s*$/.test(v ?? "")
@@ -91,21 +100,115 @@ function monthShort(key: string) {
   const mois = d.toLocaleDateString("fr-FR", { month: "short" }).replace(".", "");
   return y === new Date().getFullYear() ? mois : `${mois} ${String(y).slice(2)}`;
 }
-/** Progression moyenne (%) par mois, tous mois avec données (legacy "0" → mois courant si absent). */
-function monthlyTrend(obj: ObjByMonth) {
-  const map = new Map<string, Objective[]>();
-  for (const [k, v] of Object.entries(obj)) {
-    if (Array.isArray(v) && v.length && isMonthKey(k)) map.set(k, v);
-  }
-  if (!map.has(CURRENT_KEY) && Array.isArray(obj["0"]) && obj["0"].length) map.set(CURRENT_KEY, obj["0"]);
-  return [...map.entries()]
-    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-    .map(([key, arr]) => ({
-      month: key,
-      label: monthShort(key),
-      // Chaque objectif borné 0..100 comme les lignes (un dépassement ne gonfle pas la moyenne).
-      pct: Math.round(arr.reduce((s, o) => s + Math.max(0, Math.min(100, Number(o.pct) || 0)), 0) / arr.length),
-    }));
+/** « octobre », ou « octobre 2025 » hors de l'année en cours (texte courant, en minuscules). */
+function monthName(key: string) {
+  const [y, m] = key.split("-").map(Number);
+  const mois = new Date(y, (m || 1) - 1, 1).toLocaleDateString("fr-FR", { month: "long" });
+  return y === new Date().getFullYear() ? mois : `${mois} ${y}`;
+}
+/** « d'octobre », « de septembre » : élision devant une voyelle. */
+const ofMonth = (key: string) => {
+  const n = monthName(key);
+  return /^[aeiouyâàéèêh]/i.test(n) ? `d'${n}` : `de ${n}`;
+};
+
+/**
+ * Modèles proposés quand le mois est vide. Les objectifs n'ont PAS de type en
+ * base : un objectif = intitulé libre + cible + réalisé (le caractère monétaire
+ * est déduit de l'intitulé par `isMoneyObj`). Un modèle pré-remplit donc
+ * simplement le formulaire existant : intitulé + exemples adaptés.
+ */
+type Template = {
+  key: string;
+  title: string;
+  descr: string;
+  icon: LucideIcon;
+  tone: StatusTone;
+  /** Intitulé pré-rempli (vide pour l'objectif libre). */
+  name: string;
+  namePh: string;
+  targetPh: string;
+  caPh: string;
+};
+const TEMPLATES: Template[] = [
+  {
+    key: "ca",
+    title: "CA d'un créateur",
+    descr: "Le chiffre d'affaires d'un créateur sur le mois.",
+    icon: Euro,
+    tone: "ok",
+    name: "CA ",
+    namePh: "Ex : CA Léna Marchand",
+    targetPh: "20 000 €",
+    caPh: "12 000 €",
+  },
+  {
+    key: "deals",
+    title: "Deals signés",
+    descr: "Le nombre de collabs signées ce mois-ci.",
+    icon: Handshake,
+    tone: "progress",
+    name: "Deals signés",
+    namePh: "Ex : Deals signés",
+    targetPh: "8",
+    caPh: "3",
+  },
+  {
+    key: "marge",
+    title: "Marge agence",
+    descr: "Ta commission totale, hors TVA.",
+    icon: PiggyBank,
+    tone: "info",
+    name: "Marge agence",
+    namePh: "Ex : Marge agence",
+    targetPh: "6 000 €",
+    caPh: "2 500 €",
+  },
+  {
+    key: "libre",
+    title: "Objectif libre",
+    descr: "Contacts, posts, nouveaux créateurs… ce que tu veux.",
+    icon: PenLine,
+    tone: "wait",
+    name: "",
+    namePh: "Ex : Nouveaux créateurs signés",
+    targetPh: "5",
+    caPh: "2",
+  },
+];
+
+/** Pastille d'un objectif : vert atteint, orange en retard / non atteint. */
+const STATUS_PILL: Record<ObjectiveStatus, { tone: StatusTone; label: string }> = {
+  reached: { tone: "ok", label: "Atteint" },
+  onTrack: { tone: "progress", label: "En bonne voie" },
+  behind: { tone: "wait", label: "En retard" },
+  missed: { tone: "wait", label: "Non atteint" },
+};
+
+/** Anneau de progression (jetons : piste `text-field`, arc `text-primary` ou `text-ok` si atteint). */
+function ProgressRing({ pct, reached }: { pct: number; reached: boolean }) {
+  const r = 24;
+  const c = 2 * Math.PI * r;
+  return (
+    <span className="relative grid h-[56px] w-[56px] shrink-0 place-items-center" aria-hidden>
+      <svg viewBox="0 0 56 56" className="absolute inset-0 -rotate-90">
+        <circle cx="28" cy="28" r={r} fill="none" strokeWidth="5" stroke="currentColor" className="text-field" />
+        <circle
+          cx="28"
+          cy="28"
+          r={r}
+          fill="none"
+          strokeWidth="5"
+          strokeLinecap="round"
+          stroke="currentColor"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - pct / 100)}
+          className={cn("transition-[stroke-dashoffset] duration-500 ease-out", reached ? "text-ok" : "text-primary")}
+        />
+      </svg>
+      <span className="text-[11px] font-bold tabular-nums text-foreground">{pct}&nbsp;%</span>
+    </span>
+  );
 }
 
 // Plus de données de démo (SEED) : éditer/supprimer une ligne fictive réécrivait
@@ -143,7 +246,10 @@ export function Objectifs() {
   // Liste du mois choisi (repli legacy "0" pour le mois courant).
   const list: Objective[] =
     obj[selectedMonth] ?? (selectedMonth === CURRENT_KEY ? obj["0"] : undefined) ?? [];
-  const trend = monthlyTrend(obj);
+  // Réussite mois par mois (calcul pur dans lib/objectivesTrend).
+  const points = monthlyAverages(obj, CURRENT_KEY);
+  const best = bestMonth(points);
+  const bars = trendBars(points, CURRENT_KEY).map((b) => ({ ...b, label: monthShort(b.month), title: monthTitle(b.month) }));
 
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
@@ -153,21 +259,31 @@ export function Objectifs() {
   const [editing, setEditing] = useState<Objective | null>(null);
   const [saving, setSaving] = useState(false);
   const [pendingDel, setPendingDel] = useState<null | { message: string; run: () => void }>(null);
+  // Modèle choisi dans l'état vide (adapte les exemples du formulaire), null sinon.
+  const [tpl, setTpl] = useState<Template | null>(null);
 
-  const avgPct =
-    list.length > 0
-      ? Math.round(list.reduce((a, o) => a + Math.max(0, Math.min(100, Number(o.pct) || 0)), 0) / list.length) // borné 0..100 comme les lignes
-      : 0;
+  const avgPct = averagePct(list); // chaque objectif borné 0..100 comme les lignes
 
   function openAdd() {
     setEditing(null);
+    setTpl(null);
     setName("");
+    setTarget("");
+    setCa("");
+    setFormOpen(true);
+  }
+  /** « Utiliser ce modèle » : ouvre le formulaire d'ajout habituel, intitulé pré-rempli. */
+  function applyTemplate(t: Template) {
+    setEditing(null);
+    setTpl(t);
+    setName(t.name);
     setTarget("");
     setCa("");
     setFormOpen(true);
   }
   function startEdit(o: Objective) {
     setEditing(o);
+    setTpl(null);
     setName(objLabel(o));
     setTarget(String(o.target ?? ""));
     setCa(achievedOf(o));
@@ -211,6 +327,7 @@ export function Objectifs() {
     setTarget("");
     setCa("");
     setEditing(null);
+    setTpl(null);
     setFormOpen(false);
     toast(isEdit ? "Objectif mis à jour ✓" : "Objectif ajouté ✓");
   }
@@ -242,37 +359,50 @@ export function Objectifs() {
     toast(ok ? "Supprimé" : "Erreur, réessaie");
   }
 
+  // Sélecteur de mois (‹ Octobre 2026 ›) : jamais au-delà du mois courant.
+  const shiftMonth = (n: number) => {
+    const [y, m] = selectedMonth.split("-").map(Number);
+    const next = monthKeyOf(new Date(y, m - 1 + n, 1));
+    if (next <= CURRENT_KEY) setSelectedMonth(next);
+  };
+  const stepBtn =
+    "grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent";
+  const card = "rounded-[22px] bg-surface p-5";
+  const today = new Date();
+
   return (
     <div className="space-y-4">
-      {/* En-tête : résumé + sélecteur de mois + action */}
+      {/* En-tête : sélecteur de mois + action */}
       <PageHeaderRow>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {loading ? (
-            <AnimatedBadge status="loading" size="sm">
-              Chargement…
-            </AnimatedBadge>
-          ) : (
-            <>
-              <span className="font-semibold text-foreground">{list.length}</span>
-              <span>{list.length > 1 ? "objectifs" : "objectif"}</span>
-              <span className="text-faint">·</span>
-              <span>Progression moyenne</span>
-              <span className="font-semibold text-signaltext">{avgPct}&nbsp;%</span>
-            </>
-          )}
-        </div>
         <div className="flex items-center gap-2">
-          <MonthPicker value={selectedMonth} onChange={setSelectedMonth} max={CURRENT_KEY} />
+          <div className="flex h-9 items-center rounded-full bg-surface px-1">
+            <button type="button" onClick={() => shiftMonth(-1)} aria-label="Mois précédent" className={stepBtn}>
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="min-w-[116px] px-1 text-center text-[13px] font-semibold tabular-nums text-foreground">
+              {monthTitle(selectedMonth)}
+            </span>
+            <button
+              type="button"
+              onClick={() => shiftMonth(1)}
+              disabled={selectedMonth >= CURRENT_KEY}
+              aria-label="Mois suivant"
+              className={stepBtn}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
           <AddButton label="Objectif" onClick={openAdd} />
         </div>
       </PageHeaderRow>
 
       <InlineForm
         open={formOpen}
-        title={editing != null ? "Modifier l'objectif" : "Nouvel objectif"}
+        title={editing != null ? "Modifier l'objectif" : tpl ? `Nouvel objectif : ${tpl.title}` : "Nouvel objectif"}
         onClose={() => {
           setFormOpen(false);
           setEditing(null);
+          setTpl(null);
         }}
         onSubmit={submit}
         submitLabel={editing != null ? "Enregistrer" : "Ajouter"}
@@ -281,116 +411,144 @@ export function Objectifs() {
           label="Intitulé"
           value={name}
           onChange={setName}
-          placeholder="Ex : CA Léna Marchand"
+          placeholder={tpl?.namePh ?? "Ex : CA Léna Marchand"}
           className="min-w-[220px] flex-[2]"
         />
         <TextField
           label="Cible"
           value={target}
           onChange={setTarget}
-          placeholder="50 000 €"
+          placeholder={tpl?.targetPh ?? "50 000 €"}
           className="min-w-[140px] flex-none"
         />
         <TextField
           label="Réalisé (optionnel)"
           value={ca}
           onChange={setCa}
-          placeholder="38 000 €"
+          placeholder={tpl?.caPh ?? "38 000 €"}
           className="min-w-[140px] flex-none"
         />
       </InlineForm>
 
       {/* Contenu */}
       {loading ? (
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div className={card}>
           <AnimatedBadge status="loading" size="sm">
             Chargement…
           </AnimatedBadge>
         </div>
       ) : error ? (
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div className={card}>
           <AnimatedBadge status="danger" size="sm">
             Erreur de chargement
           </AnimatedBadge>
         </div>
       ) : list.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center shadow-sm">
-          <div className="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-signalsoft text-signaltext">
-            <Target className="size-5" />
+        /* Mois vide : 4 modèles qui pré-remplissent le formulaire d'ajout */
+        <section className={card}>
+          <div className="flex items-start gap-3.5">
+            <IconTile tone="ok">
+              <Target />
+            </IconTile>
+            <div className="min-w-0">
+              <h2 className="text-[20px] font-bold leading-tight tracking-[-0.01em] text-foreground">
+                Pas encore d'objectif pour {monthName(selectedMonth)}
+              </h2>
+              <p className="mt-1 text-[14px] text-muted-foreground">Choisis un modèle : tu n'as plus qu'à mettre le chiffre.</p>
+            </div>
           </div>
-          <div className="text-sm font-medium text-foreground">Aucun objectif pour {monthTitle(selectedMonth)}</div>
-          <div className="mt-1.5 text-xs text-faint">
-            Ajoute un objectif avec le bouton « + Objectif » (ex : CA d'un créateur, deals signés, marge agence).
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="text-sm font-semibold text-foreground">Objectifs par créateur</div>
-            <div className="rounded-full bg-panel px-2.5 py-1 text-[12px] font-medium text-muted-foreground">{monthTitle(selectedMonth)}</div>
-          </div>
-          <ul className="divide-y divide-border">
-            {list.map((o, index) => {
-              const pct = Math.max(0, Math.min(100, Number(o.pct) || 0));
-              // Code couleur : ≥70% bleu · 50–70% orange · <50% rouge
-              const tone =
-                pct >= 70
-                  ? { ind: "bg-primary", track: "bg-primary/15", text: "text-primary" }
-                  : pct >= 50
-                    ? { ind: "bg-amber", track: "bg-amber/15", text: "text-amber" }
-                    : { ind: "bg-danger", track: "bg-danger/15", text: "text-dangertext" };
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {TEMPLATES.map((t) => {
+              const Icon = t.icon;
               return (
-                <li
-                  key={o.id ?? `${o.name}-${index}`}
-                  className="flex flex-col gap-3 py-3.5 md:flex-row md:items-center md:gap-4"
-                >
-                  <span className="block min-w-0 truncate text-[13px] font-semibold text-foreground md:w-44 md:shrink-0">
-                    {objLabel(o)}
-                  </span>
-                  <div className="flex min-w-0 items-center gap-3 md:contents">
-                  <Progress value={pct} className={"h-2 w-auto min-w-0 flex-1 " + tone.track} indicatorClassName={tone.ind} />
-                  <div className="flex shrink-0 items-center justify-end gap-2 md:gap-4">
-                    <span className={"w-10 shrink-0 text-right text-[13px] font-semibold md:w-12 " + tone.text}>
-                      {pct}&nbsp;%
-                    </span>
-                    <span className="max-w-28 shrink-0 truncate whitespace-nowrap text-right text-[11px] tabular-nums text-faint md:w-36 md:max-w-none" title={progressLabel(o)}>
-                      {progressLabel(o)}
-                    </span>
+                <div key={t.key} className="flex min-w-0 flex-col rounded-[18px] border border-border p-4">
+                  <IconTile tone={t.tone} size="sm">
+                    <Icon />
+                  </IconTile>
+                  <div className="mt-3 text-[17px] font-bold leading-snug text-foreground">{t.title}</div>
+                  <p className="mt-1 flex-1 text-[13px] leading-snug text-muted-foreground">{t.descr}</p>
+                  <button
+                    type="button"
+                    onClick={() => applyTemplate(t)}
+                    className="mt-4 h-9 w-full rounded-full bg-field text-[13px] font-semibold text-foreground transition-colors hover:bg-rowhover"
+                  >
+                    Utiliser ce modèle
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : (
+        <section className={card}>
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 className="text-[17px] font-bold text-foreground">Objectifs {ofMonth(selectedMonth)}</h2>
+            <div className="text-[13px] text-muted-foreground">
+              <span className="font-semibold text-foreground">{list.length}</span> {list.length > 1 ? "objectifs" : "objectif"}
+              <span className="px-1.5 text-faint">·</span>
+              <span className="font-semibold text-foreground">{avgPct}&nbsp;%</span> atteint en moyenne
+            </div>
+          </div>
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {list.map((o, index) => {
+              const pct = clampPct(o.pct);
+              const st = STATUS_PILL[objectiveStatus(pct, selectedMonth, today)];
+              return (
+                <li key={o.id ?? `${o.name}-${index}`} className="flex min-w-0 flex-col rounded-[18px] border border-border p-4">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <ProgressRing pct={pct} reached={pct >= 100} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[15px] font-semibold text-foreground" title={objLabel(o)}>
+                        {objLabel(o)}
+                      </div>
+                      <div className="mt-0.5 truncate text-[13px] tabular-nums text-muted-foreground" title={progressLabel(o)}>
+                        {progressLabel(o)}
+                      </div>
+                    </div>
+                    <StatusPill tone={st.tone} size="xs" className="self-start">
+                      {st.label}
+                    </StatusPill>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between border-t border-border pt-2">
                     <button
                       type="button"
                       onClick={() => startEdit(o)}
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                      className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                       title="Modifier l'avancement"
                     >
-                      <Pencil className="h-4 w-4" />
+                      <Pencil className="h-4 w-4" /> Mettre à jour
                     </button>
                     <DeleteButton onClick={() => setPendingDel({ message: `Supprimer l'objectif « ${objLabel(o)} » ? Cette action est irréversible.`, run: () => remove(o) })} />
-                  </div>
                   </div>
                 </li>
               );
             })}
           </ul>
-        </div>
+        </section>
       )}
 
-      {/* Suivi dans le temps — progression moyenne par mois */}
+      {/* Réussite mois par mois : part moyenne atteinte, une barre par mois */}
       {!loading && !error && (
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <TrendingUp className="h-4 w-4 text-primary" /> Progression mois par mois
+        <section className={card}>
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+            <div className="min-w-0">
+              <h2 className="text-[17px] font-bold text-foreground">Réussite mois par mois</h2>
+              <p className="mt-0.5 text-[13px] text-muted-foreground">Part moyenne de tes objectifs atteinte chaque mois.</p>
+            </div>
+            {best && (
+              <div className="text-[13px] text-muted-foreground">
+                Meilleur mois : <span className="font-semibold text-foreground">{monthName(best.month)}, {best.pct}&nbsp;%</span>
+              </div>
+            )}
           </div>
-          <p className="mb-2 mt-0.5 text-[11px] text-faint">Progression moyenne par mois</p>
-          {trend.length === 0 ? (
-            <div className="grid h-[180px] place-items-center px-4 text-center text-xs text-muted-foreground">
-              Renseigne l'avancement de tes objectifs — la courbe de progression apparaîtra ici, mois après mois.
+          {bars.length === 0 ? (
+            <div className="grid h-[180px] place-items-center px-4 text-center text-[13px] text-muted-foreground">
+              Ajoute tes premiers objectifs : ta réussite mois par mois s'affichera ici.
             </div>
           ) : (
-            <Suspense fallback={<div className="h-[200px] animate-pulse rounded-xl bg-panel/50" />}>
-              <ObjectivesTrend points={trend} />
-            </Suspense>
+            <ObjectivesTrend bars={bars} selected={selectedMonth} onSelect={setSelectedMonth} />
           )}
-        </div>
+        </section>
       )}
 
       {pendingDel && (

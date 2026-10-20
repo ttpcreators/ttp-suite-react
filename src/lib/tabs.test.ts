@@ -63,9 +63,9 @@ describe("closeTab (fermer un onglet)", () => {
       .toEqual({ tabs: ["facturation", "todo"], active: "todo" });
   });
 
-  it("ferme le dernier onglet → retombe sur apercu", () => {
+  it("ferme le dernier onglet → retombe sur l'accueil", () => {
     expect(closeTab(["contacts"], "contacts", "contacts"))
-      .toEqual({ tabs: ["apercu"], active: "apercu" });
+      .toEqual({ tabs: ["aujourdhui"], active: "aujourdhui" });
   });
 
   it("ferme le dernier onglet de la liste (actif) → voisin de gauche", () => {
