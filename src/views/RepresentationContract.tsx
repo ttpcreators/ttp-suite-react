@@ -29,7 +29,17 @@ const EXT = "__ext__";
 
 /** Contrat enregistré (historique agence). Le fichier vit aussi dans `documents`
  *  (type='contract') → visible sur le portail du créateur concerné. */
-type ContractHist = { id: string; creator: string | null; title: string; variante: string; config: Cfg; createdAt: string; path: string };
+export type ContractHist = {
+  id: string;
+  creator: string | null;
+  title: string;
+  variante: string;
+  config: Cfg;
+  createdAt: string;
+  path: string;
+  /** Statut de signature (page d'arrivée Contrats). Absent sur les anciens contrats = « En attente ». */
+  status?: "signed" | "pending" | "changes";
+};
 
 let _uid = 0;
 const uid = () => `rc${Date.now().toString(36)}${(_uid += 1)}`;
@@ -68,15 +78,16 @@ function Modal({ title, onClose, children, footer, wide }: { title: string; onCl
   );
 }
 
-export function RepresentationContract() {
+/** `initial` : contrat enregistré à recharger (« Modifier » depuis la page d'arrivée Contrats). */
+export function RepresentationContract({ initial = null }: { initial?: ContractHist | null } = {}) {
   const creators = useCreators();
   const { data: cfgData } = useAppState<Configs>((s: AppState) => (s["representationConfigs"] as Configs) ?? {});
   const [localCfg, setLocalCfg] = useState<Configs | null>(null);
   const configs = localCfg ?? cfgData ?? {};
 
-  const [creatorName, setCreatorName] = useState("");
-  const [config, setConfig] = useState<Cfg>(() => defaultConfig("exclusif"));
-  const [caseName, setCaseName] = useState("Standard");
+  const [creatorName, setCreatorName] = useState(() => (initial ? (initial.creator ?? EXT) : ""));
+  const [config, setConfig] = useState<Cfg>(() => (initial ? { ...defaultConfig(initial.variante || "exclusif"), ...initial.config } : defaultConfig("exclusif")));
+  const [caseName, setCaseName] = useState(initial ? "Modifié" : "Standard");
   const [pendingDel, setPendingDel] = useState<null | { title?: string; message: string; run: () => void }>(null);
   // « Modifier » depuis l'historique : le préremplissage créateur ne doit pas écraser le contrat chargé
   const skipPrefillRef = useRef(false);
@@ -109,7 +120,8 @@ export function RepresentationContract() {
   // était raté) ; garde : une seule fois par créateur une fois les modèles chargés, pour
   // qu'un rafraîchissement live n'écrase jamais la saisie en cours.
   const cfgLoaded = cfgData != null;
-  const prefilledRef = useRef<{ ct: string; withCfg: boolean } | null>(null);
+  // Contrat chargé au montage : considéré comme déjà prérempli (le roster et les modèles ne l'écrasent pas).
+  const prefilledRef = useRef<{ ct: string; withCfg: boolean } | null>(initial ? { ct: initial.creator ?? EXT, withCfg: true } : null);
   useEffect(() => {
     if (!ctName) return;
     const done = prefilledRef.current;
@@ -270,6 +282,7 @@ export function RepresentationContract() {
         config,
         createdAt: new Date().toISOString(),
         path,
+        status: "pending",
       };
       let next: ContractHist[] = [];
       let ok = false;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Copy, Check, Plus, Trash2, FileText, FileDown, Eye, X, Maximize2 } from "lucide-react";
+import { Copy, Check, Plus, Trash2, FileText, FileDown, Eye, X, Maximize2, ArrowLeft } from "lucide-react";
 import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { printHtml } from "@/lib/printPdf";
@@ -11,7 +11,9 @@ import { ConfirmDialog } from "@/components/ui/action-menu";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { CasesBar, ContractDocument, FoldSection, HistoryPanel, PanelSection, SettingsPanel, SwitchRow, docIconBtn, docPrimaryBtn } from "@/components/contracts/contract-ui";
-import { RepresentationContract } from "@/views/RepresentationContract";
+import { RepresentationContract, type ContractHist } from "@/views/RepresentationContract";
+import { ContractsHome } from "@/components/contracts/contracts-home";
+import { TYPE_META as REG_TYPE_META, type ContractRow, type ContractStatus } from "@/lib/contractRegistry";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
 import { CONTRACT_CSS, contractHead, contractTitle, docHead, docToday } from "@/lib/pdfDoc";
 import { nbspFr } from "@/lib/representationContract";
@@ -329,9 +331,77 @@ type ContractHistoryEntry = {
   ref: string;
   title: string;
   html: string;
+  /** Statut de signature (page d'arrivée). Absent sur les anciens contrats = « En attente ». */
+  status?: ContractStatus;
+  /** Réglages du formulaire au moment de l'archivage → « Modifier » recharge tout (absent sur les anciens contrats). */
+  form?: BrandForm;
 };
+/** Réglages du formulaire Marque × Créateur / UGC (un « cas » sans son nom). */
+type BrandForm = Omit<ContractCase, "id" | "name">;
 
+/** « Modifier » depuis la page d'arrivée : ce qu'il faut recharger dans un générateur. */
+type EditRequest =
+  | { kind: "brand"; ctType: CtType; ctName: string | null; brand: string; form?: BrandForm }
+  | { kind: "repr"; entry: ContractHist };
+
+/**
+ * Page Contrats : la page d'arrivée (liste des contrats, statuts, catégories) et, par
+ * « Nouveau contrat », « Modifier » ou la sidebar (sous-pages Marque × Créateur /
+ * Représentation / UGC), les générateurs. Le générateur reste monté (masqué) pendant
+ * qu'on regarde la liste : une saisie en cours n'est jamais perdue.
+ */
 export function Contrats() {
+  const navSub = useNavSub();
+  const setNavSub = useSetNavSub();
+  const genType: CtType | null = navSub === "marque" || navSub === "repr" || navSub === "ugc" ? navSub : null;
+  // `seq` remonte le générateur (formulaire neuf) ; `req` = contrat chargé par « Modifier ».
+  const [edit, setEdit] = useState<{ seq: number; req: EditRequest | null }>({ seq: 0, req: null });
+  // Dernier générateur ouvert : proposé en « Reprendre » sur la page d'arrivée.
+  const [lastGen, setLastGen] = useState<CtType | null>(null);
+  useEffect(() => {
+    if (genType) setLastGen(genType);
+  }, [genType]);
+
+  const openEdit = (row: ContractRow, raw: Record<string, unknown>) => {
+    let req: EditRequest;
+    if (row.key === "contractHistory") {
+      req = { kind: "repr", entry: raw as unknown as ContractHist };
+      toast("Contrat chargé : modifie-le puis enregistre-le à nouveau");
+    } else {
+      const form = raw.form && typeof raw.form === "object" ? (raw.form as BrandForm) : undefined;
+      req = { kind: "brand", ctType: row.type, ctName: row.creator, brand: row.brand, form };
+      toast(form ? "Contrat chargé : modifie-le puis enregistre le PDF" : "Créateur, marque et type repris. Les autres conditions de ce contrat n'étaient pas gardées : vérifie-les");
+    }
+    setEdit((e) => ({ seq: e.seq + 1, req }));
+    setNavSub(row.type);
+  };
+
+  return (
+    <>
+      <div hidden={!!genType}>
+        <ContractsHome
+          active={!genType}
+          onNew={(t) => {
+            // Après un « Modifier », « Nouveau contrat » repart d'un formulaire neuf.
+            setEdit((e) => (e.req ? { seq: e.seq + 1, req: null } : e));
+            setNavSub(t);
+          }}
+          onEdit={openEdit}
+          resume={lastGen ? { label: REG_TYPE_META[lastGen].label, onClick: () => setNavSub(lastGen) } : null}
+        />
+      </div>
+      {(genType || lastGen) && (
+        <div hidden={!genType}>
+          <ContractGenerator key={edit.seq} active={!!genType} initial={edit.req} onBack={() => setNavSub(null)} />
+        </div>
+      )}
+    </>
+  );
+}
+
+function ContractGenerator({ active, initial, onBack }: { active: boolean; initial: EditRequest | null; onBack: () => void }) {
+  const brandInit = initial?.kind === "brand" ? initial : null;
+  const form0 = brandInit?.form;
   const creators = useCreators();
   const { data: cfgData } = useAppState<ContractConfigs>((s: AppState) => (s["contractConfigs"] as ContractConfigs) ?? {});
   const [localCfg, setLocalCfg] = useState<ContractConfigs | null>(null);
@@ -348,29 +418,32 @@ export function Contrats() {
     setLocalHist(null);
   }, [histData]);
 
-  const [ctType, setCtType] = useState<CtType>("marque");
   // Sous-page demandée depuis la sidebar (Contrats → Marque × Créateur / Représentation / UGC).
   const navSub = useNavSub();
+  const [ctType, setCtType] = useState<CtType>(() =>
+    initial?.kind === "repr" ? "repr" : brandInit ? brandInit.ctType : navSub === "repr" || navSub === "ugc" ? navSub : "marque",
+  );
   const setNavSub = useSetNavSub();
   useEffect(() => {
     if (navSub === "marque" || navSub === "repr" || navSub === "ugc") setCtType(navSub);
   }, [navSub]);
-  const [creatorName, setCreatorName] = useState("");
-  const [brand, setBrand] = useState("");
-  const [value, setValue] = useState("");
-  const [commission, setCommission] = useState("20");
-  const [duration, setDuration] = useState("");
-  const [deliverables, setDeliverables] = useState("");
-  const [extra, setExtra] = useState<Clause[]>([]);
+  // « Modifier » : le formulaire repart des réglages archivés avec le contrat (sinon valeurs par défaut).
+  const [creatorName, setCreatorName] = useState(brandInit?.ctName ?? "");
+  const [brand, setBrand] = useState(form0?.brand ?? brandInit?.brand ?? "");
+  const [value, setValue] = useState(form0?.value ?? "");
+  const [commission, setCommission] = useState(form0?.commission ?? "20");
+  const [duration, setDuration] = useState(form0?.duration ?? "");
+  const [deliverables, setDeliverables] = useState(form0?.deliverables ?? "");
+  const [extra, setExtra] = useState<Clause[]>(form0?.extra ?? []);
   // Cas de figure
-  const [collab, setCollab] = useState(SCENARIO_DEFAULT.collab);
-  const [rights, setRights] = useState(SCENARIO_DEFAULT.rights);
-  const [rightsDuration, setRightsDuration] = useState(SCENARIO_DEFAULT.rightsDuration);
-  const [territory, setTerritory] = useState(SCENARIO_DEFAULT.territory);
-  const [payment, setPayment] = useState(SCENARIO_DEFAULT.payment);
-  const [tva, setTva] = useState(SCENARIO_DEFAULT.tva);
-  const [exclScope, setExclScope] = useState(SCENARIO_DEFAULT.exclScope);
-  const [defraiement, setDefraiement] = useState(SCENARIO_DEFAULT.defraiement);
+  const [collab, setCollab] = useState(form0?.collab ?? SCENARIO_DEFAULT.collab);
+  const [rights, setRights] = useState(form0?.rights ?? SCENARIO_DEFAULT.rights);
+  const [rightsDuration, setRightsDuration] = useState(form0?.rightsDuration ?? SCENARIO_DEFAULT.rightsDuration);
+  const [territory, setTerritory] = useState(form0?.territory ?? SCENARIO_DEFAULT.territory);
+  const [payment, setPayment] = useState(form0?.payment ?? SCENARIO_DEFAULT.payment);
+  const [tva, setTva] = useState(form0?.tva ?? SCENARIO_DEFAULT.tva);
+  const [exclScope, setExclScope] = useState(form0?.exclScope ?? (form0 ? (form0.excl ? "cat30" : "non") : SCENARIO_DEFAULT.exclScope));
+  const [defraiement, setDefraiement] = useState(form0?.defraiement ?? SCENARIO_DEFAULT.defraiement);
   const scenario: Scenario = { collab, rights, rightsDuration, territory, payment, tva, exclScope, defraiement };
   const [copied, setCopied] = useState(false);
   // `hist` : aperçu d'un contrat de l'historique (ne doit rien ré-archiver)
@@ -426,8 +499,9 @@ export function Contrats() {
 
   // Au changement de créateur (ou à l'arrivée des configs), charge son 1er cas s'il en a un,
   // une seule fois par créateur. Sans cas enregistré : on remet les valeurs par défaut.
-  const appliedFor = useRef<string | null>(null);
-  const lastCt = useRef<string | null>(null);
+  // Contrat chargé par « Modifier » : on ne remplace pas ses valeurs par le 1er modèle du créateur.
+  const appliedFor = useRef<string | null>(brandInit?.ctName ?? null);
+  const lastCt = useRef<string | null>(brandInit?.ctName ?? null);
   useEffect(() => {
     const switched = lastCt.current !== ctName;
     lastCt.current = ctName;
@@ -618,7 +692,8 @@ export function Contrats() {
     let entry: ContractHistoryEntry | null = null;
     const ok = await mutateHistory((fresh) => {
       if (fresh.some((h) => h.html === html)) return {}; // déjà archivé à l'identique
-      const e: ContractHistoryEntry = { id: uid(), ts: Date.now(), ctType, ctName, brand, ref, title: meta.title, html };
+      const form: BrandForm = { ctType, brand, value, commission, duration, deliverables, excl: exclScope !== "non", extra, collab, rights, rightsDuration, territory, payment, tva, exclScope, defraiement };
+      const e: ContractHistoryEntry = { id: uid(), ts: Date.now(), ctType, ctName, brand, ref, title: meta.title, html, status: "pending", form };
       entry = e;
       // Plafond de 100 : l'ajout en tête pousse dehors les plus anciennes.
       return { upsert: [e], remove: fresh.slice(99).map((h) => h.id) };
@@ -664,8 +739,11 @@ export function Contrats() {
   const toggleSec = (k: string) => setOpenSec((o) => ({ ...o, [k]: !o[k] }));
 
   // Type de contrat : dans l'en-tête de page, à droite du titre (comme les autres pages).
-  const typeTabs = (
+  const typeTabs = active && (
     <PageHeaderRow>
+      <button type="button" onClick={onBack} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 text-[12.5px] font-medium text-foreground transition-colors hover:bg-rowhover">
+        <ArrowLeft className="h-3.5 w-3.5" /> Tous les contrats
+      </button>
       <Tabs
         label="Type de contrat"
         items={(Object.keys(TYPE_META) as CtType[]).map((k) => ({ value: k, label: TYPE_META[k].chip }))}
@@ -679,7 +757,7 @@ export function Contrats() {
     return (
       <>
         {typeTabs}
-        <RepresentationContract />
+        <RepresentationContract initial={initial?.kind === "repr" ? initial.entry : null} />
       </>
     );
   }

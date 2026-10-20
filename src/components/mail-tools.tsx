@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { PenLine, Reply, Send, Settings2, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { ChevronUp, Minus, PenLine, Reply, Send, Settings2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -14,7 +15,7 @@ import { AttachButton, AttachChips } from "@/components/mail-attach";
 import { BoxChip, BoxPicker } from "@/components/mail-box-chip";
 import { cleanSignature } from "@/lib/mailSignature";
 import type { MailMessage } from "@/lib/creatorMail";
-import { Overlay } from "@/components/mobile/ios-sheet";
+import { Overlay, useIosPhone } from "@/components/mobile/ios-sheet";
 import { ClaudeConsigne, ClaudeReadyBanner, ClaudeReplyButton, useClaudeReply } from "@/components/mail-claude";
 
 /*
@@ -632,19 +633,28 @@ function ForwardPanel({
 
 // ── Nouveau mail libre (n'importe quelle adresse, boîte au choix) ────────────
 export function NewMailDialog({
-  open, defaultBox, onClose, onSent, onReopen,
+  open, defaultBox, onClose, onSent, onReopen, floating, expandKey,
 }: {
   open: boolean; defaultBox: MailBox; onClose: () => void; onSent?: () => void;
   /** Envoi échoué ou annulé : rouvrir la fenêtre avec son contenu. */
   onReopen?: () => void;
+  /**
+   * Fenêtre flottante en bas à droite (réductible, sans fond sombre) au lieu de la
+   * fenêtre centrée. Ordinateur et tablette seulement : le téléphone garde sa feuille.
+   */
+  floating?: boolean;
+  /** Fenêtre flottante : change à chaque demande d'ouverture (la ré-agrandit si elle est réduite). */
+  expandKey?: number;
 }) {
   if (!open) return null;
-  return <NewMailPanel defaultBox={defaultBox} onClose={onClose} onSent={onSent} onReopen={onReopen} />;
+  return <NewMailPanel defaultBox={defaultBox} onClose={onClose} onSent={onSent} onReopen={onReopen} floating={floating} expandKey={expandKey} />;
 }
 
 const NEW_KEY = "new";
 
-function NewMailPanel({ defaultBox, onClose, onSent, onReopen }: { defaultBox: MailBox; onClose: () => void; onSent?: () => void; onReopen?: () => void }) {
+function NewMailPanel({ defaultBox, onClose, onSent, onReopen, floating, expandKey }: {
+  defaultBox: MailBox; onClose: () => void; onSent?: () => void; onReopen?: () => void; floating?: boolean; expandKey?: number;
+}) {
   const settings = useMailSettings();
   const [d] = useState(() => readDraft<NewDraft>(NEW_KEY));
   const [to, setTo] = useState(d?.to ?? "");
@@ -670,15 +680,27 @@ function NewMailPanel({ defaultBox, onClose, onSent, onReopen }: { defaultBox: M
     setDraftFiles(NEW_KEY, att.files);
   }, [hasContent, to, cc, bcc, subject, body, box, sig, att.files]);
 
+  // Fenêtre flottante (pas sur téléphone) : réductible, Cc / Cci repliés par défaut.
+  const phone = useIosPhone();
+  const float = !!floating && !phone;
+  const [min, setMin] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(!!(d?.cc || d?.bcc));
   const requestClose = () => {
     if (!hasContent) {
       writeDraft(NEW_KEY, null);
       return onClose();
     }
     if (ask) return onClose(); // 2ᵉ demande : on garde le brouillon
+    setMin(false); // fenêtre flottante réduite : la question doit se voir
     setAsk(true);
   };
-  useEscape(requestClose);
+  useEffect(() => {
+    if (expandKey) setMin(false);
+  }, [expandKey]);
+  useEscape(() => {
+    if (float && min) return; // réduite : Échap ne la ferme pas
+    requestClose();
+  });
 
   const send = () => {
     const dest = parseEmails(to);
@@ -713,6 +735,99 @@ function NewMailPanel({ defaultBox, onClose, onSent, onReopen }: { defaultBox: M
     }, { onCancel: reopen });
     onClose();
   };
+
+  if (float) {
+    const row = "flex min-h-10 items-center gap-3 border-b border-border px-4";
+    const bare = "h-9 min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-faint";
+    return createPortal(
+      <section
+        role="dialog"
+        aria-label="Nouveau mail"
+        className={cn(
+          "fixed bottom-4 right-4 z-[120] flex flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl shadow-black/15 dark:shadow-black/50",
+          min ? "w-[min(340px,calc(100vw-2rem))]" : "max-h-[min(640px,calc(100dvh-2rem))] w-[min(560px,calc(100vw-2rem))]",
+        )}
+      >
+        <div className={cn("flex shrink-0 items-center gap-2 px-4 py-2.5", !min && "border-b border-border")}>
+          {min ? (
+            <button type="button" onClick={() => setMin(false)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+              <PenLine className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{subject.trim() || "Nouveau message"}</span>
+            </button>
+          ) : (
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="text-[13px] font-semibold text-foreground">{d ? "Brouillon" : "Nouveau message"}</span>
+              <span className="text-[12px] text-muted-foreground">de</span>
+              <BoxPicker value={box} onChange={setBox} />
+            </div>
+          )}
+          <button type="button" onClick={() => setMin((v) => !v)} aria-label={min ? "Agrandir" : "Réduire"} title={min ? "Agrandir" : "Réduire"}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            {min ? <ChevronUp className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+          </button>
+          <button type="button" onClick={requestClose} aria-label="Fermer" title="Fermer"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        {!min && (
+          <>
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+              <div className={row}>
+                <span aria-hidden className="w-10 shrink-0 text-[12.5px] text-muted-foreground">À</span>
+                <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="adresse@exemple.com" className={bare} autoFocus inputMode="email" aria-label="Destinataire" />
+                <button type="button" onClick={() => setCopyOpen((v) => !v)} aria-expanded={copyOpen}
+                  className={cn("shrink-0 rounded px-1 text-[12px] font-medium hover:text-foreground", copyOpen ? "text-foreground" : "text-muted-foreground")}>
+                  Cc · Cci
+                </button>
+              </div>
+              {copyOpen && (
+                <>
+                  <label className={row}>
+                    <span className="w-10 shrink-0 text-[12.5px] text-muted-foreground">Cc</span>
+                    <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="Facultatif" className={bare} inputMode="email" aria-label="Copie" />
+                  </label>
+                  <label className={row}>
+                    <span className="w-10 shrink-0 text-[12.5px] text-muted-foreground">Cci</span>
+                    <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="Facultatif, invisible pour les autres" className={bare} inputMode="email" aria-label="Copie cachée" />
+                  </label>
+                </>
+              )}
+              <label className={row}>
+                <span className="w-10 shrink-0 text-[12.5px] text-muted-foreground">Objet</span>
+                <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Objet du mail" className={cn(bare, "font-medium")} aria-label="Objet" />
+              </label>
+              <textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
+                }}
+                placeholder="Ton message…"
+                aria-label="Message"
+                className="block min-h-[220px] w-full flex-1 resize-none bg-transparent px-4 py-3 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-faint"
+              />
+              {att.files.length > 0 && <div className="px-4 pb-3"><AttachChips files={att.files} onRemove={att.remove} /></div>}
+            </div>
+            {ask ? (
+              <KeepDraftBar onKeep={onClose} onDiscard={() => { writeDraft(NEW_KEY, null); onClose(); }} />
+            ) : (
+              <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-4 py-2.5 text-[12px] text-muted-foreground">
+                <button type="button" onClick={send}
+                  className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                  <Send className="h-4 w-4" /> Envoyer
+                </button>
+                <AttachButton onFiles={(f) => void att.add(f)} total={att.total} />
+                <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
+                <span className="ml-auto text-faint">{settings.delaySec ? `Annulable ${settings.delaySec} s · ` : ""}⌘↵</span>
+              </div>
+            )}
+          </>
+        )}
+      </section>,
+      document.body,
+    );
+  }
 
   return (
     <Overlay className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClose={requestClose} label="Nouveau mail">

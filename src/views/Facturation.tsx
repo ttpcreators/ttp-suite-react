@@ -12,6 +12,9 @@ import {
   Wallet,
   AlertTriangle,
   X,
+  EyeOff,
+  ChevronRight,
+  Check,
 } from "lucide-react";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { supabase } from "@/lib/supabase";
@@ -23,7 +26,9 @@ import type { AnimatedBadgeStatus } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
-import { AddButton, TextField, SelectField } from "@/components/ui/form";
+import { AddButton, TextField, Field, Picker } from "@/components/ui/form";
+import { Loader, Spin } from "@/components/ui/loader";
+import { InvoiceSheet, EditorCard, EditorSection, ClientChip } from "@/components/invoice-editor";
 import { ActionMenu, type ActionItem } from "@/components/ui/action-menu";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { PeriodFilter, periodsFrom, inPeriod, periodToRange, periodLabel } from "@/components/ui/period-filter";
@@ -238,6 +243,12 @@ function ymOf(iso: string): { y: number; m: number } | null {
   return null;
 }
 
+/** Empreinte d'un brouillon d'éditeur, pour savoir s'il reste des modifications non
+ *  enregistrées (la saisie brute et l'id attribué à la création n'en font pas partie). */
+function draftSnapshot(d: Draft): string {
+  return JSON.stringify({ ...d, id: null, raw: undefined });
+}
+
 const esc = (s: unknown) =>
   String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c] ?? c);
 
@@ -414,6 +425,10 @@ function Modal({
 
 const primaryBtn =
   "rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90";
+const editorBtn =
+  "inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover";
+const editorPrimaryBtn =
+  "inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60";
 const ghostBtn =
   "rounded-lg border border-border bg-surface px-4 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground";
 
@@ -448,6 +463,22 @@ export function Facturation() {
   const [preview, setPreview] = useState<{ html: string; ref: string; email: string; brand: string } | null>(null);
   // Fiche « marge » ouverte au clic sur une facture (détail HT / TVA / commission).
   const [finView, setFinView] = useState<Row | null>(null);
+  // Éditeur en page : relecture en cours, empreinte du dernier état enregistré (pour
+  // « Modifications non enregistrées »), confirmation de sortie, aperçu affiché ou non.
+  const [editorLoading, setEditorLoading] = useState(false);
+  const [baseline, setBaseline] = useState("");
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
+  const [mobilePreview, setMobilePreview] = useState(false);
+  const editorTop = useRef<HTMLDivElement>(null);
+  const editing = draft !== null || editorLoading;
+  // Ouvrir l'éditeur (ou revenir à la liste) remonte en haut de la page (pas à l'arrivée sur la page).
+  const editingSeen = useRef(editing);
+  useEffect(() => {
+    if (editingSeen.current === editing) return;
+    editingSeen.current = editing;
+    editorTop.current?.scrollIntoView({ block: "start" });
+  }, [editing]);
 
   useEffect(() => {
     supabase
@@ -578,7 +609,7 @@ export function Facturation() {
 
   // ── Éditeur ──
   function openCreate() {
-    setDraft({
+    const d: Draft = {
       id: null,
       ref: nextRefFrom(invoices.map((r) => r.ref)),
       brand: "",
@@ -598,17 +629,24 @@ export function Facturation() {
       commissionRate: DEFAULT_COMMISSION,
       bankId: banks[0]?.id ?? "",
       notes: "",
-    });
+    };
+    setDraft(d);
+    setBaseline(draftSnapshot(d));
+    setConfirmLeave(false);
   }
 
   // Ouvre la modification sur les détails RELUS à l'instant (jamais sur une copie périmée
   // ou pas encore chargée : enregistrer écraserait les vraies lignes de la facture).
   async function openEdit(r: Row) {
+    if (editorLoading) return;
+    setEditorLoading(true);
+    setConfirmLeave(false);
     let fresh: Record<string, Details>;
     try {
       invalidateAppState();
       fresh = ((await getAppState())["invoiceDetails"] as Record<string, Details>) ?? {};
     } catch {
+      setEditorLoading(false);
       toast("Lecture impossible : réessaie dans un instant");
       return;
     }
@@ -617,7 +655,21 @@ export function Facturation() {
     const d = existing ? { ...existing, tpoRef: existing.tpoRef ?? "" } : detailsFor(r);
     const party = r.party ?? "";
     const brand = party.includes("×") ? party.split("×")[0].trim() : party;
-    setDraft({ ...d, id: r.id, ref: r.ref, brand, creator: r.creator ?? "", status: r.status });
+    const next: Draft = { ...d, id: r.id, ref: r.ref, brand, creator: r.creator ?? "", status: r.status };
+    setDraft(next);
+    setBaseline(draftSnapshot(next));
+    setEditorLoading(false);
+  }
+
+  /** Retour à la liste. Avec des modifications non enregistrées, on demande d'abord. */
+  function closeEditor(force = false) {
+    if (!force && draft && draftSnapshot(draft) !== baseline) {
+      setConfirmLeave(true);
+      return;
+    }
+    setConfirmLeave(false);
+    setMobilePreview(false);
+    setDraft(null);
   }
 
   async function saveDraft() {
@@ -665,14 +717,14 @@ export function Facturation() {
     const wasPaid = id ? invoices.find((x) => x.id === id)?.status === "payee" : false;
     if (id) {
       if (!(await dbUpdate("invoices", id, summary))) {
-        toast("Erreur — réessaie");
+        toast("Erreur, réessaie");
         return;
       }
       setRows(invoices.map((x) => (x.id === id ? { ...x, ...summary } : x)));
     } else {
       const created = await dbInsert("invoices", { ...summary, sort_order: nextOrder(invoices) });
       if (!created) {
-        toast("Erreur — réessaie");
+        toast("Erreur, réessaie");
         return;
       }
       id = (created as unknown as Row).id;
@@ -735,6 +787,8 @@ export function Facturation() {
       return;
     }
     toast(isNew ? "Facture créée ✓" : "Facture modifiée ✓");
+    setConfirmLeave(false);
+    setMobilePreview(false);
     setDraft(null);
   }
 
@@ -777,7 +831,7 @@ export function Facturation() {
     const ok = await saveAppStateKey("invoiceIssuer", issuerDraft).catch(() => false);
     // Échec : la fenêtre reste ouverte avec la saisie, rien n'est appliqué
     if (!ok) {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return;
     }
     setIssuer(issuerDraft);
@@ -825,14 +879,316 @@ export function Facturation() {
   }
 
   const draftTotals = draft ? totalsOf(draft.items, draft.franchise, draft.vatRate, draft.commissionRate) : null;
-  const creatorOptions = [{ value: "", label: "— Aucun —" }, ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url }))];
+  const creatorOptions = [{ value: "", label: "Aucun" }, ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url }))];
   const bankOptions = [
-    { value: "", label: banks.length ? "— Aucun compte —" : "— Ajoute un compte —" },
+    { value: "", label: banks.length ? "Aucun compte" : "Ajoute d'abord un compte" },
     ...banks.map((b) => ({ value: b.id, label: b.label || b.iban || "Compte" })),
   ];
+  const vatValue = draft ? (draft.franchise ? "franchise" : String(draft.vatRate)) : "";
+
+  // ── Éditeur en page ──
+  // La facture affichée à droite = le HTML EXACT de l'impression (même fonction que
+  // « Enregistrer en PDF » depuis la liste), recalculé à chaque frappe.
+  const liveHtml =
+    draft && draftTotals
+      ? invoiceHTML({
+          issuer,
+          bank: banks.find((b) => b.id === draft.bankId) ?? null,
+          details: draft,
+          ref: draft.ref,
+          brand: draft.brand,
+          creator: draft.creator || null,
+          totals: draftTotals,
+          statusLabel: metaOf(draft.status).label,
+        })
+      : "";
+  const dirty = !!draft && draftSnapshot(draft) !== baseline;
+  // « Envoyer au client » (mail + PDF) part des détails ENREGISTRÉS : proposé seulement
+  // pour une facture déjà enregistrée et sans modification en attente.
+  const savedRow = draft?.id ? invoices.find((x) => x.id === draft.id) : undefined;
+  const canSend = !!savedRow && !dirty;
+
+  function renderEditor() {
+    const crumb = draft ? (draft.id ? `N° ${draft.ref}` : "Nouvelle facture") : "Ouverture…";
+    const bar = (
+      <div className="mb-5 flex min-h-[46px] flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-border bg-panel px-4 py-2 text-[13px]">
+        <nav aria-label="Fil d'Ariane" className="flex min-w-0 items-center gap-1.5">
+          <button type="button" onClick={() => closeEditor()} className="shrink-0 text-muted-foreground transition-colors hover:text-foreground">
+            Factures
+          </button>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-faint" />
+          <span className="truncate font-medium text-foreground">{crumb}</span>
+        </nav>
+        {confirmLeave ? (
+          <div className="flex flex-wrap items-center gap-2" role="alert">
+            <span className="text-foreground">Quitter sans enregistrer les modifications ?</span>
+            <button type="button" onClick={() => setConfirmLeave(false)} className="rounded-md border border-border bg-surface px-2.5 py-1 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
+              Rester
+            </button>
+            <button type="button" onClick={() => closeEditor(true)} className="rounded-md border border-border bg-surface px-2.5 py-1 text-[12px] font-medium text-dangertext transition-colors hover:bg-dangersoft">
+              Quitter
+            </button>
+          </div>
+        ) : dirty ? (
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber" aria-hidden />
+            Modifications non enregistrées
+          </span>
+        ) : null}
+      </div>
+    );
+
+    if (!draft || !draftTotals) {
+      return (
+        <div>
+          {bar}
+          <div className="grid place-items-center rounded-2xl border border-border bg-surface py-20">
+            <Loader variant="dots" size={18} className="text-faint" label="Ouverture de la facture" />
+          </div>
+        </div>
+      );
+    }
+
+    const who = draft.brand.trim() ? (draft.creator ? `${draft.brand.trim()} × ${firstName(draft.creator)}` : draft.brand.trim()) : "";
+    const subtitle = [who, draft.id ? metaOf(draft.status).label : "Numéro confirmé à l'enregistrement"].filter(Boolean).join(" · ");
+    const setItem = (id: string, patch: Partial<LineItem>, raw?: Record<string, string>) =>
+      setDraft({ ...draft, raw: raw ? { ...draft.raw, ...raw } : draft.raw, items: draft.items.map((x) => (x.id === id ? { ...x, ...patch } : x)) });
+    const cellCls =
+      "h-10 w-full min-w-0 rounded-lg border border-border bg-surface px-3 text-sm text-foreground outline-none transition-shadow placeholder:text-faint focus:border-primary focus:ring-2 focus:ring-primary/15";
+    const linkBtn = "text-[12px] font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline";
+    const sumRow = (label: string, value: string, cls = "") => (
+      <div className={cn("flex items-baseline justify-between gap-4 py-1.5 text-[13px]", cls)}>
+        <dt className="text-muted-foreground">{label}</dt>
+        <dd className="tabular-nums text-foreground">{value}</dd>
+      </div>
+    );
+
+    return (
+      <div>
+        {bar}
+
+        {/* Titre + actions */}
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <div className="min-w-0">
+            <h2 className="text-[24px] font-semibold leading-tight tracking-[-0.02em] text-foreground md:text-[28px]">
+              {draft.id ? `Facture ${draft.ref}` : "Nouvelle facture"}
+            </h2>
+            <p className="mt-1 text-[14px] text-muted-foreground">{subtitle}</p>
+          </div>
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <button type="button" onClick={() => setShowPreview((v) => !v)} className={cn(editorBtn, "hidden xl:inline-flex")}>
+              {showPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {showPreview ? "Masquer l'aperçu" : "Afficher l'aperçu"}
+            </button>
+            <button type="button" onClick={() => setMobilePreview(true)} className={cn(editorBtn, "xl:hidden")}>
+              <Eye className="h-4 w-4" /> Aperçu
+            </button>
+            {canSend && savedRow && (
+              <button type="button" onClick={() => sendInvoice(savedRow)} className={editorBtn}>
+                <Send className="h-4 w-4" /> Envoyer au client
+              </button>
+            )}
+            <button type="button" onClick={() => printHtml(liveHtml)} className={editorBtn}>
+              <Download className="h-4 w-4" /> Enregistrer en PDF
+            </button>
+            <button type="button" onClick={saveDraft} disabled={saving} className={cn(editorPrimaryBtn, "max-sm:flex-1")}>
+              {saving ? <Spin size={15} /> : <Check className="h-4 w-4" />}
+              {saving ? "Enregistrement…" : "Enregistrer la facture"}
+            </button>
+          </div>
+        </div>
+
+        <div className={cn("grid items-start gap-5", showPreview && "xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]")}>
+          {/* ── Formulaire ── */}
+          <EditorCard className={cn("min-w-0", !showPreview && "xl:max-w-[900px]")}>
+            <EditorSection title="Détails" hint="Client et dates." right={<ClientChip name={draft.clientName} email={draft.clientEmail} />}>
+              <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
+                <TextField label="Marque / campagne" value={draft.brand} onChange={(v) => setDraft({ ...draft, brand: v })} placeholder="Saucony" />
+                <Field label="Créateur">
+                  <Picker
+                    ariaLabel="Créateur"
+                    value={draft.creator}
+                    onChange={(v) =>
+                      // Taux du roster appliqué : la saisie brute de commission est oubliée (sinon l'ancien taux resterait affiché)
+                      setDraft({
+                        ...draft,
+                        creator: v,
+                        commissionRate: v ? commissionFor(v) : draft.commissionRate,
+                        raw: v ? Object.fromEntries(Object.entries(draft.raw ?? {}).filter(([k]) => k !== "commission")) : draft.raw,
+                      })
+                    }
+                    options={creatorOptions}
+                  />
+                </Field>
+                <TextField label="Client (nom ou société)" value={draft.clientName} onChange={(v) => setDraft({ ...draft, clientName: v })} />
+                <TextField label="Email du client" type="email" value={draft.clientEmail} onChange={(v) => setDraft({ ...draft, clientEmail: v })} placeholder="compta@marque.com" />
+                <TextField label="Adresse de facturation" value={draft.clientAddress} onChange={(v) => setDraft({ ...draft, clientAddress: v })} className="sm:col-span-2" />
+                <TextField label="SIRET du client" value={draft.clientSiret} onChange={(v) => setDraft({ ...draft, clientSiret: v })} />
+                <TextField label="N° TVA du client" value={draft.clientVat} onChange={(v) => setDraft({ ...draft, clientVat: v })} />
+                <TextField label="Référence TPO" value={draft.tpoRef} onChange={(v) => setDraft({ ...draft, tpoRef: v.trim() })} placeholder="TPO20261470" />
+                <Field label="N° de facture">
+                  <div
+                    className="flex h-[42px] items-center gap-2 rounded-lg border border-border bg-muted px-3 text-sm tabular-nums text-foreground"
+                    title={draft.id ? undefined : "Le numéro est recalculé juste avant l'enregistrement, pour éviter tout doublon."}
+                  >
+                    <span className="truncate">{draft.ref}</span>
+                    {!draft.id && <span className="ml-auto shrink-0 text-[11.5px] text-faint">provisoire</span>}
+                  </div>
+                </Field>
+                <TextField label="Émise le" type="date" value={draft.issueDate} onChange={(v) => setDraft({ ...draft, issueDate: v })} />
+                <TextField label="Échéance" type="date" value={draft.dueDate} onChange={(v) => setDraft({ ...draft, dueDate: v })} />
+                <Field label="Statut">
+                  <Picker ariaLabel="Statut" value={draft.status} onChange={(v) => setDraft({ ...draft, status: v as InvoiceStatus })} options={STATUS_OPTIONS} />
+                </Field>
+                <Field label="Compte bancaire">
+                  <Picker ariaLabel="Compte bancaire" value={draft.bankId} onChange={(v) => setDraft({ ...draft, bankId: v })} options={bankOptions} />
+                </Field>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+                <button type="button" onClick={openBanks} className={linkBtn}>Gérer les comptes bancaires</button>
+                <button type="button" onClick={() => setIssuerDraft(issuer)} className={linkBtn}>Informations émetteur</button>
+              </div>
+            </EditorSection>
+
+            <EditorSection title="Prestations" hint={showPreview ? "Modifie les quantités ou les prix, l'aperçu suit." : "Modifie les quantités ou les prix."}>
+              <div className="rounded-xl bg-panel p-3 sm:p-4">
+                <div className="hidden grid-cols-[minmax(0,1fr)_4rem_6.5rem_7rem_2rem] gap-2 px-1 pb-2 text-[12px] text-muted-foreground sm:grid">
+                  <span>Livrable</span>
+                  <span>Qté</span>
+                  <span>Prix HT</span>
+                  <span className="text-right">Total</span>
+                  <span />
+                </div>
+                <div className="flex flex-col gap-3 sm:gap-2">
+                  {draft.items.map((it, i) => (
+                    <div key={it.id} className="grid grid-cols-[4rem_minmax(0,1fr)_minmax(0,1fr)_2rem] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_4rem_6.5rem_7rem_2rem]">
+                      <input
+                        value={it.label}
+                        onChange={(e) => setItem(it.id, { label: e.target.value })}
+                        placeholder="Désignation (ex : Reel Instagram)"
+                        aria-label={`Livrable, ligne ${i + 1}`}
+                        className={cn(cellCls, "col-span-4 sm:col-span-1")}
+                      />
+                      <input
+                        value={draft.raw?.[`${it.id}:qty`] ?? fmtQty(it.qty)}
+                        onChange={(e) => setItem(it.id, { qty: num(e.target.value) }, { [`${it.id}:qty`]: e.target.value })}
+                        inputMode="decimal"
+                        placeholder="Qté"
+                        aria-label={`Quantité, ligne ${i + 1}`}
+                        className={cn(cellCls, "px-2 text-center tabular-nums")}
+                      />
+                      <input
+                        value={draft.raw?.[`${it.id}:unit`] ?? fmtQty(it.unit)}
+                        onChange={(e) => setItem(it.id, { unit: num(e.target.value) }, { [`${it.id}:unit`]: e.target.value })}
+                        inputMode="decimal"
+                        placeholder="PU HT"
+                        aria-label={`Prix unitaire HT, ligne ${i + 1}`}
+                        className={cn(cellCls, "text-right tabular-nums")}
+                      />
+                      <span className="flex h-10 min-w-0 items-center justify-end truncate rounded-lg bg-muted px-3 text-sm tabular-nums text-muted-foreground">
+                        {euro2((it.qty || 0) * (it.unit || 0))}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setDraft({ ...draft, items: draft.items.length > 1 ? draft.items.filter((x) => x.id !== it.id) : draft.items })}
+                        disabled={draft.items.length <= 1}
+                        className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-dangertext disabled:pointer-events-none disabled:opacity-40"
+                        title="Supprimer la ligne"
+                        aria-label={`Supprimer la ligne ${i + 1}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDraft({ ...draft, items: [...draft.items, { id: uid(), label: "", qty: 1, unit: 0 }] })}
+                  className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+                >
+                  <Plus className="h-4 w-4" /> Ajouter une ligne
+                </button>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
+                <Field label="TVA">
+                  <Picker
+                    ariaLabel="TVA"
+                    value={vatValue}
+                    onChange={(v) => setDraft({ ...draft, franchise: v === "franchise", vatRate: v === "franchise" ? draft.vatRate : num(v) })}
+                    options={VAT_OPTIONS}
+                  />
+                </Field>
+                <Field label="Commission agence (%)">
+                  <input
+                    value={draft.raw?.commission ?? fmtRate(draft.commissionRate)}
+                    onChange={(e) => setDraft({ ...draft, raw: { ...draft.raw, commission: e.target.value }, commissionRate: num(e.target.value) })}
+                    inputMode="decimal"
+                    className={cn(cellCls, "h-[42px] tabular-nums")}
+                  />
+                </Field>
+              </div>
+
+              {/* Totaux (identiques à la facture) + part agence / créateur (interne, non imprimée) */}
+              <div className="mt-5 flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-start sm:justify-between">
+                <dl className="order-2 min-w-0 sm:order-1 sm:max-w-[240px]">
+                  <div className="text-[12px] font-medium text-muted-foreground">Interne, non imprimé</div>
+                  {sumRow(`Commission TTP · ${fmtRate(draft.commissionRate)} %`, euro2(draftTotals.commission), "[&_dd]:font-medium [&_dd]:text-signaltext")}
+                  {draft.creator && sumRow(`Reversé à ${firstName(draft.creator)}`, euro2(draftTotals.reversal))}
+                </dl>
+                <dl className="order-1 w-full sm:order-2 sm:max-w-[300px]">
+                  {sumRow("Sous-total HT", euro2(draftTotals.ht))}
+                  {sumRow(draft.franchise ? "TVA non applicable" : `TVA ${fmtRate(draft.vatRate)} %`, euro2(draftTotals.tva))}
+                  {sumRow("Total TTC", euro2(draftTotals.ttc), "mt-1 border-t border-border pt-2.5 text-[15px] [&_dd]:font-semibold [&_dt]:font-semibold [&_dt]:text-foreground")}
+                </dl>
+              </div>
+            </EditorSection>
+
+            <EditorSection title="Notes" hint="Facultatif, imprimées sur la facture.">
+              <textarea
+                value={draft.notes}
+                onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+                rows={3}
+                aria-label="Notes"
+                className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15"
+              />
+            </EditorSection>
+          </EditorCard>
+
+          {/* ── Aperçu vivant (ordinateur) ── */}
+          {showPreview && (
+            <div className="sticky top-4 hidden min-w-0 xl:block">
+              <InvoiceSheet html={liveHtml} title={`Facture ${draft.ref}`} className="h-[calc(100dvh-150px)] min-h-[560px]" />
+            </div>
+          )}
+        </div>
+
+        {/* ── Aperçu (téléphone, tablette) ── */}
+        {mobilePreview && (
+          <Modal
+            title={`Aperçu · ${draft.ref}`}
+            onClose={() => setMobilePreview(false)}
+            wide
+            footer={
+              <>
+                <button type="button" className={ghostBtn} onClick={() => setMobilePreview(false)}>Fermer</button>
+                <button type="button" className={cn(ghostBtn, "flex items-center gap-1.5")} onClick={() => printHtml(liveHtml)}>
+                  <Download className="h-3.5 w-3.5" /> Enregistrer en PDF
+                </button>
+              </>
+            }
+          >
+            <InvoiceSheet html={liveHtml} title={`Facture ${draft.ref}`} className="h-[62vh] p-2 sm:p-3" />
+          </Modal>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>
+      <div ref={editorTop} className="scroll-mt-4" />
+      {editing ? renderEditor() : (<>
       {/* En-tête */}
       <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
@@ -1017,168 +1373,7 @@ export function Facturation() {
         )}
       </div>
 
-      {/* ── Éditeur de facture ── */}
-      {draft && draftTotals && (
-        <Modal
-          title={draft.id ? `Modifier · ${draft.ref}` : `Nouvelle facture · ${draft.ref}`}
-          onClose={() => setDraft(null)}
-          wide
-          footer={
-            <>
-              <button type="button" className={ghostBtn} onClick={() => setDraft(null)}>Annuler</button>
-              <button type="button" className={cn(primaryBtn, saving && "opacity-60")} onClick={saveDraft} disabled={saving}>
-                {saving ? "Enregistrement…" : "Enregistrer"}
-              </button>
-            </>
-          }
-        >
-          <div className="flex flex-col gap-5">
-            {/* Marque / créateur / statut */}
-            <div className="flex flex-wrap items-end gap-3">
-              <TextField label="Marque / campagne" value={draft.brand} onChange={(v) => setDraft({ ...draft, brand: v })} className="min-w-[180px] flex-[2]" />
-              <div className="min-w-[160px] flex-1">
-                <SelectField
-                  label="Créateur"
-                  value={draft.creator}
-                  onChange={(v) =>
-                    // Taux du roster appliqué : la saisie brute de commission est oubliée (sinon l'ancien taux resterait affiché)
-                    setDraft({
-                      ...draft,
-                      creator: v,
-                      commissionRate: v ? commissionFor(v) : draft.commissionRate,
-                      raw: v ? Object.fromEntries(Object.entries(draft.raw ?? {}).filter(([k]) => k !== "commission")) : draft.raw,
-                    })
-                  }
-                  options={creatorOptions}
-                />
-              </div>
-              <div className="min-w-[140px] flex-1">
-                <SelectField label="Statut" value={draft.status} onChange={(v) => setDraft({ ...draft, status: v as InvoiceStatus })} options={STATUS_OPTIONS} />
-              </div>
-            </div>
-
-            {/* Client */}
-            <div>
-              <div className="mb-2 text-[12px] font-medium text-muted-foreground">Client (facturé à)</div>
-              <div className="flex flex-wrap items-end gap-3">
-                <TextField label="Nom / société" value={draft.clientName} onChange={(v) => setDraft({ ...draft, clientName: v })} className="min-w-[180px] flex-[2]" />
-                <TextField label="Email" type="email" value={draft.clientEmail} onChange={(v) => setDraft({ ...draft, clientEmail: v })} className="min-w-[180px] flex-1" />
-                <TextField label="Adresse" value={draft.clientAddress} onChange={(v) => setDraft({ ...draft, clientAddress: v })} className="min-w-full flex-[2]" />
-                <TextField label="SIRET" value={draft.clientSiret} onChange={(v) => setDraft({ ...draft, clientSiret: v })} className="min-w-[150px] flex-1" />
-                <TextField label="N° TVA" value={draft.clientVat} onChange={(v) => setDraft({ ...draft, clientVat: v })} className="min-w-[150px] flex-1" />
-                <TextField label="Référence TPO" value={draft.tpoRef} onChange={(v) => setDraft({ ...draft, tpoRef: v.trim() })} placeholder="TPO20261470" className="min-w-[180px] flex-1" />
-              </div>
-            </div>
-
-            {/* Dates + compte */}
-            <div className="flex flex-wrap items-end gap-3">
-              <TextField label="Date d'émission" type="date" value={draft.issueDate} onChange={(v) => setDraft({ ...draft, issueDate: v })} className="min-w-[150px] flex-1" />
-              <TextField label="Échéance" type="date" value={draft.dueDate} onChange={(v) => setDraft({ ...draft, dueDate: v })} className="min-w-[150px] flex-1" />
-              <div className="min-w-[180px] flex-1">
-                <SelectField label="Compte bancaire" value={draft.bankId} onChange={(v) => setDraft({ ...draft, bankId: v })} options={bankOptions} />
-              </div>
-            </div>
-
-            {/* Lignes / options */}
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <div className="text-[12px] font-medium text-muted-foreground">Lignes / options</div>
-                <button
-                  type="button"
-                  onClick={() => setDraft({ ...draft, items: [...draft.items, { id: uid(), label: "", qty: 1, unit: 0 }] })}
-                  className="flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Ajouter une ligne
-                </button>
-              </div>
-              <div className="flex flex-col gap-2">
-                {draft.items.map((it) => (
-                  <div key={it.id} className="flex flex-wrap items-center gap-2">
-                    <input
-                      value={it.label}
-                      onChange={(e) => setDraft({ ...draft, items: draft.items.map((x) => (x.id === it.id ? { ...x, label: e.target.value } : x)) })}
-                      placeholder="Désignation (ex : Reel Instagram)"
-                      className="min-w-0 basis-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:basis-0 sm:flex-[3]"
-                    />
-                    <input
-                      value={draft.raw?.[`${it.id}:qty`] ?? fmtQty(it.qty)}
-                      onChange={(e) => setDraft({ ...draft, raw: { ...draft.raw, [`${it.id}:qty`]: e.target.value }, items: draft.items.map((x) => (x.id === it.id ? { ...x, qty: num(e.target.value) } : x)) })}
-                      inputMode="decimal"
-                      placeholder="Qté"
-                      className="w-14 shrink-0 rounded-md border border-border bg-surface px-2 py-2 text-center text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:w-16"
-                    />
-                    <input
-                      value={draft.raw?.[`${it.id}:unit`] ?? fmtQty(it.unit)}
-                      onChange={(e) => setDraft({ ...draft, raw: { ...draft.raw, [`${it.id}:unit`]: e.target.value }, items: draft.items.map((x) => (x.id === it.id ? { ...x, unit: num(e.target.value) } : x)) })}
-                      inputMode="decimal"
-                      placeholder="PU HT"
-                      className="w-20 shrink-0 rounded-md border border-border bg-surface px-2 py-2 text-right text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:w-24"
-                    />
-                    <span className="flex-1 text-right text-sm font-semibold text-foreground sm:w-24 sm:flex-none">{euro2((it.qty || 0) * (it.unit || 0))}</span>
-                    <button
-                      type="button"
-                      onClick={() => setDraft({ ...draft, items: draft.items.length > 1 ? draft.items.filter((x) => x.id !== it.id) : draft.items })}
-                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-dangertext"
-                      title="Supprimer la ligne"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* TVA + commission */}
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="min-w-[190px] flex-1">
-                <SelectField
-                  label="TVA"
-                  value={draft.franchise ? "franchise" : String(draft.vatRate)}
-                  onChange={(v) => setDraft({ ...draft, franchise: v === "franchise", vatRate: v === "franchise" ? draft.vatRate : num(v) })}
-                  options={VAT_OPTIONS}
-                />
-              </div>
-              <div className="min-w-[170px] flex-1">
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-[11px] font-medium text-muted-foreground">Commission agence (%)</span>
-                  <input
-                    value={draft.raw?.commission ?? fmtRate(draft.commissionRate)}
-                    onChange={(e) => setDraft({ ...draft, raw: { ...draft.raw, commission: e.target.value }, commissionRate: num(e.target.value) })}
-                    inputMode="decimal"
-                    className="h-[42px] w-full rounded-md border border-border bg-surface px-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                  />
-                </label>
-              </div>
-            </div>
-
-            {/* Notes */}
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Notes (facultatif)</span>
-              <textarea
-                value={draft.notes}
-                onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
-                rows={2}
-                className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-              />
-            </label>
-
-            {/* Récap */}
-            <div className="rounded-xl border border-border bg-panel p-4">
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-4">
-                <div><div className="text-[11px] font-medium text-muted-foreground">Total HT</div><div className="mt-0.5 font-semibold text-foreground">{euro2(draftTotals.ht)}</div></div>
-                <div><div className="text-[11px] font-medium text-muted-foreground">{draft.franchise ? "TVA" : `TVA ${fmtRate(draft.vatRate)}%`}</div><div className="mt-0.5 font-semibold text-foreground">{draft.franchise ? "—" : euro2(draftTotals.tva)}</div></div>
-                <div><div className="text-[11px] font-medium text-muted-foreground">Total TTC</div><div className="mt-0.5 font-bold text-primary">{euro2(draftTotals.ttc)}</div></div>
-                <div><div className="text-[11px] font-medium text-muted-foreground">Commission TTP · {fmtRate(draft.commissionRate)}%</div><div className="mt-0.5 font-semibold text-signaltext">{euro2(draftTotals.commission)}</div></div>
-              </div>
-              {draft.creator && (
-                <div className="mt-2 border-t border-border pt-2 text-[11px] text-muted-foreground">
-                  Reversé à {firstName(draft.creator)} : <span className="font-semibold text-foreground">{euro2(draftTotals.reversal)}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </Modal>
-      )}
+      </>)}
 
       {/* ── Fiche marge d'une facture (au clic) ── */}
       {finView && (() => {
@@ -1264,7 +1459,7 @@ export function Facturation() {
           footer={<button type="button" className={primaryBtn} onClick={commitBanks}>Terminé</button>}
         >
           <div className="flex flex-col gap-3">
-            {banksDraft.length === 0 && <p className="text-sm text-muted-foreground">Aucun compte — ajoute-en un pour pouvoir le sélectionner sur une facture.</p>}
+            {banksDraft.length === 0 && <p className="text-sm text-muted-foreground">Aucun compte : ajoute-en un pour pouvoir le sélectionner sur une facture.</p>}
             {banksDraft.map((b) => (
               <div key={b.id} className="rounded-xl border border-border bg-surface p-3">
                 <div className="flex flex-wrap items-end gap-2">

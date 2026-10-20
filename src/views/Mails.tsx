@@ -1,14 +1,14 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ExpandableActionBar } from "@/components/ui/expandable-action-bar";
 import { Loader, Spin } from "@/components/ui/loader";
-import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, type LucideIcon } from "lucide-react";
+import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, Plus, type LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { getCache, setCache } from "@/lib/viewCache";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
 import { Kbd, RailButton, SearchField, Tip, ToolButton, mailRowCls, pillCls, type TipSide } from "@/components/mail-shell";
 import { SwipeRow, type SwipeAction } from "@/components/mobile/swipe-row";
-import { saveBase64, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
+import { STORED_STATUSES, saveBase64, statusMeta, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
 import { toast } from "@/components/ui/toast";
 import { parseTouches, nextKind, touchId, type Touch } from "@/lib/touches";
 import { updateTouches } from "@/lib/touchesDb";
@@ -21,6 +21,10 @@ import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useCreators } from "@/lib/useCreators";
 import { useCreatorMailCounts } from "@/lib/creatorMailCounts";
 import { connect as connectGoogle, consumeOAuthReturn } from "@/lib/googleCalendar";
+import { useSearch } from "@/lib/search";
+import { useLiveKey } from "@/lib/useLive";
+import { buildBrandIndex, collabTag, creatorTone, matchCollabs, relanceDays, type BrandIndex, type CollabLite, type MailTag } from "@/lib/mailCollab";
+import { LinkedCollabCard, MailTagChip } from "@/components/mail-collab";
 
 // Espace mails d'un créateur (statuts, remarques, suivi), chargé seulement à la demande.
 const CreatorMailsAgency = lazy(() => import("@/views/CreatorMails").then((m) => ({ default: m.CreatorMailsAgency })));
@@ -290,11 +294,11 @@ const hasTokens = (p: PageTokens | null | undefined, box: "all" | MailBox) =>
  * en-tête (titre, boîtes, recherche), lecture.
  */
 type Mode = "inbox" | "sent" | "contacts" | "creators";
-const MODES: { id: Mode; label: string; short: string; icon: LucideIcon; shortcut?: string }[] = [
-  { id: "inbox", label: "Boîte de réception", short: "Reçus", icon: Inbox, shortcut: "g puis i" },
-  { id: "sent", label: "Envoyés", short: "Envoyés", icon: Send, shortcut: "g puis s" },
-  { id: "contacts", label: "Contacts", short: "Contacts", icon: BookUser },
-  { id: "creators", label: "Par créateur", short: "Créateurs", icon: UsersRound },
+const MODES: { id: Mode; label: string; short: string; wide: string; icon: LucideIcon; shortcut?: string }[] = [
+  { id: "inbox", label: "Boîte de réception", short: "Reçus", wide: "Réception", icon: Inbox, shortcut: "g puis i" },
+  { id: "sent", label: "Envoyés", short: "Envoyés", wide: "Envoyés", icon: Send, shortcut: "g puis s" },
+  { id: "contacts", label: "Contacts", short: "Contacts", wide: "Contacts", icon: BookUser },
+  { id: "creators", label: "Par créateur", short: "Créateurs", wide: "Suivi créateurs", icon: UsersRound },
 ];
 const BOX_FILTERS: { id: "all" | MailBox; label: string }[] = [
   { id: "all", label: "Toutes" },
@@ -424,10 +428,35 @@ function RowAction({ icon: Icon, label, shortcut, onClick, danger, side = "botto
   );
 }
 
+/** Ligne de la colonne de gauche (grand écran) : icône ou pastille de couleur, libellé, compteur. */
+function FolderRow({ label, active, count, onClick, icon: Icon, swatch, title, shortcut }: {
+  label: string; active?: boolean; count?: number | null; onClick: () => void; icon?: LucideIcon; swatch?: string; title?: string; shortcut?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={title}
+      aria-keyshortcuts={shortcut}
+      className={cn(
+        "flex h-9 w-full min-w-0 shrink-0 items-center gap-3 rounded-lg px-3 text-left text-[13px] transition-colors",
+        active ? "bg-muted font-semibold text-foreground dark:bg-white/[0.08]" : "font-medium text-muted-foreground hover:bg-rowhover hover:text-foreground",
+      )}
+    >
+      {Icon ? <Icon className="h-4 w-4 shrink-0" /> : <span aria-hidden className={cn("size-3 shrink-0 rounded-[4px]", swatch)} />}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {count ? <span className={cn("shrink-0 text-[12px] tabular-nums", active ? "text-foreground" : "text-faint")}>{count > 99 ? "99+" : count}</span> : null}
+    </button>
+  );
+}
+
 /** Une conversation de la liste (≈ 72 px) : expéditeur, objet, extrait sur une ligne. */
-function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhoto, onOpen, onArchive, onTrash, onToggleRead }: {
+function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhoto, tags, onOpen, onArchive, onTrash, onToggleRead }: {
   t: InboxThread; folder: Folder; on: boolean; cursor: boolean; showBox: boolean; draft: boolean;
   creator: string | null; creatorPhoto: string | null;
+  /** Étiquettes de statut (collab liée, suivi créateur, relance), seulement si elles existent. */
+  tags?: MailTag[];
   onOpen: () => void; onArchive: () => void; onTrash: () => void; onToggleRead: () => void;
 }) {
   const name = prettyName(t.name) || t.email;
@@ -473,6 +502,11 @@ function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhot
               {t.archived && <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Archivé</span>}
               {showBox && <span title={BOX_LABEL[t.box]} className="flex shrink-0"><BoxDot box={t.box} /></span>}
             </span>
+            {!!tags?.length && (
+              <span className="mt-1.5 flex flex-wrap gap-1">
+                {tags.map((g) => <MailTagChip key={g.key} tag={g} />)}
+              </span>
+            )}
           </span>
         </button>
       </SwipeRow>
@@ -532,6 +566,112 @@ export function Mails() {
     return m;
   }, [linked]);
   const photoOf = (n: string) => allCreators.find((c) => sameName(c.name, n))?.photo_url ?? null;
+
+  // ── Collabs actives, marques des contacts, suivi créateur ────────────────
+  // Servent à l'encart « Collab liée » et aux étiquettes de la liste. Rien n'est
+  // déduit sans ces données : sans correspondance, rien n'est affiché.
+  const live = useLiveKey();
+  const [collabs, setCollabs] = useState<CollabLite[]>(() => getCache<CollabLite[]>("mails:collabs") ?? []);
+  const [brandIndex, setBrandIndex] = useState<BrandIndex | null>(null);
+  const [cmRows, setCmRows] = useState<Map<string, { creator: string; status: string; brand: string | null }>>(() => new Map());
+  const sideAsked = useRef(false);
+  const sideSig = useRef({ collabs: "", cm: "" }); // pas de nouveau rendu si rien n'a changé
+  useEffect(() => {
+    // Relu au rythme de l'app, seulement quand la page Mails est affichée.
+    if (sideAsked.current && !rootRef.current?.getClientRects().length) return;
+    const first = !sideAsked.current;
+    sideAsked.current = true;
+    let alive = true;
+    void supabase
+      .from("collabs")
+      .select("id, brand, creator, contact, title, deliverables, cachet, step, status, updated_at")
+      .eq("status", "active")
+      .then(({ data, error }) => {
+        if (!alive || error) return; // table absente ou réseau : on garde ce qu'on a
+        const rows = (data ?? []) as CollabLite[];
+        const sig = JSON.stringify(rows);
+        if (sig === sideSig.current.collabs) return;
+        sideSig.current.collabs = sig;
+        setCollabs(rows);
+        setCache("mails:collabs", rows);
+      });
+    // Statut rangé à la main dans le suivi créateur (fils de talent@).
+    void supabase
+      .from("creator_mail_threads")
+      .select("creator, thread_id, status, brand")
+      .then(({ data, error }) => {
+        if (!alive || error) return;
+        const sig = JSON.stringify(data ?? []);
+        if (sig === sideSig.current.cm) return;
+        sideSig.current.cm = sig;
+        const m = new Map<string, { creator: string; status: string; brand: string | null }>();
+        for (const r of (data ?? []) as { creator: string; thread_id: string; status: string; brand: string | null }[]) {
+          const cur = m.get(r.thread_id);
+          const stored = (STORED_STATUSES as readonly string[]).includes(r.status);
+          if (!cur || (stored && !(STORED_STATUSES as readonly string[]).includes(cur.status))) m.set(r.thread_id, { creator: r.creator, status: r.status, brand: r.brand });
+        }
+        setCmRows(m);
+      });
+    // Marques des contacts (adresse → marque) : une fois par visite, par pages de 1000.
+    if (first) {
+      void (async () => {
+        const rows: { email: string | null; brand: string | null }[] = [];
+        for (let from = 0; from < 10_000; from += 1000) {
+          const { data, error } = await supabase.from("contacts").select("email, brand").not("brand", "is", null).order("id").range(from, from + 999);
+          if (error) break; // on garde ce qui a été lu
+          rows.push(...((data ?? []) as typeof rows));
+          if ((data ?? []).length < 1000) break;
+        }
+        setBrandIndex(buildBrandIndex(rows));
+      })();
+    }
+    return () => {
+      alive = false;
+    };
+  }, [live]);
+
+  // Créateur et collabs d'un fil de la liste (calculés une fois par fil).
+  const rowInfo = useMemo(() => {
+    const cache = new Map<string, { creator: string | null; collabs: CollabLite[] }>();
+    return (t: InboxThread) => {
+      const k = keyOf(t);
+      const hit = cache.get(k);
+      if (hit) return hit;
+      const cm = t.box === "talent" ? cmRows.get(t.threadId) : undefined;
+      const owner = (t.to ?? []).map((a) => aliasOwner.get(a.toLowerCase())).find(Boolean) ?? cm?.creator ?? null;
+      const v = {
+        creator: owner,
+        collabs: matchCollabs({ emails: [t.email, ...(t.to ?? [])], creator: owner, text: `${t.subject} ${t.name}`, brands: [cm?.brand] }, brandIndex, collabs),
+      };
+      cache.set(k, v);
+      return v;
+    };
+  }, [aliasOwner, cmRows, brandIndex, collabs]);
+  /** Créateurs concernés par un fil : alias dans le fil, suivi créateur, ou collab unique. */
+  const rowCreators = useCallback((t: InboxThread): string[] => {
+    const i = rowInfo(t);
+    const names = new Set<string>();
+    if (i.creator) names.add(i.creator.trim().toLowerCase());
+    if (i.collabs.length === 1 && i.collabs[0].creator) names.add(i.collabs[0].creator.trim().toLowerCase());
+    return [...names];
+  }, [rowInfo]);
+  // Étiquettes d'un fil : étape de la collab liée, statut du suivi créateur, relance.
+  const tagsOf = (t: InboxThread): MailTag[] => {
+    const out: MailTag[] = [];
+    const ct = collabTag(rowInfo(t).collabs);
+    if (ct) out.push(ct);
+    const cm = t.box === "talent" ? cmRows.get(t.threadId) : undefined;
+    if (cm && (STORED_STATUSES as readonly string[]).includes(cm.status)) {
+      const m = statusMeta(cm.status);
+      out.push({ key: "suivi", label: m.label, cls: m.badge, title: `Suivi de ${titleCase(cm.creator)} : ${m.label}` });
+    }
+    const r = relanceDays(t);
+    if (r != null) out.push({ key: "relance", label: `Relance J+${r}`, cls: "bg-danger/10 text-dangertext", title: `Dernier message envoyé par l'agence il y a ${r} jours, sans réponse depuis` });
+    return out;
+  };
+  // Dossier de couleur choisi dans la colonne de gauche : filtre la liste sur un créateur.
+  const [creatorFilter, setCreatorFilter] = useState<string | null>(null);
+  const creatorKey = creatorFilter?.trim().toLowerCase() ?? null;
 
   // ── Dossier et boîte ─────────────────────────────────────────────────────
   const [mode, setModeState] = useState<Mode>(() => readPref("ttp:mails-mode", MODES.map((m) => m.id), "inbox"));
@@ -679,6 +819,15 @@ export function Mails() {
     return c;
   }, [inboxEff]);
   const unreadShown = unreadBy[box];
+  // Non lus par créateur (dossiers de couleur), d'après la boîte de réception chargée.
+  const creatorUnread = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of inboxEff) {
+      if (!t.unread || (box !== "all" && t.box !== box)) continue;
+      for (const n of rowCreators(t)) m.set(n, (m.get(n) ?? 0) + 1);
+    }
+    return m;
+  }, [inboxEff, box, rowCreators]);
 
   // ── Recherche : filtre local immédiat + recherche Gmail (350 ms, ≥ 2 caractères) ──
   const [inboxQuery, setInboxQuery] = useState("");
@@ -828,6 +977,11 @@ export function Mails() {
   const [forward, setForward] = useState<{ msg: MailMessage; subject: string; box: MailBox } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newMailOpen, setNewMailOpen] = useState(false); // mail libre, n'importe quelle adresse
+  const [newMailKey, setNewMailKey] = useState(0); // fenêtre flottante : ré-agrandie à chaque demande
+  const openNewMail = () => {
+    setNewMailOpen(true);
+    setNewMailKey((n) => n + 1);
+  };
   const [composerOpen, setComposerOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null); // ligne choisie au clavier (j / k)
@@ -937,7 +1091,10 @@ export function Mails() {
 
   // ── Liste affichée (filtre de boîte + recherche) et navigation ───────────
   const folderList = useMemo(() => effList(lists[folder]?.threads), [lists, folder, applyOv]); // eslint-disable-line react-hooks/exhaustive-deps
-  const boxThreads = useMemo(() => folderList.filter((t) => box === "all" || t.box === box), [folderList, box]);
+  const boxThreads = useMemo(
+    () => folderList.filter((t) => (box === "all" || t.box === box) && (!creatorKey || rowCreators(t).includes(creatorKey))),
+    [folderList, box, creatorKey, rowCreators],
+  );
   const inboxQ = inboxQuery.trim().toLowerCase();
   const localMatches = useMemo(
     () => (inboxQ ? boxThreads.filter((t) => `${t.name} ${t.email} ${t.subject} ${decodeEntities(t.snippet)}`.toLowerCase().includes(inboxQ)) : boxThreads),
@@ -947,8 +1104,8 @@ export function Mails() {
   const remote = useMemo(() => {
     if (!searchLive || !search) return [];
     const local = new Set(localMatches.map(keyOf));
-    return effList(search.threads).filter((t) => (box === "all" || t.box === box) && !local.has(keyOf(t)));
-  }, [searchLive, search, localMatches, box, applyOv]); // eslint-disable-line react-hooks/exhaustive-deps
+    return effList(search.threads).filter((t) => (box === "all" || t.box === box) && (!creatorKey || rowCreators(t).includes(creatorKey)) && !local.has(keyOf(t)));
+  }, [searchLive, search, localMatches, box, applyOv, creatorKey, rowCreators]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // « 3 sur 12 » ‹ › : les fils de la liste d'où le mail a été ouvert.
   const navList = useMemo<OpenRef[]>(() => {
@@ -1173,6 +1330,7 @@ export function Mails() {
   };
   const goMode = (m: Mode) => {
     if (m !== mode) closeThread();
+    setCreatorFilter(null); // un dossier (Réception, Envoyés…) montre tous ses mails
     setMode(m);
     if (m !== "contacts") setSelected(null);
     if (m === "creators" && mode === "creators") setCreatorView(null);
@@ -1180,6 +1338,22 @@ export function Mails() {
   const openCreator = (name: string, threadId?: string) => {
     setCreatorView({ name, threadId });
     setMode("creators");
+  };
+  // Dossier de couleur d'un créateur : filtre la liste (reçus ou envoyés) ; second clic, tout revient.
+  const pickCreator = (name: string) => {
+    const on = !!creatorFilter && sameName(creatorFilter, name);
+    if (mode !== "inbox" && mode !== "sent") {
+      closeThread();
+      setSelected(null);
+      setMode("inbox");
+    }
+    setCreatorFilter(on ? null : name);
+  };
+  // « Ouvrir la collab » : page Collabs, filtrée sur la marque (recherche de l'app).
+  const { setQuery: setAppQuery } = useSearch();
+  const openCollab = (c: CollabLite) => {
+    setAppQuery(c.brand);
+    window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "collabs" }));
   };
 
   // ── Réponse ──────────────────────────────────────────────────────────────
@@ -1215,6 +1389,21 @@ export function Mails() {
     for (const a of allKnown().find((t) => keyOf(t) === keyOf(thread))?.to ?? []) addrs.add(a.toLowerCase());
     return linked.find((l) => l.alias && addrs.has(l.alias.toLowerCase())) ?? null;
   }, [thread, threadMsgs, linked, lists, search]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Collab(s) active(s) liée(s) au fil ouvert : adresses de tous ses messages, alias, objet.
+  const threadCollabs = useMemo(() => {
+    if (!thread) return [];
+    const row = allKnown().find((t) => keyOf(t) === keyOf(thread));
+    const addrs = new Set(
+      [thread.contact, ...(row?.to ?? []), ...(threadMsgs ?? []).flatMap((m) => addrsOf(`${m.from} ${m.to ?? ""} ${m.cc ?? ""}`))]
+        .filter(Boolean)
+        .map((a) => a.toLowerCase()),
+    );
+    const cm = thread.box === "talent" ? cmRows.get(thread.threadId) : undefined;
+    const creator = [...addrs].map((a) => aliasOwner.get(a)).find(Boolean) ?? cm?.creator ?? null;
+    const names = (threadMsgs ?? []).filter((m) => m.direction === "in").map((m) => displayName(m.from)).join(" ");
+    return matchCollabs({ emails: [...addrs], creator, text: `${thread.subject} ${thread.name} ${names}`, brands: [cm?.brand] }, brandIndex, collabs);
+  }, [thread, threadMsgs, aliasOwner, cmRows, brandIndex, collabs, lists, search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const focusReply = (m: "reply" | "all" = "reply") => {
     const last = readerMsgs[readerMsgs.length - 1];
@@ -1325,7 +1514,7 @@ export function Mails() {
     }
     if (k === "c") {
       e.preventDefault();
-      setNewMailOpen(true);
+      openNewMail();
       return;
     }
     if (k === "Escape") {
@@ -1442,12 +1631,13 @@ export function Mails() {
   );
   const boxesText = (boxes: MailBox[]) => boxes.map((b) => BOX_LABEL[b]).join(" et ");
 
-  // ── Barre d'icônes (ordinateur) : dossiers ───────────────────────────────
+  // ── Barre d'icônes (ordinateur moyen) : dossiers ─────────────────────────
+  const creatorOn = (n: string) => !!creatorFilter && sameName(creatorFilter, n) && (mode === "inbox" || mode === "sent");
   const rail = (
-    <nav aria-label="Dossiers" className="hidden min-h-0 flex-col items-center gap-1 border-r border-border py-3 lg:flex">
+    <nav aria-label="Dossiers" className="hidden min-h-0 flex-col items-center gap-1 border-r border-border py-3 lg:flex xl:hidden">
       <button
         type="button"
-        onClick={() => setNewMailOpen(true)}
+        onClick={openNewMail}
         aria-label="Nouveau mail"
         aria-keyshortcuts="c"
         className="group/tip relative mb-2 flex h-[54px] w-14 shrink-0 flex-col items-center justify-center gap-1 rounded-xl text-foreground transition-colors hover:bg-rowhover"
@@ -1471,6 +1661,31 @@ export function Mails() {
           <m.icon className="h-[18px] w-[18px]" />
         </RailButton>
       ))}
+      {/* Dossiers de couleur des créateurs (filtre de la liste). */}
+      {linked.length > 0 && (
+        <div className="mt-1 flex min-h-0 flex-col items-center gap-1 overflow-y-auto border-t border-border pt-2 [scrollbar-width:none]">
+          {linked.map((l) => {
+            const on = creatorOn(l.creator);
+            const n = creatorUnread.get(l.creator.trim().toLowerCase()) ?? 0;
+            return (
+              <button
+                key={l.creator}
+                type="button"
+                onClick={() => pickCreator(l.creator)}
+                aria-pressed={on}
+                aria-label={`Mails de ${titleCase(l.creator)}`}
+                title={`Mails de ${titleCase(l.creator)}${n ? ` (${n} non lu${n > 1 ? "s" : ""})` : ""}`}
+                className={cn("relative grid h-9 w-9 shrink-0 place-items-center rounded-xl transition-colors", on ? "bg-muted ring-1 ring-border" : "hover:bg-rowhover")}
+              >
+                <span className={cn("grid size-6 place-items-center rounded-md text-[10.5px] font-bold text-black/75", creatorTone(l.creator))}>
+                  {titleCase(l.creator).charAt(0)}
+                </span>
+                {n > 0 && <span aria-hidden className="absolute right-1 top-1 size-2 rounded-full bg-primary ring-2 ring-surface" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <span className="flex-1" />
       <RailButton label="Signature et délai d'annulation" caption="Réglages" onClick={() => setSettingsOpen(true)}>
         <Settings2 className="h-[18px] w-[18px]" />
@@ -1478,10 +1693,78 @@ export function Mails() {
     </nav>
   );
 
+  // ── Colonne de gauche (grand écran) : dossiers avec libellés et créateurs ─
+  const wideRail = (
+    <nav aria-label="Dossiers" className="hidden min-h-0 flex-col border-r border-border xl:flex">
+      <div className="shrink-0 px-3 pb-2 pt-3">
+        <button
+          type="button"
+          onClick={openNewMail}
+          aria-keyshortcuts="c"
+          title="Nouveau mail (c)"
+          className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 text-[13px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+        >
+          <PenLine className="h-4 w-4" /> Nouveau mail
+        </button>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3 [scrollbar-width:thin]">
+        <div className="flex flex-col gap-0.5">
+          {MODES.map((m) => (
+            <FolderRow
+              key={m.id}
+              icon={m.icon}
+              label={m.wide}
+              title={m.shortcut ? `${m.label} (${m.shortcut})` : m.label}
+              active={mode === m.id}
+              count={m.id === "inbox" ? unreadShown : m.id === "creators" ? mailTotal : null}
+              onClick={() => goMode(m.id)}
+            />
+          ))}
+        </div>
+        <div className="mt-5">
+          <div className="flex items-center gap-1 pb-1 pl-3 pr-1">
+            <span className="min-w-0 flex-1 text-[11.5px] font-semibold text-muted-foreground">Créateurs</span>
+            <button
+              type="button"
+              onClick={() => goMode("creators")}
+              aria-label="Relier un créateur"
+              title="Relier un créateur (alias talent@)"
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {linked.length ? (
+            <div className="flex flex-col gap-0.5">
+              {linked.map((l) => (
+                <FolderRow
+                  key={l.creator}
+                  swatch={creatorTone(l.creator)}
+                  label={titleCase(l.creator)}
+                  title={`Mails de ${titleCase(l.creator)}${l.alias ? ` (${l.alias})` : ""}`}
+                  active={creatorOn(l.creator)}
+                  count={creatorUnread.get(l.creator.trim().toLowerCase())}
+                  onClick={() => pickCreator(l.creator)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="px-3 text-[12px] leading-snug text-faint">Relie l'adresse d'un créateur pour classer ses mails ici.</p>
+          )}
+        </div>
+        <span className="min-h-4 flex-1" />
+        <div className="flex flex-col gap-0.5 border-t border-border pt-2">
+          <FolderRow icon={Keyboard} label="Raccourcis" title="Raccourcis clavier (?)" onClick={() => setHelpOpen((v) => !v)} />
+          <FolderRow icon={Settings2} label="Réglages" title="Signature et délai d'annulation" onClick={() => setSettingsOpen(true)} />
+        </div>
+      </div>
+    </nav>
+  );
+
   // ── Même barre, en ligne (téléphone, tablette) ──────────────────────────
   const mobileNav = (
     <nav aria-label="Dossiers" className={cn("flex gap-1.5 overflow-x-auto border-b border-border p-2 [scrollbar-width:none] lg:hidden", readerOpen && "max-lg:hidden")}>
-      <button type="button" onClick={() => setNewMailOpen(true)} className={cn(pillCls, "bg-primary px-3 text-primary-foreground hover:opacity-90")}>
+      <button type="button" onClick={openNewMail} className={cn(pillCls, "bg-primary px-3 text-primary-foreground hover:opacity-90")}>
         <PenLine className="h-3.5 w-3.5" /> Nouveau
       </button>
       {MODES.map((m) => {
@@ -1491,6 +1774,18 @@ export function Mails() {
           <button key={m.id} type="button" onClick={() => goMode(m.id)} aria-pressed={on}
             className={cn(pillCls, on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
             <m.icon className="h-3.5 w-3.5" /> {m.short}
+            {n ? <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{n}</span> : null}
+          </button>
+        );
+      })}
+      {linked.length > 0 && <span aria-hidden className="my-1.5 w-px shrink-0 bg-border" />}
+      {linked.map((l) => {
+        const on = creatorOn(l.creator);
+        const n = creatorUnread.get(l.creator.trim().toLowerCase()) ?? 0;
+        return (
+          <button key={l.creator} type="button" onClick={() => pickCreator(l.creator)} aria-pressed={on} aria-label={`Mails de ${titleCase(l.creator)}`}
+            className={cn(pillCls, on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+            <span aria-hidden className={cn("size-2.5 shrink-0 rounded-[3px]", creatorTone(l.creator))} /> {firstName(l.creator)}
             {n ? <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{n}</span> : null}
           </button>
         );
@@ -1561,6 +1856,7 @@ export function Mails() {
         draft={draftSet.has(replyDraftKey(t.box, t.threadId))}
         creator={owner}
         creatorPhoto={owner ? photoOf(owner) : null}
+        tags={tagsOf(t)}
         onOpen={() => openThread({ threadId: t.threadId, subject: t.subject, box: t.box, contact: t.email, name: t.name })}
         onArchive={() => archive(target)}
         onTrash={() => trash(target)}
@@ -1602,6 +1898,21 @@ export function Mails() {
               }
             }} />
         </div>
+        {creatorFilter && (
+          <div className="mt-2 flex min-w-0 items-center gap-2 pl-1">
+            <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-border bg-surface py-0.5 pl-2 pr-0.5 text-[12px] font-semibold text-foreground">
+              <span aria-hidden className={cn("size-2.5 shrink-0 rounded-[3px]", creatorTone(creatorFilter))} />
+              <span className="truncate">{titleCase(creatorFilter)}</span>
+              <button type="button" onClick={() => setCreatorFilter(null)} aria-label="Retirer le filtre créateur"
+                className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+            <button type="button" onClick={() => openCreator(creatorFilter)} className="shrink-0 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground">
+              Voir son suivi
+            </button>
+          </div>
+        )}
         <p className="mt-1.5 truncate pl-1 text-[11.5px] text-muted-foreground" aria-live="polite">{cur ? metaText : busyNow ? "Chargement…" : ""}</p>
       </div>
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto" aria-busy={busyNow}>
@@ -1624,7 +1935,12 @@ export function Mails() {
             <ListSkeleton />
           )
         ) : !boxThreads.length && !inboxQ ? (
-          centerNote(<Inbox className="h-5 w-5 text-faint" />, folder === "sent" ? "Aucun mail envoyé depuis cette boîte." : "Aucun mail dans cette boîte.")
+          centerNote(
+            <Inbox className="h-5 w-5 text-faint" />,
+            creatorFilter
+              ? `Aucun mail de ${titleCase(creatorFilter)} dans les mails chargés.`
+              : folder === "sent" ? "Aucun mail envoyé depuis cette boîte." : "Aucun mail dans cette boîte.",
+          )
         ) : (
           <>
             {inboxQ && !localMatches.length && (
@@ -1781,84 +2097,91 @@ export function Mails() {
         <ToolButton icon={Forward} label="Transférer" text="Transférer" shortcut="f" tipSide="bottom-end" disabled={!loaded} onClick={forwardLast} />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[860px] px-4 pb-6 pt-4 max-md:pb-24 sm:px-8">
-          <h1 className="text-[18px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere] [text-wrap:balance] sm:text-[20px]">
-            {thread.subject || "(sans objet)"}
-          </h1>
-          <p className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
-            <BoxChip box={thread.box} className="text-[10px]" />
-            <span className="min-w-0 truncate">
-              {listName}
-              {threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
-            </span>
-          </p>
-          {threadErr ? (
-            <ErrorCard
-              text={loadErrText(threadErr, "Impossible de charger ce fil.")}
-              onRetry={retryThread}
-              onReconnect={needsReconnect(threadErr) ? () => void reconnectGoogle() : undefined}
-            />
-          ) : !threadMsgs ? (
-            <BodySkeleton />
-          ) : readerMsgs.length === 0 ? (
-            <ErrorCard text="Ce fil est vide (mail supprimé ?)." onRetry={retryThread} />
-          ) : (
-            <div className="mt-2 flex flex-col divide-y divide-border">
-              {readerMsgs.map((m, i) => {
-                if (many && i > 0 && i < readerMsgs.length - 2) {
-                  if (i !== 1) return null;
-                  const n = readerMsgs.length - 3;
-                  return (
-                    <button key="older" type="button" onClick={() => setShowAllMsgs(true)}
-                      className="flex w-full items-center gap-3 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground">
-                      <span className="h-px flex-1 bg-border" />
-                      <span className="rounded-full border border-border bg-surface px-3 py-1">{n} message{n > 1 ? "s" : ""} plus ancien{n > 1 ? "s" : ""}</span>
-                      <span className="h-px flex-1 bg-border" />
-                    </button>
-                  );
-                }
-                const last = i === readerMsgs.length - 1;
-                return (
-                  <div key={m.id} className="flex flex-col">
-                    <MailItem
-                      variant="plain"
-                      m={m}
-                      index={i}
-                      onDownload={downloadAgencyAttachment}
-                      open={expanded.has(m.id)}
-                      onToggle={() => setExpanded((s) => {
-                        const n = new Set(s);
-                        if (n.has(m.id)) n.delete(m.id); else n.add(m.id);
-                        return n;
-                      })}
-                      actions={[
-                        { icon: Reply, label: "Répondre", onClick: () => focusReply("reply") },
-                        { icon: Forward, label: "Transférer", onClick: () => setForward({ msg: m, subject: thread.subject, box: thread.box }) },
-                      ]}
-                      footer={last ? (
-                        <ReplyBox
-                          key={draftKey}
-                          variant="card"
-                          to={replyName}
-                          toTitle={plan.to}
-                          box={thread.box}
-                          focusKey={replyFocus.key}
-                          focusMode={replyFocus.mode}
-                          draftKey={draftKey}
-                          replyAllCc={plan.cc}
-                          sendLabel={`Réponse à ${replyName || plan.to}`}
-                          placeholder="Écris ta réponse…"
-                          onSend={sendReply}
-                          claude={{ threadId: thread.threadId, subject: thread.subject }}
+      <div className="@container min-h-0 flex-1 overflow-y-auto">
+        <div className={cn("mx-auto w-full px-4 pb-6 pt-4 max-md:pb-24 sm:px-8", threadCollabs.length ? "max-w-[1140px]" : "max-w-[860px]")}>
+          {/* Grand lecteur : encart « Collab liée » à droite ; sinon en haut du mail. */}
+          <div className={cn(threadCollabs.length > 0 && "@3xl:grid @3xl:grid-cols-[minmax(0,1fr)_248px] @3xl:items-start @3xl:gap-8")}>
+            <div className="min-w-0">
+              <h1 className="text-[18px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere] [text-wrap:balance] sm:text-[20px]">
+                {thread.subject || "(sans objet)"}
+              </h1>
+              <p className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+                <BoxChip box={thread.box} className="text-[10px]" />
+                <span className="min-w-0 truncate">
+                  {listName}
+                  {threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
+                </span>
+              </p>
+              <LinkedCollabCard collabs={threadCollabs} photoOf={photoOf} onOpen={openCollab} className="mt-3 @3xl:hidden" />
+              {threadErr ? (
+                <ErrorCard
+                  text={loadErrText(threadErr, "Impossible de charger ce fil.")}
+                  onRetry={retryThread}
+                  onReconnect={needsReconnect(threadErr) ? () => void reconnectGoogle() : undefined}
+                />
+              ) : !threadMsgs ? (
+                <BodySkeleton />
+              ) : readerMsgs.length === 0 ? (
+                <ErrorCard text="Ce fil est vide (mail supprimé ?)." onRetry={retryThread} />
+              ) : (
+                <div className="mt-2 flex flex-col divide-y divide-border">
+                  {readerMsgs.map((m, i) => {
+                    if (many && i > 0 && i < readerMsgs.length - 2) {
+                      if (i !== 1) return null;
+                      const n = readerMsgs.length - 3;
+                      return (
+                        <button key="older" type="button" onClick={() => setShowAllMsgs(true)}
+                          className="flex w-full items-center gap-3 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground">
+                          <span className="h-px flex-1 bg-border" />
+                          <span className="rounded-full border border-border bg-surface px-3 py-1">{n} message{n > 1 ? "s" : ""} plus ancien{n > 1 ? "s" : ""}</span>
+                          <span className="h-px flex-1 bg-border" />
+                        </button>
+                      );
+                    }
+                    const last = i === readerMsgs.length - 1;
+                    return (
+                      <div key={m.id} className="flex flex-col">
+                        <MailItem
+                          variant="plain"
+                          m={m}
+                          index={i}
+                          onDownload={downloadAgencyAttachment}
+                          open={expanded.has(m.id)}
+                          onToggle={() => setExpanded((s) => {
+                            const n = new Set(s);
+                            if (n.has(m.id)) n.delete(m.id); else n.add(m.id);
+                            return n;
+                          })}
+                          actions={[
+                            { icon: Reply, label: "Répondre", onClick: () => focusReply("reply") },
+                            { icon: Forward, label: "Transférer", onClick: () => setForward({ msg: m, subject: thread.subject, box: thread.box }) },
+                          ]}
+                          footer={last ? (
+                            <ReplyBox
+                              key={draftKey}
+                              variant="card"
+                              to={replyName}
+                              toTitle={plan.to}
+                              box={thread.box}
+                              focusKey={replyFocus.key}
+                              focusMode={replyFocus.mode}
+                              draftKey={draftKey}
+                              replyAllCc={plan.cc}
+                              sendLabel={`Réponse à ${replyName || plan.to}`}
+                              placeholder="Écris ta réponse…"
+                              onSend={sendReply}
+                              claude={{ threadId: thread.threadId, subject: thread.subject }}
+                            />
+                          ) : undefined}
                         />
-                      ) : undefined}
-                    />
-                  </div>
-                );
-              })}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
+            <LinkedCollabCard collabs={threadCollabs} photoOf={photoOf} onOpen={openCollab} className="sticky top-4 hidden @3xl:block" />
+          </div>
         </div>
       </div>
 
@@ -1992,7 +2315,7 @@ export function Mails() {
       )}
       <button
         type="button"
-        onClick={() => setNewMailOpen(true)}
+        onClick={openNewMail}
         className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 text-[13px] font-semibold text-foreground transition-colors hover:bg-rowhover"
       >
         <PenLine className="h-3.5 w-3.5" /> Nouveau mail
@@ -2083,11 +2406,12 @@ export function Mails() {
         className={cn(
           "flex min-w-0 flex-col overflow-clip rounded-2xl border border-border bg-surface lg:grid lg:min-h-[560px] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden",
           mode === "creators"
-            ? "lg:grid-cols-[72px_minmax(0,1fr)]"
-            : "lg:grid-cols-[72px_minmax(320px,360px)_minmax(0,1fr)] xl:grid-cols-[72px_minmax(330px,400px)_minmax(0,1fr)]",
+            ? "lg:grid-cols-[72px_minmax(0,1fr)] xl:grid-cols-[208px_minmax(0,1fr)]"
+            : "lg:grid-cols-[72px_minmax(320px,360px)_minmax(0,1fr)] xl:grid-cols-[208px_minmax(300px,360px)_minmax(0,1fr)] 2xl:grid-cols-[220px_minmax(330px,400px)_minmax(0,1fr)]",
         )}
       >
         {rail}
+        {wideRail}
         {mobileNav}
         {mode === "creators" ? (
           creatorsCol
@@ -2151,10 +2475,12 @@ export function Mails() {
       <MailSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <NewMailDialog
         open={newMailOpen}
+        floating
+        expandKey={newMailKey}
         defaultBox={box === "talent" ? "talent" : "partnerships"}
         onClose={() => setNewMailOpen(false)}
         onSent={() => void refreshList("sent")}
-        onReopen={() => setNewMailOpen(true)}
+        onReopen={openNewMail}
       />
 
       {/* Composeur : nouveau mail depuis un modèle (prospection / relance) */}
