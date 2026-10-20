@@ -1,22 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { TtpBrief, TtpInvoice, TtpMail, TtpPhone, TtpPlanning, TtpSpark, TtpTodo } from "@/components/icons/ttp-icons";
 import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "motion/react";
-import {
-  ArrowUpRight,
-  CalendarDays,
-  Check,
-  ChevronRight,
-  FileText,
-  Inbox,
-  Pencil,
-  Phone,
-  Plus,
-  ReceiptText,
-  Sparkle,
-  SquareCheck,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowUpRight, Check, ChevronRight, Pencil, Plus, X, type LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { useAppState, type AppState } from "@/lib/appState";
@@ -111,11 +97,11 @@ const isoToDate = (iso: string) => {
 };
 
 function iconOf(it: TodayItem): LucideIcon {
-  if (it.kind === "relance") return ReceiptText;
-  if (it.kind === "todo") return SquareCheck;
-  if (it.kind === "mails") return Inbox;
-  if (it.kind === "brief") return FileText;
-  return it.event?.type === "call" ? Phone : CalendarDays;
+  if (it.kind === "relance") return TtpInvoice;
+  if (it.kind === "todo") return TtpTodo;
+  if (it.kind === "mails") return TtpMail;
+  if (it.kind === "brief") return TtpBrief;
+  return it.event?.type === "call" ? TtpPhone : TtpPlanning;
 }
 
 /** Libellé du bouton principal de l'inspecteur. */
@@ -319,7 +305,7 @@ function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onP
         {mail && (
           <div className="mt-4 rounded-[16px] border border-border p-4">
             <div className="flex items-center gap-1.5 text-[13.5px] font-semibold text-primary">
-              <Sparkle className="h-3.5 w-3.5" /> Relance préparée
+              <TtpSpark className="h-3.5 w-3.5" /> Relance préparée
             </div>
             <div className="mt-1 truncate text-[13px] text-muted-foreground">Objet : {mail.subject}</div>
             {editing ? (
@@ -595,7 +581,7 @@ export function Aujourdhui() {
             aria-label="Demander à Megan"
             title="Demander à Megan"
           >
-            <Sparkle className="h-4 w-4" />
+            <TtpSpark className="h-4 w-4" />
           </button>
         )}
         {navSlot ? (

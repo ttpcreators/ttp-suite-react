@@ -99,3 +99,12 @@ export const TtpFolder = make("TtpFolder", <path d="M3 5 H10 L12 7.5 H21 V20 H3 
 export const TtpSearch = make("TtpSearch", <><path d="M10.5 4 A6.5 6.5 0 1 1 10.5 17 A6.5 6.5 0 1 1 10.5 4 Z" /><path d="M15.5 15.5 L21 21" /></>);
 export const TtpTrash = make("TtpTrash", <><path d="M4 6 H20" /><path d="M9 6 V3.5 H15 V6" /><path d="M6 6 L7 21 H17 L18 6" /><path d="M10 10 V17 M14 10 V17" /></>);
 export const TtpMore = make("TtpMore", <path d="M4 6 H20 M4 12 H20 M4 18 H20" />);
+
+// ── Dans les pages (lignes, tuiles, actions) ─────────────────────────────────
+export const TtpPhone = make("TtpPhone", <path d="M5 3 H9 L10.5 7.5 L8 9.5 L14.5 16 L16.5 13.5 L21 15 V19 L19 21 Q9 21 3 11 V5 Z" />);
+export const TtpClock = make("TtpClock", <><path d="M8 3.5 H16 L20.5 8 V16 L16 20.5 H8 L3.5 16 V8 Z" /><path d="M12 7.5 V12 L15 14" /></>);
+export const TtpProgress = make("TtpProgress", <><path d="M4 10 L12 4.5 L20 10 V20 H4 Z" strokeDasharray="2.2 2.2" /><path d="M10 13 H14 V17 H10 Z" /></>);
+export const TtpRepeat = make("TtpRepeat", <><path d="M4 10.5 V7 H17 M14 4 L17 7 L14 10" /><path d="M20 13.5 V17 H7 M10 20 L7 17 L10 14" /></>);
+export const TtpPackage = make("TtpPackage", <><path d="M3 9 L12 4 L21 9 V20 H3 Z" /><path d="M3 9 H21" /><path d="M10 12.5 H14" /></>);
+export const TtpTrophy = make("TtpTrophy", <><path d="M7 4 H17 V9 L12 14 L7 9 Z" /><path d="M12 14 V18 M8 20.5 H16" /><path d="M7 6 H4 V8 L7 10.5 M17 6 H20 V8 L17 10.5" /></>);
+export const TtpNote = make("TtpNote", <><path d="M5 3 H19 V15 L13 21 H5 Z" /><path d="M13 21 V15 H19" /><path d="M8 8 H16 M8 11 H13" /></>);

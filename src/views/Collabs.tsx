@@ -1,9 +1,10 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { TtpClock, TtpContacts, TtpGains, TtpNote, TtpPackage, TtpTrophy } from "@/components/icons/ttp-icons";
 import { supabase } from "@/lib/supabase";
 import { Spin } from "@/components/ui/loader";
 import { useSearch, matchQuery } from "@/lib/search";
 import { cn, titleCase } from "@/lib/utils";
-import { ArrowRight, Pencil, Trash2, X, UserRound, Package, Wallet, Clock, Trophy, XCircle, Archive, CircleDot, Check, ListChecks, ChevronDown, ChevronLeft, RotateCcw, StickyNote, LayoutGrid, List as ListIcon, PanelsTopLeft, RefreshCw, Heart, MessageCircle, ExternalLink, Contact as ContactIcon } from "lucide-react";
+import { ArrowRight, Pencil, Trash2, X, UserRound, XCircle, Archive, CircleDot, Check, ListChecks, ChevronDown, ChevronLeft, RotateCcw, LayoutGrid, List as ListIcon, PanelsTopLeft, RefreshCw, Heart, MessageCircle, ExternalLink } from "lucide-react";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { StatsBento } from "@/components/ui/stats-bento";
@@ -432,7 +433,7 @@ export function Collabs() {
       items={[
         { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(row) },
         ...(row.status !== "active" ? [{ key: "reopen", label: "Remettre en cours", icon: RotateCcw, onClick: () => setStatus(row, "active") }] : []),
-        { key: "won", label: "Marquer gagnée", icon: Trophy, onClick: () => setStatus(row, "gagnee") },
+        { key: "won", label: "Marquer gagnée", icon: TtpTrophy, onClick: () => setStatus(row, "gagnee") },
         { key: "lost", label: "Marquer perdue", icon: XCircle, onClick: () => setStatus(row, "perdue") },
         { key: "archive", label: "Archiver", icon: Archive, onClick: () => setStatus(row, "archivee") },
         { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: () => del(row), confirm: { title: "Mettre à la corbeille", message: `Déplacer la collab « ${row.brand} » vers la corbeille ? Tu pourras la restaurer.`, confirmLabel: "Mettre à la corbeille" } },
@@ -604,7 +605,7 @@ export function Collabs() {
             </div>
             {stale !== null && (
               <span className="flex items-center gap-1 rounded-full bg-amber/15 px-2 py-0.5 text-[9px] font-semibold text-amber">
-                <Clock className="h-3 w-3" /> {stale} j à cette étape
+                <TtpClock className="h-3 w-3" /> {stale} j à cette étape
               </span>
             )}
           </div>
@@ -619,7 +620,7 @@ export function Collabs() {
         {/* Note de création */}
         {row.note && (
           <div className="mt-2 flex items-start gap-1.5 text-[11px] text-muted-foreground">
-            <StickyNote className="mt-0.5 h-3 w-3 shrink-0 text-faint" />
+            <TtpNote className="mt-0.5 h-3 w-3 shrink-0 text-faint" />
             <span className="line-clamp-2 whitespace-pre-line">{row.note}</span>
           </div>
         )}
@@ -629,13 +630,13 @@ export function Collabs() {
           <div className="mt-2 grid grid-cols-2 gap-2">
             <div className="rounded-xl bg-panel px-3 py-2">
               <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-                <Package className="h-3 w-3" /> Livrables
+                <TtpPackage className="h-3 w-3" /> Livrables
               </div>
               <div className="mt-1 truncate text-[12px] font-medium text-foreground">{row.deliverables || "—"}</div>
             </div>
             <div className="rounded-xl bg-panel px-3 py-2">
               <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-                <Wallet className="h-3 w-3" /> Cachet
+                <TtpGains className="h-3 w-3" /> Cachet
               </div>
               <div className="mt-1 truncate text-[12px] font-medium text-foreground">{row.cachet || "—"}</div>
             </div>
@@ -699,7 +700,7 @@ export function Collabs() {
               <span className="min-w-0 truncate font-semibold text-foreground">{def.label}</span>
               {stale !== null && (
                 <span className="flex shrink-0 items-center gap-1 rounded-full bg-amber/15 px-2 py-0.5 text-[9px] font-semibold text-amber">
-                  <Clock className="h-3 w-3" /> {stale} j
+                  <TtpClock className="h-3 w-3" /> {stale} j
                 </span>
               )}
             </div>
@@ -818,9 +819,9 @@ export function Collabs() {
     const statusMeta = statusMetaFor(row);
     const history = [...(steps[row.id] ?? [])].reverse();
     const facts = [
-      { icon: Package, label: "Livrables", value: row.deliverables },
-      { icon: Wallet, label: "Cachet", value: row.cachet },
-      { icon: ContactIcon, label: "Contact marque", value: row.contact },
+      { icon: TtpPackage, label: "Livrables", value: row.deliverables },
+      { icon: TtpGains, label: "Cachet", value: row.cachet },
+      { icon: TtpContacts, label: "Contact marque", value: row.contact },
     ].filter((f) => f.value);
     return (
       <div className="flex min-w-0 flex-col gap-5 rounded-[22px] bg-surface p-5 md:p-6">
@@ -871,7 +872,7 @@ export function Collabs() {
               <h3 className="text-[17px] font-semibold text-foreground">{def.label}</h3>
               {!isDone(row.step) && row.status === "active" && (
                 <StatusPill tone={stale !== null ? "wait" : "progress"}>
-                  {stale !== null ? <Clock className="h-3 w-3" /> : null}
+                  {stale !== null ? <TtpClock className="h-3 w-3" /> : null}
                   En cours{d !== null ? ` · ${d} j` : ""}
                 </StatusPill>
               )}
@@ -890,7 +891,7 @@ export function Collabs() {
             )}
             {row.note && (
               <div className="flex items-start gap-2 rounded-[12px] bg-surface px-3 py-2 text-[13px] text-foreground/80">
-                <StickyNote className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <TtpNote className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="whitespace-pre-line">{row.note}</span>
               </div>
             )}
@@ -986,7 +987,7 @@ export function Collabs() {
             primary={{ eyebrow: "Collabs en cours", value: String(activeRows.length), caption: `sur ${rows.length} collab${rows.length > 1 ? "s" : ""} au total.` }}
             bars={{ label: "En production", value: String(prod), series: byPhase }}
             small={{ value: String(staleCount), label: `Bloquées depuis ${STALE_DAYS} j ou +` }}
-            accent={{ value: String(won), label: "Bouclées / gagnées", icon: Trophy }}
+            accent={{ value: String(won), label: "Bouclées / gagnées", icon: TtpTrophy }}
           />
         );
       })()}

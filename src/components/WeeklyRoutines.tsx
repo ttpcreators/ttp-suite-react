@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Picker } from "@/components/ui/form";
-import { Check, ChevronRight, Clock, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
+import { TtpClock } from "@/components/icons/ttp-icons";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -285,7 +286,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                               title="Historique des « Fait »"
                               aria-label="Historique des « Fait »"
                             >
-                              <Clock className="h-3.5 w-3.5" /> {log.length > 0 && <span className="tabular-nums text-faint">{log.length}</span>}
+                              <TtpClock className="h-3.5 w-3.5" /> {log.length > 0 && <span className="tabular-nums text-faint">{log.length}</span>}
                             </button>
                             <ActionMenu
                               buttonClassName="h-8 w-8"

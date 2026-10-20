@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { TtpChecklist, TtpClock, TtpMission, TtpPlanning, TtpProgress, TtpRepeat } from "@/components/icons/ttp-icons";
 import { cn, titleCase } from "@/lib/utils";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -42,31 +43,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import {
-  X,
-  Pencil,
-  Trash2,
-  MessageSquarePlus,
-  Check,
-  List,
-  Columns3,
-  UserRound,
-  Building2,
-  Plus,
-  Upload,
-  Type,
-  AlignLeft,
-  CalendarClock,
-  Repeat,
-  CircleDotDashed,
-  Clock,
-  Flag,
-  CircleCheck,
-  ArrowUp,
-  Forward,
-  RotateCcw,
-  Paperclip,
-} from "lucide-react";
+import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3, UserRound, Building2, Plus, Upload, Type, AlignLeft, CalendarClock, ArrowUp, Forward, RotateCcw, Paperclip } from "lucide-react";
 import { WeeklyRoutines } from "@/components/WeeklyRoutines";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
 import { PageHeaderRow } from "@/components/ui/page-header";
@@ -673,10 +650,10 @@ export function Todo() {
     setPriorityFilter(target === "prioritaires" ? "haute" : null);
   };
   const KPIS: { id: KpiId; label: string; tone: StatusTone; icon: ReactNode }[] = [
-    { id: "encours", label: "En cours", tone: "progress", icon: <CircleDotDashed /> },
-    { id: "retard", label: "En retard", tone: "wait", icon: <Clock /> },
-    { id: "prioritaires", label: "Prioritaires", tone: "wait", icon: <Flag /> },
-    { id: "terminees", label: "Terminées", tone: "ok", icon: <CircleCheck /> },
+    { id: "encours", label: "En cours", tone: "progress", icon: <TtpProgress /> },
+    { id: "retard", label: "En retard", tone: "wait", icon: <TtpClock /> },
+    { id: "prioritaires", label: "Prioritaires", tone: "wait", icon: <TtpMission /> },
+    { id: "terminees", label: "Terminées", tone: "ok", icon: <TtpChecklist /> },
   ];
 
   // ── Sélection (fiche) ──
@@ -1169,7 +1146,7 @@ export function Todo() {
           </button>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { kind: "reporter" as const, label: "Reporter", icon: CalendarClock },
+              { kind: "reporter" as const, label: "Reporter", icon: TtpPlanning },
               { kind: "deleguer" as const, label: "Déléguer", icon: Forward },
             ].map((b) => (
               <button
@@ -1344,7 +1321,7 @@ export function Todo() {
               key: "weekly",
               label: "Chaque semaine",
               hint: "Revient toute seule chaque semaine, le jour choisi",
-              icon: Repeat,
+              icon: TtpRepeat,
               onClick: () => setRoutineAdd((n) => n + 1),
             },
           ]}
