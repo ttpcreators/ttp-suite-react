@@ -13,6 +13,8 @@ import { titleCase } from "./utils";
  *   - « Argent en retard » : factures à relancer (même règle que la page Relances) ;
  *   - « Aujourd'hui » : agenda du jour, tâches dues aujourd'hui ou en retard, mails non lus ;
  *   - « Demain » : agenda et briefs du lendemain.
+ * Les lignes d'anticipation (« Cette semaine », « À anticiper », et ce que « Demain » ne
+ * couvrait pas) sont construites à part par lib/anticipation.ts : buildToday ne change pas.
  * Une facture relancée aujourd'hui ou une tâche terminée aujourd'hui sort de la liste et
  * rejoint « traitées aujourd'hui ». « Demain » (snooze) cache une ligne jusqu'au lendemain.
  */
@@ -33,8 +35,16 @@ export type AujBrief = { id: string; brand: string | null; creator: string | nul
 /** Mails non lus par boîte (coup d'œil Gmail) ; null = inconnu (Google non relié, erreur). */
 export type MailUnread = { box: string; label: string; count: number }[] | null;
 
-export type ItemKind = "relance" | "event" | "todo" | "brief" | "mails";
-export type SectionId = "argent" | "today" | "tomorrow";
+export type ItemKind = "relance" | "event" | "todo" | "brief" | "mails" | "echeance" | "contrat" | "collab" | "stats";
+export type SectionId = "argent" | "today" | "tomorrow" | "week" | "later";
+
+/** Échéance de contrat suivie (blob agence `contractDeadlines`, page Échéances). */
+export type AujDeadline = { id?: string; creator: string; type: string; start: string; months: number; note?: string };
+/** Collab (colonnes de la page Collabs) et historique daté de ses étapes (`collab_steps`). */
+export type AujCollab = { id: string; brand: string | null; creator: string | null; step: number; status: string | null; updated_at: string | null };
+export type AujCollabStep = { collab_id: string; step: number; reached_at: string };
+/** Créateur du roster, pour la règle « stats du mois » (`creators.stats_month`). */
+export type AujStatsCreator = { name: string; status: string | null; stats_month: string | null };
 export const TODAY_FILTERS = ["tout", "argent", "talents", "boite"] as const;
 export type TodayFilter = (typeof TODAY_FILTERS)[number];
 
@@ -62,6 +72,16 @@ export type TodayItem = {
   event?: AujEvent;
   brief?: AujBrief;
   unread?: number;
+  /** Tâche de priorité haute (point rouge `bg-priority`). */
+  priority?: boolean;
+  /** Date de l'élément (ISO local) : tri des sections d'anticipation. */
+  dateISO?: string;
+  /** Jours avant l'échéance (négatif : dépassée). */
+  daysLeft?: number;
+  contract?: AujDeadline & { end: string };
+  collab?: AujCollab & { stepLabel: string; staleDays: number };
+  /** Créateurs sans stats du mois. */
+  staleCreators?: string[];
 };
 
 export type DoneEntry = { id: string; label: string; kind: "relance" | "todo" };
@@ -69,7 +89,7 @@ export type DoneEntry = { id: string; label: string; kind: "relance" | "todo" };
 export type TodaySection = { id: SectionId; title: string; right: string; items: TodayItem[] };
 
 /** Minutes par type d'action : des ordres de grandeur, volontairement simples. */
-export const MINUTES: Record<Exclude<ItemKind, "mails">, number> = { relance: 2, todo: 3, event: 2, brief: 3 };
+export const MINUTES: Record<Exclude<ItemKind, "mails" | "stats">, number> = { relance: 2, todo: 3, event: 2, brief: 3, echeance: 2, contrat: 5, collab: 3 };
 /** Tri des mails : environ 30 s par mail non lu, entre 2 et 20 min. */
 export const mailMinutes = (n: number) => Math.min(20, Math.max(2, Math.ceil(n / 2)));
 
@@ -355,12 +375,29 @@ export function buildToday(input: TodayInput): TodayResult {
   return { items, done };
 }
 
+/** « 23 oct. » */
+export function dayMonth(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+}
+/** Fenêtre de dates : « 23 au 28 oct. », ou « 29 oct. au 20 nov. » à cheval sur deux mois. */
+export function rangeLabel(from: string, to: string): string {
+  const head = from.slice(0, 7) === to.slice(0, 7) ? String(Number(from.slice(8, 10))) : dayMonth(from);
+  return `${head} au ${dayMonth(to)}`;
+}
+/** Fenêtres d'anticipation : « Cette semaine » de J+2 à J+7, « À anticiper » de J+8 à J+30. */
+export const WEEK_FROM = 2;
+export const WEEK_TO = 7;
+export const LATER_TO = 30;
+
+const TALENT_KINDS: ItemKind[] = ["event", "todo", "brief", "contrat", "collab", "stats"];
+
 /** Filtre « Tout / Argent / Talents / Boîte ». */
 export function filterItems(items: TodayItem[], f: TodayFilter): TodayItem[] {
   if (f === "tout") return items;
-  if (f === "argent") return items.filter((i) => i.kind === "relance");
+  if (f === "argent") return items.filter((i) => i.kind === "relance" || i.kind === "echeance");
   if (f === "boite") return items.filter((i) => i.kind === "mails");
-  return items.filter((i) => i.kind === "event" || i.kind === "todo" || i.kind === "brief");
+  return items.filter((i) => TALENT_KINDS.includes(i.kind));
 }
 
 /** Sections affichées (seulement les non vides), dans l'ordre de la page. */
@@ -370,10 +407,15 @@ export function sectionsOf(items: TodayItem[], now: Date): TodaySection[] {
   const argent = pick("argent");
   const today = pick("today");
   const next = pick("tomorrow");
+  const week = pick("week");
+  const later = pick("later");
+  const d0 = localISO(now);
   const out: TodaySection[] = [];
   if (argent.length) out.push({ id: "argent", title: "Argent en retard", right: formatEuro(argent.reduce((s, i) => s + (i.amount ?? 0), 0)), items: argent });
   if (today.length) out.push({ id: "today", title: "Aujourd'hui", right: String(today.length), items: today });
   if (next.length) out.push({ id: "tomorrow", title: "Demain", right: shortDayLabel(tomorrow), items: next });
+  if (week.length) out.push({ id: "week", title: "Cette semaine", right: rangeLabel(addDaysISO(d0, WEEK_FROM), addDaysISO(d0, WEEK_TO)), items: week });
+  if (later.length) out.push({ id: "later", title: "À anticiper", right: rangeLabel(addDaysISO(d0, WEEK_TO + 1), addDaysISO(d0, LATER_TO)), items: later });
   return out;
 }
 

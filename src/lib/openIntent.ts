@@ -1,34 +1,39 @@
 import { useEffect, useRef } from "react";
 
 /**
- * Demande d'ouverture d'un formulaire dans une autre page : « + » d'Aujourd'hui,
- * « Nouvelle tâche » / « Nouvelle collab » de la palette ⌘K. On pose l'intention,
- * puis on navigue : la page la consomme à son montage, ou tout de suite si elle est
- * déjà montée (onglets gardés en vie). Une intention ne sert qu'une fois.
+ * Demande d'ouverture d'un formulaire ou d'une fiche dans une autre page : « + »
+ * d'Aujourd'hui, « Nouvelle tâche » / « Nouvelle collab » de la palette ⌘K, « Ouvrir »
+ * d'une collab bloquée. On pose l'intention (avec, au besoin, l'id visé), puis on
+ * navigue : la page la consomme à son montage, ou tout de suite si elle est déjà montée
+ * (onglets gardés en vie). Une intention ne sert qu'une fois.
  */
-export type OpenIntent = "todo:new" | "collab:new";
+export type OpenIntent = "todo:new" | "collab:new" | "collab:open";
 
 const EVENT = "ttp-intent";
 let pending: OpenIntent | null = null;
+let pendingData: string | undefined;
 
-export function requestIntent(intent: OpenIntent): void {
+export function requestIntent(intent: OpenIntent, data?: string): void {
   pending = intent;
+  pendingData = data;
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent<OpenIntent>(EVENT, { detail: intent }));
 }
 
-/** Exécute `run` quand `intent` est demandée (au montage si elle attendait déjà). */
-export function useIntent(intent: OpenIntent, run: () => void): void {
+/** Exécute `run` (avec l'id éventuel) quand `intent` est demandée (au montage si elle attendait déjà). */
+export function useIntent(intent: OpenIntent, run: (data?: string) => void): void {
   const ref = useRef(run);
   ref.current = run;
   useEffect(() => {
-    if (pending === intent) {
+    const consume = () => {
+      const data = pendingData;
       pending = null;
-      ref.current();
-    }
+      pendingData = undefined;
+      ref.current(data);
+    };
+    if (pending === intent) consume();
     const on = (e: Event) => {
       if ((e as CustomEvent<OpenIntent>).detail !== intent || pending !== intent) return;
-      pending = null;
-      ref.current();
+      consume();
     };
     window.addEventListener(EVENT, on);
     return () => window.removeEventListener(EVENT, on);
