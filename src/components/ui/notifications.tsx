@@ -1,11 +1,12 @@
 import * as React from "react";
-import { Bell, BellRing, GripVertical, Trash2, Archive, ChevronRight } from "lucide-react";
-import { motion } from "motion/react";
+import { Bell, BellRing, Bug, CalendarDays, FileText, Mail, Receipt, ScrollText, Sparkles, Users, type LucideIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Card } from "@/components/ui/card";
+import { NotificationPanel, type PanelItem } from "@/components/ui/notification-panel";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
-import { Tabs } from "@/components/ui/animated-tabs";
+import { viewTitle } from "@/lib/nav";
+import { actorInitials, readIds, toggleIds, writeIds } from "@/lib/notifLocal";
+import type { StatusTone } from "@/lib/statusTone";
 
 export type NotifKind = "team" | "creator" | "email" | "facture" | "brief" | "event" | "contrat" | "bug";
 
@@ -101,9 +102,29 @@ function PushRow() {
   );
 }
 
+/** Icône et couleur de chaque genre de notification (statuts : rouge = argent en retard seulement). */
+const KIND_META: Record<NotifKind, { icon: LucideIcon; tone: StatusTone }> = {
+  team: { icon: Users, tone: "progress" },
+  creator: { icon: Sparkles, tone: "info" },
+  email: { icon: Mail, tone: "progress" },
+  facture: { icon: Receipt, tone: "late" },
+  brief: { icon: FileText, tone: "info" },
+  event: { icon: CalendarDays, tone: "progress" },
+  contrat: { icon: ScrollText, tone: "wait" },
+  bug: { icon: Bug, tone: "wait" },
+};
+/** Ce qui attend un geste (onglet « À traiter ») et le bouton proposé dans la ligne. */
+const KIND_ACTION: Partial<Record<NotifKind, string>> = {
+  facture: "Relancer",
+  brief: "Valider le brief",
+  contrat: "Voir le contrat",
+  bug: "Voir le diagnostic",
+};
+
 export function Notifications({
   items = [],
   onDismiss,
+  onOpenPage,
   variant = "default",
 }: {
   /** « bar » : simple icône pour la barre de titre du mode iPhone ; « sidebar » : bouton du pied de menu (s'ouvre à droite). */
@@ -111,35 +132,54 @@ export function Notifications({
   items?: NotificationItem[];
   /** Effacement PERSISTANT (mémorisé côté serveur) — sinon la notif revient au refresh. */
   onDismiss?: (ids: string[]) => void;
+  /** Ouvre la page concernée (clic sur une ligne, bouton d'action, réglages). */
+  onOpenPage?: (page: string) => void;
 }) {
-  const [notifications, setNotifications] = React.useState<NotificationItem[]>(items);
-  const [activeId, setActiveId] = React.useState<string | null>(null);
-  const [filter, setFilter] = React.useState<"all" | NotifKind>("all");
+  const [open, setOpen] = React.useState(false);
+  // Lue / archivée : propre à cet appareil (lib/notifLocal).
+  const [read, setRead] = React.useState(() => readIds("read"));
+  const [archived, setArchived] = React.useState(() => readIds("archived"));
+  const mark = (ids: string[], on: boolean) => {
+    const next = toggleIds(read, ids, on);
+    setRead(next);
+    writeIds("read", next);
+  };
+  const archive = (ids: string[], on: boolean) => {
+    const next = toggleIds(archived, ids, on);
+    setArchived(next);
+    writeIds("archived", next);
+  };
 
-  React.useEffect(() => {
-    setNotifications(items);
-  }, [items]);
-
-  // Compteur par type + liste filtrée. Si le type filtré disparaît → retour à « Tout ».
-  const counts = React.useMemo(() => {
-    const m: Partial<Record<NotifKind, number>> = {};
-    for (const n of notifications) if (n.kind) m[n.kind] = (m[n.kind] ?? 0) + 1;
-    return m;
-  }, [notifications]);
-  const activeKinds = NOTIF_KINDS.filter((k) => counts[k.value]);
-  React.useEffect(() => {
-    if (filter !== "all" && !counts[filter]) setFilter("all");
-  }, [counts, filter]);
-  const shown = filter === "all" ? notifications : notifications.filter((n) => n.kind === filter);
-
-  const remove = (id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-    setActiveId(null);
-    onDismiss?.([id]);
+  const panelItems: PanelItem[] = items.map((n) => {
+    const kind = n.kind ?? "team";
+    const meta = KIND_META[kind];
+    const action = KIND_ACTION[kind];
+    return {
+      id: n.id,
+      title: n.title,
+      description: n.description,
+      time: n.time,
+      context: n.page ? viewTitle(n.page) : undefined,
+      initials: kind === "team" ? actorInitials(n.title) || undefined : undefined,
+      icon: meta.icon,
+      tone: meta.tone,
+      unread: !read.has(n.id),
+      archived: archived.has(n.id),
+      actionable: !!action,
+      actions: action && n.page && onOpenPage ? [{ id: "open", label: action, tone: "primary" }] : undefined,
+    };
+  });
+  const unreadCount = panelItems.filter((n) => n.unread && !n.archived).length;
+  const go = (id: string) => {
+    const page = items.find((n) => n.id === id)?.page;
+    if (page && onOpenPage) {
+      onOpenPage(page);
+      setOpen(false);
+    }
   };
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -151,87 +191,34 @@ export function Notifications({
               : "relative grid h-10 w-10 place-items-center rounded-full bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"}
         >
           <Bell className={variant === "bar" ? "h-[22px] w-[22px]" : "h-4 w-4"} strokeWidth={variant === "bar" ? 1.9 : 2} />
-          {notifications.length > 0 && (
+          {unreadCount > 0 && (
             <span className={(variant === "bar" ? "absolute right-1 top-1" : variant === "sidebar" ? "absolute -right-0.5 -top-0.5" : "absolute -right-1 -top-1") + " grid h-[18px] min-w-[18px] place-items-center rounded-full bg-badge px-1 text-[10px] font-bold text-white"}>
-              {notifications.length}
+              {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" side={variant === "sidebar" ? "right" : undefined} align="end" sideOffset={variant === "sidebar" ? 14 : 8}>
-        <Card className="max-h-96 overflow-y-auto border-none shadow-none">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <span className="text-sm font-semibold">Notifications</span>
-            {notifications.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  onDismiss?.(notifications.map((n) => n.id));
-                  setNotifications([]);
-                }}
-                className="text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Tout effacer
-              </button>
-            )}
-          </div>
-          <PushRow />
-
-          {/* Filtres par type (onglet actif en bleu + compteur) */}
-          {activeKinds.length >= 2 && (
-            <div className="border-b border-border px-3 py-2">
-              <Tabs
-                size="sm"
-                label="Filtrer les notifications par type"
-                value={filter}
-                onValueChange={(v) => setFilter(v as "all" | NotifKind)}
-                items={[{ value: "all", label: "Tout", count: notifications.length }, ...activeKinds.map((k) => ({ value: k.value, label: k.label, count: counts[k.value] ?? 0 }))]}
-              />
-            </div>
-          )}
-
-          {notifications.length === 0 ? (
-            <div className="p-6 text-center text-sm text-muted-foreground">Aucune notification 🎉</div>
-          ) : shown.length === 0 ? (
-            <div className="p-6 text-center text-sm text-muted-foreground">Aucune notification de ce type.</div>
-          ) : (
-            <ul className="divide-y divide-border">
-              {shown.map((item) => {
-                const isActive = activeId === item.id;
-                return (
-                  <li key={item.id} className="flex items-center justify-between p-4 transition hover:bg-rowhover/50">
-                    <motion.div animate={{ x: isActive ? -36 : 0 }} transition={{ duration: 0.2 }} className="min-w-0 flex-1">
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <span className="truncate text-sm font-medium">{item.title}</span>
-                        <span className="shrink-0 text-[11px] text-faint">{item.time}</span>
-                      </div>
-                      <p className="text-xs leading-relaxed text-muted-foreground">{item.description}</p>
-                    </motion.div>
-                    <div className="ml-2 flex items-center">
-                      {isActive ? (
-                        <div className="flex items-center gap-1.5">
-                          <button type="button" className="rounded-md p-1 hover:bg-rowhover" onClick={() => setActiveId(null)} title="Archiver">
-                            <Archive className="h-4 w-4 text-muted-foreground" />
-                          </button>
-                          <button type="button" className="rounded-md p-1 hover:bg-rowhover" onClick={() => remove(item.id)} title="Supprimer">
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </button>
-                          <button type="button" className="rounded-md p-1 hover:bg-rowhover" onClick={() => setActiveId(null)}>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button type="button" className="rounded-md p-1 hover:bg-rowhover" onClick={() => setActiveId(item.id)}>
-                          <GripVertical className="h-4 w-4 text-muted-foreground" />
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
+      <PopoverContent
+        className="w-[400px] max-w-[calc(100vw-1rem)] overflow-hidden p-0"
+        side={variant === "sidebar" ? "right" : undefined}
+        align="end"
+        sideOffset={variant === "sidebar" ? 14 : 8}
+      >
+        <NotificationPanel
+          items={panelItems}
+          maxHeight={440}
+          top={<PushRow />}
+          onOpenItem={(it) => go(it.id)}
+          onAction={(it) => go(it.id)}
+          onReadChange={(it, unread) => mark([it.id], !unread)}
+          onArchiveChange={(it, on) => archive([it.id], on)}
+          onDelete={onDismiss ? (it) => onDismiss([it.id]) : undefined}
+          onMarkAllRead={() => mark(items.map((n) => n.id), true)}
+          onSettings={onOpenPage ? () => {
+            onOpenPage("parametres");
+            setOpen(false);
+          } : undefined}
+        />
       </PopoverContent>
     </Popover>
   );

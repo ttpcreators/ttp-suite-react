@@ -801,7 +801,7 @@ export default function App() {
       <GlobalSearch query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={navHidden} />
       {/* right cluster */}
       <div className="ml-auto flex shrink-0 items-center gap-2.5">
-        <Notifications items={notifs} onDismiss={dismissNotifs} />
+        <Notifications items={notifs} onDismiss={dismissNotifs} onOpenPage={(p) => select(p as ViewId)} />
         {/* Thème : desktop uniquement (sur mobile → Paramètres → Apparence, gain de place) */}
         <button
           type="button"
@@ -875,7 +875,7 @@ export default function App() {
               search={<GlobalSearch variant="sidebar" query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={navHidden} onActivate={openCommandPalette} />}
               tools={
                 <>
-                  <Notifications variant="sidebar" items={notifs} onDismiss={dismissNotifs} />
+                  <Notifications variant="sidebar" items={notifs} onDismiss={dismissNotifs} onOpenPage={(p) => select(p as ViewId)} />
                   <button
                     type="button"
                     onClick={toggleTheme}
@@ -919,7 +919,7 @@ export default function App() {
                       ) : (
                         <>
                           <IosBarIcon icon={Search} label="Rechercher" onClick={() => setPhoneScreen("search")} />
-                          <Notifications items={notifs} onDismiss={dismissNotifs} variant="bar" />
+                          <Notifications items={notifs} onDismiss={dismissNotifs} onOpenPage={(p) => select(p as ViewId)} variant="bar" />
                         </>
                       )
                     }
