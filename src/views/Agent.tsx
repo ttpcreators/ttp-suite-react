@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { supabase } from "@/lib/supabase";
 import { MorphingTabs } from "@/components/ui/morphing-tabs";
 import { Picker } from "@/components/ui/form";
@@ -214,7 +215,7 @@ export function AgentView() {
   // Agents configurables (agent.agents) : absents tant que le SQL n'est pas lancé.
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [agentsMissing, setAgentsMissing] = useState(false);
-  const [tab, setTab] = useState<Tab>("apercu");
+  const [tab, setTab] = useStickyState<Tab>("agents:onglet", ["apercu", "valider", "agents", "megan", "memoire", "journal"], "apercu");
   // Ordinateur (≥ 768 px) : onglets « morphing » ; ordre choisi au glisser, gardé sur l'appareil.
   const [wide, setWide] = useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches);
   useEffect(() => {

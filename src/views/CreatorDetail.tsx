@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { fmtCompact } from "@/lib/timeSeries";
 import { useEffect, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X, ArrowUpRight, Share2, IdCard, ScrollText, Receipt, ListChecks, FileText, Lightbulb, Mail, TrendingUp, type LucideIcon } from "lucide-react";
@@ -192,7 +193,7 @@ export function CreatorDetail({
   const [c, setC] = useState<Creator | null>(null);
   // Téléphone : la fiche est découpée en sections (au lieu d'une très longue page).
   const iosPhone = useIosPhone();
-  const [phoneSeg, setPhoneSeg] = useState<"suivi" | "infos" | "activite" | "mails">("suivi");
+  const [phoneSeg, setPhoneSeg] = useStickyState("fiche-createur:section", ["suivi", "infos", "activite", "mails"] as const, "suivi");
   const segHide = (seg: typeof phoneSeg) => (iosPhone && phoneSeg !== seg ? "hidden" : "");
   const [inv, setInv] = useState<Inv[]>([]);
   const [td, setTd] = useState<Td[]>([]);

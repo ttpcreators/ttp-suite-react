@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { supabase } from "@/lib/supabase";
 import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, Clock, AlertTriangle, MapPin, MessageCircle, AtSign, Phone, BriefcaseBusiness, Check, type LucideIcon } from "lucide-react";
 import {
@@ -289,7 +290,7 @@ export function Contacts() {
   const [city, setCity] = useState("");
 
   const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS);
-  const [contactFilter, setContactFilter] = useState<"all" | "contacted" | "never" | "relancer">("all"); // déjà échangé ?
+  const [contactFilter, setContactFilter] = useStickyState("contacts:suivi", ["all", "contacted", "never", "relancer"] as const, "all"); // déjà échangé ?
   const [cityFilter, setCityFilter] = useState<string>(""); // "" = toutes les villes
   const iosPhone = useIosPhone(); // mode iPhone : filtres rangés dans une feuille « Filtres »
   const [touchDel, setTouchDel] = useState<string | null>(null); // suppression d'une touche en 2 temps

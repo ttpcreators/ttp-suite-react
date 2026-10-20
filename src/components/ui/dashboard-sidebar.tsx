@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
+import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { Check, ChevronRight, ChevronsUpDown, Columns2, PanelLeftClose, Star, type LucideIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -13,33 +14,48 @@ const BASE = import.meta.env.BASE_URL;
 /** Sous-page ; `pinnable` = aussi une vraie page, épinglable aux raccourcis (étoile, clic droit). */
 export type SbChild = { id: string; label: string; pinnable?: boolean; badge?: number };
 /** `badge` = nombre de notifications de la page (pastille ; 0 ou absent = rien). */
-export type SbItem = { id: string; label: string; icon: LucideIcon; badge?: number; children?: SbChild[] };
-export type SbGroup = { id: string; label: string; icon: LucideIcon; items: SbItem[] };
+export type SbItem = { id: string; label: string; icon: LucideIcon; badge?: number; badgeTone?: "late"; children?: SbChild[] };
+/** `fixed` = section toujours dépliée (Favoris, Raccourcis), hors accordéon. */
+export type SbGroup = { id: string; label: string; icon: LucideIcon; fixed?: boolean; items: SbItem[] };
 
 /*
- * Langage visuel (façon Efferd) : la sidebar est posée à même le fond, sans
- * cadre. Intitulés de section discrets, icônes et libellés gris, élément actif
- * sur une pastille claire (blanche en clair, gris profond en sombre), aucun
- * aplat de couleur. Partagé par l'espace agence et l'espace créatrices.
+ * Langage visuel (TTP Suite 2.0) : sidebar posée à même le fond. Intitulés de section
+ * discrets, icônes à la couleur d'accent, élément actif sur une pastille pleine
+ * d'accent (texte blanc) qui GLISSE d'une ligne à l'autre au clic. Pastilles de nombre
+ * grises, rouges seulement pour l'argent en retard. Partagé agence et créateurs.
  */
-const ACTIVE_BG = "bg-surface dark:bg-rowhover";
-const HOVER_BG = "hover:bg-surface/60 dark:hover:bg-rowhover/70";
+const ACTIVE_BG = "bg-primary";
+const HOVER_BG = "hover:bg-rowhover";
+/** Ressort de la pastille active (glisse, sans rebond visible). */
+const PILL_SPRING = { type: "spring", stiffness: 520, damping: 44, mass: 0.7 } as const;
 
-/** Ligne de menu (pleine largeur). */
-export const sbItemCls = (active: boolean) =>
+/** Ligne de menu (pleine largeur). `pill` : le fond actif est la pastille animée (ActivePill). */
+export const sbItemCls = (active: boolean, pill = false) =>
   cn(
-    "flex w-full select-none items-center gap-2.5 rounded-full px-3 py-[7px] text-left text-[13.5px] transition-colors focus-visible:outline-offset-[-2px]",
-    active ? cn(ACTIVE_BG, "font-medium text-foreground") : cn("text-foreground/70 hover:text-foreground", HOVER_BG),
+    "relative isolate flex w-full select-none items-center gap-2.5 rounded-[10px] px-3 py-[7px] text-left text-[14px] transition-[color,background-color,transform] duration-[var(--dur-press)] active:scale-[0.98] focus-visible:outline-offset-[-2px] motion-reduce:active:scale-100",
+    active ? cn(!pill && ACTIVE_BG, "font-medium text-primary-foreground") : cn("text-foreground/85 hover:text-foreground", HOVER_BG),
   );
 /** Icône d'une ligne de menu. */
 export const sbIconCls = (active: boolean) =>
-  cn("h-4 w-4 shrink-0 transition-colors", active ? "text-foreground" : "text-foreground/45 group-hover:text-foreground/80");
+  cn("h-[18px] w-[18px] shrink-0 transition-colors", active ? "text-primary-foreground" : "text-primary");
 /** Bouton carré du rail replié (icône seule). */
 export const sbRailCls = (active: boolean) =>
   cn(
-    "grid h-10 w-10 shrink-0 place-items-center rounded-full transition-colors",
-    active ? cn(ACTIVE_BG, "text-foreground") : cn("text-foreground/50 hover:text-foreground", HOVER_BG),
+    "grid h-10 w-10 shrink-0 place-items-center rounded-[12px] transition-[color,background-color,transform] duration-[var(--dur-press)] active:scale-95",
+    active ? cn(ACTIVE_BG, "text-primary-foreground") : cn("text-primary", HOVER_BG),
   );
+/** Pastille d'accent de la ligne active : un seul exemplaire qui glisse vers la ligne cliquée. */
+function ActivePill() {
+  const reduce = useReducedMotion();
+  return (
+    <motion.span
+      layoutId="sb-active-pill"
+      aria-hidden
+      className={cn("absolute inset-0 -z-10 rounded-[10px]", ACTIVE_BG)}
+      transition={reduce ? { duration: 0 } : PILL_SPRING}
+    />
+  );
+}
 /** Dégradé SVG de l'accent (deux bouts `--accent-a/-b`, égaux hors accent en dégradé). */
 const ACCENT_GRAD_ID = "ttp-accent-grad";
 function AccentGradientDef() {
@@ -55,9 +71,15 @@ function AccentGradientDef() {
   );
 }
 /** Pastille de nombre (notifications) à droite d'une ligne du menu. */
-export function SbCount({ n, className }: { n: number; className?: string }) {
+export function SbCount({ n, className, tone, onActive }: { n: number; className?: string; tone?: "late"; onActive?: boolean }) {
   return (
-    <span className={cn("grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-foreground px-1 text-[10.5px] font-semibold tabular-nums text-background", className)}>
+    <span
+      className={cn(
+        "grid h-[20px] min-w-[22px] shrink-0 place-items-center rounded-full px-1.5 text-[11.5px] font-semibold tabular-nums",
+        onActive ? "bg-primary-foreground/25 text-primary-foreground" : tone === "late" ? "bg-late-soft text-late" : "bg-field text-foreground/70",
+        className,
+      )}
+    >
       {n > 99 ? "99+" : n}
     </span>
   );
@@ -67,6 +89,8 @@ export const sbBadgeTotal = (item: SbItem) =>
   (item.badge ?? 0) + (item.children ?? []).reduce((s, c) => s + (c.badge ?? 0), 0);
 /** Petit bouton d'action révélé dans une ligne (chevron, vue partagée, étoile). */
 const ghostBtn = "grid h-6 w-6 place-items-center rounded-md text-foreground/40 transition-colors hover:bg-foreground/[0.06] hover:text-foreground";
+/** Les mêmes, posés sur la pastille d'accent de la ligne active. */
+const ON_PILL_BTN = "text-primary-foreground/70 hover:bg-primary-foreground/15 hover:text-primary-foreground";
 
 function Row({
   item,
@@ -103,12 +127,13 @@ function Row({
     : (hasChildren ? "pr-9" : "pr-2.5");
   return (
     <div className="group relative flex items-center">
-      <button type="button" onClick={onClick} onContextMenu={onContext} title={hint} className={cn(sbItemCls(active), pr)}>
+      <button type="button" onClick={onClick} onContextMenu={onContext} title={hint} aria-current={active ? "page" : undefined} className={cn(sbItemCls(active, true), pr)}>
+        {active && <ActivePill />}
         <item.icon className={sbIconCls(active)} strokeWidth={1.75} />
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
         {/* Pastille : décalée pour ne pas passer sous le bouton « à côté » ni l'étoile. */}
         {!!item.badge && (
-          <SbCount n={item.badge} className={cn(!hasChildren && (onSplit || onTogglePin) && "mr-6")} />
+          <SbCount n={item.badge} tone={item.badgeTone} onActive={active} className={cn(!hasChildren && (onSplit || onTogglePin) && "mr-6")} />
         )}
       </button>
 
@@ -122,7 +147,7 @@ function Row({
           }}
           aria-label={open ? t("Replier") : t("Déplier")}
           aria-expanded={open}
-          className={cn("absolute right-1.5", ghostBtn)}
+          className={cn("absolute right-1.5", ghostBtn, active && ON_PILL_BTN)}
         >
           <ChevronRight className={cn("h-3.5 w-3.5 transition-transform duration-200", open && "rotate-90")} strokeWidth={2} />
         </button>
@@ -136,7 +161,7 @@ function Row({
             }}
             title={t("Ouvrir à côté (2 pages côte à côte)")}
             aria-label={t("Ouvrir à côté")}
-            className={cn("absolute right-1.5 opacity-0 focus-visible:opacity-100 group-hover:opacity-100", ghostBtn)}
+            className={cn("absolute right-1.5 opacity-0 focus-visible:opacity-100 group-hover:opacity-100", ghostBtn, active && ON_PILL_BTN)}
           >
             <Columns2 className="h-3.5 w-3.5" />
           </button>
@@ -156,6 +181,7 @@ function Row({
           className={cn(
             "absolute right-8 focus-visible:opacity-100",
             ghostBtn,
+            active && ON_PILL_BTN,
             pinned ? "opacity-100" : "opacity-0 group-hover:opacity-100",
           )}
         >
@@ -257,10 +283,12 @@ function ItemBlock({
                       type="button"
                       onClick={() => onSelect(item.id, c.id)}
                       onContextMenu={c.pinnable && onItemContext ? (e) => onItemContext(c.id, e) : undefined}
-                      className={cn(sbItemCls(on), "py-[5px]", pin && "pr-9")}
+                      aria-current={on ? "page" : undefined}
+                      className={cn(sbItemCls(on, true), "py-[5px] text-[13.5px]", pin && "pr-9")}
                     >
+                      {on && <ActivePill />}
                       <span className="min-w-0 flex-1 truncate">{c.label}</span>
-                      {!!c.badge && <SbCount n={c.badge} />}
+                      {!!c.badge && <SbCount n={c.badge} onActive={on} />}
                     </button>
                     {pin && (
                       <button
@@ -318,6 +346,32 @@ function Group({
 }) {
   const containsActive = group.items.some((i) => i.id === activeId);
   const total = group.items.reduce((s, i) => s + sbBadgeTotal(i), 0);
+  const items = (
+    <div className="flex flex-col gap-0.5 pb-2">
+      {group.items.map((item) => (
+        <ItemBlock
+          key={item.id}
+          item={item}
+          activeId={activeId}
+          activeSub={activeSub}
+          onSelect={onSelect}
+          onItemContext={onItemContext}
+          onItemSplit={onItemSplit}
+          isPinned={isPinned}
+          onTogglePin={onTogglePin}
+        />
+      ))}
+    </div>
+  );
+  // Section fixe (Favoris, Raccourcis) : intitulé simple, toujours dépliée.
+  if (group.fixed) {
+    return (
+      <div className="flex flex-col">
+        <div className="flex h-8 select-none items-center px-2.5 text-[12px] font-semibold text-foreground/50">{group.label}</div>
+        {items}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col">
       <button
@@ -325,7 +379,7 @@ function Group({
         onClick={onToggle}
         aria-expanded={open}
         className={cn(
-          "group/h flex h-8 select-none items-center gap-1.5 rounded-[8px] px-2.5 text-left text-[12px] font-medium transition-colors hover:text-foreground",
+          "group/h flex h-8 select-none items-center gap-1.5 rounded-[8px] px-2.5 text-left text-[12px] font-semibold transition-colors hover:text-foreground",
           open || containsActive ? "text-foreground/60" : "text-foreground/50",
         )}
       >
@@ -350,23 +404,7 @@ function Group({
           open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
         )}
       >
-        <div className="min-h-0 overflow-hidden">
-          <div className="flex flex-col gap-0.5 pb-2">
-            {group.items.map((item) => (
-              <ItemBlock
-                key={item.id}
-                item={item}
-                activeId={activeId}
-                activeSub={activeSub}
-                onSelect={onSelect}
-                onItemContext={onItemContext}
-                onItemSplit={onItemSplit}
-                isPinned={isPinned}
-                onTogglePin={onTogglePin}
-              />
-            ))}
-          </div>
-        </div>
+        <div className="min-h-0 overflow-hidden">{items}</div>
       </div>
     </div>
   );
@@ -556,8 +594,8 @@ export function SidebarNav({
 }) {
   // Accordéon : une seule section ouverte à la fois. Celle de la page active s'ouvre
   // automatiquement (navigation, recherche) ; un clic sur une autre section bascule.
-  const activeGroupId = groups.find((g) => g.items.some((i) => i.id === activeId))?.id ?? null;
-  const [openGroup, setOpenGroup] = useState<string | null>(activeGroupId ?? groups[0]?.id ?? null);
+  const activeGroupId = groups.find((g) => !g.fixed && g.items.some((i) => i.id === activeId))?.id ?? null;
+  const [openGroup, setOpenGroup] = useState<string | null>(activeGroupId);
   useEffect(() => {
     if (activeGroupId) setOpenGroup(activeGroupId);
   }, [activeGroupId]);
@@ -567,6 +605,7 @@ export function SidebarNav({
       <AccentGradientDef />
       {header}
       <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <LayoutGroup id="sidebar-nav">
         {groups.map((g) => (
           <Group
             key={g.id}
@@ -582,6 +621,7 @@ export function SidebarNav({
             onTogglePin={onTogglePin}
           />
         ))}
+        </LayoutGroup>
       </nav>
       {footer && <div className="mt-auto flex flex-col gap-1 pt-2">{footer}</div>}
     </aside>

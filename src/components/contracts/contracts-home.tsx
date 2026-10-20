@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Eye, FileDown, FileText, ListFilter, PenLine, Search, Send, Trash2, X } from "lucide-react";
@@ -97,7 +98,7 @@ export function ContractsHome({
     [data, removed, statusOver],
   );
 
-  const [tab, setTab] = useState<StatusTab>("all");
+  const [tab, setTab] = useStickyState<StatusTab>("contrats:statut", ["all", "signed", "pending", "changes"], "all");
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<SortKey>("recent");
   const [fCreator, setFCreator] = useState("");

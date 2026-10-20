@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TONE_SOLID, TONE_TILE } from "@/lib/statusTone";
 import { Loader, Spin } from "@/components/ui/loader";
@@ -379,7 +380,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const [partial, setPartial] = useState(false);
   const [listAlias, setListAlias] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("tous");
+  const [filter, setFilter] = useStickyState<(typeof FILTERS)[number]["key"]>("mails-createur:filtre", FILTERS.map((f) => f.key), "tous");
   const [openId, setOpenId] = useState<string | null>(null);
   const [thread, setThread] = useState<MailThread | null>(null);
   const [threadErr, setThreadErr] = useState<string | null>(null);

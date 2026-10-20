@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { MailAvatar } from "@/components/mail-avatar";
@@ -69,7 +70,7 @@ export function WhatsappView() {
   const [journalOpen, setJournalOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [composeFor, setComposeFor] = useState<Row | null>(null);
-  const [view, setView] = useState<"all" | "relance" | "jamais" | "encours">("all");
+  const [view, setView] = useStickyState("a-contacter:file", ["all", "relance", "jamais", "encours"] as const, "all");
   const [tagFilter, setTagFilter] = useState("__all__");
   const { query } = useSearch();
   const live = useLiveKey();

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useStickyState } from "@/lib/useStickyState";
 import { Users, Clapperboard, Radar } from "lucide-react";
 import { Roster } from "./Roster";
 import { Ugc } from "./Ugc";
@@ -14,7 +14,7 @@ const TABS: { id: Tab; label: string; icon: typeof Users }[] = [
 ];
 
 export function RosterTabs({ onOpen }: { onOpen?: (name: string) => void }) {
-  const [tab, setTab] = useState<Tab>("roster");
+  const [tab, setTab] = useStickyState<Tab>("roster:section", ["roster", "suivi", "ugc"], "roster");
   return (
     <div>
       {/* Onglets animés : la pastille glisse, le texte change de couleur à son passage,

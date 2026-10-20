@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useCallback, useEffect, useState } from "react";
 import { Bug, Check, ChevronDown, ChevronUp, Copy, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -49,7 +50,7 @@ function reportText(g: Group): string {
 
 export function BugsPanel() {
   const [rows, setRows] = useState<Row[] | null>(null);
-  const [filter, setFilter] = useState<"open" | "all">("open");
+  const [filter, setFilter] = useStickyState("bugs:filtre", ["open", "all"] as const, "open");
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 

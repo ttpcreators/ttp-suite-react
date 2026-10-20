@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import { Users, TrendingUp, TrendingDown, Receipt, Wallet, Clock, FileText, Contact as ContactIcon, Activity } from "lucide-react";
 
@@ -212,8 +213,8 @@ function CompareCard({ label, current, previous, delta, curLbl, prevLbl }: { lab
 export function Stats() {
   const [data, setData] = useState<StatsData | null>(() => getCache<StatsData>("statsData"));
   const [error, setError] = useState(false);
-  const [cmpMonths, setCmpMonths] = useState<1 | 3 | 6 | 12>(3);
-  const [cmpAgainst, setCmpAgainst] = useState<"prev" | "year">("prev");
+  const [cmpMonths, setCmpMonths] = useStickyState<1 | 3 | 6 | 12>("stats:duree", [1, 3, 6, 12], 3);
+  const [cmpAgainst, setCmpAgainst] = useStickyState("stats:comparer", ["prev", "year"] as const, "prev");
   const live = useLiveKey();
   // Instantanés mensuels (blob agence) → variation MoM des cartes « état du moment ».
   const { data: snaps } = useAppState<Record<string, Snap>>((s: AppState) => (s["statsSnapshots"] as Record<string, Snap>) ?? {});

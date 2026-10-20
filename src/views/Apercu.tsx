@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useState, lazy, Suspense, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { supabase } from "@/lib/supabase";
@@ -132,7 +133,7 @@ export function ApercuView({
   // Fenêtre des KPI : raccourci 7 / 30 / 90 jours ou dates libres (calendrier).
   const [range, setRange] = useState<DateRange>(() => presetRange("30j")!);
   const quick = (["7j", "30j", "90j"] as const).find((id) => sameRange(presetRange(id), range)) ?? null;
-  const [caBasis, setCaBasis] = useState<"emission" | "echeance">("emission");
+  const [caBasis, setCaBasis] = useStickyState("apercu:base-ca", ["emission", "echeance"] as const, "emission");
 
   const issued = d.invoices.filter((i) => i.status !== "brouillon");
   const issueMs = (iv: Invoice) => toMs(invDetails[iv.id]?.issueDate || iv.date);

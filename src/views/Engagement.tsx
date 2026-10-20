@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import { Activity, Check, Save, Pencil, X, Calculator, Gauge, History } from "lucide-react";
 import { TickMeter } from "@/components/ui/dash";
@@ -145,7 +146,7 @@ function verdict(er: number, p: Platform): { label: string; hint: string; tone: 
 export function Engagement() {
   const creators = useCreators();
 
-  const [platformKey, setPlatformKey] = useState<PlatformKey>("instagram");
+  const [platformKey, setPlatformKey] = useStickyState<PlatformKey>("engagement:reseau", ["instagram", "tiktok", "youtube", "x", "snapchat"], "instagram");
   const [creatorId, setCreatorId] = useState<string>("");
   const [vals, setVals] = useState<Record<string, string>>({});
   const [followers, setFollowers] = useState("");
