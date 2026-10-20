@@ -169,6 +169,15 @@ export function Collabs() {
   const [formOpen, setFormOpen] = useState(false);
   // « Nouvelle collab » de la palette ⌘K : ouvre le formulaire de création.
   useIntent("collab:new", () => setFormOpen(true));
+  // « Ouvrir » d'une collab bloquée (Aujourd'hui) : affichage détail, filtres levés, fiche ouverte.
+  useIntent("collab:open", (id) => {
+    if (!id) return;
+    changeLayout("detail");
+    if (statusFilter !== "__all__" && statusFilter !== "active") setStatusFilter("active");
+    setPhaseFilter("__all__");
+    setCreatorFilter("");
+    pick(id);
+  });
   const [brand, setBrand] = useState("");
   const [creator, setCreator] = useState("");
   const [contact, setContact] = useState("");
