@@ -569,7 +569,7 @@ export function Parametres() {
   return (
     <div className="grid gap-6 xl:grid-cols-[210px_minmax(0,1fr)]">
     <SettingsNav />
-    <div className="flex max-w-3xl flex-col gap-4">
+    <div className="flex min-w-0 max-w-3xl flex-col gap-4">
       <GroupTitle id="general" first>Général</GroupTitle>
       {/* Apparence (thème) — pratique surtout sur mobile où l'icône a quitté le bandeau */}
       <Section

@@ -106,8 +106,8 @@ export function Notifications({
   onDismiss,
   variant = "default",
 }: {
-  /** « bar » : simple icône pour la barre de titre du mode iPhone. */
-  variant?: "default" | "bar";
+  /** « bar » : simple icône pour la barre de titre du mode iPhone ; « sidebar » : bouton du pied de menu (s'ouvre à droite). */
+  variant?: "default" | "bar" | "sidebar";
   items?: NotificationItem[];
   /** Effacement PERSISTANT (mémorisé côté serveur) — sinon la notif revient au refresh. */
   onDismiss?: (ids: string[]) => void;
@@ -146,17 +146,19 @@ export function Notifications({
           aria-label="Notifications"
           className={variant === "bar"
             ? "relative grid h-11 w-11 place-items-center text-foreground"
-            : "relative grid h-10 w-10 place-items-center rounded-full bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"}
+            : variant === "sidebar"
+              ? "relative grid h-9 w-9 shrink-0 place-items-center rounded-full text-foreground/60 transition-colors hover:bg-rowhover hover:text-foreground"
+              : "relative grid h-10 w-10 place-items-center rounded-full bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"}
         >
           <Bell className={variant === "bar" ? "h-[22px] w-[22px]" : "h-4 w-4"} strokeWidth={variant === "bar" ? 1.9 : 2} />
           {notifications.length > 0 && (
-            <span className={(variant === "bar" ? "absolute right-1 top-1" : "absolute -right-1 -top-1") + " grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground"}>
+            <span className={(variant === "bar" ? "absolute right-1 top-1" : variant === "sidebar" ? "absolute -right-0.5 -top-0.5" : "absolute -right-1 -top-1") + " grid h-[18px] min-w-[18px] place-items-center rounded-full bg-badge px-1 text-[10px] font-bold text-white"}>
               {notifications.length}
             </span>
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="end" sideOffset={8}>
+      <PopoverContent className="w-80 p-0" side={variant === "sidebar" ? "right" : undefined} align="end" sideOffset={variant === "sidebar" ? 14 : 8}>
         <Card className="max-h-96 overflow-y-auto border-none shadow-none">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <span className="text-sm font-semibold">Notifications</span>

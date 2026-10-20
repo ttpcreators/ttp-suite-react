@@ -1607,7 +1607,7 @@ export function CreatorSpace({
       <div className={cn("flex min-h-0 flex-1 overflow-hidden", !iosPhone && "rounded-[22px]")}>
         {/* Sidebar desktop repliable */}
         {sbCollapsed ? (
-          <aside className="hidden w-[68px] shrink-0 flex-col items-center p-2 md:flex">
+          <aside className="hidden w-[68px] shrink-0 flex-col items-center glass rounded-[22px] bg-surface p-2 md:flex">
             <SidebarLogo className="mt-1 h-9 w-9" />
             <button
               type="button"

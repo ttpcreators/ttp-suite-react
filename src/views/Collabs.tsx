@@ -3,11 +3,14 @@ import { supabase } from "@/lib/supabase";
 import { Spin } from "@/components/ui/loader";
 import { useSearch, matchQuery } from "@/lib/search";
 import { cn, titleCase } from "@/lib/utils";
-import { ArrowRight, Pencil, Trash2, X, UserRound, Package, Wallet, Clock, Trophy, XCircle, Archive, CircleDot, Check, ListChecks, ChevronDown, RotateCcw, StickyNote, LayoutGrid, List as ListIcon, RefreshCw, Heart, MessageCircle, ExternalLink } from "lucide-react";
+import { ArrowRight, Pencil, Trash2, X, UserRound, Package, Wallet, Clock, Trophy, XCircle, Archive, CircleDot, Check, ListChecks, ChevronDown, ChevronLeft, RotateCcw, StickyNote, LayoutGrid, List as ListIcon, PanelsTopLeft, RefreshCw, Heart, MessageCircle, ExternalLink, Contact as ContactIcon } from "lucide-react";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
+import { IconTile } from "@/components/ui/icon-tile";
+import { StatusPill } from "@/components/ui/status-pill";
+import type { StatusTone } from "@/lib/statusTone";
 import { useEffect, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
@@ -60,6 +63,26 @@ const PHASE_DOT: Record<PhaseKey, string> = {
   facturation: "bg-amber",
   cloture: "bg-signal",
 };
+/** Teinte de la tuile de marque, selon la phase (couleurs de statut). */
+const PHASE_TONE: Record<PhaseKey, StatusTone> = {
+  negociation: "wait",
+  production: "progress",
+  mesure: "info",
+  facturation: "ok",
+  cloture: "closed",
+};
+
+/** « Aujourd'hui, 14:32 », « Hier, 18:02 », sinon « 4 oct. ». */
+function whenLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(new Date()) - day(d)) / 86400000);
+  const hm = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  if (diff === 0) return `Aujourd'hui, ${hm}`;
+  if (diff === 1) return `Hier, ${hm}`;
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+}
 
 /** Nombre de publications attendues d'après les livrables (« 3 posts · 1 reel » → 4 ; stories exclues). */
 function expectedPosts(d?: string | null): number {
@@ -113,18 +136,24 @@ export function Collabs() {
   const [statusFilter, setStatusFilter] = useStickyState<string>("collabs:statut", ["__all__", ...STATUS_OPTS.map((o) => o.value)], "active");
   const [creatorFilter, setCreatorFilter] = useState<string>("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  // Affichage : cartes (grille) ou liste (une collab par ligne). Retenu sur l'appareil.
-  const [layout, setLayout] = useState<"cards" | "list">(() => {
+  // Affichage : détail (liste par phase + fiche à droite, par défaut), cartes ou liste.
+  // Retenu sur l'appareil.
+  const [layout, changeLayout] = useStickyState("collabs:vue", ["detail", "cards", "list"] as const, "detail");
+  // Collab ouverte dans l'affichage détail (retenue sur l'appareil) ; sur petit écran,
+  // la fiche s'ouvre à la place de la liste.
+  const [selId, setSelId] = useState<string | null>(() => {
     try {
-      return localStorage.getItem("ttp:collabs-layout") === "list" ? "list" : "cards";
+      return localStorage.getItem("ttp:ui:collabs:ouverte");
     } catch {
-      return "cards";
+      return null;
     }
   });
-  const changeLayout = (v: "cards" | "list") => {
-    setLayout(v);
+  const [phoneDetail, setPhoneDetail] = useState(false);
+  const pick = (id: string) => {
+    setSelId(id);
+    setPhoneDetail(true);
     try {
-      localStorage.setItem("ttp:collabs-layout", v);
+      localStorage.setItem("ttp:ui:collabs:ouverte", id);
     } catch {
       /* stockage indisponible */
     }
@@ -702,6 +731,194 @@ export function Collabs() {
     );
   };
 
+  // ── affichage détail : liste par phase (gauche) + fiche de la collab (droite) ──
+  const firstName = (name?: string | null) => (name ? titleCase(name).split(" ")[0] : "");
+  const renderMaster = (list: Row[], selected: Row | undefined): ReactElement => (
+    <div className="flex flex-col gap-3 rounded-[22px] bg-surface p-3 lg:sticky lg:top-0 lg:max-h-[calc(100dvh-8rem)] lg:overflow-y-auto">
+      {PHASES.map((p) => {
+        const inPhase = list.filter((r) => phaseOf(r.step) === p.key);
+        if (!inPhase.length) return null;
+        return (
+          <section key={p.key}>
+            <h3 className="px-2 pb-1 pt-1.5 text-[12px] font-semibold text-muted-foreground">{p.label}</h3>
+            <div className="flex flex-col gap-0.5">
+              {inPhase.map((r) => {
+                const on = selected?.id === r.id;
+                const d = daysSince(reachedAt(r));
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => pick(r.id)}
+                    aria-current={on ? "true" : undefined}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-[14px] px-2.5 py-2 text-left transition-[background-color,transform] duration-[var(--dur-press)] active:scale-[0.99]",
+                      on ? "bg-primary text-primary-foreground" : "hover:bg-rowhover",
+                    )}
+                  >
+                    <IconTile size="sm" tone={on ? undefined : PHASE_TONE[p.key]} className={cn("text-[13px] font-bold", on && "bg-primary-foreground/20 text-primary-foreground")}>
+                      {r.brand.trim().charAt(0).toUpperCase()}
+                    </IconTile>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[14px] font-semibold">
+                        {r.brand}
+                        {r.creator ? ` × ${firstName(r.creator)}` : ""}
+                      </span>
+                      <span className={cn("block truncate text-[12px]", on ? "text-primary-foreground/80" : "text-muted-foreground")}>{stepDef(r.step).short}</span>
+                    </span>
+                    {d !== null && <span className={cn("shrink-0 text-[12px] font-semibold tabular-nums", on ? "text-primary-foreground/90" : "text-muted-foreground")}>{d} j</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+
+  /** Frise des 11 étapes : franchies cochées, étape en cours cerclée ; clic = aller à l'étape. */
+  const stepperFor = (row: Row) => (
+    <div className="overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ol className="flex min-w-[600px]">
+        {STEPS.map((st, i) => {
+          const done = st.n < row.step || isDone(row.step);
+          const current = st.n === row.step && !isDone(row.step);
+          return (
+            <li key={st.n} className="relative flex flex-1 flex-col items-center">
+              {i > 0 && <span aria-hidden className={cn("absolute right-1/2 top-[13px] h-[2px] w-full", st.n <= row.step ? "bg-primary" : "bg-border")} />}
+              <button
+                type="button"
+                onClick={() => setStep(row, st.n)}
+                title={`${st.n}. ${st.label}`}
+                className={cn(
+                  "relative z-10 grid h-7 w-7 place-items-center rounded-full transition-transform duration-[var(--dur-press)] active:scale-90",
+                  done ? "bg-primary text-primary-foreground" : current ? "bg-surface ring-[3px] ring-inset ring-primary" : "bg-field",
+                )}
+              >
+                {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : current ? <span className="h-2 w-2 rounded-full bg-primary" /> : null}
+              </button>
+              <span className={cn("mt-2 px-0.5 text-center text-[11px] leading-tight", current ? "font-semibold text-foreground" : done ? "text-foreground/80" : "text-muted-foreground")}>{st.short}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+
+  const renderDetail = (row: Row): ReactElement => {
+    if (editId === row.id) return renderCard(row);
+    const def = stepDef(row.step);
+    const reached = reachedAt(row);
+    const d = daysSince(reached);
+    const stale = staleDays(row);
+    const statusMeta = statusMetaFor(row);
+    const history = [...(steps[row.id] ?? [])].reverse();
+    const facts = [
+      { icon: Package, label: "Livrables", value: row.deliverables },
+      { icon: Wallet, label: "Cachet", value: row.cachet },
+      { icon: ContactIcon, label: "Contact marque", value: row.contact },
+    ].filter((f) => f.value);
+    return (
+      <div className="flex min-w-0 flex-col gap-5 rounded-[22px] bg-surface p-5 md:p-6">
+        {/* En-tête : marque × créateur, actions */}
+        <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
+          <IconTile size="lg" tone={PHASE_TONE[def.phase]}>{row.brand.trim().charAt(0).toUpperCase()}</IconTile>
+          <div className="min-w-[12rem] flex-1">
+            <h2 className="text-[26px] font-bold leading-tight tracking-[-0.02em] text-foreground">
+              {row.brand}
+              {row.creator ? ` × ${titleCase(row.creator)}` : ""}
+            </h2>
+            <p className="mt-0.5 text-[14px] text-muted-foreground">
+              {[row.title, row.deliverables].filter(Boolean).join(" · ") || "Collab"} · étape {row.step} sur {STEP_COUNT}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {row.status !== "active" && <AnimatedBadge status={statusMeta.variant} size="sm">{statusMeta.label}</AnimatedBadge>}
+            <button
+              type="button"
+              onClick={() => startEdit(row)}
+              className="flex h-9 items-center gap-1.5 rounded-full bg-field px-3.5 text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover"
+            >
+              <Pencil className="h-3.5 w-3.5" /> Modifier
+            </button>
+            {menuFor(row)}
+            {isDone(row.step) ? (
+              <span className="flex h-9 items-center gap-1.5 rounded-full bg-ok-soft px-4 text-[13px] font-semibold text-ok">
+                <Check className="h-4 w-4" /> Collab bouclée
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setStep(row, row.step + 1)}
+                className="flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                Passer à : {stepDef(row.step + 1).short} <ArrowRight className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {stepperFor(row)}
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          {/* Étape en cours */}
+          <div className="flex flex-col gap-3 rounded-[20px] bg-panel p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-[17px] font-semibold text-foreground">{def.label}</h3>
+              {!isDone(row.step) && row.status === "active" && (
+                <StatusPill tone={stale !== null ? "wait" : "progress"}>
+                  {stale !== null ? <Clock className="h-3 w-3" /> : null}
+                  En cours{d !== null ? ` · ${d} j` : ""}
+                </StatusPill>
+              )}
+            </div>
+            {reached && <p className="-mt-2 text-[12px] text-muted-foreground">Depuis le {frDate(reached)}</p>}
+            {facts.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                {facts.map((f) => (
+                  <div key={f.label} className="flex items-center gap-2.5 rounded-[12px] bg-surface px-3 py-2">
+                    <f.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="text-[13px] text-muted-foreground">{f.label}</span>
+                    <span className="ml-auto truncate text-[13px] font-medium text-foreground">{f.value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {row.note && (
+              <div className="flex items-start gap-2 rounded-[12px] bg-surface px-3 py-2 text-[13px] text-foreground/80">
+                <StickyNote className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="whitespace-pre-line">{row.note}</span>
+              </div>
+            )}
+            {igBlockFor(row)}
+          </div>
+
+          {/* Activité : chaque étape franchie, datée (historique de la collab) */}
+          <div className="rounded-[20px] bg-panel p-4">
+            <h3 className="mb-3 text-[17px] font-semibold text-foreground">Activité</h3>
+            {history.length ? (
+              <ol className="flex flex-col">
+                {history.slice(0, 12).map((h, i) => (
+                  <li key={`${h.step}-${h.reached_at}`} className="relative flex gap-3 pb-3 last:pb-0">
+                    {i < Math.min(history.length, 12) - 1 && <span aria-hidden className="absolute left-[4px] top-3 h-full w-px bg-border" />}
+                    <span className={cn("relative mt-1.5 h-[9px] w-[9px] shrink-0 rounded-full", PHASE_DOT[phaseOf(h.step)])} />
+                    <span className="min-w-0">
+                      <span className="block text-[14px] font-medium text-foreground">Étape « {stepDef(h.step).short} » atteinte</span>
+                      <span className="block text-[12px] text-muted-foreground">{whenLabel(h.reached_at)}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-[13px] text-muted-foreground">Les étapes franchies s'afficheront ici, datées.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // ── contenu ──
   let content: ReactElement;
   if (rows === null) {
@@ -723,7 +940,20 @@ export function Collabs() {
   } else if (filtered.length === 0) {
     content = <div className="rounded-xl border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">{query.trim() ? `Aucun résultat pour « ${query} »` : "Aucune collab pour ces filtres."}</div>;
   } else {
-    content = layout === "list" ? (
+    const selected = filtered.find((r) => r.id === selId) ?? filtered[0];
+    content = layout === "detail" ? (
+      <div className="grid items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
+        <div className={cn(phoneDetail && "max-lg:hidden")}>{renderMaster(filtered, selected)}</div>
+        {selected && (
+          <div className={cn("min-w-0", !phoneDetail && "max-lg:hidden")}>
+            <button type="button" onClick={() => setPhoneDetail(false)} className="mb-2 flex items-center gap-1 text-[14px] font-medium text-primary lg:hidden">
+              <ChevronLeft className="h-4 w-4" /> Collabs
+            </button>
+            {renderDetail(selected)}
+          </div>
+        )}
+      </div>
+    ) : layout === "list" ? (
       <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-sm">{filtered.map((r) => renderRow(r))}</div>
     ) : (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">{filtered.map((r) => renderCard(r))}</div>
@@ -797,8 +1027,9 @@ export function Collabs() {
                 size="sm"
                 label="Affichage des collabs"
                 value={layout}
-                onValueChange={(v) => changeLayout(v as "cards" | "list")}
+                onValueChange={(v) => changeLayout(v as "detail" | "cards" | "list")}
                 items={[
+                  { value: "detail", label: "Détail", icon: <PanelsTopLeft className="h-3.5 w-3.5" />, hideLabel: "mobile" },
                   { value: "cards", label: "Cartes", icon: <LayoutGrid className="h-3.5 w-3.5" />, hideLabel: "mobile" },
                   { value: "list", label: "Liste", icon: <ListIcon className="h-3.5 w-3.5" />, hideLabel: "mobile" },
                 ]}

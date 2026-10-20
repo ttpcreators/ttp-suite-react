@@ -174,7 +174,7 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
   }, [selectedIndex, items, wrap, reduced]);
 
   return (
-    <div className={className}>
+    <div className={cn("min-w-0 max-w-full", className)}>
       <div
         {...tabs.tabListProps}
         ref={rowRef}

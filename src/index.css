@@ -516,7 +516,7 @@ body {
 }
 /* Barre d'onglets en capsule flottante (mobile). */
 .ios-tabbar {
-  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
   -webkit-backdrop-filter: saturate(180%) blur(24px);
   backdrop-filter: saturate(180%) blur(24px);
   border: 1px solid var(--border);

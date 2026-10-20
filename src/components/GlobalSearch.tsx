@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Users, Contact, ListChecks, Receipt, FileText, Search as SearchIcon, X, Trash2, type LucideIcon } from "lucide-react";
 import { useGlobalSearch, type SearchHit } from "@/lib/useGlobalSearch";
@@ -55,6 +55,7 @@ export function GlobalSearch({
   hidden = [],
   inline = false,
   autoFocus = false,
+  variant = "bar",
   className,
 }: {
   query: string;
@@ -66,9 +67,26 @@ export function GlobalSearch({
   /** Résultats affichés sous le champ, dans la page (écran de recherche plein écran sur téléphone). */
   inline?: boolean;
   autoFocus?: boolean;
+  /** « sidebar » : champ compact en tête du menu (⌘K pour y aller), résultats sur le côté. */
+  variant?: "bar" | "sidebar";
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const side = variant === "sidebar";
+  // ⌘K / Ctrl+K : place le curseur dans la recherche, où que l'on soit.
+  useEffect(() => {
+    if (!side) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [side]);
   // Texte d'aide court sur mobile (le long était tronqué au milieu d'un mot).
   const [narrow] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
   const { hits: rawHits, loading } = useGlobalSearch(query);
@@ -100,15 +118,18 @@ export function GlobalSearch({
   };
 
   return (
-    <div className={cn("relative w-full", !inline && "max-w-[220px] sm:max-w-md md:max-w-xl", className)}>
+    <div className={cn("relative w-full", !inline && !side && "max-w-[220px] sm:max-w-md md:max-w-xl", className)}>
       {/* Champ contrôlé — langage de l’Aperçu : champ clair bordé, halo discret au focus.
           Écran plein (téléphone) : champ gris façon iOS. */}
       <div className={cn(
-        "flex h-10 items-center gap-2.5 rounded-full px-4 text-foreground transition-shadow",
-        inline ? "bg-foreground/[0.06]" : "border border-border bg-surface focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-foreground/10",
+        "flex items-center gap-2.5 text-foreground transition-shadow",
+        side
+          ? "h-9 rounded-[10px] bg-field px-3 focus-within:ring-2 focus-within:ring-ring/30"
+          : cn("h-10 rounded-full px-4", inline ? "bg-foreground/[0.06]" : "border border-border bg-surface focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-foreground/10"),
       )}>
         <SearchIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
         <input
+          ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => {
@@ -126,9 +147,11 @@ export function GlobalSearch({
           }}
           autoFocus={autoFocus}
           enterKeyHint="search"
-          placeholder={narrow && !inline ? "Rechercher…" : "Page, créateur, contact, facture…"}
-          className="h-full min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-faint"
+          placeholder={side ? "Rechercher" : narrow && !inline ? "Rechercher…" : "Page, créateur, contact, facture…"}
+          aria-label="Rechercher une page, un créateur, un contact, une facture"
+          className={cn("h-full min-w-0 flex-1 bg-transparent text-foreground outline-none", side ? "text-[14px] placeholder:text-muted-foreground" : "text-[13px] placeholder:text-faint")}
         />
+        {side && !query && <kbd className="shrink-0 font-sans text-[12px] font-medium text-muted-foreground">⌘K</kbd>}
         {query && (
           <button
             type="button"
@@ -149,7 +172,7 @@ export function GlobalSearch({
           {!inline && <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />}
           <div className={cn(
             "overflow-y-auto rounded-xl border border-border bg-surface p-1.5",
-            inline ? "mt-3" : "absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-[60vh] shadow-xl",
+            inline ? "mt-3" : side ? "absolute left-0 top-[calc(100%+8px)] z-50 max-h-[70vh] w-[440px] shadow-xl" : "absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-[60vh] shadow-xl",
           )}>
             {loading && hits.length === 0 && pageHits.length === 0 ? (
               <div className="px-3 py-4 text-xs text-muted-foreground">Recherche…</div>
