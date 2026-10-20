@@ -1,5 +1,5 @@
 import { useStickyState } from "@/lib/useStickyState";
-import { TtpContacts, TtpEvolution, TtpFiles, TtpGains, TtpGift, TtpGuide, TtpHome, TtpIdea, TtpMediakit, TtpMessages, TtpMission, TtpPerson, TtpPlanning, TtpReport, TtpRoad, TtpStats, TtpTodo } from "@/components/icons/ttp-icons";
+import { TtpStar, TtpContacts, TtpEvolution, TtpFiles, TtpGains, TtpGift, TtpGuide, TtpHome, TtpIdea, TtpMediakit, TtpMessages, TtpMission, TtpPerson, TtpPlanning, TtpReport, TtpRoad, TtpStats, TtpTodo } from "@/components/icons/ttp-icons";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { Spin } from "@/components/ui/loader";
 import { motion, AnimatePresence } from "motion/react";
@@ -52,7 +52,7 @@ import { TONE_SOFT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
 import { useTheme } from "@/lib/theme";
 import { THEME_CHOICES, type ThemeChoice } from "@/lib/accent";
 import { STEPS, STEP_COUNT } from "@/lib/collabs";
-import { CS_MAIN_TABS, isMainTab, normalizeCsTab, ownerTab, type CsTab } from "@/lib/creatorTabs";
+import { CS_FAVORABLE, CS_MAIN_TABS, isMainTab, normalizeCsTab, ownerTab, parseCsFavorites, toggleCsFavorite, type CsTab } from "@/lib/creatorTabs";
 import { brandInitial, briefKey, buildMissions, CREATOR_PHASES, creatorPhaseIndex, missionState, type Mission, type MissionCollab } from "@/lib/creatorMissions";
 import { creatorSteps, whenLabel, type NextStep } from "@/lib/creatorNextStep";
 import { gainsSummary, invoiceTone } from "@/lib/creatorGains";
@@ -408,6 +408,15 @@ export function CreatorSpace({
   // renvoie plus systématiquement le créateur sur l'accueil. Les anciennes valeurs
   // (« briefs », « facturation », écran « Plus ») sont ramenées vers leur nouvel onglet.
   const [tab, setTabState] = useState<Tab>(() => normalizeCsTab(lsGet("ttp:cs-tab")));
+  // Favoris : les rubriques préférées du créateur, en tête du menu et sur l'Accueil (propres à cet appareil).
+  const [favs, setFavs] = useState<CsTab[]>(() => parseCsFavorites(lsGet("ttp:cs-favoris")));
+  const toggleFav = (id: CsTab) =>
+    setFavs((cur) => {
+      const next = toggleCsFavorite(cur, id);
+      lsSet("ttp:cs-favoris", JSON.stringify(next));
+      return next;
+    });
+  const isFavorable = (id: string) => (CS_FAVORABLE as readonly string[]).includes(id);
   // Mission ouverte (fiche) dans l'onglet Missions ; null = la liste.
   const [missionId, setMissionId] = useState<string | null>(null);
   const setTab = (next: Tab | string) => {
@@ -473,16 +482,17 @@ export function CreatorSpace({
   }, [name, mailBadgeOn, tab, live]);
   // Messages reste toujours visible (5 onglets fixes) : sans boîte activée, la page
   // l'explique. La pastille compte les échanges qui ont bougé.
-  const navGroups = useMemo(
-    () =>
-      CREATOR_GROUPS.map((g) => ({
-        ...g,
-        label: t(g.label),
-        items: g.items.map((i) => ({ ...i, label: t(i.label), ...(i.id === "mails" && mailsOn ? { badge: mailBadge || undefined } : {}) })),
-      })),
-    [mailsOn, mailBadge, t],
-  );
-  const navTabs = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
+  const navGroups = useMemo(() => {
+    const base = CREATOR_GROUPS.map((g) => ({
+      ...g,
+      label: t(g.label),
+      items: g.items.map((i) => ({ ...i, label: t(i.label), ...(i.id === "mails" && mailsOn ? { badge: mailBadge || undefined } : {}) })),
+    }));
+    const all = base.flatMap((g) => g.items);
+    const favItems = favs.map((id) => all.find((i) => i.id === id)).filter((i): i is (typeof all)[number] => !!i);
+    return favItems.length ? [{ id: "favoris", label: t("Favoris"), icon: TtpStar, fixed: true, items: favItems }, ...base] : base;
+  }, [mailsOn, mailBadge, t, favs]);
+  const navTabs = useMemo(() => navGroups.filter((g) => g.id !== "favoris").flatMap((g) => g.items), [navGroups]);
 
   // ── Affichage iPhone (téléphone) : 5 onglets en bas (Accueil, Missions, Messages, Gains, Profil) ──
   const iosPhone = useIsPhone();
@@ -1870,6 +1880,8 @@ export function CreatorSpace({
               groups={navGroups}
               activeId={tab}
               onSelect={(id) => setTab(id as Tab)}
+              isPinned={(id) => favs.includes(id as CsTab)}
+              onTogglePin={(id) => isFavorable(id) && toggleFav(id as CsTab)}
               header={<SidebarBrand title={t("Espace créateur")} sub="TTP Creators" onCollapse={() => setSbCollapsed(true)} />}
               footer={
                 <SidebarUser
@@ -2059,6 +2071,37 @@ export function CreatorSpace({
                   </section>
                 );
               })()}
+
+              {/* Favoris : accès direct aux rubriques préférées (ajoutées depuis Profil ou le menu). */}
+              <section aria-label={t("Tes favoris")} className="flex flex-col gap-2">
+                <div className="flex items-center justify-between px-1">
+                  <h2 className="text-[17px] font-semibold text-foreground">{t("Tes favoris")}</h2>
+                  <button type="button" onClick={() => setTab("profil")} className="-my-2 px-1 py-2 text-[14px] font-medium text-primary">
+                    {favs.length ? t("Modifier") : t("Choisir")}
+                  </button>
+                </div>
+                {favs.length ? (
+                  <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {favs.map((id) => {
+                      const it = navTabs.find((x) => x.id === id);
+                      if (!it) return null;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setTab(id)}
+                          className="flex min-h-[64px] w-[104px] shrink-0 snap-start flex-col items-start justify-between gap-2 rounded-[16px] bg-surface p-3 text-left shadow-sm transition-transform active:scale-[0.97]"
+                        >
+                          <it.icon className="h-5 w-5 text-primary" />
+                          <span className="w-full truncate text-[13.5px] font-medium text-foreground">{it.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="px-1 text-[13.5px] leading-snug text-muted-foreground">{t("Mets tes rubriques préférées en favoris (l'étoile dans Profil) pour les ouvrir d'ici en un geste.")}</p>
+                )}
+              </section>
 
               {/* À faire : les étapes suivantes, une action par ligne */}
               {steps.length > 1 && (
@@ -3626,14 +3669,36 @@ export function CreatorSpace({
                 </div>
               </IosGroup>
 
-              {/* Toutes les autres rubriques, groupées comme le menu ordinateur */}
+              {/* Toutes les autres rubriques, groupées comme le menu ordinateur. L'étoile
+                  met une rubrique en favori : elle passe en tête du menu et sur l'Accueil. */}
               {navGroups
-                .map((g) => ({ ...g, items: g.items.filter((i) => !isMainTab(i.id)) }))
+                .map((g) => ({ ...g, items: g.id === "favoris" ? g.items : g.items.filter((i) => !isMainTab(i.id)) }))
                 .filter((g) => g.items.length > 0)
                 .map((g) => (
-                  <IosGroup key={g.id} title={g.label}>
+                  <IosGroup key={g.id} title={g.label} footer={g.id === "favoris" ? undefined : g === navGroups.find((x) => x.id !== "favoris" && x.items.some((i) => !isMainTab(i.id))) && !favs.length ? t("Touche l'étoile d'une rubrique pour l'ajouter à tes favoris.") : undefined}>
                     {g.items.map((it) => (
-                      <IosRow key={it.id} icon={it.icon} label={it.label} onClick={() => setTab(it.id)} />
+                      <IosRow
+                        key={`${g.id}-${it.id}`}
+                        icon={it.icon}
+                        label={it.label}
+                        onClick={() => setTab(it.id)}
+                        right={
+                          isFavorable(it.id) ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleFav(it.id);
+                              }}
+                              aria-pressed={favs.includes(it.id)}
+                              aria-label={favs.includes(it.id) ? t("Retirer des favoris") : t("Ajouter aux favoris")}
+                              className={cn("-my-2 grid h-11 w-11 place-items-center", favs.includes(it.id) ? "text-primary" : "text-faint")}
+                            >
+                              <TtpStar className="h-5 w-5" fill={favs.includes(it.id) ? "currentColor" : "none"} />
+                            </button>
+                          ) : undefined
+                        }
+                      />
                     ))}
                   </IosGroup>
                 ))}

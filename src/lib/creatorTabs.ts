@@ -54,3 +54,29 @@ export function ownerTab(tab: CsTab): CsMainTab {
 export function isMainTab(tab: CsTab): tab is CsMainTab {
   return (CS_MAIN_TABS as readonly string[]).includes(tab);
 }
+
+// ── Favoris du créateur : ses rubriques préférées, en tête du menu et sur l'Accueil ──
+/** Rubriques qu'on peut mettre en favori (Accueil et Profil sont toujours dans la barre). */
+export const CS_FAVORABLE: readonly CsTab[] = CS_ALL_TABS.filter((t) => t !== "accueil" && t !== "profil");
+
+/** Liste gardée (texte JSON) → favoris valides, sans doublon, dans l'ordre d'ajout. */
+export function parseCsFavorites(raw: string | null | undefined): CsTab[] {
+  try {
+    const arr = JSON.parse(raw ?? "[]");
+    if (!Array.isArray(arr)) return [];
+    const out: CsTab[] = [];
+    for (const v of arr) {
+      const t = typeof v === "string" ? (v in CS_TAB_ALIASES ? CS_TAB_ALIASES[v] : v) : "";
+      if ((CS_FAVORABLE as readonly string[]).includes(t) && !out.includes(t as CsTab)) out.push(t as CsTab);
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/** Ajoute ou retire une rubrique des favoris. */
+export function toggleCsFavorite(favs: CsTab[], tab: CsTab): CsTab[] {
+  if (favs.includes(tab)) return favs.filter((t) => t !== tab);
+  return (CS_FAVORABLE as readonly string[]).includes(tab) ? [...favs, tab] : favs;
+}

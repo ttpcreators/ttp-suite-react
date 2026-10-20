@@ -499,4 +499,8 @@ export const EN_CREATORSPACE: Record<string, string> = {
   "Verre": "Glass",
   "Noir": "Dark",
   "Auto": "Auto",
+  "Tes favoris": "Your favorites",
+  "Choisir": "Choose",
+  "Mets tes rubriques préférées en favoris (l'étoile dans Profil) pour les ouvrir d'ici en un geste.": "Star your favorite sections (in Profile) to open them from here in one tap.",
+  "Touche l'étoile d'une rubrique pour l'ajouter à tes favoris.": "Tap a section's star to add it to your favorites.",
 };

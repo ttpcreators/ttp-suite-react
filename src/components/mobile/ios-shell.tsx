@@ -168,6 +168,25 @@ export function IosRow({ icon: Icon, label, detail, onClick, chevron = true, des
     "after:absolute after:bottom-0 after:right-0 after:h-px after:bg-border/70 last:after:hidden",
     Icon || leading || indent ? "after:left-[58px]" : "after:left-3.5",
   );
+  // Un bouton (ex. étoile de favori) à droite d'une ligne cliquable : la ligne devient un
+  // conteneur, le bouton principal prend toute la place à gauche (pas de bouton dans un bouton).
+  if (onClick && right) {
+    return (
+      <div className={cn(cls, "gap-0 py-0 pr-1.5")}>
+        <button type="button" onClick={onClick} className="flex min-h-[46px] min-w-0 flex-1 items-center gap-3 py-2 text-left">
+          {leading ?? (Icon ? (
+            <span className={cn("grid h-[29px] w-[29px] shrink-0 place-items-center rounded-[8px]", destructive ? "bg-danger/10 text-dangertext" : "bg-muted text-foreground")}>
+              <Icon className="h-[17px] w-[17px]" strokeWidth={1.9} />
+            </span>
+          ) : null)}
+          {label && <span className={cn("min-w-0 flex-1 truncate text-[16px]", destructive ? "text-dangertext" : indent ? "text-muted-foreground" : "text-foreground")}>{label}</span>}
+          {detail != null && <span className="max-w-[45%] shrink-0 truncate text-[15px] text-muted-foreground">{detail}</span>}
+        </button>
+        {right}
+        {chevron && <ChevronRight className="pointer-events-none h-[18px] w-[18px] shrink-0 text-faint" strokeWidth={2.2} />}
+      </div>
+    );
+  }
   return onClick ? (
     <button type="button" onClick={onClick} className={cls}>{body}</button>
   ) : (

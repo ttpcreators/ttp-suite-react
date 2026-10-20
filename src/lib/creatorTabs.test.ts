@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CS_ALL_TABS, CS_MAIN_TABS, normalizeCsTab, ownerTab } from "./creatorTabs";
+import { CS_ALL_TABS, CS_MAIN_TABS, normalizeCsTab, ownerTab, parseCsFavorites, toggleCsFavorite } from "./creatorTabs";
 
 describe("onglets de l'espace créateur", () => {
   it("5 onglets en bas, dans l'ordre de la maquette", () => {
@@ -24,5 +24,19 @@ describe("onglets de l'espace créateur", () => {
   it("une rubrique secondaire allume l'onglet Profil", () => {
     expect(ownerTab("guide")).toBe("profil");
     expect(ownerTab("gains")).toBe("gains");
+  });
+});
+
+describe("favoris du créateur", () => {
+  it("garde seulement les rubriques valides, sans doublon", () => {
+    expect(parseCsFavorites('["planning","planning","accueil","inconnu","briefs"]')).toEqual(["planning", "missions"]);
+    expect(parseCsFavorites("{oups")).toEqual([]);
+    expect(parseCsFavorites(null)).toEqual([]);
+  });
+  it("ajoute puis retire", () => {
+    const a = toggleCsFavorite([], "mediakit");
+    expect(a).toEqual(["mediakit"]);
+    expect(toggleCsFavorite(a, "mediakit")).toEqual([]);
+    expect(toggleCsFavorite(a, "profil")).toEqual(["mediakit"]);
   });
 });
