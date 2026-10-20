@@ -1,11 +1,12 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
 import { SIGNATURE_KEY, setCurrentSignature, validSig } from "@/lib/agencySignature";
 import { Loader } from "@/components/ui/loader";
-import { Moon, Sun, X, Columns2, SquareArrowRight, Plus, LogOut, Star, StarOff, House, CircleEllipsis, Search, Trash2 } from "lucide-react";
+import { Moon, Sun, X, Columns2, SquareArrowRight, Plus, LogOut, Star, StarOff, Trash2 } from "lucide-react";
 import { cn, titleCase } from "@/lib/utils";
 import { restoreTabs, navigateTab, addTab, closeTab as closeTabState } from "@/lib/tabs";
 import type { Session } from "@supabase/supabase-js";
 import { GlobalSearch } from "@/components/GlobalSearch";
+import { TtpHome, TtpMore, TtpSearch, TtpStar } from "@/components/icons/ttp-icons";
 import { CommandPalette } from "@/components/CommandPalette";
 import { openCommandPalette } from "@/lib/commandPalette";
 import { RestrictedViewsContext } from "@/lib/restrictedViews";
@@ -635,9 +636,9 @@ export default function App() {
     ...(["contacts", "roster", "planning", "mails", "todo"] as ViewId[]).filter(inNav),
   ])].slice(0, 4);
   const iosTabs: IosTab[] = [
-    ...tabIds.map((id) => ({ id, label: id === "aujourdhui" ? "Accueil" : findPinnable(id)?.label ?? viewTitle(id), icon: id === "aujourdhui" ? House : findPinnable(id)?.icon ?? Star, badge: navBadges[id] })),
+    ...tabIds.map((id) => ({ id, label: id === "aujourdhui" ? "Accueil" : findPinnable(id)?.label ?? viewTitle(id), icon: id === "aujourdhui" ? TtpHome : findPinnable(id)?.icon ?? TtpStar, badge: navBadges[id] })),
     // « Plus » : les notifications des pages qui n'ont pas leur onglet.
-    { id: "__more", label: "Plus", icon: CircleEllipsis, badge: Object.entries(navBadges).reduce((n, [id, c]) => (tabIds.includes(id as ViewId) || !inNav(id as ViewId) ? n : n + c), 0) },
+    { id: "__more", label: "Plus", icon: TtpMore, badge: Object.entries(navBadges).reduce((n, [id, c]) => (tabIds.includes(id as ViewId) || !inNav(id as ViewId) ? n : n + c), 0) },
   ];
   const iosActive = phoneScreen === "more" ? "__more" : phoneScreen === "search" ? "" : tabIds.includes(active) ? active : "__more";
   // Chaque écran garde sa position de défilement, comme les onglets d'une app iOS.
@@ -920,7 +921,7 @@ export default function App() {
                         <button type="button" onClick={() => { setPhoneScreen(null); setQuery(""); }} className="h-11 px-3 text-[17px] text-primary">Annuler</button>
                       ) : (
                         <>
-                          <IosBarIcon icon={Search} label="Rechercher" onClick={() => setPhoneScreen("search")} />
+                          <IosBarIcon icon={TtpSearch} label="Rechercher" onClick={() => setPhoneScreen("search")} />
                           <Notifications items={notifs} onDismiss={dismissNotifs} onOpenPage={(p) => select(p as ViewId)} variant="bar" />
                         </>
                       )

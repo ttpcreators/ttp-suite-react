@@ -1,5 +1,6 @@
 import * as React from "react";
-import { Bell, BellRing, Bug, CalendarDays, FileText, Mail, Receipt, ScrollText, Sparkles, Users, type LucideIcon } from "lucide-react";
+import { TtpBell, TtpBrief, TtpContract, TtpInvoice, TtpMail, TtpPerson, TtpPlanning, TtpPulse, TtpSpark } from "@/components/icons/ttp-icons";
+import { BellRing, type LucideIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { NotificationPanel, type PanelItem } from "@/components/ui/notification-panel";
 import { usePush } from "@/lib/push";
@@ -104,14 +105,14 @@ function PushRow() {
 
 /** Icône et couleur de chaque genre de notification (statuts : rouge = argent en retard seulement). */
 const KIND_META: Record<NotifKind, { icon: LucideIcon; tone: StatusTone }> = {
-  team: { icon: Users, tone: "progress" },
-  creator: { icon: Sparkles, tone: "info" },
-  email: { icon: Mail, tone: "progress" },
-  facture: { icon: Receipt, tone: "late" },
-  brief: { icon: FileText, tone: "info" },
-  event: { icon: CalendarDays, tone: "progress" },
-  contrat: { icon: ScrollText, tone: "wait" },
-  bug: { icon: Bug, tone: "wait" },
+  team: { icon: TtpPerson, tone: "progress" },
+  creator: { icon: TtpSpark, tone: "info" },
+  email: { icon: TtpMail, tone: "progress" },
+  facture: { icon: TtpInvoice, tone: "late" },
+  brief: { icon: TtpBrief, tone: "info" },
+  event: { icon: TtpPlanning, tone: "progress" },
+  contrat: { icon: TtpContract, tone: "wait" },
+  bug: { icon: TtpPulse, tone: "wait" },
 };
 /** Ce qui attend un geste (onglet « À traiter ») et le bouton proposé dans la ligne. */
 const KIND_ACTION: Partial<Record<NotifKind, string>> = {
@@ -190,7 +191,7 @@ export function Notifications({
               ? "relative grid h-9 w-9 shrink-0 place-items-center rounded-full text-foreground/60 transition-colors hover:bg-rowhover hover:text-foreground"
               : "relative grid h-10 w-10 place-items-center rounded-full bg-surface text-foreground shadow-sm transition-colors hover:bg-rowhover"}
         >
-          <Bell className={variant === "bar" ? "h-[22px] w-[22px]" : "h-4 w-4"} strokeWidth={variant === "bar" ? 1.9 : 2} />
+          <TtpBell className={variant === "bar" ? "h-[22px] w-[22px]" : "h-4 w-4"} strokeWidth={variant === "bar" ? 1.9 : 2} />
           {unreadCount > 0 && (
             <span className={(variant === "bar" ? "absolute right-1 top-1" : variant === "sidebar" ? "absolute -right-0.5 -top-0.5" : "absolute -right-1 -top-1") + " grid h-[18px] min-w-[18px] place-items-center rounded-full bg-badge px-1 text-[10px] font-bold text-white"}>
               {unreadCount > 99 ? "99+" : unreadCount}
