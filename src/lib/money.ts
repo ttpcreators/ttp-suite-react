@@ -76,5 +76,7 @@ export function parseAmount(x: unknown): number {
 
 /** Formate un nombre en "3 000 €" (normalise l'espace insécable des milliers). */
 export function formatEuro(n: number): string {
-  return n.toLocaleString("fr-FR").replace(/ /g, " ") + " €";
+  // Montant à centimes : toujours deux décimales (« 1 615,20 € », jamais « 1 615,2 € »).
+  const cents = Math.round(n * 100) % 100 !== 0;
+  return n.toLocaleString("fr-FR", cents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : undefined).replace(/ /g, " ") + " €";
 }

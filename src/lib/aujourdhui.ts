@@ -133,10 +133,20 @@ export const eventTypeLabel = (t: string | null) => (t ? EVENT_TYPE[t] ?? titleC
 
 const isTodoOpen = (t: AujTodo) => !t.done && t.status !== "Fait";
 
+/** L'intitulé cite-t-il déjà le créateur (prénom ou nom complet, sans accents ni majuscules) ? */
+export function namesCreator(party: string, creator: string | null | undefined): boolean {
+  const n = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const words = n(party).split(/[^a-z0-9]+/);
+  const first = n((creator ?? "").trim().split(/\s+/)[0] ?? "");
+  return !!first && words.includes(first);
+}
+
 /** Titre d'une facture : « Marque × Créateur ». */
 export function invoiceTitle(iv: Pick<RelanceInvoice, "party" | "creator">): string {
   const party = (iv.party ?? "").trim();
   const who = titleCase(iv.creator);
+  // L'intitulé porte souvent déjà le créateur (« Nike x Sarah ») : pas de doublon.
+  if (party && who && namesCreator(party, iv.creator)) return party;
   if (party && who) return `${party} × ${who}`;
   return party || who || "Facture";
 }

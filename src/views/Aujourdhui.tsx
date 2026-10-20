@@ -452,7 +452,9 @@ export function Aujourdhui() {
     }
     // La ligne traitée disparaît : on passe à la suivante (comme une boîte mail).
     if (selectedId) setSelectedId(flat.length ? flat[Math.min(lastIndex.current, flat.length - 1)].id : null);
-  }, [flat, selectedId]);
+    // Ordinateur : la fiche montre d'emblée la première action (pas de panneau vide).
+    else if (isLg && flat.length) setSelectedId(flat[0].id);
+  }, [flat, selectedId, isLg]);
   useEffect(() => {
     if (!selected) setSheetOpen(false);
   }, [selected]);
@@ -731,7 +733,7 @@ export function Aujourdhui() {
 
           {/* Raccourcis clavier (ordinateur) */}
           {flat.length > 0 && (
-            <div className="sticky bottom-0 z-10 mt-4 hidden flex-wrap items-center gap-x-5 gap-y-2 border-t border-border bg-panel py-3 text-[13px] text-muted-foreground lg:flex">
+            <div className="sticky bottom-0 z-10 mt-4 hidden flex-wrap items-center gap-x-5 gap-y-2 border-t border-border bg-background py-3 text-[13px] text-muted-foreground verre:bg-transparent lg:flex">
               <span className="flex items-center gap-1.5"><Kbd>J</Kbd> Suivant</span>
               <span className="flex items-center gap-1.5"><Kbd>K</Kbd> Précédent</span>
               <span className="flex items-center gap-1.5"><Kbd>E</Kbd> Traiter</span>

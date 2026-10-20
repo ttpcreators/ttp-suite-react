@@ -1,3 +1,4 @@
+import { namesCreator } from "@/lib/aujourdhui";
 import { normSearch } from "./pageAliases";
 import { titleCase } from "./utils";
 
@@ -54,6 +55,7 @@ export function firstName(name: string | null | undefined): string {
 export function relanceActionLabel(iv: { party: string | null; creator: string | null }): string {
   const who = firstName(iv.creator);
   const party = (iv.party ?? "").trim();
+  if (party && who && namesCreator(party, iv.creator)) return `Relancer ${party}`;
   return `Relancer ${party && who ? `${party} × ${who}` : party || who || "la facture"}`;
 }
 

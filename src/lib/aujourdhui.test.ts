@@ -77,6 +77,8 @@ describe("factures en retard", () => {
 
   it("titre sans créateur", () => {
     expect(invoiceTitle({ party: "Sanytol", creator: null })).toBe("Sanytol");
+    expect(invoiceTitle({ party: "Nike x Sarah", creator: "sarah benali" })).toBe("Nike x Sarah");
+    expect(invoiceTitle({ party: "JNPR", creator: "léna pasquale" })).toBe("JNPR × Léna Pasquale");
   });
 });
 
