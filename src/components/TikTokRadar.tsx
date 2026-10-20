@@ -143,7 +143,7 @@ export function TikTokRadar({ platformTabs }: { platformTabs?: ReactNode } = {})
   if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement du radar TikTok…</AnimatedBadge>;
   if (missing) {
     return (
-      <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/[0.04] px-6 py-10 text-center text-sm text-muted-foreground">
+      <div className="rounded-[22px] bg-surface px-6 py-10 text-center text-sm text-muted-foreground">
         Cette partie n'est pas encore activée : une mise à jour est en attente (voir Réglages › Diagnostic).
       </div>
     );
@@ -187,8 +187,8 @@ export function TikTokRadar({ platformTabs }: { platformTabs?: ReactNode } = {})
       notice={
         <>
           {problem ? (
-            <div className="mb-3 flex items-start gap-3 rounded-2xl border border-amber/40 bg-amber/[0.06] p-3.5 text-[12px] leading-relaxed text-muted-foreground">
-              <Hourglass className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
+            <div className="mb-3 flex items-start gap-3 rounded-[16px] bg-wait-soft p-3.5 text-[12px] leading-relaxed text-foreground">
+              <Hourglass className="mt-0.5 h-4 w-4 shrink-0 text-wait" />
               <div>
                 <p className="font-semibold text-foreground">Radar TikTok pas encore allumé</p>
                 <p>{problem}</p>
@@ -198,7 +198,7 @@ export function TikTokRadar({ platformTabs }: { platformTabs?: ReactNode } = {})
         </>
       }
     >
-      <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+      <div className="overflow-hidden rounded-[22px] bg-surface">
         {view_.length ? (
           <div className="divide-y divide-border">
             {view_.slice(0, 200).map((b) => {

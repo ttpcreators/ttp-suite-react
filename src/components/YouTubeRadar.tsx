@@ -143,7 +143,7 @@ export function YouTubeRadar({ platformTabs }: { platformTabs?: ReactNode } = {}
   if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement du radar YouTube…</AnimatedBadge>;
   if (missing) {
     return (
-      <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/[0.04] px-6 py-10 text-center text-sm text-muted-foreground">
+      <div className="rounded-[22px] bg-surface px-6 py-10 text-center text-sm text-muted-foreground">
         Cette partie n'est pas encore activée : une mise à jour est en attente (voir Réglages › Diagnostic).
       </div>
     );
@@ -184,7 +184,7 @@ export function YouTubeRadar({ platformTabs }: { platformTabs?: ReactNode } = {}
         </>
       }
     >
-      <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+      <div className="overflow-hidden rounded-[22px] bg-surface">
         {list.length ? (
           <div className="divide-y divide-border">
             {list.slice(0, 200).map((b) => {
@@ -200,7 +200,7 @@ export function YouTubeRadar({ platformTabs }: { platformTabs?: ReactNode } = {}
                         {flagged > 0 ? (
                           <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary" title="Le créateur a coché « communication commerciale » sur YouTube"><BadgeCheck className="h-3 w-3" />Placement déclaré</span>
                         ) : (
-                          <span className="rounded-full bg-amber/15 px-2 py-0.5 text-[10px] font-semibold text-amber" title="Code promo, #ad ou partenariat dans la description">Code / #ad</span>
+                          <span className="rounded-full bg-wait-soft px-2 py-0.5 text-[10px] font-semibold text-wait" title="Code promo, #ad ou partenariat dans la description">Code / #ad</span>
                         )}
                         {mine > 0 && <span className="rounded-full bg-signal/10 px-2 py-0.5 text-[10px] font-semibold text-signaltext">Chez {mine} de tes créateurs</span>}
                         {known.has(b.brand) && <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Déjà en contact</span>}

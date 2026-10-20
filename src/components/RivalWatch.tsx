@@ -163,7 +163,7 @@ export function RivalWatch() {
   if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement des agences…</AnimatedBadge>;
   if (missing) {
     return (
-      <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/[0.04] px-6 py-10 text-center text-sm text-muted-foreground">
+      <div className="rounded-[22px] bg-surface px-6 py-10 text-center text-sm text-muted-foreground">
         Cette partie n'est pas encore activée : une mise à jour est en attente (voir Réglages › Diagnostic).
       </div>
     );
@@ -172,7 +172,7 @@ export function RivalWatch() {
   return (
     <div className="space-y-4">
       {/* Ajouter une agence */}
-      <div className="rounded-2xl border border-border bg-surface p-4">
+      <div className="rounded-[22px] bg-surface p-4 sm:p-5">
         <div className="flex flex-col gap-2 sm:flex-row">
           <input
             value={input}
@@ -195,7 +195,7 @@ export function RivalWatch() {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {suggestions.map((s) => (
-                <button key={s.u} type="button" disabled={adding} onClick={() => void follow(s.u)} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-50">
+                <button key={s.u} type="button" disabled={adding} onClick={() => void follow(s.u)} className="inline-flex items-center gap-1 rounded-full bg-field px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
                   <Plus className="h-3 w-3" /> @{s.u}<span className="text-faint">· {s.n} créateur{s.n > 1 ? "s" : ""}</span>
                 </button>
               ))}
@@ -206,7 +206,7 @@ export function RivalWatch() {
 
       {/* Point de comparaison : le compte TTP */}
       {self?.data && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-primary/30 bg-primary/[0.04] px-4 py-3 text-[12px]">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[16px] bg-primary/[0.06] px-4 py-3 text-[12px]">
           <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-primary-foreground">TOI</span>
           <span className="font-semibold text-foreground">@{self.username}</span>
           <span className="text-muted-foreground"><span className="font-semibold text-foreground">{fmtCompact(self.data.followers ?? 0)}</span> abonnés</span>
@@ -218,7 +218,7 @@ export function RivalWatch() {
       )}
 
       {rivals.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center">
+        <div className="rounded-[22px] bg-surface px-6 py-10 text-center">
           <Binoculars className="mx-auto h-8 w-8 text-faint" />
           <p className="mt-2 text-[14px] font-semibold text-foreground">Aucune agence suivie pour l'instant</p>
           <p className="mx-auto mt-1 max-w-md text-[12px] text-muted-foreground">Ajoute le @ Instagram d'une agence concurrente : l'app suit sa croissance chaque jour, repère les créateurs qu'elle met en avant et les marques avec qui elle travaille.</p>
@@ -269,7 +269,7 @@ function RivalCard({ r, busy, pool, roster, known, onRefresh, onRemove, onScouti
   const shownC = allC ? creators : creators.slice(0, 6);
   const shownB = allB ? brands : brands.slice(0, 6);
   return (
-    <div className="rounded-2xl border border-border bg-surface">
+    <div className="rounded-[22px] bg-surface">
       <div className="flex flex-wrap items-center gap-3 border-b border-border p-4">
         <Pic src={d?.picture} name={d?.name || r.username} size={48} />
         <div className="min-w-0 flex-1">
@@ -287,7 +287,7 @@ function RivalCard({ r, busy, pool, roster, known, onRefresh, onRemove, onScouti
                 <span>Engagement {fmtEr(d.er)}</span>
               </>
             ) : r.why ? (
-              <span className="text-amber">{igWhyText(r.why)}</span>
+              <span className="text-wait">{igWhyText(r.why)}</span>
             ) : (
               <span>Lecture au prochain passage du radar (ou clique Actualiser).</span>
             )}

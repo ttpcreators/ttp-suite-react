@@ -57,7 +57,7 @@ export function RadarFrame({
 }) {
   return (
     <div>
-      <div className="mb-3 rounded-2xl bg-surface p-3 sm:p-4">
+      <div className="mb-3 rounded-[22px] bg-surface p-3 sm:p-5">
         {/* 1. Réseau + passage du radar */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">{platformTabs}</div>
@@ -69,7 +69,7 @@ export function RadarFrame({
               type="button"
               onClick={onRun}
               disabled={running}
-              className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+              className="flex h-9 items-center gap-1.5 rounded-full bg-field px-3.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
             >
               {running ? <Spin size={14} /> : <RefreshCw className="h-3.5 w-3.5" />} {runLabel}
             </button>
@@ -97,7 +97,7 @@ export function RadarFrame({
               onChange={(e) => onQuery(e.target.value)}
               placeholder={placeholder}
               aria-label={placeholder}
-              className="h-9 w-full rounded-full border border-border bg-surface pl-8 pr-3 text-[12px] outline-none focus:border-primary"
+              className="h-9 w-full rounded-full bg-field pl-8 pr-3 text-[12px] outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
         </div>
@@ -118,4 +118,4 @@ export function RadarFrame({
 }
 
 /** Bouton d'action d'une ligne de radar (Voir, Pipeline, Pas pertinente…). */
-export const RADAR_BTN = "inline-flex h-8 items-center gap-1 rounded-full border border-border px-3 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover";
+export const RADAR_BTN = "inline-flex h-8 items-center gap-1 rounded-full bg-field px-3 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover";
