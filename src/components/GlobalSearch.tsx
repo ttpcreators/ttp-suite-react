@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import { TtpSearch } from "@/components/icons/ttp-icons";
 import { cn } from "@/lib/utils";
-import { Search as SearchIcon, X, Trash2, type LucideIcon } from "lucide-react";
+import { X, Trash2, type LucideIcon } from "lucide-react";
 import { useGlobalSearch, type SearchHit } from "@/lib/useGlobalSearch";
 import { titleCase } from "@/lib/utils";
 import { ALL_ITEMS, type ViewId } from "@/lib/nav";
@@ -97,7 +98,7 @@ export function GlobalSearch({
         className={cn("flex h-9 w-full items-center gap-2.5 rounded-[10px] bg-field px-3 text-left text-foreground transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30", className)}
         aria-label="Rechercher ou lancer une action (⌘K)"
       >
-        <SearchIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <TtpSearch className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate text-[14px] text-muted-foreground">Rechercher</span>
         <kbd className="shrink-0 font-sans text-[12px] font-medium text-muted-foreground">⌘K</kbd>
       </button>
@@ -114,7 +115,7 @@ export function GlobalSearch({
           ? "h-9 rounded-[10px] bg-field px-3 focus-within:ring-2 focus-within:ring-ring/30"
           : cn("h-10 rounded-full px-4", inline ? "bg-foreground/[0.06]" : "border border-border bg-surface focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-foreground/10"),
       )}>
-        <SearchIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <TtpSearch className="h-4 w-4 shrink-0 text-muted-foreground" />
         <input
           ref={inputRef}
           type="text"

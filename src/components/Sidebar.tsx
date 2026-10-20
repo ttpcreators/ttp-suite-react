@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { Building2, LogOut, Moon, PanelLeftOpen, Search, Settings, Sparkles, Star, Sun, Trash2 } from "lucide-react";
+import { Building2, LogOut, Moon, PanelLeftOpen, Settings, Sparkles, Star, Sun } from "lucide-react";
 import { NAV, findPinnable, type ViewId, FAVORIS_BASE, FAVORIS_ID, withFavorites } from "@/lib/nav";
 import { cn } from "@/lib/utils";
+import { TtpSearch, TtpTrash } from "@/components/icons/ttp-icons";
 import { useTheme } from "@/lib/theme";
 import { AgencyAvatar } from "@/components/ui/agency-avatar";
 import { useMyName } from "@/lib/useMyName";
@@ -128,7 +129,7 @@ export function Sidebar({
         </button>
         {search && (
           <button type="button" onClick={() => setCollapsed(false)} className={cn(sbRailCls(false), "mt-1 h-8 w-8")} title="Rechercher" aria-label="Rechercher">
-            <Search className="h-4 w-4" strokeWidth={1.75} />
+            <TtpSearch className="h-4 w-4" strokeWidth={1.75} />
           </button>
         )}
         <nav className="mt-3 flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -160,7 +161,7 @@ export function Sidebar({
         </nav>
         <div className="mt-auto flex w-full flex-col items-center gap-1 pt-2">
           <button type="button" onClick={() => onSelect("corbeille")} title="Corbeille" className={sbRailCls(active === "corbeille")}>
-            <Trash2 className="h-[18px] w-[18px]" strokeWidth={1.75} />
+            <TtpTrash className="h-[18px] w-[18px]" strokeWidth={1.75} />
           </button>
           <button type="button" onClick={onLogout} title="Se déconnecter" className={sbRailCls(false)}>
             <LogOut className="h-[18px] w-[18px]" strokeWidth={1.75} />
@@ -188,7 +189,7 @@ export function Sidebar({
   const footer = (
     <>
       <button type="button" onClick={() => onSelect("corbeille")} className={cn("group", sbItemCls(active === "corbeille"))}>
-        <Trash2 className={sbIconCls(active === "corbeille")} strokeWidth={1.75} />
+        <TtpTrash className={sbIconCls(active === "corbeille")} strokeWidth={1.75} />
         Corbeille
       </button>
       <div className="flex items-center gap-1 border-t border-border pt-2">

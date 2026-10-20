@@ -1,10 +1,11 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { TtpContacts, TtpEvolution, TtpFiles, TtpGains, TtpGift, TtpGuide, TtpHome, TtpIdea, TtpMediakit, TtpMessages, TtpMission, TtpPerson, TtpPlanning, TtpReport, TtpRoad, TtpStats, TtpTodo } from "@/components/icons/ttp-icons";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { Spin } from "@/components/ui/loader";
 import { motion, AnimatePresence } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { fmtCompact } from "@/lib/timeSeries";
-import { LayoutDashboard, House, ListChecks, SquareCheckBig, MessageSquare, Wallet, UserRound, ChevronRight, Camera, PenLine, CircleCheck, Lightbulb, FileText, Gift, Sparkles, Globe2, CalendarDays, Files, Image as ImageIcon, Receipt, Upload, Mail, ShieldCheck, Package, LogOut, Moon, Sun, Pencil, Check, Trash2, TrendingUp, ExternalLink, BarChart3, Contact, X, Copy, List, Columns3, PanelLeftOpen, Target, Share2, Plus, FileChartColumn, FileBarChart, HelpCircle, Eye, ArrowLeft } from "lucide-react";
+import { LayoutDashboard, ListChecks, SquareCheckBig, ChevronRight, Camera, PenLine, CircleCheck, Lightbulb, FileText, Sparkles, Globe2, CalendarDays, Files, Image as ImageIcon, Receipt, Upload, Mail, ShieldCheck, Package, LogOut, Moon, Sun, Pencil, Check, Trash2, TrendingUp, ExternalLink, BarChart3, Contact, X, Copy, List, Columns3, PanelLeftOpen, Share2, Plus, Eye, ArrowLeft } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
 import { frDate, toISODate, todayISO } from "@/lib/dates";
@@ -135,12 +136,12 @@ const CREATOR_GROUPS: {
     label: "Mon espace",
     icon: LayoutDashboard,
     items: [
-      { id: "accueil", label: "Accueil", icon: House },
-      { id: "missions", label: "Missions", icon: SquareCheckBig },
+      { id: "accueil", label: "Accueil", icon: TtpHome },
+      { id: "missions", label: "Missions", icon: TtpMission },
       // Boîte mail : section activée par l'agence (sinon un message l'explique).
-      { id: "mails", label: "Messages", icon: MessageSquare },
-      { id: "gains", label: "Gains", icon: Wallet },
-      { id: "profil", label: "Profil", icon: UserRound },
+      { id: "mails", label: "Messages", icon: TtpMessages },
+      { id: "gains", label: "Gains", icon: TtpGains },
+      { id: "profil", label: "Profil", icon: TtpPerson },
     ],
   },
   {
@@ -148,10 +149,10 @@ const CREATOR_GROUPS: {
     label: "Mon travail",
     icon: ListChecks,
     items: [
-      { id: "todo", label: "À faire", icon: ListChecks },
-      { id: "ideas", label: "Idées", icon: Lightbulb },
-      { id: "gifting", label: "Gifting", icon: Gift },
-      { id: "planning", label: "Planning", icon: CalendarDays },
+      { id: "todo", label: "À faire", icon: TtpTodo },
+      { id: "ideas", label: "Idées", icon: TtpIdea },
+      { id: "gifting", label: "Gifting", icon: TtpGift },
+      { id: "planning", label: "Planning", icon: TtpPlanning },
     ],
   },
   {
@@ -159,11 +160,11 @@ const CREATOR_GROUPS: {
     label: "Mon suivi",
     icon: TrendingUp,
     items: [
-      { id: "guide", label: "Guide", icon: HelpCircle },
-      { id: "evolution", label: "Évolution", icon: TrendingUp },
-      { id: "rapport", label: "Mon rapport", icon: FileBarChart },
-      { id: "debrief", label: "Bilans", icon: FileChartColumn },
-      { id: "roadmap", label: "Ma feuille de route", icon: Target },
+      { id: "guide", label: "Guide", icon: TtpGuide },
+      { id: "evolution", label: "Évolution", icon: TtpEvolution },
+      { id: "rapport", label: "Mon rapport", icon: TtpStats },
+      { id: "debrief", label: "Bilans", icon: TtpReport },
+      { id: "roadmap", label: "Ma feuille de route", icon: TtpRoad },
     ],
   },
   {
@@ -171,9 +172,9 @@ const CREATOR_GROUPS: {
     label: "Ressources",
     icon: Files,
     items: [
-      { id: "mediakit", label: "Media kit", icon: ImageIcon },
-      { id: "documents", label: "Documents", icon: Files },
-      { id: "contacts", label: "Contacts", icon: Contact },
+      { id: "mediakit", label: "Media kit", icon: TtpMediakit },
+      { id: "documents", label: "Documents", icon: TtpFiles },
+      { id: "contacts", label: "Contacts", icon: TtpContacts },
     ],
   },
 ];
