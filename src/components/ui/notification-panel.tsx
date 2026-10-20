@@ -2,7 +2,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Archive, Bell, Check, CheckCheck, Inbox, MoreHorizontal, Settings2, Trash2, type LucideIcon } from "@/components/icons";
-import { TONE_SOFT, TONE_SOLID, type StatusTone } from "@/lib/statusTone";
+import { TONE_SOLID, type StatusTone } from "@/lib/statusTone";
 import { cn } from "@/lib/utils";
 
 /*
@@ -68,7 +68,7 @@ function Avatar({ item }: { item: PanelItem }) {
   const Icon = item.icon;
   return (
     <span className="relative block h-8 w-8 shrink-0">
-      <span aria-hidden className={cn("grid h-8 w-8 place-items-center rounded-full text-[11px] font-semibold", TONE_SOFT[item.tone])}>
+      <span aria-hidden className={cn("grid h-8 w-8 place-items-center rounded-full bg-field text-[11px] font-semibold", item.tone === "late" ? "text-late" : item.tone === "wait" ? "text-wait" : "text-muted-foreground")}>
         {item.initials ? item.initials : <Icon className="h-4 w-4" />}
       </span>
       {/* Genre d'évènement, lisible sans lire la phrase */}

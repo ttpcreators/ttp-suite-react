@@ -23,7 +23,7 @@ import { FEATURES } from "@/lib/features";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { StatusPill } from "@/components/ui/status-pill";
 import { IconTile } from "@/components/ui/icon-tile";
-import { TONE_DOT, TONE_SOFT } from "@/lib/statusTone";
+import { TONE_DOT } from "@/lib/statusTone";
 import { SCOUT_SORTS, SCOUT_STEPS, SCOUT_TONE, engagementBarPct, engagementTone, nextScoutStep, sortScouting, stepState, type ScoutSort, type ScoutStatus } from "@/lib/scouting";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -638,7 +638,7 @@ function ScoutingList({ kind, switcher }: { kind: Kind; switcher: ReactNode }) {
           {/* Identité : photo (touche le rond pour en ajouter une), nom, @ · catégorie */}
           <div className="flex flex-col items-center text-center">
             <label className="group relative shrink-0 cursor-pointer" title="Changer la photo">
-              <ScoutAvatar name={r.name} photos={photosOf(r.id)} size={72} tint={TONE_SOFT[SCOUT_TONE[st]]} className="rounded-full text-[22px]" />
+              <ScoutAvatar name={r.name} photos={photosOf(r.id)} size={72} tint="bg-field text-muted-foreground" className="rounded-full text-[22px]" />
               <span className={cn("absolute inset-0 grid place-items-center rounded-full bg-black/45 text-white transition-opacity", photoBusy ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
                 {photoBusy ? <Spin size={16} /> : <Camera className="h-4 w-4" />}
               </span>
@@ -961,7 +961,7 @@ function ScoutingList({ kind, switcher }: { kind: Kind; switcher: ReactNode }) {
                       on ? "bg-primary/[0.06] ring-[1.5px] ring-primary" : "hover:bg-rowhover",
                     )}
                   >
-                    <ScoutAvatar name={r.name} photos={photosOf(r.id)} size={40} tint={TONE_SOFT[tone]} className="rounded-full text-[13px]" />
+                    <ScoutAvatar name={r.name} photos={photosOf(r.id)} size={40} tint="bg-field text-muted-foreground" className="rounded-full text-[13px]" />
                     <div className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-center gap-1.5">
                         <span className="truncate text-[14px] font-semibold text-foreground">{r.name}</span>
