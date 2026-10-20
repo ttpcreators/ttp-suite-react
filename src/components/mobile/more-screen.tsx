@@ -63,7 +63,7 @@ export function MoreScreen({
       {before}
 
       {pinned && pinned.length > 0 && (
-        <IosGroup title={t("Raccourcis")}>
+        <IosGroup title={t("Favoris")}>
           {pinned.map((it) => (
             <IosRow key={`pin-${it.id}`} icon={it.icon} label={it.label} right={<Count n={badges[it.id]} />} onClick={() => onSelect(it.id)} />
           ))}
