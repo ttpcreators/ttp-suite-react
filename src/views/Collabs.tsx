@@ -10,7 +10,8 @@ import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { MailAvatar } from "@/components/mail-avatar";
-import { brandDomainFrom } from "@/lib/mailAvatar";
+import { brandDomainFrom, brandInitials, siteDomain } from "@/lib/mailAvatar";
+import { mergeAppStateKey, useAppState } from "@/lib/appState";
 import { StatusPill } from "@/components/ui/status-pill";
 import { useEffect, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
@@ -185,6 +186,11 @@ export function Collabs() {
   const [eCachet, setECachet] = useState("");
   const [eCreator, setECreator] = useState("");
   const [eNote, setENote] = useState("");
+  const [eSite, setESite] = useState("");
+  // Sites des marques saisis par l'agence (blob partagé `brandSites` : clé = nom de marque
+  // en minuscules → domaine). Sert à afficher le logo quand aucun contact ne le donne.
+  const { data: brandSites } = useAppState<Record<string, string>>((st) => (st["brandSites"] as Record<string, string>) ?? {});
+  const siteOf = (brand: string) => brandSites?.[brand.trim().toLowerCase()] ?? "";
 
   useEffect(() => {
     let active = true;
@@ -323,10 +329,15 @@ export function Collabs() {
           name={row.brand}
           email={email}
           brand={row.brand}
-          brandDomain={brandDomainFrom(brandContacts, row.brand)}
+          brandDomain={siteOf(row.brand) || brandDomainFrom(brandContacts, row.brand)}
           className={size === "lg" ? "h-14 w-14 rounded-[16px]" : "h-9 w-9 rounded-[11px]"}
-          fallback={row.brand.trim().charAt(0).toUpperCase()}
-          fallbackClassName={cn("font-bold", size === "lg" ? "text-[22px]" : "text-[13px]", onAccent ? "bg-primary-foreground/20 text-primary-foreground" : "bg-field text-muted-foreground")}
+          // Pas de logo trouvé : monogramme encre, comme un logo de marque (« PI », « OA »).
+          fallback={brandInitials(row.brand)}
+          fallbackClassName={cn(
+            "font-semibold tracking-[-0.02em]",
+            size === "lg" ? "text-[20px]" : "text-[12.5px]",
+            onAccent ? "bg-primary-foreground text-primary" : "bg-foreground text-background",
+          )}
         />
         {row.creator && (
           <CreatorAvatar
@@ -334,7 +345,7 @@ export function Collabs() {
             photoUrl={photoOf(row.creator)}
             className={cn(
               "absolute rounded-full ring-2",
-              size === "lg" ? "-bottom-1.5 -right-1.5 h-7 w-7 text-[10px]" : "-bottom-1 -right-1 h-[18px] w-[18px] text-[8px]",
+              size === "lg" ? "-bottom-1.5 -right-1.5 h-7 w-7 text-[10px]" : "-bottom-1.5 -right-1.5 h-[18px] w-[18px] text-[8px]",
               onAccent ? "ring-primary" : "ring-surface",
             )}
           />
@@ -390,6 +401,7 @@ export function Collabs() {
     setECachet(row.cachet ?? "");
     setECreator(row.creator ?? "");
     setENote(row.note ?? "");
+    setESite(siteOf(row.brand));
   };
   const saveEdit = async (id: string) => {
     if (!eBrand.trim()) return toast("Renseigne la marque");
@@ -400,6 +412,14 @@ export function Collabs() {
     };
     if (!(await dbUpdate("collabs", id, patch))) return toast("Erreur — réessaie");
     setRows((rows ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    // Site de la marque (pour son logo) : partagé avec toute l'équipe, rangé par nom de marque.
+    const key = patch.brand.toLowerCase();
+    const domain = siteDomain(eSite);
+    if (eSite.trim() && !domain) toast("Site de la marque non reconnu, ex. seoni.fr");
+    else if (domain !== siteOf(patch.brand)) {
+      const ok = domain ? await mergeAppStateKey("brandSites", { [key]: domain }) : await mergeAppStateKey("brandSites", {}, [key]);
+      if (!ok) toast("Site de la marque non enregistré, réessaie");
+    }
     toast("Collab mise à jour ✓");
     setEditId(null);
   };
@@ -586,6 +606,7 @@ export function Collabs() {
             <TextField label="Contact marque" value={eContact} onChange={setEContact} />
             <TextField label="Livrables" value={eDeliverables} onChange={setEDeliverables} placeholder="ex 3 posts · 1 reel" />
             <TextField label="Cachet" value={eCachet} onChange={setECachet} />
+            <TextField label="Site de la marque (pour son logo)" value={eSite} onChange={setESite} placeholder="ex. seoni.fr" />
             <AutoGrowTextField label="Note" value={eNote} onChange={setENote} placeholder="Contexte, angle, points d'attention…" />
             <button
               type="button"
