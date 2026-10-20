@@ -19,6 +19,7 @@ import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "
 import { igUser } from "../_shared/instagram.ts";
 import { brandMatcher, norm } from "../_shared/brandmatch.ts";
 import { ttFreshToken, ttReady, ttStats, ttUser, ttVideos, type TtAccount, type TtVideo } from "../_shared/tiktok.ts";
+import { isMain, markStatsMonth, recordAutoMeasure } from "../_shared/autoStats.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 // Motif ilike EXACT : « _ » et « % » d'un nom ne servent pas de jokers.
@@ -46,13 +47,22 @@ function whyOf(code: string): string {
   return `tiktok_${code}`;
 }
 
-/** Ligne TikTok du media kit (si elle existe) : abonnés, j'aime cumulés, moyennes par vidéo. */
+/**
+ * Ligne TikTok du media kit : abonnés, j'aime cumulés, moyennes par vidéo, engagement.
+ * Absente d'un kit déjà monté (liste des réseaux) : elle est AJOUTÉE dès que TikTok a
+ * renvoyé des chiffres, pour ne pas avoir à la créer à la main.
+ */
 function updateKit(mk: Json, tt: Json): Json | null {
   if (!Array.isArray(mk.platforms)) return null;
   const platforms = [...(mk.platforms as Json[])];
-  const i = platforms.findIndex((p) => p?.key === "tiktok");
-  if (i === -1) return null;
+  let i = platforms.findIndex((p) => p?.key === "tiktok");
+  if (i === -1) {
+    if (!(typeof tt.followers === "number" && tt.followers > 0)) return null;
+    platforms.push({ key: "tiktok" });
+    i = platforms.length - 1;
+  }
   const block: Json = { ...platforms[i] };
+  if (typeof tt.er === "number" && tt.er > 0) block.er = `${tt.er.toFixed(2).replace(".", ",")}%`;
   if (typeof tt.followers === "number" && tt.followers > 0) block.followers = String(tt.followers);
   if (typeof tt.likes === "number" && tt.likes > 0) block.likesTotal = String(tt.likes);
   if (typeof tt.avgViews === "number" && tt.avgViews > 0) block.avgViews = String(tt.avgViews);
@@ -107,6 +117,17 @@ async function syncCreator(sb: SupabaseClient, acc: TtAccount, brandHandles: Map
   patch.tt = next;
   const { error } = await sb.from("creators").update(patch).eq("id", c.id);
   if (error) console.error("tt-sync creators", c.name, error.message);
+
+  // Stats du mois relevées toutes seules : mesure d'engagement mensuelle, et « à jour »
+  // si TikTok est son réseau principal (TikTok ne donne pas d'audience : rien d'autre à demander).
+  if (!error && next.ok === now && typeof next.er === "number" && next.er > 0) {
+    const n = Array.isArray(next.recent) ? (next.recent as unknown[]).length : 0;
+    await recordAutoMeasure(sb, c, {
+      platform: "tiktok", er: next.er, followers: typeof next.followers === "number" ? next.followers : null,
+      detail: `Relevé automatique TikTok : (j'aime + commentaires + partages) ÷ vues sur ${n} dernière${n > 1 ? "s" : ""} vidéo${n > 1 ? "s" : ""}`,
+    });
+    if (isMain(c.platform, "tiktok")) await markStatsMonth(sb, c.id);
+  }
 
   // Collabs de la créatrice (étape 4 et plus) : ses vidéos qui citent la marque. FUSION avec
   // les vidéos déjà repérées : TikTok ne renvoie que les 20 dernières, une vidéo de collab

@@ -115,6 +115,7 @@ type Creator = {
   tiktok: string | null;
   email_pro: string | null;
   mediakit: { slug?: string; ugc?: { enabled?: boolean } } | null; // blob media kit (slug + activation UGC)
+  stats_month?: string | null; // « 2026-10 » : stats du mois à jour (agence ou synchro automatique)
   lang?: string | null; // langue de l'espace : « fr » (défaut) ou « en » (sql/2026-10-21-langue-createur)
   ig?: IgCreator | null; // chiffres Instagram (ig-sync) + lien « Instagram connecté »
   tt?: TtCreator | null; // chiffres TikTok (tt-sync) + lien « TikTok connecté »
@@ -1814,7 +1815,13 @@ export function CreatorSpace({
             const lastTotal = totalPts.length ? totalPts[totalPts.length - 1].value : 0;
             const followersDelta = totalPts.length >= 2 && prevTotal > 0 ? ((lastTotal - prevTotal) / prevTotal) * 100 : null;
             const lastMeasure = Math.max(0, ...(mySuivi ?? []).map((e) => frTime(e.date) || 0));
-            const statsStale = mySuivi !== null && (!lastMeasure || Date.now() - lastMeasure > 35 * 86400000);
+            // « Stats du mois » : même indicateur que le Roster et la notification du matin
+            // (creators.stats_month), coché par l'agence ou tout seul par les synchros TikTok /
+            // Instagram quand le réseau principal est couvert. Repli : dernière mesure de plus de 35 j.
+            const thisMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+            const statsStale = creator
+              ? (creator.stats_month ?? "") !== thisMonth
+              : mySuivi !== null && (!lastMeasure || Date.now() - lastMeasure > 35 * 86400000);
             const now = new Date();
             const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
             const evIso = (e: Ev) => e.date || (e.day ? `${todayIso.slice(0, 8)}${String(e.day).padStart(2, "0")}` : "9999-12-31");

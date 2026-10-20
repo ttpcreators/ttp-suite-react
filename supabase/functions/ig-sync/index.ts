@@ -26,6 +26,7 @@ import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "
 import { discover, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, type IgPost, type IgResult } from "../_shared/instagram.ts";
 import { accountTotals, audience, freshToken, loginReady, postInsights, recentReels, type IgAccount, type Split } from "../_shared/instagram-login.ts";
 import { citesHandle } from "../_shared/mentions.ts";
+import { isMain, markStatsMonth, recordAutoMeasure } from "../_shared/autoStats.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 // Motif ilike EXACT : « _ » et « % » d'un nom ne servent pas de jokers.
@@ -188,6 +189,19 @@ async function syncCreator(ctx: Ctx, c: CreatorRow): Promise<Json> {
   patch.ig = next;
   const { error } = await ctx.sb.from("creators").update(patch).eq("id", c.id);
   if (error) console.error("ig-sync creators", c.name, error.message);
+
+  // Compte CONNECTÉ (statistiques privées reçues à l'instant) : mesure d'engagement du mois
+  // sur les vues, comme le calculateur, et « stats du mois à jour » si Instagram est son
+  // réseau principal (couverture, vues et audience arrivent toutes seules : rien à demander).
+  const ins = next.insights as Json | undefined;
+  if (!error && ins && ins.at === now && typeof ins.views === "number" && ins.views > 0 && typeof ins.interactions === "number") {
+    await recordAutoMeasure(ctx.sb, { id: c.id, name: c.name, platform: c.platform ?? null }, {
+      platform: "instagram", er: Math.round((ins.interactions / ins.views) * 10000) / 100,
+      followers: typeof next.followers === "number" ? next.followers : null,
+      detail: "Relevé automatique Instagram : interactions ÷ vues sur les 28 derniers jours (statistiques du compte connecté)",
+    });
+    if (isMain(c.platform, "instagram")) await markStatsMonth(ctx.sb, c.id);
+  }
   return next;
 }
 

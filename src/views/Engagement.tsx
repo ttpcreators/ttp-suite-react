@@ -295,9 +295,10 @@ export function Engagement() {
       followers,
     };
     const rest = freshHist.filter((h) => h.id !== editingId);
-    const nextHist = [entry, ...rest].slice(0, 100);
-    // N'envoie QUE la mesure (et les ids retirés : l'ancienne version, le dépassement du plafond de 100).
-    const removed = [...(editingId ? [editingId] : []), ...rest.slice(99).map((h) => h.id)];
+    // Plafond 400 mesures (comme les relevés automatiques, supabase/functions/_shared/autoStats.ts).
+    const nextHist = [entry, ...rest].slice(0, 400);
+    // N'envoie QUE la mesure (et les ids retirés : l'ancienne version, le dépassement du plafond de 400).
+    const removed = [...(editingId ? [editingId] : []), ...rest.slice(399).map((h) => h.id)];
     const okBlob = await listAppStateKey("engagementHistory", [entry], removed, true);
     if (!okBlob) {
       setSaving(false);
