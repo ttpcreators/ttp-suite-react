@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Gift, Mail, Package, CalendarClock, Pencil, Trash2, LayoutGrid, List as ListIcon, ShieldCheck, Info, Eye, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -40,7 +41,7 @@ export function Gifting() {
   const live = useLiveKey();
   const [rows, setRows] = useState<GiftRow[] | null>(() => getCache<GiftRow[]>("gifting"));
   const [error, setError] = useState(false);
-  const [view, setView] = useState<GView>("list");
+  const [view, setView] = useStickyState<GView>("gifting:vue", ["cards", "list"], "list");
   const [viewG, setViewG] = useState<GiftRow | null>(null); // fiche détail (clic sur une ligne)
 
   const [formOpen, setFormOpen] = useState(false);

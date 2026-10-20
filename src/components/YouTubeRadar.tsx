@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { BadgeCheck, ChevronDown, ChevronUp, Eye, EyeOff, Plus, RotateCcw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -43,8 +44,8 @@ export function YouTubeRadar({ platformTabs }: { platformTabs?: ReactNode } = {}
   const [state, setState] = useState<{ data: State; at: string } | null>(null);
   const [known, setKnown] = useState<Set<string>>(new Set());
   const [pool, setPool] = useState<Set<string>>(new Set());
-  const [period, setPeriod] = useState("90");
-  const [src, setSrc] = useState("toutes");
+  const [period, setPeriod] = useStickyState("youtube-radar:periode", PERIODS.map((p) => p.value), "90");
+  const [src, setSrc] = useStickyState("youtube-radar:chaines", SRC.map((s) => s.value), "toutes");
   const [view, setView] = useState<Status>("nouveau");
   const [q, setQ] = useState("");
   const [onlyFlag, setOnlyFlag] = useState(false);

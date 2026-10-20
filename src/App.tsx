@@ -264,9 +264,17 @@ export default function App() {
   // Ref vers l'onglet actif : navigateCurrentTab (stable) lit la valeur à jour.
   const activeRef = useRef(active);
   activeRef.current = active;
-  // Sous-onglet demandé (3e niveau de nav : Media kit → Agence…). Transitoire : posé au
-  // clic d'une sous-page, lu par la vue à son montage. Réinitialisé sur toute autre nav.
-  const [sub, setSub] = useState<string | null>(null);
+  // Sous-onglet demandé (3e niveau de nav : Media kit → Agence…). Posé au clic d'une
+  // sous-page, lu par la vue à son montage, réinitialisé sur toute autre nav. Mémorisé avec
+  // sa page : après un rechargement, on rouvre la même sous-page (Contrats → Représentation…).
+  const [sub, setSub] = useState<string | null>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("ttp:sub") ?? "null") as { view?: string; sub?: string } | null;
+      return saved?.view === active && typeof saved.sub === "string" ? saved.sub : null;
+    } catch {
+      return null; // stockage indisponible ou valeur illisible
+    }
+  });
   // Volet secondaire (multi-pages côte à côte, desktop) + son menu contextuel.
   const [splitView, setSplitView] = useState<ViewId | null>(() => {
     try {
@@ -370,6 +378,16 @@ export default function App() {
       /* localStorage indisponible */
     }
   }, [active]);
+
+  // Mémorise la sous-page de la page courante.
+  useEffect(() => {
+    try {
+      if (sub) localStorage.setItem("ttp:sub", JSON.stringify({ view: active, sub }));
+      else localStorage.removeItem("ttp:sub");
+    } catch {
+      /* localStorage indisponible */
+    }
+  }, [active, sub]);
 
   // Mémorise la liste d'onglets ouverts.
   useEffect(() => {

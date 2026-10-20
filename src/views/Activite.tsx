@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader } from "@/components/ui/loader";
 import { History, RefreshCw } from "lucide-react";
@@ -45,7 +46,7 @@ export function Activite() {
   const [missing, setMissing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [who, setWho] = useState("__all__");
-  const [period, setPeriod] = useState("7");
+  const [period, setPeriod] = useStickyState("activite:periode", PERIODS.map((p) => p.value), "7");
 
   const load = useCallback(async () => {
     setBusy(true);

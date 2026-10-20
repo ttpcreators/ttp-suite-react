@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useState } from "react";
 import { Pencil, Share2, Download, LayoutGrid, List, Table2, Trash2, Send, Eye, X, FileText, Activity, Sparkles } from "lucide-react";
 import { FileCard } from "@/components/ui/file-card-collections";
@@ -267,7 +268,7 @@ export function Debrief() {
   const debriefedKeys = new Set(list.map((d) => brandKey(d.brand)).filter(Boolean));
   const needsDebrief = briefRows.filter((b) => b.brand && briefDone(b) && !debriefedKeys.has(brandKey(b.brand)));
 
-  const [view, setView] = useState<DebriefView>("cards");
+  const [view, setView] = useStickyState<DebriefView>("debrief:vue", ["cards", "list", "table"], "cards");
   const [viewD, setViewD] = useState<Debrief | null>(null); // fiche détail (clic sur une ligne)
   const [formOpen, setFormOpen] = useState(false);
   // Bilan en cours d'édition, mémorisé tel qu'ouvert (pas son index : la liste peut se

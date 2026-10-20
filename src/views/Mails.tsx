@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ExpandableActionBar } from "@/components/ui/expandable-action-bar";
 import { Loader, Spin } from "@/components/ui/loader";
@@ -871,7 +872,7 @@ export function Mails() {
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [query, setQuery] = useState("");
   const [tagFilter, setTagFilter] = useState("__all__"); // filtre par niche/tag
-  const [contactFilter, setContactFilter] = useState<"all" | "contacted" | "never">("all"); // déjà échangé ?
+  const [contactFilter, setContactFilter] = useStickyState("mails:echange", ["all", "contacted", "never"] as const, "all"); // déjà échangé ?
   const [selected, setSelected] = useState<Contact | null>(null);
   const contactsAsked = useRef(false);
   useEffect(() => {

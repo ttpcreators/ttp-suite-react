@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { supabase } from "@/lib/supabase";
 import { Spin } from "@/components/ui/loader";
 import { useSearch, matchQuery } from "@/lib/search";
@@ -109,7 +110,7 @@ export function Collabs() {
   }, [live]);
 
   const [phaseFilter, setPhaseFilter] = useState<string>("__all__");
-  const [statusFilter, setStatusFilter] = useState<string>("active");
+  const [statusFilter, setStatusFilter] = useStickyState<string>("collabs:statut", ["__all__", ...STATUS_OPTS.map((o) => o.value)], "active");
   const [creatorFilter, setCreatorFilter] = useState<string>("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // Affichage : cartes (grille) ou liste (une collab par ligne). Retenu sur l'appareil.

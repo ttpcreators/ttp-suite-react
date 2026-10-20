@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronUp, EyeOff, ExternalLink, Hourglass, Plus, RotateCcw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -45,7 +46,7 @@ export function TikTokRadar({ platformTabs }: { platformTabs?: ReactNode } = {})
   const [known, setKnown] = useState<Set<string>>(new Set());
   const [roster, setRoster] = useState<Set<string>>(new Set());
   const [pool, setPool] = useState<Set<string>>(new Set());
-  const [period, setPeriod] = useState("30");
+  const [period, setPeriod] = useStickyState("tiktok-radar:periode", PERIODS.map((p) => p.value), "30");
   const [view, setView] = useState<Status>("nouveau");
   const [q, setQ] = useState("");
   const [onlyMany, setOnlyMany] = useState(false);

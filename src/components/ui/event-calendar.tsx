@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, X, Trash2 } from "lucide-react";
 import { TextField, TextAreaField, SelectField } from "@/components/ui/form";
@@ -229,7 +230,7 @@ export function EventCalendar({
     return d;
   });
   // Téléphone : l'agenda en liste se lit mieux qu'une grille de mois.
-  const [view, setView] = useState<View>(() => (isPhoneNow() ? "list" : "month"));
+  const [view, setView] = useStickyState<View>("agenda:vue", ["month", "week", "list"], () => (isPhoneNow() ? "list" : "month"));
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false); // enregistrement / suppression en cours
   // Filtres de catégorie (événements / briefs / to-do) — actifs par défaut.
@@ -667,7 +668,7 @@ function WeekView({
 function ListView({ events, onEventClick }: { events: Ev[]; onEventClick: (e: Ev) => void }) {
   const t = useT();
   const lang = useLang();
-  const [filter, setFilter] = useState<"avenir" | "passe" | "tous">("avenir");
+  const [filter, setFilter] = useStickyState("agenda:liste", ["avenir", "passe", "tous"] as const, "avenir");
   const today = todayKey();
   const groups = useMemo(() => {
     const shown = events.filter((e) =>

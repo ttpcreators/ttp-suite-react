@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
@@ -310,7 +311,7 @@ const ytErr = (e?: string) =>
 const poolKey = (handle: string) => (/youtube\.com|youtu\.be/i.test(handle) ? `yt:${(/@([\w.-]+)/.exec(handle)?.[1] ?? handle).toLowerCase()}` : cleanUser(handle));
 
 function CreatorFinder() {
-  const [source, setSource] = useState<"marque" | "similaire" | "liste">("marque");
+  const [source, setSource] = useStickyState("sourcing:depart", ["marque", "similaire", "liste"] as const, "marque");
   const [brandIn, setBrandIn] = useState("");
   const [creatorIn, setCreatorIn] = useState("");
   const [listIn, setListIn] = useState("");
@@ -354,7 +355,7 @@ function CreatorFinder() {
     }
   };
   // YouTube : thème, marque ou liste de chaînes ; pays ; quota du jour.
-  const [ytSource, setYtSource] = useState<"search" | "brand" | "list">("search");
+  const [ytSource, setYtSource] = useStickyState("sourcing:depart-youtube", ["search", "brand", "list"] as const, "search");
   const [ytQ, setYtQ] = useState("");
   const [ytRegion, setYtRegion] = useState("FR");
   const [ytList, setYtList] = useState("");
@@ -576,7 +577,7 @@ function CreatorFinder() {
     }
     return rejects[k] ? "pas" : "trier";
   };
-  const [section, setSection] = useState<Section>("trier");
+  const [section, setSection] = useStickyState<Section>("sourcing:tri", ["trier", "scouting", "contacter", "pas", "roster"], "trier");
   // Compte pas encore au Scouting : on demande dans quelle liste (créateurs ou sportifs) le ranger.
   const [askKind, setAskKind] = useState<{ c: Candidate; to: "scouting" | "contacter"; kind: PoolKind; sport: string | null } | null>(null);
   /** Range un compte : Scouting (en observation), À contacter, ou Pas intéressé. */
@@ -1165,7 +1166,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
   const [scanning, setScanning] = useState(false);
 
   // Filtres
-  const [kind, setKind] = useState<"clients" | "chauds" | "tous">("clients");
+  const [kind, setKind] = useStickyState("sourcing:radar-marques", ["clients", "chauds", "tous"] as const, "clients");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [openRows, setOpenRows] = useState<Set<string>>(new Set());
   const [verifying, setVerifying] = useState(false);
@@ -1175,7 +1176,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
   const [maxF, setMaxF] = useState("");
   const [city, setCity] = useState("");
   const [status, setStatus] = useState<"nouveau" | "ignore" | "pipeline">("nouveau");
-  const [srcF, setSrcF] = useState<"toutes" | "miennes" | "scouting" | "hors">("toutes");
+  const [srcF, setSrcF] = useStickyState("sourcing:radar-createurs", ["toutes", "miennes", "scouting", "hors"] as const, "toutes");
   const [q, setQ] = useState("");
   // Créatrices hors agence : en file (citées par une marque vérifiée) et déjà lues.
   const [queue, setQueue] = useState<{ waiting: number; read: number } | null>(null);

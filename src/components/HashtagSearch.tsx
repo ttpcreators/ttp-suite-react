@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useState } from "react";
 import { Spin } from "@/components/ui/loader";
 import { Hash, Heart, MessageCircle, ExternalLink, Search, X } from "lucide-react";
@@ -14,7 +15,7 @@ import { fmtAgo, igWhyText, noteQuota, postKind, type IgPostLite } from "@/lib/i
  */
 export function HashtagSearch({ onClose }: { onClose: () => void }) {
   const [tag, setTag] = useState("");
-  const [kind, setKind] = useState<"top" | "recent">("top");
+  const [kind, setKind] = useStickyState("hashtag:posts", ["top", "recent"] as const, "top");
   const [busy, setBusy] = useState(false);
   const [posts, setPosts] = useState<IgPostLite[] | null>(null);
   const [why, setWhy] = useState("");

@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, Pencil, LayoutGrid, List, Table2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
@@ -88,7 +89,7 @@ export function Checklist() {
     (s: AppState) => (s["checklists"] as Checklist[]) ?? DEFAULT_CHECKLISTS
   );
   const [lists, setLists] = useState<Checklist[]>(DEFAULT_CHECKLISTS);
-  const [view, setView] = useState<ChecklistView>("cards");
+  const [view, setView] = useStickyState<ChecklistView>("checklist:vue", ["cards", "list", "table"], "cards");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");

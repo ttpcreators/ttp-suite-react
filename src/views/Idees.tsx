@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -67,7 +68,7 @@ export function Idees() {
   const [text, setText] = useState("");
   const [note, setNote] = useState("");
   const [formCreator, setFormCreator] = useState(""); // "" = idée générale (aucune créatrice)
-  const [statusFilter, setStatusFilter] = useState<string>(ALL_STATUS);
+  const [statusFilter, setStatusFilter] = useStickyState<string>("idees:statut", [ALL_STATUS, ...STATUS_OPTS.map((o) => o.value)], ALL_STATUS);
   const [creatorFilter, setCreatorFilter] = useState<string>(""); // "" = toutes ; "__general__" = non assignées
   // Édition inline du texte d'une idée.
   const [editId, setEditId] = useState<string | null>(null);

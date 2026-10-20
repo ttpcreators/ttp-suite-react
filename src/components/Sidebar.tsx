@@ -17,11 +17,15 @@ import {
   type SbGroup,
 } from "@/components/ui/dashboard-sidebar";
 
+// Pastilles en rouge doux : uniquement l'argent en retard (factures, relances).
+const LATE_BADGE = new Set<string>(["facturation", "relances"]);
+
 const NAV_GROUPS: SbGroup[] = NAV.map((f) => ({
   id: f.id,
   label: f.label,
   icon: f.icon,
-  items: f.items.map((i) => ({ id: i.id, label: i.label, icon: i.icon, children: i.children })),
+  fixed: f.fixed,
+  items: f.items.map((i) => ({ id: i.id, label: i.label, icon: i.icon, children: i.children, badgeTone: LATE_BADGE.has(i.id) ? "late" : undefined })),
 }));
 
 export function Sidebar({
@@ -81,7 +85,7 @@ export function Sidebar({
       .map((id) => findPinnable(id))
       .filter((i): i is NonNullable<typeof i> => !!i)
       .map((i) => ({ id: i.id, label: i.label, icon: i.icon, badge: b[i.id] }));
-    return items.length ? [{ id: "__pins__", label: "Raccourcis", icon: Star, items }, ...base] : base;
+    return items.length ? [{ id: "__pins__", label: "Raccourcis", icon: Star, fixed: true, items }, ...base] : base;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pinned, hidden, badges]);
   // Sidebar repliable en rail d'icônes (mémorisé).

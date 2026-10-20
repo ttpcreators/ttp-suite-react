@@ -17,7 +17,6 @@ import {
   LayoutTemplate,
   CheckCircle2,
   KeyRound,
-  Gauge,
   Briefcase,
   Handshake,
   Wrench,
@@ -41,7 +40,8 @@ import {
   type LucideIcon,
   Mail,
   Tag,
-  Sun,
+  Star,
+  Sparkles,
 } from "lucide-react";
 
 export type ViewId =
@@ -90,35 +90,30 @@ export type NavFamily = {
   id: string;
   label: string;
   icon: LucideIcon;
+  /** Section toujours dépliée (Favoris), hors accordéon. */
+  fixed?: boolean;
   items: NavItem[];
 };
 
-// Organisation par MÉTIER (refaite le 2026-10-14) : chaque section = un moment de travail,
-// pour retrouver une page « là où on la cherche ».
-//   • Pilotage : où en est l'agence ;          • Au quotidien : ce qu'on ouvre tous les jours ;
-//   • Créateurs : le roster et ses chiffres ;  • Prospection : trouver et démarcher les marques ;
-//   • Collaborations : livrer une campagne ;   • Finance, Ressources, Réglages.
+// Organisation (refaite le 2026-10-20, TTP Suite 2.0) : en tête les FAVORIS, les pages
+// ouvertes tous les jours (toujours dépliés) ; puis une section par métier.
+//   • Favoris : la journée ;                 • Talents : le roster et ses chiffres ;
+//   • Prospection : trouver les marques ;    • Collaborations : livrer une campagne ;
+//   • Finance : l'argent et le pilotage ;    • Intelligence : les agents ;
+//   • Ressources, Réglages.
 // Les `id` ne changent JAMAIS (raccourcis, droits, onglets enregistrés) : seuls l'ordre,
 // le rangement et les libellés bougent.
 export const NAV: NavFamily[] = [
   {
-    id: "pilotage",
-    label: "Pilotage",
-    icon: Gauge,
+    id: "favoris",
+    label: "Favoris",
+    icon: Star,
+    fixed: true,
     items: [
       { id: "apercu", label: "Aperçu", icon: LayoutDashboard },
-      { id: "stats", label: "Stats", icon: TrendingUp },
-      { id: "objectifs", label: "Objectifs", icon: Target },
-      { id: "agent", label: "Agents", icon: Bot },
-      { id: "activite", label: "Activité", icon: History },
-    ],
-  },
-  {
-    id: "quotidien",
-    label: "Au quotidien",
-    icon: Sun,
-    items: [
       { id: "todo", label: "To-do", icon: ListChecks },
+      { id: "mails", label: "Mails", icon: Mail },
+      { id: "collabs", label: "Collabs", icon: Milestone },
       {
         id: "planning",
         label: "Planning",
@@ -128,19 +123,25 @@ export const NAV: NavFamily[] = [
           { id: "instagram", label: "Posts Instagram" },
         ],
       },
-      { id: "mails", label: "Mails", icon: Mail },
-      { id: "messages", label: "DM Instagram", icon: MessagesSquare },
     ],
   },
   {
-    id: "createurs",
-    label: "Créateurs",
+    id: "talents",
+    label: "Talents",
     icon: Users,
     items: [
       { id: "roster", label: "Roster", icon: Users },
+      {
+        id: "vivier",
+        label: "Scouting",
+        icon: UserPlus,
+        children: [
+          { id: "createurs", label: "Créateurs" },
+          { id: "sportifs", label: "Sportifs" },
+        ],
+      },
       { id: "engagement", label: "Engagement", icon: BarChart3 },
       { id: "suivi", label: "Évolution", icon: Activity },
-      { id: "pricing", label: "Tarifs", icon: Tag },
       {
         id: "mediakit",
         label: "Media kit",
@@ -151,15 +152,7 @@ export const NAV: NavFamily[] = [
           { id: "files", label: "Fichiers" },
         ],
       },
-      {
-        id: "vivier",
-        label: "Scouting",
-        icon: UserPlus,
-        children: [
-          { id: "createurs", label: "Créateurs" },
-          { id: "sportifs", label: "Sportifs" },
-        ],
-      },
+      { id: "pricing", label: "Tarifs", icon: Tag },
     ],
   },
   {
@@ -168,9 +161,10 @@ export const NAV: NavFamily[] = [
     icon: Handshake,
     items: [
       { id: "contacts", label: "Contacts", icon: Contact },
+      { id: "sourcing", label: "Sourcing", icon: Radar },
       { id: "whatsapp", label: "À contacter", icon: MessageCircle },
       { id: "prospection", label: "Pipeline", icon: Search },
-      { id: "sourcing", label: "Sourcing", icon: Radar },
+      { id: "messages", label: "DM Instagram", icon: MessagesSquare },
     ],
   },
   {
@@ -178,7 +172,6 @@ export const NAV: NavFamily[] = [
     label: "Collaborations",
     icon: Briefcase,
     items: [
-      { id: "collabs", label: "Collabs", icon: Milestone },
       { id: "briefs", label: "Briefs", icon: FileText },
       {
         id: "contrats",
@@ -204,6 +197,17 @@ export const NAV: NavFamily[] = [
       { id: "facturation", label: "Facturation", icon: Receipt },
       { id: "relances", label: "Relances", icon: AlarmClock },
       { id: "reversements", label: "Reversements", icon: Wallet },
+      { id: "stats", label: "Stats", icon: TrendingUp },
+      { id: "objectifs", label: "Objectifs", icon: Target },
+    ],
+  },
+  {
+    id: "intelligence",
+    label: "Intelligence",
+    icon: Sparkles,
+    items: [
+      { id: "agent", label: "Agents", icon: Bot },
+      { id: "activite", label: "Activité", icon: History },
     ],
   },
   {

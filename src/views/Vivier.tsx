@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { fmtCompact } from "@/lib/timeSeries";
 import { Spin } from "@/components/ui/loader";
 import { useEffect, useMemo, useState } from "react";
@@ -231,7 +232,7 @@ function ScoutingList({ kind }: { kind: Kind }) {
   const live = useLiveKey();
 
   const [tagFilter, setTagFilter] = useState(ALL);
-  const [contactFilter, setContactFilter] = useState<"all" | "contacted" | "never">("all");
+  const [contactFilter, setContactFilter] = useStickyState("scouting:contact", ["all", "contacted", "never"] as const, "all");
 
   // Formulaire (ajout / édition)
   const [formOpen, setFormOpen] = useState(false);
@@ -261,7 +262,7 @@ function ScoutingList({ kind }: { kind: Kind }) {
   // inclut l'écriture) : sinon les changements faits ailleurs resteraient masqués.
   useEffect(() => { setLocalTrack(null); }, [trackData]);
   const tracking = localTrack ?? trackData ?? {};
-  const [statusFilter, setStatusFilter] = useState<ScoutStatus | "__all__">("__all__");
+  const [statusFilter, setStatusFilter] = useStickyState<ScoutStatus | "__all__">("scouting:statut", ["__all__", "observation", "contacter", "discussion", "signe", "ecarte"], "__all__");
   const [snapDate, setSnapDate] = useState(() => todayISO()); // date locale (pas UTC)
   const [snapVal, setSnapVal] = useState("");
 

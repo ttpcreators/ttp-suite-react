@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   FileText,
@@ -449,7 +450,7 @@ export function Facturation() {
   const [commissions, setCommissions] = useState<Record<string, number>>({});
   const inited = useRef(false);
 
-  const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "Tous">("Tous");
+  const [statusFilter, setStatusFilter] = useStickyState<InvoiceStatus | "Tous">("facturation:statut", ["Tous", "brouillon", "attente", "payee", "retard"], "Tous");
   const [period, setPeriod] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [issuerDraft, setIssuerDraft] = useState<Issuer | null>(null);

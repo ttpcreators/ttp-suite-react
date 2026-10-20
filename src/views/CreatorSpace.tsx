@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { Spin } from "@/components/ui/loader";
 import { motion, AnimatePresence } from "motion/react";
@@ -587,12 +588,12 @@ export function CreatorSpace({
   const [contacts, setContacts] = useState<Contact[]>([]);
 
   // todo filter
-  const [todoFilter, setTodoFilter] = useState<TodoFilter>("encours");
+  const [todoFilter, setTodoFilter] = useStickyState<TodoFilter>("espace:taches", ["encours", "terminees", "toutes"], "encours");
 
   // "Mes infos" edit state
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<Creator>>({});
-  const [infoTab, setInfoTab] = useState<"stats" | "coord">("stats"); // carte Mes infos : onglet actif
+  const [infoTab, setInfoTab] = useStickyState("espace:infos", ["stats", "coord"] as const, "stats"); // carte Mes infos : onglet actif
   const [todoView, setTodoView] = useState<"liste" | "colonnes">(
     () => (lsGet("ttp:cs-todo-view") === "colonnes" ? "colonnes" : "liste"),
   );

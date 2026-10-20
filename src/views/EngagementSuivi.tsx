@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { fmtCompact } from "@/lib/timeSeries";
 import { useMemo, useState, lazy, Suspense } from "react";
 import { Activity, TrendingUp, TrendingDown, Users, Hash } from "lucide-react";
@@ -602,7 +603,7 @@ export function EngagementSuivi() {
     (s: AppState) => ((s["engagementHistory"] as HistEntry[]) ?? []),
   );
   const entries = useMemo(() => (hist ?? []).filter((h) => h.creator && h.creator !== "Calcul libre"), [hist]);
-  const [view, setView] = useState<"all" | "one">("all");
+  const [view, setView] = useStickyState("evolution:vue", ["all", "one"] as const, "all");
   const [focus, setFocus] = useState<string | undefined>(undefined);
   // Filtre « Période » remonté ici : survit à l'aller-retour vers la vue « Un créateur ».
   const [period, setPeriod] = useState("");
