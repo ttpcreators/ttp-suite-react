@@ -713,6 +713,8 @@ export default function App() {
   // Espace CRÉATEUR : vue dédiée quand un créateur se connecte
   if (profile?.role === "creator" && profile.creator_name) {
     return (
+      // Thème partagé (Profil → Thème : Clair, Verre, Noir, Auto), comme côté agence.
+      <ThemeContext.Provider value={{ dark, toggle: toggleTheme, theme, setTheme }}>
       <Suspense fallback={<div className="grid min-h-screen place-items-center bg-background"><Loader variant="dot-matrix" size={26} className="text-muted-foreground" /></div>}>
         <CreatorSpace
           name={profile.creator_name}
@@ -721,6 +723,7 @@ export default function App() {
           onLogout={logout}
         />
       </Suspense>
+      </ThemeContext.Provider>
     );
   }
 
@@ -772,6 +775,7 @@ export default function App() {
       );
     }
     return (
+      <ThemeContext.Provider value={{ dark, toggle: toggleTheme, theme, setTheme }}>
       <Suspense fallback={<div className="grid min-h-screen place-items-center bg-background"><Loader variant="dot-matrix" size={26} className="text-muted-foreground" /></div>}>
         {/* key : changer de créateur repart d'un espace neuf (formulaires, listes,
             infos) au lieu d'enregistrer les données du précédent sur le suivant. */}
@@ -784,6 +788,7 @@ export default function App() {
           preview={{ onExit: () => setSpace("agency"), onPick: setPortalCreator, creators }}
         />
       </Suspense>
+      </ThemeContext.Provider>
     );
   }
 
