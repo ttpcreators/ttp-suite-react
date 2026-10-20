@@ -19,7 +19,7 @@ import {
   ChevronRight,
   Monitor,
   type LucideIcon,
-} from "lucide-react";
+} from "@/components/icons";
 import { DashPanel, DashSectionTitle } from "@/components/ui/dash";
 import { useT } from "@/lib/i18n";
 

@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn, titleCase } from "@/lib/utils";
-import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown, Paperclip, FileText, UserRound, CheckCircle2 } from "lucide-react";
+import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown, Paperclip, FileText, UserRound, CheckCircle2 } from "@/components/icons";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { StatsBento } from "@/components/ui/stats-bento";

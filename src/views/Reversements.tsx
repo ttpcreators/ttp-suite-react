@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, Check, Wallet } from "lucide-react";
+import { Plus, Trash2, Check, Wallet } from "@/components/icons";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { supabase } from "@/lib/supabase";
 import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";

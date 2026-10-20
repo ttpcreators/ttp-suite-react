@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { Spin } from "@/components/ui/loader";
 import { useSearch, matchQuery } from "@/lib/search";
 import { cn, titleCase } from "@/lib/utils";
-import { ArrowRight, Pencil, Trash2, X, UserRound, XCircle, Archive, CircleDot, Check, ListChecks, ChevronDown, ChevronLeft, RotateCcw, LayoutGrid, List as ListIcon, PanelsTopLeft, RefreshCw, Heart, MessageCircle, ExternalLink } from "lucide-react";
+import { ArrowRight, Pencil, Trash2, X, UserRound, XCircle, Archive, CircleDot, Check, ListChecks, ChevronDown, ChevronLeft, RotateCcw, LayoutGrid, List as ListIcon, PanelsTopLeft, RefreshCw, Heart, MessageCircle, ExternalLink } from "@/components/icons";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { StatsBento } from "@/components/ui/stats-bento";

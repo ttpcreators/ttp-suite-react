@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from "lucide-react";
+import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from "@/components/icons";
 import { Alert, type AlertVariant } from "@/components/ui/alert";
 import { EN } from "@/lib/i18n/en";
 

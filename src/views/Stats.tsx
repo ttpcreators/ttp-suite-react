@@ -1,6 +1,6 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
-import { Users, TrendingUp, TrendingDown, Receipt, Wallet, Clock, FileText, Contact as ContactIcon, Activity } from "lucide-react";
+import { Users, TrendingUp, TrendingDown, Receipt, Wallet, Clock, FileText, Contact as ContactIcon, Activity } from "@/components/icons";
 
 const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
 import { supabase } from "@/lib/supabase";

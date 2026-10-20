@@ -1,4 +1,4 @@
-import { Check, ExternalLink, Palette } from "lucide-react";
+import { Check, ExternalLink, Palette } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { CREATOR_THEMES, mkCreatorTheme, type MkThemeId } from "@/lib/mediakitThemes";
 

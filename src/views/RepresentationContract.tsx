@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Copy, Check, FileText, FileDown, Eye, X, Save, Maximize2, Link2, PenLine, Trash2 } from "lucide-react";
+import { Copy, Check, FileText, FileDown, Eye, X, Save, Maximize2, Link2, PenLine, Trash2 } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";

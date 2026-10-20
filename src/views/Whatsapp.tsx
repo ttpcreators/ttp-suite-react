@@ -5,7 +5,7 @@ import { MailAvatar } from "@/components/mail-avatar";
 import { brandDomainFrom } from "@/lib/mailAvatar";
 import {
   MessageCircle, Mail, Phone, AtSign, Check, Clock, Send, ScrollText, ChevronDown, UserRound,
-} from "lucide-react";
+} from "@/components/icons";
 import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";

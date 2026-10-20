@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { siteSlugify, siteSlugs, type MkRow } from "@/lib/mediakitSlug";
-import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon, Check, Sparkles, Euro, UserRound, Users, BarChart3, Share2, ListChecks, Store, Languages, type LucideIcon } from "lucide-react";
+import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon, Check, Sparkles, Euro, UserRound, Users, BarChart3, Share2, ListChecks, Store, Languages, type LucideIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { ImageField } from "@/components/ui/image-field";
 import { dbUpdate } from "@/lib/db";

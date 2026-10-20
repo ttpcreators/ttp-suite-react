@@ -1,7 +1,7 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { useState } from "react";
 import { Spin } from "@/components/ui/loader";
-import { Hash, Heart, MessageCircle, ExternalLink, Search, X } from "lucide-react";
+import { Hash, Heart, MessageCircle, ExternalLink, Search, X } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { fmtCompact } from "@/lib/timeSeries";

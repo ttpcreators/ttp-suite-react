@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import { X, Send, Settings2, Plus, Trash2, ArrowLeft, ExternalLink } from "lucide-react";
+import { X, Send, Settings2, Plus, Trash2, ArrowLeft, ExternalLink } from "@/components/icons";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { MailAvatar } from "@/components/mail-avatar";
 import { toast } from "@/components/ui/toast";

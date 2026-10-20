@@ -5,7 +5,7 @@
 // quand la liste déborde. Exportés en MotionTabs* pour ne pas se confondre avec les
 // onglets standard de l'app (components/ui/animated-tabs).
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "@/components/icons";
 import { cancelFrame, frame, motion, MotionConfig, useReducedMotion, useSpring, type MotionValue, type Transition } from "motion/react";
 import { createContext, useCallback, useContext, useId, useLayoutEffect, useRef, useMemo, useState, type ButtonHTMLAttributes, type HTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
 import { EASE_OUT, SPRING_SWAP } from "@/lib/ease";

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Trash2, RefreshCw, Copy, X, Crown, KeyRound, Pencil } from "lucide-react";
+import { Trash2, RefreshCw, Copy, X, Crown, KeyRound, Pencil } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { titleCase } from "@/lib/utils";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";

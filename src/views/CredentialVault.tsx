@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { KeyRound, Eye, EyeOff, Copy, Plus, Trash2, Save } from "lucide-react";
+import { KeyRound, Eye, EyeOff, Copy, Plus, Trash2, Save } from "@/components/icons";
 import { useAppState, saveAppStateKey, invalidateAppState, getAppState, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
 

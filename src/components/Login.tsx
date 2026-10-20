@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Spin } from "@/components/ui/loader";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowRight, AtSign, Building2, Eye, EyeOff, Lock, Sparkles, Store } from "lucide-react";
+import { ArrowRight, AtSign, Building2, Eye, EyeOff, Lock, Sparkles, Store } from "@/components/icons";
 import { supabase, setRemember } from "@/lib/supabase";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";

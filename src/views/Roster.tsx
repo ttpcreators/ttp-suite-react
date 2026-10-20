@@ -12,7 +12,7 @@ import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { Trash2, Check, RefreshCw, ChevronUp, ChevronDown } from "lucide-react";
+import { Trash2, Check, RefreshCw, ChevronUp, ChevronDown } from "@/components/icons";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { PageHeaderRow } from "@/components/ui/page-header";

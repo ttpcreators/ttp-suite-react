@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, Check } from "lucide-react";
+import { ChevronDown, Check } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 export type StatusOption = { value: string; label: string; dot: string };

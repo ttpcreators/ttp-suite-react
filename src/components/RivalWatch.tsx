@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Spin } from "@/components/ui/loader";
-import { Binoculars, Check, ExternalLink, Plus, RefreshCw, Trash2, TrendingDown, TrendingUp, Minus, Wallet, Users } from "lucide-react";
+import { Binoculars, Check, ExternalLink, Plus, RefreshCw, Trash2, TrendingDown, TrendingUp, Minus, Wallet, Users } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, initials } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";

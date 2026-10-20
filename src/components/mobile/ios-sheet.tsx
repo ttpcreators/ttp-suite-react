@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { motion, useDragControls, useReducedMotion } from "motion/react";
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useIsPhone } from "@/lib/iosUi";
 import { useT } from "@/lib/i18n";

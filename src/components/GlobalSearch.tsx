@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { TtpSearch } from "@/components/icons/ttp-icons";
 import { cn } from "@/lib/utils";
-import { X, Trash2, type LucideIcon } from "lucide-react";
+import { X, Trash2, type LucideIcon } from "@/components/icons";
 import { useGlobalSearch, type SearchHit } from "@/lib/useGlobalSearch";
 import { titleCase } from "@/lib/utils";
 import { ALL_ITEMS, type ViewId } from "@/lib/nav";

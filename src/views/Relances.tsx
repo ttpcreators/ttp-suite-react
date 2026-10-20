@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Mail, BellRing, Check } from "lucide-react";
+import { Copy, Mail, BellRing, Check } from "@/components/icons";
 import { useAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";
 import { titleCase } from "@/lib/utils";
 import { overdueInvoices, parseDueDate, relanceEmail, relanceMailto, type RelanceInvoice, type Reminders } from "@/lib/relance";

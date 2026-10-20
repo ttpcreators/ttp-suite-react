@@ -1,6 +1,6 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, X, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Trash2 } from "@/components/icons";
 import { TextField, TextAreaField, SelectField } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { cn } from "@/lib/utils";

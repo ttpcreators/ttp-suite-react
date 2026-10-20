@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Paperclip, X } from "lucide-react";
+import { Paperclip, X } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { ATTACH_MAX_BYTES, ATTACH_MAX_LABEL, type OutAttachment } from "@/lib/mailSend";

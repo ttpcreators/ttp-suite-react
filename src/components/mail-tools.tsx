@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronUp, Minus, PenLine, Reply, Send, Settings2, X } from "lucide-react";
+import { ChevronUp, Minus, PenLine, Reply, Send, Settings2, X } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";

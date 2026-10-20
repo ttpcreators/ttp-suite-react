@@ -1,6 +1,6 @@
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Plus, X, ChevronDown, type LucideIcon } from "lucide-react";
+import { Plus, X, ChevronDown, type LucideIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { IosActionSheet, IosSheet, useIosPhone } from "@/components/mobile/ios-sheet";
 import { useNavActionSlot } from "@/lib/navAction";

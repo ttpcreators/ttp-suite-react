@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { ArrowUp, ArrowDown, type LucideIcon } from "lucide-react";
+import { ArrowUp, ArrowDown, type LucideIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 /** Sparkline (aire) en SVG inline — léger, sans dépendance. */

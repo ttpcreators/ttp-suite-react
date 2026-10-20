@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Copy, Search, Eye, X, LayoutGrid, List as ListIcon, Pencil, Trash2 } from "lucide-react";
+import { Copy, Search, Eye, X, LayoutGrid, List as ListIcon, Pencil, Trash2 } from "@/components/icons";
 import { useSearch, matchQuery } from "@/lib/search";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";

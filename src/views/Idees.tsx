@@ -17,7 +17,7 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
-import { Trash2, MessageSquarePlus, Check, X, Pencil, UserRound, Sparkles } from "lucide-react";
+import { Trash2, MessageSquarePlus, Check, X, Pencil, UserRound, Sparkles } from "@/components/icons";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useEffect, useRef, useState } from "react";

@@ -1,6 +1,6 @@
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { Spin } from "@/components/ui/loader";
-import { Search, type LucideIcon } from "lucide-react";
+import { Search, type LucideIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 /*

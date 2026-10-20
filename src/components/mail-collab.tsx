@@ -1,4 +1,4 @@
-import { ArrowUpRight, Milestone } from "lucide-react";
+import { ArrowUpRight, Milestone } from "@/components/icons";
 import { cn, titleCase } from "@/lib/utils";
 import { STEP_COUNT, stepDef } from "@/lib/collabs";
 import { phaseTagCls, type CollabLite, type MailTag } from "@/lib/mailCollab";

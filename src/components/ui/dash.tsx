@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, type LucideIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useLang, useT } from "@/lib/i18n";
 

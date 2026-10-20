@@ -1,6 +1,6 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
-import { Activity, Check, Save, Pencil, X, Calculator, Gauge, History } from "lucide-react";
+import { Activity, Check, Save, Pencil, X, Calculator, Gauge, History } from "@/components/icons";
 import { TickMeter } from "@/components/ui/dash";
 import { supabase } from "@/lib/supabase";
 

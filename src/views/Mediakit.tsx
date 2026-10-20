@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Upload, FileText, ExternalLink, Trash2, Image as ImageIcon, Link2, Mail, X, Send, Pencil, Plus, Check } from "lucide-react";
+import { Upload, FileText, ExternalLink, Trash2, Image as ImageIcon, Link2, Mail, X, Send, Pencil, Plus, Check } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { dbInsert, dbDelete } from "@/lib/db";
 import { notifyCreator } from "@/lib/push";

@@ -1,7 +1,7 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { fmtCompact } from "@/lib/timeSeries";
 import { useEffect, useRef, useState, lazy, Suspense, type ReactNode } from "react";
-import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X, ArrowUpRight, Share2, IdCard, ScrollText, Receipt, ListChecks, FileText, Lightbulb, Mail, TrendingUp, type LucideIcon } from "lucide-react";
+import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X, ArrowUpRight, Share2, IdCard, ScrollText, Receipt, ListChecks, FileText, Lightbulb, Mail, TrendingUp, type LucideIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { useIosPhone } from "@/components/mobile/ios-sheet";

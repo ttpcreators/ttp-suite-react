@@ -1,6 +1,6 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { useCallback, useEffect, useState } from "react";
-import { Bug, Check, ChevronDown, ChevronUp, Copy, RefreshCw } from "lucide-react";
+import { Bug, Check, ChevronDown, ChevronUp, Copy, RefreshCw } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";

@@ -3,7 +3,7 @@
 // réordonnables au glisser (souris ou doigt) ou au clavier (Alt + flèches).
 // Couleurs adaptées au mode sombre de l'app.
 
-import { X } from "lucide-react";
+import { X } from "@/components/icons";
 import { AnimatePresence, animate as animateValue, motion, useMotionValue, useReducedMotion, useSpring, useTransform, type MotionValue } from "motion/react";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";

@@ -12,7 +12,7 @@ import {
   SelectField,
 } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { ArrowRight, Pencil, Trash2 } from "lucide-react";
+import { ArrowRight, Pencil, Trash2 } from "@/components/icons";
 import { useEffect, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";

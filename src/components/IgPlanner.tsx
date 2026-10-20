@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import { AlertTriangle, CalendarClock, Clapperboard, ExternalLink, GalleryHorizontal, Handshake, Image as ImageIcon, ImagePlus, Pencil, Plus, RefreshCw, RotateCcw, Send, Smartphone, Trash2, UserPlus, X, ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
+import { AlertTriangle, CalendarClock, Clapperboard, ExternalLink, GalleryHorizontal, Handshake, Image as ImageIcon, ImagePlus, Pencil, Plus, RefreshCw, RotateCcw, Send, Smartphone, Trash2, UserPlus, X, ArrowLeft, ArrowRight, Sparkles } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, initials } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";

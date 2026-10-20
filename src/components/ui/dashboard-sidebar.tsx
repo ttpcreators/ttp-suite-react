@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
-import { Check, ChevronRight, ChevronsUpDown, Columns2, PanelLeftClose, Star, type LucideIcon } from "lucide-react";
+import { Check, ChevronRight, ChevronsUpDown, Columns2, PanelLeftClose, Star, type LucideIcon } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { VIEW_HINTS } from "@/lib/viewHints";

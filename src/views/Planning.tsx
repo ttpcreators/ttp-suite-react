@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Send } from "lucide-react";
+import { CalendarDays, Send } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { EventCalendar, type Ev } from "@/components/ui/event-calendar";
 import { GoogleConnect } from "@/components/ui/google-connect";

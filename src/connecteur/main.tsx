@@ -1,7 +1,7 @@
 import { StrictMode, useEffect, useState } from "react";
 import { Spin } from "@/components/ui/loader";
 import { createRoot } from "react-dom/client";
-import { Check, LogOut, ShieldCheck, X } from "lucide-react";
+import { Check, LogOut, ShieldCheck, X } from "@/components/icons";
 import "@/index.css";
 import { supabase } from "@/lib/supabase";
 

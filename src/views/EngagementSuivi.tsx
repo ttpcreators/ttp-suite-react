@@ -1,7 +1,7 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { fmtCompact } from "@/lib/timeSeries";
 import { useMemo, useState, lazy, Suspense } from "react";
-import { Activity, TrendingUp, TrendingDown, Users, Hash } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, Users, Hash } from "@/components/icons";
 
 const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
 import {

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
 import { SIGNATURE_KEY, setCurrentSignature, validSig } from "@/lib/agencySignature";
 import { Loader } from "@/components/ui/loader";
-import { Moon, Sun, X, Columns2, SquareArrowRight, Plus, LogOut, Star, StarOff, Trash2 } from "lucide-react";
+import { Moon, Sun, X, Columns2, SquareArrowRight, Plus, LogOut, Star, StarOff, Trash2 } from "@/components/icons";
 import { cn, titleCase } from "@/lib/utils";
 import { restoreTabs, navigateTab, addTab, closeTab as closeTabState } from "@/lib/tabs";
 import type { Session } from "@supabase/supabase-js";

@@ -15,7 +15,7 @@ import {
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { cva, type VariantProps } from "class-variance-authority";
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "@/components/icons";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";

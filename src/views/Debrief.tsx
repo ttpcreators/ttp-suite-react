@@ -1,6 +1,6 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useState } from "react";
-import { Pencil, Share2, Download, LayoutGrid, List, Table2, Trash2, Send, Eye, X, FileText, Activity, Sparkles } from "lucide-react";
+import { Pencil, Share2, Download, LayoutGrid, List, Table2, Trash2, Send, Eye, X, FileText, Activity, Sparkles } from "@/components/icons";
 import { FileCard } from "@/components/ui/file-card-collections";
 import {
   useAppState,

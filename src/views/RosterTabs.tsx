@@ -1,5 +1,5 @@
 import { useStickyState } from "@/lib/useStickyState";
-import { Users, Radar } from "lucide-react";
+import { Users, Radar } from "@/components/icons";
 import { Roster } from "./Roster";
 import { RosterTracking } from "./CreatorTracking";
 import { MotionTabs, MotionTabsList, MotionTabsTrigger } from "@/components/ui/motion-tabs";

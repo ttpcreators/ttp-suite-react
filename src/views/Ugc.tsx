@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pencil, Copy, Trash2 } from "lucide-react";
+import { Pencil, Copy, Trash2 } from "@/components/icons";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState } from "@/lib/appState";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";

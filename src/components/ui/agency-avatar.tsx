@@ -1,6 +1,6 @@
 import { useRef, useState, type ChangeEvent } from "react";
 import { Spin } from "@/components/ui/loader";
-import { Camera } from "lucide-react";
+import { Camera } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
 import { useMyName } from "@/lib/useMyName";

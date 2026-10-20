@@ -5,7 +5,7 @@ import { Spin } from "@/components/ui/loader";
 import { motion, AnimatePresence } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { fmtCompact } from "@/lib/timeSeries";
-import { LayoutDashboard, ListChecks, SquareCheckBig, ChevronRight, Camera, PenLine, CircleCheck, Lightbulb, FileText, Sparkles, Globe2, CalendarDays, Files, Image as ImageIcon, Receipt, Upload, Mail, ShieldCheck, Package, LogOut, Moon, Sun, Pencil, Check, Trash2, TrendingUp, ExternalLink, BarChart3, Contact, X, Copy, List, Columns3, PanelLeftOpen, Share2, Plus, Eye, ArrowLeft } from "lucide-react";
+import { LayoutDashboard, ListChecks, SquareCheckBig, ChevronRight, Camera, PenLine, CircleCheck, Lightbulb, FileText, Sparkles, Globe2, CalendarDays, Files, Image as ImageIcon, Receipt, Upload, Mail, ShieldCheck, Package, LogOut, Moon, Sun, Pencil, Check, Trash2, TrendingUp, ExternalLink, BarChart3, Contact, X, Copy, List, Columns3, PanelLeftOpen, Share2, Plus, Eye, ArrowLeft } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
 import { frDate, toISODate, todayISO } from "@/lib/dates";

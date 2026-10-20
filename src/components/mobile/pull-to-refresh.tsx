@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { refreshNow } from "@/lib/useLive";
 import { useT } from "@/lib/i18n";

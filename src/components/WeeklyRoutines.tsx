@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Picker } from "@/components/ui/form";
-import { Check, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Pencil, Plus, Trash2, X } from "@/components/icons";
 import { TtpClock } from "@/components/icons/ttp-icons";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";

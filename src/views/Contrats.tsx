@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Copy, Check, Plus, Trash2, FileText, FileDown, Eye, X, Maximize2, ArrowLeft } from "lucide-react";
+import { Copy, Check, Plus, Trash2, FileText, FileDown, Eye, X, Maximize2, ArrowLeft } from "@/components/icons";
 import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { printHtml } from "@/lib/printPdf";

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { TtpBrief, TtpInvoice, TtpMail, TtpPhone, TtpPlanning, TtpSpark, TtpTodo } from "@/components/icons/ttp-icons";
 import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowUpRight, Check, ChevronRight, Pencil, Plus, X, type LucideIcon } from "lucide-react";
+import { ArrowUpRight, Check, ChevronRight, Pencil, Plus, X, type LucideIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { useAppState, type AppState } from "@/lib/appState";

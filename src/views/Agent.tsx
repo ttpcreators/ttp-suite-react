@@ -8,7 +8,7 @@ import {
   Mail, MessageCircle, BriefcaseBusiness, AtSign, TriangleAlert, Copy, Check, X,
   ChevronDown, Trash2, Plus, AlarmClock, ExternalLink, UserRound, Settings2,
   type LucideIcon,
-} from "lucide-react";
+} from "@/components/icons";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";

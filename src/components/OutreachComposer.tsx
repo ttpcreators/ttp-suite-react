@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Spin } from "@/components/ui/loader";
-import { Copy, ExternalLink, Mail, Send, X } from "lucide-react";
+import { Copy, ExternalLink, Mail, Send, X } from "@/components/icons";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PlatformIcon } from "@/components/ui/platform-icon";

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BellRing, HelpCircle, Check, Smartphone, Bell, Shield } from "lucide-react";
+import { BellRing, HelpCircle, Check, Smartphone, Bell, Shield } from "@/components/icons";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
 import { WelcomeModal } from "@/components/ui/welcome-modal";
