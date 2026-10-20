@@ -225,11 +225,11 @@ function frTime(s: string): number {
 const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
 // Libellé + couleur de marque par plateforme (glass abonnés par réseau).
 const FOLLOWER_PLAT: Record<string, { label: string; color: string }> = {
-  instagram: { label: "Instagram", color: "#E1306C" },
-  tiktok: { label: "TikTok", color: "#0ea5e9" },
-  youtube: { label: "YouTube", color: "#ef4444" },
-  x: { label: "X", color: "#64748b" },
-  snapchat: { label: "Snapchat", color: "#f59e0b" },
+  instagram: { label: "Instagram", color: "var(--brand-instagram)" },
+  tiktok: { label: "TikTok", color: "var(--brand-tiktok)" },
+  youtube: { label: "YouTube", color: "var(--brand-youtube)" },
+  x: { label: "X", color: "var(--brand-x)" },
+  snapchat: { label: "Snapchat", color: "var(--brand-snapchat)" },
 };
 const CreatorStatsCard = lazy(() => import("./charts/CreatorStatsCard"));
 const GlobeStickers = lazy(() => import("@/components/ui/cobe-globe-stickers"));
@@ -3437,7 +3437,7 @@ export function CreatorSpace({
                           {s.done && <Check className="h-3 w-3" />}
                         </button>
                         <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
-                        <button type="button" onClick={() => delSubtask(taskView, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label={t("Supprimer la sous-tâche")}><Trash2 className="h-3.5 w-3.5" /></button>
+                        <button type="button" onClick={() => delSubtask(taskView, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label={t("Supprimer la sous-tâche")}><Trash2 className="h-3.5 w-3.5" /></button>
                       </div>
                     ))}
                   </div>
@@ -3462,7 +3462,7 @@ export function CreatorSpace({
                       <div className="truncate text-[13px] font-medium text-foreground hover:underline">{a.name}</div>
                       <div className="text-[11px] text-faint">{a.size}</div>
                     </button>
-                    <button type="button" onClick={() => removeAttachment(taskView, a.path)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title={t("Retirer")}><Trash2 className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => removeAttachment(taskView, a.path)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title={t("Retirer")}><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
                 <input ref={attFileRef} type="file" multiple className="hidden" onChange={(e) => uploadAttachments(taskView, e.target.files)} />

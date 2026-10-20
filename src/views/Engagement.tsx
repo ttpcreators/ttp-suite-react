@@ -661,7 +661,7 @@ export function Engagement() {
                   type="button"
                   onClick={() => setPendingDel({ message: "Supprimer cette mesure de l'historique ? Cette action est irréversible.", run: () => delHist(h.id) })}
                   title="Supprimer"
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -764,7 +764,7 @@ function DetailModal({
           <button
             type="button"
             onClick={onDelete}
-            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-[#E5484D] transition-colors hover:bg-rowhover"
+            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-destructive transition-colors hover:bg-rowhover"
           >
             <X className="h-3.5 w-3.5" /> Supprimer
           </button>

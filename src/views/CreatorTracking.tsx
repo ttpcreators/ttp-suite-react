@@ -270,7 +270,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
                           placeholder={`Pilier ${i + 1} (ex : routine sport, coulisses…)`}
                           className={IN}
                         />
-                        <button type="button" onClick={() => set({ piliers: cur.piliers.filter((_, j) => j !== i) })} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                        <button type="button" onClick={() => set({ piliers: cur.piliers.filter((_, j) => j !== i) })} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
@@ -530,7 +530,7 @@ export function MonthlyTracking({ name }: { name: string }) {
                       </span>
                     )}
                   </div>
-                  <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.month !== m.month))} className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                  <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.month !== m.month))} className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -736,7 +736,7 @@ export function JournalCard({ name }: { name: string }) {
                 <Picker size="xs" ariaLabel="Type d'échange" className="min-w-[140px]" value={e.type} onChange={(v) => edit(e.id, { type: v as ExchangeType })}
                   options={(Object.keys(EXCHANGE_META) as ExchangeType[]).map((t) => ({ value: t, label: EXCHANGE_META[t].label }))} />
                 <div className="flex-1" />
-                <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.id !== e.id))} className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.id !== e.id))} className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>

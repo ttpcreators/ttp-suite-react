@@ -131,7 +131,7 @@ export function ImageField({
           <button
             type="button"
             onClick={() => onChange(null)}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive"
           >
             <Trash2 className="h-4 w-4" />
           </button>

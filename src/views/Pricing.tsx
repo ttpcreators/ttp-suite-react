@@ -270,7 +270,7 @@ export function Pricing() {
                       <Picker size="sm" ariaLabel="Format" className="flex-1" value={r.format} onChange={(v) => setInf(r.id, { format: v })} options={plat.formats.map((f) => ({ value: f.key, label: f.label }))} />
                       <input type="number" min={1} value={r.qty} onChange={(e) => setInf(r.id, { qty: Math.max(1, parseInt(e.target.value, 10) || 1) })} title="Quantité" className="w-14 rounded-md border border-border bg-surface px-2 py-1.5 text-center text-[13px] tabular-nums outline-none focus:border-primary" />
                       {infRows.length > 1 && (
-                        <button type="button" onClick={() => setInfRows((rows) => rows.filter((x) => x.id !== r.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                        <button type="button" onClick={() => setInfRows((rows) => rows.filter((x) => x.id !== r.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       )}
@@ -347,7 +347,7 @@ export function Pricing() {
                   <Picker size="sm" ariaLabel="Type de livrable" className="flex-1" value={r.type} onChange={(v) => setUgcRows((rows) => rows.map((x) => (x.id === r.id ? { ...x, type: v } : x)))} options={UGC_TYPES.map((t) => ({ value: t.key, label: t.label }))} />
                   <input type="number" min={1} value={r.qty} onChange={(e) => setUgcRows((rows) => rows.map((x) => (x.id === r.id ? { ...x, qty: Math.max(1, parseInt(e.target.value, 10) || 1) } : x)))} title="Quantité" className="w-14 rounded-md border border-border bg-surface px-2 py-1.5 text-center text-[13px] tabular-nums outline-none focus:border-primary" />
                   {ugcRows.length > 1 && (
-                    <button type="button" onClick={() => setUgcRows((rows) => rows.filter((x) => x.id !== r.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                    <button type="button" onClick={() => setUgcRows((rows) => rows.filter((x) => x.id !== r.id))} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}
@@ -523,7 +523,7 @@ function RatesEditor({ rates, onClose }: { rates: RateOverrides; onClose: () => 
           // Valeurs SAISIES (même invalides) : modifier le max ne doit pas effacer le min tapé.
           const raw = { cpm: draft[key]?.cpm ?? cur.cpm, rate: draft[key]?.rate ?? cur.rate };
           const err = errOf(key);
-          const box = `rounded-md border bg-surface px-1.5 py-1 text-center tabular-nums outline-none focus:border-primary ${err ? "border-[#E5484D]" : "border-border"}`;
+          const box = `rounded-md border bg-surface px-1.5 py-1 text-center tabular-nums outline-none focus:border-primary ${err ? "border-destructive" : "border-border"}`;
           return (
             <div key={key}>
               <div className="grid grid-cols-[minmax(0,1fr)_56px_56px_52px] items-center gap-1.5 text-[11px]">
@@ -532,7 +532,7 @@ function RatesEditor({ rates, onClose }: { rates: RateOverrides; onClose: () => 
                 <input defaultValue={raw.cpm[1]} onBlur={(e) => set(key, { cpm: [raw.cpm[0], num(e.target.value)] })} title="€ / 1000 abonnés (max)" className={box} />
                 <input defaultValue={Math.round(raw.rate * 100)} onBlur={(e) => set(key, { rate: num(e.target.value) / 100 })} title="% des abonnés qui voient habituellement ce format" className={box} />
               </div>
-              {err && <div className="mt-0.5 text-[10px] leading-snug text-[#E5484D]">{err}</div>}
+              {err && <div className="mt-0.5 text-[10px] leading-snug text-destructive">{err}</div>}
             </div>
           );
         }))}
@@ -542,7 +542,7 @@ function RatesEditor({ rates, onClose }: { rates: RateOverrides; onClose: () => 
       </div>
       <div className="mt-3 flex flex-wrap justify-end gap-2">
         {confirmReset ? (
-          <button type="button" onClick={() => void save(true)} disabled={saving} className="flex items-center gap-1 rounded-full bg-[#E5484D] px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"><RotateCcw className="h-3 w-3" /> Confirmer : effacer le barème de l'agence</button>
+          <button type="button" onClick={() => void save(true)} disabled={saving} className="flex items-center gap-1 rounded-full bg-destructive px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"><RotateCcw className="h-3 w-3" /> Confirmer : effacer le barème de l'agence</button>
         ) : (
           <button type="button" onClick={() => setConfirmReset(true)} disabled={saving} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover"><RotateCcw className="h-3 w-3" /> Barème par défaut</button>
         )}

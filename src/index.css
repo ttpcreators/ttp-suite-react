@@ -95,6 +95,20 @@
   --segment: #ffffff; /* onglet choisi d'un contrôle segmenté */
   --badge: #ff3b30; /* pastille de notification (compteur) */
 
+  /* Séries de graphiques (palette Apple) et couleurs des réseaux. */
+  --chart-1: #0a84ff;
+  --chart-2: #30b0c7;
+  --chart-3: #34c759;
+  --chart-4: #ff9f0a;
+  --chart-5: #af52de;
+  --chart-6: #8e8e93;
+  --chart-7: #ff375f;
+  --brand-instagram: #e1306c;
+  --brand-tiktok: #0ea5e9;
+  --brand-youtube: #ef4444;
+  --brand-x: #64748b;
+  --brand-snapchat: #f59e0b;
+
   /* Statuts : UN sens par couleur, partout (fond / texte). */
   --st-ok-bg: #e3f6e8; /* payé, signé, à jour */
   --st-ok: #1e7b34;
@@ -183,6 +197,10 @@
   --shadow-float: 0 10px 40px rgba(0, 0, 0, 0.5);
   --segment: #636366;
   --badge: #ff453a;
+  --chart-2: #40c8e0;
+  --chart-3: #30d158;
+  --chart-5: #bf5af2;
+  --chart-6: #98989d;
 
   --st-ok-bg: rgba(48, 209, 88, 0.16);
   --st-ok: #30d158;

@@ -294,7 +294,7 @@ function ClaudeSection() {
                         <span className="block truncate text-[13px] font-medium text-foreground">{g.client_name || "Claude"}</span>
                         <span className="block text-[11px] text-faint">Depuis le {fmtWhen(g.created_at)}{g.last_used_at ? ` · utilisé le ${fmtWhen(g.last_used_at)}` : ""}</span>
                       </span>
-                      <button type="button" onClick={() => void cut(g.id)} disabled={busy === g.id} className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-[#E5484D] hover:bg-rowhover disabled:opacity-50">
+                      <button type="button" onClick={() => void cut(g.id)} disabled={busy === g.id} className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-destructive hover:bg-rowhover disabled:opacity-50">
                         <Unplug className="h-3.5 w-3.5" /> Couper l'accès
                       </button>
                     </li>
@@ -991,7 +991,7 @@ export function Parametres() {
         <button
           type="button"
           onClick={() => supabase.auth.signOut()}
-          className="flex w-full items-center justify-center gap-2 rounded-full border border-border bg-surface px-4 py-2.5 text-[12px] font-medium text-[#E5484D] transition-colors hover:bg-rowhover"
+          className="flex w-full items-center justify-center gap-2 rounded-full border border-border bg-surface px-4 py-2.5 text-[12px] font-medium text-destructive transition-colors hover:bg-rowhover"
         >
           <LogOut className="h-3.5 w-3.5" /> Se déconnecter
         </button>

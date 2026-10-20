@@ -1092,7 +1092,7 @@ export function Todo() {
                             {s.done && <Check className="h-3 w-3" />}
                           </button>
                           <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
-                          <button type="button" onClick={() => delSubtask(selectedTodo, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button type="button" onClick={() => delSubtask(selectedTodo, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
                       ))}
                     </div>
@@ -1114,7 +1114,7 @@ export function Todo() {
                         <div className="truncate text-[13px] font-medium text-foreground hover:underline">{a.name}</div>
                         <div className="text-[11px] text-faint">{a.size}</div>
                       </button>
-                      <button type="button" onClick={() => setConfirmAtt({ todo: selectedTodo, att: a })} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title="Retirer"><Trash2 className="h-4 w-4" /></button>
+                      <button type="button" onClick={() => setConfirmAtt({ todo: selectedTodo, att: a })} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title="Retirer"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   ))}
                   <input ref={attFileRef} type="file" multiple className="hidden" onChange={(e) => uploadAttachments(selectedTodo, e.target.files)} />

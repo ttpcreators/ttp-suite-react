@@ -850,7 +850,7 @@ function EventModal({
               type="button"
               disabled={busy}
               onClick={() => setShowConfirm(true)}
-              className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-[#E5484D] transition-colors hover:bg-rowhover"
+              className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-destructive transition-colors hover:bg-rowhover"
             >
               <Trash2 className="h-3.5 w-3.5" /> {t("Supprimer")}
             </button>

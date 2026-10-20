@@ -1433,7 +1433,7 @@ export function Contacts() {
                       <button
                         type="button"
                         onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
-                        className="text-faint transition-colors hover:text-[#E5484D]"
+                        className="text-faint transition-colors hover:text-destructive"
                         aria-label={`Retirer ${a.filename}`}
                       >
                         <X className="h-3 w-3" />

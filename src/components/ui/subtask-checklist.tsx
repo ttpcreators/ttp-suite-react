@@ -84,7 +84,7 @@ export function SubtaskChecklist({
                 {s.done && <Check className="h-3 w-3" />}
               </button>
               <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
-              <button type="button" onClick={() => del(s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label={t("Supprimer")}>
+              <button type="button" onClick={() => del(s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label={t("Supprimer")}>
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
