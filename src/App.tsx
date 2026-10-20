@@ -147,6 +147,9 @@ function ViewContent({
   );
 }
 
+/** Vues sans en-tête de page posé par App (elles affichent leur propre titre, ou aucun). */
+const NO_PAGE_HEADER: ViewId[] = ["mails", "parametres"];
+
 const PANE_FALLBACK = (
   <div className="grid min-h-[50vh] place-items-center">
     <Loader variant="dot-matrix" size={26} className="text-muted-foreground" />
@@ -836,8 +839,9 @@ export default function App() {
     );
   // (Le mode portail a déjà fait un return anticipé plus haut : ici space === "agency".)
   const primaryTitle = detailCreator ? titleCase(detailCreator) : canSee(active) ? title : "Accès réservé";
-  // Accueil et Mails n'ont pas d'en-tête de page (Mails : client plein écran avec son propre en-tête).
-  const showPrimaryH1 = !detailCreator && active !== "mails";
+  // Accueil, Mails et Paramètres n'ont pas d'en-tête de page (Mails : client plein écran avec son
+  // propre en-tête ; Paramètres : le titre vit en tête de sa colonne de réglages).
+  const showPrimaryH1 = !detailCreator && !NO_PAGE_HEADER.includes(active);
   // Multi-pages actif dès qu'il y a ≥ 2 onglets ou un volet latéral.
   // (Mode iPhone : toujours une seule page à la fois, comme une app.)
   const multi = !iosPhone && (tabs.length > 1 || splitShown != null);
@@ -1011,7 +1015,7 @@ export default function App() {
                             <ErrorBoundary variant="inline" label="Cette page" resetKey={`tab:${id}`}>
                               <Suspense fallback={PANE_FALLBACK}>
                                 <NavSubContext.Provider value={id === active ? sub : null}>
-                                  {id !== "mails" ? (
+                                  {!NO_PAGE_HEADER.includes(id) ? (
                                     <PageFrame title={tabTitle} hint={VIEW_HINTS[id]}>
                                       <ViewContent active={id} onOpenCreator={openDetail} />
                                     </PageFrame>
