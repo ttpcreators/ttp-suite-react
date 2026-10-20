@@ -87,8 +87,8 @@ type Todo = { id: string; text: string; descr: string | null; due: string | null
 let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
 // Priorité : barre d'accent (bord gauche de la carte) + pilule.
-const PRIO_ACCENT: Record<string, string> = { haute: "bg-danger", moyenne: "bg-foreground/50", basse: "bg-foreground/30" };
-const PRIO_PILL: Record<string, string> = { haute: "bg-danger/10 text-dangertext", moyenne: "bg-muted text-muted-foreground", basse: "border border-border text-muted-foreground" };
+const PRIO_ACCENT: Record<string, string> = { haute: "bg-wait", moyenne: "bg-foreground/50", basse: "bg-foreground/30" };
+const PRIO_PILL: Record<string, string> = { haute: "bg-wait-soft text-wait", moyenne: "bg-muted text-muted-foreground", basse: "border border-border text-muted-foreground" };
 const prioAccent = (p: string | null) => PRIO_ACCENT[p ?? "moyenne"] ?? PRIO_ACCENT.moyenne;
 const prioPill = (p: string | null) => PRIO_PILL[p ?? "moyenne"] ?? PRIO_PILL.moyenne;
 type Idea = { id: string; text: string; status: string | null; sort_order?: number; subtasks?: Subtask[] | null };

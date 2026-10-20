@@ -61,9 +61,9 @@ type Row = {
 
 // Suivi du sur-contact : en-deçà de ce seuil (jours), on alerte de ne pas relancer.
 const RECENT_DAYS = 30;
-// Couleurs du suivi : rouge = trop tôt pour relancer, vert = on peut y aller.
-const TOO_SOON = "bg-danger/10 text-dangertext";
-const GOOD_TO_GO = "bg-signalsoft text-signaltext";
+// Couleurs du suivi : orange = trop tôt pour relancer, vert = on peut y aller.
+const TOO_SOON = "bg-wait-soft text-wait";
+const GOOD_TO_GO = "bg-ok-soft text-ok";
 /** Nombre de jours depuis une date ISO (null si absente/invalide). */
 function daysSince(iso?: string | null): number | null {
   if (!iso) return null;

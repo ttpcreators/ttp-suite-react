@@ -467,7 +467,7 @@ export function MonthlyTracking({ name }: { name: string }) {
             {sorted.map((m) => {
               const realTotal = cadenceTotal(m.cadence);
               const ratio = recoTotal > 0 ? realTotal / recoTotal : 1;
-              const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-signal/10 text-signaltext" : ratio >= 0.7 ? "bg-foreground/[0.06] text-amber" : "bg-danger/10 text-dangertext";
+              const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-ok-soft text-ok" : "bg-wait-soft text-wait";
               return (
                 <div key={m.month} className="rounded-xl border border-border bg-panel/40 p-4">
                   <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -515,7 +515,7 @@ export function MonthlyTracking({ name }: { name: string }) {
           {sorted.map((m) => {
             const realTotal = cadenceTotal(m.cadence);
             const ratio = recoTotal > 0 ? realTotal / recoTotal : 1;
-            const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-signal/10 text-signaltext" : ratio >= 0.7 ? "bg-foreground/[0.06] text-amber" : "bg-danger/10 text-dangertext";
+            const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-ok-soft text-ok" : "bg-wait-soft text-wait";
             return (
               <div key={m.month} className="rounded-xl border border-border bg-panel/40 p-3.5">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -796,7 +796,7 @@ export function CreatorAlerts({ name }: { name: string }) {
       </span>
       {alerts.length > 0 && <span className="text-faint">·</span>}
       {alerts.map((a, i) => (
-        <span key={i} className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold", a.level === "danger" ? "bg-danger/10 text-dangertext" : "bg-foreground/[0.06] text-amber")}>
+        <span key={i} className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold", a.level === "danger" ? "bg-wait-soft text-wait" : "bg-info-soft text-info")}>
           <AlertTriangle className="h-3 w-3" /> {a.label}
         </span>
       ))}
@@ -871,7 +871,7 @@ export function RosterTracking({ onOpen }: { onOpen?: (name: string) => void }) 
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {r.alerts.map((a, i) => (
-                          <span key={i} className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", a.level === "danger" ? "bg-danger/10 text-dangertext" : "bg-muted text-muted-foreground")}>
+                          <span key={i} className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", a.level === "danger" ? "bg-wait-soft text-wait" : "bg-muted text-muted-foreground")}>
                             {a.label}
                           </span>
                         ))}

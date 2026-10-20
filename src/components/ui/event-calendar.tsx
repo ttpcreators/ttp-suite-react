@@ -45,7 +45,7 @@ const TYPE_BG: Record<string, string> = {
   shoot: "bg-indigo",
   event: "bg-cyan",
   voyage: "bg-amber",
-  deadline: "bg-danger",
+  deadline: "bg-wait",
 };
 
 const TYPE_TEXT: Record<string, string> = {
@@ -55,7 +55,7 @@ const TYPE_TEXT: Record<string, string> = {
   shoot: "text-indigo",
   event: "text-cyan",
   voyage: "text-amber",
-  deadline: "text-dangertext",
+  deadline: "text-wait",
 };
 
 function typeBg(t: string) {
