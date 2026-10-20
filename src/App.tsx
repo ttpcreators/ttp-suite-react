@@ -6,6 +6,9 @@ import { cn, titleCase } from "@/lib/utils";
 import { restoreTabs, navigateTab, addTab, closeTab as closeTabState } from "@/lib/tabs";
 import type { Session } from "@supabase/supabase-js";
 import { GlobalSearch } from "@/components/GlobalSearch";
+import { CommandPalette } from "@/components/CommandPalette";
+import { openCommandPalette } from "@/lib/commandPalette";
+import { RestrictedViewsContext } from "@/lib/restrictedViews";
 import { Toaster, toast } from "@/components/ui/toast";
 import { consumeIgReturn } from "@/lib/instagram";
 import { UndoSendBar } from "@/components/ui/undo-send";
@@ -39,6 +42,7 @@ import { OfflineBanner } from "@/components/mobile/offline-banner";
 
 // Vues chargées à la demande (code-splitting → démarrage plus léger, mobile compris).
 const RosterTabs = lazy(() => import("@/views/RosterTabs").then((m) => ({ default: m.RosterTabs })));
+const Aujourdhui = lazy(() => import("@/views/Aujourdhui").then((m) => ({ default: m.Aujourdhui })));
 const Apercu = lazy(() => import("@/views/Apercu").then((m) => ({ default: m.Apercu })));
 const Stats = lazy(() => import("@/views/Stats").then((m) => ({ default: m.Stats })));
 const Facturation = lazy(() => import("@/views/Facturation").then((m) => ({ default: m.Facturation })));
@@ -79,6 +83,7 @@ const Pricing = lazy(() => import("@/views/Pricing").then((m) => ({ default: m.P
 
 
 const VIEWS: Partial<Record<ViewId, ComponentType>> = {
+  aujourdhui: Aujourdhui,
   apercu: Apercu,
   agent: AgentView,
   stats: Stats,
@@ -842,6 +847,7 @@ export default function App() {
 
   return (
     <ThemeContext.Provider value={{ dark, toggle: toggleTheme, theme, setTheme }}>
+    <RestrictedViewsContext.Provider value={hiddenIds}>
     <SearchContext.Provider value={{ query, setQuery }}>
     <NavSubSetContext.Provider value={setSub}>
       <div className={iosPhone ? "app-frame h-[100dvh] bg-background" : "app-frame h-[100dvh] bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
@@ -861,7 +867,7 @@ export default function App() {
               hidden={navHidden}
               userId={session.user.id}
               badges={navBadges}
-              search={<GlobalSearch variant="sidebar" query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={navHidden} />}
+              search={<GlobalSearch variant="sidebar" query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={navHidden} onActivate={openCommandPalette} />}
               tools={
                 <>
                   <Notifications variant="sidebar" items={notifs} onDismiss={dismissNotifs} />
@@ -1129,8 +1135,11 @@ export default function App() {
       <Toaster />
       <AgencySignatureSync />
       <UndoSendBar />
+      {/* Palette ⌘K : actions, pages, recherche et Megan, depuis n'importe quelle page. */}
+      <CommandPalette hidden={navHidden} restricted={hiddenIds} onSelect={select} onGoto={gotoSearch} onOpenCreator={openDetail} setQuery={setQuery} />
     </NavSubSetContext.Provider>
     </SearchContext.Provider>
+    </RestrictedViewsContext.Provider>
     </ThemeContext.Provider>
   );
 }

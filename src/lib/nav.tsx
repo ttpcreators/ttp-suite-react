@@ -42,9 +42,11 @@ import {
   Tag,
   Star,
   Sparkles,
+  Sun,
 } from "lucide-react";
 
 export type ViewId =
+  | "aujourdhui"
   | "apercu"
   | "activite"
   | "agent"
@@ -110,6 +112,7 @@ export const NAV: NavFamily[] = [
     icon: Star,
     fixed: true,
     items: [
+      { id: "aujourdhui", label: "Aujourd'hui", icon: Sun },
       { id: "apercu", label: "Aperçu", icon: LayoutDashboard },
       { id: "todo", label: "To-do", icon: ListChecks },
       { id: "mails", label: "Mails", icon: Mail },
