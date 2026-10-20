@@ -94,6 +94,7 @@
   --shadow-float: 0 10px 40px rgba(30, 40, 80, 0.1);
   --segment: #ffffff; /* onglet choisi d'un contrôle segmenté */
   --badge: #ff3b30; /* pastille de notification (compteur) */
+  --brand: #49060e; /* bordeaux du logo TTP (fond derrière le monogramme) */
 
   /* Séries de graphiques (palette Apple) et couleurs des réseaux. */
   --chart-1: #0a84ff;
@@ -271,6 +272,7 @@
   --color-field: var(--field);
   --color-segment: var(--segment);
   --color-badge: var(--badge);
+  --color-brand: var(--brand);
   /* Priorité haute (tâches) : rouge vif, demandé par Marc. Même rouge que les pastilles de nombre. */
   --color-priority: var(--badge);
   --color-ring: var(--ring);

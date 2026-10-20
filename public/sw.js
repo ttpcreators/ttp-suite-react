@@ -83,8 +83,8 @@ self.addEventListener("push", (event) => {
   const title = data.title || "TTP Suite";
   const options = {
     body: data.body || "",
-    icon: "/logo.png?v=2",
-    badge: "/logo.png?v=2",
+    icon: "/logo.png?v=3",
+    badge: "/logo.png?v=3",
     tag: data.tag || "ttp-digest",
     renotify: true,
     data: { url: data.url || "/" },

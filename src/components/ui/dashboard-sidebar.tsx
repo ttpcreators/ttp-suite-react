@@ -425,11 +425,11 @@ function Group({
   );
 }
 
-/** Logo carré TTP (fond sombre fixe : le logo est blanc). */
+/** Logo carré TTP : monogramme blanc sur le bordeaux de la marque. */
 export function SidebarLogo({ className = "h-8 w-8" }: { className?: string }) {
   return (
-    <div className={cn("shrink-0 overflow-hidden rounded-[8px] bg-[#14181E]", className)}>
-      <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
+    <div className={cn("shrink-0 overflow-hidden rounded-[8px] bg-brand", className)}>
+      <img src={`${BASE}cover.png?v=3`} alt="TTP" className="h-full w-full object-cover" />
     </div>
   );
 }

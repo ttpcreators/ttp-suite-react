@@ -38,9 +38,9 @@ export function AgencyAvatar({
 
   if (readOnly) {
     return (
-      <div className={`shrink-0 overflow-hidden bg-[#14181E] ${className} ${rounded}`}>
+      <div className={`shrink-0 overflow-hidden bg-brand ${className} ${rounded}`}>
         <img
-          src={url && !broken ? url : `${BASE}cover.png`}
+          src={url && !broken ? url : `${BASE}cover.png?v=3`}
           alt={url && !broken ? "Profil" : "TTP"}
           onError={() => setBroken(true)}
           className="h-full w-full object-cover"
@@ -93,7 +93,7 @@ export function AgencyAvatar({
 
   return (
     <div
-      className={`group relative shrink-0 cursor-pointer overflow-hidden bg-[#14181E] ${className} ${rounded}`}
+      className={`group relative shrink-0 cursor-pointer overflow-hidden bg-brand ${className} ${rounded}`}
       onClick={() => !busy && inputRef.current?.click()}
       role="button"
       tabIndex={0}
@@ -109,7 +109,7 @@ export function AgencyAvatar({
       {url && !broken ? (
         <img src={url} alt="Profil" onError={() => setBroken(true)} className="h-full w-full object-cover" />
       ) : (
-        <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
+        <img src={`${BASE}cover.png?v=3`} alt="TTP" className="h-full w-full object-cover" />
       )}
       <div className={`absolute inset-0 grid place-items-center bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100${busy ? " opacity-100" : ""}`}>
         {busy ? <Spin size={16} /> : <Camera className="h-3.5 w-3.5" />}

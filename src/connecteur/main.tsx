@@ -114,7 +114,7 @@ function App() {
     <main className="grid min-h-dvh place-items-center bg-background px-4 py-10 text-foreground">
       <div className="w-full max-w-[440px] rounded-[20px] bg-surface p-6 shadow-sm sm:p-8">
         <div className="mb-6 flex items-center gap-3">
-          <img src="/logo.png?v=2" alt="" className="h-10 w-10 rounded-xl" />
+          <img src="/logo.png?v=3" alt="" className="h-10 w-10 rounded-xl" />
           <div>
             <div className="text-[15px] font-semibold">TTP Suite</div>
             <div className="text-[12px] text-muted-foreground">Connexion de {client}</div>

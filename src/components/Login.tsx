@@ -74,8 +74,8 @@ function BrandCard() {
   return (
     <div className="flex h-full flex-col rounded-xl border border-border bg-surface px-6 py-7 dark:bg-panel shadow-[0_1px_2px_rgb(0_0_0/0.04),0_12px_32px_-16px_rgb(0_0_0/0.18)] dark:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.06)]">
       <div className="flex items-center gap-2">
-        <div className="h-6 w-6 overflow-hidden rounded-[6px] bg-[#14181E] ring-1 ring-border">
-          <img src={`${BASE}cover.png`} alt="" className="h-full w-full object-cover" />
+        <div className="h-6 w-6 overflow-hidden rounded-[6px] bg-brand ring-1 ring-border">
+          <img src={`${BASE}cover.png?v=3`} alt="" className="h-full w-full object-cover" />
         </div>
         <span className="text-[14px] font-semibold tracking-tight text-foreground">TTP Creators</span>
       </div>
@@ -165,8 +165,8 @@ export function Login() {
       <main className="flex min-w-0 flex-1 flex-col items-center justify-center px-6 py-12">
         <motion.div {...rise(16, 0.1)} className="flex w-full max-w-[320px] flex-col gap-6">
           <div className="flex items-center justify-center gap-2.5">
-            <div className="h-8 w-8 overflow-hidden rounded-[8px] bg-[#14181E] ring-1 ring-border">
-              <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
+            <div className="h-8 w-8 overflow-hidden rounded-[8px] bg-brand ring-1 ring-border">
+              <img src={`${BASE}cover.png?v=3`} alt="TTP" className="h-full w-full object-cover" />
             </div>
             <span className="text-[16px] font-semibold tracking-tight">TTP Suite</span>
           </div>
