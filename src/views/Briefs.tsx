@@ -1,3 +1,4 @@
+import { useStickyState } from "@/lib/useStickyState";
 import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -105,8 +106,8 @@ export function Briefs() {
   const creators = useCreators();
   const live = useLiveKey();
 
-  const [view, setView] = useState<"board" | "list">("list");
-  const [statusFilter, setStatusFilter] = useState<string>("__all__");
+  const [view, setView] = useStickyState("briefs:vue", ["board", "list"] as const, "list");
+  const [statusFilter, setStatusFilter] = useStickyState<string>("briefs:statut", ["__all__", ...STATUS_OPTS.map((o) => o.value)], "__all__");
   const [creatorFilter, setCreatorFilter] = useState<string>("");
   const [formOpen, setFormOpen] = useState(false);
   const [brand, setBrand] = useState("");
