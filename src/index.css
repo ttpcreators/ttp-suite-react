@@ -92,6 +92,8 @@
   --faint: #6e6e73;
   --rowhover: rgba(118, 118, 128, 0.08);
   --shadow-float: 0 10px 40px rgba(30, 40, 80, 0.1);
+  --segment: #ffffff; /* onglet choisi d'un contrôle segmenté */
+  --badge: #ff3b30; /* pastille de notification (compteur) */
 
   /* Statuts : UN sens par couleur, partout (fond / texte). */
   --st-ok-bg: #e3f6e8; /* payé, signé, à jour */
@@ -149,6 +151,7 @@
   --input: rgba(60, 60, 67, 0.12);
   --field: rgba(118, 118, 128, 0.12);
   --rowhover: rgba(255, 255, 255, 0.55);
+  --segment: rgba(255, 255, 255, 0.92);
 }
 
 /* ── Noir : le soir, écrans OLED ──────────────────────────────────────────── */
@@ -178,6 +181,8 @@
   --faint: #98989d;
   --rowhover: rgba(118, 118, 128, 0.18);
   --shadow-float: 0 10px 40px rgba(0, 0, 0, 0.5);
+  --segment: #636366;
+  --badge: #ff453a;
 
   --st-ok-bg: rgba(48, 209, 88, 0.16);
   --st-ok: #30d158;
@@ -244,6 +249,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-field: var(--field);
+  --color-segment: var(--segment);
+  --color-badge: var(--badge);
   --color-ring: var(--ring);
   --color-panel: var(--panel);
   --color-surface: var(--surface);
@@ -287,7 +294,7 @@
   background-attachment: fixed;
 }
 /* Le cadre de l'app laisse voir les halos. */
-[data-theme="verre"] .bg-background:has(> * > .shell-panel) {
+[data-theme="verre"] .app-frame {
   background: transparent;
 }
 /* Panneaux de verre : zone de contenu, fenêtres et menus flottants. */
@@ -360,8 +367,17 @@ body {
 /* Règle 1 de la DA : cartes blanches posées sur le gris, sans bordure ni ombre lourde.
    (Les bordures colorées d'état — sélection, erreur — restent.) */
 .rounded-2xl.border-border:is(.bg-surface, .bg-card),
-.rounded-\[22px\].border-border:is(.bg-surface, .bg-card) {
+.rounded-3xl.border-border:is(.bg-surface, .bg-card),
+.rounded-\[20px\].border-border:is(.bg-surface, .bg-card),
+.rounded-\[22px\].border-border:is(.bg-surface, .bg-card),
+.rounded-\[24px\].border-border:is(.bg-surface, .bg-card),
+.rounded-\[26px\].border-border:is(.bg-surface, .bg-card) {
   border-color: transparent;
+}
+/* Grilles de chiffres (cellules séparées par des filets fins) : plus de contour
+   extérieur, seuls les filets intérieurs restent. */
+:is(.rounded-2xl, .rounded-3xl).border-border.bg-border {
+  border-width: 0;
 }
 
 /* Langage de l'Aperçu : panneaux PLATS, dessinés par leur seule bordure. Les
@@ -447,6 +463,19 @@ body {
   background: color-mix(in srgb, var(--panel) 80%, transparent);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   backdrop-filter: saturate(180%) blur(20px);
+}
+/* Barre d'onglets en capsule flottante (mobile). */
+.ios-tabbar {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-float);
+}
+[data-theme="verre"] .ios-tabbar {
+  background: var(--glass);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
 }
 .dark .ios-bar {
   background: color-mix(in srgb, var(--surface) 78%, transparent);

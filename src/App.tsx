@@ -820,7 +820,7 @@ export default function App() {
     <ThemeContext.Provider value={{ dark, toggle: toggleTheme, theme, setTheme }}>
     <SearchContext.Provider value={{ query, setQuery }}>
     <NavSubSetContext.Provider value={setSub}>
-      <div className={iosPhone ? "h-[100dvh] bg-panel" : "h-[100dvh] bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
+      <div className={iosPhone ? "app-frame h-[100dvh] bg-background" : "app-frame h-[100dvh] bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
         <div className={cn("flex h-full overflow-hidden", !iosPhone && "rounded-[22px]")}>
           {/* Desktop sidebar */}
           <div className="hidden h-full md:block">
@@ -850,7 +850,7 @@ export default function App() {
               <div
                 ref={scrollRef}
                 onScroll={iosPhone ? (e) => { lastScroll.current = e.currentTarget.scrollTop; } : undefined}
-                className={cn("flex-1 overflow-y-auto md:pb-7", iosPhone ? "pb-[calc(env(safe-area-inset-bottom)+5.5rem)]" : "pb-28")}
+                className={cn("flex-1 overflow-y-auto md:pb-7", iosPhone ? "pb-[calc(env(safe-area-inset-bottom)+6.5rem)]" : "pb-28")}
               >
                 {iosPhone ? (
                   <IosNavBar

@@ -1584,7 +1584,7 @@ export function CreatorSpace({
 
   return (
     <LangProvider lang={lang}>
-    <div className={iosPhone ? "flex h-[100dvh] flex-col bg-panel" : "flex h-[100dvh] flex-col bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
+    <div className={iosPhone ? "app-frame flex h-[100dvh] flex-col bg-background" : "app-frame flex h-[100dvh] flex-col bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
       {preview && (
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-primary/30 bg-primary/[0.06] px-3 py-2">
           <div className="flex items-center gap-2 text-[12px] font-semibold text-primary">
@@ -3174,7 +3174,7 @@ export function CreatorSpace({
           </ErrorBoundary>
           </NavActionSlotContext.Provider>)}
           {/* Espaceur mobile (plus fiable que le padding bas d'un conteneur flex défilant sur iOS) */}
-          <div aria-hidden className="h-[calc(6rem+env(safe-area-inset-bottom))] md:hidden" />
+          <div aria-hidden className="h-[calc(6.75rem+env(safe-area-inset-bottom))] md:hidden" />
         </main>
         </div>
       </div>
