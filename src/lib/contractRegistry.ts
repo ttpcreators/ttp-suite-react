@@ -21,15 +21,15 @@ export const CT_TYPES: CtType[] = ["marque", "repr", "ugc"];
 export const TYPE_META: Record<CtType, { label: string; hint: string; dot: string }> = {
   marque: { label: "Marque × Créateur", hint: "Partenariat commercial entre une marque et un créateur", dot: "bg-primary" },
   repr: { label: "Représentation", hint: "Contrat d'agent entre TTP et un créateur", dot: "bg-signal" },
-  ugc: { label: "UGC", hint: "Cession de droits sur des contenus UGC", dot: "bg-orange-500" },
+  ugc: { label: "UGC", hint: "Cession de droits sur des contenus UGC", dot: "bg-info" },
 };
 
 export const STATUSES: ContractStatus[] = ["signed", "pending", "changes"];
 
 export const STATUS_META: Record<ContractStatus, { label: string; dot: string; text: string }> = {
-  signed: { label: "Signé", dot: "bg-signal", text: "text-signaltext" },
-  pending: { label: "En attente", dot: "bg-amber-500", text: "text-amber-700 dark:text-amber-400" },
-  changes: { label: "Modifs demandées", dot: "bg-violet-500", text: "text-violet-700 dark:text-violet-300" },
+  signed: { label: "Signé", dot: "bg-ok", text: "text-ok" },
+  pending: { label: "En attente", dot: "bg-wait", text: "text-wait" },
+  changes: { label: "Modifs demandées", dot: "bg-progress", text: "text-progress" },
 };
 
 /** Valeur stockée → statut connu (« En attente » par défaut, libellés français tolérés). */

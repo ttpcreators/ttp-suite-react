@@ -71,12 +71,12 @@ function typeLabel(t: string, tr: T) {
 
 // ─── Overlays lecture seule (briefs / to-do datés) ───────────────────────────
 // Une puce peut être un vrai événement (couleur = son type) OU une échéance
-// dérivée d'un brief (ambre) / d'une to-do (indigo), affichée en lecture seule.
+// dérivée d'un brief (bleu-vert) / d'une to-do (indigo), affichée en lecture seule.
 function evKind(e: Ev): Kind {
   return e.kind ?? "event";
 }
 function chipBg(e: Ev) {
-  if (e.kind === "brief") return "bg-amber";
+  if (e.kind === "brief") return "bg-info";
   if (e.kind === "todo") return "bg-indigo";
   if (e.kind === "facture") return "bg-signal";
   if (e.kind === "post") return "bg-pink-500";
@@ -89,11 +89,11 @@ function chipFg(e: Ev) {
   if (bg === "bg-primary") return "text-primary-foreground";
   // Niveaux d’encre (indigo = encre forte, amber/cyan = gris) : presque blancs en
   // sombre → texte de la couleur du FOND pour rester lisible dans les deux thèmes.
-  if (bg === "bg-indigo" || bg === "bg-amber" || bg === "bg-cyan") return "text-background";
+  if (bg === "bg-indigo" || bg === "bg-amber" || bg === "bg-cyan" || bg === "bg-info") return "text-background";
   return "text-onsignal";
 }
 function chipText(e: Ev) {
-  if (e.kind === "brief") return "text-amber";
+  if (e.kind === "brief") return "text-info";
   if (e.kind === "todo") return "text-indigo";
   if (e.kind === "facture") return "text-signaltext";
   if (e.kind === "post") return "text-pink-500";
@@ -109,7 +109,7 @@ function chipLabel(e: Ev, t: T) {
 
 const KIND_META: { id: Kind; label: string; dot: string }[] = [
   { id: "event", label: "Événements", dot: "bg-primary" },
-  { id: "brief", label: "Briefs", dot: "bg-amber" },
+  { id: "brief", label: "Briefs", dot: "bg-info" },
   { id: "todo", label: "To-do", dot: "bg-indigo" },
   { id: "facture", label: "Factures", dot: "bg-signal" },
   { id: "post", label: "Posts Instagram", dot: "bg-pink-500" },

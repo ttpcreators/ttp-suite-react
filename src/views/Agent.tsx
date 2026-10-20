@@ -65,14 +65,14 @@ const ACTION_META: Record<string, { label: string; icon: LucideIcon }> = {
 };
 
 const PROSPECT_OPTS: StatusOption[] = [
-  { value: "valide", label: "Validé", dot: "bg-primary" },
-  { value: "contacte", label: "Contacté", dot: "bg-cyan" },
-  { value: "relance_1", label: "Relance 1", dot: "bg-indigo" },
-  { value: "relance_2", label: "Relance 2", dot: "bg-indigo" },
-  { value: "relance_3", label: "Relance 3", dot: "bg-indigo" },
-  { value: "repondu", label: "Répondu", dot: "bg-signal" },
-  { value: "converti", label: "Converti", dot: "bg-signal" },
-  { value: "abandonne", label: "Abandonné", dot: "bg-muted-foreground" },
+  { value: "valide", label: "Validé", dot: "bg-info" },
+  { value: "contacte", label: "Contacté", dot: "bg-progress" },
+  { value: "relance_1", label: "Relance 1", dot: "bg-wait" },
+  { value: "relance_2", label: "Relance 2", dot: "bg-wait" },
+  { value: "relance_3", label: "Relance 3", dot: "bg-wait" },
+  { value: "repondu", label: "Répondu", dot: "bg-ok" },
+  { value: "converti", label: "Converti", dot: "bg-ok" },
+  { value: "abandonne", label: "Abandonné", dot: "bg-closed" },
 ];
 const PROSPECT_ACTIFS = ["valide", "contacte", "relance_1", "relance_2", "relance_3", "repondu"];
 

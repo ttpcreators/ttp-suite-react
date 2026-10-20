@@ -300,17 +300,17 @@ function briefKey(status: string): string {
 }
 
 const BRIEF_STATUS: StatusOption[] = [
-  { value: "attente", label: "En attente", dot: "bg-amber" },
-  { value: "valider", label: "À valider", dot: "bg-primary" },
-  { value: "cours", label: "En cours", dot: "bg-cyan" },
-  { value: "terminé", label: "Terminé", dot: "bg-signal" },
+  { value: "attente", label: "En attente", dot: "bg-wait" },
+  { value: "valider", label: "À valider", dot: "bg-info" },
+  { value: "cours", label: "En cours", dot: "bg-progress" },
+  { value: "terminé", label: "Terminé", dot: "bg-ok" },
 ];
 // Statuts d'idée — identiques à l'espace agence (page Idées).
 const IDEA_STATUS: StatusOption[] = [
-  { value: "À explorer", label: "À explorer", dot: "bg-indigo" },
-  { value: "À faire", label: "À faire", dot: "bg-primary" },
-  { value: "En cours", label: "En cours", dot: "bg-cyan" },
-  { value: "Publiée", label: "Publiée", dot: "bg-signal" },
+  { value: "À explorer", label: "À explorer", dot: "bg-info" },
+  { value: "À faire", label: "À faire", dot: "bg-wait" },
+  { value: "En cours", label: "En cours", dot: "bg-progress" },
+  { value: "Publiée", label: "Publiée", dot: "bg-ok" },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -327,9 +327,9 @@ const TODO_FILTERS: { id: TodoFilter; label: string }[] = [
   { id: "toutes", label: "Toutes" },
 ];
 const TODO_STATUS_OPTS: StatusOption[] = [
-  { value: "À faire", label: "À faire", dot: "bg-primary" },
-  { value: "En cours", label: "En cours", dot: "bg-cyan" },
-  { value: "Fait", label: "Fait", dot: "bg-signal" },
+  { value: "À faire", label: "À faire", dot: "bg-wait" },
+  { value: "En cours", label: "En cours", dot: "bg-progress" },
+  { value: "Fait", label: "Fait", dot: "bg-ok" },
 ];
 
 const invStatus = (s: string | null): { status: "success" | "warning" | "danger" | "neutral"; label: string } => {

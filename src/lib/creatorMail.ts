@@ -11,14 +11,14 @@ import { supabase } from "@/lib/supabase";
 export type MailStatus = "nouvelle" | "demarchee" | "negociation" | "a_verifier" | "a_valider" | "valide" | "refuse";
 
 export const MAIL_STATUS: { value: MailStatus; label: string; short: string; dot: string; badge: string }[] = [
-  { value: "nouvelle", short: "Nouvelles", label: "Nouvelle demande", dot: "bg-sky-500", badge: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
+  { value: "nouvelle", short: "Nouvelles", label: "Nouvelle demande", dot: "bg-info", badge: "bg-info-soft text-info" },
   // Fil lancé par l'agence (démarchage), la marque n'a pas encore répondu.
-  { value: "demarchee", short: "Démarchées", label: "Démarchée par l'agence", dot: "bg-primary", badge: "bg-primary/10 text-primary" },
-  { value: "negociation", short: "Négociation", label: "En négociation", dot: "bg-amber-500", badge: "bg-amber-500/10 text-amber-700 dark:text-amber-400" },
-  { value: "a_verifier", short: "À vérifier", label: "À vérifier", dot: "bg-orange-500", badge: "bg-orange-500/10 text-orange-700 dark:text-orange-400" },
-  { value: "a_valider", short: "À valider", label: "À valider", dot: "bg-indigo-500", badge: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" },
-  { value: "valide", short: "Validés", label: "Validé", dot: "bg-signal", badge: "bg-signal/10 text-signaltext" },
-  { value: "refuse", short: "Refusés", label: "Refusé", dot: "bg-danger", badge: "bg-danger/10 text-dangertext" },
+  { value: "demarchee", short: "Démarchées", label: "Démarchée par l'agence", dot: "bg-progress", badge: "bg-progress-soft text-progress" },
+  { value: "negociation", short: "Négociation", label: "En négociation", dot: "bg-progress", badge: "bg-progress-soft text-progress" },
+  { value: "a_verifier", short: "À vérifier", label: "À vérifier", dot: "bg-wait", badge: "bg-wait-soft text-wait" },
+  { value: "a_valider", short: "À valider", label: "À valider", dot: "bg-wait", badge: "bg-wait-soft text-wait" },
+  { value: "valide", short: "Validés", label: "Validé", dot: "bg-ok", badge: "bg-ok-soft text-ok" },
+  { value: "refuse", short: "Refusés", label: "Refusé", dot: "bg-closed", badge: "bg-closed-soft text-closed" },
 ];
 export const statusMeta = (s: string) => MAIL_STATUS.find((x) => x.value === s) ?? MAIL_STATUS[0];
 

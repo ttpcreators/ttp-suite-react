@@ -204,7 +204,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                                 <span className={cn("text-[13px] font-medium [overflow-wrap:anywhere]", done ? "text-muted-foreground line-through decoration-faint" : "text-foreground")}>{r.text}</span>
                                 {r.weekday != null && (
                                   <span className={cn("rounded-full px-2 py-px text-[11px] font-medium",
-                                    late ? "bg-amber-500/15 text-amber-700 dark:text-amber-400" : isToday ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                                    late ? "bg-wait-soft text-wait" : isToday ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                                     {isToday ? "Aujourd'hui" : DAYS[r.weekday - 1]}{late ? " · en retard" : ""}
                                   </span>
                                 )}

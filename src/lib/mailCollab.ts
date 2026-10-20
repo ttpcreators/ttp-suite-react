@@ -146,11 +146,11 @@ export type MailTag = { key: string; label: string; cls: string; title?: string 
 
 /** Couleur d'étiquette par phase de collab (tokens de l'app, lisibles en sombre). */
 const PHASE_TAG: Record<PhaseKey, string> = {
-  negociation: "bg-primary/10 text-primary",
-  production: "bg-cyan/15 text-cyan-700 dark:text-cyan-300",
-  mesure: "bg-indigo/15 text-indigo-700 dark:text-indigo-300",
-  facturation: "bg-amber/15 text-amber-700 dark:text-amber-300",
-  cloture: "bg-signal/10 text-signaltext",
+  negociation: "bg-wait-soft text-wait",
+  production: "bg-progress-soft text-progress",
+  mesure: "bg-info-soft text-info",
+  facturation: "bg-ok-soft text-ok",
+  cloture: "bg-closed-soft text-closed",
 };
 export const phaseTagCls = (step: number) => PHASE_TAG[phaseOf(step)];
 

@@ -1075,9 +1075,9 @@ function postType(p: RadarPost): PostType {
   return "spontane";
 }
 const TYPE_META: Record<PostType, { label: string; cls: string; tip: string }> = {
-  paye: { label: "Payé", cls: "bg-primary/10 text-primary", tip: "Le post dit #ad, publicité, collaboration commerciale, sponsorisé…" },
-  offert: { label: "Offert / code", cls: "bg-amber/15 text-amber", tip: "Produit offert, code promo ou réduction : la marque envoie des produits ou rémunère à la vente" },
-  spontane: { label: "Spontané", cls: "bg-signal/10 text-signaltext", tip: "Aucun signe de partenariat dans le texte" },
+  paye: { label: "Payé", cls: "bg-ok-soft text-ok", tip: "Le post dit #ad, publicité, collaboration commerciale, sponsorisé…" },
+  offert: { label: "Offert / code", cls: "bg-info-soft text-info", tip: "Produit offert, code promo ou réduction : la marque envoie des produits ou rémunère à la vente" },
+  spontane: { label: "Spontané", cls: "bg-closed-soft text-closed", tip: "Aucun signe de partenariat dans le texte" },
 };
 /** Extrait du texte centré sur la marque, avec la marque en évidence. */
 function Excerpt({ text, brand, name }: { text: string; brand: string; name?: string }) {

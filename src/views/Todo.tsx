@@ -68,9 +68,9 @@ let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
 
 const TODO_STATUS_OPTS: StatusOption[] = [
-  { value: "À faire", label: "À faire", dot: "bg-primary" },
-  { value: "En cours", label: "En cours", dot: "bg-cyan" },
-  { value: "Fait", label: "Fait", dot: "bg-signal" },
+  { value: "À faire", label: "À faire", dot: "bg-wait" },
+  { value: "En cours", label: "En cours", dot: "bg-progress" },
+  { value: "Fait", label: "Fait", dot: "bg-ok" },
 ];
 /** Statut affiché : colonne status si présente, sinon dérivé de `done`. */
 const todoStatus = (r: Row): string => r.status ?? (r.done ? "Fait" : "À faire");

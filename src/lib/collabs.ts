@@ -38,11 +38,11 @@ export const STEPS: CollabStepDef[] = [
 export const STEP_COUNT = STEPS.length;
 
 export const PHASES: { key: PhaseKey; label: string; dot: string }[] = [
-  { key: "negociation", label: "Négociation", dot: "bg-primary" },
-  { key: "production", label: "Production", dot: "bg-cyan" },
-  { key: "mesure", label: "Mesure", dot: "bg-indigo" },
-  { key: "facturation", label: "Facturation", dot: "bg-amber" },
-  { key: "cloture", label: "Clôture", dot: "bg-signal" },
+  { key: "negociation", label: "Négociation", dot: "bg-wait" },
+  { key: "production", label: "Production", dot: "bg-progress" },
+  { key: "mesure", label: "Mesure", dot: "bg-info" },
+  { key: "facturation", label: "Facturation", dot: "bg-ok" },
+  { key: "cloture", label: "Clôture", dot: "bg-closed" },
 ];
 
 export function stepDef(n: number): CollabStepDef {

@@ -35,11 +35,11 @@ type Row = {
 type TypeMeta = { label: string; icon: LucideIcon; className: string; tagClassName: string };
 
 const DOC_TYPE_META: Record<string, TypeMeta> = {
-  brief: { label: "Brief", icon: PencilLine, className: "bg-indigo/15 text-indigo", tagClassName: "bg-indigo/10 text-indigo" },
-  mediakit: { label: "Media kit", icon: LayoutGrid, className: "bg-signal/15 text-signaltext", tagClassName: "bg-signal/10 text-signaltext" },
-  facture: { label: "Facture", icon: ReceiptText, className: "bg-cyan/15 text-cyan", tagClassName: "bg-cyan/10 text-cyan" },
-  stats: { label: "Stats", icon: BarChart3, className: "bg-amber/15 text-amber", tagClassName: "bg-amber/10 text-amber" },
-  autre: { label: "Document", icon: FileText, className: "bg-primary/15 text-primary", tagClassName: "bg-primary/10 text-primary" },
+  brief: { label: "Brief", icon: PencilLine, className: "bg-info-soft text-info", tagClassName: "bg-info-soft text-info" },
+  mediakit: { label: "Media kit", icon: LayoutGrid, className: "bg-progress-soft text-progress", tagClassName: "bg-progress-soft text-progress" },
+  facture: { label: "Facture", icon: ReceiptText, className: "bg-ok-soft text-ok", tagClassName: "bg-ok-soft text-ok" },
+  stats: { label: "Stats", icon: BarChart3, className: "bg-closed-soft text-closed", tagClassName: "bg-closed-soft text-closed" },
+  autre: { label: "Document", icon: FileText, className: "bg-closed-soft text-closed", tagClassName: "bg-closed-soft text-closed" },
 };
 const metaFor = (type: string): TypeMeta => DOC_TYPE_META[type] ?? DOC_TYPE_META.autre;
 

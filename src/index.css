@@ -107,6 +107,8 @@
   --st-closed-bg: #eeeef0; /* clôturé, écarté */
   --st-closed: #55555a;
 
+  --on-status: #ffffff; /* texte posé sur un aplat de statut */
+
   /* Anciens noms, branchés sur les statuts. */
   --signal: #248a3d;
   --signaltext: var(--st-ok);
@@ -115,10 +117,10 @@
   --danger: var(--st-late);
   --dangertext: var(--st-late);
   --dangersoft: var(--st-late-bg);
-  /* Niveaux d'encre (anciens jetons décoratifs). */
+  /* Anciens jetons : ambre = en attente, cyan = en cours, indigo = encre forte. */
   --indigo: #1d1d1f;
-  --amber: #6e6e73;
-  --cyan: #6e6e73;
+  --amber: var(--st-wait);
+  --cyan: var(--st-progress);
 }
 
 /* ── Verre : façon Liquid Glass ───────────────────────────────────────────── */
@@ -190,11 +192,10 @@
   --st-closed-bg: rgba(142, 142, 147, 0.2);
   --st-closed: #aeaeb2;
 
+  --on-status: #000000;
   --signal: #30d158;
   --onsignal: #000000;
   --indigo: #e5e5ea;
-  --amber: #98989d;
-  --cyan: #98989d;
 }
 
 @theme inline {
@@ -261,6 +262,7 @@
   --color-late-soft: var(--st-late-bg);
   --color-closed: var(--st-closed);
   --color-closed-soft: var(--st-closed-bg);
+  --color-on-status: var(--on-status);
   --color-signal: var(--signal);
   --color-signaltext: var(--signaltext);
   --color-signalsoft: var(--signalsoft);

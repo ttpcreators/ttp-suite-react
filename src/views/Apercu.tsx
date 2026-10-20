@@ -374,9 +374,9 @@ export function ApercuView({
               <div className="mb-5 mt-2 text-[28px] font-semibold leading-none tracking-tight tabular-nums">{formatEuro(factTotal)}</div>
               <SegmentBar
                 segments={[
-                  { label: "Payé", value: paidSum, className: "bg-foreground/70" },
-                  { label: "En attente", value: waitSum, className: "bg-foreground/30" },
-                  { label: "En retard", value: lateSum, className: "bg-danger/80" },
+                  { label: "Payé", value: paidSum, className: "bg-ok" },
+                  { label: "En attente", value: waitSum, className: "bg-wait" },
+                  { label: "En retard", value: lateSum, className: "bg-late" },
                 ]}
               />
             </div>
