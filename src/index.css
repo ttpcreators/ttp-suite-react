@@ -271,6 +271,8 @@
   --color-field: var(--field);
   --color-segment: var(--segment);
   --color-badge: var(--badge);
+  /* Priorité haute (tâches) : rouge vif, demandé par Marc. Même rouge que les pastilles de nombre. */
+  --color-priority: var(--badge);
   --color-ring: var(--ring);
   --color-panel: var(--panel);
   --color-surface: var(--surface);
