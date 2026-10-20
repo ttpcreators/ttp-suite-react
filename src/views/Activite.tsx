@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { History, Loader2, RefreshCw } from "lucide-react";
+import { Loader } from "@/components/ui/loader";
+import { History, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { DashPanel } from "@/components/ui/dash";
@@ -117,7 +118,7 @@ export function Activite() {
 
       {rows === null ? (
         <DashPanel className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Chargement…
+          <Loader variant="dots" size={16} /> Chargement…
         </DashPanel>
       ) : missing ? (
         <DashPanel className="px-6 py-10 text-center text-[13px] text-muted-foreground">

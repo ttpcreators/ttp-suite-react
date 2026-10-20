@@ -1,4 +1,5 @@
 "use client";
+import { Loader } from "@/components/ui/loader";
 
 import {
   Check,
@@ -209,18 +210,9 @@ export function AnimatedBadge({
               exit={reduce ? undefined : "exit"}
               className="inline-flex will-change-transform"
             >
-              {status === "loading" && !reduce && !icon ? (
-                <motion.span
-                  animate={{ rotate: 360 }}
-                  transition={{
-                    duration: 1,
-                    repeat: Infinity,
-                    ease: "linear",
-                  }}
-                  className="inline-flex"
-                >
-                  <Icon className={ICON_CLASS[size]} />
-                </motion.span>
+              {status === "loading" && !icon ? (
+                // Chargement : les trois points animés de l'app (components/ui/loader).
+                <Loader variant="dots" size={size === "sm" ? 11 : 13} speed={0.9} className="text-current" />
               ) : (
                 (icon ?? <Icon className={ICON_CLASS[size]} />)
               )}

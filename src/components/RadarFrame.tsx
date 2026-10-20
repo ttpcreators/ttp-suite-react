@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Loader2, RefreshCw, Search } from "lucide-react";
+import { Spin } from "@/components/ui/loader";
+import { RefreshCw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { fmtAgo } from "@/lib/instagram";
@@ -70,7 +71,7 @@ export function RadarFrame({
               disabled={running}
               className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
             >
-              {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} {runLabel}
+              {running ? <Spin size={14} /> : <RefreshCw className="h-3.5 w-3.5" />} {runLabel}
             </button>
             {help}
           </div>

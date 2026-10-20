@@ -1,50 +1,9 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
+import { Spin } from "@/components/ui/loader";
 import { motion, AnimatePresence } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { fmtCompact } from "@/lib/timeSeries";
-import {
-  LayoutDashboard,
-  CircleEllipsis,
-  House,
-  ListChecks,
-  Lightbulb,
-  FileText,
-  Gift,
-  Sparkles,
-  Globe2,
-  CalendarDays,
-  Files,
-  Image as ImageIcon,
-  Receipt,
-  Upload,
-  Mail,
-  ShieldCheck,
-  Package,
-  LogOut,
-  Moon,
-  Sun,
-  Pencil,
-  Check,
-  Trash2,
-  TrendingUp,
-  ExternalLink,
-  BarChart3,
-  Contact,
-  X,
-  Copy,
-  List,
-  Columns3,
-  PanelLeftOpen,
-  Target,
-  Share2,
-  Plus,
-  FileChartColumn,
-  FileBarChart,
-  HelpCircle,
-  Eye,
-  ArrowLeft,
-  Loader2,
-} from "lucide-react";
+import { LayoutDashboard, CircleEllipsis, House, ListChecks, Lightbulb, FileText, Gift, Sparkles, Globe2, CalendarDays, Files, Image as ImageIcon, Receipt, Upload, Mail, ShieldCheck, Package, LogOut, Moon, Sun, Pencil, Check, Trash2, TrendingUp, ExternalLink, BarChart3, Contact, X, Copy, List, Columns3, PanelLeftOpen, Target, Share2, Plus, FileChartColumn, FileBarChart, HelpCircle, Eye, ArrowLeft } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
 import { frDate, toISODate } from "@/lib/dates";
@@ -3284,7 +3243,7 @@ export function CreatorSpace({
                   title={preview ? "Le créateur le fait depuis son espace" : undefined}
                   className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground py-2.5 text-[12px] font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
                 >
-                  {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} {t("Connecter mon Instagram")}
+                  {igBusy ? <Spin size={14} /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} {t("Connecter mon Instagram")}
                 </button>
               </>
             )}
@@ -3324,7 +3283,7 @@ export function CreatorSpace({
                   title={preview ? "Le créateur le fait depuis son espace" : undefined}
                   className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
                 >
-                  {ttBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} {t("Connecter mon TikTok")}
+                  {ttBusy ? <Spin size={14} /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} {t("Connecter mon TikTok")}
                 </button>
               </>
             )}
@@ -3364,7 +3323,7 @@ export function CreatorSpace({
                   title={preview ? "Le créateur le fait depuis son espace" : undefined}
                   className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
                 >
-                  {ytBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} {t("Connecter mon YouTube")}
+                  {ytBusy ? <Spin size={14} /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} {t("Connecter mon YouTube")}
                 </button>
               </>
             )}

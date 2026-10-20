@@ -1,5 +1,6 @@
 import type { KeyboardEvent, ReactNode, Ref } from "react";
-import { Loader2, Search, type LucideIcon } from "lucide-react";
+import { Spin } from "@/components/ui/loader";
+import { Search, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /*
@@ -118,7 +119,7 @@ export function ToolButton({ icon: Icon, label, onClick, disabled, busy, spin, d
         className,
       )}
     >
-      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className={cn("h-[17px] w-[17px]", spin && "animate-spin")} />}
+      {busy ? <Spin size={16} /> : <Icon className={cn("h-[17px] w-[17px]", spin && "animate-spin")} />}
       {text && <span className="hidden text-[13px] font-medium @4xl:inline">{text}</span>}
       {styled && (
         <Tip side={tipSide ?? "bottom"}>
@@ -144,7 +145,7 @@ export function BarButton({ icon: Icon, label, onClick, disabled, busy, danger }
         danger && "hover:bg-danger/[0.08] hover:text-dangertext dark:hover:text-dangertext",
       )}
     >
-      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
+      {busy ? <Spin size={16} /> : <Icon className="h-4 w-4" />}
       {label}
     </button>
   );

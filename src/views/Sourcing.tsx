@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import {
-  AtSign, Binoculars, Bookmark, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Loader2, Mail, PhoneOutgoing, Plus, Radar, Search, Send, SlidersHorizontal, Trophy, Users, Wallet, EyeOff, RotateCcw, X,
-} from "lucide-react";
+import { AtSign, Binoculars, Bookmark, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Mail, PhoneOutgoing, Plus, Radar, Search, Send, SlidersHorizontal, Trophy, Users, Wallet, EyeOff, RotateCcw, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -650,7 +649,7 @@ function CreatorFinder() {
   ];
   const runBtn = (label: string, onClick: () => void) => (
     <button type="button" onClick={onClick} disabled={!!busy} className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
-      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />} {label}
+      {busy ? <Spin size={14} /> : <Search className="h-3.5 w-3.5" />} {label}
     </button>
   );
 
@@ -917,7 +916,7 @@ function CreatorFinder() {
                         /* Tri en un clic : garder, à contacter, ou pas intéressé. */
                         <>
                           <button type="button" onClick={() => void triage(c, "scouting")} disabled={adding === c.username} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
-                            {adding === c.username ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bookmark className="h-3.5 w-3.5" />} Scouting
+                            {adding === c.username ? <Spin size={14} /> : <Bookmark className="h-3.5 w-3.5" />} Scouting
                           </button>
                           <button type="button" onClick={() => void triage(c, "contacter")} disabled={adding === c.username} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
                             <PhoneOutgoing className="h-3.5 w-3.5" /> À contacter
@@ -1480,7 +1479,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
             </p>
           </div>
           <button type="button" onClick={() => void runVerify()} disabled={verifying} className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-3.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
-            {verifying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} {verifying ? "Vérification…" : "Vérifier la suite"}
+            {verifying ? <Spin size={14} /> : <Check className="h-3.5 w-3.5" />} {verifying ? "Vérification…" : "Vérifier la suite"}
           </button>
         </div>
       )}
@@ -1570,7 +1569,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
                             <span className="text-faint">{fmtAgo(p.at)}{p.n > 1 ? ` · ${p.n} posts pareils` : ""}</span>
                             {srcOf(p) === "hors" && (
                               <button type="button" onClick={() => void addCreator(p.c, row.brand)} disabled={adding === p.c} className="flex items-center gap-0.5 rounded-full border border-border bg-surface px-1.5 py-0.5 text-[10px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
-                                {adding === p.c ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />} Scouting
+                                {adding === p.c ? <Spin size={12} /> : <Plus className="h-3 w-3" />} Scouting
                               </button>
                             )}
                             <span title={tp.tip} className={cn("ml-auto shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold", tp.cls)}>{tp.label}</span>

@@ -1,5 +1,6 @@
 import { useRef, useState, type ChangeEvent } from "react";
-import { Trash2, Camera, Loader2 } from "lucide-react";
+import { Spin } from "@/components/ui/loader";
+import { Trash2, Camera } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 
@@ -121,7 +122,7 @@ export function ImageField({
           {url ? (
             <img src={url} alt="" className="h-full w-full object-cover" />
           ) : busy ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Spin size={16} />
           ) : (
             <Camera className="h-4 w-4" />
           )}

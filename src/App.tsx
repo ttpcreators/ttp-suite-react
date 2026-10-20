@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
-import { Moon, Sun, Loader2, X, Columns2, SquareArrowRight, Plus, LogOut, Pin, PinOff, Star, House, CircleEllipsis, Search, Trash2 } from "lucide-react";
+import { Loader } from "@/components/ui/loader";
+import { Moon, Sun, X, Columns2, SquareArrowRight, Plus, LogOut, Pin, PinOff, Star, House, CircleEllipsis, Search, Trash2 } from "lucide-react";
 import { cn, titleCase } from "@/lib/utils";
 import { restoreTabs, navigateTab, addTab, closeTab as closeTabState } from "@/lib/tabs";
 import type { Session } from "@supabase/supabase-js";
@@ -144,7 +145,7 @@ function ViewContent({
 
 const PANE_FALLBACK = (
   <div className="grid min-h-[50vh] place-items-center">
-    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    <Loader variant="dot-matrix" size={26} className="text-muted-foreground" />
   </div>
 );
 
@@ -619,7 +620,7 @@ export default function App() {
   if (session === undefined) {
     return (
       <div className="grid min-h-screen place-items-center bg-background">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Loader variant="dot-matrix" size={26} className="text-muted-foreground" />
       </div>
     );
   }
@@ -655,7 +656,7 @@ export default function App() {
     }
     return (
       <div className="grid min-h-screen place-items-center bg-background">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Loader variant="dot-matrix" size={26} className="text-muted-foreground" />
       </div>
     );
   }
@@ -663,7 +664,7 @@ export default function App() {
   // Espace CRÉATEUR : vue dédiée quand un créateur se connecte
   if (profile?.role === "creator" && profile.creator_name) {
     return (
-      <Suspense fallback={<div className="grid min-h-screen place-items-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+      <Suspense fallback={<div className="grid min-h-screen place-items-center bg-background"><Loader variant="dot-matrix" size={26} className="text-muted-foreground" /></div>}>
         <CreatorSpace
           name={profile.creator_name}
           dark={dark}
@@ -722,7 +723,7 @@ export default function App() {
       );
     }
     return (
-      <Suspense fallback={<div className="grid min-h-screen place-items-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+      <Suspense fallback={<div className="grid min-h-screen place-items-center bg-background"><Loader variant="dot-matrix" size={26} className="text-muted-foreground" /></div>}>
         {/* key : changer de créateur repart d'un espace neuf (formulaires, listes,
             infos) au lieu d'enregistrer les données du précédent sur le suivant. */}
         <CreatorSpace

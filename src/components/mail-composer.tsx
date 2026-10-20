@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import { X, Send, Loader2, Settings2, Plus, Trash2, ArrowLeft, ExternalLink } from "lucide-react";
+import { X, Send, Settings2, Plus, Trash2, ArrowLeft, ExternalLink } from "lucide-react";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { MailAvatar } from "@/components/mail-avatar";
 import { toast } from "@/components/ui/toast";
@@ -379,7 +380,7 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
                   disabled={sending || !subject.trim() || !body.trim()}
                   className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
-                  {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  {sending ? <Spin size={14} /> : <Send className="h-3.5 w-3.5" />}
                   {sending ? "Envoi…" : "Envoyer via Gmail"}
                 </button>
               </div>
@@ -475,7 +476,7 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
                 disabled={saving}
                 className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
               >
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? <Spin size={14} /> : null}
                 {saving ? "Enregistrement…" : "Enregistrer les modèles"}
               </button>
             </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { CircleAlert, Copy, Loader2, RotateCw, Send, Undo2, X } from "lucide-react";
+import { Spin } from "@/components/ui/loader";
+import { CircleAlert, Copy, RotateCw, Send, Undo2, X } from "lucide-react";
 import {
   cancelSend, dismissFailedSend, flushSend, retryFailedSend, sendErrorText, subscribeFailed, subscribePending,
   type FailedSend, type PendingSend,
@@ -96,7 +97,7 @@ export function UndoSendBar() {
             </span>
           </span>
           <button type="button" onClick={() => void retry(f)} disabled={!!retrying} className={ghost} aria-label={`Réessayer : ${f.label}`}>
-            {retrying === f.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
+            {retrying === f.id ? <Spin size={14} /> : <RotateCw className="h-3.5 w-3.5" />}
             <span className="max-sm:hidden">Réessayer</span>
           </button>
           <button type="button" onClick={() => void copy(f)} className={ghost} aria-label={`Copier le texte : ${f.label}`}>

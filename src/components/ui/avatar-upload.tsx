@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
-import { Camera, Loader2 } from "lucide-react";
+import { Spin } from "@/components/ui/loader";
+import { Camera } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { dbUpdate } from "@/lib/db";
 import { invalidateCreators } from "@/lib/useCreators";
@@ -137,7 +138,7 @@ export function AvatarUpload({
             (busy ? " opacity-100" : "")
           }
         >
-          {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-[18px] w-[18px]" />}
+          {busy ? <Spin size={20} /> : <Camera className="h-[18px] w-[18px]" />}
         </div>
       )}
       <input ref={inputRef} type="file" accept="image/*" aria-label={t("Fichier photo")} onChange={onFile} className="hidden" />

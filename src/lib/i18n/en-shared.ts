@@ -190,4 +190,5 @@ export const EN_SHARED: Record<string, string> = {
   "Cette page": "This page",
   "{label} n'a pas pu s'afficher": "{label} couldn't be displayed",
   "Le reste de l'app fonctionne. Tu peux réessayer.": "The rest of the app is working. You can try again.",
+  "Chargement": "Loading",
 };

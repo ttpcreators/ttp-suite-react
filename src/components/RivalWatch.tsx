@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Binoculars, Check, ExternalLink, Loader2, Plus, RefreshCw, Trash2, TrendingDown, TrendingUp, Minus, Wallet, Users } from "lucide-react";
+import { Spin } from "@/components/ui/loader";
+import { Binoculars, Check, ExternalLink, Plus, RefreshCw, Trash2, TrendingDown, TrendingUp, Minus, Wallet, Users } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -181,7 +182,7 @@ export function RivalWatch() {
             className={cn(IN, "min-w-0 flex-1")}
           />
           <button type="button" disabled={adding || !input.trim()} onClick={() => void follow(input)} className="flex h-10 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
-            {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Suivre
+            {adding ? <Spin size={16} /> : <Plus className="h-4 w-4" />} Suivre
           </button>
         </div>
         {suggestions.length > 0 && (

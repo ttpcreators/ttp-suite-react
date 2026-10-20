@@ -1,11 +1,8 @@
 import { supabase } from "@/lib/supabase";
+import { Spin } from "@/components/ui/loader";
 import { useSearch, matchQuery } from "@/lib/search";
 import { cn, titleCase } from "@/lib/utils";
-import {
-  ArrowRight, Pencil, Trash2, X, UserRound, Package, Wallet, Clock, Trophy,
-  XCircle, Archive, CircleDot, Check, ListChecks, ChevronDown, RotateCcw, StickyNote, LayoutGrid, List as ListIcon,
-  RefreshCw, Loader2, Heart, MessageCircle, ExternalLink,
-} from "lucide-react";
+import { ArrowRight, Pencil, Trash2, X, UserRound, Package, Wallet, Clock, Trophy, XCircle, Archive, CircleDot, Check, ListChecks, ChevronDown, RotateCcw, StickyNote, LayoutGrid, List as ListIcon, RefreshCw, Heart, MessageCircle, ExternalLink } from "lucide-react";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { StatsBento } from "@/components/ui/stats-bento";
@@ -224,7 +221,7 @@ export function Collabs() {
             title="Chercher maintenant les posts qui citent la marque"
             className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
           >
-            {igBusy === row.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Vérifier
+            {igBusy === row.id ? <Spin size={12} /> : <RefreshCw className="h-3 w-3" />} Vérifier
           </button>
         </div>
         {total > 0 ? (

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Copy, ExternalLink, Loader2, Mail, Send, X } from "lucide-react";
+import { Spin } from "@/components/ui/loader";
+import { Copy, ExternalLink, Mail, Send, X } from "lucide-react";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PlatformIcon } from "@/components/ui/platform-icon";
@@ -107,7 +108,7 @@ export function OutreachComposer({ title, to: toInit, subject: subjectInit, body
                 <Copy className="h-3.5 w-3.5" /> Copier
               </button>
               <button type="button" onClick={() => void send()} disabled={sending} className="flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
-                {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Envoyer
+                {sending ? <Spin size={14} /> : <Send className="h-3.5 w-3.5" />} Envoyer
               </button>
             </div>
           </div>

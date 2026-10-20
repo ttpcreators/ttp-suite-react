@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowLeft, AtSign, Check, Contact, Copy, EyeOff, Inbox, Loader2, Mail, MessagesSquare, RefreshCw, Search, Send, X } from "lucide-react";
+import { Loader, Spin } from "@/components/ui/loader";
+import { AlertTriangle, ArrowLeft, AtSign, Check, Contact, Copy, EyeOff, Inbox, Mail, MessagesSquare, RefreshCw, Search, Send, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -412,12 +413,12 @@ function Conversation({ t, q, contact, onBack, onChange }: { t: Thread; q: strin
           {contact ? (
             <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "contacts" }))} className={cn(BTN, "border-signal/40 text-signaltext")}><Check className="h-3 w-3" /> Fiche : {contact.brand}</button>
           ) : (
-            <button type="button" onClick={() => void createContact()} disabled={!!busy} className={BTN}>{busy === "contact" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Contact className="h-3 w-3" />} Créer la fiche contact</button>
+            <button type="button" onClick={() => void createContact()} disabled={!!busy} className={BTN}>{busy === "contact" ? <Spin size={12} /> : <Contact className="h-3 w-3" />} Créer la fiche contact</button>
           )}
-          <button type="button" onClick={() => void toPipeline()} disabled={!!busy} className={BTN}>{busy === "pipeline" ? <Loader2 className="h-3 w-3 animate-spin" /> : <AtSign className="h-3 w-3" />} Pipeline</button>
+          <button type="button" onClick={() => void toPipeline()} disabled={!!busy} className={BTN}>{busy === "pipeline" ? <Spin size={12} /> : <AtSign className="h-3 w-3" />} Pipeline</button>
           {!t.hidden && (
             <button type="button" onClick={() => void setHidden(true)} disabled={!!busy} className={cn(BTN, "text-muted-foreground")} title="Masquer (spam, conversation sans intérêt)">
-              {busy === "hide" ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />} Masquer
+              {busy === "hide" ? <Spin size={12} /> : <EyeOff className="h-3 w-3" />} Masquer
             </button>
           )}
         </div>
@@ -443,7 +444,7 @@ function Conversation({ t, q, contact, onBack, onChange }: { t: Thread; q: strin
       )}
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-background/40 px-4 py-4">
         {msgs === null ? (
-          <div className="grid place-items-center py-10"><Loader2 className="h-5 w-5 animate-spin text-faint" /></div>
+          <div className="grid place-items-center py-10"><Loader variant="dots" size={18} className="text-faint" /></div>
         ) : (
           <>
             {msgs.length >= 20 && <p className="text-center text-[11px] text-faint">Meta ne donne que les 20 derniers messages de chaque conversation (plus anciens : dans l'app Instagram).</p>}

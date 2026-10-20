@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import {
-  AlertTriangle, CalendarClock, Clapperboard, ExternalLink, GalleryHorizontal, Handshake, Image as ImageIcon, ImagePlus, Loader2, Pencil,
-  Plus, RefreshCw, RotateCcw, Send, Smartphone, Trash2, UserPlus, X, ArrowLeft, ArrowRight, Sparkles,
-} from "lucide-react";
+import { AlertTriangle, CalendarClock, Clapperboard, ExternalLink, GalleryHorizontal, Handshake, Image as ImageIcon, ImagePlus, Pencil, Plus, RefreshCw, RotateCcw, Send, Smartphone, Trash2, UserPlus, X, ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -148,7 +146,7 @@ function Thumb({ m, className }: { m?: PlanMedia; className?: string }) {
 function StatusPill({ s }: { s: PlanStatus }) {
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold", STATUS_CLS[s])}>
-      {s === "en_cours" && <Loader2 className="h-3 w-3 animate-spin" />}
+      {s === "en_cours" && <Spin size={12} />}
       {STATUS_LABEL[s]}
     </span>
   );
@@ -402,7 +400,7 @@ function PlanCard({ r, busy, onEdit, onNow, onDraft, onDelete }: { r: Planned; b
               {(r.status === "programme" || r.status === "erreur") && <button type="button" onClick={onDraft} className={BTN}><RotateCcw className="h-3 w-3" /> En brouillon</button>}
             </>
           )}
-          {busy && <span className={cn(BTN, "pointer-events-none")}><Loader2 className="h-3 w-3 animate-spin" /> Envoi…</span>}
+          {busy && <span className={cn(BTN, "pointer-events-none")}><Spin size={12} /> Envoi…</span>}
           {!locked && <button type="button" onClick={onDelete} className={cn(BTN, "text-muted-foreground hover:text-dangertext")} aria-label="Supprimer"><Trash2 className="h-3 w-3" /></button>}
         </div>
       </div>
@@ -765,7 +763,7 @@ function PlanEditor({ initial, account, onClose, onSaved }: { initial: Planned |
                     }}
                     className="grid h-[110px] w-[88px] place-items-center rounded-xl border border-dashed border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
                   >
-                    {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <span className="flex flex-col items-center gap-1 text-[10px] font-medium"><ImagePlus className="h-5 w-5" />Ajouter</span>}
+                    {uploading ? <Spin size={20} /> : <span className="flex flex-col items-center gap-1 text-[10px] font-medium"><ImagePlus className="h-5 w-5" />Ajouter</span>}
                   </button>
                 )}
                 <input
@@ -894,7 +892,7 @@ function PlanEditor({ initial, account, onClose, onSaved }: { initial: Planned |
             <button type="button" disabled={saving || uploading > 0} onClick={() => void save("draft")} className="h-9 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">Brouillon</button>
             <button type="button" disabled={saving || uploading > 0 || problems.length > 0} onClick={() => setConfirmNow(true)} className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"><Send className="h-3.5 w-3.5" /> Publier maintenant</button>
             <button type="button" disabled={saving || uploading > 0 || problems.length > 0} onClick={() => void save("schedule")} className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarClock className="h-3.5 w-3.5" />} Programmer
+              {saving ? <Spin size={14} /> : <CalendarClock className="h-3.5 w-3.5" />} Programmer
             </button>
           </div>
         </div>

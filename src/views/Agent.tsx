@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { MorphingTabs } from "@/components/ui/morphing-tabs";
 import { Picker } from "@/components/ui/form";
 import { cn, titleCase } from "@/lib/utils";
 import {
@@ -178,6 +179,15 @@ function DeleteButton({ armed, onArm, onConfirm, title }: {
   );
 }
 
+/** Range les onglets dans l'ordre enregistré ; les inconnus (nouveaux onglets) gardent leur place à la fin. */
+function sortByOrder<T extends { value: string }>(items: T[], order: string[]): T[] {
+  const pos = (v: string) => {
+    const k = order.indexOf(v);
+    return k < 0 ? order.length + items.findIndex((x) => x.value === v) : k;
+  };
+  return [...items].sort((a, b) => pos(a.value) - pos(b.value));
+}
+
 export function AgentView() {
   const live = useLiveKey();
   const [notExposed, setNotExposed] = useState(false);
@@ -205,6 +215,30 @@ export function AgentView() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [agentsMissing, setAgentsMissing] = useState(false);
   const [tab, setTab] = useState<Tab>("apercu");
+  // Ordinateur (≥ 768 px) : onglets « morphing » ; ordre choisi au glisser, gardé sur l'appareil.
+  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const on = () => setWide(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  const [tabOrder, setTabOrder] = useState<string[]>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem("ttp:agents-tab-order") ?? "[]");
+      return Array.isArray(v) ? v.map(String) : [];
+    } catch {
+      return [];
+    }
+  });
+  const saveTabOrder = (ids: string[]) => {
+    setTabOrder(ids);
+    try {
+      localStorage.setItem("ttp:agents-tab-order", JSON.stringify(ids));
+    } catch {
+      /* stockage bloqué : l'ordre vaut pour cette visite */
+    }
+  };
   const [agentFilter, setAgentFilter] = useState<string>("tous");
   const [editing, setEditing] = useState<AgentDraft | null>(null);
 
@@ -503,21 +537,18 @@ export function AgentView() {
     </div>
   );
 
-  return (
-    <div className="flex flex-col gap-4">
-      <Tabs
-        label="Sous-pages Agents"
-        value={tab}
-        onValueChange={(v) => setTab(v as Tab)}
-        items={[
-          { value: "apercu", label: "Vue d'ensemble" },
-          { value: "valider", label: "À valider", count: queue.length || undefined },
-          { value: "agents", label: "Agents", count: agents.length || undefined },
-          { value: "megan", label: "Megan" },
-          { value: "memoire", label: "Mémoire" },
-          { value: "journal", label: "Journal" },
-        ]}
-      />
+  // Onglets de la page : « morphing » sur ordinateur (réordonnables au glisser, ordre
+  // gardé sur l'appareil), onglets simples sur téléphone. Le contenu n'est monté qu'une fois.
+  const tabItems: { value: Tab; label: string; count?: number }[] = [
+    { value: "apercu", label: "Vue d'ensemble" },
+    { value: "valider", label: "À valider", count: queue.length || undefined },
+    { value: "agents", label: "Agents", count: agents.length || undefined },
+    { value: "megan", label: "Megan" },
+    { value: "memoire", label: "Mémoire" },
+    { value: "journal", label: "Journal" },
+  ];
+  const panel = (
+    <>
 
       {tab === "apercu" && (
         <>
@@ -877,6 +908,28 @@ export function AgentView() {
           </div>
         )}
       </Section>
+        </>
+      )}
+    </>
+  );
+  return (
+    <div className="flex flex-col gap-4">
+      {wide ? (
+        <MorphingTabs
+          ariaLabel="Sous-pages Agents"
+          value={tab}
+          onValueChange={(v) => v && setTab(v as Tab)}
+          onOrderChange={saveTabOrder}
+          items={sortByOrder(tabItems, tabOrder).map((it) => ({
+            id: it.value,
+            label: it.count ? `${it.label} · ${it.count}` : it.label,
+            content: <div className="flex flex-col gap-4 p-4 sm:p-5">{panel}</div>,
+          }))}
+        />
+      ) : (
+        <>
+          <Tabs label="Sous-pages Agents" value={tab} onValueChange={(v) => setTab(v as Tab)} items={tabItems} />
+          {panel}
         </>
       )}
     </div>

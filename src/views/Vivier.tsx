@@ -1,4 +1,5 @@
 import { fmtCompact } from "@/lib/timeSeries";
+import { Spin } from "@/components/ui/loader";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials } from "@/lib/utils";
@@ -13,7 +14,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import GlassStatChart from "@/components/ui/glass-stat-chart";
-import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus, Tag, Camera, Loader2, Hash, Globe, Search } from "lucide-react";
+import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus, Tag, Camera, Hash, Globe, Search } from "lucide-react";
 import { igWhyText, fmtEr, fmtPerWeek, noteQuota } from "@/lib/instagram";
 import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
 import { HashtagSearch } from "@/components/HashtagSearch";
@@ -655,7 +656,7 @@ function ScoutingList({ kind }: { kind: Kind }) {
               <label className="group relative shrink-0 cursor-pointer" title="Changer la photo">
                 <ScoutAvatar name={selected.name} photos={photosOf(selected.id)} size={56} className="rounded-full text-sm" />
                 <span className={cn("absolute inset-0 grid place-items-center rounded-full bg-black/45 text-white transition-opacity", photoBusy ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
-                  {photoBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                  {photoBusy ? <Spin size={16} /> : <Camera className="h-4 w-4" />}
                 </span>
                 {/* Pastille appareil photo toujours visible (pas de survol sur téléphone). */}
                 <span className="absolute -bottom-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full border-2 border-card bg-primary text-primary-foreground"><Camera className="h-2.5 w-2.5" /></span>

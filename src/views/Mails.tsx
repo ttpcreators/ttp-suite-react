@@ -1,9 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import {
-  Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, Loader2, PenLine, Reply, Forward, Settings2, RefreshCw, Send,
-  MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X,
-  type LucideIcon,
-} from "lucide-react";
+import { ExpandableActionBar } from "@/components/ui/expandable-action-bar";
+import { Loader, Spin } from "@/components/ui/loader";
+import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, type LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -1637,7 +1635,7 @@ export function Mails() {
               <div className="border-t border-border">
                 <div className="flex items-center gap-2 bg-muted/40 px-4 py-2 text-[11.5px] font-semibold uppercase tracking-wide text-muted-foreground sm:px-5">
                   <Search className="h-3.5 w-3.5" /> Résultats dans Gmail
-                  {search.busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {search.busy && <Spin size={14} />}
                 </div>
                 {search.err ? (
                   <ErrorBanner text={loadErrText(search.err, "Recherche Gmail impossible.")} onRetry={() => setSearchTick((n) => n + 1)}
@@ -1653,7 +1651,7 @@ export function Mails() {
               <div className="flex justify-center border-t border-border px-4 py-3">
                 <button type="button" onClick={() => void loadMore()} disabled={moreBusy}
                   className="flex h-8 items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 text-[12.5px] font-semibold text-foreground transition-colors hover:bg-rowhover disabled:opacity-60">
-                  {moreBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Charger plus
+                  {moreBusy && <Spin size={14} />} Charger plus
                 </button>
               </div>
             )}
@@ -1759,12 +1757,25 @@ export function Mails() {
     <section className="flex min-h-0 min-w-0 flex-col" aria-label="Lecture du mail">
       <div className="@container sticky top-0 z-20 flex h-14 shrink-0 items-center gap-0.5 border-b border-border bg-surface px-2 max-md:top-[calc(2.75rem+env(safe-area-inset-top))] sm:px-3 lg:static">
         <ToolButton icon={ArrowLeft} label={selected ? "Retour aux échanges" : "Retour à la liste"} shortcut="Échap" tipSide="bottom-start" onClick={closeThread} />
-        <ToolButton icon={Archive} label="Archiver" text="Archiver" shortcut="e" className="max-md:hidden" onClick={() => archive(tgt)} />
-        <ToolButton icon={Trash2} label="Corbeille" text="Corbeille" shortcut="#" danger onClick={() => trash(tgt)} />
-        <ToolButton icon={Mail} label="Marquer non lu" text="Non lu" shortcut="⇧U" onClick={() => void setRead(tgt, true)} />
-        {threadCreator && (
-          <ToolButton icon={MessageSquareText} label={`Statut et remarques que ${firstName(threadCreator.creator)} voit`} tipSide="bottom" onClick={openThreadCreator} />
-        )}
+        {/* Ordinateur : barre extensible (icônes, noms au survol). Téléphone : boutons simples. */}
+        <ExpandableActionBar
+          size="sm"
+          className="ml-1 max-md:hidden"
+          classNames={{ track: "border-transparent bg-transparent shadow-none backdrop-blur-none" }}
+          items={[
+            { id: "archive", label: "Archiver", icon: <Archive className="h-full w-full" />, shortcut: "e", onClick: () => archive(tgt) },
+            { id: "trash", label: "Corbeille", icon: <Trash2 className="h-full w-full" />, shortcut: "#", onClick: () => trash(tgt) },
+            { id: "unread", label: "Non lu", icon: <Mail className="h-full w-full" />, shortcut: "⇧U", onClick: () => void setRead(tgt, true) },
+            ...(threadCreator ? [{ id: "creator", label: `Ce que voit ${firstName(threadCreator.creator)}`, icon: <MessageSquareText className="h-full w-full" />, onClick: openThreadCreator }] : []),
+          ]}
+        />
+        <span className="contents md:hidden">
+          <ToolButton icon={Trash2} label="Corbeille" text="Corbeille" shortcut="#" danger onClick={() => trash(tgt)} />
+          <ToolButton icon={Mail} label="Marquer non lu" text="Non lu" shortcut="⇧U" onClick={() => void setRead(tgt, true)} />
+          {threadCreator && (
+            <ToolButton icon={MessageSquareText} label={`Statut et remarques que ${firstName(threadCreator.creator)} voit`} tipSide="bottom" onClick={openThreadCreator} />
+          )}
+        </span>
         <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5 max-md:invisible">{navBtns}</div>
         <ToolButton icon={Reply} label="Répondre" text="Répondre" shortcut="r" className="max-md:hidden" disabled={!loaded} onClick={() => focusReply("reply")} />
         <ToolButton icon={Forward} label="Transférer" text="Transférer" shortcut="f" tipSide="bottom-end" disabled={!loaded} onClick={forwardLast} />
@@ -2019,7 +2030,7 @@ export function Mails() {
       </div>
       <div className="px-4 pb-6 pt-4 sm:px-6">
         {creatorView ? (
-          <Suspense fallback={<div className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Chargement…</div>}>
+          <Suspense fallback={<div className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground"><Loader variant="dots" size={16} /> Chargement…</div>}>
             <CreatorMailsAgency
               key={`${creatorView.name}-${creatorView.threadId ?? ""}`}
               creator={creatorView.name}

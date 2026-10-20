@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Loader, Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import {
-  ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Loader2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X,
-  type LucideIcon, Megaphone } from "lucide-react";
+import { ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X, type LucideIcon, Megaphone } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -265,7 +264,7 @@ function StatusPanel({
             </button>
             <button type="button" onClick={() => void confirm()} disabled={busy}
               className={cn("inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50", pick.confirm)}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {t("Confirmer")}
+              {busy ? <Spin size={16} /> : <Check className="h-4 w-4" />} {t("Confirmer")}
             </button>
           </div>
         </div>
@@ -879,7 +878,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         {err ? (
           <DashPanel><StatePanel icon={CircleAlert} text={unavailable} action={{ label: t("Réessayer"), busy: loading, onClick: retry }} /></DashPanel>
         ) : (
-          <DashPanel className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> {t("Chargement des mails…")}</DashPanel>
+          <DashPanel className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground"><Loader variant="dots" size={16} /> {t("Chargement des mails…")}</DashPanel>
         )}
       </div>
     );
@@ -1094,7 +1093,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
             </div>
           </div>
         ) : !thread ? (
-          <div className="flex items-center justify-center gap-2 px-5 py-16 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> {t("Ouverture…")}</div>
+          <div className="flex items-center justify-center gap-2 px-5 py-16 text-[13px] text-muted-foreground"><Spin size={16} /> {t("Ouverture…")}</div>
         ) : (
           <div className="px-4 py-6 sm:px-8">
             {help && <div className="mb-6 max-lg:hidden">{helpBanner}</div>}
@@ -1192,7 +1191,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
                     disabled={!note.trim() || sending}
                     className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-35"
                   >
-                    {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} {t("Envoyer")}
+                    {sending ? <Spin size={14} /> : <Send className="h-3.5 w-3.5" />} {t("Envoyer")}
                   </button>
                 </div>
               </div>

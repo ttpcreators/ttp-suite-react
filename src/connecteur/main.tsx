@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useState } from "react";
+import { Spin } from "@/components/ui/loader";
 import { createRoot } from "react-dom/client";
-import { Check, Loader2, LogOut, ShieldCheck, X } from "lucide-react";
+import { Check, LogOut, ShieldCheck, X } from "lucide-react";
 import "@/index.css";
 import { supabase } from "@/lib/supabase";
 
@@ -121,7 +122,7 @@ function App() {
         </div>
 
         {step === "check" || step === "busy" ? (
-          <div className="flex items-center gap-2 py-6 text-[14px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Un instant…</div>
+          <div className="flex items-center gap-2 py-6 text-[14px] text-muted-foreground"><Spin size={16} /> Un instant…</div>
         ) : step === "error" ? (
           <p className="rounded-xl bg-muted px-4 py-3 text-[14px] text-foreground">{err}</p>
         ) : step === "login" ? (

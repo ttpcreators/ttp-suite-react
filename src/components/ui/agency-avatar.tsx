@@ -1,5 +1,6 @@
 import { useRef, useState, type ChangeEvent } from "react";
-import { Camera, Loader2 } from "lucide-react";
+import { Spin } from "@/components/ui/loader";
+import { Camera } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAppState, saveAppStateKey, type AppState } from "@/lib/appState";
 import { useMyName } from "@/lib/useMyName";
@@ -111,7 +112,7 @@ export function AgencyAvatar({
         <img src={`${BASE}cover.png`} alt="TTP" className="h-full w-full object-cover" />
       )}
       <div className={`absolute inset-0 grid place-items-center bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100${busy ? " opacity-100" : ""}`}>
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+        {busy ? <Spin size={16} /> : <Camera className="h-3.5 w-3.5" />}
       </div>
       <input ref={inputRef} type="file" accept="image/*" aria-label="Fichier photo" onChange={onFile} className="hidden" />
     </div>

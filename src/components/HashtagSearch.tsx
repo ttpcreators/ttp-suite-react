@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Hash, Heart, MessageCircle, ExternalLink, Loader2, Search, X } from "lucide-react";
+import { Spin } from "@/components/ui/loader";
+import { Hash, Heart, MessageCircle, ExternalLink, Search, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { fmtCompact } from "@/lib/timeSeries";
@@ -71,7 +72,7 @@ export function HashtagSearch({ onClose }: { onClose: () => void }) {
           ]}
         />
         <button type="submit" disabled={busy || !tag.trim()} className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />} Chercher
+          {busy ? <Spin size={14} /> : <Search className="h-3.5 w-3.5" />} Chercher
         </button>
       </form>
       <p className="mt-2 text-[11px] text-faint">Meta ne dit pas qui a publié : ouvre un post pour voir le compte, puis ajoute-le au scouting. 30 hashtags différents par semaine au maximum.</p>

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { Spin } from "@/components/ui/loader";
+import { ExternalLink, RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { fmtCompact } from "@/lib/timeSeries";
@@ -42,7 +43,7 @@ export function BrandIgPanel({ contactId, ig, onChange }: { contactId: string; i
           <PlatformIcon platform="instagram" className="h-3.5 w-3.5" /> Instagram de la marque
         </span>
         <button type="button" onClick={() => void refresh()} disabled={busy} className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
-          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Actualiser
+          {busy ? <Spin size={12} /> : <RefreshCw className="h-3 w-3" />} Actualiser
         </button>
       </div>
       {ig?.followers ? (

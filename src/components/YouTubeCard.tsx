@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ExternalLink, Eye, Link2, Loader2, RefreshCw, Unlink } from "lucide-react";
+import { Spin } from "@/components/ui/loader";
+import { ExternalLink, Eye, Link2, RefreshCw, Unlink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { fmtCompact } from "@/lib/timeSeries";
@@ -77,7 +78,7 @@ export function YouTubeCard({ creatorId, name, yt, onChange, className }: {
         </div>
         {linked && (
           <button type="button" onClick={refresh} disabled={!!busy} title="Redemander les chiffres à YouTube" className="flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
-            {busy === "sync" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Actualiser
+            {busy === "sync" ? <Spin size={14} /> : <RefreshCw className="h-3.5 w-3.5" />} Actualiser
           </button>
         )}
       </div>
@@ -149,7 +150,7 @@ export function YouTubeCard({ creatorId, name, yt, onChange, className }: {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-[11px] leading-snug text-muted-foreground">Il connecte sa chaîne depuis son espace (« Envoyer mes stats »), ou ici avec lui.</span>
             <button type="button" onClick={connect} disabled={!!busy} className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
-              {busy === "link" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />} Connecter
+              {busy === "link" ? <Spin size={14} /> : <ExternalLink className="h-3.5 w-3.5" />} Connecter
             </button>
           </div>
         )}

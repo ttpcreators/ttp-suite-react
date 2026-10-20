@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ExternalLink, Link2, Loader2, RefreshCw, Unlink } from "lucide-react";
+import { Spin } from "@/components/ui/loader";
+import { ExternalLink, Link2, RefreshCw, Unlink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { fmtCompact } from "@/lib/timeSeries";
@@ -66,7 +67,7 @@ export function InstagramCard({ creatorId, name, ig, onChange, className }: {
           title="Redemander les chiffres à Meta"
           className="flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
         >
-          {busy === "sync" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Actualiser
+          {busy === "sync" ? <Spin size={14} /> : <RefreshCw className="h-3.5 w-3.5" />} Actualiser
         </button>
       </div>
 
@@ -124,7 +125,7 @@ export function InstagramCard({ creatorId, name, ig, onChange, className }: {
               disabled={!!busy}
               className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
             >
-              {busy === "link" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />} Connecter
+              {busy === "link" ? <Spin size={14} /> : <ExternalLink className="h-3.5 w-3.5" />} Connecter
             </button>
           </div>
         )}

@@ -6,7 +6,8 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, AlertTriangle, RefreshCw, Unlink, Loader2 } from "lucide-react";
+import { Spin } from "@/components/ui/loader";
+import { CheckCircle2, AlertTriangle, RefreshCw, Unlink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { connect, disconnect, getStatus, triggerSync, consumeOAuthReturn, type GoogleStatus } from "@/lib/googleCalendar";
@@ -112,7 +113,7 @@ export function GoogleConnect() {
         {/* Badge d'état */}
         {loading ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-rowhover px-2.5 py-1 text-[10px] font-semibold text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" /> …
+            <Spin size={12} /> …
           </span>
         ) : connected ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-signal/15 px-2.5 py-1 text-[10px] font-semibold text-signaltext">
@@ -131,7 +132,7 @@ export function GoogleConnect() {
 
       {loading ? (
         <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Vérification du statut…
+          <Spin size={14} /> Vérification du statut…
         </div>
       ) : connected ? (
         <>

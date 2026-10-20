@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
+import { Spin } from "@/components/ui/loader";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowRight, AtSign, Building2, Eye, EyeOff, Loader2, Lock, Sparkles, Store } from "lucide-react";
+import { ArrowRight, AtSign, Building2, Eye, EyeOff, Lock, Sparkles, Store } from "lucide-react";
 import { supabase, setRemember } from "@/lib/supabase";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -230,7 +231,7 @@ export function Login() {
               disabled={isLoading}
               className="mt-1 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-primary text-[14px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
             >
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {isLoading ? <Spin size={16} /> : null}
               {isLoading ? "Connexion…" : "Se connecter"}
               {!isLoading && <ArrowRight className="h-4 w-4" />}
             </button>

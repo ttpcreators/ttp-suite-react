@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import { Plus, Trash2, Camera, Loader2, Calculator, ArrowUp, Rows3, Layers } from "lucide-react";
+import { Plus, Trash2, Camera, Calculator, ArrowUp, Rows3, Layers } from "lucide-react";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { postKind, type IgCollab, type IgCreator, type IgPostLite } from "@/lib/instagram";
 import type { TtCollab, TtCreator, TtVideoLite } from "@/lib/tiktok";
@@ -107,7 +108,7 @@ function Thumb({ shot, url, onRemove }: { shot: Shot; url?: string; onRemove: ()
         </a>
       ) : (
         <div className="grid h-full w-full place-items-center text-faint">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Spin size={16} />
         </div>
       )}
       <button
@@ -421,7 +422,7 @@ export function DebriefCalculator({
             className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
             title="Reprend les posts de la marque repérés sur Instagram (page Collabs)"
           >
-            {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} Instagram
+            {igBusy ? <Spin size={14} /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} Instagram
           </button>
           {FEATURES.connect.tiktok && (
             <button
@@ -431,7 +432,7 @@ export function DebriefCalculator({
               className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
               title="Reprend les vidéos TikTok du créateur qui citent la marque (s'il a connecté son TikTok)"
             >
-              {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} TikTok
+              {igBusy ? <Spin size={14} /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} TikTok
             </button>
           )}
           {FEATURES.connect.youtube && (
@@ -442,7 +443,7 @@ export function DebriefCalculator({
               className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
               title="Reprend les vidéos YouTube du créateur qui citent la marque (s'il a connecté sa chaîne)"
             >
-              {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} YouTube
+              {igBusy ? <Spin size={14} /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} YouTube
             </button>
           )}
         </div>
@@ -583,7 +584,7 @@ export function DebriefCalculator({
             className="flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover disabled:opacity-50"
             disabled={busy}
           >
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />} Joindre
+            {busy ? <Spin size={14} /> : <Camera className="h-3.5 w-3.5" />} Joindre
           </button>
         </div>
         {shots.length === 0 ? (
