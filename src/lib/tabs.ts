@@ -42,12 +42,12 @@ export function addTab(tabs: string[], id: string): string[] {
 
 /**
  * Ferme un onglet → nouvelle liste + nouvel onglet actif (voisin si on ferme
- * l'actif). Ne laisse jamais 0 onglet : retombe sur "apercu".
+ * l'actif). Ne laisse jamais 0 onglet : retombe sur "aujourdhui" (l'accueil).
  */
 export function closeTab(tabs: string[], active: string, id: string): { tabs: string[]; active: string } {
   const idx = tabs.indexOf(id);
   const next = tabs.filter((t) => t !== id);
-  if (next.length === 0) return { tabs: ["apercu"], active: "apercu" };
+  if (next.length === 0) return { tabs: ["aujourdhui"], active: "aujourdhui" };
   const nextActive = id === active ? next[Math.min(idx, next.length - 1)] : active;
   return { tabs: next, active: nextActive };
 }

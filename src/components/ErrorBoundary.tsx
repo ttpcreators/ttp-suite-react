@@ -80,7 +80,7 @@ const RESET_KEYS = ["ttp:tabs", "ttp:split"];
 function selfHeal() {
   try {
     for (const k of RESET_KEYS) localStorage.removeItem(k);
-    localStorage.setItem("ttp:view", "apercu"); // revient sur une page sûre
+    localStorage.setItem("ttp:view", "aujourdhui"); // revient sur une page sûre
   } catch {
     /* localStorage indisponible — on recharge quand même */
   }

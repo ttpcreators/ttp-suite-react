@@ -18,7 +18,8 @@ describe("withFavorites", () => {
     expect(out.map((g) => g.id)).toEqual([FAVORIS_ID, "finance"]);
   });
   it("garde les pages fixes de Favoris", () => {
-    expect(FAVORIS_BASE.has("apercu")).toBe(true);
+    expect(FAVORIS_BASE.has("aujourdhui")).toBe(true);
+    expect(FAVORIS_BASE.has("apercu")).toBe(false);
     expect(FAVORIS_BASE.has("facturation")).toBe(false);
   });
 });
