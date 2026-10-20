@@ -17,6 +17,9 @@ import { useLiveKey } from "@/lib/useLive";
 import { frDate } from "@/lib/dates";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { AgentEditor, type AgentDraft, type AgentRow } from "@/components/AgentEditor";
+import { AgentAvatar } from "@/components/agent-avatar";
+import { assignFigurines, figurineSrc, type AgentFigurine } from "@/lib/agentAvatars";
+import { mergeAppStateKey, useAppState as useAgentAppState } from "@/lib/appState";
 
 /**
  * Section « Agents » (Espace Agence, fondateurs) : les agents de TTP, créés et réglés
@@ -415,6 +418,13 @@ export function AgentView() {
   // ── agents ──
   const agentOf = (id: string | null | undefined) => (id ? agents.find((a) => a.id === id) ?? null : null);
   const megan = agents.find((a) => a.slug === "megan") ?? null;
+  // Photos de profil : figurines (lib/agentAvatars), choix enregistrés dans le blob `agentAvatars`.
+  const { data: chosenFigs } = useAgentAppState<Record<string, string>>((st) => (st["agentAvatars"] as Record<string, string>) ?? {});
+  const figs = useMemo(() => assignFigurines(agents, chosenFigs), [agents, chosenFigs]);
+  const figOf = (id: string | null | undefined): AgentFigurine => (id && figs[id]) || "circuit";
+  const pickFigurine = async (id: string, f: AgentFigurine) => {
+    if (!(await mergeAppStateKey("agentAvatars", { [id]: f }))) toast("Photo non enregistrée, réessaie");
+  };
   const slugify = (n: string) => n.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "agent";
   const saveAgent = async (a: AgentDraft): Promise<boolean> => {
     const row = { nom: a.nom, emoji: a.emoji, role: a.role?.trim() || null, moteur: a.moteur, consignes: a.consignes, routines: a.routines, actif: a.actif };
@@ -482,7 +492,7 @@ export function AgentView() {
           <button key={a.id} type="button" onClick={() => { setEditing(a); setTab("agents"); }}
             className="flex flex-col gap-2 rounded-[20px] bg-card p-4 text-left shadow-sm transition-colors hover:bg-rowhover">
             <div className="flex items-center gap-3">
-              <span className="grid h-11 w-11 place-items-center rounded-[14px] bg-muted text-[22px]">{a.emoji}</span>
+              <AgentAvatar figurine={figOf(a.id)} name={a.nom} className="h-12 w-12 rounded-[14px]" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[15px] font-semibold text-foreground">{a.nom}</div>
                 <div className="text-[11px] text-muted-foreground">{a.moteur === "claude" ? "Joué par Claude" : "Programme externe"}</div>
@@ -513,6 +523,8 @@ export function AgentView() {
   ) : editing ? (
     <AgentEditor
       agent={editing}
+      figurine={editing.id ? figOf(editing.id) : assignFigurines([...agents, { id: "__new__" }], chosenFigs).__new__}
+      onPickFigurine={editing.id ? (f) => void pickFigurine(editing.id!, f) : undefined}
       onSave={saveAgent}
       onDelete={editing.id ? () => deleteAgent(editing.id!) : undefined}
       onClose={() => setEditing(null)}
@@ -522,7 +534,7 @@ export function AgentView() {
       {agents.map((a) => (
         <button key={a.id} type="button" onClick={() => setEditing(a)}
           className="flex items-center gap-3 rounded-[14px] bg-card px-4 py-3 text-left shadow-sm transition-colors hover:bg-rowhover">
-          <span className="text-[22px]">{a.emoji}</span>
+          <AgentAvatar figurine={figOf(a.id)} name={a.nom} className="h-10 w-10" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[14px] font-semibold text-foreground">{a.nom}{!a.actif && <span className="ml-2 text-[11px] font-normal text-faint">en pause</span>}</span>
             <span className="block truncate text-[12px] text-muted-foreground">{a.role || "Sans rôle"}</span>
@@ -584,7 +596,7 @@ export function AgentView() {
               label="Agent"
               value={agentFilter}
               onValueChange={setAgentFilter}
-              items={[{ value: "tous", label: "Tous", count: queue.length || undefined }, ...agents.map((a) => ({ value: a.id, label: `${a.emoji} ${a.nom}`, count: queueOf(a) || undefined }))]}
+              items={[{ value: "tous", label: "Tous", count: queue.length || undefined }, ...agents.map((a) => ({ value: a.id, label: a.nom, icon: <AgentAvatar figurine={figOf(a.id)} className="h-4 w-4 rounded-full" />, count: queueOf(a) || undefined }))]}
             />
           )}
       {/* 2) La file d'attente */}
@@ -604,8 +616,8 @@ export function AgentView() {
                     </span>
                     {a.cible && <span className="text-[12px] font-semibold uppercase tracking-wide text-foreground">{a.cible}</span>}
                     {(agentOf(a.agent_id) ?? (!a.agent_id ? megan : null)) && (
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                        {(agentOf(a.agent_id) ?? megan)!.emoji} {(agentOf(a.agent_id) ?? megan)!.nom}
+                      <span className="flex items-center gap-1.5 rounded-full bg-muted py-0.5 pl-0.5 pr-2 text-[10px] font-medium text-muted-foreground">
+                        <AgentAvatar figurine={figOf((agentOf(a.agent_id) ?? megan)!.id)} className="h-4 w-4 rounded-full" /> {(agentOf(a.agent_id) ?? megan)!.nom}
                       </span>
                     )}
                     <span className="ml-auto text-[10px] text-faint">{fmtDT(a.cree_le)}</span>
@@ -840,7 +852,7 @@ export function AgentView() {
                 <label className="flex flex-col gap-1 sm:w-44">
                   <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">Pour</span>
                   <Picker size="sm" ariaLabel="Agent concerné" className="w-full" value={leconAgent} onChange={setLeconAgent}
-                    options={[{ value: "", label: "Tous les agents" }, ...agents.map((a) => ({ value: a.id, label: `${a.emoji} ${a.nom}` }))]} />
+                    options={[{ value: "", label: "Tous les agents" }, ...agents.map((a) => ({ value: a.id, label: a.nom, img: figurineSrc(figOf(a.id)) }))]} />
                 </label>
               )}
               <label className="flex flex-1 flex-col gap-1">
@@ -870,7 +882,7 @@ export function AgentView() {
             {lecons.map((l) => (
               <div key={l.id} className="flex items-start gap-2.5 rounded-lg bg-panel px-3 py-2">
                 {l.module && <span className="mt-0.5 shrink-0 rounded-full bg-rowhover px-2 py-0.5 text-[9px] font-semibold text-muted-foreground">{titleCase(l.module)}</span>}
-                {agentOf(l.agent_id) && <span className="mt-0.5 shrink-0 text-[11px]" title={agentOf(l.agent_id)!.nom}>{agentOf(l.agent_id)!.emoji}</span>}
+                {agentOf(l.agent_id) && <span title={agentOf(l.agent_id)!.nom}><AgentAvatar figurine={figOf(l.agent_id)} className="mt-0.5 h-5 w-5 rounded-full" /></span>}
                 <div className="min-w-0 flex-1">
                   <div className="text-[12px] leading-relaxed text-foreground">{l.lecon}</div>
                   <div className="mt-0.5 text-[10px] text-faint">{fmtDT(l.cree_le)}</div>
@@ -901,7 +913,7 @@ export function AgentView() {
             {journal.map((j) => (
               <div key={j.id} className="flex items-baseline gap-2.5 rounded-md px-2 py-1.5 text-[11px] hover:bg-rowhover">
                 <span className="shrink-0 tabular-nums text-faint">{fmtDT(j.cree_le)}</span>
-                {agentOf(j.agent_id) && <span className="shrink-0" title={agentOf(j.agent_id)!.nom}>{agentOf(j.agent_id)!.emoji}</span>}
+                {agentOf(j.agent_id) && <span className="shrink-0 self-center" title={agentOf(j.agent_id)!.nom}><AgentAvatar figurine={figOf(j.agent_id)} className="h-4 w-4 rounded-full" /></span>}
                 <span className="shrink-0 font-semibold text-foreground">{journalLabel(j.action)}</span>
                 {j.detail && <span className="min-w-0 truncate text-muted-foreground">{j.detail}</span>}
               </div>

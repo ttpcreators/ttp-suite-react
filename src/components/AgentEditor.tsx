@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Check, Copy, Plus, Trash2, X } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
+import { AgentAvatar } from "@/components/agent-avatar";
+import { AGENT_FIGURINES, FIGURINE_LABEL, type AgentFigurine } from "@/lib/agentAvatars";
 
 /**
  * Fiche d'un agent de TTP (section Agents) : identité, consignes, routines et
@@ -41,8 +43,11 @@ async function copy(text: string, what: string) {
   }
 }
 
-export function AgentEditor({ agent, onSave, onDelete, onClose }: {
+export function AgentEditor({ agent, figurine, onPickFigurine, onSave, onDelete, onClose }: {
   agent: AgentDraft;
+  /** Photo de profil de l'agent (figurine) ; `onPickFigurine` absent = agent pas encore créé. */
+  figurine: AgentFigurine;
+  onPickFigurine?: (f: AgentFigurine) => void;
   onSave: (a: AgentDraft) => Promise<boolean>;
   onDelete?: () => Promise<void>;
   onClose: () => void;
@@ -50,6 +55,9 @@ export function AgentEditor({ agent, onSave, onDelete, onClose }: {
   const [d, setD] = useState<AgentDraft>(agent);
   const [busy, setBusy] = useState(false);
   const [armDel, setArmDel] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [fig, setFig] = useState<AgentFigurine>(figurine);
+  useEffect(() => setFig(figurine), [figurine]);
   useEffect(() => setD(agent), [agent]);
   const set = <K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => setD((x) => ({ ...x, [k]: v }));
   const setRoutine = (i: number, patch: Partial<Routine>) => set("routines", d.routines.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -65,8 +73,17 @@ export function AgentEditor({ agent, onSave, onDelete, onClose }: {
   return (
     <div className="flex flex-col gap-4 rounded-[20px] bg-card p-4 sm:p-5">
       <div className="flex items-start gap-3">
-        <input value={d.emoji} onChange={(e) => set("emoji", e.target.value.slice(0, 4))} aria-label="Emoji"
-          className="h-12 w-12 shrink-0 rounded-[14px] border border-input bg-surface text-center text-[22px] outline-none focus:border-foreground" />
+        {/* Photo de profil : une des figurines de TTP (un clic pour en changer, une fois l'agent créé). */}
+        <button
+          type="button"
+          onClick={() => onPickFigurine && setPicking((v) => !v)}
+          title={onPickFigurine ? "Changer la photo" : "La photo se choisit une fois l'agent créé"}
+          aria-label="Photo de l'agent"
+          aria-expanded={picking}
+          className="shrink-0 rounded-[16px] transition-transform active:scale-95"
+        >
+          <AgentAvatar figurine={fig} name={d.nom} className="h-14 w-14 rounded-[16px]" />
+        </button>
         <div className="min-w-0 flex-1">
           <input value={d.nom} onChange={(e) => set("nom", e.target.value)} placeholder="Nom de l'agent (ex. Léa, talent manager)"
             className="w-full bg-transparent text-[20px] font-semibold tracking-tight text-foreground outline-none placeholder:text-faint" />
@@ -77,6 +94,27 @@ export function AgentEditor({ agent, onSave, onDelete, onClose }: {
           <X className="h-4 w-4" />
         </button>
       </div>
+      {picking && onPickFigurine && (
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Photo de l'agent">
+          {AGENT_FIGURINES.map((f) => (
+            <button
+              key={f}
+              type="button"
+              role="radio"
+              aria-checked={f === fig}
+              title={FIGURINE_LABEL[f]}
+              onClick={() => {
+                setFig(f);
+                onPickFigurine(f);
+                setPicking(false);
+              }}
+              className={cn("rounded-[14px] p-0.5 transition-transform active:scale-95", f === fig ? "ring-2 ring-primary" : "ring-1 ring-border hover:ring-foreground/30")}
+            >
+              <AgentAvatar figurine={f} className="h-12 w-12" />
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         {(["claude", "externe"] as const).map((m) => (
