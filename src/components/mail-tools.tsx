@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { ContextMessage } from "@/lib/mailThreadContext";
 import { createPortal } from "react-dom";
 import { ChevronUp, Minus, PenLine, Reply, Send, Settings2, X } from "@/components/icons";
 import { cn } from "@/lib/utils";
@@ -209,7 +210,7 @@ export function ReplyBox({
   placeholder, box, focusKey, focusMode, onSend, variant = "bar", to, toTitle, draftKey, replyAllCc = [], sendLabel, claude,
 }: {
   /** « Rédiger avec Claude » (connecteur, sans clé API) : fil concerné. */
-  claude?: { threadId: string; subject: string };
+  claude?: { threadId: string; subject: string; messages?: readonly ContextMessage[] };
   placeholder: string; box: MailBox; focusKey?: number;
   /** Mode demandé avec le focus (raccourcis r / a). */
   focusMode?: "reply" | "all";
@@ -398,7 +399,7 @@ export function ReplyBox({
           className="block max-h-80 min-h-[96px] w-full resize-none bg-transparent px-4 py-3 text-[13px] leading-relaxed text-foreground outline-none [field-sizing:content] placeholder:text-faint"
         />
         {att.files.length > 0 && <div className="px-3.5 pb-2.5"><AttachChips files={att.files} onRemove={att.remove} /></div>}
-        {claude && aiOpen && !ai.waiting && <ClaudeConsigne onStart={(c) => void ai.start(c)} onClose={() => setAiOpen(false)} />}
+        {claude && aiOpen && !ai.waiting && <ClaudeConsigne withThread={!!claude.messages?.length} onStart={(c, a) => void ai.start(c, a)} onCopy={(c, a) => void ai.copy(c, a)} onClose={() => setAiOpen(false)} />}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-3.5 py-2 text-[12px] text-muted-foreground">
           <AttachButton onFiles={(f) => void att.add(f)} total={att.total} />
           <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />

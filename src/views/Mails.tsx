@@ -2171,7 +2171,7 @@ export function Mails() {
                               sendLabel={`Réponse à ${replyName || plan.to}`}
                               placeholder="Écris ta réponse…"
                               onSend={sendReply}
-                              claude={{ threadId: thread.threadId, subject: thread.subject }}
+                              claude={{ threadId: thread.threadId, subject: thread.subject, messages: readerMsgs }}
                             />
                           ) : undefined}
                         />
