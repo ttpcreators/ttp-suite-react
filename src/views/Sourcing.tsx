@@ -1,8 +1,9 @@
 import { useStickyState } from "@/lib/useStickyState";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useReducedMotion } from "motion/react";
 import { Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import { AtSign, Binoculars, Bookmark, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Mail, PhoneOutgoing, Plus, Radar, Search, Send, SlidersHorizontal, Trophy, Users, Wallet, EyeOff, RotateCcw, X } from "lucide-react";
+import { ArrowUpRight, Binoculars, Bookmark, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Info, Mail, PhoneOutgoing, Plus, Radar, Search, Send, SlidersHorizontal, Trophy, Users, Wallet, EyeOff, RotateCcw, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -11,29 +12,38 @@ import { PageHeaderRow } from "@/components/ui/page-header";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { HelpTip } from "@/components/ui/help-tip";
 import { PlatformIcon } from "@/components/ui/platform-icon";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { StatusPill } from "@/components/ui/status-pill";
+import { ActionMenu, type ActionItem } from "@/components/ui/action-menu";
+import { Kbd } from "@/components/ui/kbd";
 import { dbInsert, dbUpdate } from "@/lib/db";
 import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { guessSport } from "@/lib/niche";
+import { useIsPhone } from "@/lib/iosUi";
+import { TONE_DOT, TONE_SOFT, TONE_TEXT } from "@/lib/statusTone";
+import { PEPITE, scoreBreakdown, scoreOf, scoreTone, type ScoreBreakdown } from "@/lib/sourcingScore";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { fmtCompact } from "@/lib/timeSeries";
-import { fmtAgo, fmtEr, fmtPerWeek, igWhyText, noteQuota } from "@/lib/instagram";
+import { fmtAgo, fmtEr, igWhyText, noteQuota } from "@/lib/instagram";
 import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
 import { OutreachComposer } from "@/components/OutreachComposer";
-import { SourcingGuide } from "@/components/SourcingGuide";
+import { SourcingGuide, type GuideTool } from "@/components/SourcingGuide";
 import { RivalWatch } from "@/components/RivalWatch";
 import { RadarFrame } from "@/components/RadarFrame";
 import { TikTokRadar } from "@/components/TikTokRadar";
 import { YouTubeRadar } from "@/components/YouTubeRadar";
 
 /**
- * SOURCING (agence) — deux outils, toujours via l'outil officiel de Meta (comptes pro) :
- *  • « Trouver des créatrices » : les @ cités par une marque dans ses derniers posts
- *    (= les créatrices avec qui elle travaille), ou une liste de @ collée ; chiffres,
- *    filtres, puis « Ajouter au Scouting ».
+ * SOURCING (agence) : trois outils, toujours via l'outil officiel de Meta (comptes pro) :
+ *  • « Trouver des créateurs » : les @ cités par une marque dans ses derniers posts
+ *    (= les créateurs avec qui elle travaille), ou une liste de @ collée ; chiffres,
+ *    filtres en pastilles, score « Potentiel », puis tri (Scouting, À contacter, Écartés).
+ *    Sur grand écran, le panneau « Profil sélectionné » dit pourquoi un compte a sa note,
+ *    et le clavier trie vite (J / K pour parcourir, S, C, X pour agir).
  *  • « Radar à marques » : chaque nuit (fonction ig-sourcing), les marques citées par
- *    les créatrices du roster et du Scouting. Partenariats payés = clients potentiels ;
- *    citées gratuitement par tes créatrices = contacts chauds. → Pipeline / mail.
- *  • « Agences concurrentes » : croissance, créatrices mises en avant et marques des
+ *    les créateurs du roster et du Scouting. Partenariats payés = clients potentiels ;
+ *    citées gratuitement par tes créateurs = contacts chauds. → Pipeline / mail.
+ *  • « Agences concurrentes » : croissance, créateurs mis en avant et marques des
  *    agences suivies (components/RivalWatch.tsx).
  */
 
@@ -62,6 +72,24 @@ function parseCount(v: string): number {
 }
 const domainOf = (url?: string) => (url ?? "").replace(/^https?:\/\//i, "").replace(/^www\./, "").replace(/\/.*$/, "");
 const safeHref = (url?: string) => (!url ? "" : /^https?:\/\//i.test(url) ? url : `https://${url}`);
+/** Saisie en cours (champ, zone de texte, menu, texte éditable) : les raccourcis clavier se taisent. */
+const isTyping = (t: EventTarget | null) => {
+  const el = t as HTMLElement | null;
+  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+};
+/** Grand écran (≥ 1024 px) : colonne « Profil sélectionné » et raccourcis clavier. */
+const WIDE = "(min-width: 1024px)";
+function useWide(): boolean {
+  return useSyncExternalStore(
+    (fn) => {
+      const mq = window.matchMedia(WIDE);
+      mq.addEventListener("change", fn);
+      return () => mq.removeEventListener("change", fn);
+    },
+    () => window.matchMedia(WIDE).matches,
+    () => true,
+  );
+}
 
 async function invokeSourcing<T>(body: Record<string, unknown>): Promise<T & { error?: string }> {
   const { data, error } = await supabase.functions.invoke("ig-sourcing", { body });
@@ -75,22 +103,47 @@ const errorText = (e?: string) =>
       : e === "reseau" ? "Le Sourcing n'est pas encore en ligne, ou Meta n'a pas répondu. Réessaie."
         : igWhyText(e) || "Erreur, réessaie.";
 
-/** Photo de profil Instagram (lien Meta temporaire), initiales en dessous. */
+/** Photo de profil Instagram (lien Meta temporaire), initiales teintées en dessous. */
 function Pic({ src, name, size = 40, square }: { src?: string; name: string; size?: number; square?: boolean }) {
   const [ok, setOk] = useState(true);
   return (
-    <div className={cn("relative grid shrink-0 place-items-center overflow-hidden bg-panel text-[11px] font-bold text-foreground", square ? "rounded-xl" : "rounded-full")} style={{ width: size, height: size }}>
+    <div
+      className={cn("relative grid shrink-0 place-items-center overflow-hidden font-bold", square ? "rounded-xl bg-panel text-foreground" : "rounded-full bg-primary/10 text-primary")}
+      style={{ width: size, height: size, fontSize: Math.max(11, Math.round(size * 0.3)) }}
+    >
       {initials(name || "?")}
       {src && ok && <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setOk(false)} className="absolute inset-0 h-full w-full bg-panel object-cover" />}
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+/** Anneau de score « Potentiel » : vert dès 70, orange de 40 à 69, gris en dessous. */
+function ScoreRing({ score, size = 36 }: { score: number; size?: number }) {
+  const r = (size - 4) / 2;
+  const len = 2 * Math.PI * r;
   return (
-    <div className="min-w-0 lg:min-w-[64px]">
-      <div className="truncate text-[10px] text-faint">{label}</div>
-      <div className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-foreground">{value}</div>
+    <span title={`Potentiel ${score} / 100`} className={cn("relative grid shrink-0 place-items-center", TONE_TEXT[scoreTone(score)])} style={{ width: size, height: size }}>
+      <svg aria-hidden width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0 -rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeOpacity={0.18} strokeWidth={3} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeDasharray={len} strokeDashoffset={len * (1 - Math.max(0, Math.min(100, score)) / 100)} />
+      </svg>
+      <span className="relative text-[12px] font-bold tabular-nums text-foreground">{score}</span>
+    </span>
+  );
+}
+
+/** Rythme court pour les colonnes chiffrées : « 1,2 » + « /sem ». */
+const perWeekParts = (n?: number | null) => (n == null ? null : String(n).replace(".", ","));
+
+/** Colonne chiffrée d'une ligne : petit libellé au-dessus, valeur en dessous (« — » si inconnue). */
+function Metric({ label, value, unit, title }: { label: string; value: string | null; unit?: string; title?: string }) {
+  return (
+    <div className="min-w-0" title={title}>
+      <div className="truncate text-[11px] text-muted-foreground">{label}</div>
+      <div className="truncate whitespace-nowrap text-[14px] font-semibold tabular-nums text-foreground @2xl:text-[16px]">
+        {value ?? "—"}
+        {value != null && unit ? <span className="ml-0.5 text-[11px] font-medium text-muted-foreground">{unit}</span> : null}
+      </div>
     </div>
   );
 }
@@ -119,22 +172,97 @@ function Check2({ label, checked, onChange, help }: { label: string; checked: bo
   );
 }
 
+type Opt = { value: string; label: string; hint?: string; icon?: ReactNode };
+/** Liste de choix d'un menu (pilule de la barre de recherche, pastille de filtre). */
+function OptionList({ options, value, onPick }: { options: Opt[]; value: string; onPick: (v: string) => void }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      {options.map((o) => {
+        const on = o.value === value;
+        return (
+          <button key={o.value} type="button" onClick={() => onPick(o.value)} className={cn("flex w-full items-start gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition-colors hover:bg-rowhover", on && "bg-field")}>
+            {o.icon && <span className="mt-0.5 shrink-0">{o.icon}</span>}
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-medium text-foreground">{o.label}</span>
+              {o.hint && <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground">{o.hint}</span>}
+            </span>
+            {on && <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+/** Pilule à menu de la barre de recherche (réseau, point de départ, pays). */
+function MenuPill({ label, icon, value, options, onChange, ariaLabel, disabled }: { label: string; icon?: ReactNode; value: string; options: Opt[]; onChange: (v: string) => void; ariaLabel: string; disabled?: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" aria-label={ariaLabel} disabled={disabled} className="flex h-10 min-w-0 items-center gap-1.5 rounded-full bg-surface px-3.5 text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
+          {icon}
+          <span className="truncate">{label}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[min(20rem,calc(100vw-2rem))] p-1.5">
+        <OptionList options={options} value={value} onPick={(v) => { onChange(v); setOpen(false); }} />
+      </PopoverContent>
+    </Popover>
+  );
+}
+/**
+ * Pastille de filtre : active = fond doux de l'accent et « × » pour l'enlever ;
+ * inactive = simple contour. Un clic ouvre son réglage (`children`), ou bascule (`onToggle`).
+ */
+function FilterChip({ label, active, onClear, onToggle, children }: { label: string; active: boolean; onClear?: () => void; onToggle?: () => void; children?: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const pill = cn("flex h-8 max-w-full items-center rounded-full border text-[12px] font-medium transition-colors", active ? "border-primary/40 bg-primary/[0.08] text-primary" : "border-border text-foreground hover:bg-rowhover");
+  const body = (
+    <button type="button" onClick={onToggle} aria-pressed={onToggle ? active : undefined} className={cn("flex h-full min-w-0 items-center gap-1 pl-3", active && onClear ? "pr-1" : "pr-3")}>
+      <span className="truncate">{label}</span>
+      {children && !active && <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />}
+    </button>
+  );
+  return (
+    <span className={pill}>
+      {children ? (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>{body}</PopoverTrigger>
+          <PopoverContent align="start" className="w-[min(18rem,calc(100vw-2rem))] p-3">
+            {children}
+          </PopoverContent>
+        </Popover>
+      ) : (
+        body
+      )}
+      {active && onClear && (
+        <button type="button" onClick={onClear} aria-label={`Enlever le filtre ${label}`} className="mr-1 grid h-6 w-6 shrink-0 place-items-center rounded-full transition-colors hover:bg-primary/10">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </span>
+  );
+}
+
 const TOOLS = [
   {
-    v: "createurs" as const, icon: Users, title: "Trouver des créateurs", goal: "Pour recruter",
-    text: "Des profils à recruter, avec chiffres et email.",
+    v: "createurs" as const, icon: Users, title: "Trouver des créateurs", short: "Créateurs", goal: "Pour recruter",
+    text: "Des profils à recruter, avec leurs chiffres, un score et leur email.",
   },
   {
-    v: "radar" as const, icon: Radar, title: "Radar à marques", goal: "Pour trouver des clients",
+    v: "radar" as const, icon: Radar, title: "Radar à marques", short: "Marques", goal: "Pour trouver des clients",
     text: "Les marques qui paient des créateurs : tes futurs clients.",
   },
   {
-    v: "concurrents" as const, icon: Binoculars, title: "Agences concurrentes", goal: "Pour garder une longueur d'avance",
+    v: "concurrents" as const, icon: Binoculars, title: "Agences concurrentes", short: "Agences", goal: "Pour garder une longueur d'avance",
     text: "Leur croissance, leurs créateurs, leurs marques.",
   },
 ];
 type ToolId = (typeof TOOLS)[number]["v"];
 const toolOf = (v: string | null): ToolId => (v === "radar" || v === "concurrents" ? v : "createurs");
+/** Mode d'emploi déjà vu, ou « Ne plus l'ouvrir automatiquement » coché (sur cet appareil). */
+const GUIDE_KEY = "ttp:sourcing-guide-v1";
 
 export function Sourcing() {
   const [tab, setTab] = useState<ToolId>(() => {
@@ -144,22 +272,34 @@ export function Sourcing() {
       return "createurs";
     }
   });
-  // Mode d'emploi : ouvert tout seul à la première visite (sur cet appareil).
+  // Mode d'emploi : ouvert tout seul à la première visite (sur cet appareil), tant que
+  // « Ne plus l'ouvrir automatiquement » n'est pas coché.
   const [guide, setGuide] = useState(() => {
     try {
-      return !localStorage.getItem("ttp:sourcing-guide-v1");
+      return !localStorage.getItem(GUIDE_KEY);
     } catch {
       return false;
     }
   });
-  const closeGuide = () => {
+  const closeGuide = (noAuto: boolean) => {
     setGuide(false);
     try {
-      localStorage.setItem("ttp:sourcing-guide-v1", "1");
+      if (noAuto) localStorage.setItem(GUIDE_KEY, "1");
+      else localStorage.removeItem(GUIDE_KEY);
     } catch {
       /* stockage indisponible */
     }
   };
+  // « ? » rouvre le mode d'emploi (sauf pendant une saisie).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented || isTyping(e.target)) return;
+      e.preventDefault();
+      setGuide(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const pick = (v: string) => {
     const t = toolOf(v);
     setTab(t);
@@ -169,50 +309,47 @@ export function Sourcing() {
       /* stockage indisponible */
     }
   };
+  const phone = useIsPhone();
+  const cur = TOOLS.find((t) => t.v === tab) ?? TOOLS[0];
+  // Haut de la colonne principale : les trois outils en un grand sélecteur, et à quoi sert celui choisi.
+  const toolBar = (
+    <div className="mb-5">
+      <p className="mb-2 text-[12px] font-semibold text-muted-foreground">Instagram, TikTok et YouTube</p>
+      <Tabs
+        size="lg"
+        fullWidth
+        label="Outil de sourcing"
+        value={tab}
+        onValueChange={pick}
+        items={TOOLS.map((t) => ({ value: t.v, label: phone ? t.short : t.title, icon: <t.icon className="h-4 w-4" /> }))}
+      />
+      <p className="mt-2.5 text-[13px] leading-snug text-muted-foreground">{cur.text}</p>
+    </div>
+  );
   return (
     <>
       <PageHeaderRow>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setGuide(true)} className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
-            <BookOpen className="h-3.5 w-3.5 text-primary" /> Mode d'emploi
+          <button type="button" onClick={() => setGuide(true)} className="flex h-9 items-center gap-1.5 rounded-full bg-field px-3.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
+            <BookOpen className="h-3.5 w-3.5" /> Mode d'emploi
           </button>
-          <MetaQuotaBadge />
+          <MetaQuotaBadge className="border-transparent bg-field" />
         </div>
       </PageHeaderRow>
-      {guide && <SourcingGuide onClose={closeGuide} />}
-      <div role="tablist" aria-label="Outil de sourcing" className="mb-4 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-        {TOOLS.map((t) => {
-          const on = tab === t.v;
-          const Icon = t.icon;
-          return (
-            <button
-              key={t.v}
-              type="button"
-              role="tab"
-              aria-selected={on}
-              onClick={() => pick(t.v)}
-              className={cn("flex items-start gap-3 rounded-2xl border p-4 text-left transition-colors", on ? "border-primary bg-primary/[0.04]" : "border-border bg-surface hover:bg-rowhover")}
-            >
-              <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full", on ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground")}>
-                <Icon className="h-4 w-4" />
-              </span>
-              <span className="min-w-0">
-                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="text-[14px] font-semibold text-foreground">{t.title}</span>
-                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", on ? "bg-primary/10 text-primary" : "bg-panel text-muted-foreground")}>{t.goal}</span>
-                </span>
-                <span className={cn("mt-1 text-[12px] leading-snug text-muted-foreground", on ? "block" : "hidden sm:block")}>{t.text}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      {tab === "createurs" ? <CreatorFinder /> : tab === "radar" ? <RadarTool /> : <RivalWatch />}
+      {guide && <SourcingGuide initial={tab as GuideTool} onClose={closeGuide} />}
+      {tab === "createurs" ? (
+        <CreatorFinder top={toolBar} paused={guide} onGuide={() => setGuide(true)} />
+      ) : (
+        <>
+          {toolBar}
+          {tab === "radar" ? <RadarTool /> : <RivalWatch />}
+        </>
+      )}
     </>
   );
 }
 
-// ═════════════════════════ Trouver des créatrices ═════════════════════════
+// ═════════════════════════ Trouver des créateurs ═════════════════════════
 type LastSearch = {
   label: string; at: string; mode: "marque" | "similaire" | "liste" | "yt-search" | "yt-brand" | "yt-list"; platform?: "instagram" | "youtube";
   brand?: Prof & { username: string }; creator?: Prof & { username: string }; brands?: string[]; results: Candidate[];
@@ -249,56 +386,6 @@ type Rejects = Record<string, { at: string; name?: string }>;
 type Section = "trier" | "scouting" | "contacter" | "pas" | "roster";
 const SCOUT_LABEL: Record<ScoutStatus, string> = { observation: "En observation", contacter: "À contacter", discussion: "En discussion", signe: "Signé", ecarte: "Pas intéressé" };
 
-/** Taux d'engagement « normal » selon la taille du compte (repère public). */
-const erRef = (f: number) => (f < 10_000 ? 5 : f < 50_000 ? 3.5 : f < 200_000 ? 2.5 : f < 1_000_000 ? 1.8 : 1.2);
-/**
- * Score « Potentiel » sur 100 : engagement par rapport à sa taille (40), rythme (15),
- * déjà payée par des marques (15), email trouvé (10), pas d'agence (10), active (10),
- * moins 15 par signal d'alerte. Une aide au tri, pas un verdict.
- */
-function potential(d: Prof): { score: number; flags: string[] } {
-  const f = d.followers ?? 0;
-  const ref = erRef(f);
-  const flags: string[] = [];
-  let s = 0;
-  if (d.er != null) s += Math.min(40, (d.er / ref) * 30);
-  s += Math.min(15, (d.perWeek ?? 0) * 5);
-  if (d.deals?.length) s += 15;
-  if (d.email) s += 10;
-  if (!d.agency) s += 10;
-  const quiet = d.lastPost ? (Date.now() - Date.parse(d.lastPost)) / 86400000 : 999;
-  if (quiet < 14) s += 10;
-  if (d.er != null && d.er < ref * 0.25) flags.push("Engagement très bas pour sa taille");
-  if ((d.following ?? 0) > f && f < 50_000) flags.push("Suit plus de comptes qu'elle n'a d'abonnés");
-  if (quiet > 60 && quiet < 999) flags.push("Rien publié depuis 2 mois");
-  s -= flags.length * 15;
-  return { score: Math.max(0, Math.min(100, Math.round(s))), flags };
-}
-/**
- * Score « Potentiel » d'une chaîne YouTube : vues moyennes par rapport aux abonnés (30),
- * engagement des vidéos (10), rythme (15), déjà sponsorisée (15), email (10), pas
- * d'agence (10), active ce mois-ci (10), moins 15 par signal d'alerte.
- */
-function potentialYt(d: Prof): { score: number; flags: string[] } {
-  const f = d.followers ?? 0;
-  const flags: string[] = [];
-  let s = 0;
-  const vr = d.avgViews != null && f > 0 ? d.avgViews / f : null;
-  if (vr != null) s += Math.min(30, (vr / 0.25) * 22);
-  else if (d.avgViews) s += 15; // abonnés masqués : on juge sur les vues seules
-  if (d.er != null) s += Math.min(10, (d.er / 4) * 8);
-  s += Math.min(15, (d.perWeek ?? 0) * 10);
-  if (d.deals?.length || d.sponsored) s += 15;
-  if (d.email) s += 10;
-  if (!d.agency) s += 10;
-  const quiet = d.lastPost ? (Date.now() - Date.parse(d.lastPost)) / 86400000 : 999;
-  if (quiet < 30) s += 10;
-  if (vr != null && vr < 0.02) flags.push("Très peu de vues pour sa taille");
-  if (quiet > 90 && quiet < 999) flags.push("Aucune vidéo depuis 3 mois");
-  s -= flags.length * 15;
-  return { score: Math.max(0, Math.min(100, Math.round(s))), flags };
-}
-const scoreOf = (d: Prof) => (d.platform === "youtube" ? potentialYt(d) : potential(d));
 const firstName = (d: Prof | null, user: string) => (d?.name?.trim().split(/\s+/)[0] ?? "") || user;
 const REGIONS = [["FR", "France"], ["BE", "Belgique"], ["CH", "Suisse"], ["CA", "Canada"], ["GB", "Royaume-Uni"], ["US", "États-Unis"]] as const;
 const ytErr = (e?: string) =>
@@ -307,10 +394,11 @@ const ytErr = (e?: string) =>
       : e === "recherche_vide" ? "Tape un thème ou une marque."
         : e === "quota_youtube" ? "Quota YouTube du jour atteint : ça repart demain."
           : "YouTube n'a pas répondu, réessaie.";
-/** Clé d'une créatrice dans le Scouting : @ Instagram, ou « yt:<handle> » pour une chaîne YouTube. */
+/** Clé d'un créateur dans le Scouting : @ Instagram, ou « yt:<handle> » pour une chaîne YouTube. */
 const poolKey = (handle: string) => (/youtube\.com|youtu\.be/i.test(handle) ? `yt:${(/@([\w.-]+)/.exec(handle)?.[1] ?? handle).toLowerCase()}` : cleanUser(handle));
 
-function CreatorFinder() {
+/** Trouver des créateurs : colonne principale (recherche, filtres, liste) + panneau « Profil sélectionné ». */
+function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boolean; onGuide: () => void }) {
   const [source, setSource] = useStickyState("sourcing:depart", ["marque", "similaire", "liste"] as const, "marque");
   const [brandIn, setBrandIn] = useState("");
   const [creatorIn, setCreatorIn] = useState("");
@@ -643,109 +731,370 @@ function CreatorFinder() {
   for (const x of shown) bySection[sectionOf(x.c)]++;
   const visible = shown.filter((x) => sectionOf(x.c) === section);
 
-  const SOURCES = [
-    { value: "marque", label: "Depuis une marque" },
-    { value: "similaire", label: "Comme un créateur" },
-    { value: "liste", label: "Liste de @" },
-  ];
-  const runBtn = (label: string, onClick: () => void) => (
-    <button type="button" onClick={onClick} disabled={!!busy} className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
-      {busy ? <Spin size={14} /> : <Search className="h-3.5 w-3.5" />} {label}
-    </button>
-  );
 
-  return (
-    <div>
-      {/* Point de départ */}
-      <div className="mb-3 rounded-2xl border border-border bg-surface p-4">
-        {/* Réseau */}
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
-          <Tabs
-            size="sm"
-            label="Réseau"
-            value={platform}
-            onValueChange={(v) => setPlatform(v === "youtube" ? "youtube" : "instagram")}
-            items={[
-              { value: "instagram", label: "Instagram", icon: <PlatformIcon platform="instagram" className="h-3.5 w-3.5" /> },
-              { value: "youtube", label: "YouTube", icon: <PlatformIcon platform="youtube" className="h-3.5 w-3.5" /> },
-            ]}
-          />
-          {isYt && ytQuota && (
-            <span className="text-[11px] text-faint" title="Google offre 10 000 unités par jour : une recherche par thème ou par marque en coûte environ 150, une chaîne de la liste environ 3">
-              Quota YouTube du jour : <span className={cn("font-semibold", ytQuota.used / ytQuota.limit > 0.85 ? "text-dangertext" : "text-foreground")}>{ytQuota.used.toLocaleString("fr-FR")}</span> / {ytQuota.limit.toLocaleString("fr-FR")}
-            </span>
-          )}
-        </div>
-        {isYt ? (
-          <div>
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <Tabs
-                size="sm"
-                wrap
-                label="Point de départ YouTube"
-                value={ytSource}
-                onValueChange={(v) => setYtSource(v as typeof ytSource)}
-                items={[
-                  { value: "search", label: "Par thème" },
-                  { value: "brand", label: "Depuis une marque" },
-                  { value: "list", label: "Liste de chaînes" },
-                ]}
-              />
-              <HelpTip title="Quelle différence ?">
-                <p><span className="font-medium text-foreground">Par thème</span> : tu tapes un sujet (« fitness lyon », « maman bébé », « recettes healthy ») et un pays : YouTube te donne les chaînes qui en parlent. Impossible sur Instagram, possible ici.</p>
-                <p><span className="font-medium text-foreground">Depuis une marque</span> : les chaînes qui ont fait des vidéos sur cette marque (tests, sponsors, avis).</p>
-                <p><span className="font-medium text-foreground">Liste de chaînes</span> : tu colles des @ ou des liens YouTube pour voir leurs chiffres.</p>
-              </HelpTip>
-            </div>
-            {ytSource === "list" ? (
-              <div className="flex flex-col gap-2">
-                <textarea aria-label="Liste de chaînes" value={ytList} onChange={(e) => setYtList(e.target.value)} rows={4} placeholder={"@lea.fit\nyoutube.com/@camilleyoga\nyoutube.com/channel/UC…"} className={cn(IN, "resize-y text-[13px]")} />
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-[11px] text-faint">Un @ ou un lien par ligne. Environ 3 unités YouTube par chaîne.</span>
-                  {runBtn("Analyser", () => void runYt())}
-                </div>
-              </div>
-            ) : (
-              <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void runYt(); }}>
-                <input aria-label={ytSource === "search" ? "Thème" : "Marque"} value={ytQ} onChange={(e) => setYtQ(e.target.value)} placeholder={ytSource === "search" ? "fitness lyon, maman bébé, recettes healthy…" : "nom de la marque (ex : gymshark)"} className={cn(IN, "min-w-[200px] flex-1 py-2 text-[13px]")} />
-                <Picker size="sm" ariaLabel="Pays" className="w-36" value={ytRegion} onChange={setYtRegion} options={REGIONS.map(([v, l]) => ({ value: v, label: l }))} />
-                {runBtn(ytSource === "search" ? "Trouver des chaînes" : "Trouver ses créateurs", () => void runYt())}
-              </form>
+  // ── Sélection (panneau « Profil sélectionné ») et raccourcis clavier ─────────
+  const wide = useWide();
+  const reduced = useReducedMotion();
+  const [selKey, setSelKey] = useState<string | null>(null);
+  const [sheet, setSheet] = useState(false); // téléphone / tablette : fiche en feuille du bas
+  const [moreFilters, setMoreFilters] = useState(false);
+  const selIdx = useRef(0);
+  const rowEls = useRef(new Map<string, HTMLElement>());
+  // Grand écran : un compte est toujours sélectionné ; s'il quitte la section (trié), on passe au suivant.
+  const selected = visible.find((x) => x.c.username === selKey) ?? (wide && visible.length ? visible[Math.min(selIdx.current, visible.length - 1)] : null);
+  const selPos = selected ? visible.indexOf(selected) : -1;
+  useEffect(() => {
+    if (selPos >= 0) selIdx.current = selPos;
+  }, [selPos]);
+  const select = (key: string, open = true) => {
+    setSelKey(key);
+    if (!wide && open) setSheet(true);
+  };
+  const move = (dir: 1 | -1) => {
+    if (!visible.length) return;
+    const next = visible[Math.max(0, Math.min(visible.length - 1, (selPos < 0 ? -1 : selPos) + dir))];
+    setSelKey(next.c.username);
+    rowEls.current.get(next.c.username)?.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+  };
+  // Les actions de tri, les mêmes que les boutons (rien de nouveau côté données).
+  const canScout = (s: Section) => s !== "scouting" && s !== "roster";
+  const canWrite = (s: Section) => s !== "roster" && s !== "pas";
+  const canPass = (s: Section) => s !== "pas" && s !== "roster";
+  const act = (x: { c: Candidate }, what: "scouting" | "contacter" | "pas" | "ecrire") => {
+    const s = sectionOf(x.c);
+    if (adding === x.c.username) return;
+    if (what === "ecrire") {
+      if (!canWrite(s)) return;
+      setSheet(false);
+      setContact(x.c);
+      return;
+    }
+    if (what === "scouting" && !canScout(s)) return;
+    if (what === "pas" && !canPass(s)) return;
+    if (what === "contacter" && (s === "contacter" || s === "roster")) return;
+    setSheet(false);
+    void triage(x.c, what);
+  };
+  const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  keyRef.current = (e) => {
+    if (paused || contact || askKind || !wide || !last) return;
+    const k = e.key.toLowerCase();
+    if (k === "j") move(1);
+    else if (k === "k") move(-1);
+    else if (selected && k === "s") act(selected, "scouting");
+    else if (selected && k === "c") act(selected, "ecrire");
+    else if (selected && k === "x") act(selected, "pas");
+    else return;
+    e.preventDefault();
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
+      if ((e.target as HTMLElement | null)?.closest?.("[role='dialog']")) return;
+      keyRef.current(e);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const SOURCES: Opt[] = [
+    { value: "marque", label: "Depuis une marque", hint: "L'app lit les 50 derniers posts de la marque et liste les @ qu'elle cite : souvent les créateurs avec qui elle a travaillé." },
+    { value: "similaire", label: "Comme un créateur", hint: "Les marques avec qui il travaille, puis les autres créateurs de ces marques. Plus ils en partagent, plus ils lui ressemblent." },
+    { value: "liste", label: "Liste de @", hint: "Colle des @ trouvés ailleurs pour voir tous leurs chiffres d'un coup." },
+  ];
+  const YT_SOURCES: Opt[] = [
+    { value: "search", label: "Par thème", hint: "Un sujet (« fitness lyon », « maman bébé ») et un pays : les chaînes qui en parlent. Impossible sur Instagram, possible ici." },
+    { value: "brand", label: "Depuis une marque", hint: "Les chaînes qui ont fait des vidéos sur cette marque (tests, sponsors, avis)." },
+    { value: "list", label: "Liste de chaînes", hint: "Colle des @ ou des liens YouTube pour voir leurs chiffres." },
+  ];
+  const isList = isYt ? ytSource === "list" : source === "liste";
+  const run = () => void (isYt ? runYt() : source === "marque" ? runBrand() : source === "similaire" ? runSimilar() : runList());
+  const startOpts = isYt ? YT_SOURCES : SOURCES;
+  const startVal = isYt ? ytSource : source;
+  const inputVal = isYt ? ytQ : source === "marque" ? brandIn : creatorIn;
+  const setInput = (v: string) => (isYt ? setYtQ(v) : source === "marque" ? setBrandIn(v) : setCreatorIn(v));
+  const inputHint = isYt ? (ytSource === "search" ? "fitness lyon, maman bébé, recettes healthy…" : "nom de la marque (ex : gymshark)") : source === "marque" ? "gymshark" : "un créateur que tu aimes";
+  const regionLabel = REGIONS.find(([v]) => v === ytRegion)?.[1] ?? ytRegion;
+
+  // Pastilles de filtre : uniquement les filtres qui existent (abonnés, engagement, bio, email, agence, tri, comptes masqués).
+  const sortOpts: Opt[] = [
+    { value: "score", label: "Potentiel" },
+    { value: "followers", label: "Abonnés" },
+    { value: "er", label: "Engagement" },
+    ...(last && last.mode !== "liste" && last.mode !== "yt-list"
+      ? [{ value: "count", label: last.mode === "similaire" ? "Marques en commun" : last.mode === "yt-brand" ? "Vidéos sur la marque" : last.mode === "yt-search" ? "Pertinence" : "Citations" }]
+      : []),
+  ];
+  const followersLabel = minF.trim() && maxF.trim() ? `${minF.trim()} à ${maxF.trim()} abonnés` : minF.trim() ? `${minF.trim()} abonnés et plus` : maxF.trim() ? `Jusqu'à ${maxF.trim()} abonnés` : "Abonnés";
+  const pepites = shown.filter((x) => x.p.score >= PEPITE).length;
+  const withEmail = shown.filter((x) => x.c.data?.email).length;
+  const noAgency = shown.filter((x) => !x.c.data?.agency).length;
+  const plural = (n: number, w: string) => `${n} ${w}${n > 1 ? "s" : ""}`;
+
+  /** Menu ⋯ d'un compte : toutes les actions existantes (ouvrir, écrire, ranger, copier l'email). */
+  const menuFor = (c: Candidate): ActionItem[] => {
+    const sec = sectionOf(c);
+    const inPool = pool.get(keyOf(c));
+    const yt = c.data?.platform === "youtube";
+    const href = yt ? c.data?.url : igLink(c.username);
+    return [
+      ...(href ? [{ key: "open", label: "Ouvrir le profil", icon: ExternalLink, onClick: () => window.open(href, "_blank", "noopener,noreferrer") }] : []),
+      ...(canWrite(sec) ? [{ key: "write", label: "Écrire (mail ou Instagram)", icon: Send, onClick: () => setContact(c) }] : []),
+      ...(canScout(sec) ? [{ key: "scout", label: "Ajouter au Scouting", icon: Bookmark, onClick: () => act({ c }, "scouting") }] : []),
+      ...(sec !== "contacter" && sec !== "roster" ? [{ key: "tocontact", label: "Ranger dans « À contacter »", icon: PhoneOutgoing, onClick: () => act({ c }, "contacter") }] : []),
+      ...(canPass(sec) ? [{ key: "pass", label: "Pas intéressé", icon: X, onClick: () => act({ c }, "pas") }] : []),
+      ...(sec === "pas" && !inPool ? [{ key: "back", label: "Remettre à trier", icon: RotateCcw, onClick: () => void untriage(c) }] : []),
+      ...(c.data?.email ? [{ key: "mail", label: "Copier l'email", icon: Mail, onClick: () => { void navigator.clipboard?.writeText(c.data?.email ?? ""); toast("Email copié ✓"); } }] : []),
+    ];
+  };
+
+  /** Ce que l'app a déjà repéré et qui mérite un coup d'œil avant d'écrire. */
+  const caveats = (c: Candidate, b: ScoreBreakdown | null): string[] => {
+    const d = c.data;
+    const out: string[] = [];
+    if (c.why) out.push(igWhyText(c.why));
+    if (!d) return out;
+    if (b) out.push(...b.flags.map((f) => `${f}.`));
+    if (d.agency) out.push(`Sa bio ou son lien parle peut-être d'une agence (« ${d.agency} ») : vérifie avant d'écrire.`);
+    if (!d.email && !c.why) out.push(d.platform === "youtube" ? "Pas d'email trouvé sur la chaîne." : "Pas d'email trouvé : écris-lui plutôt en message Instagram.");
+    return out;
+  };
+
+  /** Le panneau « Profil sélectionné » (colonne de droite, ou feuille du bas sur téléphone). */
+  const renderInspector = (x: { c: Candidate; p: { score: number; flags: string[] } }) => {
+    const { c } = x;
+    const d = c.data;
+    const yt = d?.platform === "youtube";
+    const ok = !!d && !c.why;
+    const b = ok && d ? scoreBreakdown(d) : null;
+    const sec = sectionOf(c);
+    const inPool = pool.get(keyOf(c));
+    const scoutSt: ScoutStatus | null = inPool ? statusIn(inPool) : null;
+    const href = yt ? d?.url : igLink(c.username);
+    const busyRow = adding === c.username;
+    const notes = caveats(c, b);
+    const handle = yt ? `@${d?.handle || c.username}` : `@${c.username}`;
+    const btn2 = "flex h-10 items-center justify-center gap-1.5 rounded-full bg-field px-3 text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50";
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <span className="text-[13px] font-semibold text-muted-foreground">Profil sélectionné</span>
+          <div className="flex items-center gap-1">
+            <ActionMenu items={menuFor(c)} buttonClassName="h-8 w-8 bg-field text-foreground" />
+            {href && (
+              <a href={href} target="_blank" rel="noreferrer" title="Ouvrir le profil" aria-label="Ouvrir le profil" className="grid h-8 w-8 place-items-center rounded-full bg-field text-foreground transition-colors hover:bg-rowhover">
+                <ArrowUpRight className="h-4 w-4" />
+              </a>
             )}
           </div>
-        ) : (
-        <>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <Tabs size="sm" wrap label="Point de départ" value={source} onValueChange={(v) => setSource(v as typeof source)} items={SOURCES} />
-          <HelpTip title="Quelle différence ?">
-            <p><span className="font-medium text-foreground">Depuis une marque</span> : l'app lit les 50 derniers posts de la marque et liste les @ qu'elle cite. Ce sont souvent les créateurs avec qui elle a travaillé.</p>
-            <p><span className="font-medium text-foreground">Comme un créateur</span> : tu choisis un créateur (un des tiens, par exemple). L'app regarde avec quelles marques il travaille, puis quels autres créateurs travaillent avec ces mêmes marques. Plus ils en partagent, plus ils lui ressemblent.</p>
-            <p><span className="font-medium text-foreground">Liste de @</span> : tu colles des @ trouvés ailleurs pour voir tous leurs chiffres d'un coup.</p>
-          </HelpTip>
         </div>
-        {source === "marque" && (
-          <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void runBrand(); }}>
-            <div className="flex min-w-[200px] flex-1 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 focus-within:border-primary">
-              <AtSign className="h-3.5 w-3.5 shrink-0 text-faint" />
-              <input aria-label="@ de la marque" value={brandIn} onChange={(e) => setBrandIn(e.target.value)} placeholder="gymshark" className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none" />
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="flex flex-col items-center text-center">
+            <Pic src={d?.picture} name={d?.name || c.username} size={72} />
+            <a href={href} target="_blank" rel="noreferrer" className="mt-3 max-w-full truncate text-[22px] font-bold tracking-tight text-foreground hover:underline">
+              {yt ? d?.name || handle : handle}
+            </a>
+            {d?.name && <div className="max-w-full truncate text-[13px] text-muted-foreground">{yt ? handle : d.name}</div>}
+            {d?.bio && <p className="mt-1.5 line-clamp-3 text-[13px] leading-snug text-muted-foreground">{d.bio}</p>}
+            <div className="mt-2.5 flex flex-wrap justify-center gap-1.5">
+              {ok && x.p.score >= PEPITE && <StatusPill tone="ok" size="xs">Pépite</StatusPill>}
+              {sec !== "trier" && (
+                <StatusPill tone={sec === "pas" ? "closed" : sec === "contacter" ? "progress" : sec === "roster" ? "info" : "ok"} size="xs">
+                  {sec === "roster" ? "Au roster" : scoutSt ? SCOUT_LABEL[scoutSt] : "Pas intéressé"}
+                </StatusPill>
+              )}
+              {inPool && <span className="inline-flex h-5 items-center rounded-full bg-field px-2 text-[11px] font-medium text-muted-foreground" title={`Dans le ${KIND_LIST[inPool.kind]}`}>{KIND_ONE[inPool.kind]}</span>}
+              {inPool?.last_contacted && <span className="inline-flex h-5 items-center rounded-full bg-field px-2 text-[11px] font-medium text-muted-foreground">Contacté {fmtAgo(inPool.last_contacted)}</span>}
             </div>
-            {runBtn("Trouver ses créateurs", () => void runBrand())}
-          </form>
-        )}
-        {source === "similaire" && (
-          <div className="flex flex-col gap-2.5">
-            <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void runSimilar(); }}>
-              <div className="flex min-w-[200px] flex-1 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 focus-within:border-primary">
-                <AtSign className="h-3.5 w-3.5 shrink-0 text-faint" />
-                <input aria-label="@ du créateur" value={creatorIn} onChange={(e) => setCreatorIn(e.target.value)} placeholder="un créateur que tu aimes" className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none" />
+            {d?.email && (
+              <button type="button" onClick={() => { void navigator.clipboard?.writeText(d.email ?? ""); toast("Email copié ✓"); }} title={d.emailFrom === "lien" ? "Trouvé sur son lien en bio · copier" : "Trouvé dans sa bio · copier"} className="mt-2 flex max-w-full items-center gap-1.5 rounded-full bg-field px-3 py-1 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
+                <Mail className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{d.email}</span>{d.emailFrom === "lien" ? <span className="text-muted-foreground">(lien)</span> : null}
+              </button>
+            )}
+          </div>
+
+          {ok && d && (
+            <div className="mt-4 grid grid-cols-3 divide-x divide-border rounded-[16px] bg-panel py-3 text-center">
+              {[
+                ["abonnés", d.followers != null ? fmtCompact(d.followers) : null, yt && d.followers == null ? "Abonnés masqués par la chaîne" : undefined],
+                ...(yt ? [["vues / vidéo", d.avgViews != null ? fmtCompact(d.avgViews) : null, undefined]] : [["engagement", d.er != null ? fmtEr(d.er) : null, undefined]]),
+                [yt ? "vidéos / sem." : "posts / sem.", perWeekParts(d.perWeek), undefined],
+              ].map(([label, value, title]) => (
+                <div key={label} className="min-w-0 px-2" title={title ?? undefined}>
+                  <div className="truncate text-[18px] font-semibold tabular-nums text-foreground">{value ?? "—"}</div>
+                  <div className="truncate text-[11px] text-muted-foreground">{label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {b && (
+            <div className="mt-5">
+              <div className="mb-2.5 flex items-baseline justify-between gap-2">
+                <span className="text-[15px] font-bold text-foreground">Pourquoi {b.score} / 100</span>
+                <span className="flex items-center gap-1 text-[12px] text-muted-foreground">
+                  Score Potentiel
+                  <HelpTip title="Le score « Potentiel »" align="end">
+                    {yt ? (
+                      <p>Une note sur 100 pour trier vite : vues moyennes par rapport aux abonnés (30), engagement des vidéos (10), rythme (15), déjà sponsorisé (15), email (10), pas d'agence (10), actif ce mois-ci (10).</p>
+                    ) : (
+                      <p>Une note sur 100 pour trier vite : engagement par rapport à sa taille (40), rythme de publication (15), déjà payé par des marques (15), email trouvé (10), pas d'agence (10), actif ces 2 dernières semaines (10).</p>
+                    )}
+                    <p>Chaque signal d'alerte retire 15 points. 70 et plus : pépite. C'est une aide, pas un verdict.</p>
+                  </HelpTip>
+                </span>
               </div>
-              {runBtn("Trouver des profils proches", () => void runSimilar())}
-            </form>
-            {roster.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-faint">
+              <div className="flex flex-col gap-2">
+                {b.factors.map((f) => (
+                  <div key={f.key} className="grid grid-cols-[92px_minmax(0,1fr)_auto] items-center gap-3" title={`${Math.round(f.points)} / ${f.max} points`}>
+                    <span className="truncate text-[13px] text-foreground">{f.label}</span>
+                    <span className="h-1.5 overflow-hidden rounded-full bg-field">
+                      <span className={cn("block h-full rounded-full", TONE_DOT[f.tone])} style={{ width: `${Math.round((f.points / f.max) * 100)}%` }} />
+                    </span>
+                    <span className={cn("text-right text-[12px] font-semibold", TONE_TEXT[f.tone])}>{f.verdict}</span>
+                  </div>
+                ))}
+                {b.penalty > 0 && (
+                  <div className="grid grid-cols-[92px_minmax(0,1fr)_auto] items-center gap-3">
+                    <span className="truncate text-[13px] text-foreground">Alertes</span>
+                    <span className="truncate text-[12px] text-muted-foreground">{plural(b.flags.length, "signal")}</span>
+                    <span className={cn("text-right text-[12px] font-semibold", TONE_TEXT.wait)}>moins {b.penalty}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {notes.length > 0 && (
+            <div className="mt-4 flex gap-2.5 rounded-[14px] bg-wait-soft px-3.5 py-3 text-[13px] leading-snug text-foreground">
+              <Info className={cn("mt-0.5 h-4 w-4 shrink-0", TONE_TEXT.wait)} />
+              <div className="flex min-w-0 flex-col gap-1">{notes.map((n) => <p key={n}>{n}</p>)}</div>
+            </div>
+          )}
+
+          {!!d?.deals?.length && (
+            <div className="mt-4 text-[12px] text-muted-foreground">
+              <div className="mb-1.5 font-medium text-foreground">{yt ? "Déjà sponsorisé par" : "A déjà bossé avec"}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {d.deals.slice(0, 8).map((m) => yt
+                  ? <span key={m} className="rounded-full bg-field px-2 py-0.5 text-[11px] font-medium text-foreground">{m}</span>
+                  : <a key={m} href={igLink(m)} target="_blank" rel="noreferrer" className="rounded-full bg-field px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-rowhover">@{m}</a>)}
+              </div>
+            </div>
+          )}
+          {!!c.via?.length && <div className="mt-3 text-[12px] text-muted-foreground">Marques en commun : {c.via.map((m) => `@${m}`).join(", ")}</div>}
+        </div>
+
+        {/* Actions, toujours en bas du panneau */}
+        {sec !== "roster" && (
+          <div className="mt-4 flex shrink-0 flex-col gap-2 border-t border-border pt-4">
+            {canScout(sec) ? (
+              <button type="button" onClick={() => act(x, "scouting")} disabled={busyRow} className="flex h-11 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+                {busyRow ? <Spin size={14} /> : <Plus className="h-4 w-4" />} Ajouter au Scouting
+              </button>
+            ) : (
+              <button type="button" onClick={() => act(x, "contacter")} disabled={busyRow} className="flex h-11 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+                {busyRow ? <Spin size={14} /> : <PhoneOutgoing className="h-4 w-4" />} Ranger dans « À contacter »
+              </button>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              {canWrite(sec) ? (
+                <button type="button" onClick={() => act(x, "ecrire")} className={btn2}><Send className="h-3.5 w-3.5" /> Contacter</button>
+              ) : !inPool ? (
+                <button type="button" onClick={() => void untriage(c)} className={btn2}><RotateCcw className="h-3.5 w-3.5" /> Remettre à trier</button>
+              ) : (
+                <button type="button" onClick={() => act(x, "contacter")} disabled={busyRow} className={btn2}><PhoneOutgoing className="h-3.5 w-3.5" /> À contacter</button>
+              )}
+              {canPass(sec) ? (
+                <button type="button" onClick={() => act(x, "pas")} disabled={busyRow} className={btn2}><X className="h-3.5 w-3.5" /> Pas intéressé</button>
+              ) : (
+                <button type="button" disabled className={btn2}><Check className="h-3.5 w-3.5" /> Écarté</button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const hasInspector = wide && !!last;
+  return (
+    <div className={cn("grid items-start gap-5", hasInspector && "lg:grid-cols-[minmax(0,1fr)_340px]")}>
+      <div className="@container min-w-0">
+        {top}
+
+        {/* Barre de recherche : réseau, point de départ, le @ (ou le thème), « Trouver » */}
+        <form onSubmit={(e) => { e.preventDefault(); run(); }} className="grid grid-cols-2 gap-1.5 rounded-[16px] bg-field p-1.5 @xl:flex @xl:items-center">
+          <MenuPill
+            ariaLabel="Réseau"
+            label={isYt ? "YouTube" : "Instagram"}
+            icon={<PlatformIcon platform={platform} className="h-4 w-4 shrink-0" />}
+            value={platform}
+            onChange={(v) => setPlatform(v === "youtube" ? "youtube" : "instagram")}
+            options={[
+              { value: "instagram", label: "Instagram", icon: <PlatformIcon platform="instagram" className="h-4 w-4" /> },
+              { value: "youtube", label: "YouTube", icon: <PlatformIcon platform="youtube" className="h-4 w-4" /> },
+            ]}
+          />
+          <MenuPill
+            ariaLabel="Point de départ"
+            label={startOpts.find((o) => o.value === startVal)?.label ?? ""}
+            value={startVal}
+            onChange={(v) => (isYt ? setYtSource(v as typeof ytSource) : setSource(v as typeof source))}
+            options={startOpts}
+          />
+          <div className="col-span-2 flex min-w-0 flex-1 items-center gap-1.5">
+            {isList ? (
+              <span className="min-w-0 flex-1 truncate px-2 text-[13px] text-muted-foreground">{isYt ? "Colle tes chaînes ci-dessous" : "Colle tes @ ci-dessous"}</span>
+            ) : (
+              <label className="flex h-10 min-w-0 flex-1 items-center gap-1 px-2">
+                {isYt && ytSource === "search" ? <Search className="h-4 w-4 shrink-0 text-faint" /> : !isYt ? <span aria-hidden className="text-[15px] font-medium text-faint">@</span> : null}
+                <input
+                  aria-label={isYt ? (ytSource === "search" ? "Thème" : "Marque") : source === "marque" ? "@ de la marque" : "@ du créateur"}
+                  value={inputVal}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder={inputHint}
+                  className="min-w-0 flex-1 bg-transparent text-[14px] text-foreground outline-none placeholder:text-faint"
+                />
+              </label>
+            )}
+            {isYt && !isList && (
+              <MenuPill ariaLabel="Pays" label={regionLabel} value={ytRegion} onChange={setYtRegion} options={REGIONS.map(([v, l]) => ({ value: v, label: l }))} />
+            )}
+            <button type="submit" disabled={!!busy} className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+              {busy ? <Spin size={14} /> : <Search className="h-4 w-4" />} {isList ? "Analyser" : "Trouver"}
+            </button>
+          </div>
+        </form>
+
+        {isList && (
+          <div className="mt-2 rounded-[16px] bg-field p-1.5">
+            {isYt ? (
+              <textarea aria-label="Liste de chaînes" value={ytList} onChange={(e) => setYtList(e.target.value)} rows={4} placeholder={"@lea.fit\nyoutube.com/@camilleyoga\nyoutube.com/channel/UC…"} className="w-full resize-y rounded-[12px] bg-surface px-3 py-2 text-[13px] outline-none" />
+            ) : (
+              <textarea aria-label="Liste de @" value={listIn} onChange={(e) => setListIn(e.target.value)} rows={4} placeholder={"@lea.fit\n@ines.run\ninstagram.com/camille.yoga"} className="w-full resize-y rounded-[12px] bg-surface px-3 py-2 text-[13px] outline-none" />
+            )}
+            <div className="px-2 pb-1 pt-1.5 text-[11px] text-muted-foreground">
+              {isYt ? "Un @ ou un lien par ligne. Environ 3 unités YouTube par chaîne." : "Un @ par ligne (ou des liens Instagram). 1 demande Meta par @."}
+            </div>
+          </div>
+        )}
+
+        {/* Sous la barre : avancement, quota YouTube, raccourcis vers le roster */}
+        {(busy || (isYt && ytQuota) || (!isYt && source === "similaire" && roster.length > 0)) && (
+          <div className="mt-2 flex flex-col gap-2 px-1 text-[12px] text-muted-foreground">
+            {busy && <div>{busy}</div>}
+            {isYt && ytQuota && (
+              <span title="Google offre 10 000 unités par jour : une recherche par thème ou par marque en coûte environ 150, une chaîne de la liste environ 3">
+                Quota YouTube du jour : <span className={cn("font-semibold", ytQuota.used / ytQuota.limit > 0.85 ? TONE_TEXT.wait : "text-foreground")}>{ytQuota.used.toLocaleString("fr-FR")}</span> / {ytQuota.limit.toLocaleString("fr-FR")}
+              </span>
+            )}
+            {!isYt && source === "similaire" && roster.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
                 Tes créateurs :
                 {roster.slice(0, 12).map((r) => (
-                  <button key={r.user} type="button" disabled={!!busy} onClick={() => void runSimilar(r.user)} className="rounded-full border border-border px-2.5 py-1 font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
+                  <button key={r.user} type="button" disabled={!!busy} onClick={() => void runSimilar(r.user)} className="rounded-full bg-field px-2.5 py-1 font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
                     {titleCase(r.name)}
                   </button>
                 ))}
@@ -753,234 +1102,268 @@ function CreatorFinder() {
             )}
           </div>
         )}
-        {source === "liste" && (
-          <div className="flex flex-col gap-2">
-            <textarea aria-label="Liste de @" value={listIn} onChange={(e) => setListIn(e.target.value)} rows={4} placeholder={"@lea.fit\n@ines.run\ninstagram.com/camille.yoga"} className={cn(IN, "resize-y text-[13px]")} />
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] text-faint">Un @ par ligne (ou des liens Instagram). 1 demande Meta par @.</span>
-              {runBtn("Analyser", () => void runList())}
-            </div>
-          </div>
-        )}
-        </>
-        )}
-        {busy && <div className="mt-2 text-[12px] text-muted-foreground">{busy}</div>}
-      </div>
 
-      {last && (
-        <>
-          {/* Filtres */}
-          <div className="mb-3 flex flex-wrap items-end gap-2 rounded-2xl border border-border bg-surface p-3">
-            <Field label="Abonnés min" help={<p>Tu peux écrire 10k, 10 000 ou 1,2M.</p>}><input aria-label="Abonnés minimum" value={minF} onChange={(e) => setMinF(e.target.value)} placeholder="10k" className={cn(IN, "w-24")} /></Field>
-            <Field label="Abonnés max"><input aria-label="Abonnés maximum" value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-24")} /></Field>
-            <Field label="Engagement min (%)" help={<><p>Likes + commentaires moyens de ses 12 derniers posts, divisés par ses abonnés.</p><p>Repère : de 1 à 3 % c'est la moyenne, au-dessus de 3 % c'est bon. Les petits comptes ont souvent un taux plus haut.</p></>}><input aria-label="Engagement minimum" value={minEr} onChange={(e) => setMinEr(e.target.value)} placeholder="2" inputMode="decimal" className={cn(IN, "w-24")} /></Field>
-            <Field label="Mot dans la bio" className="min-w-[140px] flex-1" help={<p>Pour cibler une ville (Lyon), une niche (running, maman, vegan) ou une langue. L'app cherche le mot dans la bio et le nom.</p>}><input aria-label="Mot dans la bio" value={bioWord} onChange={(e) => setBioWord(e.target.value)} placeholder="Lyon, running, maman…" className={IN} /></Field>
-            <Field label="Email" help={<p>L'app cherche un email dans la bio, puis sur le lien du créateur (Linktree, son site). « Avec email » : tu peux lui écrire tout de suite depuis l'app.</p>}>
-              <Picker size="sm" ariaLabel="Email" className="w-36" value={emailF} onChange={(v) => setEmailF(v as typeof emailF)}
-                options={[{ value: "tous", label: "Tous" }, { value: "avec", label: "Avec email" }, { value: "sans", label: "Sans email" }]} />
-            </Field>
-            <Field label="Agence" help={<><p>L'app cherche dans la bio et sur le lien des indices comme « management », « agence », « représentée par », « booking », ou un email d'agence.</p><p>C'est un indice, pas une certitude : vérifie avant d'écrire.</p></>}>
-              <Picker size="sm" ariaLabel="Agence" className="w-40" value={agencyF} onChange={(v) => setAgencyF(v as typeof agencyF)}
-                options={[{ value: "toutes", label: "Toutes" }, { value: "sans", label: "Sans agence" }, { value: "avec", label: "Déjà en agence" }]} />
-            </Field>
-            <Field label="Trier par">
-              <Picker size="sm" ariaLabel="Trier par" className="w-44" value={sort} onChange={(v) => setSort(v as typeof sort)}
-                options={[{ value: "score", label: "Potentiel" }, { value: "followers", label: "Abonnés" }, { value: "er", label: "Engagement" },
-                  ...(last.mode !== "liste" && last.mode !== "yt-list" ? [{ value: "count", label: last.mode === "similaire" ? "Marques en commun" : last.mode === "yt-brand" ? "Vidéos sur la marque" : last.mode === "yt-search" ? "Pertinence" : "Citations" }] : [])]} />
-            </Field>
-            <div className="pb-2 text-[12px] text-muted-foreground">
-              <Check2 label="Comptes perso, marques, introuvables" checked={showOthers} onChange={setShowOthers} help={<p>Cachés par défaut : les comptes perso (Meta ne donne pas leurs chiffres), les marques citées, et les @ introuvables. Coche pour les voir.</p>} />
+        {last && (
+          <>
+            {/* Filtres en pastilles */}
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <FilterChip label={followersLabel} active={!!(minF.trim() || maxF.trim())} onClear={() => { setMinF(""); setMaxF(""); }}>
+                <div className="flex flex-col gap-2">
+                  <div className="text-[12px] font-semibold text-foreground">Abonnés</div>
+                  <div className="flex items-center gap-2">
+                    <input aria-label="Abonnés minimum" value={minF} onChange={(e) => setMinF(e.target.value)} placeholder="10k" className={cn(IN, "w-full")} />
+                    <span className="text-[12px] text-muted-foreground">à</span>
+                    <input aria-label="Abonnés maximum" value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-full")} />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Tu peux écrire 10k, 10 000 ou 1,2M.</p>
+                </div>
+              </FilterChip>
+              <FilterChip label={minEr.trim() ? `Engagement ${minEr.trim()} % et plus` : "Engagement"} active={!!minEr.trim()} onClear={() => setMinEr("")}>
+                <div className="flex flex-col gap-2">
+                  <div className="text-[12px] font-semibold text-foreground">Engagement minimum (%)</div>
+                  <input aria-label="Engagement minimum" value={minEr} onChange={(e) => setMinEr(e.target.value)} placeholder="2" inputMode="decimal" className={cn(IN, "w-full")} />
+                  <p className="text-[11px] leading-snug text-muted-foreground">Likes et commentaires moyens de ses 12 derniers posts, divisés par ses abonnés. De 1 à 3 % c'est la moyenne, au-dessus de 3 % c'est bon.</p>
+                </div>
+              </FilterChip>
+              <FilterChip label={bioWord.trim() ? `Bio : ${bioWord.trim()}` : "Mot dans la bio"} active={!!bioWord.trim()} onClear={() => setBioWord("")}>
+                <div className="flex flex-col gap-2">
+                  <div className="text-[12px] font-semibold text-foreground">Mot dans la bio</div>
+                  <input aria-label="Mot dans la bio" value={bioWord} onChange={(e) => setBioWord(e.target.value)} placeholder="Lyon, running, maman…" className={cn(IN, "w-full")} />
+                  <p className="text-[11px] leading-snug text-muted-foreground">Une ville, une niche ou une langue : l'app cherche le mot dans la bio et le nom.</p>
+                </div>
+              </FilterChip>
+              <FilterChip label={emailF === "avec" ? "Avec email" : emailF === "sans" ? "Sans email" : "Email"} active={emailF !== "tous"} onClear={() => setEmailF("tous")}>
+                <OptionList value={emailF} onPick={(v) => setEmailF(v as typeof emailF)} options={[{ value: "tous", label: "Tous" }, { value: "avec", label: "Avec email", hint: "Tu peux lui écrire tout de suite depuis l'app." }, { value: "sans", label: "Sans email" }]} />
+              </FilterChip>
+              <FilterChip label={agencyF === "sans" ? "Sans agence" : agencyF === "avec" ? "Déjà en agence" : "Agence"} active={agencyF !== "toutes"} onClear={() => setAgencyF("toutes")}>
+                <OptionList value={agencyF} onPick={(v) => setAgencyF(v as typeof agencyF)} options={[{ value: "toutes", label: "Toutes" }, { value: "sans", label: "Sans agence" }, { value: "avec", label: "Déjà en agence", hint: "Un indice dans la bio ou le lien (management, booking…), pas une certitude." }]} />
+              </FilterChip>
+              <FilterChip label={`Trier : ${sortOpts.find((o) => o.value === sort)?.label ?? "Potentiel"}`} active onClear={sort !== "score" ? () => setSort("score") : undefined}>
+                <OptionList value={sort} onPick={(v) => setSort(v as typeof sort)} options={sortOpts} />
+              </FilterChip>
+              <FilterChip label="Comptes perso et marques" active={showOthers} onToggle={() => setShowOthers(!showOthers)} onClear={() => setShowOthers(false)} />
+              <button type="button" onClick={() => setMoreFilters((o) => !o)} aria-expanded={moreFilters} className="ml-1 flex items-center gap-1 text-[12px] font-medium text-primary hover:underline">
+                <SlidersHorizontal className="h-3.5 w-3.5" /> {moreFilters ? "Moins de filtres" : "Plus de filtres"}
+              </button>
             </div>
-          </div>
 
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[12px] text-muted-foreground">
-            <span className="flex flex-wrap items-center gap-1.5">
-              <span className="font-medium text-foreground">{last.label.replace(/^Créatrices citées/, "Créateurs cités")}</span> · {shown.length} profil{shown.length > 1 ? "s" : ""}
+            {/* Tous les filtres d'un coup, avec leurs explications */}
+            {moreFilters && (
+              <div className="mt-2 flex flex-wrap items-end gap-2 rounded-[16px] bg-surface p-3">
+                <Field label="Abonnés min" help={<p>Tu peux écrire 10k, 10 000 ou 1,2M.</p>}><input aria-label="Abonnés minimum" value={minF} onChange={(e) => setMinF(e.target.value)} placeholder="10k" className={cn(IN, "w-24")} /></Field>
+                <Field label="Abonnés max"><input aria-label="Abonnés maximum" value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-24")} /></Field>
+                <Field label="Engagement min (%)" help={<><p>Likes + commentaires moyens de ses 12 derniers posts, divisés par ses abonnés.</p><p>Repère : de 1 à 3 % c'est la moyenne, au-dessus de 3 % c'est bon. Les petits comptes ont souvent un taux plus haut.</p></>}><input aria-label="Engagement minimum" value={minEr} onChange={(e) => setMinEr(e.target.value)} placeholder="2" inputMode="decimal" className={cn(IN, "w-24")} /></Field>
+                <Field label="Mot dans la bio" className="min-w-[140px] flex-1" help={<p>Pour cibler une ville (Lyon), une niche (running, maman, vegan) ou une langue. L'app cherche le mot dans la bio et le nom.</p>}><input aria-label="Mot dans la bio" value={bioWord} onChange={(e) => setBioWord(e.target.value)} placeholder="Lyon, running, maman…" className={IN} /></Field>
+                <Field label="Email" help={<p>L'app cherche un email dans la bio, puis sur le lien du créateur (Linktree, son site). « Avec email » : tu peux lui écrire tout de suite depuis l'app.</p>}>
+                  <Picker size="sm" ariaLabel="Email" className="w-36" value={emailF} onChange={(v) => setEmailF(v as typeof emailF)}
+                    options={[{ value: "tous", label: "Tous" }, { value: "avec", label: "Avec email" }, { value: "sans", label: "Sans email" }]} />
+                </Field>
+                <Field label="Agence" help={<><p>L'app cherche dans la bio et sur le lien des indices comme « management », « agence », « représentée par », « booking », ou un email d'agence.</p><p>C'est un indice, pas une certitude : vérifie avant d'écrire.</p></>}>
+                  <Picker size="sm" ariaLabel="Agence" className="w-40" value={agencyF} onChange={(v) => setAgencyF(v as typeof agencyF)}
+                    options={[{ value: "toutes", label: "Toutes" }, { value: "sans", label: "Sans agence" }, { value: "avec", label: "Déjà en agence" }]} />
+                </Field>
+                <Field label="Trier par">
+                  <Picker size="sm" ariaLabel="Trier par" className="w-44" value={sort} onChange={(v) => setSort(v as typeof sort)} options={sortOpts.map((o) => ({ value: o.value, label: o.label }))} />
+                </Field>
+                <div className="pb-2 text-[12px] text-muted-foreground">
+                  <Check2 label="Comptes perso, marques, introuvables" checked={showOthers} onChange={setShowOthers} help={<p>Cachés par défaut : les comptes perso (Meta ne donne pas leurs chiffres), les marques citées, et les @ introuvables. Coche pour les voir.</p>} />
+                </div>
+              </div>
+            )}
+
+            {/* En-tête des résultats : d'où ils viennent, combien, et les sections du tri */}
+            <div className="mb-3 mt-6 flex flex-wrap items-end justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-[20px] font-bold leading-tight tracking-tight text-foreground">{last.label.replace(/^Créatrices citées/, "Créateurs cités")}</h2>
+                <p className="mt-1 flex flex-wrap items-center gap-x-1 text-[13px] text-muted-foreground">
+                  <span>
+                    {plural(shown.length, "profil")}
+                    {shown.length > 0 && <> · {plural(pepites, "pépite")} · {withEmail} avec email · {noAgency} sans agence</>}
+                    {hidden > 0 && <> · {hidden} masqué{hidden > 1 ? "s" : ""}</>}
+                    {" "}· {fmtAgo(last.at)}
+                    {last.mode === "similaire" && !!last.brands?.length && <> · via {last.brands.slice(0, 4).map((m) => `@${m}`).join(", ")}</>}
+                  </span>
+                  <HelpTip title="Le score « Potentiel »">
+                    <p>Une note sur 100 pour trier vite : engagement par rapport à sa taille (40), rythme de publication (15), déjà payé par des marques (15), email trouvé (10), pas d'agence (10), actif ces 2 dernières semaines (10).</p>
+                    <p>Chaque signal d'alerte retire 15 points : engagement très bas pour sa taille, compte qui suit plus de monde qu'il n'a d'abonnés, rien publié depuis 2 mois.</p>
+                    <p>70 et plus : pépite. C'est une aide, pas un verdict.</p>
+                  </HelpTip>
+                </p>
+              </div>
               {shown.length > 0 && (
-                <span className="text-muted-foreground">
-                  {" "}· {shown.filter((x) => x.p.score >= 70).length} pépite{shown.filter((x) => x.p.score >= 70).length > 1 ? "s" : ""} · {shown.filter((x) => x.c.data?.email).length} avec email · {shown.filter((x) => !x.c.data?.agency).length} sans agence
-                </span>
+                <Tabs
+                  size="sm"
+                  label="Sections du tri"
+                  value={section}
+                  onValueChange={(v) => setSection(v as Section)}
+                  items={[
+                    { value: "trier", label: "À trier", count: bySection.trier },
+                    { value: "scouting", label: "Scouting", count: bySection.scouting },
+                    { value: "contacter", label: "À contacter", count: bySection.contacter },
+                    { value: "pas", label: "Écartés", count: bySection.pas },
+                    ...(bySection.roster ? [{ value: "roster", label: "Au roster", count: bySection.roster }] : []),
+                  ]}
+                />
               )}
-              {hidden > 0 && <span className="text-faint">({hidden} masqué{hidden > 1 ? "s" : ""})</span>}
-              {last.mode === "similaire" && !!last.brands?.length && <span className="text-faint">· via {last.brands.slice(0, 4).map((b) => `@${b}`).join(", ")}</span>}
-            </span>
-            <span className="flex items-center gap-1.5 text-[11px] text-faint">
-              {fmtAgo(last.at)}
-              <HelpTip title="Le score « Potentiel »" align="end">
-                <p>Une note sur 100 pour trier vite : engagement par rapport à sa taille (40), rythme de publication (15), déjà payée par des marques (15), email trouvé (10), pas d'agence (10), active ces 2 dernières semaines (10).</p>
-                <p>Chaque signal d'alerte retire 15 points : engagement très bas pour sa taille, compte qui suit plus de monde qu'il n'a d'abonnés, rien publié depuis 2 mois.</p>
-                <p>70 et plus : pépite. C'est une aide, pas un verdict.</p>
-              </HelpTip>
-            </span>
-          </div>
-
-          {/* Sections du tri : chaque compte trouvé passe de « À trier » à sa section. */}
-          {shown.length > 0 && (
-            <Tabs
-              className="mb-3"
-              size="sm"
-              label="Sections du tri"
-              value={section}
-              onValueChange={(v) => setSection(v as Section)}
-              items={[
-                { value: "trier", label: "À trier", count: bySection.trier },
-                { value: "scouting", label: "Scouting", count: bySection.scouting },
-                { value: "contacter", label: "À contacter", count: bySection.contacter },
-                { value: "pas", label: "Pas intéressés", count: bySection.pas },
-                ...(bySection.roster ? [{ value: "roster", label: "Déjà au roster", count: bySection.roster }] : []),
-              ]}
-            />
-          )}
-
-          {shown.length === 0 ? (
-            <div className="rounded-2xl border border-border bg-surface px-6 py-10 text-center text-sm text-muted-foreground">Aucun profil pour ces filtres.</div>
-          ) : visible.length === 0 ? (
-            <div className="rounded-2xl bg-surface px-6 py-10 text-center text-sm text-muted-foreground">
-              {section === "trier"
-                ? "Tout est trié ✓ Retrouve chaque compte dans sa section."
-                : section === "scouting"
-                  ? "Aucun compte gardé dans le Scouting pour cette recherche."
-                  : section === "contacter"
-                    ? "Aucun compte à contacter pour cette recherche."
-                    : section === "pas"
-                      ? "Aucun compte écarté pour cette recherche."
-                      : "Aucun compte déjà au roster."}
             </div>
-          ) : (
-            <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
-              {visible.map(({ c, p }) => {
-                const d = c.data;
-                const yt = d?.platform === "youtube";
-                const inPool = pool.get(keyOf(c));
-                const sec = sectionOf(c);
-                const scoutSt: ScoutStatus | null = inPool ? statusIn(inPool) : null;
-                const ok = !!d && !c.why;
-                return (
-                  <div key={c.username} className={cn("flex flex-col gap-2.5 px-4 py-3.5 lg:flex-row lg:items-center lg:gap-4", !ok && "opacity-60")}>
-                    <div className="flex min-w-0 flex-1 items-start gap-3">
-                      <div className="relative">
-                        <Pic src={d?.picture} name={d?.name || c.username} />
-                        {ok && (
-                          <span title={`Potentiel ${p.score} / 100`} className={cn("absolute -bottom-1 -right-1.5 rounded-full border-2 border-surface px-1 text-[9px] font-bold tabular-nums leading-[14px]", p.score >= 70 ? "bg-signal text-onsignal" : p.score >= 45 ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground")}>
-                            {p.score}
+
+            {shown.length === 0 ? (
+              <div className="rounded-[16px] bg-surface px-6 py-10 text-center text-sm text-muted-foreground">Aucun profil pour ces filtres.</div>
+            ) : visible.length === 0 ? (
+              <div className="rounded-[16px] bg-surface px-6 py-10 text-center text-sm text-muted-foreground">
+                {section === "trier"
+                  ? "Tout est trié ✓ Retrouve chaque compte dans sa section."
+                  : section === "scouting"
+                    ? "Aucun compte gardé dans le Scouting pour cette recherche."
+                    : section === "contacter"
+                      ? "Aucun compte à contacter pour cette recherche."
+                      : section === "pas"
+                        ? "Aucun compte écarté pour cette recherche."
+                        : "Aucun compte déjà au roster."}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {visible.map((x) => {
+                  const { c, p } = x;
+                  const d = c.data;
+                  const yt = d?.platform === "youtube";
+                  const inPool = pool.get(keyOf(c));
+                  const sec = sectionOf(c);
+                  const scoutSt: ScoutStatus | null = inPool ? statusIn(inPool) : null;
+                  const ok = !!d && !c.why;
+                  const on = selected?.c.username === c.username;
+                  const busyRow = adding === c.username;
+                  return (
+                    <div
+                      key={c.username}
+                      ref={(el) => {
+                        if (el) rowEls.current.set(c.username, el);
+                        else rowEls.current.delete(c.username);
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={on}
+                      onClick={() => select(c.username)}
+                      onKeyDown={(e) => {
+                        if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) {
+                          e.preventDefault();
+                          select(c.username);
+                        }
+                      }}
+                      className={cn(
+                        "flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1.5 rounded-[16px] px-3 py-3 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/40 @2xl:flex-nowrap",
+                        on ? "bg-primary/[0.06] ring-[1.5px] ring-primary" : "hover:bg-rowhover",
+                        !ok && "opacity-70",
+                      )}
+                    >
+                      <div className="order-1 @2xl:order-none"><Pic src={d?.picture} name={d?.name || c.username} /></div>
+                      <div className="order-1 min-w-0 flex-1 @2xl:order-none">
+                        <div className="flex min-w-0 items-baseline gap-2">
+                          <span className="flex min-w-0 items-center gap-1 truncate text-[14px] font-bold text-foreground">
+                            {yt && <PlatformIcon platform="youtube" className="h-3.5 w-3.5 shrink-0" />}
+                            <span className="truncate">{yt ? d?.name || `@${c.username}` : `@${c.username}`}</span>
                           </span>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <a href={yt ? d?.url : igLink(c.username)} target="_blank" rel="noreferrer" className="flex items-center gap-1 truncate text-[13px] font-semibold text-foreground hover:underline">
-                            {yt && <PlatformIcon platform="youtube" className="h-3.5 w-3.5 shrink-0" />}{yt ? d?.name || `@${c.username}` : `@${c.username}`}
-                          </a>
-                          {d?.name && <span className="truncate text-[12px] text-muted-foreground">{yt ? `@${d.handle || c.username}` : d.name}</span>}
-                          {ok && p.score >= 70 && <span className="rounded-full bg-signal/10 px-2 py-0.5 text-[10px] font-semibold text-signaltext">Pépite</span>}
+                          {d?.name && <span className="min-w-0 truncate text-[13px] text-muted-foreground">{yt ? `@${d.handle || c.username}` : d.name}</span>}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
                           {c.count && last.mode !== "yt-search" ? (
-                            <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            <span className="inline-flex h-5 items-center rounded-full bg-field px-2 text-[11px] font-medium text-muted-foreground">
                               {last.mode === "similaire" ? `${c.count} marque${c.count > 1 ? "s" : ""} en commun` : last.mode === "yt-brand" ? `${c.count} vidéo${c.count > 1 ? "s" : ""} sur la marque` : `cité ${c.count}×`}
                             </span>
                           ) : null}
-                          {d?.agency && <span title={`Indice : « ${d.agency} »`} className="rounded-full bg-amber/15 px-2 py-0.5 text-[10px] font-medium text-amber">En agence ?</span>}
-                          {d?.email && (
-                            <button type="button" onClick={() => { void navigator.clipboard?.writeText(d.email ?? ""); toast("Email copié ✓"); }} className="flex items-center gap-1 rounded-full bg-signalsoft px-2 py-0.5 text-[10px] font-medium text-signaltext" title={d.emailFrom === "lien" ? "Trouvé sur son lien en bio · copier" : "Trouvé dans sa bio · copier"}>
-                              <Mail className="h-3 w-3" /> {d.email}{d.emailFrom === "lien" ? " (lien)" : ""}
-                            </button>
+                          {ok && p.score >= PEPITE && <StatusPill tone="ok" size="xs">Pépite</StatusPill>}
+                          {d?.agency && <StatusPill tone="wait" size="xs" title={`Indice : « ${d.agency} »`}>En agence ?</StatusPill>}
+                          {p.flags.map((f) => <StatusPill key={f} tone="wait" size="xs">{f}</StatusPill>)}
+                          {d?.email && <span title={d.email} className="inline-flex h-5 items-center gap-1 rounded-full bg-field px-2 text-[11px] font-medium text-muted-foreground"><Mail className="h-3 w-3" /> Email</span>}
+                          {sec !== "trier" && sec !== "roster" && (
+                            <StatusPill tone={sec === "pas" ? "closed" : sec === "contacter" ? "progress" : "ok"} size="xs">{scoutSt ? SCOUT_LABEL[scoutSt] : "Pas intéressé"}</StatusPill>
                           )}
+                          {inPool && <span title={`Dans le ${KIND_LIST[inPool.kind]}`} className="inline-flex h-5 items-center rounded-full border border-border px-2 text-[11px] font-medium text-muted-foreground">{KIND_ONE[inPool.kind]}</span>}
+                          {inPool?.last_contacted && <span className="text-[11px] text-muted-foreground">Contacté {fmtAgo(inPool.last_contacted)}</span>}
+                          {c.why && <span className="text-[11px] text-muted-foreground">{igWhyText(c.why)}</span>}
                         </div>
-                        {d?.bio ? <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">{d.bio}</div> : null}
-                        {!!d?.deals?.length && (
-                          <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-faint">
-                            A déjà bossé avec
-                            {d.deals.slice(0, 5).map((b) => yt
-                              ? <span key={b} className="rounded bg-primary/10 px-1.5 py-0.5 font-medium text-primary">{b}</span>
-                              : <a key={b} href={igLink(b)} target="_blank" rel="noreferrer" className="rounded bg-primary/10 px-1.5 py-0.5 font-medium text-primary hover:underline">@{b}</a>)}
-                          </div>
-                        )}
-                        {!!c.via?.length && (
-                          <div className="mt-1 text-[10px] text-faint">Marques en commun : {c.via.map((b) => `@${b}`).join(", ")}</div>
-                        )}
-                        {p.flags.length > 0 && <div className="mt-1 text-[10px] font-medium text-dangertext">⚠︎ {p.flags.join(" · ")}</div>}
-                        {c.why && <div className="mt-0.5 text-[11px] text-faint">{igWhyText(c.why)}</div>}
                       </div>
-                    </div>
-                    {ok && (
-                      <div className={cn("grid shrink-0 gap-2 lg:flex lg:items-center lg:gap-4", yt ? "grid-cols-4" : "grid-cols-3 sm:pl-[52px] lg:pl-0")}>
-                        <Stat label="Abonnés" value={d.followers != null ? fmtCompact(d.followers) : yt ? "masqués" : "—"} />
-                        {yt && <Stat label="Vues / vidéo" value={d.avgViews != null ? fmtCompact(d.avgViews) : "—"} />}
-                        <Stat label="Engagement" value={fmtEr(d.er)} />
-                        <Stat label="Rythme" value={fmtPerWeek(d.perWeek)} />
+                      {/* Téléphone : chiffres et actions passent sur une 2e ligne */}
+                      <div className="order-3 grid min-w-0 flex-1 grid-cols-3 gap-2 @2xl:order-none @2xl:w-[228px] @2xl:flex-none">
+                        {ok && d ? (
+                          <>
+                            <Metric label="Abonnés" value={d.followers != null ? fmtCompact(d.followers) : null} title={yt && d.followers == null ? "Abonnés masqués par la chaîne" : undefined} />
+                            {yt ? <Metric label="Vues / vidéo" value={d.avgViews != null ? fmtCompact(d.avgViews) : null} /> : <Metric label="Engagement" value={d.er != null ? fmtEr(d.er) : null} />}
+                            <Metric label="Rythme" value={perWeekParts(d.perWeek)} unit="/sem" />
+                          </>
+                        ) : null}
                       </div>
-                    )}
-                    <div className="flex shrink-0 flex-wrap items-center gap-2 pl-[52px] lg:pl-0">
-                      {inPool?.last_contacted && <span className="text-[10px] text-faint">Contacté {fmtAgo(inPool.last_contacted)}</span>}
-                      {sec === "roster" ? (
-                        <span className="rounded-full bg-panel px-2.5 py-1 text-[11px] font-medium text-muted-foreground">Au roster</span>
-                      ) : sec === "trier" ? (
-                        /* Tri en un clic : garder, à contacter, ou pas intéressé. */
-                        <>
-                          <button type="button" onClick={() => void triage(c, "scouting")} disabled={adding === c.username} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
-                            {adding === c.username ? <Spin size={14} /> : <Bookmark className="h-3.5 w-3.5" />} Scouting
+                      <div className="order-2 @2xl:order-none">{ok ? <ScoreRing score={p.score} /> : <span className="block w-9" />}</div>
+                      <div className="order-4 flex shrink-0 items-center gap-1 @2xl:order-none">
+                        {sec === "roster" ? (
+                          <span className="inline-flex h-8 items-center rounded-full bg-field px-3 text-[12px] font-medium text-muted-foreground">Au roster</span>
+                        ) : sec === "trier" ? (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); act(x, "scouting"); }}
+                            disabled={busyRow}
+                            className={cn("flex h-8 items-center gap-1 rounded-full px-3 text-[12px] font-semibold transition-colors disabled:opacity-50", on ? "bg-primary text-primary-foreground hover:opacity-90" : "bg-field text-foreground hover:bg-rowhover")}
+                          >
+                            {busyRow ? <Spin size={14} /> : <Plus className="h-3.5 w-3.5" />} Scouting
                           </button>
-                          <button type="button" onClick={() => void triage(c, "contacter")} disabled={adding === c.username} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
-                            <PhoneOutgoing className="h-3.5 w-3.5" /> À contacter
-                          </button>
-                          <button type="button" onClick={() => void triage(c, "pas")} disabled={adding === c.username} className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
-                            <X className="h-3.5 w-3.5" /> Pas intéressé
-                          </button>
-                        </>
-                      ) : (
-                        /* Déjà trié : son statut, et de quoi le changer de section. */
-                        <>
-                          <span className={cn("flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium", sec === "pas" ? "bg-panel text-muted-foreground" : sec === "contacter" ? "bg-primary/10 text-primary" : "bg-signal/10 text-signaltext")}>
-                            {sec === "pas" ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
-                            {scoutSt ? SCOUT_LABEL[scoutSt] : "Pas intéressé"}
-                          </span>
-                          {/* De quel scouting il s'agit : créateurs ou sportifs. */}
-                          {inPool && (
-                            <span title={`Dans le ${KIND_LIST[inPool.kind]}`} className="rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                              {KIND_ONE[inPool.kind]}
-                            </span>
-                          )}
-                          <Picker size="xs" ariaLabel={`Changer de section ${c.username}`} className="w-[130px]" pill placeholder="Déplacer…" value="" disabled={adding === c.username}
-                            onChange={(v) => {
-                              if (v === "trier") void untriage(c);
-                              else if (v === "scouting" || v === "contacter" || v === "pas") void triage(c, v);
-                            }}
-                            options={[
-                              ...(sec !== "scouting" ? [{ value: "scouting", label: "Scouting" }] : []),
-                              ...(sec !== "contacter" ? [{ value: "contacter", label: "À contacter" }] : []),
-                              ...(sec !== "pas" ? [{ value: "pas", label: "Pas intéressé" }] : []),
-                              ...(sec === "pas" && !inPool ? [{ value: "trier", label: "Remettre à trier" }] : []),
-                            ]} />
-                        </>
-                      )}
-                      {sec !== "roster" && sec !== "pas" && (
-                        <button type="button" onClick={() => setContact(c)} title="Écrire un mail ou un message Instagram" className="flex items-center gap-1 rounded-full bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
-                          <Send className="h-3.5 w-3.5" /> Écrire
-                        </button>
-                      )}
+                        ) : null}
+                        <ActionMenu items={menuFor(c)} buttonClassName="h-8 w-8" />
+                      </div>
+                      <div aria-hidden className="order-2 h-0 basis-full @2xl:hidden" />
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </>
-      )}
-      {!last && !busy && (
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-          {[
-            ["1", "Choisis un point de départ", "Une marque de ta niche, un créateur que tu aimes, ou une liste de @."],
-            ["2", "Filtre", "Abonnés, engagement, ville dans la bio, avec email, sans agence. Tri par score « Potentiel »."],
-            ["3", "Trie et contacte", "Range chaque compte : Scouting, À contacter ou Pas intéressé. Écris-lui depuis ta boîte Gmail ou Instagram."],
-          ].map(([n, t, dsc]) => (
-            <div key={n} className="rounded-2xl border border-dashed border-border px-4 py-4">
-              <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
-                <span className="grid h-5 w-5 place-items-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">{n}</span>
-                {t}
+                  );
+                })}
               </div>
-              <div className="mt-1 text-[12px] leading-snug text-muted-foreground">{dsc}</div>
-            </div>
-          ))}
-        </div>
+            )}
+
+            {/* Raccourcis clavier (grand écran) */}
+            {wide && visible.length > 0 && (
+              <div className="sticky bottom-0 z-10 mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border bg-background/90 px-1 py-3 text-[12px] text-muted-foreground backdrop-blur">
+                <span className="flex items-center gap-1.5"><Kbd>J</Kbd> Suivant</span>
+                <span className="flex items-center gap-1.5"><Kbd>K</Kbd> Précédent</span>
+                <span className="flex items-center gap-1.5"><Kbd>S</Kbd> Scouting</span>
+                <span className="flex items-center gap-1.5"><Kbd>C</Kbd> Contacter</span>
+                <span className="flex items-center gap-1.5"><Kbd>X</Kbd> Écarter</span>
+                <button type="button" onClick={onGuide} className="ml-auto flex items-center gap-1.5 hover:text-foreground"><Kbd>?</Kbd> Mode d'emploi</button>
+              </div>
+            )}
+          </>
+        )}
+        {!last && !busy && (
+          <div className="mt-5 grid grid-cols-1 gap-2.5 @xl:grid-cols-3">
+            {[
+              ["1", "Choisis un point de départ", "Une marque de ta niche, un créateur que tu aimes, ou une liste de @."],
+              ["2", "Filtre", "Abonnés, engagement, ville dans la bio, avec email, sans agence. Tri par score « Potentiel »."],
+              ["3", "Trie et contacte", "Range chaque compte : Scouting, À contacter ou Pas intéressé. Écris-lui depuis ta boîte Gmail ou Instagram."],
+            ].map(([n, t, dsc]) => (
+              <div key={n} className="rounded-[20px] bg-surface p-5">
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-foreground text-[12px] font-bold text-background">{n}</span>
+                <div className="mt-3 text-[15px] font-bold text-foreground">{t}</div>
+                <div className="mt-1 text-[13px] leading-snug text-muted-foreground">{dsc}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Colonne de droite : le profil sélectionné (grand écran) */}
+      {hasInspector && (
+        <aside aria-label="Profil sélectionné" className="sticky top-0 flex max-h-[calc(100dvh-8rem)] flex-col rounded-[22px] bg-surface p-5">
+          {selected ? (
+            renderInspector(selected)
+          ) : (
+            <div className="grid flex-1 place-items-center py-16 text-center text-[13px] text-muted-foreground">Choisis un profil dans la liste pour voir son détail.</div>
+          )}
+        </aside>
+      )}
+
+      {/* Téléphone et tablette : la même fiche, en feuille du bas */}
+      {!wide && sheet && selected && (
+        <Overlay className="fixed inset-0 z-[65] flex items-center justify-center bg-black/40 p-4" onClose={() => setSheet(false)} label="Profil sélectionné">
+          <div role="dialog" aria-label="Profil sélectionné" className="flex max-h-[85dvh] w-full max-w-md flex-col rounded-[22px] bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            {renderInspector(selected)}
+          </div>
+        </Overlay>
       )}
 
       {contact && (
@@ -1023,7 +1406,7 @@ function KindChoice({ who, suggested, sport, onPick, onClose }: { who: string; s
   ];
   return (
     <Overlay className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClose={onClose} label={`Ajouter ${who} au scouting`}>
-      <div role="dialog" aria-label={`Ajouter ${who} au scouting`} className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-label={`Ajouter ${who} au scouting`} className="w-full max-w-sm rounded-[22px] bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-1 flex items-start justify-between gap-3">
           <div className="min-w-0 text-sm font-bold text-foreground">
             Ajouter <span className="break-all">{who}</span> au scouting
@@ -1102,7 +1485,7 @@ function Excerpt({ text, brand, name }: { text: string; brand: string; name?: st
     </>
   );
 }
-/** Un même texte posté plusieurs fois par la même créatrice : une seule ligne. */
+/** Un même texte posté plusieurs fois par le même créateur : une seule ligne. */
 function dedupe(posts: RadarPost[]): (RadarPost & { n: number })[] {
   const out = new Map<string, RadarPost & { n: number }>();
   for (const p of [...posts].sort((a, b) => b.at.localeCompare(a.at))) {
@@ -1120,7 +1503,7 @@ const PERIODS = [
   { value: "all", label: "Tout" },
 ];
 
-/** Radar à marques : Instagram (posts des créatrices), TikTok (partenariats payés déclarés en France) ou YouTube (vidéos sponsorisées). */
+/** Radar à marques : Instagram (posts des créateurs), TikTok (partenariats payés déclarés en France) ou YouTube (vidéos sponsorisées). */
 function RadarTool() {
   const [pf, setPf] = useState<"instagram" | "tiktok" | "youtube">(() => {
     try {
@@ -1197,7 +1580,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
       }
       const list = (r.data as RadarRow[] | null) ?? [];
       setRows(list);
-      // Profils des marques et des créatrices citées (abonnés, bio, « est-ce une marque ? »).
+      // Profils des marques et des créateurs cités (abonnés, bio, « est-ce une marque ? »).
       const users = [...new Set(list.flatMap((x) => [x.brand, ...x.posts.map((p) => p.c)]))];
       const prof: Record<string, Prof & { why?: string | null }> = {};
       for (let i = 0; i < users.length; i += 150) {
@@ -1360,7 +1743,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
   if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement du radar…</AnimatedBadge>;
   if (missing) {
     return (
-      <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/[0.04] px-6 py-10 text-center text-sm text-muted-foreground">
+      <div className="rounded-[22px] bg-surface px-6 py-10 text-center text-sm text-muted-foreground">
         Cette partie n'est pas encore activée : une mise à jour est en attente (voir Réglages › Diagnostic).
       </div>
     );
@@ -1387,7 +1770,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
     toast(`@${handle} ajouté au Scouting ✓`);
   };
   const srcTag = (p: RadarPost) =>
-    rosterNames[p.c] || p.roster ? { t: "Roster", c: "bg-foreground/[0.07] text-foreground" } : poolUsers.has(p.c) ? { t: "Scouting", c: "bg-indigo/10 text-indigo" } : { t: "Hors agence", c: "bg-panel text-faint" };
+    rosterNames[p.c] || p.roster ? { t: "Roster", c: "bg-foreground/[0.07] text-foreground" } : poolUsers.has(p.c) ? { t: "Scouting", c: TONE_SOFT.info } : { t: "Hors agence", c: "bg-surface text-muted-foreground" };
 
   return (
     <RadarFrame
@@ -1434,7 +1817,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
             <p>Des créateurs que tu ne connais pas encore : ceux trouvés par le Sourcing, et ceux que citent les marques du radar. Le radar lit leurs posts petit à petit et ajoute leurs marques.</p>
             <p>Double intérêt : de nouvelles marques à démarcher, et de nouveaux créateurs à recruter (bouton « + Scouting » sur leurs posts).</p>
           </HelpTip>
-          <button type="button" onClick={() => setFiltersOpen((o) => !o)} className={cn("flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors", filtersOpen || activeFilters ? "border-primary text-primary" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+          <button type="button" onClick={() => setFiltersOpen((o) => !o)} className={cn("flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors", filtersOpen || activeFilters ? "border-primary/40 bg-primary/[0.08] text-primary" : "border-border text-foreground hover:bg-rowhover")}>
             <SlidersHorizontal className="h-3.5 w-3.5" /> Plus de filtres{activeFilters ? ` · ${activeFilters}` : ""}
           </button>
         </>
@@ -1448,7 +1831,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
       }
     >
       {filtersOpen && (
-        <div className="mb-3 flex flex-wrap items-end gap-2 rounded-2xl border border-border bg-surface p-3">
+        <div className="mb-3 flex flex-wrap items-end gap-2 rounded-[16px] bg-surface p-3">
 
         <Field label="# ou mots dans le post" className="min-w-[180px] flex-1" help={<><p>Ne garde que les posts qui contiennent TOUS ces mots ou hashtags.</p><p>Exemple : « #running #ad » = les partenariats payés dans le running. « lyon » = les posts qui parlent de Lyon.</p><p>L'app lit le texte sous le post : les # mis en commentaire ne sont pas visibles.</p></>}><input aria-label="Hashtags ou mots" value={words} onChange={(e) => setWords(e.target.value)} placeholder="#running #ad" className={IN} /></Field>
         <label className="flex flex-col gap-1 text-[10px] font-medium text-faint">Période
@@ -1466,14 +1849,14 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
 
       {/* Vérification en cours : une barre, une phrase, un bouton */}
       {pendingNow > 0 && (
-        <div className="mb-3 flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-3 flex flex-col gap-3 rounded-[22px] bg-surface p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline justify-between gap-3 text-[13px]">
               <span className="font-semibold text-foreground">Vérification des marques</span>
               <span className="tabular-nums text-muted-foreground"><span className="font-semibold text-foreground">{prog.verified}</span> sur {prog.total}</span>
             </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-panel">
-              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.max(2, Math.round((prog.verified / Math.max(1, prog.total)) * 100))}%` }} />
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-field">
+              <div className="h-full rounded-full bg-primary transition-all motion-reduce:transition-none" style={{ width: `${Math.max(2, Math.round((prog.verified / Math.max(1, prog.total)) * 100))}%` }} />
             </div>
             <p className="mt-2 text-[12px] leading-snug text-muted-foreground">
               L'app vérifie auprès de Meta que chaque nom trouvé dans les posts est bien une marque. Ça avance tout seul toutes les 2 heures (Meta limite les demandes par heure).
@@ -1486,7 +1869,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
       )}
 
       {view.length === 0 ? (
-        <div className="rounded-2xl bg-surface px-6 py-10 text-center text-[13px] text-muted-foreground">
+        <div className="rounded-[22px] bg-surface px-6 py-10 text-center text-[13px] text-muted-foreground">
           {rows.length === 0
             ? "Le radar n'a encore rien lu. Il passe toutes les 2 heures ; tu peux aussi « Lancer le radar » maintenant."
             : pendingNow > 0
@@ -1496,11 +1879,11 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
                 : kind === "chauds" ? "Aucune marque citée spontanément par tes créateurs pour l'instant." : "Aucune marque avec ces réglages."}
         </div>
       ) : (
-        <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+        <div className="flex flex-col gap-1 rounded-[22px] bg-surface p-1.5">
           {view.map(({ row, posts, types, warm, creators, lastAt, known, prof }) => {
             const open = openRows.has(row.brand);
             const list = dedupe(posts);
-            const verdict = types.paye || types.offert ? { t: "Client potentiel", c: "bg-primary/10 text-primary" } : warm ? { t: "Contact chaud", c: "bg-signal/10 text-signaltext" } : { t: "Citée", c: "bg-panel text-muted-foreground" };
+            const verdict = types.paye || types.offert ? { t: "Client potentiel", c: "bg-primary/10 text-primary" } : warm ? { t: "Contact chaud", c: TONE_SOFT.ok } : { t: "Citée", c: TONE_SOFT.closed };
             const unsure = !prof?.isBrand;
             const summary = [
               types.paye ? `${types.paye} payé${types.paye > 1 ? "s" : ""}` : "",
@@ -1508,7 +1891,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
               warm ? `${warm} spontané${warm > 1 ? "s" : ""} chez tes créateurs` : "",
             ].filter(Boolean).join(" · ");
             return (
-              <div key={row.brand} className="px-4 py-3.5">
+              <div key={row.brand} className="rounded-[16px] px-3 py-3 transition-colors hover:bg-rowhover">
                 <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:gap-4">
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     <Pic src={prof?.picture} name={prof?.name || row.brand} size={42} square />
@@ -1516,8 +1899,8 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="truncate text-[14px] font-semibold text-foreground">{prof?.name || `@${row.brand}`}</span>
                         <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", verdict.c)}>{verdict.t}</span>
-                        {unsure && <span title="L'app n'est pas sûre que ce compte soit une marque : vérifie avant d'écrire" className="rounded-full bg-amber/15 px-2 py-0.5 text-[10px] font-semibold text-amber">À confirmer</span>}
-                        {known && <span className="rounded-full bg-panel px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{dmHandles.has(row.brand) ? "Déjà en DM" : "Déjà en contact"}</span>}
+                        {unsure && <span title="L'app n'est pas sûre que ce compte soit une marque : vérifie avant d'écrire" className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", TONE_SOFT.wait)}>À confirmer</span>}
+                        {known && <span className="rounded-full bg-field px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{dmHandles.has(row.brand) ? "Déjà en DM" : "Déjà en contact"}</span>}
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
                         <a href={igLink(row.brand)} target="_blank" rel="noreferrer" className="text-primary hover:underline">@{row.brand}</a>
@@ -1532,7 +1915,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2 pl-[54px] lg:pl-0">
-                    <button type="button" onClick={() => toggleRow(row.brand)} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground" aria-expanded={open}>
+                    <button type="button" onClick={() => toggleRow(row.brand)} className="flex items-center gap-1 rounded-full bg-field px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover" aria-expanded={open}>
                       {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />} {open ? "Masquer les preuves" : `Voir les preuves (${list.length})`}
                     </button>
                     {row.status !== "pipeline" ? (
@@ -1540,9 +1923,9 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
                         <Plus className="h-3.5 w-3.5" /> Pipeline
                       </button>
                     ) : (
-                      <span className="flex items-center gap-1 rounded-lg bg-signal/10 px-2.5 py-1.5 text-[11px] font-medium text-signaltext"><Check className="h-3.5 w-3.5" /> Au Pipeline</span>
+                      <span className={cn("flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-medium", TONE_SOFT.ok)}><Check className="h-3.5 w-3.5" /> Au Pipeline</span>
                     )}
-                    <button type="button" onClick={() => setMailFor({ row, post: posts.find((p) => p.roster && postType(p) === "spontane") ?? posts[0] })} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover">
+                    <button type="button" onClick={() => setMailFor({ row, post: posts.find((p) => p.roster && postType(p) === "spontane") ?? posts[0] })} className="flex items-center gap-1 rounded-full bg-field px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover">
                       <Send className="h-3.5 w-3.5" /> Contacter
                     </button>
                     {row.status === "nouveau" ? (
@@ -1562,7 +1945,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
                       const tp = TYPE_META[postType(p)];
                       const src = srcTag(p);
                       return (
-                        <div key={p.url || `${p.c}${p.at}`} className="rounded-lg bg-panel/60 px-3 py-2">
+                        <div key={p.url || `${p.c}${p.at}`} className="rounded-[12px] bg-panel px-3 py-2">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
                             <a href={igLink(p.c)} target="_blank" rel="noreferrer" className="font-semibold text-foreground hover:underline">@{p.c}</a>
                             <span className={cn("rounded px-1.5 text-[9px] font-semibold tracking-wide", src.c)}>{src.t}</span>
