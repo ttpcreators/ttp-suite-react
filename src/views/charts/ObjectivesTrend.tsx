@@ -23,13 +23,13 @@ export default function ObjectivesTrend({
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.6} vertical={false} />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickMargin={8} interval="preserveStartEnd" minTickGap={14} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "var(--faint)" }} tickMargin={8} interval="preserveStartEnd" minTickGap={14} />
         <YAxis
           domain={[0, 100]}
           ticks={[0, 25, 50, 75, 100]}
           tickLine={false}
           axisLine={false}
-          tick={{ fontSize: 10, fill: "#94a3b8" }}
+          tick={{ fontSize: 10, fill: "var(--faint)" }}
           tickFormatter={(v) => `${v}%`}
           width={44}
         />

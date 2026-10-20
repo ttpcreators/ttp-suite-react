@@ -666,7 +666,7 @@ export function Mails() {
       out.push({ key: "suivi", label: m.label, cls: m.badge, title: `Suivi de ${titleCase(cm.creator)} : ${m.label}` });
     }
     const r = relanceDays(t);
-    if (r != null) out.push({ key: "relance", label: `Relance J+${r}`, cls: "bg-danger/10 text-dangertext", title: `Dernier message envoyé par l'agence il y a ${r} jours, sans réponse depuis` });
+    if (r != null) out.push({ key: "relance", label: `Relance J+${r}`, cls: "bg-wait-soft text-wait", title: `Dernier message envoyé par l'agence il y a ${r} jours, sans réponse depuis` });
     return out;
   };
   // Dossier de couleur choisi dans la colonne de gauche : filtre la liste sur un créateur.

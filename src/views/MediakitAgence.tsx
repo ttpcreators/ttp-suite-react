@@ -402,7 +402,7 @@ export function AgencyTab() {
                     <button
                       type="button"
                       onClick={() => setPillars(kit.pillars.filter((_, j) => j !== i))}
-                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive"
                       aria-label="Supprimer le pilier"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -452,7 +452,7 @@ export function AgencyTab() {
                     <button
                       type="button"
                       onClick={() => setConcepts(kit.concepts.filter((_, j) => j !== i))}
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive"
                       aria-label="Supprimer le concept"
                     >
                       <Trash2 className="h-4 w-4" />

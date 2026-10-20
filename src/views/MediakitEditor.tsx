@@ -143,7 +143,7 @@ const CARD = "rounded-2xl border border-border bg-surface p-5";
 // Listes éditables : UN cadre, lignes séparées par des filets, champs sans bordure.
 const LIST = "overflow-hidden rounded-xl border border-border divide-y divide-border";
 const BARE = "min-w-0 flex-1 bg-transparent px-3 py-2 text-[13px] text-foreground outline-none transition-colors placeholder:text-faint hover:bg-rowhover/50 focus:bg-rowhover/70";
-const DEL = "grid h-8 w-8 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]";
+const DEL = "grid h-8 w-8 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-rowhover hover:text-destructive";
 const ADD = "mt-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground";
 
 /** Titre de section façon Aperçu : icône grise + intitulé, aide et action optionnelles. */
@@ -811,7 +811,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                   <button
                     type="button"
                     onClick={() => setBrands((mk.brands ?? []).filter((_, j) => j !== i))}
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -1227,7 +1227,7 @@ function PlatformEditor({
         <button
           type="button"
           onClick={onRemove}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive"
         >
           <Trash2 className="h-4 w-4" />
         </button>

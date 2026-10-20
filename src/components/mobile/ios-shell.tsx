@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 
 /*
  * Coque « app iPhone » (mode iPhone, téléphone seulement) :
- *   - IosTabBar  : barre d'onglets en bas (icône + libellé), translucide ;
+ *   - IosTabBar  : barre d'onglets en bas (icône + libellé), capsule flottante en verre ;
  *   - IosNavBar  : barre de titre du haut, transparente en haut de page puis
  *                  floutée avec le titre centré quand le grand titre a défilé ;
  *   - IosGroup / IosRow / IosSwitch : listes groupées façon Réglages d'iOS.
@@ -20,8 +20,15 @@ export function IosTabBar({ items, active, onSelect, onReselect }: {
 }) {
   const tr = useT();
   return (
-    <nav aria-label={tr("Navigation principale")} className="ios-chrome ios-bar fixed inset-x-0 bottom-0 z-50 border-t border-border/70 md:hidden">
-      <div className="grid h-[50px]" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
+    // Capsule flottante (TTP Suite 2.0) : verre dépoli, onglet actif dans une pastille.
+    <nav
+      aria-label={tr("Navigation principale")}
+      className="ios-chrome fixed inset-x-0 bottom-0 z-50 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
+    >
+      <div
+        className="ios-tabbar grid h-[62px] rounded-full p-1.5"
+        style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
+      >
         {items.map((t) => {
           const on = t.id === active;
           return (
@@ -30,22 +37,24 @@ export function IosTabBar({ items, active, onSelect, onReselect }: {
               type="button"
               aria-current={on ? "page" : undefined}
               onClick={() => (on ? onReselect?.(t.id) : onSelect(t.id))}
-              className={cn("relative flex min-w-0 flex-col items-center justify-center gap-[3px] pt-1", on ? "text-foreground" : "text-faint")}
+              className={cn(
+                "relative flex min-w-0 flex-col items-center justify-center gap-[3px] rounded-full transition-colors duration-[var(--dur-press)]",
+                on ? "bg-field text-primary" : "text-foreground",
+              )}
             >
               <span className="relative">
-                <t.icon className="h-[23px] w-[23px]" strokeWidth={on ? 2.2 : 1.7} />
+                <t.icon className="h-[22px] w-[22px]" strokeWidth={on ? 2.1 : 1.8} />
                 {t.badge ? (
-                  <span className="absolute -right-2.5 -top-1 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold tabular-nums text-primary-foreground">
+                  <span className="absolute -right-2.5 -top-1.5 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-badge px-1 text-[10px] font-semibold tabular-nums text-white">
                     {t.badge > 99 ? "99+" : t.badge}
                   </span>
                 ) : null}
               </span>
-              <span className={cn("max-w-full truncate px-0.5 text-[10px] leading-none", on ? "font-semibold" : "font-medium")}>{t.label}</span>
+              <span className="max-w-full truncate px-0.5 text-[10.5px] font-semibold leading-none">{t.label}</span>
             </button>
           );
         })}
       </div>
-      <div className="h-[env(safe-area-inset-bottom)]" />
     </nav>
   );
 }

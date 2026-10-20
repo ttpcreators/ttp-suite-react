@@ -270,7 +270,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
                           placeholder={`Pilier ${i + 1} (ex : routine sport, coulisses…)`}
                           className={IN}
                         />
-                        <button type="button" onClick={() => set({ piliers: cur.piliers.filter((_, j) => j !== i) })} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                        <button type="button" onClick={() => set({ piliers: cur.piliers.filter((_, j) => j !== i) })} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
@@ -467,7 +467,7 @@ export function MonthlyTracking({ name }: { name: string }) {
             {sorted.map((m) => {
               const realTotal = cadenceTotal(m.cadence);
               const ratio = recoTotal > 0 ? realTotal / recoTotal : 1;
-              const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-signal/10 text-signaltext" : ratio >= 0.7 ? "bg-foreground/[0.06] text-amber" : "bg-danger/10 text-dangertext";
+              const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-ok-soft text-ok" : "bg-wait-soft text-wait";
               return (
                 <div key={m.month} className="rounded-xl border border-border bg-panel/40 p-4">
                   <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -515,7 +515,7 @@ export function MonthlyTracking({ name }: { name: string }) {
           {sorted.map((m) => {
             const realTotal = cadenceTotal(m.cadence);
             const ratio = recoTotal > 0 ? realTotal / recoTotal : 1;
-            const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-signal/10 text-signaltext" : ratio >= 0.7 ? "bg-foreground/[0.06] text-amber" : "bg-danger/10 text-dangertext";
+            const badge = recoTotal === 0 ? "bg-panel text-faint" : ratio >= 1 ? "bg-ok-soft text-ok" : "bg-wait-soft text-wait";
             return (
               <div key={m.month} className="rounded-xl border border-border bg-panel/40 p-3.5">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -530,7 +530,7 @@ export function MonthlyTracking({ name }: { name: string }) {
                       </span>
                     )}
                   </div>
-                  <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.month !== m.month))} className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                  <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.month !== m.month))} className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -736,7 +736,7 @@ export function JournalCard({ name }: { name: string }) {
                 <Picker size="xs" ariaLabel="Type d'échange" className="min-w-[140px]" value={e.type} onChange={(v) => edit(e.id, { type: v as ExchangeType })}
                   options={(Object.keys(EXCHANGE_META) as ExchangeType[]).map((t) => ({ value: t, label: EXCHANGE_META[t].label }))} />
                 <div className="flex-1" />
-                <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.id !== e.id))} className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                <button type="button" onClick={() => setLocal((l) => (l ?? []).filter((x) => x.id !== e.id))} className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -796,7 +796,7 @@ export function CreatorAlerts({ name }: { name: string }) {
       </span>
       {alerts.length > 0 && <span className="text-faint">·</span>}
       {alerts.map((a, i) => (
-        <span key={i} className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold", a.level === "danger" ? "bg-danger/10 text-dangertext" : "bg-foreground/[0.06] text-amber")}>
+        <span key={i} className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold", a.level === "danger" ? "bg-wait-soft text-wait" : "bg-info-soft text-info")}>
           <AlertTriangle className="h-3 w-3" /> {a.label}
         </span>
       ))}
@@ -871,7 +871,7 @@ export function RosterTracking({ onOpen }: { onOpen?: (name: string) => void }) 
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {r.alerts.map((a, i) => (
-                          <span key={i} className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", a.level === "danger" ? "bg-danger/10 text-dangertext" : "bg-muted text-muted-foreground")}>
+                          <span key={i} className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", a.level === "danger" ? "bg-wait-soft text-wait" : "bg-muted text-muted-foreground")}>
                             {a.label}
                           </span>
                         ))}

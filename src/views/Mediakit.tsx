@@ -419,7 +419,7 @@ function MediakitFiles() {
 
       {/* Liste */}
       {archivesError ? (
-        <div className="rounded-2xl border border-border bg-surface px-5 py-6 text-[13px] text-[#E5484D]">
+        <div className="rounded-2xl border border-border bg-surface px-5 py-6 text-[13px] text-destructive">
           Impossible de charger les media kits. Vérifie ta connexion puis recharge la page.
         </div>
       ) : archives === null ? (
@@ -468,7 +468,7 @@ function MediakitFiles() {
                   type="button"
                   onClick={() => setDel(row)}
                   title="Supprimer"
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -531,7 +531,7 @@ function MediakitFiles() {
                 <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Destinataires</div>
                 <RecipientPicker value={sendRecipients} onChange={setSendRecipients} contacts={contacts} />
                 {contactsError && (
-                  <p className="mt-1.5 text-[11px] text-[#E5484D]">Contacts indisponibles (erreur de chargement). Tu peux saisir les adresses à la main.</p>
+                  <p className="mt-1.5 text-[11px] text-destructive">Contacts indisponibles (erreur de chargement). Tu peux saisir les adresses à la main.</p>
                 )}
               </div>
 
@@ -676,7 +676,7 @@ function MediakitFiles() {
                       type="button"
                       onClick={() => setTplDelete(t)}
                       title="Supprimer"
-                      className="grid h-8 w-8 place-items-center rounded-full text-faint hover:bg-rowhover hover:text-[#E5484D]"
+                      className="grid h-8 w-8 place-items-center rounded-full text-faint hover:bg-rowhover hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

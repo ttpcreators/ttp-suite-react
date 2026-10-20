@@ -106,11 +106,11 @@ export function CredentialVault() {
                   <input value={r.label} onChange={(e) => edit(r.id, { label: e.target.value })} placeholder="Créateur / libellé (ex : Carla — boîte pro)" className={CIN + " font-semibold"} />
                   {confirmDel === r.id ? (
                     <div className="flex shrink-0 items-center gap-1">
-                      <button type="button" onClick={() => del(r.id)} className="rounded-full bg-[#E5484D] px-2.5 py-2 text-[11px] font-semibold text-white">Supprimer</button>
+                      <button type="button" onClick={() => del(r.id)} className="rounded-full bg-destructive px-2.5 py-2 text-[11px] font-semibold text-white">Supprimer</button>
                       <button type="button" onClick={() => setConfirmDel(null)} className="rounded-full border border-border px-2.5 py-2 text-[11px] font-semibold text-muted-foreground hover:bg-rowhover">Non</button>
                     </div>
                   ) : (
-                    <button type="button" onClick={() => setConfirmDel(r.id)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]">
+                    <button type="button" onClick={() => setConfirmDel(r.id)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}

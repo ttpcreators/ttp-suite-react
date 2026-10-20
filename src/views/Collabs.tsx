@@ -43,10 +43,10 @@ type Row = {
 type StepRow = { collab_id: string; step: number; reached_at: string };
 
 const STATUS_OPTS = [
-  { value: "active", label: "En cours", dot: "bg-cyan" },
-  { value: "gagnee", label: "Gagnée", dot: "bg-signal" },
-  { value: "perdue", label: "Perdue", dot: "bg-danger" },
-  { value: "archivee", label: "Archivée", dot: "bg-muted-foreground" },
+  { value: "active", label: "En cours", dot: "bg-progress" },
+  { value: "gagnee", label: "Gagnée", dot: "bg-ok" },
+  { value: "perdue", label: "Perdue", dot: "bg-closed" },
+  { value: "archivee", label: "Archivée", dot: "bg-closed" },
 ];
 /** Une collab stagne si elle est restée trop longtemps sur l'étape courante. */
 const STALE_DAYS = 7;

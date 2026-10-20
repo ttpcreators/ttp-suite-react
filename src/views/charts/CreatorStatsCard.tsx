@@ -15,10 +15,10 @@ type Entry = { date: string; platform?: string; followers?: string; er?: string;
 type MetricKey = "vues" | "abonnes" | "engagement" | "interactions";
 
 const METRICS: { key: MetricKey; label: string; color: string; pct?: boolean }[] = [
-  { key: "vues", label: "Vues (30 j)", color: "#8b5cf6" },
+  { key: "vues", label: "Vues (30 j)", color: "var(--chart-5)" },
   { key: "abonnes", label: "Abonnés", color: "var(--primary)" },
-  { key: "engagement", label: "Engagement", color: "#16a34a", pct: true },
-  { key: "interactions", label: "Interactions", color: "#f59e0b" },
+  { key: "engagement", label: "Engagement", color: "var(--chart-3)", pct: true },
+  { key: "interactions", label: "Interactions", color: "var(--chart-4)" },
 ];
 
 const num = (v?: string) => {
@@ -129,8 +129,8 @@ export default function CreatorStatsCard({ entries }: { entries: Entry[] }) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={points} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.6} vertical={false} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickMargin={8} interval="preserveStartEnd" minTickGap={16} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} width={40} tickFormatter={(v) => fmtVal(Number(v), meta.pct, lang)} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "var(--faint)" }} tickMargin={8} interval="preserveStartEnd" minTickGap={16} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "var(--faint)" }} width={40} tickFormatter={(v) => fmtVal(Number(v), meta.pct, lang)} />
                 <Tooltip
                   cursor={{ fill: "var(--color-border)", fillOpacity: 0.25 }}
                   contentStyle={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,.06)" }}

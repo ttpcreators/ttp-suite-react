@@ -87,8 +87,8 @@ type Todo = { id: string; text: string; descr: string | null; due: string | null
 let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
 // Priorité : barre d'accent (bord gauche de la carte) + pilule.
-const PRIO_ACCENT: Record<string, string> = { haute: "bg-danger", moyenne: "bg-foreground/50", basse: "bg-foreground/30" };
-const PRIO_PILL: Record<string, string> = { haute: "bg-danger/10 text-dangertext", moyenne: "bg-muted text-muted-foreground", basse: "border border-border text-muted-foreground" };
+const PRIO_ACCENT: Record<string, string> = { haute: "bg-wait", moyenne: "bg-foreground/50", basse: "bg-foreground/30" };
+const PRIO_PILL: Record<string, string> = { haute: "bg-wait-soft text-wait", moyenne: "bg-muted text-muted-foreground", basse: "border border-border text-muted-foreground" };
 const prioAccent = (p: string | null) => PRIO_ACCENT[p ?? "moyenne"] ?? PRIO_ACCENT.moyenne;
 const prioPill = (p: string | null) => PRIO_PILL[p ?? "moyenne"] ?? PRIO_PILL.moyenne;
 type Idea = { id: string; text: string; status: string | null; sort_order?: number; subtasks?: Subtask[] | null };
@@ -225,11 +225,11 @@ function frTime(s: string): number {
 const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
 // Libellé + couleur de marque par plateforme (glass abonnés par réseau).
 const FOLLOWER_PLAT: Record<string, { label: string; color: string }> = {
-  instagram: { label: "Instagram", color: "#E1306C" },
-  tiktok: { label: "TikTok", color: "#0ea5e9" },
-  youtube: { label: "YouTube", color: "#ef4444" },
-  x: { label: "X", color: "#64748b" },
-  snapchat: { label: "Snapchat", color: "#f59e0b" },
+  instagram: { label: "Instagram", color: "var(--brand-instagram)" },
+  tiktok: { label: "TikTok", color: "var(--brand-tiktok)" },
+  youtube: { label: "YouTube", color: "var(--brand-youtube)" },
+  x: { label: "X", color: "var(--brand-x)" },
+  snapchat: { label: "Snapchat", color: "var(--brand-snapchat)" },
 };
 const CreatorStatsCard = lazy(() => import("./charts/CreatorStatsCard"));
 const GlobeStickers = lazy(() => import("@/components/ui/cobe-globe-stickers"));
@@ -300,17 +300,17 @@ function briefKey(status: string): string {
 }
 
 const BRIEF_STATUS: StatusOption[] = [
-  { value: "attente", label: "En attente", dot: "bg-amber" },
-  { value: "valider", label: "À valider", dot: "bg-primary" },
-  { value: "cours", label: "En cours", dot: "bg-cyan" },
-  { value: "terminé", label: "Terminé", dot: "bg-signal" },
+  { value: "attente", label: "En attente", dot: "bg-wait" },
+  { value: "valider", label: "À valider", dot: "bg-info" },
+  { value: "cours", label: "En cours", dot: "bg-progress" },
+  { value: "terminé", label: "Terminé", dot: "bg-ok" },
 ];
 // Statuts d'idée — identiques à l'espace agence (page Idées).
 const IDEA_STATUS: StatusOption[] = [
-  { value: "À explorer", label: "À explorer", dot: "bg-indigo" },
-  { value: "À faire", label: "À faire", dot: "bg-primary" },
-  { value: "En cours", label: "En cours", dot: "bg-cyan" },
-  { value: "Publiée", label: "Publiée", dot: "bg-signal" },
+  { value: "À explorer", label: "À explorer", dot: "bg-info" },
+  { value: "À faire", label: "À faire", dot: "bg-wait" },
+  { value: "En cours", label: "En cours", dot: "bg-progress" },
+  { value: "Publiée", label: "Publiée", dot: "bg-ok" },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -327,9 +327,9 @@ const TODO_FILTERS: { id: TodoFilter; label: string }[] = [
   { id: "toutes", label: "Toutes" },
 ];
 const TODO_STATUS_OPTS: StatusOption[] = [
-  { value: "À faire", label: "À faire", dot: "bg-primary" },
-  { value: "En cours", label: "En cours", dot: "bg-cyan" },
-  { value: "Fait", label: "Fait", dot: "bg-signal" },
+  { value: "À faire", label: "À faire", dot: "bg-wait" },
+  { value: "En cours", label: "En cours", dot: "bg-progress" },
+  { value: "Fait", label: "Fait", dot: "bg-ok" },
 ];
 
 const invStatus = (s: string | null): { status: "success" | "warning" | "danger" | "neutral"; label: string } => {
@@ -1584,7 +1584,7 @@ export function CreatorSpace({
 
   return (
     <LangProvider lang={lang}>
-    <div className={iosPhone ? "flex h-[100dvh] flex-col bg-panel" : "flex h-[100dvh] flex-col bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
+    <div className={iosPhone ? "app-frame flex h-[100dvh] flex-col bg-background" : "app-frame flex h-[100dvh] flex-col bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
       {preview && (
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-primary/30 bg-primary/[0.06] px-3 py-2">
           <div className="flex items-center gap-2 text-[12px] font-semibold text-primary">
@@ -3174,7 +3174,7 @@ export function CreatorSpace({
           </ErrorBoundary>
           </NavActionSlotContext.Provider>)}
           {/* Espaceur mobile (plus fiable que le padding bas d'un conteneur flex défilant sur iOS) */}
-          <div aria-hidden className="h-[calc(6rem+env(safe-area-inset-bottom))] md:hidden" />
+          <div aria-hidden className="h-[calc(6.75rem+env(safe-area-inset-bottom))] md:hidden" />
         </main>
         </div>
       </div>
@@ -3437,7 +3437,7 @@ export function CreatorSpace({
                           {s.done && <Check className="h-3 w-3" />}
                         </button>
                         <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
-                        <button type="button" onClick={() => delSubtask(taskView, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label={t("Supprimer la sous-tâche")}><Trash2 className="h-3.5 w-3.5" /></button>
+                        <button type="button" onClick={() => delSubtask(taskView, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label={t("Supprimer la sous-tâche")}><Trash2 className="h-3.5 w-3.5" /></button>
                       </div>
                     ))}
                   </div>
@@ -3462,7 +3462,7 @@ export function CreatorSpace({
                       <div className="truncate text-[13px] font-medium text-foreground hover:underline">{a.name}</div>
                       <div className="text-[11px] text-faint">{a.size}</div>
                     </button>
-                    <button type="button" onClick={() => removeAttachment(taskView, a.path)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title={t("Retirer")}><Trash2 className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => removeAttachment(taskView, a.path)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title={t("Retirer")}><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
                 <input ref={attFileRef} type="file" multiple className="hidden" onChange={(e) => uploadAttachments(taskView, e.target.files)} />

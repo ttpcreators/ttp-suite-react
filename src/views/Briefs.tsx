@@ -43,10 +43,10 @@ type Row = {
 type BadgeStatus = "success" | "warning" | "danger" | "neutral" | "info" | "loading";
 
 const STATUS_OPTS: StatusOption[] = [
-  { value: "attente", label: "En attente", dot: "bg-amber" },
-  { value: "valider", label: "À valider", dot: "bg-primary" },
-  { value: "cours", label: "En cours", dot: "bg-cyan" },
-  { value: "terminé", label: "Terminé", dot: "bg-signal" },
+  { value: "attente", label: "En attente", dot: "bg-wait" },
+  { value: "valider", label: "À valider", dot: "bg-info" },
+  { value: "cours", label: "En cours", dot: "bg-progress" },
+  { value: "terminé", label: "Terminé", dot: "bg-ok" },
 ];
 
 /** Colonne (canonique) d'un brief selon son statut stocké. */

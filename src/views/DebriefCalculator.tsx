@@ -115,7 +115,7 @@ function Thumb({ shot, url, onRemove }: { shot: Shot; url?: string; onRemove: ()
         type="button"
         onClick={onRemove}
         title="Retirer la capture"
-        className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/55 text-white opacity-0 transition-opacity hover:bg-[#E5484D] group-hover:opacity-100 focus-visible:opacity-100"
+        className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/55 text-white opacity-0 transition-opacity hover:bg-destructive group-hover:opacity-100 focus-visible:opacity-100"
       >
         <Trash2 className="h-3 w-3" />
       </button>
@@ -473,7 +473,7 @@ export function DebriefCalculator({
                       type="button"
                       onClick={() => pushRows(rows.filter((x) => x.id !== r.id))}
                       title="Retirer cette publication"
-                      className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
+                      className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>

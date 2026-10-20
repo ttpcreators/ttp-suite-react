@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { TONE_SOLID, TONE_TILE } from "@/lib/statusTone";
 import { Loader, Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
 import { ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X, type LucideIcon, Megaphone } from "lucide-react";
@@ -71,12 +72,12 @@ function StatusDot({ status, by }: { status: string; by?: string }) {
 
 const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse" | "demarchage"; label: string; short: string; icon: LucideIcon; dot?: string; match: (t: MailThreadLite) => boolean }[] = [
   { key: "tous", label: "Tous les échanges", short: "Tous", icon: Inbox, match: () => true },
-  { key: "encours", label: "En cours", short: "En cours", icon: Hourglass, dot: "bg-amber-500", match: (t) => t.status === "nouvelle" || t.status === "demarchee" || t.status === "negociation" },
-  { key: "atraiter", label: "À vérifier / valider", short: "À traiter", icon: SearchCheck, dot: "bg-orange-500", match: (t) => t.status === "a_verifier" || t.status === "a_valider" },
-  { key: "valide", label: "Validés", short: "Validés", icon: Check, dot: "bg-signal", match: (t) => t.status === "valide" },
-  { key: "refuse", label: "Refusés", short: "Refusés", icon: X, dot: "bg-danger", match: (t) => t.status === "refuse" },
+  { key: "encours", label: "En cours", short: "En cours", icon: Hourglass, dot: "bg-progress", match: (t) => t.status === "nouvelle" || t.status === "demarchee" || t.status === "negociation" },
+  { key: "atraiter", label: "À vérifier / valider", short: "À traiter", icon: SearchCheck, dot: "bg-wait", match: (t) => t.status === "a_verifier" || t.status === "a_valider" },
+  { key: "valide", label: "Validés", short: "Validés", icon: Check, dot: "bg-ok", match: (t) => t.status === "valide" },
+  { key: "refuse", label: "Refusés", short: "Refusés", icon: X, dot: "bg-closed", match: (t) => t.status === "refuse" },
   // Démarchage : fils lancés par l'agence (alias du créateur en copie), quel que soit leur statut.
-  { key: "demarchage", label: "Démarchés par l'agence", short: "Démarchage", icon: Megaphone, dot: "bg-primary", match: (t) => !!t.prospect },
+  { key: "demarchage", label: "Démarchés par l'agence", short: "Démarchage", icon: Megaphone, dot: "bg-progress", match: (t) => !!t.prospect },
 ];
 
 /**
@@ -86,28 +87,23 @@ const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse" | "d
 const CHOICES: { value: MailChoice; label: string; hint: string; icon: LucideIcon; tile: string; disc: string; confirm: string; agencyOnly?: boolean }[] = [
   {
     value: "encours", label: "En cours", hint: "On en discute", icon: Hourglass,
-    tile: "border-amber-500/70 bg-amber-500/[0.09] text-amber-800 dark:text-amber-300",
-    disc: "bg-amber-500 text-zinc-950", confirm: "bg-amber-500 text-zinc-950",
+    tile: TONE_TILE.progress, disc: TONE_SOLID.progress, confirm: TONE_SOLID.progress,
   },
   {
     value: "a_verifier", label: "À vérifier", hint: "Un point à contrôler", icon: SearchCheck, agencyOnly: true,
-    tile: "border-orange-500/70 bg-orange-500/[0.09] text-orange-800 dark:text-orange-300",
-    disc: "bg-orange-500 text-white", confirm: "bg-orange-500 text-white",
+    tile: TONE_TILE.wait, disc: TONE_SOLID.wait, confirm: TONE_SOLID.wait,
   },
   {
     value: "a_valider", label: "À valider", hint: "Réponse attendue", icon: CircleHelp, agencyOnly: true,
-    tile: "border-indigo-500/70 bg-indigo-500/[0.09] text-indigo-800 dark:text-indigo-300",
-    disc: "bg-indigo-500 text-white", confirm: "bg-indigo-500 text-white",
+    tile: TONE_TILE.wait, disc: TONE_SOLID.wait, confirm: TONE_SOLID.wait,
   },
   {
     value: "valide", label: "Validé", hint: "C'est oui", icon: Check,
-    tile: "border-signal/70 bg-signal/[0.09] text-signaltext",
-    disc: "bg-signal text-white", confirm: "bg-signal text-white",
+    tile: TONE_TILE.ok, disc: TONE_SOLID.ok, confirm: TONE_SOLID.ok,
   },
   {
     value: "refuse", label: "Refusé", hint: "C'est non", icon: X,
-    tile: "border-danger/70 bg-danger/[0.08] text-dangertext",
-    disc: "bg-danger text-white", confirm: "bg-danger text-white",
+    tile: TONE_TILE.closed, disc: TONE_SOLID.closed, confirm: TONE_SOLID.closed,
   },
 ];
 const choiceMeta = (c: MailChoice) => CHOICES.find((x) => x.value === c) ?? CHOICES[0];

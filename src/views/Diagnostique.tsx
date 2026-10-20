@@ -13,8 +13,8 @@ import { BugsPanel } from "@/components/BugsPanel";
  */
 
 const META: Record<DiagStatus, { label: string; cls: string; dot: string; Icon: typeof CheckCircle2 }> = {
-  ok: { label: "Opérationnel", cls: "text-signaltext", dot: "bg-signal", Icon: CheckCircle2 },
-  warn: { label: "À surveiller", cls: "text-amber", dot: "bg-amber", Icon: AlertTriangle },
+  ok: { label: "Opérationnel", cls: "text-ok", dot: "bg-ok", Icon: CheckCircle2 },
+  warn: { label: "À surveiller", cls: "text-wait", dot: "bg-wait", Icon: AlertTriangle },
   down: { label: "Hors service", cls: "text-dangertext", dot: "bg-danger", Icon: XCircle },
 };
 const barCls: Record<DiagStatus, string> = { ok: "bg-signal", warn: "bg-amber", down: "bg-danger" };

@@ -37,10 +37,10 @@ type Row = {
 };
 
 const STATUS_OPTS: StatusOption[] = [
-  { value: "À explorer", label: "À explorer", dot: "bg-indigo" },
-  { value: "À faire", label: "À faire", dot: "bg-primary" },
-  { value: "En cours", label: "En cours", dot: "bg-cyan" },
-  { value: "Publiée", label: "Publiée", dot: "bg-signal" },
+  { value: "À explorer", label: "À explorer", dot: "bg-info" },
+  { value: "À faire", label: "À faire", dot: "bg-wait" },
+  { value: "En cours", label: "En cours", dot: "bg-progress" },
+  { value: "Publiée", label: "Publiée", dot: "bg-ok" },
 ];
 
 // Barre d'accent (bord gauche de la carte) selon le statut de l'idée.

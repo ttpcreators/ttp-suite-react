@@ -61,9 +61,9 @@ type Row = {
 
 // Suivi du sur-contact : en-deçà de ce seuil (jours), on alerte de ne pas relancer.
 const RECENT_DAYS = 30;
-// Couleurs du suivi : rouge = trop tôt pour relancer, vert = on peut y aller.
-const TOO_SOON = "bg-danger/10 text-dangertext";
-const GOOD_TO_GO = "bg-signalsoft text-signaltext";
+// Couleurs du suivi : orange = trop tôt pour relancer, vert = on peut y aller.
+const TOO_SOON = "bg-wait-soft text-wait";
+const GOOD_TO_GO = "bg-ok-soft text-ok";
 /** Nombre de jours depuis une date ISO (null si absente/invalide). */
 function daysSince(iso?: string | null): number | null {
   if (!iso) return null;
@@ -1330,7 +1330,7 @@ export function Contacts() {
                 <button
                   type="button"
                   onClick={() => openWhatsApp(selected)}
-                  className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-signal py-2.5 text-[12px] font-medium text-white transition-opacity hover:opacity-90"
+                  className="flex min-w-[130px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-signal py-2.5 text-[12px] font-medium text-onsignal transition-opacity hover:opacity-90"
                 >
                   <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
                 </button>
@@ -1433,7 +1433,7 @@ export function Contacts() {
                       <button
                         type="button"
                         onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
-                        className="text-faint transition-colors hover:text-[#E5484D]"
+                        className="text-faint transition-colors hover:text-destructive"
                         aria-label={`Retirer ${a.filename}`}
                       >
                         <X className="h-3 w-3" />

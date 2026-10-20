@@ -196,7 +196,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                             <button type="button" onClick={() => void toggle(r)} disabled={busy === r.id}
                               aria-label={done ? "Annuler le « Fait » de cette semaine" : "Marquer fait cette semaine"}
                               className="mt-0.5 shrink-0 transition-transform active:scale-90 disabled:opacity-50">
-                              {done ? <span className="grid h-5 w-5 place-items-center rounded-full bg-signal text-white"><Check className="h-3.5 w-3.5" /></span>
+                              {done ? <span className="grid h-5 w-5 place-items-center rounded-full bg-signal text-onsignal"><Check className="h-3.5 w-3.5" /></span>
                                 : <Circle className="h-5 w-5 text-faint hover:text-foreground" />}
                             </button>
                             <div className="min-w-0 flex-1">
@@ -204,7 +204,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                                 <span className={cn("text-[13px] font-medium [overflow-wrap:anywhere]", done ? "text-muted-foreground line-through decoration-faint" : "text-foreground")}>{r.text}</span>
                                 {r.weekday != null && (
                                   <span className={cn("rounded-full px-2 py-px text-[11px] font-medium",
-                                    late ? "bg-amber-500/15 text-amber-700 dark:text-amber-400" : isToday ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                                    late ? "bg-wait-soft text-wait" : isToday ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                                     {isToday ? "Aujourd'hui" : DAYS[r.weekday - 1]}{late ? " · en retard" : ""}
                                   </span>
                                 )}

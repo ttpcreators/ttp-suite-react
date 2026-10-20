@@ -1,15 +1,25 @@
 @import "tailwindcss";
 
+/* `dark:` = thème Noir (classe .dark posée par lib/accent.ts → applyTheme). */
 @custom-variant dark (&:is(.dark *));
-/* `minuit:` = uniquement le sombre Minuit (pas le Classique). Sert aux rares
-   endroits où le primaire (blanc en Minuit) remplit une GRANDE surface. */
-@custom-variant minuit (&:is(.dark:not(.dark-classic) *));
+/* `minuit:` : ancien nom du sombre, gardé comme alias de `dark:`. */
+@custom-variant minuit (&:is(.dark *));
+/* `verre:` = uniquement le thème Verre. */
+@custom-variant verre (&:is([data-theme="verre"] *));
 
-/* Deux bouts de l'accent : égaux à la couleur d'accent, sauf accent EN DÉGRADÉ
-   (Paramètres → Couleur d'accent → Dégradés), où accent.ts les pose en ligne. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   JETONS TTP Suite 2.0 : SEUL endroit où vivent les couleurs, tailles, rayons et
+   durées. Trois thèmes via data-theme sur <html> : clair, verre, noir (« auto »
+   choisit clair ou noir selon l'appareil, voir lib/accent.ts).
+   Accent : UNE variable, --accent (+ --on-accent pour le texte posé dessus).
+   --primary, --ring… la relisent. Le sélecteur de Paramètres la remplace en ligne.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Deux bouts de l'accent : égaux à l'accent, sauf accent EN DÉGRADÉ (Paramètres →
+   Couleur d'accent → Dégradés), où accent.ts les pose en ligne. */
 :root {
-  --accent-a: var(--primary);
-  --accent-b: var(--primary);
+  --accent-a: var(--accent);
+  --accent-b: var(--accent);
 }
 /* Accent en dégradé : chaque aplat primaire (boutons pleins, pastilles) devient
    un dégradé ; les teintes légères (bg-primary/10…) restent unies. */
@@ -26,125 +36,217 @@
   }
 }
 
-/* Couleurs : celles de l'app d'origine (choix de Marc, 2026-10-14) ; la refonte garde
-   seulement les formes (pilules, cartes blanches, plus d'air). */
+/* ── Communs aux trois thèmes ─────────────────────────────────────────────── */
 :root {
-  /* Fait suivre le thème aux contrôles NATIFs (pickers date/mois, spinners
-     number, menus <select>, cases à cocher, scrollbars) — sinon ils restent
-     blancs en dark. */
-  color-scheme: light;
+  /* Accent (bleu TTP, choix de Marc : les boutons restent bleus). */
+  --accent: #0069fe;
+  --on-accent: #ffffff;
+  --primary: var(--accent);
+  --primary-foreground: var(--on-accent);
+  --accent-foreground: var(--on-accent);
+  --ring: var(--accent);
+  --burgundy: var(--accent);
+
+  /* Typographie : police actuelle (Inter), chiffres tabulaires partout. */
+  --font-app: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --fs-title: 34px; /* grand titre, bold */
+  --fs-section: 22px; /* titre de section, bold */
+  --fs-row: 17px; /* titre de ligne, semibold */
+  --fs-body: 15px; /* texte courant */
+  --fs-note: 13px; /* note de bas de ligne */
+
+  /* Rayons : panneaux 22, cartes 20 à 26, lignes 12, champs 10, boutons en capsule. */
   --radius: 0.75rem;
-  --background: #eaebef;
-  --foreground: #18181b;
-  --card: #ffffff;
-  --card-foreground: #18181b;
-  --popover: #ffffff;
-  --popover-foreground: #18181b;
-  --primary: #0069fe;
-  --primary-foreground: #ffffff;
-  --secondary: #f4f4f5;
-  --secondary-foreground: #18181b;
-  --muted: #f4f4f5;
-  --muted-foreground: #52525b;
-  --accent: #f4f4f5;
-  --accent-foreground: #18181b;
-  --destructive: #dc2626;
-  --destructive-foreground: #ffffff;
-  --border: #e4e4e7;
-  --input: #e4e4e7;
-  --ring: #0069fe;
-  --burgundy: #0069fe;
-  /* Tokens fidèles à l'app d'origine */
-  --panel: #f4f4f5;
-  --surface: #ffffff;
-  --faint: #71717a; /* 4,8:1 sur blanc (était #a1a1aa, 2,6:1) */
-  --rowhover: #f4f4f5;
-  --signal: #16a34a;
-  --signaltext: #15803d;
-  --signalsoft: #f0fdf4;
-  /* Rouge = retard, erreur, suppression : une seule nuance partout. */
-  --danger: #dc2626;
-  --dangertext: #dc2626;
-  --dangersoft: #fef2f2;
-  /* Code couleur de l’Aperçu : encre + gris, vert = bon, rouge = retard, bleu =
-     action. Les anciens jetons décoratifs deviennent des niveaux d’encre :
-     indigo = encre forte, cyan et amber = gris neutre (plus d’orange). */
-  --indigo: #27272a;
-  --amber: #71717a;
-  --cyan: #71717a;
-  --onsignal: #ffffff;
+  --r-panel: 22px;
+  --r-card: 20px;
+  --r-card-lg: 26px;
+  --r-row: 12px;
+  --r-field: 10px;
+
+  /* Mouvement : survol et pression 120 ms ; inspecteur et feuilles 280 ms, sans rebond. */
+  --dur-press: 120ms;
+  --dur-sheet: 280ms;
+  --ease-sheet: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Sombre « Minuit » (par défaut) : noir profond, gris NEUTRES (pas de teinte
-   bleue), filets très fins, accent monochrome (le blanc joue le rôle du bleu).
-   Hiérarchie : fond #000 < zone de contenu et cartes #0a0a0a < tuiles #141414. */
+/* ── Clair : le jour, au bureau ───────────────────────────────────────────── */
+:root {
+  color-scheme: light;
+  --background: #f5f5f7;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --secondary: #f5f5f7;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f5f5f7;
+  --muted-foreground: #6e6e73;
+  --destructive: #c4251c;
+  --destructive-foreground: #ffffff;
+  --border: rgba(60, 60, 67, 0.13);
+  --input: rgba(60, 60, 67, 0.13);
+  --field: rgba(118, 118, 128, 0.12);
+  --panel: #f5f5f7; /* surface secondaire */
+  --surface: #ffffff;
+  --faint: #6e6e73;
+  --rowhover: rgba(118, 118, 128, 0.08);
+  --shadow-float: 0 10px 40px rgba(30, 40, 80, 0.1);
+  --segment: #ffffff; /* onglet choisi d'un contrôle segmenté */
+  --badge: #ff3b30; /* pastille de notification (compteur) */
+
+  /* Séries de graphiques (palette Apple) et couleurs des réseaux. */
+  --chart-1: #0a84ff;
+  --chart-2: #30b0c7;
+  --chart-3: #34c759;
+  --chart-4: #ff9f0a;
+  --chart-5: #af52de;
+  --chart-6: #8e8e93;
+  --chart-7: #ff375f;
+  --brand-instagram: #e1306c;
+  --brand-tiktok: #0ea5e9;
+  --brand-youtube: #ef4444;
+  --brand-x: #64748b;
+  --brand-snapchat: #f59e0b;
+
+  /* Statuts : UN sens par couleur, partout (fond / texte). */
+  --st-ok-bg: #e3f6e8; /* payé, signé, à jour */
+  --st-ok: #1e7b34;
+  --st-progress-bg: #e1eeff; /* en cours, envoyé */
+  --st-progress: #0a5fc2;
+  --st-info-bg: #ddf3f5; /* brief, idée, Megan */
+  --st-info: #0b6f7a;
+  --st-wait-bg: #fff0db; /* à relancer, en attente */
+  --st-wait: #9a5b00;
+  --st-late-bg: #fde6e5; /* argent en retard UNIQUEMENT */
+  --st-late: #c4251c;
+  --st-closed-bg: #eeeef0; /* clôturé, écarté */
+  --st-closed: #55555a;
+
+  --on-status: #ffffff; /* texte posé sur un aplat de statut */
+
+  /* Anciens noms, branchés sur les statuts. */
+  --signal: #248a3d;
+  --signaltext: var(--st-ok);
+  --signalsoft: var(--st-ok-bg);
+  --onsignal: #ffffff;
+  --danger: var(--st-late);
+  --dangertext: var(--st-late);
+  --dangersoft: var(--st-late-bg);
+  /* Anciens jetons : ambre = en attente, cyan = en cours, indigo = encre forte. */
+  --indigo: #1d1d1f;
+  --amber: var(--st-wait);
+  --cyan: var(--st-progress);
+}
+
+/* ── Verre : façon Liquid Glass ───────────────────────────────────────────── */
+[data-theme="verre"] {
+  color-scheme: light;
+  --background: #edf0f7;
+  --foreground: #1d1d1f;
+  --card-foreground: #1d1d1f;
+  --popover-foreground: #1d1d1f;
+  --secondary-foreground: #1d1d1f;
+  --muted-foreground: #4f4f55;
+  --faint: #4f4f55;
+  /* Matière : panneau de verre (flou posé par .shell-panel et les fenêtres, plus bas). */
+  --glass: rgba(255, 255, 255, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.75);
+  --glass-blur: blur(30px) saturate(180%);
+  --glass-shadow: 0 10px 40px rgba(30, 40, 80, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  /* Cartes dans un panneau : blanc voilé, sans second flou. */
+  --card: rgba(255, 255, 255, 0.6);
+  --surface: rgba(255, 255, 255, 0.6);
+  --popover: rgba(255, 255, 255, 0.86);
+  --panel: rgba(118, 118, 128, 0.08);
+  --secondary: rgba(118, 118, 128, 0.08);
+  --muted: rgba(118, 118, 128, 0.08);
+  --border: rgba(60, 60, 67, 0.12);
+  --input: rgba(60, 60, 67, 0.12);
+  --field: rgba(118, 118, 128, 0.12);
+  --rowhover: rgba(255, 255, 255, 0.55);
+  --segment: rgba(255, 255, 255, 0.92);
+}
+
+/* ── Noir : le soir, écrans OLED ──────────────────────────────────────────── */
+[data-theme="noir"],
 .dark {
   color-scheme: dark;
+  /* Accent par défaut en Noir : blanc monochrome, comme l'ancien sombre Minuit. */
+  --accent: #fafafa;
+  --on-accent: #0a0a0a;
   --background: #000000;
-  --foreground: #fafafa;
-  --card: #0a0a0a;
-  --card-foreground: #fafafa;
-  --popover: #0f0f0f;
-  --popover-foreground: #fafafa;
-  --primary: #fafafa;
-  --primary-foreground: #0a0a0a;
-  --secondary: #171717;
-  --secondary-foreground: #fafafa;
-  --muted: #171717;
-  --muted-foreground: #a3a3a3;
-  --accent: #171717;
-  --accent-foreground: #fafafa;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: #222222;
-  --input: #262626;
-  --ring: #a3a3a3;
-  --burgundy: #fafafa;
-  --panel: #141414;
-  --surface: #0a0a0a;
-  --faint: #737373;
-  --rowhover: #141414;
-  --signal: #16a34a;
-  --signaltext: #4ade80;
-  --signalsoft: #052e16;
-  --danger: #ef4444;
-  --dangertext: #f87171;
-  --dangersoft: #2a0c0c;
-  --indigo: #e5e5e5;
-  --amber: #a3a3a3;
-  --cyan: #a3a3a3;
-  --onsignal: #ffffff;
-}
+  --foreground: #f5f5f7;
+  --card: #1c1c1e;
+  --card-foreground: #f5f5f7;
+  --popover: #2c2c2e;
+  --popover-foreground: #f5f5f7;
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #2c2c2e;
+  --muted-foreground: #98989d;
+  --destructive: #ff6961;
+  --destructive-foreground: #000000;
+  --border: rgba(84, 84, 88, 0.5);
+  --input: rgba(84, 84, 88, 0.5);
+  --field: rgba(118, 118, 128, 0.24);
+  --panel: #2c2c2e; /* surface élevée (blocs dans une carte) */
+  --surface: #1c1c1e; /* cartes posées sur le noir */
+  --faint: #98989d;
+  --rowhover: rgba(118, 118, 128, 0.18);
+  --shadow-float: 0 10px 40px rgba(0, 0, 0, 0.5);
+  --segment: #636366;
+  --badge: #ff453a;
+  --chart-2: #40c8e0;
+  --chart-3: #30d158;
+  --chart-5: #bf5af2;
+  --chart-6: #98989d;
 
-/* Sombre « Classique » (l'ancien) : Paramètres → Apparence → Style sombre. */
-.dark.dark-classic {
-  --card: #18181b;
-  --popover: #18181b;
-  --primary: #2b7fff;
-  --primary-foreground: #ffffff;
-  --secondary: #27272a;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --accent: #27272a;
-  --border: #27272a;
-  --input: #27272a;
-  --ring: #2b7fff;
-  --burgundy: #2b7fff;
-  --panel: #18181b;
-  --surface: #18181b;
-  --faint: #71717a;
-  --rowhover: #27272a;
-  --cyan: #a1a1aa;
+  --st-ok-bg: rgba(48, 209, 88, 0.16);
+  --st-ok: #30d158;
+  --st-progress-bg: rgba(10, 132, 255, 0.22);
+  --st-progress: #64a8ff;
+  --st-info-bg: rgba(100, 210, 255, 0.16);
+  --st-info: #64d2ff;
+  --st-wait-bg: rgba(255, 159, 10, 0.18);
+  --st-wait: #ffb340;
+  --st-late-bg: rgba(255, 69, 58, 0.2);
+  --st-late: #ff6961;
+  --st-closed-bg: rgba(142, 142, 147, 0.2);
+  --st-closed: #aeaeb2;
+
+  --on-status: #000000;
+  --signal: #30d158;
+  --onsignal: #000000;
+  --indigo: #e5e5ea;
 }
 
 @theme inline {
-  /* Formes : champs 10, éléments internes 14, cartes 20 (boutons et chips en pilule). */
+  /* Formes : champs 10, lignes 12, éléments internes 14, cartes 20 et 24, panneaux 22. */
   --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
+  --radius-md: var(--r-field);
+  --radius-lg: var(--r-row);
   --radius-xl: 14px;
-  --radius-2xl: 20px;
+  --radius-2xl: var(--r-card);
   --radius-3xl: 24px;
+  --radius-panel: var(--r-panel);
+  --font-sans: var(--font-app);
+  /* Échelle de texte : text-title, text-section, text-row, text-body, text-note. */
+  --text-title: var(--fs-title);
+  --text-title--line-height: 1.1;
+  --text-title--font-weight: 700;
+  --text-title--letter-spacing: -0.025em;
+  --text-section: var(--fs-section);
+  --text-section--line-height: 1.2;
+  --text-section--font-weight: 700;
+  --text-section--letter-spacing: -0.015em;
+  --text-row: var(--fs-row);
+  --text-row--line-height: 1.3;
+  --text-row--font-weight: 600;
+  --text-body: var(--fs-body);
+  --text-body--line-height: 1.45;
+  --text-note: var(--fs-note);
+  --text-note--line-height: 1.4;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -158,16 +260,34 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-foreground: var(--on-accent);
+  --color-on-accent: var(--on-accent);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-field: var(--field);
+  --color-segment: var(--segment);
+  --color-badge: var(--badge);
   --color-ring: var(--ring);
   --color-panel: var(--panel);
   --color-surface: var(--surface);
   --color-faint: var(--faint);
   --color-rowhover: var(--rowhover);
+  /* Statuts : bg-ok-soft text-ok, bg-progress-soft text-progress… */
+  --color-ok: var(--st-ok);
+  --color-ok-soft: var(--st-ok-bg);
+  --color-progress: var(--st-progress);
+  --color-progress-soft: var(--st-progress-bg);
+  --color-info: var(--st-info);
+  --color-info-soft: var(--st-info-bg);
+  --color-wait: var(--st-wait);
+  --color-wait-soft: var(--st-wait-bg);
+  --color-late: var(--st-late);
+  --color-late-soft: var(--st-late-bg);
+  --color-closed: var(--st-closed);
+  --color-closed-soft: var(--st-closed-bg);
+  --color-on-status: var(--on-status);
   --color-signal: var(--signal);
   --color-signaltext: var(--signaltext);
   --color-signalsoft: var(--signalsoft);
@@ -178,6 +298,90 @@
   --color-amber: var(--amber);
   --color-cyan: var(--cyan);
   --color-onsignal: var(--onsignal);
+}
+
+/* ── Matière Verre ────────────────────────────────────────────────────────── */
+/* Fond : quatre halos de couleur douce, fixés à la fenêtre. */
+[data-theme="verre"] body {
+  background:
+    radial-gradient(60% 55% at 0% 0%, #b9d3ff 0%, transparent 70%),
+    radial-gradient(55% 50% at 100% 0%, #bfebd3 0%, transparent 70%),
+    radial-gradient(60% 55% at 70% 100%, #ffd9bf 0%, transparent 70%),
+    radial-gradient(55% 50% at 0% 100%, #d7e4ff 0%, transparent 70%),
+    #edf0f7;
+  background-attachment: fixed;
+}
+/* Le cadre de l'app laisse voir les halos. */
+[data-theme="verre"] .app-frame {
+  background: transparent;
+}
+/* Panneaux de verre : zone de contenu, fenêtres et menus flottants. */
+[data-theme="verre"] :is(.glass, [role="dialog"] > :is(.bg-surface, .bg-card), :is(.bg-surface, .bg-card):is(.shadow-lg, .shadow-xl, .shadow-2xl), .bg-popover, .ios-sheet-panel > :not([aria-hidden])) {
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+/* Zone de contenu : le verre est posé sur un calque de fond (::before). Un flou posé
+   directement sur le panneau piégerait les fenêtres (position: fixed) à l'intérieur. */
+[data-theme="verre"] .shell-panel {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+[data-theme="verre"] .shell-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  pointer-events: none;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-theme="verre"] .shell-panel::before {
+    background: rgba(255, 255, 255, 0.92);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme="verre"] .shell-panel::before {
+    background: rgba(255, 255, 255, 0.92);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+/* Fenêtres et menus : un voile plus opaque, le texte reste net sur le contenu. */
+[data-theme="verre"] :is([role="dialog"] > :is(.bg-surface, .bg-card), :is(.bg-surface, .bg-card):is(.shadow-lg, .shadow-xl, .shadow-2xl), .bg-popover, .ios-sheet-panel > :not([aria-hidden])) {
+  background: rgba(255, 255, 255, 0.86);
+}
+/* Repli sans flou (navigateur qui ne sait pas faire) ou transparence réduite demandée. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-theme="verre"] :is(.glass, [role="dialog"] > :is(.bg-surface, .bg-card), :is(.bg-surface, .bg-card):is(.shadow-lg, .shadow-xl, .shadow-2xl), .bg-popover, .ios-sheet-panel > :not([aria-hidden])) {
+    background: rgba(255, 255, 255, 0.92);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme="verre"] :is(.glass, [role="dialog"] > :is(.bg-surface, .bg-card), :is(.bg-surface, .bg-card):is(.shadow-lg, .shadow-xl, .shadow-2xl), .bg-popover, .ios-sheet-panel > :not([aria-hidden])) {
+    background: rgba(255, 255, 255, 0.92);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Moins d'animations demandées : tout devient instantané. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Couleur de bordure PAR DÉFAUT. En @layer base pour que les utilitaires
@@ -199,13 +403,13 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-app);
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Minuit : la zone de contenu est un panneau #0a0a0a posé sur le noir, avec un
-   filet (au lieu du gris de tuile). Les cartes s'y fondent, seules leurs
-   bordures les dessinent : l'effet « sections séparées par des filets ». */
+/* La zone de contenu prend le fond de page : les cartes (--surface) s'y posent
+   directement. En Verre, elle devient un panneau de verre (règle plus haut). */
 .shell-panel {
   background: var(--background);
 }
@@ -213,8 +417,17 @@ body {
 /* Règle 1 de la DA : cartes blanches posées sur le gris, sans bordure ni ombre lourde.
    (Les bordures colorées d'état — sélection, erreur — restent.) */
 .rounded-2xl.border-border:is(.bg-surface, .bg-card),
-.rounded-\[22px\].border-border:is(.bg-surface, .bg-card) {
+.rounded-3xl.border-border:is(.bg-surface, .bg-card),
+.rounded-\[20px\].border-border:is(.bg-surface, .bg-card),
+.rounded-\[22px\].border-border:is(.bg-surface, .bg-card),
+.rounded-\[24px\].border-border:is(.bg-surface, .bg-card),
+.rounded-\[26px\].border-border:is(.bg-surface, .bg-card) {
   border-color: transparent;
+}
+/* Grilles de chiffres (cellules séparées par des filets fins) : plus de contour
+   extérieur, seuls les filets intérieurs restent. */
+:is(.rounded-2xl, .rounded-3xl).border-border.bg-border {
+  border-width: 0;
 }
 
 /* Langage de l'Aperçu : panneaux PLATS, dessinés par leur seule bordure. Les
@@ -301,7 +514,20 @@ body {
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   backdrop-filter: saturate(180%) blur(20px);
 }
-.dark:not(.dark-classic) .ios-bar {
+/* Barre d'onglets en capsule flottante (mobile). */
+.ios-tabbar {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-float);
+}
+[data-theme="verre"] .ios-tabbar {
+  background: var(--glass);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+.dark .ios-bar {
   background: color-mix(in srgb, var(--surface) 78%, transparent);
 }
 @media (max-width: 767px) {

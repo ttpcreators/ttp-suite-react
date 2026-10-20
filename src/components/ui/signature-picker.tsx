@@ -157,7 +157,7 @@ export function SignaturePicker({
                 remove(value.id);
                 onChange(null);
               }}
-              className="inline-flex items-center gap-1 text-[#E5484D] hover:underline"
+              className="inline-flex items-center gap-1 text-destructive hover:underline"
             >
               <Trash2 className="h-3 w-3" /> Supprimer
             </button>

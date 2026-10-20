@@ -199,7 +199,7 @@ export function ContractsHome({
       {/* Bandeau d'accueil : ce qui attend une signature */}
       {pending > 0 && (
         <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3 sm:px-5">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-500/12 text-[13px] font-semibold text-amber-700 dark:text-amber-400">{pending}</span>
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-wait-soft text-[13px] font-semibold text-wait">{pending}</span>
           <p className="min-w-0 flex-1 text-[14px] text-foreground">
             {myName && <span className="font-semibold">Re, {myName} ! </span>}
             <span className={myName ? "text-muted-foreground" : undefined}>{pending > 1 ? `${pending} contrats attendent une signature.` : "1 contrat attend une signature."}</span>

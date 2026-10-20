@@ -50,12 +50,12 @@ type StatsData = {
 
 const COLORS = {
   primary: "var(--primary)",
-  green: "#16a34a",
-  amber: "#f59e0b",
-  rose: "#f43f5e",
-  indigo: "#6366f1",
-  cyan: "#06b6d4",
-  slate: "#94a3b8",
+  green: "var(--chart-3)",
+  amber: "var(--chart-4)",
+  rose: "var(--chart-7)",
+  indigo: "var(--chart-5)",
+  cyan: "var(--chart-2)",
+  slate: "var(--chart-6)",
 };
 
 function parseCompact(s: string | null): number {
@@ -141,8 +141,8 @@ function RevenueChart({ points }: { points: RevenuePoint[] }) {
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.7} vertical={false} />
-          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickMargin={10} interval="preserveStartEnd" minTickGap={16} />
-          <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtK(Number(v))} width={52} />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--faint)" }} tickMargin={10} interval="preserveStartEnd" minTickGap={16} />
+          <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--faint)" }} tickFormatter={(v) => fmtK(Number(v))} width={52} />
           <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ stroke: COLORS.primary, strokeWidth: 1, strokeOpacity: 0.4 }} />
           <Area
             type="monotone"
@@ -515,8 +515,8 @@ export function Stats() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.6} vertical={false} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickMargin={10} interval="preserveStartEnd" minTickGap={16} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtK(Number(v))} width={52} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--faint)" }} tickMargin={10} interval="preserveStartEnd" minTickGap={16} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--faint)" }} tickFormatter={(v) => fmtK(Number(v))} width={52} />
                 <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ stroke: COLORS.primary, strokeWidth: 1, strokeOpacity: 0.4 }} />
                 <Area type="monotone" dataKey="compare" name="Comparaison" stroke={COLORS.slate} strokeWidth={2} strokeDasharray="5 4" fill="transparent" dot={false} />
                 <Area type="monotone" dataKey="actuel" name="Période actuelle" stroke={COLORS.primary} strokeWidth={2.5} fill="url(#cmpGrad)" dot={false} activeDot={{ r: 4, fill: COLORS.primary, stroke: "var(--color-surface)", strokeWidth: 2 }} />
@@ -592,11 +592,11 @@ export function Stats() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid horizontal={false} stroke="var(--color-border)" strokeDasharray="4 8" strokeOpacity={0.6} />
-                <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtK(Number(v))} />
-                <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => String(v).split(" ")[0]} width={70} />
+                <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--faint)" }} tickFormatter={(v) => fmtK(Number(v))} />
+                <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--faint)" }} tickFormatter={(v) => String(v).split(" ")[0]} width={70} />
                 <Tooltip content={<ChartTooltip unit=" €" />} cursor={{ fill: "rgba(148,163,184,0.1)" }} />
                 <Bar dataKey="ca" fill="url(#topGrad)" radius={[0, 7, 7, 0]} maxBarSize={26}>
-                  <LabelList dataKey="ca" position="right" formatter={(v) => fmtK(Number(v))} style={{ fontSize: 10, fontWeight: 600, fill: "#94a3b8" }} />
+                  <LabelList dataKey="ca" position="right" formatter={(v) => fmtK(Number(v))} style={{ fontSize: 10, fontWeight: 600, fill: "var(--faint)" }} />
                 </Bar>
               </BarChart>
             </ChartContainer>
@@ -617,8 +617,8 @@ export function Stats() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="4 8" strokeOpacity={0.6} />
-                <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => String(v).split(" ")[0]} interval={0} angle={-35} textAnchor="end" height={52} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => fmtK(Number(v))} width={52} />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "var(--faint)" }} tickFormatter={(v) => String(v).split(" ")[0]} interval={0} angle={-35} textAnchor="end" height={52} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--faint)" }} tickFormatter={(v) => fmtK(Number(v))} width={52} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(148,163,184,0.1)" }} />
                 <Bar dataKey="followers" name="Abonnés" fill="url(#folGrad)" radius={[7, 7, 0, 0]} maxBarSize={56} />
               </BarChart>

@@ -292,8 +292,8 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
                 <AreaChart data={points.filter((x) => x.followers > 0)} margin={{ top: 6, right: 8, left: -6, bottom: 0 }}>
                   <defs>
                     <linearGradient id="suiviFol" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#6366f1" stopOpacity={0.25} />
-                      <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+                      <stop offset="0%" stopColor="var(--chart-5)" stopOpacity={0.25} />
+                      <stop offset="100%" stopColor="var(--chart-5)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -304,7 +304,7 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
                     labelFormatter={(_, pl) => (pl?.[0]?.payload?.full ? t("Le {date}", { date: pl[0].payload.full }) : "")}
                     formatter={(value) => [fmtCompact(Number(value ?? 0)), t("Abonnés")]}
                   />
-                  <Area type="monotone" dataKey="followers" stroke="#6366f1" strokeWidth={2.5} fill="url(#suiviFol)" dot={{ r: 3, fill: "#6366f1" }} />
+                  <Area type="monotone" dataKey="followers" stroke="var(--chart-5)" strokeWidth={2.5} fill="url(#suiviFol)" dot={{ r: 3, fill: "var(--chart-5)" }} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -324,8 +324,8 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
                 <BarChart data={points} margin={{ top: 6, right: 8, left: -6, bottom: 0 }}>
                   <defs>
                     <linearGradient id="suiviInt" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.9} />
-                      <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.45} />
+                      <stop offset="0%" stopColor="var(--chart-4)" stopOpacity={0.9} />
+                      <stop offset="100%" stopColor="var(--chart-4)" stopOpacity={0.45} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />

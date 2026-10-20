@@ -137,10 +137,10 @@ const igAsked = new Set<string>();
 // ── Scouting : statut de pipeline + suivi d'abonnés dans le temps ──
 type ScoutStatus = "observation" | "contacter" | "discussion" | "signe" | "ecarte";
 const STATUSES: { v: ScoutStatus; label: string; dot: string; pill: string }[] = [
-  { v: "observation", label: "En observation", dot: "bg-indigo", pill: "bg-indigo/10 text-indigo" },
-  { v: "contacter", label: "À contacter", dot: "bg-amber", pill: "bg-foreground/[0.06] text-amber" },
-  { v: "discussion", label: "En discussion", dot: "bg-primary", pill: "bg-primary/10 text-primary" },
-  { v: "signe", label: "Signé", dot: "bg-signal", pill: "bg-signal/10 text-signaltext" },
+  { v: "observation", label: "En observation", dot: "bg-info", pill: "bg-info-soft text-info" },
+  { v: "contacter", label: "À contacter", dot: "bg-wait", pill: "bg-wait-soft text-wait" },
+  { v: "discussion", label: "En discussion", dot: "bg-progress", pill: "bg-progress-soft text-progress" },
+  { v: "signe", label: "Signé", dot: "bg-ok", pill: "bg-ok-soft text-ok" },
   { v: "ecarte", label: "Pas intéressé", dot: "bg-neutral-400", pill: "bg-panel text-faint" },
 ];
 const statusMeta = (v: ScoutStatus) => STATUSES.find((s) => s.v === v) ?? STATUSES[0];

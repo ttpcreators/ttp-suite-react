@@ -64,13 +64,13 @@ export interface AnimatedBadgeProps
 }
 
 const STATUS_CLASS: Record<AnimatedBadgeStatus, string> = {
-  neutral: "border-border bg-card text-muted-foreground",
-  info: "border-foreground/20 bg-surface text-foreground",
-  success:
-    "border-signal/30 bg-signal/10 text-signaltext",
-  warning: "border-border bg-muted text-muted-foreground",
-  danger: "border-destructive/30 bg-destructive/10 text-destructive",
-  loading: "border-border bg-muted text-muted-foreground",
+  // Statuts de l'app (lib/statusTone.ts) : capsules plates, un sens par couleur.
+  neutral: "border-transparent bg-closed-soft text-closed",
+  info: "border-transparent bg-progress-soft text-progress",
+  success: "border-transparent bg-ok-soft text-ok",
+  warning: "border-transparent bg-wait-soft text-wait",
+  danger: "border-transparent bg-late-soft text-late",
+  loading: "border-transparent bg-closed-soft text-closed",
 };
 
 const SIZE_CLASS: Record<AnimatedBadgeSize, string> = {

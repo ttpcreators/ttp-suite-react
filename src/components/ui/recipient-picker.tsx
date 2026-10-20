@@ -68,7 +68,7 @@ export function RecipientPicker({
           {value.map((e) => (
             <span key={e} className="inline-flex items-center gap-1 rounded-full bg-panel px-2.5 py-1 text-[11px] text-foreground">
               {e}
-              <button type="button" onClick={() => remove(e)} className="text-faint transition-colors hover:text-[#E5484D]" aria-label={`Retirer ${e}`}>
+              <button type="button" onClick={() => remove(e)} className="text-faint transition-colors hover:text-destructive" aria-label={`Retirer ${e}`}>
                 <X className="h-3 w-3" />
               </button>
             </span>

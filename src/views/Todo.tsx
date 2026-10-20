@@ -68,9 +68,9 @@ let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
 
 const TODO_STATUS_OPTS: StatusOption[] = [
-  { value: "À faire", label: "À faire", dot: "bg-primary" },
-  { value: "En cours", label: "En cours", dot: "bg-cyan" },
-  { value: "Fait", label: "Fait", dot: "bg-signal" },
+  { value: "À faire", label: "À faire", dot: "bg-wait" },
+  { value: "En cours", label: "En cours", dot: "bg-progress" },
+  { value: "Fait", label: "Fait", dot: "bg-ok" },
 ];
 /** Statut affiché : colonne status si présente, sinon dérivé de `done`. */
 const todoStatus = (r: Row): string => r.status ?? (r.done ? "Fait" : "À faire");
@@ -93,7 +93,7 @@ function prioOf(p: string): { status: "danger" | "warning" | "neutral"; label: s
 
 /** Point de priorité scintillant (remplace le badge texte dans la liste). */
 function PriorityDot({ priority }: { priority: Priority }) {
-  const color = priority === "haute" ? "bg-danger" : priority === "moyenne" ? "bg-amber" : "bg-neutral-400";
+  const color = priority === "haute" ? "bg-wait" : priority === "moyenne" ? "bg-progress" : "bg-closed";
   const label = priority === "haute" ? "Priorité haute" : priority === "moyenne" ? "Priorité moyenne" : "Priorité basse";
   const animate = priority !== "basse";
   return (
@@ -106,12 +106,12 @@ function PriorityDot({ priority }: { priority: Priority }) {
 
 // Couleurs de priorité : point (mobile) + pilule.
 const PRIO_ACCENT: Record<Priority, string> = {
-  haute: "bg-danger",
+  haute: "bg-wait",
   moyenne: "bg-foreground/50",
   basse: "bg-foreground/30",
 };
 const PRIO_PILL: Record<Priority, string> = {
-  haute: "bg-danger/10 text-dangertext",
+  haute: "bg-wait-soft text-wait",
   moyenne: "bg-muted text-muted-foreground",
   basse: "border border-border text-muted-foreground",
 };
@@ -1092,7 +1092,7 @@ export function Todo() {
                             {s.done && <Check className="h-3 w-3" />}
                           </button>
                           <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
-                          <button type="button" onClick={() => delSubtask(selectedTodo, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button type="button" onClick={() => delSubtask(selectedTodo, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
                       ))}
                     </div>
@@ -1114,7 +1114,7 @@ export function Todo() {
                         <div className="truncate text-[13px] font-medium text-foreground hover:underline">{a.name}</div>
                         <div className="text-[11px] text-faint">{a.size}</div>
                       </button>
-                      <button type="button" onClick={() => setConfirmAtt({ todo: selectedTodo, att: a })} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title="Retirer"><Trash2 className="h-4 w-4" /></button>
+                      <button type="button" onClick={() => setConfirmAtt({ todo: selectedTodo, att: a })} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title="Retirer"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   ))}
                   <input ref={attFileRef} type="file" multiple className="hidden" onChange={(e) => uploadAttachments(selectedTodo, e.target.files)} />
