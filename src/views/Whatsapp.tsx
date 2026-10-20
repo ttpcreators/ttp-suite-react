@@ -197,7 +197,7 @@ export function WhatsappView() {
           type="button"
           onClick={() => act(x.r, "whatsapp")}
           title="Ouvrir WhatsApp et noter la prise de contact"
-          className="grid h-8 w-8 place-items-center rounded-full bg-signal text-white transition-opacity hover:opacity-90"
+          className="grid h-8 w-8 place-items-center rounded-full bg-signal text-onsignal transition-opacity hover:opacity-90"
         >
           <MessageCircle className="h-4 w-4" />
         </button>

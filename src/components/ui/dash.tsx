@@ -57,7 +57,7 @@ export function Delta({ value, suffix: suffixProp }: { value: number | null; suf
     <span className="inline-flex flex-wrap items-center gap-1.5 text-[13px]">
       <span
         className={cn(
-          "grid size-[17px] shrink-0 place-items-center rounded-full text-white dark:text-black",
+          "grid size-[17px] shrink-0 place-items-center rounded-full text-onsignal dark:text-black",
           up ? "bg-signal" : "bg-danger",
         )}
         aria-hidden

@@ -144,7 +144,7 @@ export function BugsPanel() {
                   </button>
                   {!g.resolved && (
                     <button type="button" onClick={() => void resolve(g)}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-full bg-signal px-2.5 text-[12px] font-semibold text-white hover:opacity-90">
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full bg-signal px-2.5 text-[12px] font-semibold text-onsignal hover:opacity-90">
                       <Check className="h-3.5 w-3.5" /> Marquer résolu
                     </button>
                   )}

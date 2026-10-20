@@ -17,7 +17,7 @@ import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { DEFAULT_HIDDEN_PAGES, HIDDEN_PAGES_EVENT, hiddenPagesOf } from "@/lib/hiddenPages";
 import { maybeAutoRun } from "@/lib/diagnostics";
-import { getThemePref, setThemePref } from "@/lib/accent";
+import { applyTheme, getThemeChoice, resolveTheme, setThemeChoice, type ResolvedTheme, type ThemeChoice } from "@/lib/accent";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PageFrame } from "@/components/ui/page-header";
@@ -280,9 +280,12 @@ export default function App() {
     return null;
   });
   const [ctxMenu, setCtxMenu] = useState<{ id: ViewId; x: number; y: number } | null>(null);
-  // Thème mémorisé PAR APPAREIL (avant : jamais sauvegardé → l'app repartait
-  // toujours en clair au rechargement). Classe déjà posée par initAccent().
-  const [dark, setDark] = useState(() => getThemePref());
+  // Thème mémorisé PAR APPAREIL (Clair, Verre, Noir ou Auto), déjà posé par initAccent().
+  const [theme, setTheme] = useState<ThemeChoice>(() => getThemeChoice());
+  const [resolved, setResolved] = useState<ResolvedTheme>(() => resolveTheme(getThemeChoice()));
+  const dark = resolved === "noir";
+  // Dernier thème clair choisi (Clair ou Verre) : le bouton soleil y revient depuis Noir.
+  const lastLight = useRef<"clair" | "verre">(theme === "verre" ? "verre" : "clair");
   // Mode iPhone : écran « Plus » ou « Rechercher » affiché par-dessus la page courante.
   const [phoneScreen, setPhoneScreen] = useState<null | "more" | "search">(null);
   // Emplacement du « + » de la page dans la barre de titre (iPhone).
@@ -338,9 +341,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
-    setThemePref(dark);
-  }, [dark]);
+    setThemeChoice(theme);
+    if (theme === "clair" || theme === "verre") lastLight.current = theme;
+    const sync = () => {
+      const r = resolveTheme(theme);
+      setResolved(r);
+      applyTheme(r);
+    };
+    sync();
+    if (theme !== "auto") return;
+    // Auto : suit l'appareil en direct (passage jour/nuit).
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, [theme]);
 
   // Retour de la connexion Instagram d'une créatrice faite depuis sa fiche (ig-callback).
   useEffect(() => {
@@ -516,7 +530,7 @@ export default function App() {
     const y = Math.min(e.clientY, window.innerHeight - 150);
     setCtxMenu({ id, x, y });
   };
-  const toggleTheme = () => setDark((d) => !d);
+  const toggleTheme = () => setTheme(dark ? lastLight.current : "noir");
   const logout = () => supabase.auth.signOut();
   const openDetail = (name: string) => {
     setDetailCreator(name);
@@ -803,7 +817,7 @@ export default function App() {
   const aliveIds = [...new Set<ViewId>([...tabs, ...visitedIds])].filter(canSee);
 
   return (
-    <ThemeContext.Provider value={{ dark, toggle: toggleTheme }}>
+    <ThemeContext.Provider value={{ dark, toggle: toggleTheme, theme, setTheme }}>
     <SearchContext.Provider value={{ query, setQuery }}>
     <NavSubSetContext.Provider value={setSub}>
       <div className={iosPhone ? "h-[100dvh] bg-panel" : "h-[100dvh] bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>

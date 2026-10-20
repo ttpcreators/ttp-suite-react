@@ -196,7 +196,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                             <button type="button" onClick={() => void toggle(r)} disabled={busy === r.id}
                               aria-label={done ? "Annuler le « Fait » de cette semaine" : "Marquer fait cette semaine"}
                               className="mt-0.5 shrink-0 transition-transform active:scale-90 disabled:opacity-50">
-                              {done ? <span className="grid h-5 w-5 place-items-center rounded-full bg-signal text-white"><Check className="h-3.5 w-3.5" /></span>
+                              {done ? <span className="grid h-5 w-5 place-items-center rounded-full bg-signal text-onsignal"><Check className="h-3.5 w-3.5" /></span>
                                 : <Circle className="h-5 w-5 text-faint hover:text-foreground" />}
                             </button>
                             <div className="min-w-0 flex-1">

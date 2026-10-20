@@ -4,7 +4,7 @@ import { SignaturePad } from "@/components/signature-pad";
 import { BellRing, Smartphone, Sunrise, Sun, Moon, Users, Mail, CalendarDays, Bug, LogOut, RefreshCw, Palette, Check, MessageCircle, History, PanelLeft, EyeOff, Bot, Copy, Unplug, PenLine, Sparkles } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
-import { ACCENT_PRESETS, ACCENT_GRADIENTS, getAccent, setAccent, isHex, parseGradient, getDarkStyle, setDarkStyle, type DarkStyle } from "@/lib/accent";
+import { ACCENT_PRESETS, ACCENT_GRADIENTS, getAccent, setAccent, isHex, parseGradient, THEME_CHOICES, type ThemeChoice } from "@/lib/accent";
 import { NOTIF_TEXTS_CREATOR, NOTIF_TEXTS_AGENCY, type NotifTextField } from "@/lib/notifTexts";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { RELANCE_DAYS, type ProspectSettings, type WaMode } from "@/lib/touches";
@@ -475,14 +475,7 @@ export function Parametres() {
     if (!ok) toast("Erreur d'enregistrement — réessaie");
   };
 
-  const { dark, toggle: toggleTheme } = useTheme();
-
-  // Style du thème sombre (propre à cet appareil) : Minuit (défaut) ou Classique.
-  const [darkStyle, setDarkStyleState] = useState<DarkStyle>(() => getDarkStyle());
-  const chooseDarkStyle = (s: DarkStyle) => {
-    setDarkStyle(s);
-    setDarkStyleState(s);
-  };
+  const { dark, theme, setTheme } = useTheme();
 
   // Couleur d'accent (propre à cet appareil, comme le thème).
   const [accent, setAccentState] = useState<string>(() => getAccent());
@@ -582,31 +575,22 @@ export function Parametres() {
       <Section
         icon={dark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
         title="Apparence"
-        hint="Thème clair ou sombre de l'application (propre à cet appareil)."
+        hint="Thème de l'application, propre à cet appareil."
       >
-        <PrefRow
-          label="Mode sombre"
-          hint="Bascule toute l'app en thème sombre."
-          checked={dark}
-          onChange={() => toggleTheme()}
-        />
         <div className="flex flex-wrap items-center justify-between gap-3 py-2">
           <div className="min-w-0">
-            <div className="text-[13px] font-medium text-foreground">Style sombre</div>
+            <div className="text-[13px] font-medium text-foreground">Thème</div>
             <div className="text-[11px] leading-snug text-faint">
-              Minuit : noir profond et monochrome. Classique : l'ancien sombre bleuté.
+              Clair le jour, Verre façon Liquid Glass, Noir le soir. Auto suit le réglage de l'appareil.
             </div>
           </div>
           <Tabs
             size="sm"
             className="shrink-0"
-            label="Style sombre"
-            items={[
-              { value: "minuit", label: "Minuit" },
-              { value: "classic", label: "Classique" },
-            ]}
-            value={darkStyle}
-            onValueChange={(v) => chooseDarkStyle(v as DarkStyle)}
+            label="Thème"
+            items={THEME_CHOICES}
+            value={theme}
+            onValueChange={(v) => setTheme(v as ThemeChoice)}
           />
         </div>
       </Section>

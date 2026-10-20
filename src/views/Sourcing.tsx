@@ -860,7 +860,7 @@ function CreatorFinder() {
                       <div className="relative">
                         <Pic src={d?.picture} name={d?.name || c.username} />
                         {ok && (
-                          <span title={`Potentiel ${p.score} / 100`} className={cn("absolute -bottom-1 -right-1.5 rounded-full border-2 border-surface px-1 text-[9px] font-bold tabular-nums leading-[14px]", p.score >= 70 ? "bg-signal text-white" : p.score >= 45 ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground")}>
+                          <span title={`Potentiel ${p.score} / 100`} className={cn("absolute -bottom-1 -right-1.5 rounded-full border-2 border-surface px-1 text-[9px] font-bold tabular-nums leading-[14px]", p.score >= 70 ? "bg-signal text-onsignal" : p.score >= 45 ? "bg-primary text-primary-foreground" : "bg-panel text-muted-foreground")}>
                             {p.score}
                           </span>
                         )}

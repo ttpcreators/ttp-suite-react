@@ -1,8 +1,8 @@
 /**
- * Couleur d'accent personnalisable (le token `--primary` de l'app). On pose la
- * couleur EN LIGNE sur `document.documentElement` → l'inline gagne sur les règles
- * `:root {}` ET `.dark {}` de la feuille de style, donc le changement marche dans
- * les DEUX thèmes sans rien casser. Le texte sur les boutons (`--primary-foreground`)
+ * Couleur d'accent personnalisable : la variable `--accent` (que `--primary` et
+ * `--ring` relisent). On pose la couleur EN LIGNE sur `document.documentElement`
+ * → l'inline gagne sur les règles de thème de la feuille de style, donc le
+ * changement marche dans les trois thèmes. Le texte posé dessus (`--on-accent`)
  * est recalculé (noir/blanc) selon la luminance → toujours lisible.
  *
  * Préférence PROPRE À CET APPAREIL (localStorage), comme le mode sombre.
@@ -98,16 +98,14 @@ export function applyAccent(color: string | null): void {
   }
   const solid = grad ? mixHex(grad[0], grad[1]) : color;
   if (!solid || !isHex(solid)) {
-    el.style.removeProperty("--primary");
-    el.style.removeProperty("--primary-foreground");
-    el.style.removeProperty("--ring");
+    el.style.removeProperty("--accent");
+    el.style.removeProperty("--on-accent");
     return;
   }
   // Dégradé : texte sombre seulement si les DEUX bouts sont clairs.
   const light = grad ? Math.min(luminance(grad[0]), luminance(grad[1])) > 0.55 : luminance(solid) > 0.55;
-  el.style.setProperty("--primary", solid);
-  el.style.setProperty("--primary-foreground", light ? "#18181b" : "#ffffff");
-  el.style.setProperty("--ring", solid);
+  el.style.setProperty("--accent", solid);
+  el.style.setProperty("--on-accent", light ? "#18181b" : "#ffffff");
 }
 
 export function getAccent(): string {
@@ -131,58 +129,66 @@ export function setAccent(color: string): void {
 /** À appeler au démarrage (avant le rendu) pour éviter tout flash de bleu. */
 export function initAccent(): void {
   applyAccent(getAccent() || null);
-  applyDarkStyle(getDarkStyle());
-  // Thème clair/sombre mémorisé : posé AVANT le premier rendu (pas de flash blanc).
-  document.documentElement.classList.toggle("dark", getThemePref());
-}
-
-// ── Thème clair/sombre mémorisé par appareil ──
-const THEME_KEY = "ttp:theme";
-
-export function getThemePref(): boolean {
+  // Thème mémorisé : posé AVANT le premier rendu (pas de flash blanc).
+  applyTheme(resolveTheme(getThemeChoice()));
+  // L'ancien réglage « style sombre » (Minuit / Classique) n'existe plus.
   try {
-    return localStorage.getItem(THEME_KEY) === "dark";
+    localStorage.removeItem("ttp:darkStyle");
   } catch {
-    return false;
+    /* stockage indispo */
   }
 }
 
-export function setThemePref(dark: boolean): void {
+// ── Thème mémorisé par appareil : Clair, Verre, Noir, ou Auto (suit l'appareil) ──
+const THEME_KEY = "ttp:theme";
+export type ThemeChoice = "clair" | "verre" | "noir" | "auto";
+export type ResolvedTheme = Exclude<ThemeChoice, "auto">;
+
+export const THEME_CHOICES: { value: ThemeChoice; label: string }[] = [
+  { value: "clair", label: "Clair" },
+  { value: "verre", label: "Verre" },
+  { value: "noir", label: "Noir" },
+  { value: "auto", label: "Auto" },
+];
+
+export function getThemeChoice(): ThemeChoice {
   try {
-    if (dark) localStorage.setItem(THEME_KEY, "dark");
-    else localStorage.removeItem(THEME_KEY);
+    const v = localStorage.getItem(THEME_KEY);
+    // « dark » = l'ancien réglage sombre, devenu Noir.
+    if (v === "dark" || v === "noir") return "noir";
+    if (v === "verre" || v === "auto") return v;
+    return "clair";
+  } catch {
+    return "clair";
+  }
+}
+
+/** Auto : Noir si l'appareil est en sombre, Clair sinon. */
+export function resolveTheme(choice: ThemeChoice): ResolvedTheme {
+  if (choice !== "auto") return choice;
+  try {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "noir" : "clair";
+  } catch {
+    return "clair";
+  }
+}
+
+export function setThemeChoice(choice: ThemeChoice): void {
+  try {
+    if (choice === "clair") localStorage.removeItem(THEME_KEY);
+    else localStorage.setItem(THEME_KEY, choice);
   } catch {
     /* stockage indispo : le thème reste valable pour la session */
   }
+}
+
+/** Pose le thème sur <html> : attribut data-theme, classe .dark (variante Tailwind) et barre d'état. */
+export function applyTheme(theme: ResolvedTheme): void {
+  const el = document.documentElement;
+  const dark = theme === "noir";
+  el.dataset.theme = theme;
+  el.classList.toggle("dark", dark);
   // Couleur de la barre d'état (iPhone : appliquée au prochain lancement de l'app installée).
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#000000" : "#f4f4f5");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#000000" : theme === "verre" ? "#edf0f7" : "#f5f5f7");
   document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.setAttribute("content", dark ? "black-translucent" : "default");
-}
-
-// ── Style du thème sombre : « minuit » (défaut, façon Efferd) ou « classic » ──
-// Classe `dark-classic` sur la racine : elle ne fait effet QU'EN mode sombre
-// (règle `.dark.dark-classic` de index.css). Propre à cet appareil.
-const DARK_KEY = "ttp:darkStyle";
-export type DarkStyle = "minuit" | "classic";
-
-export function getDarkStyle(): DarkStyle {
-  try {
-    return localStorage.getItem(DARK_KEY) === "classic" ? "classic" : "minuit";
-  } catch {
-    return "minuit";
-  }
-}
-
-export function applyDarkStyle(style: DarkStyle): void {
-  document.documentElement.classList.toggle("dark-classic", style === "classic");
-}
-
-export function setDarkStyle(style: DarkStyle): void {
-  try {
-    if (style === "classic") localStorage.setItem(DARK_KEY, "classic");
-    else localStorage.removeItem(DARK_KEY);
-  } catch {
-    /* stockage indispo : appliqué pour la session */
-  }
-  applyDarkStyle(style);
 }
