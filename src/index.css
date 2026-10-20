@@ -316,25 +316,57 @@
   background: transparent;
 }
 /* Panneaux de verre : zone de contenu, fenêtres et menus flottants. */
-[data-theme="verre"] :is(.shell-panel, .glass, [role="dialog"] > .bg-surface, .bg-surface:is(.shadow-lg, .shadow-xl, .shadow-2xl), .bg-popover) {
+[data-theme="verre"] :is(.glass, [role="dialog"] > :is(.bg-surface, .bg-card), :is(.bg-surface, .bg-card):is(.shadow-lg, .shadow-xl, .shadow-2xl), .bg-popover, .ios-sheet-panel > :not([aria-hidden])) {
   background: var(--glass);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
-/* Fenêtres et menus : un voile plus opaque, le texte reste net sur le contenu. */
-[data-theme="verre"] :is([role="dialog"] > .bg-surface, .bg-surface:is(.shadow-lg, .shadow-xl, .shadow-2xl), .bg-popover) {
-  background: rgba(255, 255, 255, 0.86);
+/* Zone de contenu : le verre est posé sur un calque de fond (::before). Un flou posé
+   directement sur le panneau piégerait les fenêtres (position: fixed) à l'intérieur. */
+[data-theme="verre"] .shell-panel {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
 }
-/* Repli sans flou (navigateur qui ne sait pas faire) ou transparence réduite demandée. */
+[data-theme="verre"] .shell-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  pointer-events: none;
+}
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  [data-theme="verre"] :is(.shell-panel, .glass, [role="dialog"] > .bg-surface, .bg-surface:is(.shadow-lg, .shadow-xl, .shadow-2xl), .bg-popover) {
+  [data-theme="verre"] .shell-panel::before {
     background: rgba(255, 255, 255, 0.92);
   }
 }
 @media (prefers-reduced-transparency: reduce) {
-  [data-theme="verre"] :is(.shell-panel, .glass, [role="dialog"] > .bg-surface, .bg-surface:is(.shadow-lg, .shadow-xl, .shadow-2xl), .bg-popover) {
+  [data-theme="verre"] .shell-panel::before {
+    background: rgba(255, 255, 255, 0.92);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+/* Fenêtres et menus : un voile plus opaque, le texte reste net sur le contenu. */
+[data-theme="verre"] :is([role="dialog"] > :is(.bg-surface, .bg-card), :is(.bg-surface, .bg-card):is(.shadow-lg, .shadow-xl, .shadow-2xl), .bg-popover, .ios-sheet-panel > :not([aria-hidden])) {
+  background: rgba(255, 255, 255, 0.86);
+}
+/* Repli sans flou (navigateur qui ne sait pas faire) ou transparence réduite demandée. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-theme="verre"] :is(.glass, [role="dialog"] > :is(.bg-surface, .bg-card), :is(.bg-surface, .bg-card):is(.shadow-lg, .shadow-xl, .shadow-2xl), .bg-popover, .ios-sheet-panel > :not([aria-hidden])) {
+    background: rgba(255, 255, 255, 0.92);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme="verre"] :is(.glass, [role="dialog"] > :is(.bg-surface, .bg-card), :is(.bg-surface, .bg-card):is(.shadow-lg, .shadow-xl, .shadow-2xl), .bg-popover, .ios-sheet-panel > :not([aria-hidden])) {
     background: rgba(255, 255, 255, 0.92);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
