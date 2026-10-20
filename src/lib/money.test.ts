@@ -56,6 +56,8 @@ describe("parseAmount séparateurs mixtes", () => {
 describe("formatEuro", () => {
   it("se termine par l'euro", () => {
     expect(formatEuro(3000).endsWith("€")).toBe(true);
+    expect(formatEuro(1615.2).replace(/\s/g, " ")).toBe("1 615,20 €");
+    expect(formatEuro(600).replace(/\s/g, " ")).toBe("600 €");
     expect(formatEuro(0).endsWith("€")).toBe(true);
   });
 

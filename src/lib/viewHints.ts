@@ -5,6 +5,7 @@ import type { ViewId } from "./nav";
  * Pour qu'une page se comprenne au premier coup d'œil, même la première fois.
  */
 export const VIEW_HINTS: Partial<Record<ViewId, string>> = {
+  aujourdhui: "Ce qui attend une action aujourd'hui, trié par urgence : une ligne, un geste.",
   activite: "Qui a fait quoi dans l'agence, et quand : chaque ajout, « Fait », suppression ou avancée.",
   agent: "Tes agents : ce qu'ils proposent, leurs consignes et leurs routines.",
   stats: "Les chiffres de l'agence sur une période, comparés à la période d'avant.",

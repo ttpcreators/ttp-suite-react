@@ -135,8 +135,8 @@ export type TabsProps = {
   label?: string;
   className?: string;
   panelClassName?: string;
-  /** "md" (défaut) : barre de page. "sm" : version compacte (dans une carte, un graphique…). */
-  size?: "sm" | "md";
+  /** "md" (défaut) : barre de page. "sm" : version compacte (dans une carte, un graphique…). "lg" : grand sélecteur d'outil (haut de page). */
+  size?: "sm" | "md" | "lg";
   /** Occupe toute la largeur, onglets répartis à parts égales. */
   fullWidth?: boolean;
   /** Passe à la ligne à toutes les tailles (filtres à nombreuses options) au lieu de défiler. */
@@ -147,6 +147,7 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
   const t = useT();
   const label = labelProp ?? t("Onglets");
   const sm = size === "sm";
+  const lg = size === "lg";
   const tabs = useTabs({ items, value, defaultValue, onValueChange, activation });
   const reduced = useReducedMotion();
   const rowRef = useRef<HTMLDivElement | null>(null);
@@ -184,6 +185,7 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
           // Une seule ligne qui défile au doigt (iOS) ; `wrap` pour les filtres à nombreuses options.
           wrap ? "flex-wrap" : "flex-nowrap",
           sm ? "p-0.5" : "p-1",
+          lg && "rounded-[14px]",
           fullWidth ? "w-full" : "w-fit",
         )}
       >
@@ -191,7 +193,7 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
             `style` ne déclenche pas le ressort). Masqué si aucune valeur ne correspond. */}
         <motion.span
           aria-hidden
-          className="pointer-events-none absolute rounded-[9px] bg-segment shadow-[0_1px_3px_rgba(0,0,0,0.12),0_0_0_0.5px_rgba(0,0,0,0.04)]"
+          className={cn("pointer-events-none absolute bg-segment", lg ? "rounded-[11px]" : "rounded-[9px]", "shadow-[0_1px_3px_rgba(0,0,0,0.12),0_0_0_0.5px_rgba(0,0,0,0.04)]")}
           initial={false}
           animate={{ left: ind.x, top: ind.y, width: ind.width, height: ind.height, opacity: ind.ready && selectedIndex >= 0 ? 1 : 0 }}
           transition={reduced || !ind.ready ? { duration: 0 } : INDICATOR}
@@ -207,7 +209,7 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
               title={item.hideLabel === "always" ? item.label : undefined}
               className={cn(
                 "relative z-10 flex shrink-0 items-center justify-center whitespace-nowrap font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-foreground/20 [&_svg]:text-current",
-                sm ? "h-7 gap-1.5 rounded-[9px] px-3 text-[12px]" : "h-8 gap-2 rounded-[9px] px-3.5 text-[13px]",
+                sm ? "h-7 gap-1.5 rounded-[9px] px-3 text-[12px]" : lg ? "h-10 gap-1.5 rounded-[11px] px-2.5 text-[14px] sm:gap-2 sm:px-4" : "h-8 gap-2 rounded-[9px] px-3.5 text-[13px]",
                 fullWidth && "flex-1",
                 item.disabled ? "cursor-default text-faint" : selected ? "font-semibold text-foreground" : "text-foreground/80 hover:text-foreground",
               )}
