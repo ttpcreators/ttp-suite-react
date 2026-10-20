@@ -4,10 +4,10 @@ import { Spin } from "@/components/ui/loader";
 import { motion, AnimatePresence } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { fmtCompact } from "@/lib/timeSeries";
-import { LayoutDashboard, CircleEllipsis, House, ListChecks, Lightbulb, FileText, Gift, Sparkles, Globe2, CalendarDays, Files, Image as ImageIcon, Receipt, Upload, Mail, ShieldCheck, Package, LogOut, Moon, Sun, Pencil, Check, Trash2, TrendingUp, ExternalLink, BarChart3, Contact, X, Copy, List, Columns3, PanelLeftOpen, Target, Share2, Plus, FileChartColumn, FileBarChart, HelpCircle, Eye, ArrowLeft } from "lucide-react";
+import { LayoutDashboard, House, ListChecks, SquareCheckBig, MessageSquare, Wallet, UserRound, ChevronRight, Camera, PenLine, CircleCheck, Lightbulb, FileText, Gift, Sparkles, Globe2, CalendarDays, Files, Image as ImageIcon, Receipt, Upload, Mail, ShieldCheck, Package, LogOut, Moon, Sun, Pencil, Check, Trash2, TrendingUp, ExternalLink, BarChart3, Contact, X, Copy, List, Columns3, PanelLeftOpen, Target, Share2, Plus, FileChartColumn, FileBarChart, HelpCircle, Eye, ArrowLeft } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn } from "@/lib/utils";
-import { frDate, toISODate } from "@/lib/dates";
+import { frDate, toISODate, todayISO } from "@/lib/dates";
 import { notifyAgency, notifyCreator } from "@/lib/push";
 import { PushCard } from "@/components/ui/push-card";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -44,8 +44,18 @@ import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, type Gift as GiftRow } from "
 import { PageFrame, PageHeaderRow } from "@/components/ui/page-header";
 import { useIsPhone } from "@/lib/iosUi";
 import { NavActionSlotContext } from "@/lib/navAction";
-import { IosBackButton, IosNavBar, IosTabBar } from "@/components/mobile/ios-shell";
-import { MoreScreen } from "@/components/mobile/more-screen";
+import { IosBackButton, IosGroup, IosNavBar, IosRow, IosTabBar } from "@/components/mobile/ios-shell";
+import { StatusPill } from "@/components/ui/status-pill";
+import { IconTile } from "@/components/ui/icon-tile";
+import { TONE_SOFT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
+import { useTheme } from "@/lib/theme";
+import { THEME_CHOICES, type ThemeChoice } from "@/lib/accent";
+import { STEPS, STEP_COUNT } from "@/lib/collabs";
+import { CS_MAIN_TABS, isMainTab, normalizeCsTab, ownerTab, type CsTab } from "@/lib/creatorTabs";
+import { brandInitial, briefKey, buildMissions, CREATOR_PHASES, creatorPhaseIndex, missionState, type Mission, type MissionCollab } from "@/lib/creatorMissions";
+import { creatorSteps, whenLabel, type NextStep } from "@/lib/creatorNextStep";
+import { gainsSummary, invoiceTone } from "@/lib/creatorGains";
+import { daysBetween as daysBetweenIso } from "@/lib/aujourdhui";
 import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
 import { OfflineBanner } from "@/components/mobile/offline-banner";
 import { Delta, DashPanel, DashSectionTitle, DashWideLink } from "@/components/ui/dash";
@@ -102,15 +112,15 @@ type Doc = { id: string; name: string; type: string | null; size: string | null;
 type Invoice = { ref: string; party: string; amount: string | null; date: string | null; status: string | null };
 type Contact = { id: string; brand: string; person: string | null; role: string | null; email: string | null; phone: string | null; sort_order?: number };
 
-type Tab =
-  | "accueil" | "guide" | "evolution" | "rapport" | "debrief" | "roadmap"
-  | "todo" | "ideas" | "briefs" | "mails" | "gifting" | "planning"
-  | "mediakit" | "documents" | "contacts" | "facturation";
+type Tab = CsTab;
 
 /**
  * Nav de l'espace créateur — SOURCE UNIQUE, groupée comme la sidebar agence.
  * Alimente à la fois le menu desktop (SidebarNav, sections repliables), le rail
- * replié et la nav mobile → les trois ne peuvent plus diverger.
+ * replié, la barre d'onglets du téléphone et la liste « Toutes les rubriques » de
+ * Profil → ils ne peuvent plus diverger.
+ * Premier groupe = les 5 onglets de la barre du bas (Accueil, Missions, Messages,
+ * Gains, Profil) ; toutes les autres rubriques suivent, rien n'est retiré.
  * Les ids de groupe sont préfixés `cs-` pour ne pas partager l'état d'ouverture
  * (localStorage) avec les groupes de l'espace agence.
  */
@@ -125,12 +135,12 @@ const CREATOR_GROUPS: {
     label: "Mon espace",
     icon: LayoutDashboard,
     items: [
-      { id: "accueil", label: "Accueil", icon: LayoutDashboard },
-      { id: "guide", label: "Guide", icon: HelpCircle },
-      { id: "evolution", label: "Évolution", icon: TrendingUp },
-      { id: "rapport", label: "Mon rapport", icon: FileBarChart },
-      { id: "debrief", label: "Bilans", icon: FileChartColumn },
-      { id: "roadmap", label: "Ma feuille de route", icon: Target },
+      { id: "accueil", label: "Accueil", icon: House },
+      { id: "missions", label: "Missions", icon: SquareCheckBig },
+      // Boîte mail : section activée par l'agence (sinon un message l'explique).
+      { id: "mails", label: "Messages", icon: MessageSquare },
+      { id: "gains", label: "Gains", icon: Wallet },
+      { id: "profil", label: "Profil", icon: UserRound },
     ],
   },
   {
@@ -140,11 +150,20 @@ const CREATOR_GROUPS: {
     items: [
       { id: "todo", label: "À faire", icon: ListChecks },
       { id: "ideas", label: "Idées", icon: Lightbulb },
-      { id: "briefs", label: "Briefs", icon: FileText },
-      // Visible seulement si l'agence a activé la section pour la créatrice (voir `navGroups`).
-      { id: "mails", label: "Mails", icon: Mail },
       { id: "gifting", label: "Gifting", icon: Gift },
       { id: "planning", label: "Planning", icon: CalendarDays },
+    ],
+  },
+  {
+    id: "cs-suivi",
+    label: "Mon suivi",
+    icon: TrendingUp,
+    items: [
+      { id: "guide", label: "Guide", icon: HelpCircle },
+      { id: "evolution", label: "Évolution", icon: TrendingUp },
+      { id: "rapport", label: "Mon rapport", icon: FileBarChart },
+      { id: "debrief", label: "Bilans", icon: FileChartColumn },
+      { id: "roadmap", label: "Ma feuille de route", icon: Target },
     ],
   },
   {
@@ -155,7 +174,6 @@ const CREATOR_GROUPS: {
       { id: "mediakit", label: "Media kit", icon: ImageIcon },
       { id: "documents", label: "Documents", icon: Files },
       { id: "contacts", label: "Contacts", icon: Contact },
-      { id: "facturation", label: "Facturation", icon: Receipt },
     ],
   },
 ];
@@ -252,15 +270,17 @@ const TAB_HINTS: Partial<Record<Tab, string>> = {
   rapport: "Ton mois en un coup d'œil : tes gains, tes collabs, tes chiffres et ce que l'agence t'a apporté.",
   debrief: "Les bilans de tes campagnes envoyés aux marques : chiffres et points forts.",
   roadmap: "Ta stratégie définie avec ton agence, et ce que tu publies chaque mois.",
+  missions: "Tes collabs et tes briefs : où en est chaque mission, ce qu'il faut livrer et pour quand.",
+  mails: "Les mails des marques qui t'écrivent, suivis avec ton agence.",
+  gains: "Ce que tu as gagné, ce qui arrive, et ta facture si l'agence ne l'a pas encore saisie.",
+  profil: "Tes infos, tes réseaux connectés, tes réglages et toutes tes rubriques.",
   todo: "Ce que tu as à faire, et tout ce dont tu as besoin de la part de l'agence.",
   ideas: "Tes idées de contenus et de collabs : l'agence les voit et peut rebondir.",
-  briefs: "Les campagnes des marques : livrables, échéances et ton script.",
   gifting: "Les produits que les marques t'ont offerts, et ce qu'ils attendent en retour.",
   planning: "Tes rendez-vous, tournages, briefs et échéances au même endroit.",
   mediakit: "Ta page publique à partager aux marques, toujours à jour.",
   documents: "Tes fichiers : contrats, briefs, factures et media kits.",
   contacts: "Les marques et agences avec qui tu travailles.",
-  facturation: "Tes factures : envoie les tiennes et suis ce qui est payé.",
 };
 
 /** Titre de page des onglets (hors accueil) : même en-tête que côté agence. */
@@ -289,15 +309,6 @@ function lsSet(k: string, v: string) {
   } catch {
     /* stockage indisponible */
   }
-}
-
-// Normalise les anciens statuts de brief comme côté agence (copie de colKey de Briefs.tsx).
-function briefKey(status: string): string {
-  const s = String(status).toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
-  if (s.includes("termin")) return "terminé";
-  if (s.includes("cours")) return "cours";
-  if (s.includes("valider")) return "valider";
-  return "attente";
 }
 
 const BRIEF_STATUS: StatusOption[] = [
@@ -332,13 +343,6 @@ const TODO_STATUS_OPTS: StatusOption[] = [
   { value: "En cours", label: "En cours", dot: "bg-progress" },
   { value: "Fait", label: "Fait", dot: "bg-ok" },
 ];
-
-const invStatus = (s: string | null): { status: "success" | "warning" | "danger" | "neutral"; label: string } => {
-  if (s === "payee") return { status: "success", label: "Payée" };
-  if (s === "attente") return { status: "warning", label: "En attente" };
-  if (s === "retard") return { status: "danger", label: "En retard" };
-  return { status: "neutral", label: "Brouillon" };
-};
 
 export function CreatorSpace({
   name,
@@ -400,23 +404,16 @@ export function CreatorSpace({
   // En visualisation agence, ce libellé est lu par l'agence : il reste en français.
   const exitTitle = preview ? "Revenir à l'espace agence" : t("Se déconnecter");
   // Onglet mémorisé (comme la dernière page côté agence) : un rechargement ne
-  // renvoie plus systématiquement la créatrice sur l'accueil.
-  const [tab, setTabState] = useState<Tab>(() => {
-    try {
-      const saved = localStorage.getItem("ttp:cs-tab");
-      if (saved && TABS.some((t) => t.id === saved)) return saved as Tab;
-    } catch {
-      /* stockage indisponible */
-    }
-    return "accueil";
-  });
-  const setTab = (t: Tab) => {
-    setTabState(t);
-    try {
-      localStorage.setItem("ttp:cs-tab", t);
-    } catch {
-      /* stockage indisponible */
-    }
+  // renvoie plus systématiquement le créateur sur l'accueil. Les anciennes valeurs
+  // (« briefs », « facturation », écran « Plus ») sont ramenées vers leur nouvel onglet.
+  const [tab, setTabState] = useState<Tab>(() => normalizeCsTab(lsGet("ttp:cs-tab")));
+  // Mission ouverte (fiche) dans l'onglet Missions ; null = la liste.
+  const [missionId, setMissionId] = useState<string | null>(null);
+  const setTab = (next: Tab | string) => {
+    const n = normalizeCsTab(next);
+    setTabState(n);
+    setMissionId(null);
+    lsSet("ttp:cs-tab", n);
   };
   const [confirmDoneTodo, setConfirmDoneTodo] = useState<Todo | null>(null); // anti-missclick « fait »
   const [taskView, setTaskView] = useState<Todo | null>(null); // fiche tâche (texte complet)
@@ -473,26 +470,25 @@ export function CreatorSpace({
     if (!mailBadgeOn || tab === "mails") return;
     void import("@/lib/creatorMail").then((m) => m.refreshAgencyActivity(name));
   }, [name, mailBadgeOn, tab, live]);
-  const navGroups = useMemo(() => {
-    const groups = CREATOR_GROUPS.map((g) => ({ ...g, label: t(g.label), items: g.items.map((i) => ({ ...i, label: t(i.label) })) }));
-    return mailsOn
-      ? groups.map((g) => ({ ...g, items: g.items.map((i) => (i.id === "mails" ? { ...i, badge: mailBadge || undefined } : i)) }))
-      : groups.map((g) => ({ ...g, items: g.items.filter((i) => i.id !== "mails") }));
-  }, [mailsOn, mailBadge, t]);
+  // Messages reste toujours visible (5 onglets fixes) : sans boîte activée, la page
+  // l'explique. La pastille compte les échanges qui ont bougé.
+  const navGroups = useMemo(
+    () =>
+      CREATOR_GROUPS.map((g) => ({
+        ...g,
+        label: t(g.label),
+        items: g.items.map((i) => ({ ...i, label: t(i.label), ...(i.id === "mails" && mailsOn ? { badge: mailBadge || undefined } : {}) })),
+      })),
+    [mailsOn, mailBadge, t],
+  );
   const navTabs = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
 
-  // ── Affichage iPhone (téléphone) : onglets en bas + écran « Plus » ──
+  // ── Affichage iPhone (téléphone) : 5 onglets en bas (Accueil, Missions, Messages, Gains, Profil) ──
   const iosPhone = useIsPhone();
-  const [moreOpen, setMoreOpen] = useState(false);
   const [navSlot, setNavSlot] = useState<HTMLElement | null>(null); // « + » de l'onglet dans la barre de titre
   const mainRef = useRef<HTMLElement>(null);
-  const ctabIds: Tab[] = ["accueil", "todo", "briefs", mailsOn ? "mails" : "planning"];
-  const goTab = (t: Tab) => {
-    setMoreOpen(false);
-    setTab(t);
-  };
-  // Chaque onglet garde sa position de défilement (comme une app iOS).
-  const screenKey = moreOpen ? "__more" : tab;
+  // Chaque onglet (et chaque fiche mission) garde sa position de défilement (comme une app iOS).
+  const screenKey = missionId ? `${tab}:${missionId}` : tab;
   const scrollMem = useRef(new Map<string, number>());
   const lastScroll = useRef(0);
   const prevScreen = useRef(screenKey);
@@ -586,6 +582,8 @@ export function CreatorSpace({
   const [docs, setDocs] = useState<Doc[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  // Collabs du créateur (lecture seule : RLS `collabs_scoped`, écriture réservée à l'agence).
+  const [collabs, setCollabs] = useState<MissionCollab[]>([]);
 
   // todo filter
   const [todoFilter, setTodoFilter] = useStickyState<TodoFilter>("espace:taches", ["encours", "terminees", "toutes"], "encours");
@@ -653,6 +651,7 @@ export function CreatorSpace({
     setCtEditId(null);
     setIdeaEditId(null);
     setContactView(null);
+    setMissionId(null);
   }, [name]);
 
   // Créateur dont les listes sont affichées. Sur un simple rafraîchissement, une
@@ -688,6 +687,8 @@ export function CreatorSpace({
     supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => apply(error) && setInvoices((data as Invoice[]) ?? []));
     // Contacts propres au créateur (RLS : il ne voit QUE ses lignes, jamais celles de l'agence).
     supabase.from("contacts").select("id,brand,person,role,email,phone,sort_order").eq("creator", name).order("sort_order").then(({ data, error }) => apply(error) && setContacts((data as Contact[]) ?? []));
+    // Missions : étape de chaque collab (sans le cachet ni la note interne de l'agence).
+    supabase.from("collabs").select("id,brand,title,deliverables,step,status,brief_id,created_at").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => apply(error) && setCollabs((data as MissionCollab[]) ?? []));
     return () => {
       alive = false;
     };
@@ -1360,7 +1361,6 @@ export function CreatorSpace({
   const filteredTodos =
     todoFilter === "encours" ? todos.filter((t) => !t.done) : todoFilter === "terminees" ? todos.filter((t) => t.done) : todos;
 
-  const encaisse = invoices.filter((i) => i.status === "payee").reduce((a, i) => a + parseAmount(i.amount), 0);
   // « Total facturé » = factures réellement émises. Un brouillon de l'agence n'est pas
   // encore facturé → ne doit pas être annoncé comme tel à la créatrice (même règle que
   // le KPI « CA facturé » côté agence).
@@ -1583,6 +1583,226 @@ export function CreatorSpace({
   };
   const tabHint = TAB_HINTS[tab];
 
+  // Réseaux connectés (Instagram, TikTok, YouTube) : mêmes blocs dans « Envoyer mes
+  // stats » et dans Profil.
+  const networkBlocks = (
+    <>
+      {/* Le plus simple : connecter son Instagram (stats automatiques) */}
+      {(FEATURES.connect.instagram || !!creator?.ig?.link) && (
+        <div className="mb-3 rounded-xl border border-border bg-surface p-3.5">
+          {creator?.ig?.link ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] leading-relaxed text-foreground">
+              <span className="flex items-start gap-1.5">
+                <PlatformIcon platform="instagram" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
+                <span>
+                  <span className="font-semibold">{t("Instagram connecté")}</span>
+                  {t("{account} : tes stats Instagram arrivent toutes seules. Les captures ne servent plus que pour tes autres réseaux.", { account: creator.ig.link.username ? ` (@${creator.ig.link.username})` : "" })}
+                </span>
+              </span>
+              {!preview && (
+                <button type="button" onClick={() => void disconnectIg()} disabled={igBusy} className="text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
+                  {t("Déconnecter")}
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
+                <PlatformIcon platform="instagram" className="h-3.5 w-3.5" /> {t("Encore plus simple : connecte ton Instagram")}
+              </div>
+              <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                {t("Tes stats Instagram (vues, comptes touchés, audience) arrivent toutes seules chaque jour, sans capture. Il faut un compte pro ou créateur. Tu peux déconnecter quand tu veux.")}
+              </div>
+              <button
+                type="button"
+                onClick={() => void connectIg()}
+                disabled={igBusy || !!preview}
+                title={preview ? "Le créateur le fait depuis son espace" : undefined}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground py-2.5 text-[12px] font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                {igBusy ? <Spin size={14} /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} {t("Connecter mon Instagram")}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Pareil pour TikTok */}
+      {(FEATURES.connect.tiktok || !!creator?.tt?.link) && (
+        <div className="mb-3 rounded-xl border border-border bg-surface p-3.5">
+          {creator?.tt?.link ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] leading-relaxed text-foreground">
+              <span className="flex items-start gap-1.5">
+                <PlatformIcon platform="tiktok" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
+                <span>
+                  <span className="font-semibold">{t("TikTok connecté")}</span>
+                  {t("{account} : tes abonnés et les vues de tes vidéos arrivent tout seuls.", { account: creator.tt.link.username ? ` (@${creator.tt.link.username})` : "" })}
+                </span>
+              </span>
+              {!preview && (
+                <button type="button" onClick={() => void disconnectTt()} disabled={ttBusy} className="text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
+                  {t("Déconnecter")}
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
+                <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" /> {t("Connecte aussi ton TikTok")}
+              </div>
+              <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                {t("Tes abonnés, tes j'aime et les vues de chacune de tes vidéos (collabs comprises) arrivent tout seuls chaque jour. Tu peux déconnecter quand tu veux.")}
+              </div>
+              <button
+                type="button"
+                onClick={() => void connectTt()}
+                disabled={ttBusy || !!preview}
+                title={preview ? "Le créateur le fait depuis son espace" : undefined}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
+              >
+                {ttBusy ? <Spin size={14} /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} {t("Connecter mon TikTok")}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Et YouTube (stats YouTube Studio, lecture seule) */}
+      {(FEATURES.connect.youtube || !!creator?.yt?.link) && (
+        <div className="mb-3 rounded-xl border border-border bg-surface p-3.5">
+          {creator?.yt?.link ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] leading-relaxed text-foreground">
+              <span className="flex items-start gap-1.5">
+                <PlatformIcon platform="youtube" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
+                <span>
+                  <span className="font-semibold">{t("YouTube connecté")}</span>
+                  {t("{account} : tes vues, ton temps de visionnage et ton audience arrivent tout seuls.", { account: creator.yt.link.title ? ` (${creator.yt.link.title})` : "" })}
+                </span>
+              </span>
+              {!preview && (
+                <button type="button" onClick={() => void disconnectYt()} disabled={ytBusy} className="text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
+                  {t("Déconnecter")}
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
+                <PlatformIcon platform="youtube" className="h-3.5 w-3.5" /> {t("Tu as une chaîne YouTube ?")}
+              </div>
+              <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                {t("Connecte-la : tes stats YouTube Studio (vues, heures regardées, abonnés gagnés, audience) arrivent toutes seules. Lecture seule, on ne peut rien publier ni modifier. Tu peux déconnecter quand tu veux : tes données YouTube sont alors effacées.")}
+              </div>
+              <button
+                type="button"
+                onClick={() => void connectYt()}
+                disabled={ytBusy || !!preview}
+                title={preview ? "Le créateur le fait depuis son espace" : undefined}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
+              >
+                {ytBusy ? <Spin size={14} /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} {t("Connecter mon YouTube")}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  );
+
+
+  // ── Données des 5 onglets (calculs purs dans src/lib/creator*.ts) ──
+  // « Stats du mois » : même indicateur que le Roster et la notification du matin
+  // (creators.stats_month), coché par l'agence ou tout seul par les synchros TikTok /
+  // Instagram quand le réseau principal est couvert. Repli : dernière mesure de plus de 35 j.
+  const nowD = new Date();
+  const thisMonth = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, "0")}`;
+  const lastMeasure = Math.max(0, ...(mySuivi ?? []).map((e) => frTime(e.date) || 0));
+  const statsStale = creator
+    ? (creator.stats_month ?? "") !== thisMonth
+    : mySuivi !== null && (!lastMeasure || Date.now() - lastMeasure > 35 * 86400000);
+  const todayIso = todayISO();
+  const missions = useMemo(() => buildMissions(collabs, briefs), [collabs, briefs]);
+  const openMission = missionId ? missions.find((m) => m.id === missionId) ?? null : null;
+  const steps = useMemo(
+    () => creatorSteps({ briefs, collabs, todos, events, invoices, statsStale, now: new Date() }),
+    [briefs, collabs, todos, events, invoices, statsStale],
+  );
+  const gains = useMemo(() => gainsSummary(invoices), [invoices]);
+  const themeCtx = useTheme();
+
+  // Dates courtes dans la langue de l'espace (« jeudi 23 octobre », « 23 oct. »).
+  const isoDate = (iso: string) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const longDay = (iso: string) => new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(isoDate(iso));
+  const capFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const shortDay = (iso: string) => new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(isoDate(iso));
+  const whenText = (days: number | null) => {
+    const w = whenLabel(days);
+    return w ? t(w.key, w.vars) : null;
+  };
+
+  /** Ouvre la fiche d'une mission (et, au besoin, l'éditeur de script de son brief). */
+  const goMission = (m: Mission, writeScript = false) => {
+    setTab("missions");
+    setMissionId(m.id);
+    if (writeScript && m.brief) {
+      setBriefScriptId(m.brief.id);
+      setBriefScriptText(m.brief.consignes ?? "");
+    }
+  };
+  /** Action principale d'une étape : là où elle se traite, en un tap. */
+  const openStep = (s: NextStep) => {
+    const tg = s.target;
+    if (tg.tab === "stats") return setStatsModalOpen(true);
+    if (tg.tab === "missions") {
+      const m = missions.find((x) => (tg.briefId && x.brief?.id === tg.briefId) || (tg.collabId && x.collab?.id === tg.collabId));
+      if (m) goMission(m, s.kind === "script");
+      else setTab("missions");
+      return;
+    }
+    if (tg.tab === "todo") {
+      setTab("todo");
+      const td = todos.find((x) => x.id === tg.todoId);
+      if (td) setTaskView(td);
+      return;
+    }
+    if (tg.tab === "gains") {
+      invFileRef.current?.click();
+      return;
+    }
+    setTab(tg.tab);
+  };
+  const stepVerb = (s: NextStep) =>
+    s.kind === "script" ? t("Écrire mon script")
+    : s.kind === "stats" ? t("Envoyer mes stats")
+    : s.kind === "invoice" ? t("Déposer ma facture")
+    : s.kind === "event" ? t("Voir le planning")
+    : s.kind === "todo" ? t("Voir la tâche")
+    : t("Voir le brief");
+  const STEP_ICON: Record<NextStep["kind"], typeof LayoutDashboard> = {
+    deliverable: Camera, validate: FileText, script: PenLine, event: CalendarDays, todo: ListChecks, stats: BarChart3, invoice: Receipt,
+  };
+  // Teinte de la tuile : jamais de rouge (réservé à l'argent en retard).
+  const stepTone = (s: NextStep): StatusTone | undefined =>
+    s.kind === "deliverable" ? (s.days != null && s.days < 0 ? "wait" : "progress")
+    : s.kind === "validate" || s.kind === "script" || s.kind === "stats" ? "info"
+    : s.kind === "event" ? "progress"
+    : s.kind === "invoice" ? "wait"
+    : undefined;
+  const stepSub = (s: NextStep) => {
+    const when = whenText(s.days) ?? (s.due ? shortDay(s.due) : null);
+    return [t(s.detail, s.detailVars), when].filter(Boolean).join(" · ");
+  };
+  /** « Étape 4 sur 11 · Tournage », ou le statut du brief pour un brief seul. */
+  const missionLine = (m: Mission) =>
+    m.step != null
+      ? t("Étape {n} sur {total} · {label}", { n: m.step, total: STEP_COUNT, label: t(STEPS[m.step - 1]?.short ?? "") })
+      : t("Brief · {status}", { status: opts.brief.find((o) => o.value === briefKey(m.brief?.status ?? "attente"))?.label ?? "" });
+  // Contact de la marque : uniquement les contacts du créateur lui-même (RLS).
+  const brandContact = (brand: string) => contacts.find((c) => c.brand.trim().toLowerCase() === brand.trim().toLowerCase()) ?? null;
+
   return (
     <LangProvider lang={lang}>
     <div className={iosPhone ? "app-frame flex h-[100dvh] flex-col bg-background" : "app-frame flex h-[100dvh] flex-col bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
@@ -1690,42 +1910,26 @@ export function CreatorSpace({
               className="-mx-4"
               scrollRef={mainRef}
               actionSlotRef={setNavSlot}
-              title={moreOpen ? t("Plus") : tabLabel(tab)}
-              left={!moreOpen && !ctabIds.includes(tab) ? <IosBackButton label={t("Plus")} onClick={() => setMoreOpen(true)} /> : null}
+              title={openMission ? openMission.brand : tabLabel(tab)}
+              left={
+                openMission ? (
+                  <IosBackButton label={t("Missions")} onClick={() => setMissionId(null)} />
+                ) : !isMainTab(tab) ? (
+                  <IosBackButton label={t("Profil")} onClick={() => setTab("profil")} />
+                ) : null
+              }
             />
           )}
-          {iosPhone && moreOpen && (
-            <PageFrame title={t("Plus")}>
-              <MoreScreen
-                profile={{
-                  avatar: creator?.photo_url ? (
-                    <img src={creator.photo_url} alt="" className="h-[54px] w-[54px] shrink-0 rounded-full object-cover" />
-                  ) : (
-                    <span className="grid h-[54px] w-[54px] shrink-0 place-items-center rounded-full bg-foreground/[0.08] text-[20px] font-semibold text-foreground">{titleCase(name).charAt(0)}</span>
-                  ),
-                  name: titleCase(name),
-                  sub: preview ? "Vue agence" : t("Créateur TTP"),
-                }}
-                sections={navGroups
-                  .map((g) => ({ id: g.id, label: g.label, items: g.items.filter((i) => !ctabIds.includes(i.id)) }))
-                  .filter((g) => g.items.length > 0)}
-                onSelect={(id) => goTab(id as Tab)}
-                dark={dark}
-                onToggleTheme={onToggleTheme}
-                exitLabel={exitTitle}
-                exitIcon={preview ? ArrowLeft : LogOut}
-                onExit={exitAction}
-              />
-            </PageFrame>
-          )}
-          {!(iosPhone && moreOpen) && (<NavActionSlotContext.Provider value={iosPhone ? navSlot : null}>
-          {/* En-tête de l'accueil (langage Aperçu) : salutation selon l'heure + photo.
-              Les autres onglets affichent leur propre titre (TabFrame ci-dessous). */}
+          <NavActionSlotContext.Provider value={iosPhone ? navSlot : null}>
+          {/* En-tête de l'accueil (maquette « Bonjour Léna ») : date du jour, salutation
+              selon l'heure + photo. Les autres onglets affichent leur propre titre (TabFrame). */}
           {tab === "accueil" && (
-            <div className="mb-6 flex items-center justify-between gap-3">
+            <div className="mb-5 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <h1 className="page-title text-[26px] font-semibold leading-tight tracking-[-0.02em] md:text-[32px]">{t(greetingWord())} {firstName}</h1>
-                <div className="mt-1 text-[13px] text-muted-foreground">{t("Ton espace TTP Creators")}</div>
+                <div className="text-[13px] font-semibold text-muted-foreground first-letter:uppercase">
+                  {new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(new Date())}
+                </div>
+                <h1 className="page-title mt-0.5 text-[30px] font-bold leading-tight tracking-[-0.025em] [overflow-wrap:anywhere] md:text-[34px]">{t(greetingWord())} {firstName}</h1>
               </div>
               <AvatarUpload
                 creatorId={creator?.id}
@@ -1737,12 +1941,12 @@ export function CreatorSpace({
             </div>
           )}
 
-          {/* (Nav mobile déplacée en barre flottante fixe en bas — voir plus bas.) */}
+          {/* (Nav mobile : barre d'onglets flottante fixe en bas, voir plus bas.) */}
 
           {/* Contenu des onglets — barrière d'erreur : un onglet qui plante
               n'emporte pas la navigation (la sidebar reste cliquable). */}
           <ErrorBoundary variant="inline" label="Cette page" resetKey={tab}>
-          <TabFrame title={tab === "accueil" || tab === "mails" ? null : tabLabel(tab) || null} hint={tabHint ? t(tabHint) : undefined}>
+          <TabFrame title={tab === "accueil" || openMission ? null : tabLabel(tab) || null} hint={openMission ? undefined : tabHint ? t(tabHint) : undefined}>
           {/* Guide — comment utiliser l'app (mobile + ordi) + réflexe À faire */}
           {tab === "guide" && (
             <CreatorGuide firstName={firstName} onGoto={(t) => setTab(t as Tab)} onSendStats={() => setStatsModalOpen(true)} />
@@ -1774,16 +1978,7 @@ export function CreatorSpace({
             const prevTotal = totalPts.length >= 2 ? totalPts[totalPts.length - 2].value : 0;
             const lastTotal = totalPts.length ? totalPts[totalPts.length - 1].value : 0;
             const followersDelta = totalPts.length >= 2 && prevTotal > 0 ? ((lastTotal - prevTotal) / prevTotal) * 100 : null;
-            const lastMeasure = Math.max(0, ...(mySuivi ?? []).map((e) => frTime(e.date) || 0));
-            // « Stats du mois » : même indicateur que le Roster et la notification du matin
-            // (creators.stats_month), coché par l'agence ou tout seul par les synchros TikTok /
-            // Instagram quand le réseau principal est couvert. Repli : dernière mesure de plus de 35 j.
-            const thisMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
-            const statsStale = creator
-              ? (creator.stats_month ?? "") !== thisMonth
-              : mySuivi !== null && (!lastMeasure || Date.now() - lastMeasure > 35 * 86400000);
-            const now = new Date();
-            const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+            // statsStale et todayIso : calculés plus haut (partagés avec « Ta prochaine étape »).
             const evIso = (e: Ev) => e.date || (e.day ? `${todayIso.slice(0, 8)}${String(e.day).padStart(2, "0")}` : "9999-12-31");
             const upcoming = events.filter((e) => evIso(e) >= todayIso).sort((a, b) => evIso(a).localeCompare(evIso(b))).slice(0, 3);
             const nextBrief = briefs
@@ -1812,6 +2007,139 @@ export function CreatorSpace({
             return (
             <div className="flex flex-col gap-4">
               <PushCard />
+
+              {/* Ta prochaine étape : LA chose à faire maintenant (src/lib/creatorNextStep.ts) */}
+              {(() => {
+                const s = steps[0];
+                if (!s) {
+                  return (
+                    <section className="flex items-center gap-3.5 rounded-[22px] border border-border bg-surface p-5 shadow-sm">
+                      <IconTile tone="ok" size="lg"><CircleCheck /></IconTile>
+                      <div className="min-w-0">
+                        <div className="text-[17px] font-semibold leading-snug text-foreground">{t("Tout est à jour")}</div>
+                        <div className="mt-0.5 text-[14px] text-muted-foreground">{t("Belle journée !")}</div>
+                      </div>
+                    </section>
+                  );
+                }
+                const when = whenText(s.days);
+                return (
+                  <section aria-label={t("Ta prochaine étape")} className="rounded-[22px] bg-primary p-5 text-primary-foreground shadow-sm md:p-6">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[13px] font-semibold opacity-85">{t("Ta prochaine étape")}</span>
+                      {(when || s.due) && (
+                        <span className="shrink-0 rounded-full bg-primary-foreground/15 px-2.5 py-1 text-[12px] font-semibold tabular-nums">{when ?? shortDay(s.due as string)}</span>
+                      )}
+                    </div>
+                    <h2 className="mt-3 text-[24px] font-bold leading-tight tracking-[-0.02em] [overflow-wrap:anywhere] md:text-[28px]">{t(s.title, s.vars)}</h2>
+                    <p className="mt-1.5 line-clamp-3 text-[14px] leading-snug opacity-85 [overflow-wrap:anywhere]">
+                      {s.due ? <span>{capFirst(longDay(s.due))}. </span> : null}
+                      {t(s.detail, s.detailVars)}
+                    </p>
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openStep(s)}
+                        disabled={s.kind === "invoice" && invUploading}
+                        className="h-11 min-w-0 flex-1 truncate rounded-full bg-primary-foreground px-4 text-[14px] font-semibold text-primary transition-opacity hover:opacity-90 disabled:opacity-60"
+                      >
+                        {s.kind === "invoice" && invUploading ? t("Envoi…") : stepVerb(s)}
+                      </button>
+                      {s.kind !== "event" && (
+                        <button
+                          type="button"
+                          onClick={() => setTab("planning")}
+                          className="h-11 min-w-0 flex-1 truncate rounded-full bg-primary-foreground/15 px-4 text-[14px] font-semibold transition-colors hover:bg-primary-foreground/25"
+                        >
+                          {t("Planning")}
+                        </button>
+                      )}
+                    </div>
+                  </section>
+                );
+              })()}
+
+              {/* À faire : les étapes suivantes, une action par ligne */}
+              {steps.length > 1 && (
+                <section>
+                  <h2 className="mb-2.5 flex items-baseline gap-2 px-1 text-[20px] font-bold tracking-[-0.02em]">
+                    {t("À faire")} <span className="text-[16px] font-semibold tabular-nums text-muted-foreground">{steps.length - 1}</span>
+                  </h2>
+                  <div className="overflow-hidden rounded-[20px] border border-border bg-surface shadow-sm">
+                    {steps.slice(1, 5).map((s, i) => {
+                      const Icon = STEP_ICON[s.kind];
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => (s.kind === "invoice" ? setTab("gains") : openStep(s))}
+                          className={cn("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-rowhover", i > 0 && "border-t border-border")}
+                        >
+                          <IconTile tone={stepTone(s)}><Icon /></IconTile>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[15px] font-semibold text-foreground">{t(s.title, s.vars)}</span>
+                            <span className="block truncate text-[13px] text-muted-foreground">{stepSub(s)}</span>
+                          </span>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {/* Gains en un coup d'œil (Gains) */}
+              <button
+                type="button"
+                onClick={() => setTab("gains")}
+                className="flex w-full items-center gap-2 rounded-[20px] border border-border bg-surface p-4 text-left shadow-sm transition-colors hover:bg-rowhover md:p-5"
+              >
+                <span className="grid min-w-0 flex-1 grid-cols-2 divide-x divide-border">
+                  <span className="min-w-0 pr-3">
+                    <span className="block text-[13px] text-muted-foreground">{t("À recevoir")}</span>
+                    <span className="mt-1 block truncate text-[24px] font-bold leading-none tracking-tight tabular-nums text-foreground">{formatEuro(gains.toReceive)}</span>
+                  </span>
+                  <span className="min-w-0 pl-3">
+                    <span className="block text-[13px] text-muted-foreground">{t("Encaissé")}</span>
+                    <span className={cn("mt-1 block truncate text-[24px] font-bold leading-none tracking-tight tabular-nums", TONE_TEXT.ok)}>{formatEuro(gains.cashed)}</span>
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
+              </button>
+
+              {/* Mes missions : collabs et briefs en cours (carrousel au téléphone) */}
+              {missions.some((m) => !m.done) && (
+                <section>
+                  <div className="mb-2.5 flex items-center justify-between gap-3 px-1">
+                    <h2 className="text-[20px] font-bold tracking-[-0.02em]">{t("Mes missions")}</h2>
+                    <button type="button" onClick={() => setTab("missions")} className="text-[14px] font-semibold text-primary transition-opacity hover:opacity-80">
+                      {t("Tout voir")}
+                    </button>
+                  </div>
+                  <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 xl:grid-cols-3 [&::-webkit-scrollbar]:hidden">
+                    {missions.filter((m) => !m.done).slice(0, 6).map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => goMission(m)}
+                        className="flex w-[78%] max-w-[300px] shrink-0 snap-start flex-col rounded-[20px] border border-border bg-surface p-4 text-left shadow-sm transition-colors hover:bg-rowhover md:w-auto md:max-w-none"
+                      >
+                        <div className="flex items-center gap-3">
+                          <IconTile size="sm" tone="info"><span className="text-[14px] font-bold">{brandInitial(m.brand)}</span></IconTile>
+                          <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-foreground">{m.brand}</span>
+                        </div>
+                        <div className="mt-2 line-clamp-2 min-h-[2.5em] text-[13px] leading-snug text-muted-foreground">{m.title ?? t("Livrables à préciser")}</div>
+                        <div className="mt-2 truncate text-[12px] font-medium text-foreground">{missionLine(m)}</div>
+                        {m.step != null && (
+                          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-field">
+                            <div className="h-full rounded-full bg-primary" style={{ width: `${(m.step / STEP_COUNT) * 100}%` }} />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {/* Raccourcis (mobile uniquement, comme l'Aperçu agence) */}
               <div className="grid grid-cols-3 gap-2 md:hidden">
@@ -1936,7 +2264,7 @@ export function CreatorSpace({
                         <div className="flex items-center justify-between gap-3">
                           <dt className="text-muted-foreground">{t("Statut")}</dt>
                           <dd>
-                            <AnimatedBadge status={invStatus(lastInv.status).status} size="sm">{t(invStatus(lastInv.status).label)}</AnimatedBadge>
+                            <StatusPill tone={invoiceTone(lastInv).tone} size="xs">{t(invoiceTone(lastInv).label)}</StatusPill>
                           </dd>
                         </div>
                       </dl>
@@ -1944,7 +2272,7 @@ export function CreatorSpace({
                       <div className="text-[12px] text-faint">{t("Aucune facture pour le moment.")}</div>
                     )}
                     <div className="mt-4">
-                      <DashWideLink label={t("Voir mes factures")} onClick={() => setTab("facturation")} />
+                      <DashWideLink label={t("Voir mes gains")} onClick={() => setTab("gains")} />
                     </div>
                   </div>
                   <div className="border-t border-border px-5 py-5">
@@ -2006,7 +2334,7 @@ export function CreatorSpace({
                   <div className="px-5 py-5">
                     <DashSectionTitle
                       icon={FileText}
-                      right={briefs.length > 0 ? <button type="button" onClick={() => setTab("briefs")} className="text-[12px] text-muted-foreground transition-colors hover:text-foreground">{t("Voir tout")}</button> : undefined}
+                      right={briefs.length > 0 ? <button type="button" onClick={() => setTab("missions")} className="text-[12px] text-muted-foreground transition-colors hover:text-foreground">{t("Voir tout")}</button> : undefined}
                     >
                       {t("Mes briefs")}
                     </DashSectionTitle>
@@ -2039,163 +2367,6 @@ export function CreatorSpace({
               </div>
 
 
-              {/* Mes infos — carte premium : toggle Statistiques / Coordonnées + chiffres animés */}
-              <Card index={0}>
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold">{t("Mes infos")}</div>
-                  {editing ? (
-                    <div className="flex items-center gap-2">
-                      {/* Annuler : on quitte sans enregistrer (le formulaire est rechargé depuis la fiche à la prochaine ouverture) */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditing(false);
-                          setForm({});
-                        }}
-                        className="flex h-8 items-center gap-1.5 rounded-full bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
-                      >
-                        <X className="h-3.5 w-3.5" /> {t("Annuler")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={saveInfos}
-                        className="flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
-                      >
-                        <Check className="h-3.5 w-3.5" /> {t("Enregistrer")}
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={startEdit}
-                      disabled={!creator}
-                      className="flex h-8 items-center gap-1.5 rounded-full bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover disabled:opacity-50"
-                    >
-                      <Pencil className="h-3.5 w-3.5" /> {t("Modifier")}
-                    </button>
-                  )}
-                </div>
-                {/* Langue de l'espace : pour un créateur anglophone (l'agence le règle aussi sur sa fiche). */}
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-panel/60 px-3 py-2">
-                  <span className="text-[12px] text-muted-foreground">{t("Langue de l'espace")}</span>
-                  <div className="flex gap-1" role="group" aria-label={t("Langue de l'espace")}>
-                    {(["fr", "en"] as const).map((l) => (
-                      <button key={l} type="button" aria-pressed={lang === l} disabled={!creator} onClick={() => void setSpaceLang(l)}
-                        className={cn("h-7 rounded-full px-3 text-[12px] font-medium transition-colors", lang === l ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
-                        {l === "fr" ? "Français" : "English"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {editing ? (
-                  <div className="flex flex-col gap-4">
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      {editInput(t("Ville"), "ville")}
-                      {editInput(t("Téléphone"), "phone")}
-                      {editInput(t("Email perso"), "email")}
-                      {editInput(t("Email pro"), "email_pro")}
-                      {editInput(t("Instagram"), "instagram")}
-                      {editInput(t("TikTok"), "tiktok")}
-                      {editInput(t("Adresse"), "address")}
-                      {editInput(t("SIREN"), "siren")}
-                      {editInput(t("Naissance"), "birth", undefined, "date")}
-                    </div>
-                    <div className="text-[12px] font-medium text-muted-foreground">{t("Statistiques")}</div>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      {editInput(t("Abonnés"), "followers")}
-                      {editInput(t("Engagement"), "er")}
-                      {editInput(t("Portée"), "reach")}
-                    </div>
-                    <p className="text-[11px] text-faint">{t("Le CA est calculé automatiquement depuis tes factures payées.")}</p>
-                  </div>
-                ) : (
-                  <>
-                    <Tabs
-                      size="sm"
-                      fullWidth
-                      className="mb-4"
-                      label={t("Mes infos")}
-                      value={infoTab}
-                      onValueChange={(v) => setInfoTab(v as "stats" | "coord")}
-                      items={[{ value: "stats", label: t("Statistiques") }, { value: "coord", label: t("Coordonnées") }]}
-                    />
-
-                    <AnimatePresence mode="wait" initial={false}>
-                      {infoTab === "stats" ? (
-                        <motion.div
-                          key="stats"
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -8 }}
-                          transition={{ duration: 0.2 }}
-                          className="flex flex-col gap-3.5"
-                        >
-                          <div className="grid grid-cols-2 gap-3.5">
-                            {/* Abonnés cumulés = somme de la dernière mesure de chaque plateforme */}
-                            <div className="rounded-xl bg-panel p-4">
-                              <div className="text-[22px] font-semibold tracking-tight tabular-nums text-foreground">
-                                {totalFollowers > 0 ? (
-                                  <NumberFlow value={totalFollowers} locales={locale} />
-                                ) : toNum(creator?.followers) != null ? (
-                                  <NumberFlow value={toNum(creator?.followers) as number} locales={locale} />
-                                ) : (
-                                  "—"
-                                )}
-                              </div>
-                              <div className="mt-1 text-[10px] font-medium text-faint">
-                                {t("Abonnés cumulés")}{platformLatest.length > 1 ? ` · ${t("{n} réseaux", { n: platformLatest.length })}` : ""}
-                              </div>
-                            </div>
-                            <StatTile label={t("CA encaissé")} value={caEncaisse || null} kind="eur" />
-                          </div>
-                          {/* Engagement par plateforme (on sait de quel réseau il s'agit) */}
-                          <div className="rounded-xl bg-panel p-4">
-                            <div className="mb-2.5 text-[12px] font-medium text-muted-foreground">{t("Engagement par plateforme")}</div>
-                            {platformLatest.length === 0 ? (
-                              <div className="text-xs text-muted-foreground">
-                                {toNum(creator?.er) != null ? t("Engagement global · {er}", { er: String(creator?.er) }) : t("Pas encore de mesure d'engagement de ton agence.")}
-                              </div>
-                            ) : (
-                              <div className="flex flex-col gap-2.5">
-                                {platformLatest.map((e) => (
-                                  <div key={e.platform} className="flex items-center justify-between gap-2">
-                                    <span className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground">
-                                      <PlatformIcon platform={e.platform} className="h-4 w-4 shrink-0" />
-                                      <span className="truncate">{e.platformLabel}</span>
-                                      {toNum(e.followers) ? <span className="shrink-0 text-faint">· {fmtCompact(toNum(e.followers) as number)}</span> : null}
-                                    </span>
-                                    <span className="shrink-0 text-sm font-bold text-foreground">{e.er}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      ) : (
-                        <motion.div
-                          key="coord"
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -8 }}
-                          transition={{ duration: 0.2 }}
-                          className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"
-                        >
-                          {coordRow(t("Ville"), creator?.ville ?? null)}
-                          {coordRow(t("Téléphone"), creator?.phone ?? null, true)}
-                          {coordRow(t("SIREN"), creator?.siren ?? null, true)}
-                          {coordRow(t("Naissance"), frDate(creator?.birth))}
-                          {coordRow(t("Instagram"), creator?.instagram ?? null, true, "instagram")}
-                          {coordRow(t("TikTok"), creator?.tiktok ?? null, true, "tiktok")}
-                          {coordRow(t("Email perso"), creator?.email ?? null, true, undefined, true)}
-                          {coordRow(t("Email pro"), creator?.email_pro ?? null, true, undefined, true)}
-                          {coordRow(t("Adresse"), creator?.address ?? null, true, undefined, true)}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </>
-                )}
-              </Card>
             </div>
             );
           })()}
@@ -2669,78 +2840,274 @@ export function CreatorSpace({
             </>
           )}
 
-          {/* Briefs */}
-          {tab === "briefs" && (
-            <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-              {briefs.length === 0 ? (
-                <div className="p-6 text-sm text-muted-foreground">{t("Aucun brief pour le moment.")}</div>
-              ) : (
-                briefs.map((b, i) => (
-                  <div key={b.id} className={"px-4 py-3 " + (i > 0 ? "border-t border-border" : "")}>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold">{b.brand}</div>
-                        <div className="truncate text-xs text-faint">{b.deliverables} · {t("échéance {date}", { date: frDate(b.due) })}</div>
-                      </div>
-                      <div className="w-full sm:w-[150px] sm:shrink-0">
-                        <StatusSelect value={briefKey(b.status ?? "attente")} options={opts.brief} onChange={(v) => setBriefStatus(b.id, v)} />
-                      </div>
+          {/* Missions : collabs (étape sur 11) + briefs, en liste ; un tap ouvre la fiche */}
+          {tab === "missions" && !openMission && (
+            missions.length === 0 ? (
+              <div className="rounded-[20px] border border-border bg-surface px-6 py-10 text-center shadow-sm">
+                <IconTile className="mx-auto"><SquareCheckBig /></IconTile>
+                <div className="mt-3 text-[15px] font-semibold text-foreground">{t("Aucune mission pour le moment.")}</div>
+                <p className="mt-1 text-[13px] text-muted-foreground">{t("Tes collabs et tes briefs apparaîtront ici.")}</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-6">
+                {([
+                  { key: "active", label: t("En cours"), rows: missions.filter((m) => !m.done) },
+                  { key: "done", label: t("Terminées"), rows: missions.filter((m) => m.done) },
+                ] as const).filter((g) => g.rows.length > 0).map((g) => (
+                  <section key={g.key}>
+                    <h2 className="mb-2 flex items-baseline gap-2 px-1 text-[13px] font-semibold text-muted-foreground">
+                      {g.label} <span className="tabular-nums text-faint">{g.rows.length}</span>
+                    </h2>
+                    <div className="overflow-hidden rounded-[20px] border border-border bg-surface shadow-sm">
+                      {g.rows.map((m, i) => {
+                        const st = missionState(m, todayIso);
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => goMission(m)}
+                            className={cn("flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-rowhover", i > 0 && "border-t border-border")}
+                          >
+                            <IconTile tone="info"><span className="text-[17px] font-bold">{brandInitial(m.brand)}</span></IconTile>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[16px] font-semibold text-foreground">{m.brand}</span>
+                              <span className="block truncate text-[13px] text-muted-foreground">{missionLine(m)}</span>
+                              {m.title && <span className="block truncate text-[13px] text-faint">{m.title}</span>}
+                            </span>
+                            <span className="flex shrink-0 flex-col items-end gap-1.5">
+                              <StatusPill tone={st.tone} size="xs">{t(st.label)}</StatusPill>
+                              {m.due && <span className="text-[12px] tabular-nums text-muted-foreground">{shortDay(m.due)}</span>}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
+                  </section>
+                ))}
+              </div>
+            )
+          )}
 
-                    {/* Script écrit par le créateur — visible et exportable par l'agence */}
-                    {briefScriptId === b.id ? (
-                      <div className="mt-3 flex flex-col gap-2 rounded-xl border border-border bg-panel p-3">
-                        <span className="text-[11px] font-medium text-muted-foreground">{t("Mon script")}</span>
-                        <textarea
-                          value={briefScriptText}
-                          onChange={(e) => setBriefScriptText(e.target.value)}
-                          rows={6}
-                          autoFocus
-                          placeholder={t("Écris ton script ici…\n\nHook\u00A0:\nCorps\u00A0:\nCall to action\u00A0:")}
-                          className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                        />
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => saveBriefScript(b.id)}
-                            className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
-                          >
-                            <Check className="h-3.5 w-3.5" /> {t("Enregistrer")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setBriefScriptId(null)}
-                            className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                            title={t("Annuler")}
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="mt-2">
-                        {b.consignes && (
-                          <p className="mb-2 whitespace-pre-wrap rounded-xl bg-panel px-3 py-2 text-[13px] leading-relaxed text-muted-foreground">
-                            {b.consignes}
-                          </p>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setBriefScriptId(b.id);
-                            setBriefScriptText(b.consignes ?? "");
-                          }}
-                          className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover"
-                        >
-                          <Pencil className="h-3.5 w-3.5" /> {b.consignes ? t("Modifier mon script") : t("Écrire mon script")}
-                        </button>
+          {/* Fiche mission : la collab vue par le créateur (phases, échéance, brief, script, étapes, contact) */}
+          {tab === "missions" && openMission && (() => {
+            const m = openMission;
+            const b = m.brief;
+            const cur = m.step != null ? creatorPhaseIndex(m.step) : -1;
+            const days = m.due ? daysBetweenIso(todayIso, m.due) : null;
+            const contact = brandContact(m.brand);
+            const st = missionState(m, todayIso);
+            return (
+              <div className="mx-auto flex w-full max-w-[720px] flex-col gap-4">
+                {!iosPhone && (
+                  <button type="button" onClick={() => setMissionId(null)} className="flex w-fit items-center gap-1 text-[14px] font-semibold text-primary transition-opacity hover:opacity-80">
+                    <ArrowLeft className="h-4 w-4" /> {t("Missions")}
+                  </button>
+                )}
+                <div className="flex items-center gap-3.5">
+                  <IconTile tone="info" size="lg">{brandInitial(m.brand)}</IconTile>
+                  <div className="min-w-0 flex-1">
+                    <h1 className="page-title text-[28px] font-bold leading-tight tracking-[-0.025em] [overflow-wrap:anywhere]">{m.brand}</h1>
+                    {m.title && <div className="mt-0.5 line-clamp-2 text-[15px] text-muted-foreground">{m.title}</div>}
+                  </div>
+                  <StatusPill tone={st.tone} size="xs" className="self-start">{t(st.label)}</StatusPill>
+                </div>
+
+                {/* Les 5 phases vues par le créateur (les 11 étapes restent en dessous) */}
+                {m.step != null && (
+                  <div className="rounded-[20px] border border-border bg-surface px-2 py-4 shadow-sm">
+                    <ol className="grid grid-cols-5">
+                      {CREATOR_PHASES.map((p, i) => {
+                        const done = m.done || i < cur;
+                        const now = !m.done && i === cur;
+                        return (
+                          <li key={p.key} className="relative flex min-w-0 flex-col items-center gap-1.5">
+                            {i < CREATOR_PHASES.length - 1 && (
+                              <span aria-hidden className={cn("absolute left-1/2 top-[11px] h-0.5 w-full", m.done || i < cur ? "bg-primary" : "bg-border")} />
+                            )}
+                            <span
+                              className={cn(
+                                "relative z-10 grid h-6 w-6 place-items-center rounded-full",
+                                done ? "bg-primary text-primary-foreground" : now ? "border-2 border-primary bg-surface" : "bg-field",
+                              )}
+                            >
+                              {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : now ? <span className="h-2 w-2 rounded-full bg-primary" /> : null}
+                            </span>
+                            <span className={cn("max-w-full truncate px-0.5 text-[11px] sm:text-[12px]", now ? "font-bold text-foreground" : done ? "font-medium text-foreground" : "text-muted-foreground")}>
+                              {t(p.label)}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
+                )}
+
+                {/* Prochaine échéance */}
+                {m.due && !m.done && (
+                  <div className="rounded-[20px] border-2 border-primary/50 bg-surface p-5 shadow-sm">
+                    <div className="text-[13px] font-semibold text-muted-foreground">{t("Prochaine échéance")}</div>
+                    <div className="mt-1.5 text-[24px] font-bold leading-tight tracking-[-0.02em] first-letter:uppercase">{whenText(days) ?? shortDay(m.due)}</div>
+                    <div className="mt-1 text-[14px] text-muted-foreground first-letter:uppercase">
+                      {longDay(m.due)}{m.deliverables ? ` · ${m.deliverables}` : ""}
+                    </div>
+                    {m.step != null && (
+                      <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-field">
+                        <div className="h-full rounded-full bg-primary" style={{ width: `${(m.step / STEP_COUNT) * 100}%` }} />
                       </div>
                     )}
                   </div>
-                ))
-              )}
-            </div>
-          )}
+                )}
+
+                {/* Le brief : livrables, échéance, statut (modifiable) et script du créateur */}
+                {b ? (
+                  <div className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
+                    <h2 className="text-[18px] font-bold tracking-[-0.01em]">{t("Le brief")}</h2>
+                    <dl className="mt-3 flex flex-col gap-2.5 text-[14px]">
+                      <div className="flex items-start justify-between gap-3">
+                        <dt className="shrink-0 text-muted-foreground">{t("Livrables")}</dt>
+                        <dd className="min-w-0 text-right font-medium text-foreground [overflow-wrap:anywhere]">{b.deliverables || t("Livrables à préciser")}</dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <dt className="text-muted-foreground">{t("Échéance")}</dt>
+                        <dd className="font-medium tabular-nums text-foreground">{frDate(b.due)}</dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <dt className="text-muted-foreground">{t("Statut")}</dt>
+                        <dd className="w-[150px] max-w-[60%]">
+                          <StatusSelect value={briefKey(b.status ?? "attente")} options={opts.brief} onChange={(v) => setBriefStatus(b.id, v)} />
+                        </dd>
+                      </div>
+                    </dl>
+
+                    {/* Script écrit par le créateur — visible et exportable par l'agence */}
+                    <div className="mt-4 border-t border-border pt-4">
+                      {briefScriptId === b.id ? (
+                        <div className="flex flex-col gap-2">
+                          <span className="text-[12px] font-medium text-muted-foreground">{t("Mon script")}</span>
+                          <textarea
+                            value={briefScriptText}
+                            onChange={(e) => setBriefScriptText(e.target.value)}
+                            rows={7}
+                            autoFocus
+                            placeholder={t("Écris ton script ici…\n\nHook :\nCorps :\nCall to action :")}
+                            className="w-full resize-y rounded-[12px] border border-border bg-field px-3 py-2 text-[15px] leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => saveBriefScript(b.id)}
+                              className="flex h-10 items-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                            >
+                              <Check className="h-4 w-4" /> {t("Enregistrer")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setBriefScriptId(null)}
+                              className="h-10 rounded-full px-4 text-[14px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                            >
+                              {t("Annuler")}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="mb-2 text-[12px] font-medium text-muted-foreground">{t("Mon script")}</div>
+                          {b.consignes ? (
+                            <p className="mb-3 whitespace-pre-wrap rounded-[12px] bg-field px-3 py-2.5 text-[14px] leading-relaxed text-foreground [overflow-wrap:anywhere]">{b.consignes}</p>
+                          ) : (
+                            <p className="mb-3 text-[13px] text-muted-foreground">{t("Ton agence le voit dès que tu l'enregistres.")}</p>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBriefScriptId(b.id);
+                              setBriefScriptText(b.consignes ?? "");
+                            }}
+                            className="flex h-10 items-center gap-1.5 rounded-full border border-border px-4 text-[14px] font-semibold text-primary transition-colors hover:bg-rowhover"
+                          >
+                            <Pencil className="h-4 w-4" /> {b.consignes ? t("Modifier mon script") : t("Écrire mon script")}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-[20px] border border-dashed border-border bg-surface p-5 text-[14px] text-muted-foreground">
+                    {t("Le brief de cette collab arrive bientôt : ton agence te le transmet.")}
+                  </div>
+                )}
+
+                {/* Les 11 étapes de la collab (source unique : lib/collabs.ts) */}
+                {m.step != null && (
+                  <div className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
+                    <h2 className="text-[18px] font-bold tracking-[-0.01em]">{t("Les étapes")}</h2>
+                    <ol className="mt-3 flex flex-col">
+                      {STEPS.map((s, i) => {
+                        const done = m.done || s.n < (m.step as number);
+                        const now = !m.done && s.n === m.step;
+                        return (
+                          <li key={s.n} className="relative flex items-start gap-3 pb-3 last:pb-0">
+                            {i < STEPS.length - 1 && <span aria-hidden className={cn("absolute left-[11px] top-6 h-[calc(100%-1.25rem)] w-0.5", done ? "bg-primary" : "bg-border")} />}
+                            <span
+                              className={cn(
+                                "relative z-10 grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold tabular-nums",
+                                done ? "bg-primary text-primary-foreground" : now ? "border-2 border-primary bg-surface text-primary" : "bg-field text-muted-foreground",
+                              )}
+                            >
+                              {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : s.n}
+                            </span>
+                            <span className="min-w-0 flex-1 pt-0.5">
+                              <span className={cn("block text-[14px] leading-snug", now ? "font-bold text-foreground" : done ? "text-foreground" : "text-muted-foreground")}>{t(s.label)}</span>
+                              {now && <span className="mt-0.5 block text-[12px] font-medium text-primary">{t("Étape actuelle")}</span>}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
+                )}
+
+                {/* Contact de la marque (tes contacts) */}
+                {contact && (
+                  <div className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
+                    <h2 className="text-[18px] font-bold tracking-[-0.01em]">{t("Ton contact chez {brand}", { brand: m.brand })}</h2>
+                    <div className="mt-1 text-[14px] text-muted-foreground">
+                      {[contact.person && contact.person !== "—" ? contact.person : null, contact.role].filter(Boolean).join(" · ") || m.brand}
+                    </div>
+                    {(contact.email || contact.phone) && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {contact.email && (
+                          <a href={`mailto:${contact.email}`} className="flex h-10 min-w-0 items-center gap-1.5 rounded-full bg-field px-4 text-[14px] font-medium text-foreground transition-colors hover:bg-rowhover">
+                            <Mail className="h-4 w-4 shrink-0" /> <span className="truncate">{contact.email}</span>
+                          </a>
+                        )}
+                        {contact.phone && (
+                          <a href={`tel:${contact.phone.replace(/\s/g, "")}`} className="flex h-10 items-center gap-1.5 rounded-full bg-field px-4 text-[14px] font-medium tabular-nums text-foreground transition-colors hover:bg-rowhover">
+                            {contact.phone}
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Paiement : la facture, si l'agence ne l'a pas encore saisie */}
+                {m.step != null && m.step >= 8 && (
+                  <div className="flex flex-col items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => invFileRef.current?.click()}
+                      disabled={invUploading}
+                      className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary px-5 text-[16px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+                    >
+                      <Upload className="h-5 w-5" /> {invUploading ? t("Envoi…") : t("Déposer ma facture")}
+                    </button>
+                    <p className="text-center text-[13px] text-muted-foreground">{t("Dépose-la, ton agence la reçoit aussitôt.")}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {tab === "gifting" && (
             <div className="space-y-4">
@@ -3058,42 +3425,327 @@ export function CreatorSpace({
             )
           )}
 
-          {/* Facturation */}
-          {tab === "facturation" && (
+          {/* Profil : infos, réseaux connectés, préférences (langue, thème), toutes les
+              autres rubriques (ex-écran « Plus ») et déconnexion */}
+          {tab === "profil" && (
+            <div className="mx-auto flex w-full max-w-[720px] flex-col gap-6">
+              <div className="flex items-center gap-4 rounded-[22px] border border-border bg-surface p-5 shadow-sm">
+                <AvatarUpload
+                  creatorId={creator?.id}
+                  name={name}
+                  photoUrl={creator?.photo_url ?? null}
+                  size={60}
+                  onUploaded={(url) => setCreator((c) => (c ? { ...c, photo_url: url } : c))}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[22px] font-bold tracking-[-0.02em]">{titleCase(name)}</div>
+                  <div className="truncate text-[14px] text-muted-foreground">
+                    {[creator?.handle, creator?.niche, creator?.ville].filter((x) => x && x.trim() && x !== "—").join(" · ") || (preview ? "Vue agence" : t("Créateur TTP"))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Mes infos (déplacée de l'Accueil) : toggle Statistiques / Coordonnées + chiffres animés */}
+              <Card index={0}>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div className="text-sm font-semibold">{t("Mes infos")}</div>
+                  {editing ? (
+                    <div className="flex items-center gap-2">
+                      {/* Annuler : on quitte sans enregistrer (le formulaire est rechargé depuis la fiche à la prochaine ouverture) */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditing(false);
+                          setForm({});
+                        }}
+                        className="flex h-8 items-center gap-1.5 rounded-full bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
+                      >
+                        <X className="h-3.5 w-3.5" /> {t("Annuler")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveInfos}
+                        className="flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+                      >
+                        <Check className="h-3.5 w-3.5" /> {t("Enregistrer")}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={startEdit}
+                      disabled={!creator}
+                      className="flex h-8 items-center gap-1.5 rounded-full bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover disabled:opacity-50"
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> {t("Modifier")}
+                    </button>
+                  )}
+                </div>
+                {editing ? (
+                  <div className="flex flex-col gap-4">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      {editInput(t("Ville"), "ville")}
+                      {editInput(t("Téléphone"), "phone")}
+                      {editInput(t("Email perso"), "email")}
+                      {editInput(t("Email pro"), "email_pro")}
+                      {editInput(t("Instagram"), "instagram")}
+                      {editInput(t("TikTok"), "tiktok")}
+                      {editInput(t("Adresse"), "address")}
+                      {editInput(t("SIREN"), "siren")}
+                      {editInput(t("Naissance"), "birth", undefined, "date")}
+                    </div>
+                    <div className="text-[12px] font-medium text-muted-foreground">{t("Statistiques")}</div>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {editInput(t("Abonnés"), "followers")}
+                      {editInput(t("Engagement"), "er")}
+                      {editInput(t("Portée"), "reach")}
+                    </div>
+                    <p className="text-[11px] text-faint">{t("Le CA est calculé automatiquement depuis tes factures payées.")}</p>
+                  </div>
+                ) : (
+                  <>
+                    <Tabs
+                      size="sm"
+                      fullWidth
+                      className="mb-4"
+                      label={t("Mes infos")}
+                      value={infoTab}
+                      onValueChange={(v) => setInfoTab(v as "stats" | "coord")}
+                      items={[{ value: "stats", label: t("Statistiques") }, { value: "coord", label: t("Coordonnées") }]}
+                    />
+
+                    <AnimatePresence mode="wait" initial={false}>
+                      {infoTab === "stats" ? (
+                        <motion.div
+                          key="stats"
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          transition={{ duration: 0.2 }}
+                          className="flex flex-col gap-3.5"
+                        >
+                          <div className="grid grid-cols-2 gap-3.5">
+                            {/* Abonnés cumulés = somme de la dernière mesure de chaque plateforme */}
+                            <div className="rounded-xl bg-panel p-4">
+                              <div className="text-[22px] font-semibold tracking-tight tabular-nums text-foreground">
+                                {totalFollowers > 0 ? (
+                                  <NumberFlow value={totalFollowers} locales={locale} />
+                                ) : toNum(creator?.followers) != null ? (
+                                  <NumberFlow value={toNum(creator?.followers) as number} locales={locale} />
+                                ) : (
+                                  "—"
+                                )}
+                              </div>
+                              <div className="mt-1 text-[10px] font-medium text-faint">
+                                {t("Abonnés cumulés")}{platformLatest.length > 1 ? ` · ${t("{n} réseaux", { n: platformLatest.length })}` : ""}
+                              </div>
+                            </div>
+                            <StatTile label={t("CA encaissé")} value={caEncaisse || null} kind="eur" />
+                          </div>
+                          {/* Engagement par plateforme (on sait de quel réseau il s'agit) */}
+                          <div className="rounded-xl bg-panel p-4">
+                            <div className="mb-2.5 text-[12px] font-medium text-muted-foreground">{t("Engagement par plateforme")}</div>
+                            {platformLatest.length === 0 ? (
+                              <div className="text-xs text-muted-foreground">
+                                {toNum(creator?.er) != null ? t("Engagement global · {er}", { er: String(creator?.er) }) : t("Pas encore de mesure d'engagement de ton agence.")}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-2.5">
+                                {platformLatest.map((e) => (
+                                  <div key={e.platform} className="flex items-center justify-between gap-2">
+                                    <span className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground">
+                                      <PlatformIcon platform={e.platform} className="h-4 w-4 shrink-0" />
+                                      <span className="truncate">{e.platformLabel}</span>
+                                      {toNum(e.followers) ? <span className="shrink-0 text-faint">· {fmtCompact(toNum(e.followers) as number)}</span> : null}
+                                    </span>
+                                    <span className="shrink-0 text-sm font-bold text-foreground">{e.er}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key="coord"
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          transition={{ duration: 0.2 }}
+                          className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"
+                        >
+                          {coordRow(t("Ville"), creator?.ville ?? null)}
+                          {coordRow(t("Téléphone"), creator?.phone ?? null, true)}
+                          {coordRow(t("SIREN"), creator?.siren ?? null, true)}
+                          {coordRow(t("Naissance"), frDate(creator?.birth))}
+                          {coordRow(t("Instagram"), creator?.instagram ?? null, true, "instagram")}
+                          {coordRow(t("TikTok"), creator?.tiktok ?? null, true, "tiktok")}
+                          {coordRow(t("Email perso"), creator?.email ?? null, true, undefined, true)}
+                          {coordRow(t("Email pro"), creator?.email_pro ?? null, true, undefined, true)}
+                          {coordRow(t("Adresse"), creator?.address ?? null, true, undefined, true)}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </>
+                )}
+              </Card>
+
+              {/* Réseaux connectés : leurs stats arrivent toutes seules */}
+              {(FEATURES.connect.instagram || !!creator?.ig?.link || FEATURES.connect.tiktok || !!creator?.tt?.link || FEATURES.connect.youtube || !!creator?.yt?.link) && (
+                <section className="flex flex-col">
+                  <h2 className="px-4 pb-1.5 text-[0.8125rem] uppercase tracking-[0.02em] text-muted-foreground">{t("Réseaux connectés")}</h2>
+                  <div className="[&>div:last-child]:mb-0">{networkBlocks}</div>
+                </section>
+              )}
+
+              <IosGroup title={t("Préférences")}>
+                {/* Langue de l'espace : pour un créateur anglophone (l'agence le règle aussi sur sa fiche). */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-3.5 py-3">
+                  <span className="text-[16px] text-foreground">{t("Langue de l'espace")}</span>
+                  <div className="flex gap-1" role="group" aria-label={t("Langue de l'espace")}>
+                    {(["fr", "en"] as const).map((l) => (
+                      <button key={l} type="button" aria-pressed={lang === l} disabled={!creator} onClick={() => void setSpaceLang(l)}
+                        className={cn("h-8 rounded-full px-3.5 text-[14px] font-medium transition-colors disabled:opacity-50", lang === l ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+                        {l === "fr" ? "Français" : "English"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Thème (propre à cet appareil) : Clair, Verre, Noir ou Auto */}
+                <div className="flex flex-col gap-2 px-3.5 py-3">
+                  <span className="text-[16px] text-foreground">{t("Thème")}</span>
+                  <Tabs
+                    size="sm"
+                    fullWidth
+                    label={t("Thème")}
+                    value={themeCtx.theme}
+                    onValueChange={(v) => themeCtx.setTheme(v as ThemeChoice)}
+                    items={THEME_CHOICES.map((c) => ({ value: c.value, label: t(c.label) }))}
+                  />
+                </div>
+              </IosGroup>
+
+              {/* Toutes les autres rubriques, groupées comme le menu ordinateur */}
+              {navGroups
+                .map((g) => ({ ...g, items: g.items.filter((i) => !isMainTab(i.id)) }))
+                .filter((g) => g.items.length > 0)
+                .map((g) => (
+                  <IosGroup key={g.id} title={g.label}>
+                    {g.items.map((it) => (
+                      <IosRow key={it.id} icon={it.icon} label={it.label} onClick={() => setTab(it.id)} />
+                    ))}
+                  </IosGroup>
+                ))}
+              <IosGroup>
+                <IosRow icon={BarChart3} label={t("Envoyer mes stats")} onClick={() => setStatsModalOpen(true)} />
+              </IosGroup>
+
+              <IosGroup>
+                <IosRow icon={preview ? ArrowLeft : LogOut} label={exitTitle} destructive chevron={false} onClick={exitAction} />
+              </IosGroup>
+            </div>
+          )}
+
+          {/* Gains (ex-Facturation) : à recevoir, encaissé, à venir, historique + dépôt de facture.
+              Calculs purs : src/lib/creatorGains.ts (le rouge = argent en retard, seulement). */}
+          {tab === "gains" && (
             <div className="flex flex-col gap-4">
+              {/* À recevoir */}
+              <div className="rounded-[22px] border border-border bg-surface p-5 shadow-sm md:p-6">
+                <div className="text-[14px] font-semibold text-muted-foreground">{t("À recevoir")}</div>
+                <div className="mt-1 truncate text-[40px] font-bold leading-tight tracking-[-0.03em] tabular-nums md:text-[48px]">{formatEuro(gains.toReceive)}</div>
+                {gains.late > 0 ? (
+                  <div className={cn("mt-3 flex items-start gap-2.5 rounded-[14px] px-3.5 py-3 text-[14px] leading-snug", TONE_SOFT.late)}>
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                      {t("{brands} : paiement en retard de {amount}. Ton agence suit la relance, tu n'as rien à faire.", {
+                        brands: gains.lateParties.join(", ") || t("Une marque"),
+                        amount: formatEuro(gains.late),
+                      })}
+                    </span>
+                  </div>
+                ) : gains.toReceive > 0 ? (
+                  <div className={cn("mt-3 flex items-start gap-2.5 rounded-[14px] px-3.5 py-3 text-[14px] leading-snug", TONE_SOFT.ok)}>
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{t("Rien en retard pour le moment.")}</span>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Encaissé · En attente · À venir */}
+              <div className="grid grid-cols-3 gap-px overflow-hidden rounded-[20px] border border-border bg-border">
+                {[
+                  { label: t("Encaissé"), value: gains.cashed, cls: TONE_TEXT.ok },
+                  { label: t("En attente"), value: gains.pending, cls: "text-foreground" },
+                  { label: t("À venir"), value: gains.upcoming, cls: "text-muted-foreground" },
+                ].map((k) => (
+                  <div key={k.label} className="min-w-0 bg-surface px-3 py-4 sm:px-5">
+                    <div className="truncate text-[12px] text-muted-foreground sm:text-[13px]">{k.label}</div>
+                    <div className={cn("mt-1.5 truncate text-[17px] font-bold leading-none tracking-tight tabular-nums sm:text-[24px]", k.cls)}>{formatEuro(k.value)}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="-mt-2 px-1 text-[12px] text-muted-foreground">
+                {t("Total facturé")} : <span className="font-semibold tabular-nums text-foreground">{formatEuro(gains.billed)}</span>
+                {gains.upcoming > 0 ? ` · ${t("À venir = factures en préparation chez ton agence.")}` : ""}
+              </div>
+
+              {/* Historique des paiements */}
+              <section>
+                <h2 className="mb-2 flex items-baseline justify-between gap-3 px-1">
+                  <span className="text-[20px] font-bold tracking-[-0.02em]">{t("Historique")}</span>
+                  <span className="text-[13px] text-muted-foreground">
+                    {t("Reçu")} : <span className="font-semibold tabular-nums text-foreground">{formatEuro(gains.cashed)}</span>
+                  </span>
+                </h2>
+                <div className="overflow-hidden rounded-[20px] border border-border bg-surface shadow-sm">
+                  {invoices.length === 0 ? (
+                    <div className="p-5 text-[14px] text-muted-foreground">{t("Tes factures apparaîtront ici dès que ton agence les aura créées.")}</div>
+                  ) : (
+                    invoices.map((inv, i) => {
+                      const st = invoiceTone(inv);
+                      return (
+                        <div key={inv.ref + i} className={cn("flex items-center gap-3 px-4 py-3", i > 0 && "border-t border-border")}>
+                          <IconTile tone="info"><span className="text-[17px] font-bold">{brandInitial(inv.party)}</span></IconTile>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[15px] font-semibold text-foreground">{inv.party}</div>
+                            <div className="truncate text-[13px] text-muted-foreground">
+                              #{inv.ref}{inv.date ? <span className="tabular-nums"> · {frDate(inv.date)}</span> : null}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            <span className="whitespace-nowrap text-[15px] font-bold tracking-tight tabular-nums">{formatEuro(parseAmount(inv.amount))}</span>
+                            <StatusPill tone={st.tone} size="xs">{t(st.label)}</StatusPill>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </section>
+
               {/* Dépôt de facture — filet de sécurité si l'agence oublie de la saisir */}
-              <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold">{t("Envoyer une facture")}</div>
-                    <div className="mt-0.5 text-[11px] text-faint">
-                      {t("Ta facture n'apparaît pas ci-dessous\u00A0? Dépose-la, ton agence la reçoit aussitôt.")}
+              <div className="rounded-[20px] border border-border bg-surface p-4 shadow-sm md:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[15px] font-semibold">{t("Envoyer une facture")}</div>
+                    <div className="mt-0.5 text-[13px] text-muted-foreground">
+                      {t("Ta facture n'apparaît pas ci-dessus ? Dépose-la, ton agence la reçoit aussitôt.")}
                     </div>
                   </div>
-                  <input
-                    ref={invFileRef}
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg,.webp"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = "";
-                      if (f) sendInvoiceFile(f);
-                    }}
-                  />
                   <button
                     type="button"
                     onClick={() => invFileRef.current?.click()}
                     disabled={invUploading}
-                    className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+                    className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
-                    <Upload className="h-3.5 w-3.5" /> {invUploading ? t("Envoi…") : t("Déposer ma facture")}
+                    <Upload className="h-4 w-4" /> {invUploading ? t("Envoi…") : t("Déposer ma facture")}
                   </button>
                 </div>
 
                 {docs.filter((d) => d.type === "facture").length > 0 && (
                   <div className="mt-3 border-t border-border pt-3">
-                    <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+                    <div className="mb-1.5 text-[12px] font-medium text-muted-foreground">
                       {t("Déposées par toi")}
                     </div>
                     <div className="flex flex-col gap-1.5">
@@ -3102,12 +3754,12 @@ export function CreatorSpace({
                         .map((doc) => (
                           <div key={doc.id} className="flex items-center gap-2.5">
                             <FileText className="h-3.5 w-3.5 shrink-0 text-faint" />
-                            <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{doc.name}</span>
+                            <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{doc.name}</span>
                             {doc.path && (
                               <button
                                 type="button"
                                 onClick={() => openDocFile(doc)}
-                                className="shrink-0 text-[11px] font-semibold text-primary transition-opacity hover:opacity-80"
+                                className="shrink-0 text-[13px] font-semibold text-primary transition-opacity hover:opacity-80"
                               >
                                 {t("Ouvrir")}
                               </button>
@@ -3118,62 +3770,11 @@ export function CreatorSpace({
                   </div>
                 )}
               </div>
-
-              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border">
-                <div className="min-w-0 bg-surface px-4 py-4 sm:px-5 sm:py-5">
-                  <div className="text-[12px] text-muted-foreground sm:text-[13px]">{t("Encaissé")}</div>
-                  <div className="mt-2 truncate text-[22px] font-semibold leading-none tracking-tight tabular-nums text-signaltext sm:text-[26px]">{formatEuro(encaisse)}</div>
-                </div>
-                <div className="min-w-0 bg-surface px-4 py-4 sm:px-5 sm:py-5">
-                  <div className="text-[12px] text-muted-foreground sm:text-[13px]">{t("Total facturé")}</div>
-                  <div className="mt-2 truncate text-[22px] font-semibold leading-none tracking-tight tabular-nums sm:text-[26px]">{formatEuro(totalFacture)}</div>
-                </div>
-              </div>
-              <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-                {invoices.length === 0 ? (
-                  <div className="p-6 text-sm text-muted-foreground">{t("Tes factures apparaîtront ici dès que ton agence les aura créées.")}</div>
-                ) : (
-                  invoices.map((inv, i) => {
-                    const b = invStatus(inv.status);
-                    return (
-                      <div key={inv.ref + i} className={"flex items-center gap-3 px-4 py-3 " + (i > 0 ? "border-t border-border" : "")}>
-                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-panel text-muted-foreground">
-                          <Receipt className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold max-sm:line-clamp-2 max-sm:break-words sm:truncate">{inv.party}</div>
-                          {/* Mobile : réf. puis date sur sa propre ligne (structure identique quelle que soit
-                              la largeur du badge) ; ≥ sm : « #réf · date » sur une ligne. */}
-                          <div className="text-xs text-faint sm:truncate">
-                            <span className="block truncate sm:inline">#{inv.ref}</span>
-                            {inv.date ? (
-                              <>
-                                <span className="hidden sm:inline"> · </span>
-                                <span className="block whitespace-nowrap tabular-nums sm:inline">{frDate(inv.date)}</span>
-                              </>
-                            ) : null}
-                          </div>
-                        </div>
-                        {/* Mobile : statut sous le montant pour laisser la place au titre */}
-                        <div className="flex shrink-0 flex-col items-end gap-1 sm:contents">
-                          <span className="whitespace-nowrap text-sm font-bold tracking-tight tabular-nums">{formatEuro(parseAmount(inv.amount))}</span>
-                          {/* ≥ sm : case de largeur fixe → les montants s'alignent quel que soit le statut */}
-                          <span className="flex justify-end sm:w-[104px] sm:justify-start">
-                            <AnimatedBadge status={b.status} size="sm">
-                              {t(b.label)}
-                            </AnimatedBadge>
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
             </div>
           )}
           </TabFrame>
           </ErrorBoundary>
-          </NavActionSlotContext.Provider>)}
+          </NavActionSlotContext.Provider>
           {/* Espaceur mobile (plus fiable que le padding bas d'un conteneur flex défilant sur iOS) */}
           <div aria-hidden className="h-[calc(6.75rem+env(safe-area-inset-bottom))] md:hidden" />
         </main>
@@ -3184,23 +3785,33 @@ export function CreatorSpace({
       {iosPhone && <PullToRefresh scrollRef={mainRef} />}
       {iosPhone && (
         <IosTabBar
-          items={[
-            ...ctabIds.map((id) => {
-              const tb = TABS.find((x) => x.id === id);
-              return { id, label: tb ? t(tb.label) : id, icon: id === "accueil" ? House : tb?.icon ?? LayoutDashboard, badge: id === "mails" ? mailBadge : null };
-            }),
-            { id: "__more", label: t("Plus"), icon: CircleEllipsis },
-          ]}
-          active={moreOpen || !ctabIds.includes(tab) ? "__more" : tab}
-          onSelect={(id) => (id === "__more" ? setMoreOpen(true) : goTab(id as Tab))}
+          items={CS_MAIN_TABS.map((id) => {
+            const tb = TABS.find((x) => x.id === id);
+            return { id, label: tb ? t(tb.label) : id, icon: tb?.icon ?? LayoutDashboard, badge: id === "mails" && mailsOn ? mailBadge : null };
+          })}
+          active={ownerTab(tab)}
+          onSelect={(id) => setTab(id)}
           onReselect={(id) => {
-            if (id === "__more" && !moreOpen) setMoreOpen(true);
+            // Toucher l'onglet ouvert : retour à la liste (fiche mission, rubrique de Profil), sinon en haut.
+            if (missionId || tab !== id) setTab(id);
             else mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
           }}
         />
       )}
       {/* Envoi des stats : hors des onglets pour être ouvrable depuis l'Accueil ET le Guide */}
       <input ref={statsFileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => sendStatsFiles(e.target.files)} />
+      {/* Dépôt de facture : hors des onglets, ouvrable depuis Gains, l'Accueil et une mission */}
+      <input
+        ref={invFileRef}
+        type="file"
+        accept=".pdf,.png,.jpg,.jpeg,.webp"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) sendInvoiceFile(f);
+        }}
+      />
       <WelcomeModal
         open={statsModalOpen}
         onClose={() => setStatsModalOpen(false)}
@@ -3211,125 +3822,7 @@ export function CreatorSpace({
         onPrimary={() => statsFileRef.current?.click()}
         primaryDisabled={statsUploading}
       >
-        {/* Le plus simple : connecter son Instagram (stats automatiques) */}
-        {(FEATURES.connect.instagram || !!creator?.ig?.link) && (
-          <div className="mb-3 rounded-xl border border-border bg-surface p-3.5">
-            {creator?.ig?.link ? (
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] leading-relaxed text-foreground">
-                <span className="flex items-start gap-1.5">
-                  <PlatformIcon platform="instagram" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
-                  <span>
-                    <span className="font-semibold">{t("Instagram connecté")}</span>
-                    {t("{account} : tes stats Instagram arrivent toutes seules. Les captures ne servent plus que pour tes autres réseaux.", { account: creator.ig.link.username ? ` (@${creator.ig.link.username})` : "" })}
-                  </span>
-                </span>
-                {!preview && (
-                  <button type="button" onClick={() => void disconnectIg()} disabled={igBusy} className="text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
-                    {t("Déconnecter")}
-                  </button>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
-                  <PlatformIcon platform="instagram" className="h-3.5 w-3.5" /> {t("Encore plus simple : connecte ton Instagram")}
-                </div>
-                <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                  {t("Tes stats Instagram (vues, comptes touchés, audience) arrivent toutes seules chaque jour, sans capture. Il faut un compte pro ou créateur. Tu peux déconnecter quand tu veux.")}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void connectIg()}
-                  disabled={igBusy || !!preview}
-                  title={preview ? "Le créateur le fait depuis son espace" : undefined}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground py-2.5 text-[12px] font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
-                >
-                  {igBusy ? <Spin size={14} /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} {t("Connecter mon Instagram")}
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Pareil pour TikTok */}
-        {(FEATURES.connect.tiktok || !!creator?.tt?.link) && (
-          <div className="mb-3 rounded-xl border border-border bg-surface p-3.5">
-            {creator?.tt?.link ? (
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] leading-relaxed text-foreground">
-                <span className="flex items-start gap-1.5">
-                  <PlatformIcon platform="tiktok" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
-                  <span>
-                    <span className="font-semibold">{t("TikTok connecté")}</span>
-                    {t("{account} : tes abonnés et les vues de tes vidéos arrivent tout seuls.", { account: creator.tt.link.username ? ` (@${creator.tt.link.username})` : "" })}
-                  </span>
-                </span>
-                {!preview && (
-                  <button type="button" onClick={() => void disconnectTt()} disabled={ttBusy} className="text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
-                    {t("Déconnecter")}
-                  </button>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
-                  <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" /> {t("Connecte aussi ton TikTok")}
-                </div>
-                <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                  {t("Tes abonnés, tes j'aime et les vues de chacune de tes vidéos (collabs comprises) arrivent tout seuls chaque jour. Tu peux déconnecter quand tu veux.")}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void connectTt()}
-                  disabled={ttBusy || !!preview}
-                  title={preview ? "Le créateur le fait depuis son espace" : undefined}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
-                >
-                  {ttBusy ? <Spin size={14} /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} {t("Connecter mon TikTok")}
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Et YouTube (stats YouTube Studio, lecture seule) */}
-        {(FEATURES.connect.youtube || !!creator?.yt?.link) && (
-          <div className="mb-3 rounded-xl border border-border bg-surface p-3.5">
-            {creator?.yt?.link ? (
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] leading-relaxed text-foreground">
-                <span className="flex items-start gap-1.5">
-                  <PlatformIcon platform="youtube" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
-                  <span>
-                    <span className="font-semibold">{t("YouTube connecté")}</span>
-                    {t("{account} : tes vues, ton temps de visionnage et ton audience arrivent tout seuls.", { account: creator.yt.link.title ? ` (${creator.yt.link.title})` : "" })}
-                  </span>
-                </span>
-                {!preview && (
-                  <button type="button" onClick={() => void disconnectYt()} disabled={ytBusy} className="text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
-                    {t("Déconnecter")}
-                  </button>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
-                  <PlatformIcon platform="youtube" className="h-3.5 w-3.5" /> {t("Tu as une chaîne YouTube ?")}
-                </div>
-                <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                  {t("Connecte-la : tes stats YouTube Studio (vues, heures regardées, abonnés gagnés, audience) arrivent toutes seules. Lecture seule, on ne peut rien publier ni modifier. Tu peux déconnecter quand tu veux : tes données YouTube sont alors effacées.")}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void connectYt()}
-                  disabled={ytBusy || !!preview}
-                  title={preview ? "Le créateur le fait depuis son espace" : undefined}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
-                >
-                  {ytBusy ? <Spin size={14} /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} {t("Connecter mon YouTube")}
-                </button>
-              </>
-            )}
-          </div>
-        )}
+        {networkBlocks}
 
         <div className="mb-3 flex items-start gap-2 rounded-xl bg-primary/5 px-3.5 py-2.5 text-[12px] leading-relaxed text-foreground">
           <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
