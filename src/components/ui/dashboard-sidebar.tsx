@@ -33,12 +33,12 @@ const PILL_SPRING = { type: "spring", stiffness: 520, damping: 44, mass: 0.7 } a
 /** Ligne de menu (pleine largeur). `pill` : le fond actif est la pastille animée (ActivePill). */
 export const sbItemCls = (active: boolean, pill = false) =>
   cn(
-    "relative isolate flex w-full select-none items-center gap-2.5 rounded-[10px] px-3 py-[7px] text-left text-[14px] transition-[color,background-color,transform] duration-[var(--dur-press)] active:scale-[0.98] focus-visible:outline-offset-[-2px] motion-reduce:active:scale-100",
+    "relative isolate flex w-full select-none items-center gap-2.5 rounded-[10px] px-3 py-[5px] text-left text-[13px] transition-[color,background-color,transform] duration-[var(--dur-press)] active:scale-[0.98] focus-visible:outline-offset-[-2px] motion-reduce:active:scale-100",
     active ? cn(!pill && ACTIVE_BG, "font-medium text-primary-foreground") : cn("text-foreground/85 hover:text-foreground", HOVER_BG),
   );
 /** Icône d'une ligne de menu. */
 export const sbIconCls = (active: boolean) =>
-  cn("h-[18px] w-[18px] shrink-0 transition-colors", active ? "text-primary-foreground" : "text-primary");
+  cn("h-4 w-4 shrink-0 transition-colors", active ? "text-primary-foreground" : "text-primary");
 /** Bouton carré du rail replié (icône seule). */
 export const sbRailCls = (active: boolean) =>
   cn(
@@ -301,7 +301,7 @@ function ItemBlock({
                       onClick={() => onSelect(item.id, c.id)}
                       onContextMenu={c.pinnable && onItemContext ? (e) => onItemContext(c.id, e) : undefined}
                       aria-current={on ? "page" : undefined}
-                      className={cn(sbItemCls(on, true), "py-[5px] text-[13.5px]", pin && "pr-9")}
+                      className={cn(sbItemCls(on, true), "py-[4px] text-[12.5px]", pin && "pr-9")}
                     >
                       {on && <ActivePill />}
                       <span className="min-w-0 flex-1 truncate">{c.label}</span>
@@ -382,7 +382,7 @@ function Group({
   if (group.fixed) {
     return (
       <div className="flex flex-col">
-        <div className="flex h-8 select-none items-center px-2.5 text-[12px] font-semibold text-foreground/50">{group.label}</div>
+        <div className="flex h-7 select-none items-center px-2.5 text-[11.5px] font-semibold text-foreground/50">{group.label}</div>
         {items}
       </div>
     );
@@ -394,7 +394,7 @@ function Group({
         onClick={onToggle}
         aria-expanded={open}
         className={cn(
-          "group/h flex h-8 select-none items-center gap-1.5 rounded-[8px] px-2.5 text-left text-[12px] font-semibold transition-colors hover:text-foreground",
+          "group/h flex h-7 select-none items-center gap-1.5 rounded-[8px] px-2.5 text-left text-[11.5px] font-semibold transition-colors hover:text-foreground",
           open || containsActive ? "text-foreground/60" : "text-foreground/50",
         )}
       >
