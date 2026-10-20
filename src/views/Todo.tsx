@@ -31,7 +31,7 @@ import { useIsPhone } from "@/lib/iosUi";
 import { toISODate, todayISO } from "@/lib/dates";
 import { useStickyState } from "@/lib/useStickyState";
 import { parseQuickAdd } from "@/lib/todoQuickAdd";
-import { TONE_DOT, TONE_RING, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
+import { TONE_DOT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
 import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
 import { openLater } from "@/lib/openLater";
@@ -907,7 +907,7 @@ export function Todo() {
               />
             </InfoRow>
             <InfoRow label="Priorité">
-              <StatusPill tone={prioTone(row.priority)}>{prioLabel(row.priority)}</StatusPill>
+              <StatusPill tone={prioTone(row.priority)} className={row.priority === "haute" ? "text-priority" : undefined}>{prioLabel(row.priority)}</StatusPill>
             </InfoRow>
             <InfoRow label="Échéance">
               <span className={cn("font-medium", late > 0 ? TONE_TEXT.wait : !dueText && "text-muted-foreground")}>
@@ -1205,7 +1205,7 @@ export function Todo() {
                     className="flex cursor-pointer flex-col gap-2 rounded-[14px] bg-panel p-3 transition-colors hover:bg-rowhover"
                   >
                     <div className="flex items-start gap-2">
-                      <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", row.priority === "haute" ? TONE_DOT.wait : "bg-faint")} title={`Priorité ${prioLabel(row.priority).toLowerCase()}`} />
+                      <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", row.priority === "haute" ? "bg-priority" : "bg-faint")} title={`Priorité ${prioLabel(row.priority).toLowerCase()}`} />
                       <span className={cn("min-w-0 flex-1 text-[13px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]", row.done && "text-muted-foreground line-through")}>
                         {row.text}
                       </span>
@@ -1269,7 +1269,7 @@ export function Todo() {
         {groups.map((g) => (
           <section key={g.key}>
             <div className="flex items-center gap-2 px-1 pb-2">
-              <span aria-hidden className={cn("h-2 w-2 rounded-full", g.key === "haute" ? TONE_DOT.wait : "bg-faint")} />
+              <span aria-hidden className={cn("h-2 w-2 rounded-full", g.key === "haute" ? "bg-priority" : "bg-faint")} />
               <h3 className="text-[13px] font-semibold text-foreground">{g.label}</h3>
               <span className="ml-auto text-[12px] font-semibold tabular-nums text-muted-foreground">{g.rows.length}</span>
             </div>
@@ -1574,7 +1574,7 @@ function DoneCircle({ done, high, onToggle, size = "md" }: { done: boolean; high
       className={cn(
         "group/c grid shrink-0 place-items-center rounded-full transition-[transform,background-color,border-color] active:scale-90",
         size === "lg" ? "h-7 w-7" : "h-6 w-6",
-        done ? "bg-primary text-primary-foreground" : cn("border-2 text-muted-foreground hover:bg-rowhover", high ? TONE_RING.wait : "border-faint"),
+        done ? "bg-primary text-primary-foreground" : cn("border-2 text-muted-foreground hover:bg-rowhover", high ? "border-priority" : "border-faint"),
       )}
     >
       <Check
