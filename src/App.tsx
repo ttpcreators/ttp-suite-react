@@ -629,11 +629,11 @@ export default function App() {
   // ── Affichage iPhone (téléphone) ──
   const iosPhone = useIsPhone();
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Onglets du bas : Accueil + 3 pages (les favoris ajoutés d'abord, sinon les plus utiles) + Plus.
+  // Onglets du bas : Accueil (Aujourd'hui) + 3 pages (les favoris ajoutés d'abord, sinon ceux de Favoris : To-do, Mails, Collabs) + Plus.
   const tabIds = [...new Set<ViewId>([
     "aujourdhui",
     ...pinned.filter((id) => inNav(id) && !!findPinnable(id)),
-    ...(["contacts", "roster", "planning", "mails", "todo"] as ViewId[]).filter(inNav),
+    ...(["todo", "mails", "collabs", "planning", "contacts"] as ViewId[]).filter(inNav),
   ])].slice(0, 4);
   const iosTabs: IosTab[] = [
     ...tabIds.map((id) => ({ id, label: id === "aujourdhui" ? "Accueil" : findPinnable(id)?.label ?? viewTitle(id), icon: id === "aujourdhui" ? TtpHome : findPinnable(id)?.icon ?? TtpStar, badge: navBadges[id] })),
