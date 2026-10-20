@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Picker } from "@/components/ui/form";
-import { Check, ChevronDown, Circle, Clock, Pencil, Plus, Repeat, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Clock, Pencil, Plus, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
-import { DashPanel } from "@/components/ui/dash";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { useLiveKey } from "@/lib/useLive";
 import { myDisplayName } from "@/lib/team";
 import { doneThisWeek, weekStart, type Routine } from "@/lib/routines";
+import { TONE_SOFT, TONE_TEXT } from "@/lib/statusTone";
+import { useStickyState } from "@/lib/useStickyState";
 
 /*
- * To-do « Chaque semaine » : les tâches qui reviennent toutes les semaines.
- * Un clic sur le rond = « Fait » (date + qui, gardés dans l'historique). La
+ * To-do « Routines de la semaine » : les tâches qui reviennent toutes les semaines.
+ * Un clic sur la case = « Fait » (date + qui, gardés dans l'historique). La
  * semaine suivante (lundi), la tâche redevient à faire toute seule.
  */
 
@@ -23,6 +24,8 @@ const fmtDone = (iso: string) => {
   const d = new Date(iso);
   return `${d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} à ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
 };
+/** « dim. 4 oct. » : jour du dernier « Fait » (l'heure reste dans l'historique). */
+const fmtDay = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
 /** Jour de la semaine d'aujourd'hui : 1 = lundi … 7 = dimanche. */
 const todayIndex = () => ((new Date().getDay() + 6) % 7) + 1;
 
@@ -37,7 +40,9 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
   const live = useLiveKey();
   const [rows, setRows] = useState<Routine[] | null>(null);
   const [missing, setMissing] = useState(false);
-  const [open, setOpen] = useState(true);
+  // Bloc déplié ou replié : retenu sur l'appareil.
+  const [openState, setOpenState] = useStickyState("todo:routines", ["ouvert", "replie"] as const, "ouvert");
+  const open = openState === "ouvert";
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
   const [day, setDay] = useState<number | null>(null);
@@ -65,10 +70,10 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
   // « + Tâche → Chaque semaine » : ouvre l'ajout et amène la section à l'écran.
   useEffect(() => {
     if (!addSignal) return;
-    setOpen(true);
+    setOpenState("ouvert");
     setAdding(true);
     ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [addSignal]);
+  }, [addSignal, setOpenState]);
 
   const add = async () => {
     const t = text.trim();
@@ -81,7 +86,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
     toast("Tâche hebdomadaire ajoutée ✓");
   };
 
-  /** Rond cliqué : « Fait » cette semaine (avec date et prénom), ou annulation. */
+  /** Case cochée : « Fait » cette semaine (avec date et prénom), ou annulation. */
   const toggle = async (r: Routine) => {
     if (busy) return;
     setBusy(r.id);
@@ -113,64 +118,83 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
   if (rows === null) return null;
   const list = rows;
   const doneCount = list.filter((r) => doneThisWeek(r)).length;
+  const allDone = list.length > 0 && doneCount === list.length;
   const today = todayIndex();
   const since = weekStart();
 
   return (
-    <div ref={ref} className="mb-4 scroll-mt-4">
-      <DashPanel className="overflow-hidden">
-        <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
-          <button type="button" onClick={() => setOpen((v) => !v)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={open}>
-            <Repeat className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="shrink-0 text-[14px] font-semibold text-foreground">Chaque semaine</span>
-            {!missing && list.length > 0 && (
-              <span className={cn("min-w-0 truncate text-[12px]", doneCount === list.length ? "text-signaltext" : "text-muted-foreground")}>
-                · {doneCount} / {list.length} faite{doneCount > 1 ? "s" : ""} cette semaine
+    <div ref={ref} className="mb-5 scroll-mt-4">
+      <section className="overflow-hidden rounded-[20px] bg-surface">
+        <div className="flex items-center gap-2 py-1.5 pl-4 pr-2 sm:pl-5">
+          <button type="button" onClick={() => setOpenState(open ? "replie" : "ouvert")} className="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left" aria-expanded={open}>
+            {/* Petit rond : vide tant qu'il reste des routines, coché quand tout est fait */}
+            {allDone ? (
+              <span aria-hidden className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
+                <Check className="h-3 w-3" strokeWidth={3} />
               </span>
+            ) : (
+              <span aria-hidden className="h-[18px] w-[18px] shrink-0 rounded-full border-2 border-faint" />
             )}
-            <ChevronDown className={cn("h-4 w-4 shrink-0 text-faint transition-transform", open && "rotate-180")} />
+            <span className="min-w-0 flex-1 truncate">
+              <span className="text-[15px] font-semibold text-foreground">Routines de la semaine</span>
+              {!missing && list.length > 0 && (
+                <span className="ml-2 text-[13px] text-muted-foreground max-sm:block max-sm:ml-0 max-sm:text-[12px]">
+                  {doneCount} sur {list.length} · repart à zéro lundi
+                </span>
+              )}
+            </span>
+            <ChevronRight className={cn("h-4 w-4 shrink-0 text-faint transition-transform", open && "rotate-90")} />
           </button>
           {!missing && (
-            <button type="button" onClick={() => { setOpen(true); setAdding((v) => !v); }}
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover">
+            <button
+              type="button"
+              onClick={() => {
+                setOpenState("ouvert");
+                setAdding((v) => !v);
+              }}
+              aria-label="Ajouter une routine"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-field px-2.5 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover"
+            >
               <Plus className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Ajouter</span>
             </button>
           )}
         </div>
 
         {open && (
-          <div className="border-t border-border">
+          <div className="px-3 pb-3 sm:px-4 sm:pb-4">
             {missing ? (
-              <p className="px-4 py-4 text-[12px] text-muted-foreground sm:px-5">
-                Les tâches hebdomadaires ne sont pas encore activées.
-              </p>
+              <p className="px-1 pb-1 text-[12px] text-muted-foreground">Les tâches hebdomadaires ne sont pas encore activées.</p>
             ) : (
               <>
                 {adding && (
-                  <div className="flex flex-col gap-2 border-b border-border bg-muted/30 px-4 py-3 sm:flex-row sm:items-center sm:px-5">
+                  <div className="mb-2 flex flex-col gap-2 rounded-[14px] bg-panel p-3 sm:flex-row sm:items-center">
                     <input
                       autoFocus
                       value={text}
                       onChange={(e) => setText(e.target.value.slice(0, 300))}
                       onKeyDown={(e) => e.key === "Enter" && void add()}
                       placeholder="Ex. Mettre à jour les stats des créateurs"
-                      className="h-9 min-w-0 flex-1 rounded-md border border-border bg-surface px-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
+                      className="h-9 min-w-0 flex-1 rounded-full border border-border bg-surface px-3.5 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
                     />
                     <div className="flex gap-2">
                       <DaySelect value={day} onChange={setDay} />
-                      <button type="button" onClick={() => void add()} disabled={!text.trim()}
-                        className="h-9 shrink-0 rounded-full bg-primary px-3.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+                      <button
+                        type="button"
+                        onClick={() => void add()}
+                        disabled={!text.trim()}
+                        className="h-9 shrink-0 rounded-full bg-primary px-3.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                      >
                         Ajouter
                       </button>
                     </div>
                   </div>
                 )}
                 {list.length === 0 && !adding ? (
-                  <p className="px-4 py-4 text-[12px] text-muted-foreground sm:px-5">
+                  <p className="px-1 pb-1 text-[12px] text-muted-foreground">
                     Ajoute ici ce que tu refais chaque semaine, sans avoir à le réécrire. Chaque tâche revient toute seule chaque semaine, le jour choisi.
                   </p>
                 ) : (
-                  <ul className="divide-y divide-border">
+                  <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
                     {list.map((r) => {
                       const log = Array.isArray(r.done_log) ? r.done_log : [];
                       const done = doneThisWeek(r);
@@ -179,58 +203,92 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                       const isToday = !done && r.weekday === today;
                       if (editId === r.id) {
                         return (
-                          <li key={r.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:px-5">
-                            <input value={editText} onChange={(e) => setEditText(e.target.value.slice(0, 300))} onKeyDown={(e) => e.key === "Enter" && void saveEdit(r)}
-                              className="h-9 min-w-0 flex-1 rounded-md border border-border bg-surface px-3 text-[13px] text-foreground outline-none focus:border-primary" />
+                          <li key={r.id} className="flex flex-col gap-2 rounded-[14px] bg-panel p-3 sm:flex-row sm:items-center md:col-span-2">
+                            <input
+                              value={editText}
+                              onChange={(e) => setEditText(e.target.value.slice(0, 300))}
+                              onKeyDown={(e) => e.key === "Enter" && void saveEdit(r)}
+                              className="h-9 min-w-0 flex-1 rounded-full border border-border bg-surface px-3.5 text-[13px] text-foreground outline-none focus:border-primary"
+                            />
                             <div className="flex gap-2">
                               <DaySelect value={editDay} onChange={setEditDay} />
-                              <button type="button" onClick={() => void saveEdit(r)} className="h-9 rounded-full bg-primary px-3 text-[13px] font-medium text-primary-foreground">Enregistrer</button>
-                              <button type="button" onClick={() => setEditId(null)} aria-label="Annuler" className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-rowhover"><X className="h-4 w-4" /></button>
+                              <button type="button" onClick={() => void saveEdit(r)} className="h-9 rounded-full bg-primary px-3 text-[13px] font-medium text-primary-foreground">
+                                Enregistrer
+                              </button>
+                              <button type="button" onClick={() => setEditId(null)} aria-label="Annuler" className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-rowhover">
+                                <X className="h-4 w-4" />
+                              </button>
                             </div>
                           </li>
                         );
                       }
                       return (
-                        <li key={r.id} className="px-4 py-3 sm:px-5">
+                        <li key={r.id} className={cn("min-w-0 rounded-[14px] bg-panel py-2.5 pl-3 pr-1.5", history === r.id && "md:col-span-2")}>
                           <div className="flex items-start gap-3">
-                            <button type="button" onClick={() => void toggle(r)} disabled={busy === r.id}
+                            {/* Case carrée : « Fait » cette semaine (date + prénom), ou annulation */}
+                            <button
+                              type="button"
+                              onClick={() => void toggle(r)}
+                              disabled={busy === r.id}
                               aria-label={done ? "Annuler le « Fait » de cette semaine" : "Marquer fait cette semaine"}
-                              className="mt-0.5 shrink-0 transition-transform active:scale-90 disabled:opacity-50">
-                              {done ? <span className="grid h-5 w-5 place-items-center rounded-full bg-signal text-onsignal"><Check className="h-3.5 w-3.5" /></span>
-                                : <Circle className="h-5 w-5 text-faint hover:text-foreground" />}
+                              className={cn(
+                                "mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-[6px] transition-[transform,background-color,border-color] active:scale-90 disabled:opacity-50",
+                                done ? "bg-primary text-primary-foreground" : "border-2 border-faint hover:border-foreground/60",
+                              )}
+                            >
+                              {done && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
                             </button>
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                <span className={cn("text-[13px] font-medium [overflow-wrap:anywhere]", done ? "text-muted-foreground line-through decoration-faint" : "text-foreground")}>{r.text}</span>
+                                <span className={cn("text-[14px] font-medium [overflow-wrap:anywhere]", done ? "text-muted-foreground line-through decoration-faint" : "text-foreground")}>{r.text}</span>
                                 {r.weekday != null && (
-                                  <span className={cn("rounded-full px-2 py-px text-[11px] font-medium",
-                                    late ? "bg-wait-soft text-wait" : isToday ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-                                    {isToday ? "Aujourd'hui" : DAYS[r.weekday - 1]}{late ? " · en retard" : ""}
+                                  <span className={cn("rounded-full px-2 py-px text-[11px] font-medium", late ? TONE_SOFT.wait : isToday ? "bg-primary/10 text-primary" : "bg-field text-muted-foreground")}>
+                                    {isToday ? "Aujourd'hui" : DAYS[r.weekday - 1]}
+                                    {late ? " · en retard" : ""}
                                   </span>
                                 )}
                               </div>
                               <p className="mt-0.5 text-[12px] text-muted-foreground">
-                                {done && last ? <span className="text-signaltext">Fait {fmtDone(last.at)}{last.by ? ` · ${last.by}` : ""}</span>
-                                  : last ? <>À faire cette semaine · dernière fois {fmtDone(last.at)}{last.by ? ` · ${last.by}` : ""}</>
-                                  : "À faire cette semaine · jamais fait pour l'instant"}
+                                {done && last ? (
+                                  <span className={TONE_TEXT.ok}>
+                                    Faite {fmtDay(last.at)}
+                                    {last.by ? ` · ${last.by}` : ""}
+                                  </span>
+                                ) : last ? (
+                                  <>
+                                    Dernière fois {fmtDay(last.at)}
+                                    {last.by ? ` · ${last.by}` : ""}
+                                  </>
+                                ) : (
+                                  "Jamais faite pour l'instant"
+                                )}
                               </p>
                               {history === r.id && (
                                 <ol className="mt-2 flex flex-col gap-1 border-l border-border pl-3">
                                   {[...log].reverse().slice(0, 12).map((e) => (
                                     <li key={e.at} className={cn("text-[12px]", new Date(e.at) >= since ? "text-foreground" : "text-muted-foreground")}>
-                                      {fmtDone(e.at)}{e.by ? ` · ${e.by}` : ""}
+                                      {fmtDone(e.at)}
+                                      {e.by ? ` · ${e.by}` : ""}
                                     </li>
                                   ))}
                                   {log.length === 0 && <li className="text-[12px] text-faint">Pas encore d'historique.</li>}
                                 </ol>
                               )}
                             </div>
-                            <button type="button" onClick={() => setHistory((h) => (h === r.id ? null : r.id))}
-                              className={cn("inline-flex h-7 shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-medium transition-colors hover:bg-rowhover", history === r.id ? "text-foreground" : "text-muted-foreground")}
-                              title="Historique des « Fait »">
-                              <Clock className="h-3.5 w-3.5" /> <span className="max-sm:hidden">Historique</span> {log.length > 0 && <span className="tabular-nums text-faint">{log.length}</span>}
+                            <button
+                              type="button"
+                              onClick={() => setHistory((h) => (h === r.id ? null : r.id))}
+                              className={cn(
+                                "inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-medium transition-colors hover:bg-rowhover",
+                                history === r.id ? "text-foreground" : "text-muted-foreground",
+                              )}
+                              title="Historique des « Fait »"
+                              aria-label="Historique des « Fait »"
+                            >
+                              <Clock className="h-3.5 w-3.5" /> {log.length > 0 && <span className="tabular-nums text-faint">{log.length}</span>}
                             </button>
                             <ActionMenu
+                              buttonClassName="h-8 w-8"
                               items={[
                                 { key: "edit", label: "Modifier", icon: Pencil, onClick: () => { setEditId(r.id); setEditText(r.text); setEditDay(r.weekday ?? null); } },
                                 { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: () => void remove(r), confirm: { title: "Mettre à la corbeille", message: `Déplacer « ${r.text} » vers la corbeille ? Tu pourras la restaurer.`, confirmLabel: "Mettre à la corbeille" } },
@@ -246,7 +304,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
             )}
           </div>
         )}
-      </DashPanel>
+      </section>
     </div>
   );
 }
