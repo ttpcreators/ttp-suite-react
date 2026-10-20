@@ -41,6 +41,16 @@ export const TONE_TEXT: Record<StatusTone, string> = {
   closed: "text-closed",
 };
 
+/** Contour seul (ronds à cocher d'une tâche, anneaux). */
+export const TONE_RING: Record<StatusTone, string> = {
+  ok: "border-ok",
+  progress: "border-progress",
+  info: "border-info",
+  wait: "border-wait",
+  late: "border-late",
+  closed: "border-closed",
+};
+
 /** Aplat plein + texte lisible dessus (boutons de choix, disques). */
 export const TONE_SOLID: Record<StatusTone, string> = {
   ok: "bg-ok text-on-status",
