@@ -997,6 +997,23 @@ end;
 $$;
 grant execute on function public.app_state_set(text, jsonb) to authenticated;
 
+-- Réponses de mails préparées par Claude (sql/2026-10-21-reponses-claude.sql).
+create table if not exists public.mail_reply_drafts (
+  id         uuid primary key default gen_random_uuid(),
+  thread_id  text not null,
+  box        text not null,
+  body       text not null,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  used_at    timestamptz
+);
+create index if not exists mail_reply_drafts_thread_idx on public.mail_reply_drafts (thread_id, created_at desc);
+alter table public.mail_reply_drafts enable row level security;
+revoke all on public.mail_reply_drafts from anon;
+drop policy if exists mail_reply_drafts_agency on public.mail_reply_drafts;
+create policy mail_reply_drafts_agency on public.mail_reply_drafts for all to authenticated
+  using (public.is_agency()) with check (public.is_agency());
+
 -- Écritures PARTIELLES (sql/2026-10-21-ecritures-partielles.sql) : seulement les entrées
 -- touchées, ligne verrouillée → deux postes ne s'écrasent plus.
 create or replace function public.app_state_merge(p_key text, p_set jsonb, p_remove text[] default '{}')

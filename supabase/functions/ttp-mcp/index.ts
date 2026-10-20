@@ -36,7 +36,8 @@ const INSTRUCTIONS =
   "rechercher_mails puis lire_mail pour les mails. Les actions (tâche, rendez-vous, brouillon, contact, scouting, collab) " +
   "écrivent dans l'app : confirme toujours avec l'utilisateur avant. Les mails ne sont jamais envoyés, seulement préparés en brouillon. " +
   "Si on te demande d'être un agent de TTP (ex. « Talent manager »), appelle d'abord lire_agent pour lire ses consignes et ses leçons à jour, et applique-les. " +
-  "Les messages WhatsApp, Instagram ou LinkedIn préparés vont dans la file « À valider » (proposer_action).";
+  "Les messages WhatsApp, Instagram ou LinkedIn préparés vont dans la file « À valider » (proposer_action). " +
+  "Pour préparer la réponse à un fil depuis la page Mails de l'app : lire_mail, puis preparer_reponse_mail (la réponse apparaît dans l'app, jamais envoyée).";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });

@@ -842,8 +842,35 @@ const memoireCreateur: Tool = {
   },
 };
 
+const preparerReponseMail: Tool = {
+  name: "preparer_reponse_mail",
+  title: "Déposer une réponse dans l'app",
+  description: "Dépose le texte d'une réponse à un fil de mails dans la page Mails de TTP Suite (zone de réponse du fil). L'équipe relit, modifie et envoie elle-même : rien n'est envoyé. Utiliser l'id du fil et la boîte du fil (lire_mail). Texte du mail seulement : sans objet ni signature (ajoutée par l'app).",
+  write: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      fil: { type: "string", description: "Id du fil Gmail" },
+      boite: { type: "string", enum: ["partnerships", "talent"] },
+      texte: { type: "string", description: "Texte de la réponse (paragraphes séparés par une ligne vide)" },
+    },
+    required: ["fil", "boite", "texte"],
+    additionalProperties: false,
+  },
+  run: async (sb, ctx, a) => {
+    const id = str(a.fil, 40);
+    if (!/^[A-Za-z0-9]+$/.test(id)) return fail("Id de fil invalide.");
+    const box = str(a.boite) === "talent" ? "talent" : "partnerships";
+    const body = str(a.texte, 8000).replace(/\s*[—–]\s*/g, ", ");
+    if (!body) return fail("Texte vide.");
+    const { error } = await sb.from("mail_reply_drafts").insert({ thread_id: id, box, body, created_by: ctx.userId });
+    if (error) return fail(/relation|does not exist/i.test(error.message) ? "Le réglage « réponses de Claude » n'est pas encore installé dans l'app (SQL à lancer)." : `Réponse non déposée : ${error.message}`);
+    return ok("Réponse déposée dans TTP Suite : elle apparaît dans la zone de réponse de ce fil (page Mails). Rien n'a été envoyé.");
+  },
+};
+
 export const TOOLS: Tool[] = [
-  pointDuJour, rechercher, roster, ficheCreateur, rechercherMails, lireMail, dmInstagram, scouting, contacts, pipeline, collabs, planning, taches, factures,
+  pointDuJour, rechercher, roster, ficheCreateur, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, planning, taches, factures,
   creerTache, creerEvenement, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
 ];
