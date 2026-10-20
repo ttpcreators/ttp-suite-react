@@ -408,3 +408,19 @@ export function resolveAvatar(email: string, agency = false, hint: { brand?: str
   inflight.set(key, p);
   return p;
 }
+
+/** Monogramme d'une marque : initiales des deux premiers mots (« Prison Island » → « PI »), sinon la première lettre. */
+export function brandInitials(brand: string | null | undefined): string {
+  const words = String(brand ?? "").normalize("NFC").split(/[\s\-_/&.+]+/).map((w) => w.replace(/[^\p{L}\p{N}]/gu, "")).filter(Boolean);
+  if (!words.length) return "?";
+  if (words.length === 1) return words[0].charAt(0).toUpperCase();
+  return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
+}
+
+/** Saisie libre d'un site (« https://www.seoni.fr/boutique », « seoni.fr ») → domaine (« seoni.fr »), sinon "". */
+export function siteDomain(input: string | null | undefined): string {
+  const t = String(input ?? "").trim();
+  if (!t) return "";
+  const host = hostOf(/^https?:\/\//i.test(t) ? t : `https://${t}`);
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(host) ? host : "";
+}

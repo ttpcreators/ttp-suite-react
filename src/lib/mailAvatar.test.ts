@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avatarCandidates, brandDomainFrom, buildBrandDomains, brandKey, emailOf, hostOf, isGenericBrand, isWebmail, letterColor, logoUrl, parentDomain } from "./mailAvatar";
+import { avatarCandidates, brandDomainFrom, brandInitials, buildBrandDomains, brandKey, emailOf, hostOf, isGenericBrand, isWebmail, letterColor, logoUrl, parentDomain, siteDomain } from "./mailAvatar";
 import { brandAddressOf, type GMessageLite } from "../../supabase/functions/creator-mail/logic.ts";
 
 describe("photos de profil des mails", () => {
@@ -87,5 +87,19 @@ describe("plus de logos de marques", () => {
   it("site officiel → domaine", () => {
     expect(hostOf("https://www.sephora.fr/")).toBe("sephora.fr");
     expect(hostOf("pas un site")).toBe("");
+  });
+});
+
+describe("monogramme et site d'une marque", () => {
+  it("initiales", () => {
+    expect(brandInitials("Prison Island")).toBe("PI");
+    expect(brandInitials("Opera Air")).toBe("OA");
+    expect(brandInitials("seoni")).toBe("S");
+    expect(brandInitials("")).toBe("?");
+  });
+  it("domaine depuis une saisie libre", () => {
+    expect(siteDomain("https://www.seoni.fr/boutique")).toBe("seoni.fr");
+    expect(siteDomain("operaair.com")).toBe("operaair.com");
+    expect(siteDomain("pas un site")).toBe("");
   });
 });
