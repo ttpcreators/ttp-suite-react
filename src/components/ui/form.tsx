@@ -33,9 +33,22 @@ function NavPlus({ slot, label, onClick, expanded }: { slot: HTMLElement; label:
  * Bouton vert « + Label » (déclenche l'ouverture d'un formulaire). Sur iPhone, dans
  * l'en-tête d'une page (ou avec `navBar`), il devient un « + » en haut à droite.
  */
-export function AddButton({ label, onClick, navBar }: { label: string; onClick: () => void; navBar?: boolean }) {
+export function AddButton({ label, onClick, navBar, round }: { label: string; onClick: () => void; navBar?: boolean; /** Rond « + » seul (le libellé passe en infobulle). */ round?: boolean }) {
   const slot = useNavActionSlot(navBar);
+  const t = useT();
   if (slot) return <NavPlus slot={slot} label={label} onClick={onClick} />;
+  if (round)
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={t("Ajouter : {label}", { label })}
+        title={t("Ajouter : {label}", { label })}
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"
+      >
+        <Plus className="h-4 w-4" />
+      </button>
+    );
   return (
     <button
       type="button"

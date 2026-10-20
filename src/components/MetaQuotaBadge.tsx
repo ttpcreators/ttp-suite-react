@@ -7,7 +7,7 @@ import { readQuota, useMetaQuota } from "@/lib/instagram";
  * Compteur Meta : part du quota de demandes utilisée, pause éventuelle et heure de
  * reprise. Au clic : le détail (demandes de l'heure et du jour, coût de chaque outil).
  */
-export function MetaQuotaBadge({ className }: { className?: string }) {
+export function MetaQuotaBadge({ className, compact }: { className?: string; /** Rond avec la jauge seule (le libellé passe en infobulle). */ compact?: boolean }) {
   const q = useMetaQuota();
   const r = readQuota(q);
   const tone = r.blockedMin ? "red" : r.pct >= 85 ? "red" : r.pct >= 60 ? "amber" : "green";
@@ -19,6 +19,20 @@ export function MetaQuotaBadge({ className }: { className?: string }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
+        {compact ? (
+          <button
+            type="button"
+            aria-label={label}
+            title={label}
+            className={cn(
+              "grid h-9 w-9 shrink-0 place-items-center rounded-full border transition-colors hover:bg-rowhover",
+              tone === "red" ? "border-danger/30 text-dangertext" : tone === "amber" ? "border-amber/40 text-amber" : "border-border text-muted-foreground",
+              className,
+            )}
+          >
+            <Gauge className="h-4 w-4" />
+          </button>
+        ) : (
         <button
           type="button"
           className={cn(
@@ -36,6 +50,7 @@ export function MetaQuotaBadge({ className }: { className?: string }) {
             </span>
           )}
         </button>
+        )}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[min(20rem,calc(100vw-2rem))] p-4 text-[12px] leading-relaxed">
         <div className="mb-2 text-[13px] font-semibold text-foreground">Demandes à Instagram (Meta)</div>
