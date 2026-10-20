@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { TtpBrief, TtpInvoice, TtpMail, TtpPhone, TtpPlanning, TtpSpark, TtpTodo } from "@/components/icons/ttp-icons";
+import { TtpBrief, TtpCollabs, TtpContract, TtpInvoice, TtpMail, TtpPhone, TtpPlanning, TtpSpark, TtpStats, TtpTodo } from "@/components/icons/ttp-icons";
 import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "motion/react";
 import { ArrowUpRight, Check, ChevronRight, Pencil, Plus, X, type LucideIcon } from "@/components/icons";
@@ -38,13 +38,19 @@ import {
   snooze,
   summaryLine,
   type AujBrief,
+  type AujCollab,
+  type AujCollabStep,
+  type AujDeadline,
   type AujEvent,
+  type AujStatsCreator,
   type AujTodo,
   type InvDetailsLite,
+  type SectionId,
   type SnoozeMap,
   type TodayFilter,
   type TodayItem,
 } from "@/lib/aujourdhui";
+import { anticipationLine, buildAnticipation, collapseItems, contractTypeLabel, groupSteps, inDays } from "@/lib/anticipation";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { IconTile } from "@/components/ui/icon-tile";
@@ -58,7 +64,8 @@ import { formatEuro } from "@/lib/money";
 
 /**
  * « Aujourd'hui » : la journée de l'agence en une liste d'actions triées par urgence
- * (argent en retard, agenda, tâches, mails, demain), avec un inspecteur à droite
+ * (argent en retard, agenda, tâches, mails, demain), puis l'anticipation (« Cette semaine »,
+ * « À anticiper » : lib/anticipation.ts), avec un inspecteur à droite
  * (feuille du bas sur mobile) et le clavier (J / K / E / R). Toutes les lignes viennent
  * des tables déjà lues par l'app, avec les mêmes requêtes ; la logique est dans
  * lib/aujourdhui.ts (testée), cette page ne fait qu'afficher et déclencher.
@@ -101,8 +108,16 @@ function iconOf(it: TodayItem): LucideIcon {
   if (it.kind === "todo") return TtpTodo;
   if (it.kind === "mails") return TtpMail;
   if (it.kind === "brief") return TtpBrief;
+  if (it.kind === "echeance") return TtpInvoice;
+  if (it.kind === "contrat") return TtpContract;
+  if (it.kind === "collab") return TtpCollabs;
+  if (it.kind === "stats") return TtpStats;
   return it.event?.type === "call" ? TtpPhone : TtpPlanning;
 }
+
+/** Sections d'anticipation repliables (« Voir les N autres »), état gardé sur l'appareil. */
+const FOLDABLE: SectionId[] = ["week", "later"];
+const FOLD = ["ouvert", "ferme"] as const;
 
 /** Libellé du bouton principal de l'inspecteur. */
 function primaryLabel(it: TodayItem): string {
@@ -117,6 +132,14 @@ function primaryLabel(it: TodayItem): string {
       return "Ouvrir le brief";
     case "mails":
       return "Trier les mails";
+    case "echeance":
+      return "Préparer la relance";
+    case "contrat":
+      return "Voir dans Échéances";
+    case "collab":
+      return "Ouvrir la collab";
+    case "stats":
+      return "Ouvrir le roster";
   }
 }
 
@@ -166,7 +189,10 @@ function Row({ it, selected, onSelect, onVerb }: { it: TodayItem; selected: bool
         <Icon />
       </IconTile>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[15px] font-semibold leading-snug text-foreground">{it.title}</div>
+        <div className="flex min-w-0 items-center gap-1.5">
+          {it.priority && <span aria-label="Priorité haute" title="Priorité haute" className="h-2 w-2 shrink-0 rounded-full bg-priority" />}
+          <span className="min-w-0 truncate text-[15px] font-semibold leading-snug text-foreground">{it.title}</span>
+        </div>
         <div className="truncate text-[13px] leading-snug text-muted-foreground">{it.sub}</div>
       </div>
       <div className="shrink-0 text-right">
@@ -229,7 +255,8 @@ function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onP
   const [editing, setEditing] = useState(false);
   useEffect(() => setEditing(false), [it.id]);
   const iv = it.invoice;
-  const mail = iv ? relanceEmail(iv, reminders[iv.id]?.count ?? 0) : null;
+  // Le brouillon de relance ne concerne que l'argent en retard (pas une échéance à venir).
+  const mail = iv && it.kind === "relance" ? relanceEmail(iv, reminders[iv.id]?.count ?? 0) : null;
 
   let eyebrow = "";
   let rows: [string, ReactNode][] = [];
@@ -245,6 +272,33 @@ function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onP
       ...(share ? [[`Part de ${titleCase(iv.creator).split(" ")[0]}`, formatEuro(share.reversal)] as [string, ReactNode]] : []),
     ];
     if (it.lateDays) pill = <StatusPill tone="late" size="md">En retard de {it.lateDays} jour{it.lateDays > 1 ? "s" : ""}</StatusPill>;
+    if (it.kind === "echeance" && it.daysLeft != null) pill = <StatusPill tone="progress" size="md">Échéance {inDays(it.daysLeft)}</StatusPill>;
+  } else if (it.contract) {
+    const c = it.contract;
+    eyebrow = "Contrat à renouveler";
+    rows = [
+      ["Créateur", titleCase(c.creator)],
+      ["Type", contractTypeLabel(c.type)],
+      ...(parseDueDate(c.start) ? [["Début", longDate(parseDueDate(c.start)!)] as [string, ReactNode]] : []),
+      ["Fin", longDate(isoToDate(c.end))],
+      ["Durée", `${c.months} mois`],
+    ];
+    pill = <StatusPill tone="wait" size="md">{(it.daysLeft ?? 0) < 0 ? `Expiré depuis ${-(it.daysLeft ?? 0)} j` : `Expire ${inDays(it.daysLeft ?? 0)}`}</StatusPill>;
+  } else if (it.collab) {
+    const c = it.collab;
+    eyebrow = "Collab bloquée";
+    rows = [
+      ...(c.brand ? [["Marque", c.brand] as [string, ReactNode]] : []),
+      ...(c.creator ? [["Créateur", titleCase(c.creator)] as [string, ReactNode]] : []),
+      ["Étape", c.stepLabel],
+      ["Sur cette étape depuis", `${c.staleDays} j`],
+    ];
+    pill = <StatusPill tone="wait" size="md">Bloquée depuis {c.staleDays} j</StatusPill>;
+  } else if (it.kind === "stats") {
+    const names = it.staleCreators ?? [];
+    eyebrow = "Stats du mois";
+    rows = names.map((n) => [n, "à mettre à jour"] as [string, ReactNode]);
+    pill = <StatusPill tone="wait" size="md">Avant la fin du mois</StatusPill>;
   } else if (it.todo) {
     const t = it.todo;
     eyebrow = "Tâche";
@@ -255,7 +309,13 @@ function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onP
       ...(t.priority ? [["Priorité", titleCase(t.priority)] as [string, ReactNode]] : []),
       ...(subs.length ? [["Sous-tâches", `${subs.filter((s) => s.done).length} / ${subs.length}`] as [string, ReactNode]] : []),
     ];
-    pill = it.lateDays ? <StatusPill tone="wait" size="md">{it.lateDays} j de retard</StatusPill> : <StatusPill tone="progress" size="md">Pour aujourd'hui</StatusPill>;
+    pill = it.lateDays ? (
+      <StatusPill tone="wait" size="md">{it.lateDays} j de retard</StatusPill>
+    ) : it.daysLeft != null && it.daysLeft > 0 ? (
+      <StatusPill tone="progress" size="md">Pour {it.daysLeft === 1 ? "demain" : `le ${shortDate(isoToDate(it.dateISO ?? ""))}`}</StatusPill>
+    ) : (
+      <StatusPill tone="progress" size="md">Pour aujourd'hui</StatusPill>
+    );
   } else if (it.event) {
     const e = it.event;
     eyebrow = eventTypeLabel(e.type);
@@ -397,6 +457,46 @@ export function Aujourdhui() {
     };
   }, [live]);
 
+  // Anticipation (à part, sans bloquer la journée) : mêmes requêtes que Collabs (collabs +
+  // historique `collab_steps`) et Roster (`creators.stats_month`). Une lecture ratée garde
+  // ce qui est affiché ; rien de lu = pas de ligne, jamais d'erreur à l'écran.
+  const [collabs, setCollabs] = useState<AujCollab[] | null>(() => getCache<AujCollab[]>("aujourdhui:collabs"));
+  const [collabSteps, setCollabSteps] = useState<AujCollabStep[] | null>(() => getCache<AujCollabStep[]>("aujourdhui:collabSteps"));
+  const [statsCreators, setStatsCreators] = useState<AujStatsCreator[] | null>(() => getCache<AujStatsCreator[]>("aujourdhui:statsCreators"));
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      supabase.from("collabs").select("id,brand,creator,step,status,updated_at").order("sort_order"),
+      supabase.from("collab_steps").select("collab_id,step,reached_at").order("reached_at"),
+      supabase.from("creators").select("name,status,stats_month").order("sort_order"),
+    ])
+      .then(([co, st, cr]) => {
+        if (!alive) return;
+        if (!co.error) {
+          const list = (co.data as AujCollab[]) ?? [];
+          setCache("aujourdhui:collabs", list);
+          setCollabs(list);
+        }
+        if (!st.error) {
+          const list = (st.data as AujCollabStep[]) ?? [];
+          setCache("aujourdhui:collabSteps", list);
+          setCollabSteps(list);
+        }
+        if (!cr.error) {
+          const list = (cr.data as AujStatsCreator[]) ?? [];
+          setCache("aujourdhui:statsCreators", list);
+          setStatsCreators(list);
+        }
+      })
+      .catch(() => {
+        /* réseau : on garde l'anticipation déjà affichée */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [live]);
+  const stepsByCollab = useMemo(() => groupSteps(collabSteps), [collabSteps]);
+
   // Relances : copie locale après une relance, jusqu'au prochain blob live.
   const [localRem, setLocalRem] = useState<Reminders | null>(null);
   const liveRem = app?.invoiceReminders;
@@ -418,11 +518,46 @@ export function Aujourdhui() {
     [invoices, reminders, todos, events, briefs, mails, snoozed, money, now],
   );
 
+  // Échéances de contrats : blob agence, seulement si la page Échéances est ouverte à ce profil.
+  const canContracts = !restricted.includes("echeances");
+  const contracts = canContracts ? ((app?.contractDeadlines as AujDeadline[] | undefined) ?? null) : null;
+  const ahead = useMemo(
+    () =>
+      buildAnticipation({
+        todos,
+        events,
+        briefs,
+        invoices: money ? invoices : null,
+        contracts: Array.isArray(contracts) ? contracts : null,
+        collabs,
+        collabSteps: stepsByCollab,
+        statsCreators,
+        snoozed,
+        now,
+      }),
+    [todos, events, briefs, money, invoices, contracts, collabs, stepsByCollab, statsCreators, snoozed, now],
+  );
+
   const filters = money ? TODAY_FILTERS : TODAY_FILTERS.filter((f) => f !== "argent");
   const [filter, setFilter] = useStickyState<TodayFilter>("aujourdhui:filtre", filters, "tout");
-  const visible = useMemo(() => filterItems(items, filter), [items, filter]);
+  const all = useMemo(() => [...items, ...ahead], [items, ahead]);
+  const visible = useMemo(() => filterItems(all, filter), [all, filter]);
   const sections = useMemo(() => sectionsOf(visible, now), [visible, now]);
-  const flat = useMemo(() => sections.flatMap((s) => s.items), [sections]);
+  // « Cette semaine » et « À anticiper » : repliées par défaut quand elles sont longues.
+  const [weekFold, setWeekFold] = useStickyState("aujourdhui:semaine", FOLD, "ferme");
+  const [laterFold, setLaterFold] = useStickyState("aujourdhui:anticiper", FOLD, "ferme");
+  const foldOf = (id: SectionId) => (id === "week" ? weekFold : laterFold);
+  const toggleFold = (id: SectionId) => (id === "week" ? setWeekFold(weekFold === "ouvert" ? "ferme" : "ouvert") : setLaterFold(laterFold === "ouvert" ? "ferme" : "ouvert"));
+  const shownSections = useMemo(
+    () =>
+      sections.map((s) => {
+        const { shown, hidden } = FOLDABLE.includes(s.id) ? collapseItems(s.items, (s.id === "week" ? weekFold : laterFold) === "ouvert") : { shown: s.items, hidden: 0 };
+        return { ...s, shown, hidden };
+      }),
+    [sections, weekFold, laterFold],
+  );
+  // J / K parcourent les lignes affichées (une section repliée cache les suivantes).
+  const flat = useMemo(() => shownSections.flatMap((s) => s.shown), [shownSections]);
 
   // Sélection (inspecteur) + feuille du bas sur mobile.
   const isLg = useIsLg();
@@ -512,9 +647,16 @@ export function Aujourdhui() {
     if (it.kind === "todo") return void finishTodo(it);
     if (it.kind === "mails") return go("mails");
     if (it.kind === "brief") return go("briefs");
+    if (it.kind === "echeance" || it.kind === "contrat" || it.kind === "collab" || it.kind === "stats") return openSource(it);
     return go("planning");
   };
   const openSource = (it: TodayItem) => {
+    if (it.kind === "contrat") return go("echeances");
+    if (it.kind === "stats") return go("roster");
+    if (it.kind === "collab" && it.collab) {
+      requestIntent("collab:open", it.collab.id); // la page Collabs ouvre sa fiche
+      return go("collabs");
+    }
     if (it.invoice) {
       setQuery(it.invoice.ref); // Facturation filtre sur la référence
       go("facturation");
@@ -617,6 +759,7 @@ export function Aujourdhui() {
   }
 
   const total = items.length + done.length;
+  const aheadLine = anticipationLine(ahead);
   const morning = now.getHours() < 12;
   const inspector = selected ? (
     <Inspector
@@ -657,6 +800,7 @@ export function Aujourdhui() {
                   {done.length} déjà faite{done.length > 1 ? "s" : ""} {morning ? "ce matin" : "aujourd'hui"}.
                 </div>
               )}
+              {aheadLine && <div className="text-[14px] leading-snug text-muted-foreground">{aheadLine}</div>}
             </div>
             {flat.length > 0 && (
               <button type="button" onClick={browseAll} className="h-10 shrink-0 rounded-full bg-field px-4 text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover max-sm:basis-full">
@@ -675,17 +819,28 @@ export function Aujourdhui() {
                 <p className="text-[15px] font-semibold text-foreground">Rien à traiter. Belle journée.</p>
               </div>
             ) : (
-              sections.map((s) => (
+              shownSections.map((s) => (
                 <section key={s.id} className="mb-4">
                   <div className="flex items-baseline justify-between gap-3 px-1 pb-1.5">
                     <h2 className="text-[14px] font-semibold text-muted-foreground">{s.title}</h2>
                     <span className="shrink-0 text-[14px] tabular-nums text-muted-foreground">{s.right}</span>
                   </div>
                   <div className="space-y-1">
-                    {s.items.map((it) => (
+                    {s.shown.map((it) => (
                       <Row key={it.id} it={it} selected={it.id === selectedId} onSelect={() => select(it.id, true)} onVerb={() => { select(it.id, false); act(it); }} />
                     ))}
                   </div>
+                  {(s.hidden > 0 || (FOLDABLE.includes(s.id) && foldOf(s.id) === "ouvert" && collapseItems(s.items, false).hidden > 0)) && (
+                    <button
+                      type="button"
+                      onClick={() => toggleFold(s.id)}
+                      aria-expanded={s.hidden === 0}
+                      className="mt-1 flex items-center gap-2 rounded-full px-3 py-1.5 text-[14px] text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <ChevronRight className={cn("h-4 w-4 transition-transform", s.hidden === 0 && "-rotate-90", s.hidden > 0 && "rotate-90")} />
+                      {s.hidden > 0 ? `Voir ${s.hidden > 1 ? `les ${s.hidden} autres` : "l'autre"}` : "Réduire"}
+                    </button>
+                  )}
                 </section>
               ))
             )}
