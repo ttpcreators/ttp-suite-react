@@ -384,6 +384,19 @@
   }
 }
 
+/* Icônes (direction « BlackYak », choix de Marc) : trait fin et régulier, bouts
+   carrés, angles vifs. Appliqué à toutes les icônes lucide, sans toucher aux
+   icônes pleines (étoile des favoris, logos). */
+svg.lucide {
+  stroke-width: var(--icon-stroke);
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  stroke-miterlimit: 4;
+}
+:root {
+  --icon-stroke: 1.5px;
+}
+
 /* Couleur de bordure PAR DÉFAUT. En @layer base pour que les utilitaires
    (border-red-500/40, border-foreground, focus:border-primary…) gardent la main :
    hors couche, cette règle repeignait en gris TOUTES les bordures colorées. */
