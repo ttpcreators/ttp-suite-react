@@ -384,6 +384,7 @@ export function totalMinutes(items: TodayItem[]): number {
 export function summaryLine(items: TodayItem[]): string {
   const n = items.length;
   const min = totalMinutes(items);
-  const dur = min >= 60 ? `${Math.floor(min / 60)} h${min % 60 ? ` ${String(min % 60).padStart(2, "0")}` : ""}` : `${min} min`;
-  return `${n} action${n > 1 ? "s" : ""} à traiter · environ ${dur}`;
+  // Espaces insécables : « environ 11 min » ne se coupe jamais avant « min » sur téléphone.
+  const dur = min >= 60 ? `${Math.floor(min / 60)}\u00a0h${min % 60 ? `\u00a0${String(min % 60).padStart(2, "0")}` : ""}` : `${min}\u00a0min`;
+  return `${n} action${n > 1 ? "s" : ""} à traiter · environ\u00a0${dur}`;
 }
