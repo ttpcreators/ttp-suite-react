@@ -9,7 +9,7 @@ import {
   LoaderCircle,
   X,
   type LucideIcon,
-} from "lucide-react";
+} from "@/components/icons";
 import {
   AnimatePresence,
   motion,

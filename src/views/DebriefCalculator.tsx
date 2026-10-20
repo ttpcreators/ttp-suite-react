@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import { Plus, Trash2, Camera, Calculator, ArrowUp, Rows3, Layers } from "lucide-react";
+import { Plus, Trash2, Camera, Calculator, ArrowUp, Rows3, Layers } from "@/components/icons";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { postKind, type IgCollab, type IgCreator, type IgPostLite } from "@/lib/instagram";
 import type { TtCollab, TtCreator, TtVideoLite } from "@/lib/tiktok";

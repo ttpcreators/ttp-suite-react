@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "@/components/icons";
 import {
   TtpBell, TtpBrief, TtpChecklist, TtpCollabs, TtpContacts, TtpContract, TtpDeadline, TtpDm, TtpEngagement, TtpEvolution,
   TtpFiles, TtpFolder, TtpGift, TtpHistory, TtpIdea, TtpInvoice, TtpLock, TtpMail, TtpMediakit, TtpPerson, TtpPipeline,

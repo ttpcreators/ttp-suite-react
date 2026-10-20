@@ -1,6 +1,6 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { BadgeCheck, ChevronDown, ChevronUp, Eye, EyeOff, Plus, RotateCcw } from "lucide-react";
+import { BadgeCheck, ChevronDown, ChevronUp, Eye, EyeOff, Plus, RotateCcw } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";

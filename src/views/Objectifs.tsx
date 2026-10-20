@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Target, Pencil, ChevronLeft, ChevronRight, Euro, Handshake, PiggyBank, PenLine, type LucideIcon } from "lucide-react";
+import { Target, Pencil, ChevronLeft, ChevronRight, Euro, Handshake, PiggyBank, PenLine, type LucideIcon } from "@/components/icons";
 import {
   useAppState,
   mergeAppStateKey,

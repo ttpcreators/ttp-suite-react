@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Spin } from "@/components/ui/loader";
-import { RefreshCw, Search } from "lucide-react";
+import { RefreshCw, Search } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { fmtAgo } from "@/lib/instagram";

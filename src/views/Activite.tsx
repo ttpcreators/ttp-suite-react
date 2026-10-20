@@ -1,7 +1,7 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader } from "@/components/ui/loader";
-import { History, RefreshCw } from "lucide-react";
+import { History, RefreshCw } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { DashPanel } from "@/components/ui/dash";

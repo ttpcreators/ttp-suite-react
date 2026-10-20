@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
-import { ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, type LucideIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 

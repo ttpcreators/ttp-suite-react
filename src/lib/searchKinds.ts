@@ -1,4 +1,4 @@
-import { Users, Contact, ListChecks, Receipt, FileText, Search as SearchIcon, type LucideIcon } from "lucide-react";
+import { Users, Contact, ListChecks, Receipt, FileText, Search as SearchIcon, type LucideIcon } from "@/components/icons";
 import type { SearchHit } from "./useGlobalSearch";
 import type { ViewId } from "./nav";
 

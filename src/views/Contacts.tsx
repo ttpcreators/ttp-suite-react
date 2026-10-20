@@ -1,6 +1,6 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { supabase } from "@/lib/supabase";
-import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, MapPin, MessageCircle, AtSign, Phone, BriefcaseBusiness, Check, Plus, ChevronDown, ClipboardList, NotebookPen, type LucideIcon } from "lucide-react";
+import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, MapPin, MessageCircle, AtSign, Phone, BriefcaseBusiness, Check, Plus, ChevronDown, ClipboardList, NotebookPen, type LucideIcon } from "@/components/icons";
 import {
   parseTouches, sortTouches, lastTouch, needsRelance, nextKind, waLink, waHref, touchId, buildTouchesPatch,
   CANAL_LABELS, KIND_LABELS, RELANCE_DAYS, type Touch, type TouchCanal, type TouchKind, type WaMode, type ProspectSettings,

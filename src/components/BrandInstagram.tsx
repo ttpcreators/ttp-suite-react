@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Spin } from "@/components/ui/loader";
-import { ExternalLink, RefreshCw } from "lucide-react";
+import { ExternalLink, RefreshCw } from "@/components/icons";
 import { toast } from "@/components/ui/toast";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { fmtCompact } from "@/lib/timeSeries";

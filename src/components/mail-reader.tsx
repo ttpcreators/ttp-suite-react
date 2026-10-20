@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { ChevronUp, Paperclip, type LucideIcon } from "lucide-react";
+import { ChevronUp, Paperclip, type LucideIcon } from "@/components/icons";
 import { toast } from "@/components/ui/toast";
 import { MailAvatar } from "@/components/mail-avatar";
 import { translate, useLang, useLocale, useT, type Lang } from "@/lib/i18n";

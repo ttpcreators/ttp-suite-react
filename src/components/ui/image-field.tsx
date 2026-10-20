@@ -1,6 +1,6 @@
 import { useRef, useState, type ChangeEvent } from "react";
 import { Spin } from "@/components/ui/loader";
-import { Trash2, Camera } from "lucide-react";
+import { Trash2, Camera } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 

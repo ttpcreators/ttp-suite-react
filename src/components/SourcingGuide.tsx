@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, BookOpen, Check, Lightbulb, ListChecks, MousePointerClick, Radar, Search, SlidersHorizontal, UserPlus, Users, X, Binoculars, ShieldCheck, Send, type LucideIcon } from "lucide-react";
+import { ArrowRight, BookOpen, Check, Lightbulb, ListChecks, MousePointerClick, Radar, Search, SlidersHorizontal, UserPlus, Users, X, Binoculars, ShieldCheck, Send, type LucideIcon } from "@/components/icons";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { IconTile } from "@/components/ui/icon-tile";

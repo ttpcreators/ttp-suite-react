@@ -1,7 +1,7 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, Eye, FileDown, FileText, ListFilter, PenLine, Search, Send, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, Eye, FileDown, FileText, ListFilter, PenLine, Search, Send, Trash2, X } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useAppState, type AppState } from "@/lib/appState";
 import { useCreators } from "@/lib/useCreators";

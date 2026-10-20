@@ -1,6 +1,6 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronLeft, Pencil, LayoutGrid, List, Table2 } from "lucide-react";
+import { Check, ChevronLeft, Pencil, LayoutGrid, List, Table2 } from "@/components/icons";
 import { Progress } from "@/components/ui/progress";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";

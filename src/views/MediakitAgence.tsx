@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Save, ExternalLink, Building2, CalendarHeart, FileText, BarChart3, Columns3, Languages } from "lucide-react";
+import { Plus, Trash2, Save, ExternalLink, Building2, CalendarHeart, FileText, BarChart3, Columns3, Languages } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import { ImageField } from "@/components/ui/image-field";

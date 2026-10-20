@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Download, FileBarChart, Handshake, HeartHandshake, TrendingUp, Wallet } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, FileBarChart, Handshake, HeartHandshake, TrendingUp, Wallet } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { formatEuro } from "@/lib/money";

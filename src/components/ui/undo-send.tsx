@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Spin } from "@/components/ui/loader";
-import { CircleAlert, Copy, RotateCw, Send, Undo2, X } from "lucide-react";
+import { CircleAlert, Copy, RotateCw, Send, Undo2, X } from "@/components/icons";
 import {
   cancelSend, dismissFailedSend, flushSend, retryFailedSend, sendErrorText, subscribeFailed, subscribePending,
   type FailedSend, type PendingSend,

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Picker } from "@/components/ui/form";
-import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle, MessageSquare, Pencil, X, Phone, MessageCircle, Users, Compass, Mic, Flag, Film, GalleryHorizontalEnd, CircleDashed, Music2, MonitorPlay, Check, ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
+import { Plus, Trash2, Save, Target, GripVertical, CalendarRange, AlertTriangle, MessageSquare, Pencil, X, Phone, MessageCircle, Users, Compass, Mic, Flag, Film, GalleryHorizontalEnd, CircleDashed, Music2, MonitorPlay, Check, ChevronLeft, ChevronRight, type LucideIcon } from "@/components/icons";
 import { useAppState, mergeAppStateKey, type AppState } from "@/lib/appState";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";

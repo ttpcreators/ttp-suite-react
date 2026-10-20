@@ -15,7 +15,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import GlassStatChart from "@/components/ui/glass-stat-chart";
-import { Mail, Pencil, Trash2, X, Send, Sparkles, ArrowUpRight, Plus, Camera, Hash, Globe, Search, Check, ChevronDown, Copy } from "lucide-react";
+import { Mail, Pencil, Trash2, X, Send, Sparkles, ArrowUpRight, Plus, Camera, Hash, Globe, Search, Check, ChevronDown, Copy } from "@/components/icons";
 import { igWhyText, fmtEr, fmtPerWeek, noteQuota } from "@/lib/instagram";
 import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
 import { HashtagSearch } from "@/components/HashtagSearch";

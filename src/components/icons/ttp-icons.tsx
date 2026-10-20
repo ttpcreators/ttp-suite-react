@@ -108,3 +108,6 @@ export const TtpRepeat = make("TtpRepeat", <><path d="M4 10.5 V7 H17 M14 4 L17 7
 export const TtpPackage = make("TtpPackage", <><path d="M3 9 L12 4 L21 9 V20 H3 Z" /><path d="M3 9 H21" /><path d="M10 12.5 H14" /></>);
 export const TtpTrophy = make("TtpTrophy", <><path d="M7 4 H17 V9 L12 14 L7 9 Z" /><path d="M12 14 V18 M8 20.5 H16" /><path d="M7 6 H4 V8 L7 10.5 M17 6 H20 V8 L17 10.5" /></>);
 export const TtpNote = make("TtpNote", <><path d="M5 3 H19 V15 L13 21 H5 Z" /><path d="M13 21 V15 H19" /><path d="M8 8 H16 M8 11 H13" /></>);
+export const TtpAlert = make("TtpAlert", <><path d="M12 4 L21 20 H3 Z" /><path d="M12 10 V14 M12 16.5 V17" /></>);
+export const TtpCamera = make("TtpCamera", <><path d="M3 8 H8 L10 5 H14 L16 8 H21 V19 H3 Z" /><path d="M12 10 L15 13 L12 16 L9 13 Z" /></>);
+export const TtpBuilding = make("TtpBuilding", <><path d="M5 21 V8 L12 3 L19 8 V21 Z" /><path d="M9 11 H10 M14 11 H15 M9 14.5 H10 M14 14.5 H15" /><path d="M11 21 V18 H13 V21" /></>);

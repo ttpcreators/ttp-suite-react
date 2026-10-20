@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Pencil, CalendarClock, RefreshCw } from "lucide-react";
+import { Pencil, CalendarClock, RefreshCw } from "@/components/icons";
 import { useAppState, listAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";

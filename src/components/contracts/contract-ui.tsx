@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, Save, X } from "lucide-react";
+import { ChevronDown, Save, X } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 /*

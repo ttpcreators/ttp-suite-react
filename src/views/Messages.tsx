@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Loader, Spin } from "@/components/ui/loader";
-import { AlertTriangle, ArrowLeft, AtSign, Check, Contact, Copy, EyeOff, Inbox, Mail, MessagesSquare, RefreshCw, Search, Send, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, AtSign, Check, Contact, Copy, EyeOff, Inbox, Mail, MessagesSquare, RefreshCw, Search, Send, X } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, initials } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";

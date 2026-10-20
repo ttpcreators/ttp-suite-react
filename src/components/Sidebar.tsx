@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { Building2, LogOut, Moon, PanelLeftOpen, Settings, Sparkles, Star, Sun } from "lucide-react";
+import { Building2, LogOut, Moon, PanelLeftOpen, Settings, Sparkles, Star, Sun } from "@/components/icons";
 import { NAV, findPinnable, type ViewId, FAVORIS_BASE, FAVORIS_ID, withFavorites } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { TtpSearch, TtpTrash } from "@/components/icons/ttp-icons";

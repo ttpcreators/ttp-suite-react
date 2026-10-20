@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { MoreHorizontal, AlertTriangle, type LucideIcon } from "lucide-react";
+import { MoreHorizontal, AlertTriangle, type LucideIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { IosActionSheet, useIosPhone } from "@/components/mobile/ios-sheet";
 import { useT } from "@/lib/i18n";

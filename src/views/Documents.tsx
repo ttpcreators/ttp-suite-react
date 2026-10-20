@@ -16,7 +16,7 @@ import { notifyCreator } from "@/lib/push";
 import { getCache, setCache } from "@/lib/viewCache";
 import { goToTab } from "@/lib/openLater";
 import { useEffect, useRef, useState } from "react";
-import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, Trash2, BarChart3, ChevronLeft, type LucideIcon } from "lucide-react";
+import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, Trash2, BarChart3, ChevronLeft, type LucideIcon } from "@/components/icons";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Overlay } from "@/components/mobile/ios-sheet";

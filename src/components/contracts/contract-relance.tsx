@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Send, X, ExternalLink, BellRing } from "lucide-react";
+import { Send, X, ExternalLink, BellRing } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { Overlay } from "@/components/mobile/ios-sheet";

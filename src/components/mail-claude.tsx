@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles, X } from "lucide-react";
+import { Sparkles, X } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import type { MailBox } from "@/lib/mailSend";

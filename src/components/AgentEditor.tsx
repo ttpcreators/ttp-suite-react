@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Copy, Plus, Trash2, X } from "lucide-react";
+import { Check, Copy, Plus, Trash2, X } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 

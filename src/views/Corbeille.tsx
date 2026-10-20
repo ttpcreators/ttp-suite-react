@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { RotateCcw, Trash2, Clock } from "lucide-react";
+import { RotateCcw, Trash2, Clock } from "@/components/icons";
 import { useAppState, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";

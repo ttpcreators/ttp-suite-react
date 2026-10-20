@@ -2,7 +2,7 @@ import { useStickyState } from "@/lib/useStickyState";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ExpandableActionBar } from "@/components/ui/expandable-action-bar";
 import { Loader, Spin } from "@/components/ui/loader";
-import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, Plus, type LucideIcon } from "lucide-react";
+import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, Plus, type LucideIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { getCache, setCache } from "@/lib/viewCache";

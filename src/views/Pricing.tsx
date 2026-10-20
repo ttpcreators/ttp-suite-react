@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Info, Plus, Trash2, Copy, Users, Sparkles, Calculator, Tag, Lightbulb, SlidersHorizontal, RotateCcw } from "lucide-react";
+import { Info, Plus, Trash2, Copy, Users, Sparkles, Calculator, Tag, Lightbulb, SlidersHorizontal, RotateCcw } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { useCreators } from "@/lib/useCreators";
 import { formatEuro, getAppState, invalidateAppState, saveAppStateKey, useAppState } from "@/lib/appState";

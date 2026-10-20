@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { TONE_SOLID, TONE_TILE } from "@/lib/statusTone";
 import { Loader, Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import { ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X, type LucideIcon, Megaphone } from "lucide-react";
+import { ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X, type LucideIcon, Megaphone } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";

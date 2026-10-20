@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { X } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { useT } from "@/lib/i18n";

@@ -4,7 +4,7 @@ import { SignaturePad } from "@/components/signature-pad";
 import {
   BellRing, Smartphone, Sunrise, History, LogOut, Palette, MessageCircle, Bot, Copy, Unplug, PenLine, Sparkles,
   Search, ChevronRight, ChevronLeft, X, type LucideIcon,
-} from "lucide-react";
+} from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
 import { ACCENT_PRESETS, ACCENT_GRADIENTS, getAccent, setAccent, isHex, parseGradient, THEME_CHOICES, type ThemeChoice } from "@/lib/accent";

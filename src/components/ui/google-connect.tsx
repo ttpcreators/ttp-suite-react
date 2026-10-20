@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Spin } from "@/components/ui/loader";
-import { CheckCircle2, AlertTriangle, RefreshCw, Unlink } from "lucide-react";
+import { CheckCircle2, AlertTriangle, RefreshCw, Unlink } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { connect, disconnect, getStatus, triggerSync, consumeOAuthReturn, type GoogleStatus } from "@/lib/googleCalendar";

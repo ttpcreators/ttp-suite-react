@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Users, Plus } from "lucide-react";
+import { X, Users, Plus } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 export type PickContact = { email: string; label: string; tag?: string };

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { TtpCollabs, TtpInvoice, TtpMail, TtpRepeat, TtpSpark, TtpToday, TtpTodo } from "@/components/icons/ttp-icons";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, Search, type LucideIcon } from "lucide-react";
+import { ArrowRight, Search, type LucideIcon } from "@/components/icons";
 import { cn, titleCase } from "@/lib/utils";
 import { NAV, type ViewId } from "@/lib/nav";
 import { PAGE_ALIASES } from "@/lib/pageAliases";

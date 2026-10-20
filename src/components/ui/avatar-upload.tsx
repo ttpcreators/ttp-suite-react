@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { Spin } from "@/components/ui/loader";
-import { Camera } from "lucide-react";
+import { Camera } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { dbUpdate } from "@/lib/db";
 import { invalidateCreators } from "@/lib/useCreators";

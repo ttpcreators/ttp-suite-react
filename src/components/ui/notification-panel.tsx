@@ -1,7 +1,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Archive, Bell, Check, CheckCheck, Inbox, MoreHorizontal, Settings2, Trash2, type LucideIcon } from "lucide-react";
+import { Archive, Bell, Check, CheckCheck, Inbox, MoreHorizontal, Settings2, Trash2, type LucideIcon } from "@/components/icons";
 import { TONE_SOFT, TONE_SOLID, type StatusTone } from "@/lib/statusTone";
 import { cn } from "@/lib/utils";
 

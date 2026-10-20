@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { CheckCircle2, Circle, CircleDotDashed, ChevronRight, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { CheckCircle2, Circle, CircleDotDashed, ChevronRight, Plus, RotateCcw, Trash2 } from "@/components/icons";
 import { SwipeRow } from "@/components/mobile/swipe-row";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { cn } from "@/lib/utils";

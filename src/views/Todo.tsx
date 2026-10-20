@@ -43,7 +43,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3, UserRound, Building2, Plus, Upload, Type, AlignLeft, CalendarClock, ArrowUp, Forward, RotateCcw, Paperclip } from "lucide-react";
+import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3, UserRound, Building2, Plus, Upload, Type, AlignLeft, CalendarClock, ArrowUp, Forward, RotateCcw, Paperclip } from "@/components/icons";
 import { WeeklyRoutines } from "@/components/WeeklyRoutines";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
 import { PageHeaderRow } from "@/components/ui/page-header";

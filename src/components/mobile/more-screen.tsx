@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { LogOut, Moon, type LucideIcon } from "lucide-react";
+import { LogOut, Moon, type LucideIcon } from "@/components/icons";
 import { IosGroup, IosRow, IosSwitch } from "@/components/mobile/ios-shell";
 import { useT } from "@/lib/i18n";
 

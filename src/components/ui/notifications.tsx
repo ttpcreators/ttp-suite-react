@@ -1,6 +1,6 @@
 import * as React from "react";
 import { TtpBell, TtpBrief, TtpContract, TtpInvoice, TtpMail, TtpPerson, TtpPlanning, TtpPulse, TtpSpark } from "@/components/icons/ttp-icons";
-import { BellRing, type LucideIcon } from "lucide-react";
+import { BellRing, type LucideIcon } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { NotificationPanel, type PanelItem } from "@/components/ui/notification-panel";
 import { usePush } from "@/lib/push";

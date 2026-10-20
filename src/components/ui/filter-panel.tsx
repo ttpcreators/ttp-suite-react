@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { SlidersHorizontal, X, ChevronDown } from "lucide-react";
+import { SlidersHorizontal, X, ChevronDown } from "@/components/icons";
 import { useState, type ReactNode } from "react";
 import { Tabs } from "./animated-tabs";
 import { IosSheet, useIosPhone } from "@/components/mobile/ios-sheet";

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { HeartPulse, CheckCircle2, AlertTriangle, XCircle, RefreshCw, ChevronDown, ChevronUp, Clock } from "lucide-react";
+import { HeartPulse, CheckCircle2, AlertTriangle, XCircle, RefreshCw, ChevronDown, ChevronUp, Clock } from "@/components/icons";
 import { useAppState, type AppState } from "@/lib/appState";
 import { runDiagnostics, type DiagSnapshot, type DiagStatus, type DiagCheck } from "@/lib/diagnostics";
 import { cn } from "@/lib/utils";

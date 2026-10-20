@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Spin } from "@/components/ui/loader";
-import { ExternalLink, Eye, Link2, RefreshCw, Unlink } from "lucide-react";
+import { ExternalLink, Eye, Link2, RefreshCw, Unlink } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { fmtCompact } from "@/lib/timeSeries";

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Plus, Star, Trash2, Code2, X, Upload, Pencil } from "lucide-react";
+import { Plus, Star, Trash2, Code2, X, Upload, Pencil } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import {
   useMailSignatures,

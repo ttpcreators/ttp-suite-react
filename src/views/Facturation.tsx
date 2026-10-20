@@ -16,7 +16,7 @@ import {
   EyeOff,
   ChevronRight,
   Check,
-} from "lucide-react";
+} from "@/components/icons";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";

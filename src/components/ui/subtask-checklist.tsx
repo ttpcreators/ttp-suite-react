@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Trash2, Plus, ChevronRight, ListChecks } from "lucide-react";
+import { Check, Trash2, Plus, ChevronRight, ListChecks } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 
