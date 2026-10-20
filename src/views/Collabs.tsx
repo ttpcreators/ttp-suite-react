@@ -9,7 +9,9 @@ import { Tabs } from "@/components/ui/animated-tabs";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
-import { IconTile } from "@/components/ui/icon-tile";
+import { MailAvatar } from "@/components/mail-avatar";
+import { brandDomainFrom } from "@/lib/mailAvatar";
+import { TONE_SOFT } from "@/lib/statusTone";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { StatusTone } from "@/lib/statusTone";
 import { useEffect, useState, type ReactElement } from "react";
@@ -109,6 +111,17 @@ export function Collabs() {
   const [igBusy, setIgBusy] = useState<string | null>(null);
   const [ttCollabs, setTtCollabs] = useState<Record<string, TtCollab>>({});
   const [ytCollabs, setYtCollabs] = useState<Record<string, YtCollab>>({});
+  // Adresses des contacts (marque → e-mail) : sert à trouver le logo de chaque marque.
+  const [brandContacts, setBrandContacts] = useState<{ brand: string | null; email: string | null }[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void supabase.from("contacts").select("brand, email").then(({ data, error }) => {
+      if (alive && !error) setBrandContacts((data as { brand: string | null; email: string | null }[] | null) ?? []);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [error, setError] = useState(false);
   const { query } = useSearch();
   const creators = useCreators();
@@ -304,6 +317,39 @@ export function Collabs() {
           </div>
         )}
       </div>
+    );
+  };
+
+  /**
+   * Repère visuel d'une collab : le logo de la marque (trouvé comme dans Contacts et
+   * Mails, sinon sa lettre teintée de la phase), avec la photo du créateur en médaillon.
+   */
+  const brandMark = (row: Row, size: "sm" | "lg", onAccent = false) => {
+    const key = row.brand.trim().toLowerCase();
+    const email = brandContacts.find((c) => (c.brand ?? "").trim().toLowerCase() === key && c.email)?.email ?? null;
+    return (
+      <span className="relative shrink-0">
+        <MailAvatar
+          name={row.brand}
+          email={email}
+          brand={row.brand}
+          brandDomain={brandDomainFrom(brandContacts, row.brand)}
+          className={size === "lg" ? "h-14 w-14 rounded-[16px]" : "h-9 w-9 rounded-[11px]"}
+          fallback={row.brand.trim().charAt(0).toUpperCase()}
+          fallbackClassName={cn("font-bold", size === "lg" ? "text-[22px]" : "text-[13px]", onAccent ? "bg-primary-foreground/20 text-primary-foreground" : TONE_SOFT[PHASE_TONE[phaseOf(row.step)]])}
+        />
+        {row.creator && (
+          <CreatorAvatar
+            name={row.creator}
+            photoUrl={photoOf(row.creator)}
+            className={cn(
+              "absolute rounded-full ring-2",
+              size === "lg" ? "-bottom-1.5 -right-1.5 h-7 w-7 text-[10px]" : "-bottom-1 -right-1 h-[18px] w-[18px] text-[8px]",
+              onAccent ? "ring-primary" : "ring-surface",
+            )}
+          />
+        )}
+      </span>
     );
   };
 
@@ -571,11 +617,14 @@ export function Collabs() {
 
     return (
       <div key={row.id} className="flex flex-col rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:bg-rowhover">
-        {/* En-tête : marque + menu */}
+        {/* En-tête : logo + marque + menu */}
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2.5">
+            {brandMark(row, "sm")}
+            <div className="min-w-0">
             <h2 className="truncate text-[14px] font-semibold tracking-tight text-foreground">{row.brand}</h2>
             {row.title && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{row.title}</p>}
+          </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <AnimatedBadge status={statusMeta.variant} size="sm">{statusMeta.label}</AnimatedBadge>
@@ -667,11 +716,14 @@ export function Collabs() {
         <div className="grid grid-cols-1 items-center gap-x-5 gap-y-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.5fr)_21rem]">
           {/* Marque + libellé, avec statut et menu sur mobile */}
           <div className="flex min-w-0 items-start justify-between gap-2">
-            <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2.5">
+              {brandMark(row, "sm")}
+              <div className="min-w-0">
               <h2 className="truncate text-[14px] font-semibold tracking-tight text-foreground">{row.brand}</h2>
               <p className="truncate text-[11px] text-muted-foreground">
                 {[row.title, row.cachet].filter(Boolean).join(" · ") || "Collab"}
               </p>
+            </div>
             </div>
             <div className="flex shrink-0 items-center gap-1 md:hidden">
               <AnimatedBadge status={statusMeta.variant} size="sm">{statusMeta.label}</AnimatedBadge>
@@ -760,9 +812,7 @@ export function Collabs() {
                       on ? "bg-primary text-primary-foreground" : "hover:bg-rowhover",
                     )}
                   >
-                    <IconTile size="sm" tone={on ? undefined : PHASE_TONE[p.key]} className={cn("text-[13px] font-bold", on && "bg-primary-foreground/20 text-primary-foreground")}>
-                      {r.brand.trim().charAt(0).toUpperCase()}
-                    </IconTile>
+                    {brandMark(r, "sm", on)}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] font-semibold">
                         {r.brand}
@@ -827,7 +877,7 @@ export function Collabs() {
       <div className="flex min-w-0 flex-col gap-5 rounded-[22px] bg-surface p-5 md:p-6">
         {/* En-tête : marque × créateur, actions */}
         <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
-          <IconTile size="lg" tone={PHASE_TONE[def.phase]}>{row.brand.trim().charAt(0).toUpperCase()}</IconTile>
+          {brandMark(row, "lg")}
           <div className="min-w-[12rem] flex-1">
             <h2 className="text-[26px] font-bold leading-tight tracking-[-0.02em] text-foreground">
               {row.brand}
