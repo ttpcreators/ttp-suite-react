@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { TtpCollabs, TtpInvoice, TtpMail, TtpRepeat, TtpSpark, TtpToday, TtpTodo } from "@/components/icons/ttp-icons";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, Inbox, ListChecks, Milestone, ReceiptText, RefreshCw, Search, Sparkle, Sun, type LucideIcon } from "lucide-react";
+import { ArrowRight, Search, type LucideIcon } from "lucide-react";
 import { cn, titleCase } from "@/lib/utils";
 import { NAV, type ViewId } from "@/lib/nav";
 import { PAGE_ALIASES } from "@/lib/pageAliases";
@@ -143,7 +144,7 @@ export function CommandPalette({
           group: "actions",
           label: relanceActionLabel(iv),
           meta: [formatEuro(parseAmount(iv.amount)), days ? `${days} j` : null].filter(Boolean).join(" · "),
-          icon: ReceiptText,
+          icon: TtpInvoice,
           tone: "late",
           keywords: ["relancer", "relance", "facture", "retard", "impaye", iv.party ?? "", iv.creator ?? "", iv.ref ?? ""],
           run: () => go("relances"),
@@ -164,7 +165,7 @@ export function CommandPalette({
           group: "actions",
           label: `Relancer les ${late.length} factures en retard`,
           meta: formatEuro(late.reduce((s, o) => s + parseAmount(o.iv.amount), 0)),
-          icon: RefreshCw,
+          icon: TtpRepeat,
           tone: "late",
           keywords: ["relancer", "relances", "factures", "retard", "impayes", "tout"],
           run: () => go("relances"),
@@ -172,13 +173,13 @@ export function CommandPalette({
       }
     }
     if (!hidden.includes("todo"))
-      actions.push({ key: "new:todo", group: "actions", label: "Nouvelle tâche", icon: ListChecks, keywords: ["tache", "to-do", "todo", "ajouter", "creer", "nouveau"], run: () => { requestIntent("todo:new"); go("todo"); } });
+      actions.push({ key: "new:todo", group: "actions", label: "Nouvelle tâche", icon: TtpTodo, keywords: ["tache", "to-do", "todo", "ajouter", "creer", "nouveau"], run: () => { requestIntent("todo:new"); go("todo"); } });
     if (!hidden.includes("collabs"))
-      actions.push({ key: "new:collab", group: "actions", label: "Nouvelle collab", icon: Milestone, keywords: ["collab", "collaboration", "campagne", "ajouter", "creer", "nouveau"], run: () => { requestIntent("collab:new"); go("collabs"); } });
+      actions.push({ key: "new:collab", group: "actions", label: "Nouvelle collab", icon: TtpCollabs, keywords: ["collab", "collaboration", "campagne", "ajouter", "creer", "nouveau"], run: () => { requestIntent("collab:new"); go("collabs"); } });
     if (!hidden.includes("mails"))
-      actions.push({ key: "mails", group: "actions", label: "Trier les mails", icon: Inbox, keywords: ["mail", "mails", "boite", "inbox", "non lus"], run: () => go("mails") });
+      actions.push({ key: "mails", group: "actions", label: "Trier les mails", icon: TtpMail, keywords: ["mail", "mails", "boite", "inbox", "non lus"], run: () => go("mails") });
     if (!hidden.includes("aujourdhui"))
-      actions.push({ key: "today", group: "actions", label: "Traiter ma journée", icon: Sun, keywords: ["aujourd'hui", "journee", "a faire", "today"], run: () => go("aujourdhui") });
+      actions.push({ key: "today", group: "actions", label: "Traiter ma journée", icon: TtpToday, keywords: ["aujourd'hui", "journee", "a faire", "today"], run: () => go("aujourdhui") });
     // Sans requête : les deux relances les plus urgentes, puis les créations.
     out.push(...(query ? rankEntries(actions, query, 6) : [...actions.filter((a) => a.tone === "late").slice(0, 2), ...actions.filter((a) => a.key === "relance:all" || !a.tone)].slice(0, 6)));
 
@@ -222,7 +223,7 @@ export function CommandPalette({
 
     // ── Megan ──
     if (canAgent && query) {
-      out.push({ key: "megan", group: "megan", label: `« ${query} »`, meta: "⌘ J", icon: Sparkle, tone: "info", run: () => go("agent") });
+      out.push({ key: "megan", group: "megan", label: `« ${query} »`, meta: "⌘ J", icon: TtpSpark, tone: "info", run: () => go("agent") });
     }
     return out;
   }, [q, invoices, money, canAgent, hidden, rawHits, app, liveRem, localRem, onSelect, onGoto, onOpenCreator, setQuery]);
