@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { fmtCompact } from "@/lib/timeSeries";
@@ -73,6 +73,7 @@ import { CreatorRoadmap } from "@/views/CreatorTracking";
 import { CreatorGuide } from "@/views/CreatorGuide";
 import { MonthlyReport } from "@/components/MonthlyReport";
 import { siteSlugs, type MkRow } from "@/lib/mediakitSlug";
+import { LangProvider, langOf, localeOf, translate, useLocale, type Lang, type Vars } from "@/lib/i18n";
 import { ScaledPreview } from "@/components/ui/scaled-preview";
 import { WelcomeModal } from "@/components/ui/welcome-modal";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
@@ -114,6 +115,7 @@ type Creator = {
   tiktok: string | null;
   email_pro: string | null;
   mediakit: { slug?: string; ugc?: { enabled?: boolean } } | null; // blob media kit (slug + activation UGC)
+  lang?: string | null; // langue de l'espace : « fr » (défaut) ou « en » (sql/2026-10-21-langue-createur)
   ig?: IgCreator | null; // chiffres Instagram (ig-sync) + lien « Instagram connecté »
   tt?: TtCreator | null; // chiffres TikTok (tt-sync) + lien « TikTok connecté »
   yt?: YtCreator | null; // chiffres YouTube (yt-sync) + lien « YouTube connecté »
@@ -229,6 +231,7 @@ function toNum(s?: string | null): number | null {
 
 /** Tuile de statistique avec chiffre animé (NumberFlow) — « — » si donnée absente. */
 function StatTile({ label, value, kind }: { label: string; value: number | null; kind: "int" | "pct" | "eur" }) {
+  const locale = useLocale();
   return (
     <div className="rounded-xl bg-panel p-4">
       <div className="flex items-baseline text-[22px] font-semibold tracking-tight tabular-nums text-foreground">
@@ -238,7 +241,7 @@ function StatTile({ label, value, kind }: { label: string; value: number | null;
           <>
             <NumberFlow
               value={value}
-              locales="fr-FR"
+              locales={locale}
               format={kind === "eur" ? { style: "currency", currency: "EUR", maximumFractionDigits: 0 } : { maximumFractionDigits: kind === "pct" ? 2 : 0 }}
             />
             {kind === "pct" && <span className="ml-0.5 text-base">%</span>}
@@ -396,7 +399,45 @@ export function CreatorSpace({
 }) {
   // En preview, les boutons « déconnexion » du menu deviennent « revenir à l'agence ».
   const exitAction = preview ? preview.onExit : onLogout;
-  const exitTitle = preview ? "Revenir à l'espace agence" : "Se déconnecter";
+  const [creator, setCreator] = useState<Creator | null>(null);
+  const [creatorReady, setCreatorReady] = useState(false); // première lecture de la fiche terminée
+  // Langue de l'espace (fiche créateur) : tout l'espace passe par t(), les composants
+  // enfants par useT() grâce au LangProvider posé autour du rendu.
+  const lang = langOf(creator?.lang);
+  const t = useCallback((fr: string, vars?: Vars) => translate(lang, fr, vars), [lang]);
+  const setSpaceLang = async (next: Lang) => {
+    if (!creator || next === lang) return;
+    if (!(await dbUpdate("creators", creator.id, { lang: next }))) {
+      toast(next === "en" ? "Erreur, réessaie" : "Error, try again");
+      return;
+    }
+    setCreator({ ...creator, lang: next });
+    toast(next === "en" ? "Your space is now in English ✓" : "Ton espace est en français ✓");
+  };
+  const locale = localeOf(lang);
+  // Singulier ou pluriel : en français 0 et 1 sont au singulier, en anglais seulement 1.
+  const isOne = (n: number) => (lang === "en" ? n === 1 : n <= 1);
+  const plural = (n: number, one: string, many: string) => t(isOne(n) ? one : many, { n });
+  // Phrase traduite contenant des morceaux mis en forme : « {a} » est remplacé par un nœud React.
+  const rich = (str: string, nodes: Record<string, ReactNode>): ReactNode =>
+    str.split(/(\{\w+\})/g).map((part, i) => {
+      const m = /^\{(\w+)\}$/.exec(part);
+      return <Fragment key={i}>{m && m[1] in nodes ? nodes[m[1]] : part}</Fragment>;
+    });
+  // Libellés des listes de statuts traduits à l'affichage (les valeurs stockées ne changent pas).
+  const opts = useMemo(() => {
+    const tr = <O extends { label: string }>(list: O[]) => list.map((o) => ({ ...o, label: t(o.label) }));
+    return {
+      brief: tr(BRIEF_STATUS),
+      idea: tr(IDEA_STATUS),
+      todo: tr(TODO_STATUS_OPTS),
+      prio: tr(PRIORITY_OPTIONS),
+      gift: tr(GIFT_STATUS),
+      todoFilters: tr(TODO_FILTERS),
+    };
+  }, [t]);
+  // En visualisation agence, ce libellé est lu par l'agence : il reste en français.
+  const exitTitle = preview ? "Revenir à l'espace agence" : t("Se déconnecter");
   // Onglet mémorisé (comme la dernière page côté agence) : un rechargement ne
   // renvoie plus systématiquement la créatrice sur l'accueil.
   const [tab, setTabState] = useState<Tab>(() => {
@@ -471,12 +512,12 @@ export function CreatorSpace({
     if (!mailBadgeOn || tab === "mails") return;
     void import("@/lib/creatorMail").then((m) => m.refreshAgencyActivity(name));
   }, [name, mailBadgeOn, tab, live]);
-  const navGroups = useMemo(
-    () => (mailsOn
-      ? CREATOR_GROUPS.map((g) => ({ ...g, items: g.items.map((i) => (i.id === "mails" ? { ...i, badge: mailBadge || undefined } : i)) }))
-      : CREATOR_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => i.id !== "mails") }))),
-    [mailsOn, mailBadge],
-  );
+  const navGroups = useMemo(() => {
+    const groups = CREATOR_GROUPS.map((g) => ({ ...g, label: t(g.label), items: g.items.map((i) => ({ ...i, label: t(i.label) })) }));
+    return mailsOn
+      ? groups.map((g) => ({ ...g, items: g.items.map((i) => (i.id === "mails" ? { ...i, badge: mailBadge || undefined } : i)) }))
+      : groups.map((g) => ({ ...g, items: g.items.filter((i) => i.id !== "mails") }));
+  }, [mailsOn, mailBadge, t]);
   const navTabs = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
 
   // ── Affichage iPhone (téléphone) : onglets en bas + écran « Plus » ──
@@ -576,7 +617,6 @@ export function CreatorSpace({
     () => (debriefs === null ? null : debriefs.filter((d) => String(d.creator ?? "").trim().toLowerCase() === nameKey)),
     [debriefs, nameKey],
   );
-  const [creator, setCreator] = useState<Creator | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [briefs, setBriefs] = useState<Brief[]>([]);
@@ -671,6 +711,7 @@ export function CreatorSpace({
       .then(({ data, error }) => {
         if (error) console.error("Espace créateur — chargement de la fiche échoué:", error);
         if (apply(error)) setCreator((data?.[0] as Creator) ?? null);
+        if (alive) setCreatorReady(true);
       });
     supabase.from("todos").select("id,text,descr,due,priority,done,status,sort_order,subtasks,attachments").eq("creator", name).order("sort_order").then(({ data, error }) => apply(error) && setTodos((data as Todo[]) ?? []));
     supabase.from("ideas").select("id,text,status,sort_order,subtasks").eq("creator", name).order("sort_order").then(({ data, error }) => apply(error) && setIdeas((data as Idea[]) ?? []));
@@ -731,7 +772,7 @@ export function CreatorSpace({
     if (!(await dbUpdate("briefs", id, { status }))) {
       // Échec : on remet l'ancien statut.
       setBriefs((list) => list.map((b) => (b.id === id ? { ...b, status: prev } : b)));
-      toast("Erreur — réessaie");
+      toast(t("Erreur — réessaie"));
     }
   };
 
@@ -748,17 +789,17 @@ export function CreatorSpace({
   const [briefScriptId, setBriefScriptId] = useState<string | null>(null);
   const [briefScriptText, setBriefScriptText] = useState("");
   const saveBriefScript = async (id: string) => {
-    const t = briefScriptText.trim();
+    const txt = briefScriptText.trim();
     const prev = briefs.find((b) => b.id === id)?.consignes ?? null;
-    setBriefs((list) => list.map((b) => (b.id === id ? { ...b, consignes: t || null } : b)));
+    setBriefs((list) => list.map((b) => (b.id === id ? { ...b, consignes: txt || null } : b)));
     setBriefScriptId(null);
-    if (!(await dbUpdate("briefs", id, { consignes: t || null }))) {
+    if (!(await dbUpdate("briefs", id, { consignes: txt || null }))) {
       setBriefs((list) => list.map((b) => (b.id === id ? { ...b, consignes: prev } : b)));
-      toast("Erreur — réessaie");
+      toast(t("Erreur — réessaie"));
       return;
     }
     pingAgency("idee", `Script — ${briefs.find((b) => b.id === id)?.brand ?? ""}`);
-    toast("Script enregistré ✓ — ton agence le voit");
+    toast(t("Script enregistré ✓ — ton agence le voit"));
   };
 
   // ── Gifting côté créateur : voir ses cadeaux, marquer publié, signaler un cadeau reçu.
@@ -768,7 +809,7 @@ export function CreatorSpace({
     if (!(await dbUpdate("gifting", id, { status }))) {
       // Échec : on remet l'ancien statut, sinon l'UI ment jusqu'au prochain refetch.
       setGifts((list) => list.map((g) => (g.id === id ? { ...g, status: prev } : g)));
-      toast("Erreur — réessaie");
+      toast(t("Erreur — réessaie"));
     }
   };
   const [giOpen, setGiOpen] = useState(false);
@@ -782,12 +823,12 @@ export function CreatorSpace({
     const b = giBrand.trim();
     const p = giProduct.trim();
     if (!b && !p) {
-      toast("Indique la marque ou le produit");
+      toast(t("Indique la marque ou le produit"));
       return;
     }
     const email = giContactEmail.trim().toLowerCase();
     if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      toast("Email de l'interlocuteur invalide");
+      toast(t("Email de l'interlocuteur invalide"));
       return;
     }
     // RLS : le créateur ne peut insérer QUE pour lui-même (creator = name).
@@ -806,13 +847,13 @@ export function CreatorSpace({
     };
     const created = await dbInsert("gifting", row);
     if (!created) {
-      toast("Erreur — réessaie");
+      toast(t("Erreur — réessaie"));
       return;
     }
     setGifts([created as unknown as GiftRow, ...gifts]);
     if (preview) notifyCreator("gift", name, b || p);
     else notifyAgency("gift", name, b || p); // push immédiat côté agence
-    toast("Cadeau signalé ✓");
+    toast(t("Cadeau signalé ✓"));
     resetGiftForm();
   };
   // ── Dépôt d'une facture par le créateur (« si jamais l'agence oublie »).
@@ -824,7 +865,7 @@ export function CreatorSpace({
   const [invUploading, setInvUploading] = useState(false);
   const sendInvoiceFile = async (file: File) => {
     if (file.size > 15 * 1024 * 1024) {
-      toast("Fichier trop lourd (max 15 Mo)");
+      toast(t("Fichier trop lourd (max 15 Mo)"));
       return;
     }
     setInvUploading(true);
@@ -832,7 +873,7 @@ export function CreatorSpace({
       const { data: u } = await supabase.auth.getUser();
       const uid = u?.user?.id;
       if (!uid) {
-        toast("Session expirée — reconnecte-toi");
+        toast(t("Session expirée — reconnecte-toi"));
         return;
       }
       const ext = (file.name.split(".").pop() || "pdf").toLowerCase().replace(/[^a-z0-9]/g, "") || "pdf";
@@ -842,7 +883,7 @@ export function CreatorSpace({
         upsert: false,
       });
       if (up.error) {
-        toast("Envoi échoué — réessaie");
+        toast(t("Envoi échoué — réessaie"));
         return;
       }
       const created = await dbInsert("documents", {
@@ -856,12 +897,12 @@ export function CreatorSpace({
       if (!created) {
         // Ligne refusée → on ne laisse pas un fichier orphelin dans le bucket.
         await supabase.storage.from("documents").remove([path]).catch(() => {});
-        toast("Envoi échoué — réessaie");
+        toast(t("Envoi échoué — réessaie"));
         return;
       }
       setDocs((prev) => [created as unknown as Doc, ...prev]);
       pingAgency("facture", `Facture déposée — ${titleCase(name)}`);
-      toast("Facture envoyée à ton agence ✓");
+      toast(t("Facture envoyée à ton agence ✓"));
     } finally {
       setInvUploading(false);
     }
@@ -875,30 +916,40 @@ export function CreatorSpace({
   const [statsModalOpen, setStatsModalOpen] = useState(false);
   // Connexion Instagram : ses stats arrivent toutes seules (plus de captures pour Instagram).
   const [igBusy, setIgBusy] = useState(false);
+  // Les messages sont lus au montage, puis affichés une fois la fiche chargée (pour
+  // être dans la langue de l'espace).
+  const returnMsgs = useRef<string[]>([]);
   useEffect(() => {
+    const msgs = returnMsgs.current;
     const back = consumeIgReturn();
-    if (back === "connected") toast("Instagram connecté ✓ Tes stats arrivent toutes seules");
-    else if (back === "error") toast("Connexion Instagram annulée");
+    if (back === "connected") msgs.push("Instagram connecté ✓ Tes stats arrivent toutes seules");
+    else if (back === "error") msgs.push("Connexion Instagram annulée");
     const tBack = consumeTtReturn();
-    if (tBack === "connected") toast("TikTok connecté ✓ Tes stats arrivent toutes seules");
-    else if (tBack === "error") toast("Connexion TikTok annulée");
+    if (tBack === "connected") msgs.push("TikTok connecté ✓ Tes stats arrivent toutes seules");
+    else if (tBack === "error") msgs.push("Connexion TikTok annulée");
     const yBack = consumeYtReturn();
-    if (yBack) toast(yBack);
+    if (yBack) msgs.push(yBack);
   }, []);
+  useEffect(() => {
+    if (!creatorReady || returnMsgs.current.length === 0) return;
+    const msgs = returnMsgs.current;
+    returnMsgs.current = [];
+    for (const m of msgs) toast(t(m));
+  }, [creatorReady, t]);
   // Connexion TikTok : abonnés, j'aime et vues de chaque vidéo, tout seuls.
   const [ttBusy, setTtBusy] = useState(false);
   const connectTt = async () => {
     setTtBusy(true);
     const err = await ttConnect();
     setTtBusy(false);
-    if (err) toast(err);
+    if (err) toast(t(err));
   };
   const disconnectTt = async () => {
     setTtBusy(true);
     const ok = await ttDisconnect();
     setTtBusy(false);
     if (ok) setCreator((c) => (c ? { ...c, tt: { ...(c.tt ?? {}), link: null } } : c));
-    toast(ok ? "TikTok déconnecté" : "Erreur, réessaie");
+    toast(ok ? t("TikTok déconnecté") : t("Erreur, réessaie"));
   };
   // Connexion YouTube : stats YouTube Studio (vues, heures, audience), toutes seules.
   const [ytBusy, setYtBusy] = useState(false);
@@ -906,27 +957,27 @@ export function CreatorSpace({
     setYtBusy(true);
     const err = await ytConnect();
     setYtBusy(false);
-    if (err) toast(err);
+    if (err) toast(t(err));
   };
   const disconnectYt = async () => {
     setYtBusy(true);
     const ok = await ytDisconnect();
     setYtBusy(false);
     if (ok) setCreator((c) => (c ? { ...c, yt: null } : c)); // ses données YouTube sont effacées côté serveur
-    toast(ok ? "YouTube déconnecté, tes données YouTube sont effacées" : "Erreur, réessaie");
+    toast(ok ? t("YouTube déconnecté, tes données YouTube sont effacées") : t("Erreur, réessaie"));
   };
   const connectIg = async () => {
     setIgBusy(true);
     const err = await igConnect();
     setIgBusy(false);
-    if (err) toast(err);
+    if (err) toast(t(err));
   };
   const disconnectIg = async () => {
     setIgBusy(true);
     const ok = await igDisconnect();
     setIgBusy(false);
     if (ok) setCreator((c) => (c ? { ...c, ig: { ...(c.ig ?? {}), link: null, insights: null } } : c));
-    toast(ok ? "Instagram déconnecté" : "Erreur, réessaie");
+    toast(ok ? t("Instagram déconnecté") : t("Erreur, réessaie"));
   };
   const sendStatsFiles = async (files: FileList | null) => {
     const list = Array.from(files ?? []).slice(0, 6); // 6 captures max
@@ -936,20 +987,20 @@ export function CreatorSpace({
       const { data: u } = await supabase.auth.getUser();
       const uid = u?.user?.id;
       if (!uid) {
-        toast("Session expirée — reconnecte-toi");
+        toast(t("Session expirée — reconnecte-toi"));
         return;
       }
       let ok = 0;
       for (const file of list) {
         if (file.size > 15 * 1024 * 1024) {
-          toast(`«\u00A0${file.name}\u00A0» trop lourd (max 15 Mo)`);
+          toast(t("«\u00A0{file}\u00A0» trop lourd (max 15 Mo)", { file: file.name }));
           continue;
         }
         const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
         const path = `creator-uploads/${uid}/stats-${Date.now()}-${ok}.${ext}`;
         const up = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined, upsert: false });
         if (up.error) {
-          toast("Envoi échoué — réessaie");
+          toast(t("Envoi échoué — réessaie"));
           continue;
         }
         const created = await dbInsert("documents", {
@@ -969,7 +1020,7 @@ export function CreatorSpace({
       }
       if (ok > 0) {
         pingAgency("stats", `${ok} capture${ok > 1 ? "s" : ""} de stats — ${titleCase(name)}`);
-        toast(`${ok} capture${ok > 1 ? "s" : ""} envoyée${ok > 1 ? "s" : ""} à ton agence ✓`);
+        toast(plural(ok, "{n} capture envoyée à ton agence ✓", "{n} captures envoyées à ton agence ✓"));
         setStatsModalOpen(false);
       }
     } finally {
@@ -991,7 +1042,7 @@ export function CreatorSpace({
       const { data, error } = await supabase.storage.from("documents").createSignedUrl(path, 3600);
       return error || !data?.signedUrl ? null : data.signedUrl;
     });
-    if (!ok) toast("Lien indisponible — réessaie");
+    if (!ok) toast(t("Lien indisponible — réessaie"));
   };
   const resetGiftForm = () => {
     setGiOpen(false);
@@ -1005,7 +1056,7 @@ export function CreatorSpace({
 
   const addTodo = async () => {
     if (!tdText.trim()) {
-      toast("Écris ta tâche");
+      toast(t("Écris ta tâche"));
       return;
     }
     const row = {
@@ -1021,13 +1072,13 @@ export function CreatorSpace({
     };
     const created = await dbInsert("todos", row);
     if (!created) {
-      toast("Erreur — réessaie");
+      toast(t("Erreur — réessaie"));
       return;
     }
     setTodos([created as unknown as Todo, ...todos]);
     if (preview) notifyCreator("task", name, row.text);
     else notifyAgency("tache", name, row.text); // push immédiat côté agence
-    toast("Tâche ajoutée ✓");
+    toast(t("Tâche ajoutée ✓"));
     setTdOpen(false);
     setTdText("");
     setTdDesc("");
@@ -1037,19 +1088,19 @@ export function CreatorSpace({
 
   const addIdea = async () => {
     if (!idText.trim()) {
-      toast("Écris ton idée");
+      toast(t("Écris ton idée"));
       return;
     }
     const row = { text: idText.trim(), creator: name, status: "À faire", source: src, sort_order: nextOrder(ideas) };
     const created = await dbInsert("ideas", row);
     if (!created) {
-      toast("Erreur — réessaie");
+      toast(t("Erreur — réessaie"));
       return;
     }
     setIdeas([created as unknown as Idea, ...ideas]);
     if (preview) notifyCreator("idea", name, row.text);
     else notifyAgency("idee", name, row.text); // push immédiat côté agence
-    toast("Idée ajoutée ✓");
+    toast(t("Idée ajoutée ✓"));
     setIdOpen(false);
     setIdText("");
   };
@@ -1059,7 +1110,7 @@ export function CreatorSpace({
     setIdeas((list) => list.map((y) => (y.id === x.id ? { ...y, status } : y)));
     if (!(await dbUpdate("ideas", x.id, { status }))) {
       setIdeas((list) => list.map((y) => (y.id === x.id ? { ...y, status: prev } : y)));
-      toast("Erreur — réessaie");
+      toast(t("Erreur — réessaie"));
     }
   };
 
@@ -1069,36 +1120,36 @@ export function CreatorSpace({
     if (!(await dbUpdate("ideas", id, { subtasks }))) {
       // Retour arrière seulement si rien n'a changé depuis (pas d'écrasement d'un clic plus récent).
       setIdeas((list) => list.map((y) => (y.id === id && y.subtasks === subtasks ? { ...y, subtasks: prev } : y)));
-      toast("Erreur — réessaie");
+      toast(t("Erreur — réessaie"));
     }
   };
 
   const saveIdeaEdit = async (id: string) => {
-    const t = ideaEditText.trim();
-    if (!t) {
-      toast("L'idée ne peut pas être vide");
+    const txt = ideaEditText.trim();
+    if (!txt) {
+      toast(t("L'idée ne peut pas être vide"));
       return;
     }
-    const prev = ideas.find((x) => x.id === id)?.text ?? t;
-    setIdeas((list) => list.map((x) => (x.id === id ? { ...x, text: t } : x)));
+    const prev = ideas.find((x) => x.id === id)?.text ?? txt;
+    setIdeas((list) => list.map((x) => (x.id === id ? { ...x, text: txt } : x)));
     setIdeaEditId(null);
-    if (!(await dbUpdate("ideas", id, { text: t }))) {
+    if (!(await dbUpdate("ideas", id, { text: txt }))) {
       setIdeas((list) => list.map((x) => (x.id === id ? { ...x, text: prev } : x)));
-      toast("Erreur — réessaie");
-    } else toast("Idée modifiée ✓");
+      toast(t("Erreur — réessaie"));
+    } else toast(t("Idée modifiée ✓"));
   };
 
   /** Carte d'une idée (mode lecture ou édition) — partagée par les vues Liste et Colonnes. */
   const ideaCard = (x: Idea) =>
     ideaEditId === x.id ? (
       <div key={x.id} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm">
-        <span className="text-[11px] font-medium text-muted-foreground">Modifier l'idée</span>
+        <span className="text-[11px] font-medium text-muted-foreground">{t("Modifier l'idée")}</span>
         <textarea
           value={ideaEditText}
           onChange={(e) => setIdeaEditText(e.target.value)}
           rows={3}
           autoFocus
-          placeholder="Ton idée de contenu…"
+          placeholder={t("Ton idée de contenu…")}
           className="w-full resize-y rounded-md border border-border bg-panel px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
         />
         <div className="flex items-center gap-2">
@@ -1107,13 +1158,13 @@ export function CreatorSpace({
             onClick={() => saveIdeaEdit(x.id)}
             className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
-            <Check className="h-3.5 w-3.5" /> Enregistrer
+            <Check className="h-3.5 w-3.5" /> {t("Enregistrer")}
           </button>
           <button
             type="button"
             onClick={() => setIdeaEditId(null)}
             className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-            title="Annuler"
+            title={t("Annuler")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -1125,13 +1176,13 @@ export function CreatorSpace({
         <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{x.text}</div>
         <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2.5">
           <div className="w-[150px] max-w-[60%]">
-            <StatusSelect value={x.status ?? "À faire"} options={IDEA_STATUS} onChange={(s) => setIdeaStatus(x, s)} />
+            <StatusSelect value={x.status ?? "À faire"} options={opts.idea} onChange={(s) => setIdeaStatus(x, s)} />
           </div>
           <ActionMenu
             items={[
               {
                 key: "edit",
-                label: "Modifier l'idée",
+                label: t("Modifier l'idée"),
                 icon: Pencil,
                 onClick: () => {
                   setIdeaEditId(x.id);
@@ -1140,18 +1191,18 @@ export function CreatorSpace({
               },
               {
                 key: "delete",
-                label: "Supprimer",
+                label: t("Supprimer"),
                 icon: Trash2,
                 danger: true,
                 onClick: async () => {
                   if (await dbDelete("ideas", x.id)) {
                     setIdeas((prev) => prev.filter((y) => y.id !== x.id));
-                    toast("Supprimé");
+                    toast(t("Supprimé"));
                   } else {
-                    toast("Erreur — réessaie");
+                    toast(t("Erreur — réessaie"));
                   }
                 },
-                confirm: { title: "Supprimer l'idée", message: `Supprimer «\u00A0${x.text}\u00A0»\u00A0? Cette action est irréversible.` },
+                confirm: { title: t("Supprimer l'idée"), message: t("Supprimer «\u00A0{name}\u00A0»\u00A0? Cette action est irréversible.", { name: x.text }) },
               },
             ]}
           />
@@ -1163,7 +1214,7 @@ export function CreatorSpace({
 
   const addContact = async () => {
     if (!ctBrand.trim() && !ctPerson.trim()) {
-      toast("Renseigne au moins la marque ou le nom");
+      toast(t("Renseigne au moins la marque ou le nom"));
       return;
     }
     const row = {
@@ -1179,12 +1230,12 @@ export function CreatorSpace({
     };
     const created = await dbInsert("contacts", row);
     if (!created) {
-      toast("Erreur — réessaie");
+      toast(t("Erreur — réessaie"));
       return;
     }
     setContacts([created as unknown as Contact, ...contacts]);
     pingAgency("contact", row.brand); // push immédiat côté agence
-    toast("Contact ajouté ✓");
+    toast(t("Contact ajouté ✓"));
     setCtOpen(false);
     setCtBrand("");
     setCtPerson("");
@@ -1204,7 +1255,7 @@ export function CreatorSpace({
   const saveContactEdit = async () => {
     if (!ctEditId) return;
     if (!ceBrand.trim() && !cePerson.trim()) {
-      toast("Renseigne au moins la marque ou le nom");
+      toast(t("Renseigne au moins la marque ou le nom"));
       return;
     }
     const patch = {
@@ -1220,8 +1271,8 @@ export function CreatorSpace({
     setCtEditId(null);
     if (!(await dbUpdate("contacts", id, patch))) {
       if (prev) setContacts((list) => list.map((x) => (x.id === id ? prev : x)));
-      toast("Erreur — réessaie");
-    } else toast("Contact modifié ✓");
+      toast(t("Erreur — réessaie"));
+    } else toast(t("Contact modifié ✓"));
   };
 
   const startEdit = () => {
@@ -1266,12 +1317,12 @@ export function CreatorSpace({
     // date arrive vide (toISODate a renvoyé "") → on la PRÉSERVE au lieu de l'effacer.
     if (!patch.birth && creator.birth && !toISODate(creator.birth)) delete patch.birth;
     if (!(await dbUpdate("creators", creator.id, patch))) {
-      toast("Erreur — réessaie");
+      toast(t("Erreur — réessaie"));
       return;
     }
     setCreator({ ...creator, ...patch });
     setEditing(false);
-    toast("Infos enregistrées ✓");
+    toast(t("Infos enregistrées ✓"));
   };
 
   const setField = (k: keyof Creator, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -1322,7 +1373,7 @@ export function CreatorSpace({
     const platforms = [...ORDER.filter((p) => platsSet.has(p)), ...[...platsSet].filter((p) => !ORDER.includes(p))];
     const points = [...byDate.entries()]
       .sort((a, b) => a[0] - b[0])
-      .map(([t, rec]) => ({ label: new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit" }).format(new Date(t)), ...rec }));
+      .map(([t, rec]) => ({ label: new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit" }).format(new Date(t)), ...rec }));
     // Total = dernière valeur connue de chaque réseau (report), pas seulement ceux
     // relevés à la dernière date (sinon le total chute quand les dates diffèrent).
     const lastTotal = totalFollowers;
@@ -1339,7 +1390,7 @@ export function CreatorSpace({
           .filter((x) => x.value > 0);
         return (
           <Suspense key={p} fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-panel/50" />}>
-            <GlassStatChart title={meta.label} subtitle="Abonnés" points={pts} format={(n) => fmtCompact(n)} color={meta.color} height={170} compareLabel="vs relevé préc." />
+            <GlassStatChart title={meta.label} subtitle={t("Abonnés")} points={pts} format={(n) => fmtCompact(n)} color={meta.color} height={170} compareLabel={t("vs relevé préc.")} />
           </Suspense>
         );
       })}
@@ -1356,35 +1407,35 @@ export function CreatorSpace({
     .filter((i) => i.status !== "brouillon")
     .reduce((a, i) => a + parseAmount(i.amount), 0);
 
-  const markTodo = async (t: Todo, next: boolean) => {
+  const markTodo = async (td: Todo, next: boolean) => {
     // On écrit done ET status ensemble (comme l'agence) → l'affichage statut/kanban
     // reste cohérent des deux côtés (audit : ne pas laisser status désynchronisé).
     const status = next ? "Fait" : "À faire";
-    if (await dbUpdate("todos", t.id, { done: next, status })) {
-      setTodos((prev) => prev.map((x) => (x.id === t.id ? { ...x, done: next, status } : x)));
-      toast(next ? "Fait ✓" : "À refaire");
+    if (await dbUpdate("todos", td.id, { done: next, status })) {
+      setTodos((prev) => prev.map((x) => (x.id === td.id ? { ...x, done: next, status } : x)));
+      toast(next ? t("Fait ✓") : t("À refaire"));
     } else {
-      toast("Erreur — réessaie");
+      toast(t("Erreur — réessaie"));
     }
   };
 
   // Change le statut d'une tâche depuis la vue colonnes (done dérivé de « Fait »).
   // Supprimer une tâche (menu ⋯, ou glisser la ligne en mode iPhone).
-  const deleteTodo = async (t: Todo) => {
-    if (await dbDelete("todos", t.id)) {
-      setTodos((prev) => prev.filter((x) => x.id !== t.id));
-      toast("Supprimé");
+  const deleteTodo = async (td: Todo) => {
+    if (await dbDelete("todos", td.id)) {
+      setTodos((prev) => prev.filter((x) => x.id !== td.id));
+      toast(t("Supprimé"));
     } else {
-      toast("Erreur — réessaie");
+      toast(t("Erreur — réessaie"));
     }
   };
-  const setTodoStatus = async (t: Todo, status: string) => {
+  const setTodoStatus = async (td: Todo, status: string) => {
     const done = status === "Fait";
-    const prev = { status: t.status ?? null, done: t.done };
-    setTodos((list) => list.map((x) => (x.id === t.id ? { ...x, status, done } : x)));
-    if (!(await dbUpdate("todos", t.id, { status, done }))) {
-      setTodos((list) => list.map((x) => (x.id === t.id ? { ...x, ...prev } : x)));
-      toast("Erreur — réessaie");
+    const prev = { status: td.status ?? null, done: td.done };
+    setTodos((list) => list.map((x) => (x.id === td.id ? { ...x, status, done } : x)));
+    if (!(await dbUpdate("todos", td.id, { status, done }))) {
+      setTodos((list) => list.map((x) => (x.id === td.id ? { ...x, ...prev } : x)));
+      toast(t("Erreur — réessaie"));
     }
   };
 
@@ -1400,16 +1451,16 @@ export function CreatorSpace({
   const saveEditTodo = async () => {
     if (!tdEditId) return;
     if (!teText.trim()) {
-      toast("Écris ta tâche");
+      toast(t("Écris ta tâche"));
       return;
     }
     const patch = { text: teText.trim(), descr: teDesc.trim(), priority: tePrio };
     if (!(await dbUpdate("todos", tdEditId, patch))) {
-      toast("Erreur — réessaie");
+      toast(t("Erreur — réessaie"));
       return;
     }
     setTodos((prev) => prev.map((x) => (x.id === tdEditId ? { ...x, ...patch } : x)));
-    toast("Tâche modifiée ✓");
+    toast(t("Tâche modifiée ✓"));
     setTdEditId(null);
   };
 
@@ -1440,7 +1491,7 @@ export function CreatorSpace({
       todosRef.current = todosRef.current.map(revert);
       setTodos((prev) => prev.map(revert));
       setTaskView((prev) => (prev ? revert(prev) : prev));
-      toast("Erreur — réessaie");
+      toast(t("Erreur — réessaie"));
       return false;
     };
     const p = (todoQueue.current[id] ?? Promise.resolve(true)).then(run, run);
@@ -1465,14 +1516,14 @@ export function CreatorSpace({
     try {
       const { data: u } = await supabase.auth.getUser();
       const uid = u?.user?.id;
-      if (!uid) { toast("Session expirée — reconnecte-toi"); return; }
+      if (!uid) { toast(t("Session expirée — reconnecte-toi")); return; }
       const added: Attachment[] = [];
       for (const file of list) {
-        if (file.size > 15 * 1024 * 1024) { toast(`«\u00A0${file.name}\u00A0» trop lourd (max 15 Mo)`); continue; }
+        if (file.size > 15 * 1024 * 1024) { toast(t("«\u00A0{file}\u00A0» trop lourd (max 15 Mo)", { file: file.name })); continue; }
         const ext = (file.name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
         const path = `creator-uploads/${uid}/todo-attachments/${todo.id}/${Date.now()}-${added.length}${ext ? "." + ext : ""}`;
         const up = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined, upsert: false });
-        if (up.error) { toast("Envoi échoué — réessaie"); continue; }
+        if (up.error) { toast(t("Envoi échoué — réessaie")); continue; }
         added.push({ name: file.name, size: `${Math.max(1, Math.round(file.size / 1024))} Ko`, path });
       }
       if (added.length) await patchTodo(todo.id, (x) => ({ attachments: [...(x.attachments ?? []), ...added] }));
@@ -1488,7 +1539,7 @@ export function CreatorSpace({
       const { data, error } = await supabase.storage.from("documents").createSignedUrl(att.path, 3600);
       return error || !data?.signedUrl ? null : data.signedUrl;
     });
-    if (!ok) toast("Lien indisponible — réessaie");
+    if (!ok) toast(t("Lien indisponible — réessaie"));
   };
   // Base d'abord, fichier ensuite : un échec ne laisse pas une pièce jointe pointant vers rien.
   const removeAttachment = async (todo: Todo, path: string) => {
@@ -1509,10 +1560,10 @@ export function CreatorSpace({
           type="button"
           onClick={() => {
             navigator.clipboard?.writeText(val);
-            toast(`${label} copié ✓`);
+            toast(t("{label} copié ✓", { label }));
           }}
           className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-          title={`Copier ${label.toLowerCase()}`}
+          title={t("Copier {label}", { label: label.toLowerCase() })}
         >
           <Copy className="h-4 w-4" />
         </button>
@@ -1538,10 +1589,10 @@ export function CreatorSpace({
               type="button"
               onClick={() => {
                 navigator.clipboard?.writeText(val);
-                toast(`${label} copié ✓`);
+                toast(t("{label} copié ✓", { label }));
               }}
               className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-border bg-surface text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-              title={`Copier ${label.toLowerCase()}`}
+              title={t("Copier {label}", { label: label.toLowerCase() })}
             >
               <Copy className="h-3.5 w-3.5" />
             </button>
@@ -1564,7 +1615,15 @@ export function CreatorSpace({
     </label>
   );
 
+  // Titre et phrase d'aide de l'onglet, traduits à l'affichage.
+  const tabLabel = (id: Tab) => {
+    const x = TABS.find((y) => y.id === id);
+    return x ? t(x.label) : "";
+  };
+  const tabHint = TAB_HINTS[tab];
+
   return (
+    <LangProvider lang={lang}>
     <div className={iosPhone ? "flex h-[100dvh] flex-col bg-panel" : "flex h-[100dvh] flex-col bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
       {preview && (
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-primary/30 bg-primary/[0.06] px-3 py-2">
@@ -1593,27 +1652,27 @@ export function CreatorSpace({
               type="button"
               onClick={() => setSbCollapsed(false)}
               className={cn(sbRailCls(false), "mt-2 h-8 w-8")}
-              title="Déplier le menu"
-              aria-label="Déplier le menu"
+              title={t("Déplier le menu")}
+              aria-label={t("Déplier le menu")}
             >
               <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
             </button>
             <nav className="mt-3 flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {navTabs.map((t) => (
+              {navTabs.map((it) => (
                 <button
-                  key={t.id}
+                  key={it.id}
                   type="button"
-                  onClick={() => setTab(t.id)}
-                  title={t.id === "mails" && mailBadge ? `${t.label} · ${mailBadge} à voir` : t.label}
-                  className={cn(sbRailCls(tab === t.id), "relative")}
+                  onClick={() => setTab(it.id)}
+                  title={it.id === "mails" && mailBadge ? t("{label} · {n} à voir", { label: it.label, n: mailBadge }) : it.label}
+                  className={cn(sbRailCls(tab === it.id), "relative")}
                 >
-                  <t.icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
-                  {t.id === "mails" && mailBadge > 0 && <span aria-hidden className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary" />}
+                  <it.icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                  {it.id === "mails" && mailBadge > 0 && <span aria-hidden className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary" />}
                 </button>
               ))}
             </nav>
             <div className="mt-auto flex w-full flex-col items-center gap-1 pt-2">
-              <button type="button" onClick={onToggleTheme} title={dark ? "Mode clair" : "Mode sombre"} className={sbRailCls(false)}>
+              <button type="button" onClick={onToggleTheme} title={dark ? t("Mode clair") : t("Mode sombre")} className={sbRailCls(false)}>
                 {dark ? <Sun className="h-[18px] w-[18px]" strokeWidth={1.75} /> : <Moon className="h-[18px] w-[18px]" strokeWidth={1.75} />}
               </button>
               <button type="button" onClick={exitAction} title={exitTitle} className={sbRailCls(false)}>
@@ -1629,7 +1688,7 @@ export function CreatorSpace({
               groups={navGroups}
               activeId={tab}
               onSelect={(id) => setTab(id as Tab)}
-              header={<SidebarBrand title="Espace créateur" sub="TTP Creators" onCollapse={() => setSbCollapsed(true)} />}
+              header={<SidebarBrand title={t("Espace créateur")} sub="TTP Creators" onCollapse={() => setSbCollapsed(true)} />}
               footer={
                 <SidebarUser
                   avatar={
@@ -1642,9 +1701,9 @@ export function CreatorSpace({
                     )
                   }
                   name={titleCase(name)}
-                  sub={preview ? "Vue agence" : "Créateur TTP"}
+                  sub={preview ? "Vue agence" : t("Créateur TTP")}
                   actions={[
-                    { icon: dark ? Sun : Moon, label: dark ? "Mode clair" : "Mode sombre", onClick: onToggleTheme },
+                    { icon: dark ? Sun : Moon, label: dark ? t("Mode clair") : t("Mode sombre"), onClick: onToggleTheme },
                     { icon: preview ? ArrowLeft : LogOut, label: exitTitle, onClick: exitAction },
                   ]}
                 />
@@ -1670,12 +1729,12 @@ export function CreatorSpace({
               className="-mx-4"
               scrollRef={mainRef}
               actionSlotRef={setNavSlot}
-              title={moreOpen ? "Plus" : tab === "accueil" ? "Accueil" : TABS.find((t) => t.id === tab)?.label ?? ""}
-              left={!moreOpen && !ctabIds.includes(tab) ? <IosBackButton label="Plus" onClick={() => setMoreOpen(true)} /> : null}
+              title={moreOpen ? t("Plus") : tabLabel(tab)}
+              left={!moreOpen && !ctabIds.includes(tab) ? <IosBackButton label={t("Plus")} onClick={() => setMoreOpen(true)} /> : null}
             />
           )}
           {iosPhone && moreOpen && (
-            <PageFrame title="Plus">
+            <PageFrame title={t("Plus")}>
               <MoreScreen
                 profile={{
                   avatar: creator?.photo_url ? (
@@ -1684,7 +1743,7 @@ export function CreatorSpace({
                     <span className="grid h-[54px] w-[54px] shrink-0 place-items-center rounded-full bg-foreground/[0.08] text-[20px] font-semibold text-foreground">{titleCase(name).charAt(0)}</span>
                   ),
                   name: titleCase(name),
-                  sub: preview ? "Vue agence" : "Créateur TTP",
+                  sub: preview ? "Vue agence" : t("Créateur TTP"),
                 }}
                 sections={navGroups
                   .map((g) => ({ id: g.id, label: g.label, items: g.items.filter((i) => !ctabIds.includes(i.id)) }))
@@ -1704,8 +1763,8 @@ export function CreatorSpace({
           {tab === "accueil" && (
             <div className="mb-6 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <h1 className="page-title text-[26px] font-semibold leading-tight tracking-[-0.02em] md:text-[32px]">{greetingWord()} {firstName}</h1>
-                <div className="mt-1 text-[13px] text-muted-foreground">Ton espace TTP Creators</div>
+                <h1 className="page-title text-[26px] font-semibold leading-tight tracking-[-0.02em] md:text-[32px]">{t(greetingWord())} {firstName}</h1>
+                <div className="mt-1 text-[13px] text-muted-foreground">{t("Ton espace TTP Creators")}</div>
               </div>
               <AvatarUpload
                 creatorId={creator?.id}
@@ -1722,7 +1781,7 @@ export function CreatorSpace({
           {/* Contenu des onglets — barrière d'erreur : un onglet qui plante
               n'emporte pas la navigation (la sidebar reste cliquable). */}
           <ErrorBoundary variant="inline" label="Cette page" resetKey={tab}>
-          <TabFrame title={tab === "accueil" || tab === "mails" ? null : TABS.find((t) => t.id === tab)?.label ?? null} hint={TAB_HINTS[tab]}>
+          <TabFrame title={tab === "accueil" || tab === "mails" ? null : tabLabel(tab) || null} hint={tabHint ? t(tabHint) : undefined}>
           {/* Guide — comment utiliser l'app (mobile + ordi) + réflexe À faire */}
           {tab === "guide" && (
             <CreatorGuide firstName={firstName} onGoto={(t) => setTab(t as Tab)} onSendStats={() => setStatsModalOpen(true)} />
@@ -1739,15 +1798,15 @@ export function CreatorSpace({
             // (sinon faux « saut » au début quand le 2e réseau apparaît).
             const allPlats = new Set((mySuivi ?? []).filter((e) => (toNum(e.followers) ?? 0) > 0).map((e) => (e.platform || "").toLowerCase()));
             for (const e of [...(mySuivi ?? [])].sort((x, y) => frTime(x.date) - frTime(y.date))) {
-              const t = frTime(e.date);
+              const ts = frTime(e.date);
               const fo = toNum(e.followers) ?? 0;
-              if (!t || fo <= 0 || !e.platform) continue;
+              if (!ts || fo <= 0 || !e.platform) continue;
               lastSeen.set((e.platform || "").toLowerCase(), fo);
               if (lastSeen.size < allPlats.size) continue;
               const value = [...lastSeen.values()].reduce((a, n) => a + n, 0);
-              const d = new Date(t);
-              const label = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(d);
-              const full = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" }).format(d);
+              const d = new Date(ts);
+              const label = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(d);
+              const full = new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric" }).format(d);
               if (totalPts.length && totalPts[totalPts.length - 1].full === full) totalPts[totalPts.length - 1].value = value;
               else totalPts.push({ label, full, value });
             }
@@ -1769,19 +1828,19 @@ export function CreatorSpace({
             const followersNow = lastTotal || totalFollowers || toNum(creator?.followers) || 0;
             const hi = (s: string) => <span className="text-foreground">{s}</span>;
             const insight: ReactNode = statsStale ? (
-              <>Pense à {hi("envoyer tes stats du mois")} : ton agence s'en sert pour te proposer aux marques.</>
+              rich(t("Pense à {a} : ton agence s'en sert pour te proposer aux marques."), { a: hi(t("envoyer tes stats du mois")) })
             ) : openTodos.length > 0 ? (
-              <>Il te reste {hi(`${openTodos.length} tâche${openTodos.length > 1 ? "s" : ""}`)} à faire. Commence par la plus ancienne.</>
+              rich(t("Il te reste {a} à faire. Commence par la plus ancienne."), { a: hi(plural(openTodos.length, "{n} tâche", "{n} tâches")) })
             ) : nextBrief ? (
-              <>Prochain brief&nbsp;: {hi(nextBrief.brand)} pour le {hi(frDate(nextBrief.due))}.</>
+              rich(t("Prochain brief\u00A0: {brand} pour le {date}."), { brand: hi(nextBrief.brand), date: hi(frDate(nextBrief.due)) })
             ) : (
-              <>Tout est à jour. {hi("Belle journée\u00A0!")}</>
+              rich(t("Tout est à jour. {a}"), { a: hi(t("Belle journée\u00A0!")) })
             );
             const kpis: { label: string; value: string; foot: ReactNode }[] = [
-              { label: "Abonnés", value: followersNow ? fmtCompact(followersNow) : "—", foot: <Delta value={followersDelta} suffix="vs relevé préc." /> },
-              { label: "Engagement", value: topEr ? String(topEr) : "—", foot: platformLatest[0]?.platformLabel ?? "Dernière mesure de ton agence" },
-              { label: "CA encaissé", value: formatEuro(caEncaisse), foot: `sur ${formatEuro(totalFacture)} facturés` },
-              { label: "À faire", value: String(openTodos.length), foot: `${briefs.length} brief${briefs.length > 1 ? "s" : ""} · ${ideas.length} idée${ideas.length > 1 ? "s" : ""}` },
+              { label: t("Abonnés"), value: followersNow ? fmtCompact(followersNow) : "—", foot: <Delta value={followersDelta} suffix={t("vs relevé préc.")} /> },
+              { label: t("Engagement"), value: topEr ? String(topEr) : "—", foot: platformLatest[0]?.platformLabel ?? t("Dernière mesure de ton agence") },
+              { label: t("CA encaissé"), value: formatEuro(caEncaisse), foot: t("sur {amount} facturés", { amount: formatEuro(totalFacture) }) },
+              { label: t("À faire"), value: String(openTodos.length), foot: `${plural(briefs.length, "{n} brief", "{n} briefs")} · ${plural(ideas.length, "{n} idée", "{n} idées")}` },
             ];
             return (
             <div className="flex flex-col gap-4">
@@ -1790,9 +1849,9 @@ export function CreatorSpace({
               {/* Raccourcis (mobile uniquement, comme l'Aperçu agence) */}
               <div className="grid grid-cols-3 gap-2 md:hidden">
                 {([
-                  { id: "todo", label: "À faire", Icon: ListChecks },
-                  { id: "ideas", label: "Idées", Icon: Lightbulb },
-                  { id: "planning", label: "Planning", Icon: CalendarDays },
+                  { id: "todo", label: t("À faire"), Icon: ListChecks },
+                  { id: "ideas", label: t("Idées"), Icon: Lightbulb },
+                  { id: "planning", label: t("Planning"), Icon: CalendarDays },
                 ] as const).map(({ id, label, Icon }) => (
                   <button
                     key={id}
@@ -1824,22 +1883,22 @@ export function CreatorSpace({
                       <div>
                         <div className="text-[30px] font-semibold leading-none tracking-tight tabular-nums">{followersNow ? fmtCompact(followersNow) : "—"}</div>
                         <div className="mt-2 text-[13px] text-muted-foreground">
-                          Abonnés cumulés{followerSeries.platforms.length > 1 ? ` · ${followerSeries.platforms.length} réseaux` : ""}
+                          {t("Abonnés cumulés")}{followerSeries.platforms.length > 1 ? ` · ${t("{n} réseaux", { n: followerSeries.platforms.length })}` : ""}
                         </div>
                       </div>
-                      <Delta value={followersDelta} suffix="vs relevé préc." />
+                      <Delta value={followersDelta} suffix={t("vs relevé préc.")} />
                     </div>
                     <div className="mt-4">
                       {totalPts.length >= 2 ? (
                         <Suspense fallback={<div className="h-[240px] animate-pulse rounded-xl bg-panel/60" />}>
-                          <DashArea points={totalPts} name="Abonnés" format={(n) => fmtCompact(n)} height={240} />
+                          <DashArea points={totalPts} name={t("Abonnés")} format={(n) => fmtCompact(n)} height={240} />
                         </Suspense>
                       ) : (
                         <div className="grid h-[180px] place-items-center rounded-xl border border-dashed border-border px-4 text-center text-[12px] text-faint">
                           {mySuivi === null && suiviErr ? (
                             // creator-history en échec : on le dit (sinon « Chargement… » à vie) + Réessayer.
                             <div>
-                              Ton évolution n'a pas pu être récupérée.
+                              {t("Ton évolution n'a pas pu être récupérée.")}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1848,27 +1907,27 @@ export function CreatorSpace({
                                 }}
                                 className="mx-auto mt-2 block rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                               >
-                                Réessayer
+                                {t("Réessayer")}
                               </button>
                             </div>
-                          ) : mySuivi === null ? "Chargement…" : "La courbe apparaîtra dès que ton agence aura enregistré 2 relevés d'abonnés."}
+                          ) : mySuivi === null ? t("Chargement…") : t("La courbe apparaîtra dès que ton agence aura enregistré 2 relevés d'abonnés.")}
                         </div>
                       )}
                     </div>
                   </div>
                   <div className="grid flex-1 grid-cols-1 divide-y divide-border border-t border-border md:grid-cols-2 md:divide-x md:divide-y-0">
                     <div className="px-5 py-5">
-                      <DashSectionTitle icon={Sparkles}>À retenir</DashSectionTitle>
+                      <DashSectionTitle icon={Sparkles}>{t("À retenir")}</DashSectionTitle>
                       <p className="line-clamp-4 text-[19px] leading-snug text-muted-foreground md:text-[21px]">{insight}</p>
                     </div>
                     <div className="flex flex-col px-5 py-5">
-                      <DashSectionTitle icon={BarChart3}>Mes stats du mois</DashSectionTitle>
+                      <DashSectionTitle icon={BarChart3}>{t("Mes stats du mois")}</DashSectionTitle>
                       <p className="text-[13px] leading-relaxed text-muted-foreground">
-                        Envoie les captures de tes 30 derniers jours en début de mois&nbsp;: c'est ce qui prouve ton audience aux marques.
+                        {t("Envoie les captures de tes 30 derniers jours en début de mois\u00A0: c'est ce qui prouve ton audience aux marques.")}
                       </p>
                       <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
                         <button type="button" onClick={() => setStatsModalOpen(true)} className="rounded-full bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
-                          Envoyer mes stats
+                          {t("Envoyer mes stats")}
                         </button>
                       </div>
                     </div>
@@ -1878,9 +1937,9 @@ export function CreatorSpace({
                 {/* Colonne de synthèse : rendez-vous, dernière facture, media kit */}
                 <DashPanel className="flex flex-col xl:col-span-4">
                   <div className="px-5 py-5">
-                    <DashSectionTitle icon={CalendarDays}>Prochains rendez-vous</DashSectionTitle>
+                    <DashSectionTitle icon={CalendarDays}>{t("Prochains rendez-vous")}</DashSectionTitle>
                     {upcoming.length === 0 ? (
-                      <div className="text-[12px] text-faint">Aucun rendez-vous à venir.</div>
+                      <div className="text-[12px] text-faint">{t("Aucun rendez-vous à venir.")}</div>
                     ) : (
                       <div className="flex flex-col gap-2">
                         {upcoming.map((e) => (
@@ -1896,35 +1955,35 @@ export function CreatorSpace({
                     )}
                   </div>
                   <div className="border-t border-border px-5 py-5">
-                    <div className="mb-3 text-[13px] text-muted-foreground">Dernière facture</div>
+                    <div className="mb-3 text-[13px] text-muted-foreground">{t("Dernière facture")}</div>
                     {lastInv ? (
                       <dl className="flex flex-col gap-2.5 text-[13px]">
                         <div className="flex items-center justify-between gap-3">
-                          <dt className="text-muted-foreground">Marque</dt>
+                          <dt className="text-muted-foreground">{t("Marque")}</dt>
                           <dd className="truncate font-medium text-foreground">{lastInv.party || "—"}</dd>
                         </div>
                         <div className="flex items-center justify-between gap-3">
-                          <dt className="text-muted-foreground">Montant</dt>
+                          <dt className="text-muted-foreground">{t("Montant")}</dt>
                           <dd className="font-medium tabular-nums text-foreground">{parseAmount(lastInv.amount) > 0 ? formatEuro(parseAmount(lastInv.amount)) : lastInv.amount || "—"}</dd>
                         </div>
                         <div className="flex items-center justify-between gap-3">
-                          <dt className="text-muted-foreground">Statut</dt>
+                          <dt className="text-muted-foreground">{t("Statut")}</dt>
                           <dd>
-                            <AnimatedBadge status={invStatus(lastInv.status).status} size="sm">{invStatus(lastInv.status).label}</AnimatedBadge>
+                            <AnimatedBadge status={invStatus(lastInv.status).status} size="sm">{t(invStatus(lastInv.status).label)}</AnimatedBadge>
                           </dd>
                         </div>
                       </dl>
                     ) : (
-                      <div className="text-[12px] text-faint">Aucune facture pour le moment.</div>
+                      <div className="text-[12px] text-faint">{t("Aucune facture pour le moment.")}</div>
                     )}
                     <div className="mt-4">
-                      <DashWideLink label="Voir mes factures" onClick={() => setTab("facturation")} />
+                      <DashWideLink label={t("Voir mes factures")} onClick={() => setTab("facturation")} />
                     </div>
                   </div>
                   <div className="border-t border-border px-5 py-5">
-                    <div className="text-[13px] text-muted-foreground">Mon media kit</div>
+                    <div className="text-[13px] text-muted-foreground">{t("Mon media kit")}</div>
                     <div className="mt-1 text-[12px] text-faint">
-                      {mkUnpublished ? "Ton media kit n'est pas encore publié." : mkLive === true ? "Ta page publique, à partager aux marques." : mkLive === null ? "Vérification de ta page…" : "En préparation avec ton agence."}
+                      {mkUnpublished ? t("Ton media kit n'est pas encore publié.") : mkLive === true ? t("Ta page publique, à partager aux marques.") : mkLive === null ? t("Vérification de ta page…") : t("En préparation avec ton agence.")}
                     </div>
                     {mkLive === true && mkUrl && (
                       <div className="mt-3 flex items-center gap-2">
@@ -1934,16 +1993,16 @@ export function CreatorSpace({
                           rel="noreferrer"
                           className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-muted px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
                         >
-                          <ExternalLink className="h-3.5 w-3.5" /> Voir mon media kit
+                          <ExternalLink className="h-3.5 w-3.5" /> {t("Voir mon media kit")}
                         </a>
                         <button
                           type="button"
                           onClick={() => {
                             navigator.clipboard?.writeText(mkUrl);
-                            toast("Lien copié ✓");
+                            toast(t("Lien copié ✓"));
                           }}
                           className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-                          title="Copier le lien"
+                          title={t("Copier le lien")}
                         >
                           <Copy className="h-4 w-4" />
                         </button>
@@ -1960,12 +2019,12 @@ export function CreatorSpace({
                   <div className="px-5 py-5">
                     <DashSectionTitle
                       icon={ListChecks}
-                      right={openTodos.length > 0 ? <button type="button" onClick={() => setTab("todo")} className="text-[12px] text-muted-foreground transition-colors hover:text-foreground">Voir tout</button> : undefined}
+                      right={openTodos.length > 0 ? <button type="button" onClick={() => setTab("todo")} className="text-[12px] text-muted-foreground transition-colors hover:text-foreground">{t("Voir tout")}</button> : undefined}
                     >
-                      Mes tâches
+                      {t("Mes tâches")}
                     </DashSectionTitle>
                     {openTodos.length === 0 ? (
-                      <div className="text-[12px] text-faint">Rien à faire pour le moment.</div>
+                      <div className="text-[12px] text-faint">{t("Rien à faire pour le moment.")}</div>
                     ) : (
                       openTodos.slice(0, 5).map((t) => (
                         <div key={t.id} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
@@ -1980,18 +2039,18 @@ export function CreatorSpace({
                   <div className="px-5 py-5">
                     <DashSectionTitle
                       icon={FileText}
-                      right={briefs.length > 0 ? <button type="button" onClick={() => setTab("briefs")} className="text-[12px] text-muted-foreground transition-colors hover:text-foreground">Voir tout</button> : undefined}
+                      right={briefs.length > 0 ? <button type="button" onClick={() => setTab("briefs")} className="text-[12px] text-muted-foreground transition-colors hover:text-foreground">{t("Voir tout")}</button> : undefined}
                     >
-                      Mes briefs
+                      {t("Mes briefs")}
                     </DashSectionTitle>
                     {briefs.length === 0 ? (
-                      <div className="text-[12px] text-faint">Aucun brief pour le moment.</div>
+                      <div className="text-[12px] text-faint">{t("Aucun brief pour le moment.")}</div>
                     ) : (
                       briefs.slice(0, 5).map((b) => (
                         <div key={b.id} className="flex items-center gap-3 border-b border-border py-2.5 last:border-0">
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-[13px] font-medium">{b.brand}</div>
-                            <div className="truncate text-[11px] text-muted-foreground">{b.deliverables || "Livrables à préciser"}</div>
+                            <div className="truncate text-[11px] text-muted-foreground">{b.deliverables || t("Livrables à préciser")}</div>
                           </div>
                           <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{frDate(b.due)}</span>
                         </div>
@@ -2001,13 +2060,13 @@ export function CreatorSpace({
                 </DashPanel>
                 <DashPanel className="md:col-span-2 xl:col-span-1">
                   <div className="px-5 py-5">
-                    <DashSectionTitle icon={Globe2}>Le monde de TTP</DashSectionTitle>
+                    <DashSectionTitle icon={Globe2}>{t("Le monde de TTP")}</DashSectionTitle>
                     <div className="mx-auto w-full max-w-[240px]">
                       <Suspense fallback={<div className="mx-auto aspect-square w-full max-w-[240px] animate-pulse rounded-full bg-panel/50" />}>
                         <GlobeStickers dark={dark} />
                       </Suspense>
                     </div>
-                    <div className="mt-1 text-center text-[11px] text-faint">Glisse pour le faire tourner</div>
+                    <div className="mt-1 text-center text-[11px] text-faint">{t("Glisse pour le faire tourner")}</div>
                   </div>
                 </DashPanel>
               </div>
@@ -2016,7 +2075,7 @@ export function CreatorSpace({
               {/* Mes infos — carte premium : toggle Statistiques / Coordonnées + chiffres animés */}
               <Card index={0}>
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold">Mes infos</div>
+                  <div className="text-sm font-semibold">{t("Mes infos")}</div>
                   {editing ? (
                     <div className="flex items-center gap-2">
                       {/* Annuler : on quitte sans enregistrer (le formulaire est rechargé depuis la fiche à la prochaine ouverture) */}
@@ -2028,14 +2087,14 @@ export function CreatorSpace({
                         }}
                         className="flex h-8 items-center gap-1.5 rounded-full bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
                       >
-                        <X className="h-3.5 w-3.5" /> Annuler
+                        <X className="h-3.5 w-3.5" /> {t("Annuler")}
                       </button>
                       <button
                         type="button"
                         onClick={saveInfos}
                         className="flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
                       >
-                        <Check className="h-3.5 w-3.5" /> Enregistrer
+                        <Check className="h-3.5 w-3.5" /> {t("Enregistrer")}
                       </button>
                     </div>
                   ) : (
@@ -2045,31 +2104,43 @@ export function CreatorSpace({
                       disabled={!creator}
                       className="flex h-8 items-center gap-1.5 rounded-full bg-panel px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover disabled:opacity-50"
                     >
-                      <Pencil className="h-3.5 w-3.5" /> Modifier
+                      <Pencil className="h-3.5 w-3.5" /> {t("Modifier")}
                     </button>
                   )}
+                </div>
+                {/* Langue de l'espace : pour un créateur anglophone (l'agence le règle aussi sur sa fiche). */}
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-panel/60 px-3 py-2">
+                  <span className="text-[12px] text-muted-foreground">{t("Langue de l'espace")}</span>
+                  <div className="flex gap-1" role="group" aria-label={t("Langue de l'espace")}>
+                    {(["fr", "en"] as const).map((l) => (
+                      <button key={l} type="button" aria-pressed={lang === l} disabled={!creator} onClick={() => void setSpaceLang(l)}
+                        className={cn("h-7 rounded-full px-3 text-[12px] font-medium transition-colors", lang === l ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+                        {l === "fr" ? "Français" : "English"}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {editing ? (
                   <div className="flex flex-col gap-4">
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      {editInput("Ville", "ville")}
-                      {editInput("Téléphone", "phone")}
-                      {editInput("Email perso", "email")}
-                      {editInput("Email pro", "email_pro")}
-                      {editInput("Instagram", "instagram")}
-                      {editInput("TikTok", "tiktok")}
-                      {editInput("Adresse", "address")}
-                      {editInput("SIREN", "siren")}
-                      {editInput("Naissance", "birth", undefined, "date")}
+                      {editInput(t("Ville"), "ville")}
+                      {editInput(t("Téléphone"), "phone")}
+                      {editInput(t("Email perso"), "email")}
+                      {editInput(t("Email pro"), "email_pro")}
+                      {editInput(t("Instagram"), "instagram")}
+                      {editInput(t("TikTok"), "tiktok")}
+                      {editInput(t("Adresse"), "address")}
+                      {editInput(t("SIREN"), "siren")}
+                      {editInput(t("Naissance"), "birth", undefined, "date")}
                     </div>
-                    <div className="text-[12px] font-medium text-muted-foreground">Statistiques</div>
+                    <div className="text-[12px] font-medium text-muted-foreground">{t("Statistiques")}</div>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      {editInput("Abonnés", "followers")}
-                      {editInput("Engagement", "er")}
-                      {editInput("Portée", "reach")}
+                      {editInput(t("Abonnés"), "followers")}
+                      {editInput(t("Engagement"), "er")}
+                      {editInput(t("Portée"), "reach")}
                     </div>
-                    <p className="text-[11px] text-faint">Le CA est calculé automatiquement depuis tes factures payées.</p>
+                    <p className="text-[11px] text-faint">{t("Le CA est calculé automatiquement depuis tes factures payées.")}</p>
                   </div>
                 ) : (
                   <>
@@ -2077,10 +2148,10 @@ export function CreatorSpace({
                       size="sm"
                       fullWidth
                       className="mb-4"
-                      label="Mes infos"
+                      label={t("Mes infos")}
                       value={infoTab}
                       onValueChange={(v) => setInfoTab(v as "stats" | "coord")}
-                      items={[{ value: "stats", label: "Statistiques" }, { value: "coord", label: "Coordonnées" }]}
+                      items={[{ value: "stats", label: t("Statistiques") }, { value: "coord", label: t("Coordonnées") }]}
                     />
 
                     <AnimatePresence mode="wait" initial={false}>
@@ -2098,25 +2169,25 @@ export function CreatorSpace({
                             <div className="rounded-xl bg-panel p-4">
                               <div className="text-[22px] font-semibold tracking-tight tabular-nums text-foreground">
                                 {totalFollowers > 0 ? (
-                                  <NumberFlow value={totalFollowers} locales="fr-FR" />
+                                  <NumberFlow value={totalFollowers} locales={locale} />
                                 ) : toNum(creator?.followers) != null ? (
-                                  <NumberFlow value={toNum(creator?.followers) as number} locales="fr-FR" />
+                                  <NumberFlow value={toNum(creator?.followers) as number} locales={locale} />
                                 ) : (
                                   "—"
                                 )}
                               </div>
                               <div className="mt-1 text-[10px] font-medium text-faint">
-                                Abonnés cumulés{platformLatest.length > 1 ? ` · ${platformLatest.length} réseaux` : ""}
+                                {t("Abonnés cumulés")}{platformLatest.length > 1 ? ` · ${t("{n} réseaux", { n: platformLatest.length })}` : ""}
                               </div>
                             </div>
-                            <StatTile label="CA encaissé" value={caEncaisse || null} kind="eur" />
+                            <StatTile label={t("CA encaissé")} value={caEncaisse || null} kind="eur" />
                           </div>
                           {/* Engagement par plateforme (on sait de quel réseau il s'agit) */}
                           <div className="rounded-xl bg-panel p-4">
-                            <div className="mb-2.5 text-[12px] font-medium text-muted-foreground">Engagement par plateforme</div>
+                            <div className="mb-2.5 text-[12px] font-medium text-muted-foreground">{t("Engagement par plateforme")}</div>
                             {platformLatest.length === 0 ? (
                               <div className="text-xs text-muted-foreground">
-                                {toNum(creator?.er) != null ? `Engagement global · ${creator?.er}` : "Pas encore de mesure d'engagement de ton agence."}
+                                {toNum(creator?.er) != null ? t("Engagement global · {er}", { er: String(creator?.er) }) : t("Pas encore de mesure d'engagement de ton agence.")}
                               </div>
                             ) : (
                               <div className="flex flex-col gap-2.5">
@@ -2143,15 +2214,15 @@ export function CreatorSpace({
                           transition={{ duration: 0.2 }}
                           className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"
                         >
-                          {coordRow("Ville", creator?.ville ?? null)}
-                          {coordRow("Téléphone", creator?.phone ?? null, true)}
-                          {coordRow("SIREN", creator?.siren ?? null, true)}
-                          {coordRow("Naissance", frDate(creator?.birth))}
-                          {coordRow("Instagram", creator?.instagram ?? null, true, "instagram")}
-                          {coordRow("TikTok", creator?.tiktok ?? null, true, "tiktok")}
-                          {coordRow("Email perso", creator?.email ?? null, true, undefined, true)}
-                          {coordRow("Email pro", creator?.email_pro ?? null, true, undefined, true)}
-                          {coordRow("Adresse", creator?.address ?? null, true, undefined, true)}
+                          {coordRow(t("Ville"), creator?.ville ?? null)}
+                          {coordRow(t("Téléphone"), creator?.phone ?? null, true)}
+                          {coordRow(t("SIREN"), creator?.siren ?? null, true)}
+                          {coordRow(t("Naissance"), frDate(creator?.birth))}
+                          {coordRow(t("Instagram"), creator?.instagram ?? null, true, "instagram")}
+                          {coordRow(t("TikTok"), creator?.tiktok ?? null, true, "tiktok")}
+                          {coordRow(t("Email perso"), creator?.email ?? null, true, undefined, true)}
+                          {coordRow(t("Email pro"), creator?.email_pro ?? null, true, undefined, true)}
+                          {coordRow(t("Adresse"), creator?.address ?? null, true, undefined, true)}
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -2166,8 +2237,8 @@ export function CreatorSpace({
           {tab === "evolution" &&
             (suiviErr ? (
               <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
-                <div className="text-sm font-medium text-foreground">Chargement impossible</div>
-                <p className="mt-1 text-xs text-muted-foreground">Ton évolution n'a pas pu être récupérée.</p>
+                <div className="text-sm font-medium text-foreground">{t("Chargement impossible")}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{t("Ton évolution n'a pas pu être récupérée.")}</p>
                 <button
                   type="button"
                   onClick={() => {
@@ -2177,12 +2248,12 @@ export function CreatorSpace({
                   }}
                   className="mt-3 rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                 >
-                  Réessayer
+                  {t("Réessayer")}
                 </button>
               </div>
             ) : mySuivi === null ? (
               <AnimatedBadge status="loading" size="sm">
-                Chargement de ton évolution…
+                {t("Chargement de ton évolution…")}
               </AnimatedBadge>
             ) : (
               <div className="flex flex-col gap-4">
@@ -2195,8 +2266,8 @@ export function CreatorSpace({
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center justify-between gap-3 px-1">
                       <div>
-                        <div className="text-sm font-semibold text-foreground">Évolution des abonnés</div>
-                        <div className="mt-0.5 text-[11px] text-faint">D'après les mesures de ton agence</div>
+                        <div className="text-sm font-semibold text-foreground">{t("Évolution des abonnés")}</div>
+                        <div className="mt-0.5 text-[11px] text-faint">{t("D'après les mesures de ton agence")}</div>
                       </div>
                       <div className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">{fmtCompact(followerSeries.lastTotal)}</div>
                     </div>
@@ -2214,8 +2285,8 @@ export function CreatorSpace({
           {tab === "debrief" &&
             (debriefErr ? (
               <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
-                <div className="text-sm font-medium text-foreground">Chargement impossible</div>
-                <p className="mt-1 text-xs text-muted-foreground">Tes bilans n'ont pas pu être récupérés.</p>
+                <div className="text-sm font-medium text-foreground">{t("Chargement impossible")}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{t("Tes bilans n'ont pas pu être récupérés.")}</p>
                 <button
                   type="button"
                   onClick={() => {
@@ -2224,18 +2295,18 @@ export function CreatorSpace({
                   }}
                   className="mt-3 rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                 >
-                  Réessayer
+                  {t("Réessayer")}
                 </button>
               </div>
             ) : myDebriefs === null ? (
               <AnimatedBadge status="loading" size="sm">
-                Chargement de tes bilans…
+                {t("Chargement de tes bilans…")}
               </AnimatedBadge>
             ) : myDebriefs.length === 0 ? (
               <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center shadow-sm">
                 <div className="mx-auto w-fit"><FileCard formatFile="doc" /></div>
-                <div className="mt-3 text-sm font-medium text-foreground">Aucun bilan pour l'instant</div>
-                <p className="mt-1 text-xs text-muted-foreground">Les bilans de tes campagnes apparaîtront ici.</p>
+                <div className="mt-3 text-sm font-medium text-foreground">{t("Aucun bilan pour l'instant")}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{t("Les bilans de tes campagnes apparaîtront ici.")}</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -2285,10 +2356,10 @@ export function CreatorSpace({
               {todos.length > 0 && (
                 <StatsBento
                   className="mb-5"
-                  primary={{ eyebrow: "À faire · en cours", value: String(openTodos.length), caption: `sur ${todos.length} tâche${todos.length > 1 ? "s" : ""} au total.` }}
-                  bars={{ label: "Par statut", value: `${todos.filter((t) => t.done).length} faites`, series: TODO_STATUS_OPTS.map((o) => todos.filter((t) => cStatus(t) === o.value).length) }}
-                  small={{ value: String(openTodos.filter((t) => t.priority === "haute").length), label: "Prioritaires" }}
-                  accent={{ value: String(todos.filter((t) => t.done).length), label: "Faites", icon: Check }}
+                  primary={{ eyebrow: t("À faire · en cours"), value: String(openTodos.length), caption: plural(todos.length, "sur {n} tâche au total.", "sur {n} tâches au total.") }}
+                  bars={{ label: t("Par statut"), value: t("{n} faites", { n: todos.filter((x) => x.done).length }), series: TODO_STATUS_OPTS.map((o) => todos.filter((x) => cStatus(x) === o.value).length) }}
+                  small={{ value: String(openTodos.filter((x) => x.priority === "haute").length), label: t("Prioritaires") }}
+                  accent={{ value: String(todos.filter((x) => x.done).length), label: t("Faites"), icon: Check }}
                 />
               )}
               <PageHeaderRow>
@@ -2296,35 +2367,35 @@ export function CreatorSpace({
                   {todoView === "liste" && (
                     <Tabs
                       size="sm"
-                      label="Filtrer les tâches"
+                      label={t("Filtrer les tâches")}
                       value={todoFilter}
                       onValueChange={(v) => setTodoFilter(v as TodoFilter)}
-                      items={TODO_FILTERS.map((f) => ({ value: f.id, label: f.label }))}
+                      items={opts.todoFilters.map((f) => ({ value: f.id, label: f.label }))}
                     />
                   )}
                   {/* Bascule Liste / Colonnes (mémorisée) */}
                   <Tabs
                     size="sm"
-                    label="Affichage des tâches"
+                    label={t("Affichage des tâches")}
                     value={todoView}
                     onValueChange={(v) => setTodoView(v as "liste" | "colonnes")}
                     items={[
-                      { value: "liste", label: "Liste", icon: <List className="h-3.5 w-3.5" />, hideLabel: "always" },
-                      { value: "colonnes", label: "Colonnes par statut", icon: <Columns3 className="h-3.5 w-3.5" />, hideLabel: "always" },
+                      { value: "liste", label: t("Liste"), icon: <List className="h-3.5 w-3.5" />, hideLabel: "always" },
+                      { value: "colonnes", label: t("Colonnes par statut"), icon: <Columns3 className="h-3.5 w-3.5" />, hideLabel: "always" },
                     ]}
                   />
                 </div>
-                <AddButton navBar label="Tâche" onClick={() => setTdOpen(true)} />
+                <AddButton navBar label={t("Tâche")} onClick={() => setTdOpen(true)} />
               </PageHeaderRow>
-              <InlineForm open={tdOpen} title="Nouvelle tâche" onClose={() => setTdOpen(false)} onSubmit={addTodo}>
-                <TextField label="Tâche" value={tdText} onChange={setTdText} />
-                <AutoGrowTextField label="Description" value={tdDesc} onChange={setTdDesc} placeholder="Détaille — le champ s'agrandit tout seul…" className="min-w-full" />
-                <TextField label="Échéance" type="date" value={tdDue} onChange={setTdDue} />
-                <SelectField label="Priorité" value={tdPrio} onChange={setTdPrio} options={PRIORITY_OPTIONS} />
+              <InlineForm open={tdOpen} title={t("Nouvelle tâche")} onClose={() => setTdOpen(false)} onSubmit={addTodo}>
+                <TextField label={t("Tâche")} value={tdText} onChange={setTdText} />
+                <AutoGrowTextField label={t("Description")} value={tdDesc} onChange={setTdDesc} placeholder={t("Détaille — le champ s'agrandit tout seul…")} className="min-w-full" />
+                <TextField label={t("Échéance")} type="date" value={tdDue} onChange={setTdDue} />
+                <SelectField label={t("Priorité")} value={tdPrio} onChange={setTdPrio} options={opts.prio} />
               </InlineForm>
               {todoView === "colonnes" ? (
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  {TODO_STATUS_OPTS.map((col) => {
+                  {opts.todo.map((col) => {
                     const colRows = todos.filter((t) => cStatus(t) === col.value);
                     return (
                       <div key={col.value} className="flex flex-col gap-2.5 rounded-2xl border border-border bg-panel/40 p-2.5">
@@ -2338,21 +2409,21 @@ export function CreatorSpace({
                         {colRows.length === 0 ? (
                           <div className="px-2 py-6 text-center text-[11px] text-faint">—</div>
                         ) : (
-                          colRows.map((t) => (
-                            <div key={t.id} className="rounded-xl border border-border bg-surface p-3">
-                              <button type="button" onClick={() => setTaskView(t)} className="block w-full text-left">
-                                <span className={"block line-clamp-2 break-words text-[12.5px] font-medium leading-snug " + (t.done ? "text-muted-foreground line-through" : "text-foreground")}>{t.text}</span>
-                                {((t.subtasks?.length ?? 0) > 0 || (t.attachments?.length ?? 0) > 0) && (
+                          colRows.map((td) => (
+                            <div key={td.id} className="rounded-xl border border-border bg-surface p-3">
+                              <button type="button" onClick={() => setTaskView(td)} className="block w-full text-left">
+                                <span className={"block line-clamp-2 break-words text-[12.5px] font-medium leading-snug " + (td.done ? "text-muted-foreground line-through" : "text-foreground")}>{td.text}</span>
+                                {((td.subtasks?.length ?? 0) > 0 || (td.attachments?.length ?? 0) > 0) && (
                                   <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[10px] text-faint">
-                                    {(t.subtasks?.length ?? 0) > 0 && <span>{(t.subtasks ?? []).filter((s) => s.done).length}/{t.subtasks!.length} sous-tâches</span>}
-                                    {(t.attachments?.length ?? 0) > 0 && <span>📎 {t.attachments!.length}</span>}
+                                    {(td.subtasks?.length ?? 0) > 0 && <span>{t("{done}/{total} sous-tâches", { done: (td.subtasks ?? []).filter((s) => s.done).length, total: td.subtasks!.length })}</span>}
+                                    {(td.attachments?.length ?? 0) > 0 && <span>📎 {td.attachments!.length}</span>}
                                   </span>
                                 )}
                               </button>
                               <div className="mt-2 flex items-center justify-between gap-2">
-                                <AnimatedBadge status={prioBadge(t.priority)} size="sm">{titleCase(t.priority ?? "moyenne")}</AnimatedBadge>
+                                <AnimatedBadge status={prioBadge(td.priority)} size="sm">{t(titleCase(td.priority ?? "moyenne"))}</AnimatedBadge>
                                 <div className="w-[118px] shrink-0">
-                                  <StatusSelect value={cStatus(t)} options={TODO_STATUS_OPTS} onChange={(s) => setTodoStatus(t, s)} />
+                                  <StatusSelect value={cStatus(td)} options={opts.todo} onChange={(s) => setTodoStatus(td, s)} />
                                 </div>
                               </div>
                             </div>
@@ -2366,33 +2437,33 @@ export function CreatorSpace({
               <div className="flex flex-col gap-3">
                 {filteredTodos.length === 0 ? (
                   <div className="rounded-2xl border border-border bg-surface p-6 text-[13px] text-muted-foreground">
-                    {todoFilter === "terminees" ? "Aucune tâche faite." : "Aucune tâche."}
+                    {todoFilter === "terminees" ? t("Aucune tâche faite.") : t("Aucune tâche.")}
                   </div>
                 ) : (
                   <AgentPlan
-                    tasks={filteredTodos.map((t): PlanTask => ({
-                      id: t.id,
-                      title: t.text,
-                      status: cStatus(t),
-                      done: t.done,
-                      accent: t.done ? undefined : prioAccent(t.priority),
-                      subtasks: t.subtasks ?? [],
+                    tasks={filteredTodos.map((td): PlanTask => ({
+                      id: td.id,
+                      title: td.text,
+                      status: cStatus(td),
+                      done: td.done,
+                      accent: td.done ? undefined : prioAccent(td.priority),
+                      subtasks: td.subtasks ?? [],
                       meta: (
                         <>
-                          {t.due && t.due !== "—" && <span>Échéance {frDate(t.due)}</span>}
-                          {(t.attachments?.length ?? 0) > 0 && <span>📎 {t.attachments!.length}</span>}
+                          {td.due && td.due !== "—" && <span>{t("Échéance {date}", { date: frDate(td.due) })}</span>}
+                          {(td.attachments?.length ?? 0) > 0 && <span>📎 {td.attachments!.length}</span>}
                         </>
                       ),
                       right: (
                         <>
-                          <span className={cn("hidden w-[70px] rounded-full py-0.5 text-center text-[11px] font-medium sm:inline-block", t.done ? "bg-muted text-faint" : prioPill(t.priority))}>
-                            {titleCase(t.priority ?? "moyenne")}
+                          <span className={cn("hidden w-[70px] rounded-full py-0.5 text-center text-[11px] font-medium sm:inline-block", td.done ? "bg-muted text-faint" : prioPill(td.priority))}>
+                            {t(titleCase(td.priority ?? "moyenne"))}
                           </span>
                           <button
                             type="button"
-                            onClick={() => (tdEditId === t.id ? setTdEditId(null) : startEditTodo(t))}
+                            onClick={() => (tdEditId === td.id ? setTdEditId(null) : startEditTodo(td))}
                             className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-                            aria-label="Modifier la tâche"
+                            aria-label={t("Modifier la tâche")}
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
@@ -2400,22 +2471,22 @@ export function CreatorSpace({
                             items={[
                               {
                                 key: "delete",
-                                label: "Supprimer",
+                                label: t("Supprimer"),
                                 icon: Trash2,
                                 danger: true,
-                                onClick: () => void deleteTodo(t),
-                                confirm: { title: "Supprimer la tâche", message: `Supprimer «\u00A0${t.text}\u00A0»\u00A0? Cette action est irréversible.` },
+                                onClick: () => void deleteTodo(td),
+                                confirm: { title: t("Supprimer la tâche"), message: t("Supprimer «\u00A0{name}\u00A0»\u00A0? Cette action est irréversible.", { name: td.text }) },
                               },
                             ]}
                           />
                         </>
                       ),
-                      footer: tdEditId === t.id ? (
+                      footer: tdEditId === td.id ? (
                         <div className="px-5 pb-2">
-                          <InlineForm open title="Modifier la tâche" onClose={() => setTdEditId(null)} onSubmit={saveEditTodo}>
-                            <TextField label="Tâche" value={teText} onChange={setTeText} />
-                            <AutoGrowTextField label="Description" value={teDesc} onChange={setTeDesc} className="min-w-full" />
-                            <SelectField label="Priorité" value={tePrio} onChange={setTePrio} options={PRIORITY_OPTIONS} />
+                          <InlineForm open title={t("Modifier la tâche")} onClose={() => setTdEditId(null)} onSubmit={saveEditTodo}>
+                            <TextField label={t("Tâche")} value={teText} onChange={setTeText} />
+                            <AutoGrowTextField label={t("Description")} value={teDesc} onChange={setTeDesc} className="min-w-full" />
+                            <SelectField label={t("Priorité")} value={tePrio} onChange={setTePrio} options={opts.prio} />
                           </InlineForm>
                         </div>
                       ) : undefined,
@@ -2428,7 +2499,7 @@ export function CreatorSpace({
                     }}
                     onSetStatus={(id, status) => { const t = todos.find((x) => x.id === id); if (t) setTodoStatus(t, status); }}
                     onDeleteTask={(id) => { const t = todos.find((x) => x.id === id); if (t) void deleteTodo(t); }}
-                    deleteMessage={(t) => `Supprimer « ${t.title} » ? Cette action est irréversible.`}
+                    deleteMessage={(task) => t("Supprimer « {name} » ? Cette action est irréversible.", { name: task.title })}
                     onToggleSubtask={(taskId, subId) => { const t = todos.find((x) => x.id === taskId); if (t) toggleSubtask(t, subId); }}
                     onAddSubtask={(taskId, text) => { patchTodo(taskId, (x) => ({ subtasks: [...(x.subtasks ?? []), { id: stid(), text, done: false }] })); }}
                     onDelSubtask={(taskId, subId) => { const t = todos.find((x) => x.id === taskId); if (t) delSubtask(t, subId); }}
@@ -2448,44 +2519,44 @@ export function CreatorSpace({
                 return (
                   <StatsBento
                     className="mb-5"
-                    primary={{ eyebrow: "Idées publiées", value: String(iCnt("Publiée")), caption: `sur ${ideas.length} idée${ideas.length > 1 ? "s" : ""} au total.` }}
-                    bars={{ label: "Par statut", value: `${iCnt("En cours")} en cours`, series: IDEA_STATUS.map((o) => iCnt(o.value)) }}
-                    small={{ value: String(iCnt("En cours")), label: "En cours" }}
-                    accent={{ value: String(iCnt("À explorer")), label: "À explorer", icon: Sparkles }}
+                    primary={{ eyebrow: t("Idées publiées"), value: String(iCnt("Publiée")), caption: plural(ideas.length, "sur {n} idée au total.", "sur {n} idées au total.") }}
+                    bars={{ label: t("Par statut"), value: t("{n} en cours", { n: iCnt("En cours") }), series: IDEA_STATUS.map((o) => iCnt(o.value)) }}
+                    small={{ value: String(iCnt("En cours")), label: t("En cours") }}
+                    accent={{ value: String(iCnt("À explorer")), label: t("À explorer"), icon: Sparkles }}
                   />
                 );
               })()}
               <PageHeaderRow>
                 <div className="text-sm text-muted-foreground">
-                  {ideas.length} idée{ideas.length > 1 ? "s" : ""}
+                  {plural(ideas.length, "{n} idée", "{n} idées")}
                 </div>
                 <div className="flex items-center gap-2">
                   {ideas.length > 0 && (
                     <Tabs
                       size="sm"
-                      label="Affichage des idées"
+                      label={t("Affichage des idées")}
                       value={ideaView}
                       onValueChange={(v) => setIdeaView(v as "liste" | "colonnes")}
                       items={[
-                        { value: "liste", label: "Liste", icon: <List className="h-3.5 w-3.5" />, hideLabel: "mobile" },
-                        { value: "colonnes", label: "Colonnes", icon: <Columns3 className="h-3.5 w-3.5" />, hideLabel: "mobile" },
+                        { value: "liste", label: t("Liste"), icon: <List className="h-3.5 w-3.5" />, hideLabel: "mobile" },
+                        { value: "colonnes", label: t("Colonnes"), icon: <Columns3 className="h-3.5 w-3.5" />, hideLabel: "mobile" },
                       ]}
                     />
                   )}
-                  <AddButton navBar label="Idée" onClick={() => setIdOpen(true)} />
+                  <AddButton navBar label={t("Idée")} onClick={() => setIdOpen(true)} />
                 </div>
               </PageHeaderRow>
-              <InlineForm open={idOpen} title="Nouvelle idée" onClose={() => setIdOpen(false)} onSubmit={addIdea}>
-                <AutoGrowTextField label="Idée de contenu" value={idText} onChange={setIdText} placeholder="Décris ton idée — le champ s'agrandit tout seul…" className="min-w-full" />
+              <InlineForm open={idOpen} title={t("Nouvelle idée")} onClose={() => setIdOpen(false)} onSubmit={addIdea}>
+                <AutoGrowTextField label={t("Idée de contenu")} value={idText} onChange={setIdText} placeholder={t("Décris ton idée — le champ s'agrandit tout seul…")} className="min-w-full" />
               </InlineForm>
               {ideas.length === 0 ? (
-                <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">Aucune idée. Ajoute la première</div>
+                <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">{t("Aucune idée. Ajoute la première")}</div>
               ) : ideaView === "liste" ? (
                 <div className="flex flex-col gap-3">{ideas.map(ideaCard)}</div>
               ) : (
                 /* Colonnes par statut (kanban) — défile horizontalement sur mobile. */
                 <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 xl:grid-cols-4">
-                  {IDEA_STATUS.map((s) => {
+                  {opts.idea.map((s) => {
                     const col = ideas.filter((i) => (i.status ?? "À faire") === s.value);
                     return (
                       <div
@@ -2514,31 +2585,31 @@ export function CreatorSpace({
             <>
               <PageHeaderRow>
                 <div className="text-sm text-muted-foreground">
-                  {contacts.length} contact{contacts.length > 1 ? "s" : ""} · visibles par ton agence
+                  {plural(contacts.length, "{n} contact · visibles par ton agence", "{n} contacts · visibles par ton agence")}
                 </div>
-                <AddButton navBar label="Contact" onClick={() => setCtOpen(true)} />
+                <AddButton navBar label={t("Contact")} onClick={() => setCtOpen(true)} />
               </PageHeaderRow>
-              <InlineForm open={ctOpen} title="Nouveau contact" onClose={() => setCtOpen(false)} onSubmit={addContact}>
-                <TextField label="Marque / société" value={ctBrand} onChange={setCtBrand} placeholder="ex Sephora" />
-                <TextField label="Nom du contact" value={ctPerson} onChange={setCtPerson} placeholder="ex Julie Martin" />
-                <TextField label="Rôle" value={ctRole} onChange={setCtRole} placeholder="ex Responsable partenariats" />
-                <TextField label="Email" value={ctEmail} onChange={setCtEmail} placeholder="ex julie@marque.com" />
-                <TextField label="Téléphone" value={ctPhone} onChange={setCtPhone} placeholder="ex 06 12 34 56 78" />
+              <InlineForm open={ctOpen} title={t("Nouveau contact")} onClose={() => setCtOpen(false)} onSubmit={addContact}>
+                <TextField label={t("Marque / société")} value={ctBrand} onChange={setCtBrand} placeholder={t("ex Sephora")} />
+                <TextField label={t("Nom du contact")} value={ctPerson} onChange={setCtPerson} placeholder={t("ex Julie Martin")} />
+                <TextField label={t("Rôle")} value={ctRole} onChange={setCtRole} placeholder={t("ex Responsable partenariats")} />
+                <TextField label={t("Email")} value={ctEmail} onChange={setCtEmail} placeholder={t("ex julie@marque.com")} />
+                <TextField label={t("Téléphone")} value={ctPhone} onChange={setCtPhone} placeholder={t("ex 06 12 34 56 78")} />
               </InlineForm>
               <div className="flex flex-col gap-3">
                 {contacts.length === 0 ? (
                   <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">
-                    Aucun contact. Ajoute une marque ou une personne que tu connais — ton agence les verra 👋
+                    {t("Aucun contact. Ajoute une marque ou une personne que tu connais — ton agence les verra 👋")}
                   </div>
                 ) : (
                   contacts.map((c) =>
                     ctEditId === c.id ? (
-                      <InlineForm key={c.id} open title="Modifier le contact" submitLabel="Enregistrer" onClose={() => setCtEditId(null)} onSubmit={saveContactEdit}>
-                        <TextField label="Marque / société" value={ceBrand} onChange={setCeBrand} placeholder="ex Sephora" />
-                        <TextField label="Nom du contact" value={cePerson} onChange={setCePerson} placeholder="ex Julie Martin" />
-                        <TextField label="Rôle" value={ceRole} onChange={setCeRole} placeholder="ex Responsable partenariats" />
-                        <TextField label="Email" value={ceEmail} onChange={setCeEmail} placeholder="ex julie@marque.com" />
-                        <TextField label="Téléphone" value={cePhone} onChange={setCePhone} placeholder="ex 06 12 34 56 78" />
+                      <InlineForm key={c.id} open title={t("Modifier le contact")} submitLabel={t("Enregistrer")} onClose={() => setCtEditId(null)} onSubmit={saveContactEdit}>
+                        <TextField label={t("Marque / société")} value={ceBrand} onChange={setCeBrand} placeholder={t("ex Sephora")} />
+                        <TextField label={t("Nom du contact")} value={cePerson} onChange={setCePerson} placeholder={t("ex Julie Martin")} />
+                        <TextField label={t("Rôle")} value={ceRole} onChange={setCeRole} placeholder={t("ex Responsable partenariats")} />
+                        <TextField label={t("Email")} value={ceEmail} onChange={setCeEmail} placeholder={t("ex julie@marque.com")} />
+                        <TextField label={t("Téléphone")} value={cePhone} onChange={setCePhone} placeholder={t("ex 06 12 34 56 78")} />
                       </InlineForm>
                     ) : (
                       <div
@@ -2570,24 +2641,24 @@ export function CreatorSpace({
                           items={[
                             {
                               key: "edit",
-                              label: "Modifier",
+                              label: t("Modifier"),
                               icon: Pencil,
                               onClick: () => startEditContact(c),
                             },
                             {
                               key: "delete",
-                              label: "Supprimer",
+                              label: t("Supprimer"),
                               icon: Trash2,
                               danger: true,
                               onClick: async () => {
                                 if (await dbDelete("contacts", c.id)) {
                                   setContacts((prev) => prev.filter((y) => y.id !== c.id));
-                                  toast("Supprimé");
+                                  toast(t("Supprimé"));
                                 } else {
-                                  toast("Erreur — réessaie");
+                                  toast(t("Erreur — réessaie"));
                                 }
                               },
-                              confirm: { title: "Supprimer le contact", message: `Supprimer «\u00A0${c.brand}\u00A0»\u00A0? Cette action est irréversible.` },
+                              confirm: { title: t("Supprimer le contact"), message: t("Supprimer «\u00A0{name}\u00A0»\u00A0? Cette action est irréversible.", { name: c.brand }) },
                             },
                           ]}
                         />
@@ -2612,17 +2683,17 @@ export function CreatorSpace({
                           )}
                         </div>
                       </div>
-                      <button type="button" onClick={() => setContactView(null)} className="shrink-0 text-faint transition-colors hover:text-foreground" title="Fermer">
+                      <button type="button" onClick={() => setContactView(null)} className="shrink-0 text-faint transition-colors hover:text-foreground" title={t("Fermer")}>
                         <X className="h-5 w-5" />
                       </button>
                     </div>
                     <div className="flex flex-col gap-2">
-                      {contactField("Email", contactView.email)}
-                      {contactField("Téléphone", contactView.phone)}
-                      {contactField("Personne", contactView.person && contactView.person !== "—" ? contactView.person : null)}
-                      {contactField("Rôle", contactView.role)}
+                      {contactField(t("Email"), contactView.email)}
+                      {contactField(t("Téléphone"), contactView.phone)}
+                      {contactField(t("Personne"), contactView.person && contactView.person !== "—" ? contactView.person : null)}
+                      {contactField(t("Rôle"), contactView.role)}
                       {!contactView.email && !contactView.phone && !contactView.role && (!contactView.person || contactView.person === "—") && (
-                        <div className="rounded-lg bg-panel px-3 py-4 text-center text-xs text-muted-foreground">Aucune info supplémentaire.</div>
+                        <div className="rounded-lg bg-panel px-3 py-4 text-center text-xs text-muted-foreground">{t("Aucune info supplémentaire.")}</div>
                       )}
                     </div>
                   </div>
@@ -2635,30 +2706,30 @@ export function CreatorSpace({
           {tab === "briefs" && (
             <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
               {briefs.length === 0 ? (
-                <div className="p-6 text-sm text-muted-foreground">Aucun brief pour le moment.</div>
+                <div className="p-6 text-sm text-muted-foreground">{t("Aucun brief pour le moment.")}</div>
               ) : (
                 briefs.map((b, i) => (
                   <div key={b.id} className={"px-4 py-3 " + (i > 0 ? "border-t border-border" : "")}>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-semibold">{b.brand}</div>
-                        <div className="truncate text-xs text-faint">{b.deliverables} · échéance {frDate(b.due)}</div>
+                        <div className="truncate text-xs text-faint">{b.deliverables} · {t("échéance {date}", { date: frDate(b.due) })}</div>
                       </div>
                       <div className="w-full sm:w-[150px] sm:shrink-0">
-                        <StatusSelect value={briefKey(b.status ?? "attente")} options={BRIEF_STATUS} onChange={(v) => setBriefStatus(b.id, v)} />
+                        <StatusSelect value={briefKey(b.status ?? "attente")} options={opts.brief} onChange={(v) => setBriefStatus(b.id, v)} />
                       </div>
                     </div>
 
                     {/* Script écrit par le créateur — visible et exportable par l'agence */}
                     {briefScriptId === b.id ? (
                       <div className="mt-3 flex flex-col gap-2 rounded-xl border border-border bg-panel p-3">
-                        <span className="text-[11px] font-medium text-muted-foreground">Mon script</span>
+                        <span className="text-[11px] font-medium text-muted-foreground">{t("Mon script")}</span>
                         <textarea
                           value={briefScriptText}
                           onChange={(e) => setBriefScriptText(e.target.value)}
                           rows={6}
                           autoFocus
-                          placeholder={"Écris ton script ici…\n\nHook\u00A0:\nCorps\u00A0:\nCall to action\u00A0:"}
+                          placeholder={t("Écris ton script ici…\n\nHook\u00A0:\nCorps\u00A0:\nCall to action\u00A0:")}
                           className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                         />
                         <div className="flex items-center gap-2">
@@ -2667,13 +2738,13 @@ export function CreatorSpace({
                             onClick={() => saveBriefScript(b.id)}
                             className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                           >
-                            <Check className="h-3.5 w-3.5" /> Enregistrer
+                            <Check className="h-3.5 w-3.5" /> {t("Enregistrer")}
                           </button>
                           <button
                             type="button"
                             onClick={() => setBriefScriptId(null)}
                             className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                            title="Annuler"
+                            title={t("Annuler")}
                           >
                             <X className="h-4 w-4" />
                           </button>
@@ -2694,7 +2765,7 @@ export function CreatorSpace({
                           }}
                           className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-rowhover"
                         >
-                          <Pencil className="h-3.5 w-3.5" /> {b.consignes ? "Modifier mon script" : "Écrire mon script"}
+                          <Pencil className="h-3.5 w-3.5" /> {b.consignes ? t("Modifier mon script") : t("Écrire mon script")}
                         </button>
                       </div>
                     )}
@@ -2710,36 +2781,38 @@ export function CreatorSpace({
               <div className="flex items-start gap-2.5 rounded-2xl border border-border bg-foreground/[0.06] px-4 py-3 text-[12px] leading-relaxed text-amber">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
-                  Un cadeau reçu d'une marque est un partenariat&nbsp;: dès que tu le montres, indique-le clairement
-                  («&nbsp;<b>Produit offert</b>&nbsp;» ou «&nbsp;<b>Cadeau</b>&nbsp;»). C'est une obligation légale (loi n°&nbsp;2023-451).
+                  {rich(t("Un cadeau reçu d'une marque est un partenariat\u00A0: dès que tu le montres, indique-le clairement («\u00A0{a}\u00A0» ou «\u00A0{b}\u00A0»). C'est une obligation légale (loi n°\u00A02023-451)."), {
+                    a: <b>{t("Produit offert")}</b>,
+                    b: <b>{t("Cadeau")}</b>,
+                  })}
                 </span>
               </div>
 
               <PageHeaderRow>
                 <div className="text-xs text-muted-foreground">
-                  <span className="font-semibold text-foreground">{gifts.length}</span> {gifts.length > 1 ? "cadeaux" : "cadeau"}
+                  <span className="font-semibold text-foreground">{gifts.length}</span> {isOne(gifts.length) ? t("cadeau") : t("cadeaux")}
                 </div>
-                <AddButton navBar label="Signaler un cadeau" onClick={() => setGiOpen(true)} />
+                <AddButton navBar label={t("Signaler un cadeau")} onClick={() => setGiOpen(true)} />
               </PageHeaderRow>
 
               <InlineForm
                 open={giOpen}
-                title="Signaler un cadeau reçu"
+                title={t("Signaler un cadeau reçu")}
                 onClose={resetGiftForm}
                 onSubmit={addGift}
-                submitLabel="Signaler"
+                submitLabel={t("Signaler")}
               >
-                <TextField label="Marque" value={giBrand} onChange={setGiBrand} placeholder="ex Sézane" className="sm:min-w-[160px] flex-1" />
-                <TextField label="Produit reçu" value={giProduct} onChange={setGiProduct} placeholder="ex Sac + foulard" className="sm:min-w-[180px] flex-[2]" />
-                <TextField label="Valeur estimée" value={giValue} onChange={setGiValue} placeholder="≈ 220 €" className="sm:min-w-[110px] flex-1" />
-                <TextField label="Interlocuteur" value={giContactName} onChange={setGiContactName} placeholder="ex Julie (RP)" className="sm:min-w-[140px] flex-1" />
-                <TextField label="Email interlocuteur" value={giContactEmail} onChange={setGiContactEmail} type="email" placeholder="julie@marque.com" className="sm:min-w-[170px] flex-1" />
-                <TextField label="Date de réception" value={giReceivedOn} onChange={setGiReceivedOn} type="date" className="sm:min-w-[150px] flex-1" />
+                <TextField label={t("Marque")} value={giBrand} onChange={setGiBrand} placeholder={t("ex Sézane")} className="sm:min-w-[160px] flex-1" />
+                <TextField label={t("Produit reçu")} value={giProduct} onChange={setGiProduct} placeholder={t("ex Sac + foulard")} className="sm:min-w-[180px] flex-[2]" />
+                <TextField label={t("Valeur estimée")} value={giValue} onChange={setGiValue} placeholder="≈ 220 €" className="sm:min-w-[110px] flex-1" />
+                <TextField label={t("Interlocuteur")} value={giContactName} onChange={setGiContactName} placeholder={t("ex Julie (RP)")} className="sm:min-w-[140px] flex-1" />
+                <TextField label={t("Email interlocuteur")} value={giContactEmail} onChange={setGiContactEmail} type="email" placeholder={t("julie@marque.com")} className="sm:min-w-[170px] flex-1" />
+                <TextField label={t("Date de réception")} value={giReceivedOn} onChange={setGiReceivedOn} type="date" className="sm:min-w-[150px] flex-1" />
               </InlineForm>
 
               {gifts.length === 0 ? (
                 <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
-                  Aucun cadeau pour le moment. Signale un produit reçu pour le tracer.
+                  {t("Aucun cadeau pour le moment. Signale un produit reçu pour le tracer.")}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -2756,19 +2829,19 @@ export function CreatorSpace({
                           )}
                         </div>
                         <div className="w-full sm:w-[168px] sm:shrink-0">
-                          <StatusSelect value={g.status ?? "recu"} options={GIFT_STATUS} onChange={(v) => setGiftStatus(g.id, v)} />
+                          <StatusSelect value={g.status ?? "recu"} options={opts.gift} onChange={(v) => setGiftStatus(g.id, v)} />
                         </div>
                       </div>
 
                       {g.content_expected && (
                         <div className="mt-2.5 rounded-lg bg-foreground/[0.06] px-3 py-2 text-[12px] font-medium text-amber">
-                          Contenu attendu par la marque{g.deliverables ? ` : ${g.deliverables}` : ""}
+                          {g.deliverables ? t("Contenu attendu par la marque : {items}", { items: g.deliverables }) : t("Contenu attendu par la marque")}
                         </div>
                       )}
 
                       <div className="mt-2.5 flex items-start gap-1.5 rounded-lg border border-border bg-foreground/[0.06] px-3 py-2 text-[11px] leading-snug text-amber">
                         <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        <span>{g.mentions || DEFAULT_MENTIONS}</span>
+                        <span>{t(g.mentions || DEFAULT_MENTIONS)}</span>
                       </div>
 
                       {g.contact_email && (
@@ -2777,7 +2850,7 @@ export function CreatorSpace({
                           {g.contact_name ? `${g.contact_name} · ` : ""}{g.contact_email}
                         </a>
                       )}
-                      {g.received_on && <div className="mt-1.5 text-[11px] text-faint">Reçu le {frDate(g.received_on)}</div>}
+                      {g.received_on && <div className="mt-1.5 text-[11px] text-faint">{t("Reçu le {date}", { date: frDate(g.received_on) })}</div>}
                       {g.note && <p className="mt-2 text-[12px] leading-relaxed text-faint">{g.note}</p>}
                     </div>
                   ))}
@@ -2795,13 +2868,13 @@ export function CreatorSpace({
                 // SES briefs (date = due) et SES factures non payées (date = échéance).
                 ...briefs.flatMap((b): CalEv[] => {
                   const date = toISODate(b.due);
-                  return date ? [{ id: `brief:${b.id}`, date, time: "", title: (b.brand ?? "").trim() || "Brief", type: "deadline", who: name, kind: "brief" }] : [];
+                  return date ? [{ id: `brief:${b.id}`, date, time: "", title: (b.brand ?? "").trim() || t("Brief"), type: "deadline", who: name, kind: "brief" }] : [];
                 }),
                 ...invoices.flatMap((iv, i): CalEv[] => {
                   const status = String(iv.status ?? "");
                   const date = toISODate(iv.date);
                   if (!date || status === "payee" || status === "brouillon") return [];
-                  return [{ id: `facture:${iv.ref}:${i}`, date, time: "", title: `Facture ${String(iv.ref ?? "").trim()}${iv.party ? ` · ${iv.party}` : ""}`.trim(), type: "deadline", who: name, kind: "facture" }];
+                  return [{ id: `facture:${iv.ref}:${i}`, date, time: "", title: `${t("Facture {ref}", { ref: String(iv.ref ?? "").trim() })}${iv.party ? ` · ${iv.party}` : ""}`.trim(), type: "deadline", who: name, kind: "facture" }];
                 }),
               ]}
               onNavigate={(kind) => setTab(kind === "brief" ? "briefs" : kind === "facture" ? "facturation" : "todo")}
@@ -2812,7 +2885,7 @@ export function CreatorSpace({
               fixedWho={name}
               onCreate={async (e) => {
                 if (!e.title.trim()) {
-                  toast("Renseigne le titre");
+                  toast(t("Renseigne le titre"));
                   return false;
                 }
                 const dateVal = e.date && e.date.trim() ? e.date : new Date().toISOString().slice(0, 10);
@@ -2830,13 +2903,13 @@ export function CreatorSpace({
                   sort_order: events.length + 1,
                 });
                 if (!created) {
-                  toast("Erreur — réessaie");
+                  toast(t("Erreur — réessaie"));
                   return false;
                 }
                 setEvents([{ id: String((created as { id: string }).id), date: dateVal, day, time: e.time || "—", title: e.title, type: e.type, who: name, description }, ...events]);
                 if (preview) notifyCreator("event", name, e.title);
                 else notifyAgency("evenement", name, e.title); // push immédiat côté agence
-                toast("Événement ajouté ✓");
+                toast(t("Événement ajouté ✓"));
                 return true;
               }}
               onUpdate={async (id, patch) => {
@@ -2849,20 +2922,20 @@ export function CreatorSpace({
                 if (patch.date) dbPatch.day = Number(patch.date.split("-")[2]) || 1;
                 if (await dbUpdate("events", id, dbPatch)) {
                   setEvents((prev) => prev.map((r) => (r.id === id ? ({ ...r, ...dbPatch } as Ev) : r)));
-                  toast("Événement modifié ✓");
+                  toast(t("Événement modifié ✓"));
                   return true;
                 }
-                toast("Erreur — réessaie");
+                toast(t("Erreur — réessaie"));
                 return false;
               }}
               onDelete={async (id) => {
                 if ((events.find((r) => r.id === id)?.who ?? "").includes(",")) return false;
                 if (await dbDelete("events", id)) {
                   setEvents((prev) => prev.filter((r) => r.id !== id));
-                  toast("Supprimé");
+                  toast(t("Supprimé"));
                   return true;
                 }
-                toast("Erreur — réessaie");
+                toast(t("Erreur — réessaie"));
                 return false;
               }}
             />
@@ -2878,7 +2951,7 @@ export function CreatorSpace({
               </Suspense>
             ) : (
               <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
-                Ta boîte mail n'est pas encore activée. Ton agence s'en occupe.
+                {t("Ta boîte mail n'est pas encore activée. Ton agence s'en occupe.")}
               </div>
             )
           )}
@@ -2888,15 +2961,15 @@ export function CreatorSpace({
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold">Mon media kit</div>
+                  <div className="text-sm font-semibold">{t("Mon media kit")}</div>
                   <div className="mt-0.5 text-[11px] text-faint">
                     {mkUnpublished
-                      ? "Ton media kit n'est pas encore publié"
+                      ? t("Ton media kit n'est pas encore publié")
                       : mkLive === true
-                        ? "Ta page publique — à partager aux marques"
+                        ? t("Ta page publique — à partager aux marques")
                         : mkLive === null
-                          ? "Vérification de ta page…"
-                          : "En préparation avec ton agence"}
+                          ? t("Vérification de ta page…")
+                          : t("En préparation avec ton agence")}
                   </div>
                 </div>
                 {mkLive === true && mkUrl && (
@@ -2905,10 +2978,10 @@ export function CreatorSpace({
                       type="button"
                       onClick={() => {
                         navigator.clipboard?.writeText(mkUrl);
-                        toast("Lien copié ✓");
+                        toast(t("Lien copié ✓"));
                       }}
                       className="grid h-9 w-9 place-items-center rounded-full bg-panel text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                      title="Copier le lien"
+                      title={t("Copier le lien")}
                     >
                       <Copy className="h-4 w-4" />
                     </button>
@@ -2919,7 +2992,7 @@ export function CreatorSpace({
                         rel="noreferrer"
                         className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                       >
-                        <Sparkles className="h-3.5 w-3.5" /> Kit UGC
+                        <Sparkles className="h-3.5 w-3.5" /> {t("Kit UGC")}
                       </a>
                     )}
                     <a
@@ -2928,7 +3001,7 @@ export function CreatorSpace({
                       rel="noreferrer"
                       className="flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
                     >
-                      <ExternalLink className="h-3.5 w-3.5" /> Ouvrir
+                      <ExternalLink className="h-3.5 w-3.5" /> {t("Ouvrir")}
                     </a>
                   </div>
                 )}
@@ -2939,19 +3012,19 @@ export function CreatorSpace({
               {mkLive === true && mkUrl ? (
                 <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
                   {/* Desktop : iframe pleine largeur. Mobile : rendu paysage « ordinateur » mis à l'échelle. */}
-                  <iframe title="Mon media kit" src={mkUrl} className="hidden h-[68vh] w-full bg-white md:block" />
+                  <iframe title={t("Mon media kit")} src={mkUrl} className="hidden h-[68vh] w-full bg-white md:block" />
                   <div className="md:hidden">
-                    <ScaledPreview src={mkUrl} title="Mon media kit" height="60vh" />
+                    <ScaledPreview src={mkUrl} title={t("Mon media kit")} height="60vh" />
                   </div>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-border bg-surface px-6 py-12 text-center shadow-sm">
                   <ImageIcon className="mx-auto h-8 w-8 text-faint" />
                   <div className="mt-3 text-sm font-medium text-foreground">
-                    {mkUnpublished ? "Ton media kit n'est pas encore publié" : mkLive === null ? "Vérification de ta page…" : "Media kit en préparation"}
+                    {mkUnpublished ? t("Ton media kit n'est pas encore publié") : mkLive === null ? t("Vérification de ta page…") : t("Media kit en préparation")}
                   </div>
                   <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-                    Ton agence prépare ta page. Elle s'affichera ici dès qu'elle sera en ligne.
+                    {t("Ton agence prépare ta page. Elle s'affichera ici dès qu'elle sera en ligne.")}
                   </p>
                 </div>
               )}
@@ -2960,7 +3033,7 @@ export function CreatorSpace({
               {docs.filter((d) => d.type === "mediakit").length > 0 && (
                 <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
                   <div className="border-b border-border px-4 py-2.5 text-[11px] font-medium text-muted-foreground">
-                    Fichiers déposés par l'agence
+                    {t("Fichiers déposés par l'agence")}
                   </div>
                   {docs
                     .filter((d) => d.type === "mediakit")
@@ -2979,7 +3052,7 @@ export function CreatorSpace({
                             onClick={() => openDocFile(doc)}
                             className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                           >
-                            <ExternalLink className="h-3.5 w-3.5" /> Ouvrir
+                            <ExternalLink className="h-3.5 w-3.5" /> {t("Ouvrir")}
                           </button>
                         )}
                       </div>
@@ -2992,21 +3065,21 @@ export function CreatorSpace({
           {/* Documents */}
           {tab === "documents" && (
             docs.length === 0 ? (
-              <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">Ton agence déposera ici tes documents (contrats, media kit…).</div>
+              <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">{t("Ton agence déposera ici tes documents (contrats, media kit…).")}</div>
             ) : (
               <div className="flex flex-col gap-2.5">
                 {docs.map((doc) => (
                   <div key={doc.id} className="flex items-center gap-4 rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm transition-colors hover:bg-rowhover">
                     <div className="shrink-0 self-center pr-1"><FileCard formatFile={fileFormatOf(doc.name, doc.type)} /></div>
-                    <button type="button" onClick={() => openDocFile(doc)} className="min-w-0 flex-1 text-left" title="Ouvrir / télécharger">
+                    <button type="button" onClick={() => openDocFile(doc)} className="min-w-0 flex-1 text-left" title={t("Ouvrir / télécharger")}>
                       <div className="truncate text-sm font-semibold text-foreground hover:underline">{doc.name}</div>
-                      <div className="truncate text-xs text-faint">{[doc.type === "mediakit" ? "Media kit" : doc.type, doc.size].filter(Boolean).join(" · ")}</div>
+                      <div className="truncate text-xs text-faint">{[doc.type === "mediakit" ? t("Media kit") : doc.type && t(doc.type), doc.size].filter(Boolean).join(" · ")}</div>
                     </button>
                     {doc.path && (
                       <button
                         type="button"
                         onClick={() => openDocFile(doc)}
-                        title="Ouvrir"
+                        title={t("Ouvrir")}
                         className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                       >
                         <ExternalLink className="h-4 w-4" />
@@ -3025,9 +3098,9 @@ export function CreatorSpace({
               <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold">Envoyer une facture</div>
+                    <div className="text-sm font-semibold">{t("Envoyer une facture")}</div>
                     <div className="mt-0.5 text-[11px] text-faint">
-                      Ta facture n'apparaît pas ci-dessous&nbsp;? Dépose-la, ton agence la reçoit aussitôt.
+                      {t("Ta facture n'apparaît pas ci-dessous\u00A0? Dépose-la, ton agence la reçoit aussitôt.")}
                     </div>
                   </div>
                   <input
@@ -3047,14 +3120,14 @@ export function CreatorSpace({
                     disabled={invUploading}
                     className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
-                    <Upload className="h-3.5 w-3.5" /> {invUploading ? "Envoi…" : "Déposer ma facture"}
+                    <Upload className="h-3.5 w-3.5" /> {invUploading ? t("Envoi…") : t("Déposer ma facture")}
                   </button>
                 </div>
 
                 {docs.filter((d) => d.type === "facture").length > 0 && (
                   <div className="mt-3 border-t border-border pt-3">
                     <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
-                      Déposées par toi
+                      {t("Déposées par toi")}
                     </div>
                     <div className="flex flex-col gap-1.5">
                       {docs
@@ -3069,7 +3142,7 @@ export function CreatorSpace({
                                 onClick={() => openDocFile(doc)}
                                 className="shrink-0 text-[11px] font-semibold text-primary transition-opacity hover:opacity-80"
                               >
-                                Ouvrir
+                                {t("Ouvrir")}
                               </button>
                             )}
                           </div>
@@ -3081,17 +3154,17 @@ export function CreatorSpace({
 
               <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border">
                 <div className="min-w-0 bg-surface px-4 py-4 sm:px-5 sm:py-5">
-                  <div className="text-[12px] text-muted-foreground sm:text-[13px]">Encaissé</div>
+                  <div className="text-[12px] text-muted-foreground sm:text-[13px]">{t("Encaissé")}</div>
                   <div className="mt-2 truncate text-[22px] font-semibold leading-none tracking-tight tabular-nums text-signaltext sm:text-[26px]">{formatEuro(encaisse)}</div>
                 </div>
                 <div className="min-w-0 bg-surface px-4 py-4 sm:px-5 sm:py-5">
-                  <div className="text-[12px] text-muted-foreground sm:text-[13px]">Total facturé</div>
+                  <div className="text-[12px] text-muted-foreground sm:text-[13px]">{t("Total facturé")}</div>
                   <div className="mt-2 truncate text-[22px] font-semibold leading-none tracking-tight tabular-nums sm:text-[26px]">{formatEuro(totalFacture)}</div>
                 </div>
               </div>
               <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
                 {invoices.length === 0 ? (
-                  <div className="p-6 text-sm text-muted-foreground">Tes factures apparaîtront ici dès que ton agence les aura créées.</div>
+                  <div className="p-6 text-sm text-muted-foreground">{t("Tes factures apparaîtront ici dès que ton agence les aura créées.")}</div>
                 ) : (
                   invoices.map((inv, i) => {
                     const b = invStatus(inv.status);
@@ -3120,7 +3193,7 @@ export function CreatorSpace({
                           {/* ≥ sm : case de largeur fixe → les montants s'alignent quel que soit le statut */}
                           <span className="flex justify-end sm:w-[104px] sm:justify-start">
                             <AnimatedBadge status={b.status} size="sm">
-                              {b.label}
+                              {t(b.label)}
                             </AnimatedBadge>
                           </span>
                         </div>
@@ -3146,10 +3219,10 @@ export function CreatorSpace({
         <IosTabBar
           items={[
             ...ctabIds.map((id) => {
-              const t = TABS.find((x) => x.id === id);
-              return { id, label: t?.label ?? id, icon: id === "accueil" ? House : t?.icon ?? LayoutDashboard, badge: id === "mails" ? mailBadge : null };
+              const tb = TABS.find((x) => x.id === id);
+              return { id, label: tb ? t(tb.label) : id, icon: id === "accueil" ? House : tb?.icon ?? LayoutDashboard, badge: id === "mails" ? mailBadge : null };
             }),
-            { id: "__more", label: "Plus", icon: CircleEllipsis },
+            { id: "__more", label: t("Plus"), icon: CircleEllipsis },
           ]}
           active={moreOpen || !ctabIds.includes(tab) ? "__more" : tab}
           onSelect={(id) => (id === "__more" ? setMoreOpen(true) : goTab(id as Tab))}
@@ -3165,9 +3238,9 @@ export function CreatorSpace({
         open={statsModalOpen}
         onClose={() => setStatsModalOpen(false)}
         icon={<BarChart3 className="h-5 w-5 text-primary" />}
-        title="Envoyer mes stats"
-        description="Les captures des 30 derniers jours — c'est ce qui prouve ton audience aux marques."
-        primaryLabel={statsUploading ? "Envoi en cours…" : "Envoyer mes captures"}
+        title={t("Envoyer mes stats")}
+        description={t("Les captures des 30 derniers jours — c'est ce qui prouve ton audience aux marques.")}
+        primaryLabel={statsUploading ? t("Envoi en cours…") : t("Envoyer mes captures")}
         onPrimary={() => statsFileRef.current?.click()}
         primaryDisabled={statsUploading}
       >
@@ -3179,23 +3252,23 @@ export function CreatorSpace({
                 <span className="flex items-start gap-1.5">
                   <PlatformIcon platform="instagram" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
                   <span>
-                    <span className="font-semibold">Instagram connecté</span>
-                    {creator.ig.link.username ? ` (@${creator.ig.link.username})` : ""} : tes stats Instagram arrivent toutes seules. Les captures ne servent plus que pour tes autres réseaux.
+                    <span className="font-semibold">{t("Instagram connecté")}</span>
+                    {t("{account} : tes stats Instagram arrivent toutes seules. Les captures ne servent plus que pour tes autres réseaux.", { account: creator.ig.link.username ? ` (@${creator.ig.link.username})` : "" })}
                   </span>
                 </span>
                 {!preview && (
                   <button type="button" onClick={() => void disconnectIg()} disabled={igBusy} className="text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
-                    Déconnecter
+                    {t("Déconnecter")}
                   </button>
                 )}
               </div>
             ) : (
               <>
                 <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
-                  <PlatformIcon platform="instagram" className="h-3.5 w-3.5" /> Encore plus simple : connecte ton Instagram
+                  <PlatformIcon platform="instagram" className="h-3.5 w-3.5" /> {t("Encore plus simple : connecte ton Instagram")}
                 </div>
                 <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                  Tes stats Instagram (vues, comptes touchés, audience) arrivent toutes seules chaque jour, sans capture. Il faut un compte pro ou créateur. Tu peux déconnecter quand tu veux.
+                  {t("Tes stats Instagram (vues, comptes touchés, audience) arrivent toutes seules chaque jour, sans capture. Il faut un compte pro ou créateur. Tu peux déconnecter quand tu veux.")}
                 </div>
                 <button
                   type="button"
@@ -3204,7 +3277,7 @@ export function CreatorSpace({
                   title={preview ? "Le créateur le fait depuis son espace" : undefined}
                   className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground py-2.5 text-[12px] font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
                 >
-                  {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} Connecter mon Instagram
+                  {igBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} {t("Connecter mon Instagram")}
                 </button>
               </>
             )}
@@ -3219,23 +3292,23 @@ export function CreatorSpace({
                 <span className="flex items-start gap-1.5">
                   <PlatformIcon platform="tiktok" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
                   <span>
-                    <span className="font-semibold">TikTok connecté</span>
-                    {creator.tt.link.username ? ` (@${creator.tt.link.username})` : ""} : tes abonnés et les vues de tes vidéos arrivent tout seuls.
+                    <span className="font-semibold">{t("TikTok connecté")}</span>
+                    {t("{account} : tes abonnés et les vues de tes vidéos arrivent tout seuls.", { account: creator.tt.link.username ? ` (@${creator.tt.link.username})` : "" })}
                   </span>
                 </span>
                 {!preview && (
                   <button type="button" onClick={() => void disconnectTt()} disabled={ttBusy} className="text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
-                    Déconnecter
+                    {t("Déconnecter")}
                   </button>
                 )}
               </div>
             ) : (
               <>
                 <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
-                  <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" /> Connecte aussi ton TikTok
+                  <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" /> {t("Connecte aussi ton TikTok")}
                 </div>
                 <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                  Tes abonnés, tes j'aime et les vues de chacune de tes vidéos (collabs comprises) arrivent tout seuls chaque jour. Tu peux déconnecter quand tu veux.
+                  {t("Tes abonnés, tes j'aime et les vues de chacune de tes vidéos (collabs comprises) arrivent tout seuls chaque jour. Tu peux déconnecter quand tu veux.")}
                 </div>
                 <button
                   type="button"
@@ -3244,7 +3317,7 @@ export function CreatorSpace({
                   title={preview ? "Le créateur le fait depuis son espace" : undefined}
                   className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
                 >
-                  {ttBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} Connecter mon TikTok
+                  {ttBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />} {t("Connecter mon TikTok")}
                 </button>
               </>
             )}
@@ -3259,23 +3332,23 @@ export function CreatorSpace({
                 <span className="flex items-start gap-1.5">
                   <PlatformIcon platform="youtube" className="mt-[3px] h-3.5 w-3.5 shrink-0" />
                   <span>
-                    <span className="font-semibold">YouTube connecté</span>
-                    {creator.yt.link.title ? ` (${creator.yt.link.title})` : ""} : tes vues, ton temps de visionnage et ton audience arrivent tout seuls.
+                    <span className="font-semibold">{t("YouTube connecté")}</span>
+                    {t("{account} : tes vues, ton temps de visionnage et ton audience arrivent tout seuls.", { account: creator.yt.link.title ? ` (${creator.yt.link.title})` : "" })}
                   </span>
                 </span>
                 {!preview && (
                   <button type="button" onClick={() => void disconnectYt()} disabled={ytBusy} className="text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
-                    Déconnecter
+                    {t("Déconnecter")}
                   </button>
                 )}
               </div>
             ) : (
               <>
                 <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
-                  <PlatformIcon platform="youtube" className="h-3.5 w-3.5" /> Tu as une chaîne YouTube ?
+                  <PlatformIcon platform="youtube" className="h-3.5 w-3.5" /> {t("Tu as une chaîne YouTube ?")}
                 </div>
                 <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                  Connecte-la : tes stats YouTube Studio (vues, heures regardées, abonnés gagnés, audience) arrivent toutes seules. Lecture seule, on ne peut rien publier ni modifier. Tu peux déconnecter quand tu veux : tes données YouTube sont alors effacées.
+                  {t("Connecte-la : tes stats YouTube Studio (vues, heures regardées, abonnés gagnés, audience) arrivent toutes seules. Lecture seule, on ne peut rien publier ni modifier. Tu peux déconnecter quand tu veux : tes données YouTube sont alors effacées.")}
                 </div>
                 <button
                   type="button"
@@ -3284,7 +3357,7 @@ export function CreatorSpace({
                   title={preview ? "Le créateur le fait depuis son espace" : undefined}
                   className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
                 >
-                  {ytBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} Connecter mon YouTube
+                  {ytBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />} {t("Connecter mon YouTube")}
                 </button>
               </>
             )}
@@ -3293,19 +3366,19 @@ export function CreatorSpace({
 
         <div className="mb-3 flex items-start gap-2 rounded-xl bg-primary/5 px-3.5 py-2.5 text-[12px] leading-relaxed text-foreground">
           <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-          <span>À envoyer <span className="font-semibold">en début de chaque mois</span> (statistiques des 30 derniers jours).</span>
+          <span>{rich(t("À envoyer {a} (statistiques des 30 derniers jours)."), { a: <span className="font-semibold">{t("en début de chaque mois")}</span> })}</span>
         </div>
 
         {/* La méthode la plus simple : l'app Edits d'Instagram */}
         <div className="mb-3 rounded-xl border border-primary/25 bg-primary/[0.04] p-3.5">
           <div className="mb-2.5 flex items-center gap-1.5 text-[12px] font-medium text-primary">
-            <Share2 className="h-3.5 w-3.5" /> La méthode la plus simple
+            <Share2 className="h-3.5 w-3.5" /> {t("La méthode la plus simple")}
           </div>
           <ol className="flex flex-col gap-2.5">
             {[
-              <>Ouvre l'app <span className="font-semibold text-foreground">Edits</span> d'Instagram sur ton téléphone.</>,
-              <>Va sur l'onglet <span className="font-semibold text-foreground">Statistiques</span> (en bas à droite).</>,
-              <>Appuie sur <span className="font-semibold text-foreground">Partager</span> et envoie-nous la capture ici. 👇</>,
+              rich(t("Ouvre l'app {a} d'Instagram sur ton téléphone."), { a: <span className="font-semibold text-foreground">Edits</span> }),
+              rich(t("Va sur l'onglet {a} (en bas à droite)."), { a: <span className="font-semibold text-foreground">{t("Statistiques")}</span> }),
+              rich(t("Appuie sur {a} et envoie-nous la capture ici. 👇"), { a: <span className="font-semibold text-foreground">{t("Partager")}</span> }),
             ].map((step, i) => (
               <li key={i} className="flex items-start gap-2.5 text-[12px] leading-relaxed text-foreground">
                 <span className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">{i + 1}</span>
@@ -3315,34 +3388,34 @@ export function CreatorSpace({
           </ol>
         </div>
 
-        <div className="mb-2 text-center text-[12px] font-medium text-muted-foreground">Ou capture toi-même — ce qu'on regarde</div>
+        <div className="mb-2 text-center text-[12px] font-medium text-muted-foreground">{t("Ou capture toi-même — ce qu'on regarde")}</div>
         <div className="rounded-xl bg-panel/50 p-3.5 text-[12px] leading-relaxed text-muted-foreground">
           <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
-            <PlatformIcon platform="instagram" className="h-3.5 w-3.5 text-foreground" /> Instagram · Statistiques (Insights) · 30 j
+            <PlatformIcon platform="instagram" className="h-3.5 w-3.5 text-foreground" /> {t("Instagram · Statistiques (Insights) · 30 j")}
           </div>
           <ul className="flex flex-col gap-1 pl-0.5">
-            <li>• <span className="font-medium text-foreground">Impressions / vues</span> (30 j)</li>
-            <li>• <span className="font-medium text-foreground">Likes cumulés, commentaires, partages, enregistrements</span> (30 j)</li>
-            <li>• Comptes touchés, taux d'engagement, abonnés</li>
-            <li>• <span className="font-medium text-foreground">Démographie</span> : pays, âge, genre</li>
+            <li>• <span className="font-medium text-foreground">{t("Impressions / vues")}</span> {t("(30 j)")}</li>
+            <li>• <span className="font-medium text-foreground">{t("Likes cumulés, commentaires, partages, enregistrements")}</span> {t("(30 j)")}</li>
+            <li>• {t("Comptes touchés, taux d'engagement, abonnés")}</li>
+            <li>• {rich(t("{a} : pays, âge, genre"), { a: <span className="font-medium text-foreground">{t("Démographie")}</span> })}</li>
           </ul>
           <div className="mb-2 mt-3 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
-            <PlatformIcon platform="tiktok" className="h-3.5 w-3.5 text-foreground" /> TikTok · Analytics · 30 j
+            <PlatformIcon platform="tiktok" className="h-3.5 w-3.5 text-foreground" /> {t("TikTok · Analytics · 30 j")}
           </div>
           <ul className="flex flex-col gap-1 pl-0.5">
-            <li>• Vues, abonnés, taux d'engagement</li>
+            <li>• {t("Vues, abonnés, taux d'engagement")}</li>
           </ul>
-          <div className="mt-3 text-faint">+ une capture de ton <span className="font-medium text-foreground">nombre d'abonnés</span> par réseau. Astuce&nbsp;: captures nettes, chiffres bien visibles 📸</div>
+          <div className="mt-3 text-faint">{rich(t("+ une capture de ton {a} par réseau. Astuce\u00A0: captures nettes, chiffres bien visibles 📸"), { a: <span className="font-medium text-foreground">{t("nombre d'abonnés")}</span> })}</div>
         </div>
-        <div className="mt-2 text-center text-[10px] text-faint">Jusqu'à 6 images · elles arrivent directement chez ton agence, qui est notifiée.</div>
+        <div className="mt-2 text-center text-[10px] text-faint">{t("Jusqu'à 6 images · elles arrivent directement chez ton agence, qui est notifiée.")}</div>
       </WelcomeModal>
 
       {/* Confirmation anti-missclick avant de marquer une tâche « faite » */}
       {confirmDoneTodo && (
         <ConfirmDialog
-          title={"Marquer comme fait\u00A0?"}
-          message={`«\u00A0${confirmDoneTodo.text}\u00A0» sera marquée comme terminée.`}
-          confirmLabel="Oui, c'est fait ✓"
+          title={t("Marquer comme fait\u00A0?")}
+          message={t("«\u00A0{name}\u00A0» sera marquée comme terminée.", { name: confirmDoneTodo.text })}
+          confirmLabel={t("Oui, c'est fait ✓")}
           onCancel={() => setConfirmDoneTodo(null)}
           onConfirm={() => {
             const t = confirmDoneTodo;
@@ -3358,10 +3431,10 @@ export function CreatorSpace({
           <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-start justify-between gap-3">
               <div className="flex items-center gap-2">
-                <AnimatedBadge status={prioBadge(taskView.priority)} size="sm">{titleCase(taskView.priority ?? "moyenne")}</AnimatedBadge>
-                <AnimatedBadge status="neutral" size="sm">{cStatus(taskView)}</AnimatedBadge>
+                <AnimatedBadge status={prioBadge(taskView.priority)} size="sm">{t(titleCase(taskView.priority ?? "moyenne"))}</AnimatedBadge>
+                <AnimatedBadge status="neutral" size="sm">{t(cStatus(taskView))}</AnimatedBadge>
               </div>
-              <button type="button" onClick={() => setTaskView(null)} className="shrink-0 text-faint transition-colors hover:text-foreground" title="Fermer">
+              <button type="button" onClick={() => setTaskView(null)} className="shrink-0 text-faint transition-colors hover:text-foreground" title={t("Fermer")}>
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -3374,7 +3447,7 @@ export function CreatorSpace({
               </div>
             )}
             {taskView.due && taskView.due !== "—" && (
-              <div className="mt-4 text-xs text-faint">Échéance · {frDate(taskView.due)}</div>
+              <div className="mt-4 text-xs text-faint">{t("Échéance · {date}", { date: frDate(taskView.due) })}</div>
             )}
 
             {/* Sous-tâches (checklist) */}
@@ -3384,7 +3457,7 @@ export function CreatorSpace({
               return (
                 <div className="mt-5 flex flex-col gap-1.5 border-t border-border pt-4">
                   <span className="text-[11px] font-medium text-muted-foreground">
-                    Sous-tâches{subs.length ? ` · ${done}/${subs.length}` : ""}
+                    {t("Sous-tâches")}{subs.length ? ` · ${done}/${subs.length}` : ""}
                   </span>
                   {subs.length > 0 && (
                     <div className="mb-1 h-1.5 w-full overflow-hidden rounded-full bg-panel">
@@ -3398,12 +3471,12 @@ export function CreatorSpace({
                           {s.done && <Check className="h-3 w-3" />}
                         </button>
                         <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
-                        <button type="button" onClick={() => delSubtask(taskView, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label="Supprimer la sous-tâche"><Trash2 className="h-3.5 w-3.5" /></button>
+                        <button type="button" onClick={() => delSubtask(taskView, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label={t("Supprimer la sous-tâche")}><Trash2 className="h-3.5 w-3.5" /></button>
                       </div>
                     ))}
                   </div>
                   <form onSubmit={(e) => { e.preventDefault(); addSubtask(taskView); }} className="mt-1.5 flex items-center gap-2">
-                    <input value={subInput} onChange={(e) => setSubInput(e.target.value)} placeholder="Ajouter une sous-tâche…" className="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary" />
+                    <input value={subInput} onChange={(e) => setSubInput(e.target.value)} placeholder={t("Ajouter une sous-tâche…")} className="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary" />
                     <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"><Plus className="h-4 w-4" /></button>
                   </form>
                 </div>
@@ -3413,22 +3486,22 @@ export function CreatorSpace({
             {/* Pièces jointes */}
             <div className="mt-4 flex flex-col gap-1.5 border-t border-border pt-4">
               <span className="text-[11px] font-medium text-muted-foreground">
-                Pièces jointes{(taskView.attachments ?? []).length ? ` · ${(taskView.attachments ?? []).length}` : ""}
+                {t("Pièces jointes")}{(taskView.attachments ?? []).length ? ` · ${(taskView.attachments ?? []).length}` : ""}
               </span>
               <div className="flex flex-col gap-2">
                 {(taskView.attachments ?? []).map((a) => (
                   <div key={a.path} className="group flex items-center gap-3 rounded-lg border border-border bg-panel/40 p-2.5">
-                    <button type="button" onClick={() => openAttachment(a)} className="shrink-0" title="Ouvrir"><FileCard formatFile={fileFormatOf(a.name)} /></button>
+                    <button type="button" onClick={() => openAttachment(a)} className="shrink-0" title={t("Ouvrir")}><FileCard formatFile={fileFormatOf(a.name)} /></button>
                     <button type="button" onClick={() => openAttachment(a)} className="min-w-0 flex-1 text-left">
                       <div className="truncate text-[13px] font-medium text-foreground hover:underline">{a.name}</div>
                       <div className="text-[11px] text-faint">{a.size}</div>
                     </button>
-                    <button type="button" onClick={() => removeAttachment(taskView, a.path)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title="Retirer"><Trash2 className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => removeAttachment(taskView, a.path)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title={t("Retirer")}><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
                 <input ref={attFileRef} type="file" multiple className="hidden" onChange={(e) => uploadAttachments(taskView, e.target.files)} />
                 <button type="button" onClick={() => attFileRef.current?.click()} disabled={attUploading} className="flex items-center justify-center gap-2 rounded-full border-2 border-dashed border-border px-3 py-2.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
-                  <Upload className="h-4 w-4" /> {attUploading ? "Envoi…" : "Ajouter un fichier"}
+                  <Upload className="h-4 w-4" /> {attUploading ? t("Envoi…") : t("Ajouter un fichier")}
                 </button>
               </div>
             </div>
@@ -3444,12 +3517,13 @@ export function CreatorSpace({
                 }}
                 className="flex items-center gap-1.5 rounded-full bg-panel px-3 py-2 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
               >
-                <Pencil className="h-3.5 w-3.5" /> Modifier
+                <Pencil className="h-3.5 w-3.5" /> {t("Modifier")}
               </button>
             </div>
           </div>
         </Overlay>
       )}
     </div>
+    </LangProvider>
   );
 }

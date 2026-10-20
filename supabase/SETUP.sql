@@ -309,6 +309,11 @@ create policy creators_agency_delete  on public.creators for delete to authentic
 -- Un trigger BEFORE UPDATE force ces colonnes à conserver leur ANCIENNE valeur quand
 -- l'auteur n'est pas l'agence. L'agence n'est jamais affectée ; les vraies éditions du
 -- créateur (coordonnées, réseaux, followers/ER/reach, bio, media kit…) passent normalement.
+-- Langue de l'espace créateur (sql/2026-10-21-langue-createur.sql).
+alter table public.creators add column if not exists lang text not null default 'fr';
+alter table public.creators drop constraint if exists creators_lang_check;
+alter table public.creators add constraint creators_lang_check check (lang in ('fr', 'en'));
+
 create or replace function public.creators_guard() returns trigger
   language plpgsql security definer as $$
 begin

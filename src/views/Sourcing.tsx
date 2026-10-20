@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Picker } from "@/components/ui/form";
 import {
-  AtSign, Binoculars, Bookmark, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Loader2, Mail, PhoneOutgoing, Plus, Radar, Search, Send, SlidersHorizontal, Users, Wallet, EyeOff, RotateCcw, X,
+  AtSign, Binoculars, Bookmark, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Loader2, Mail, PhoneOutgoing, Plus, Radar, Search, Send, SlidersHorizontal, Trophy, Users, Wallet, EyeOff, RotateCcw, X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
@@ -12,7 +12,9 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { HelpTip } from "@/components/ui/help-tip";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { dbInsert, dbUpdate } from "@/lib/db";
-import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { guessSport } from "@/lib/niche";
+import { Overlay } from "@/components/mobile/ios-sheet";
 import { fmtCompact } from "@/lib/timeSeries";
 import { fmtAgo, fmtEr, fmtPerWeek, igWhyText, noteQuota } from "@/lib/instagram";
 import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
@@ -216,13 +218,30 @@ type LastSearch = {
   brand?: Prof & { username: string }; creator?: Prof & { username: string }; brands?: string[]; results: Candidate[];
 };
 const LAST_KEY = "ttp:sourcing-last";
-type PoolInfo = { id: string; last_contacted: string | null };
+/** Les deux scoutings de l'agence : créateurs (creator_pool) et sportifs (athlete_pool). */
+type PoolKind = "createur" | "sportif";
+type PoolInfo = { id: string; last_contacted: string | null; kind: PoolKind };
+const POOL_TABLE: Record<PoolKind, string> = { createur: "creator_pool", sportif: "athlete_pool" };
+/** Clé d'état des statuts, la même que la page Scouting (onglets Créateurs / Sportifs). */
+const TRACK_KEY: Record<PoolKind, string> = { createur: "poolTracking", sportif: "athleteTracking" };
+const KIND_ONE: Record<PoolKind, string> = { createur: "Créateur", sportif: "Sportif" };
+const KIND_LIST: Record<PoolKind, string> = { createur: "scouting créateurs", sportif: "scouting sportifs" };
+/**
+ * Liste suggérée pour un compte trouvé : sportif si sa bio, son nom ou son @ désignent un
+ * sportif (guessSport : un seul mot de métier ou de compétition suffit), sinon créateur.
+ * Le sport deviné sert de tag.
+ */
+function suggestKind(c: Candidate): { kind: PoolKind; sport: string | null } {
+  const sport = guessSport([c.data?.name, c.data?.bio, c.username].filter(Boolean).join(" \n "));
+  return { kind: sport ? "sportif" : "createur", sport };
+}
 
 // ── Tri des comptes trouvés ──────────────────────────────────────────────────
 // Chaque compte trouvé se range dans une section : « À trier » (pas encore vu), « Scouting »
 // (gardé pour plus tard), « À contacter », « Pas intéressés ». Scouting et À contacter =
-// une fiche du Scouting (creator_pool) avec son statut (clé d'état `poolTracking`, la même
-// que la page Scouting). « Pas intéressé » sur un compte hors Scouting = clé `sourcingRejects`
+// une fiche d'un des deux scoutings, créateurs (creator_pool, clé d'état `poolTracking`) ou
+// sportifs (athlete_pool, clé `athleteTracking`), les mêmes que la page Scouting. Un nouveau
+// compte : on demande la liste, la suggestion vient de sa bio (sport repéré = sportif). « Pas intéressé » sur un compte hors Scouting = clé `sourcingRejects`
 // (il ne revient plus dans « À trier » aux recherches suivantes, on peut le remettre).
 type ScoutStatus = "observation" | "contacter" | "discussion" | "signe" | "ecarte";
 type PoolTracking = Record<string, { status?: ScoutStatus } & Record<string, unknown>>;
@@ -356,21 +375,35 @@ function CreatorFinder() {
   const [showOthers, setShowOthers] = useState(false);
   const [sort, setSort] = useState<"score" | "followers" | "er" | "count">("score");
 
-  // Déjà connues : Scouting (avec date de contact) + roster.
+  // Déjà connus : les deux scoutings, créateurs et sportifs (avec date de contact) + roster.
   const [pool, setPool] = useState<Map<string, PoolInfo>>(new Map());
   const [roster, setRoster] = useState<{ user: string; name: string }[]>([]);
-  const [maxOrder, setMaxOrder] = useState(0);
+  const [maxOrder, setMaxOrder] = useState<Record<PoolKind, number>>({ createur: 0, sportif: 0 });
+  // Scouting sportifs pas encore activé (table absente) : tout va au scouting créateurs, sans question.
+  const [athletesOn, setAthletesOn] = useState(true);
   useEffect(() => {
     let alive = true;
     void Promise.all([
       supabase.from("creator_pool").select("id, handle, sort_order, last_contacted"),
+      supabase.from("athlete_pool").select("id, handle, sort_order, last_contacted"),
       supabase.from("creators").select("name, handle, platform, instagram, status"),
-    ]).then(([p, c]) => {
+    ]).then(([p, a, c]) => {
       if (!alive) return;
-      const pr = (p.data as { id: string; handle: string | null; sort_order: number | null; last_contacted: string | null }[] | null) ?? [];
+      type PoolRow = { id: string; handle: string | null; sort_order: number | null; last_contacted: string | null };
+      const pr = (p.data as PoolRow[] | null) ?? [];
+      const ar = (a.data as PoolRow[] | null) ?? [];
       const cr = (c.data as { name: string; handle: string | null; platform: string | null; instagram: string | null; status: string | null }[] | null) ?? [];
-      setPool(new Map(pr.filter((r) => poolKey(r.handle ?? "")).map((r) => [poolKey(r.handle ?? ""), { id: r.id, last_contacted: r.last_contacted }])));
-      setMaxOrder(pr.reduce((m, r) => Math.max(m, r.sort_order ?? 0), 0));
+      setAthletesOn(!(a.error && (a.error.code === "42P01" || a.error.code === "PGRST205")));
+      const m = new Map<string, PoolInfo>();
+      // Un même @ dans les deux listes : le scouting créateurs l'emporte (comme avant).
+      for (const [kind, rows] of [["sportif", ar], ["createur", pr]] as const)
+        for (const r of rows) {
+          const k = poolKey(r.handle ?? "");
+          if (k) m.set(k, { id: r.id, last_contacted: r.last_contacted, kind });
+        }
+      setPool(m);
+      const top = (rows: PoolRow[]) => rows.reduce((n, r) => Math.max(n, r.sort_order ?? 0), 0);
+      setMaxOrder({ createur: top(pr), sportif: top(ar) });
       setRoster(
         cr
           .filter((r) => (r.status ?? "actif").toLowerCase() !== "inactif")
@@ -454,88 +487,130 @@ function CreatorFinder() {
 
   // Scouting : ajout (et date de contact quand on vient d'écrire).
   const [adding, setAdding] = useState<string | null>(null);
-  /** Fiche Scouting du compte (créée au besoin) : son id, ou null en cas d'erreur. */
-  const ensurePool = async (c: Candidate, contacted?: boolean): Promise<string | null> => {
+  /**
+   * Fiche Scouting du compte, créée au besoin dans la liste `kind` (sinon la liste
+   * suggérée) : son id, sa liste, et `created` si elle vient d'être créée ; null en cas d'erreur.
+   * Un compte déjà dans une liste y reste.
+   */
+  const ensurePool = async (c: Candidate, contacted?: boolean, kind?: PoolKind): Promise<{ id: string; kind: PoolKind; created: boolean } | null> => {
     const now = new Date().toISOString();
     const yt = c.data?.platform === "youtube";
     const known = pool.get(keyOf(c));
     if (known) {
-      if (!contacted) return known.id;
-      const ok = await dbUpdate("creator_pool", known.id, { last_contacted: now });
+      const res = { id: known.id, kind: known.kind, created: false };
+      if (!contacted) return res;
+      const ok = await dbUpdate(POOL_TABLE[known.kind], known.id, { last_contacted: now });
       if (ok) setPool((m) => new Map(m).set(keyOf(c), { ...known, last_contacted: now }));
-      return ok ? known.id : null;
+      return ok ? res : null;
     }
-    const origin = last?.mode === "marque" && last.brand ? ` (citée par @${last.brand.username})` : last?.mode === "similaire" && last.creator ? ` (proche de @${last.creator.username})` : "";
-    const created = await dbInsert("creator_pool", {
+    const guess = suggestKind(c);
+    const k: PoolKind = athletesOn ? kind ?? guess.kind : "createur";
+    const origin = last?.mode === "marque" && last.brand ? ` (cité par @${last.brand.username})` : last?.mode === "similaire" && last.creator ? ` (proche de @${last.creator.username})` : "";
+    const created = await dbInsert(POOL_TABLE[k], {
       name: c.data?.name?.trim() || `@${c.username}`,
       handle: yt ? c.data?.url ?? `https://www.youtube.com/@${c.username}` : `@${c.username}`,
       email: c.data?.email || null,
-      tag: yt ? "YouTube" : null,
-      note: yt ? `Trouvée via le Sourcing YouTube (${last?.label ?? ""})` : `Trouvée via le Sourcing${origin}`,
-      sort_order: maxOrder + 1,
+      // Sportif : le sport deviné ; créateur YouTube : « YouTube ».
+      tag: k === "sportif" ? guess.sport : yt ? "YouTube" : null,
+      note: yt ? `Trouvé via le Sourcing YouTube (${last?.label ?? ""})` : `Trouvé via le Sourcing${origin}`,
+      sort_order: maxOrder[k] + 1,
       ...(contacted ? { last_contacted: now } : {}),
     });
     if (!created) return null;
-    setMaxOrder((n) => n + 1);
-    setPool((m) => new Map(m).set(keyOf(c), { id: String(created.id), last_contacted: contacted ? now : null }));
-    return String(created.id);
+    const id = String(created.id);
+    setMaxOrder((o) => ({ ...o, [k]: o[k] + 1 }));
+    setPool((m) => new Map(m).set(keyOf(c), { id, last_contacted: contacted ? now : null, kind: k }));
+    return { id, kind: k, created: true };
   };
-  const toScouting = async (c: Candidate, contacted?: boolean): Promise<boolean> => !!(await ensurePool(c, contacted));
   const [contact, setContact] = useState<Candidate | null>(null);
 
-  // Tri : statuts du Scouting + comptes écartés (partagés par l'équipe, état de l'app).
-  const { data: trackData } = useAppState<PoolTracking>((st: AppState) => (st["poolTracking"] as PoolTracking) ?? {});
-  const [trackLocal, setTrackLocal] = useState<PoolTracking | null>(null);
-  const tracking = trackLocal ?? trackData ?? {};
+  // Tri : statuts des deux scoutings + comptes écartés (partagés par l'équipe, état de l'app).
+  const { data: trackC } = useAppState<PoolTracking>((st: AppState) => (st[TRACK_KEY.createur] as PoolTracking) ?? {});
+  const { data: trackS } = useAppState<PoolTracking>((st: AppState) => (st[TRACK_KEY.sportif] as PoolTracking) ?? {});
+  // Copies locales (optimistes) : elles cèdent dès que la donnée partagée change (tick suivant, qui inclut l'écriture).
+  const [trackLocal, setTrackLocal] = useState<Partial<Record<PoolKind, PoolTracking>>>({});
+  useEffect(() => setTrackLocal((l) => (l.createur ? { ...l, createur: undefined } : l)), [trackC]);
+  useEffect(() => setTrackLocal((l) => (l.sportif ? { ...l, sportif: undefined } : l)), [trackS]);
+  const tracking: Record<PoolKind, PoolTracking> = { createur: trackLocal.createur ?? trackC ?? {}, sportif: trackLocal.sportif ?? trackS ?? {} };
   const { data: rejData } = useAppState<Rejects>((st: AppState) => (st["sourcingRejects"] as Rejects) ?? {});
   const [rejLocal, setRejLocal] = useState<Rejects | null>(null);
+  useEffect(() => setRejLocal(null), [rejData]);
   const rejects = rejLocal ?? rejData ?? {};
-  /** Lit la valeur fraîche, applique `fn`, affiche tout de suite, puis enregistre. */
-  const saveKey = async <T,>(key: string, fn: (cur: T) => T, setLocal: (v: T) => void): Promise<boolean> => {
+  /** Statut d'une fiche, dans la clé de SA liste : n'envoie que cette fiche (écriture partielle). */
+  const saveStatus = async (kind: PoolKind, id: string, status: ScoutStatus): Promise<boolean> => {
     try {
       invalidateAppState();
-      const next = fn(((await getAppState())[key] as T) ?? ({} as T));
-      setLocal(next);
-      return await saveAppStateKey(key, next);
+      const fresh = ((await getAppState())[TRACK_KEY[kind]] as PoolTracking | undefined) ?? {};
+      const entry = { ...(fresh[id] ?? {}), status };
+      setTrackLocal((l) => ({ ...l, [kind]: { ...fresh, [id]: entry } }));
+      if (await mergeAppStateKey(TRACK_KEY[kind], { [id]: entry })) return true;
     } catch {
-      return false;
+      /* traité ci-dessous */
     }
+    setTrackLocal((l) => ({ ...l, [kind]: undefined }));
+    return false;
   };
+  /** Pose (entry) ou retire (null) un compte écarté hors Scouting : seule cette entrée est envoyée. */
+  const saveReject = async (k: string, entry: Rejects[string] | null): Promise<boolean> => {
+    const next = { ...rejects };
+    if (entry) next[k] = entry;
+    else delete next[k];
+    setRejLocal(next);
+    let ok = false;
+    try {
+      ok = entry ? await mergeAppStateKey("sourcingRejects", { [k]: entry }) : await mergeAppStateKey("sourcingRejects", {}, [k]);
+    } catch {
+      ok = false;
+    }
+    if (!ok) setRejLocal(null);
+    return ok;
+  };
+  /** Statut d'un compte déjà au Scouting (dans sa liste). */
+  const statusIn = (info: PoolInfo): ScoutStatus => tracking[info.kind][info.id]?.status ?? "observation";
   const sectionOf = (c: Candidate): Section => {
     const k = keyOf(c);
     if (rosterUsers.has(k)) return "roster";
     const inPool = pool.get(k);
     if (inPool) {
-      const st = tracking[inPool.id]?.status ?? "observation";
+      const st = statusIn(inPool);
       return st === "contacter" ? "contacter" : st === "ecarte" ? "pas" : "scouting";
     }
     return rejects[k] ? "pas" : "trier";
   };
   const [section, setSection] = useState<Section>("trier");
+  // Compte pas encore au Scouting : on demande dans quelle liste (créateurs ou sportifs) le ranger.
+  const [askKind, setAskKind] = useState<{ c: Candidate; to: "scouting" | "contacter"; kind: PoolKind; sport: string | null } | null>(null);
   /** Range un compte : Scouting (en observation), À contacter, ou Pas intéressé. */
-  const triage = async (c: Candidate, to: "scouting" | "contacter" | "pas") => {
+  const triage = async (c: Candidate, to: "scouting" | "contacter" | "pas", kind?: PoolKind) => {
     const k = keyOf(c);
+    const inPool = pool.get(k);
+    if (to !== "pas" && !inPool && !kind && athletesOn) {
+      setAskKind({ c, to, ...suggestKind(c) });
+      return;
+    }
     const who = c.data?.platform === "youtube" ? c.data?.name || `@${c.username}` : `@${c.username}`;
     setAdding(c.username);
     let ok: boolean;
-    if (to === "pas" && !pool.get(k)) {
-      ok = await saveKey<Rejects>("sourcingRejects", (cur) => ({ ...cur, [k]: { at: new Date().toISOString(), name: who } }), setRejLocal);
+    let added: PoolKind | null = null;
+    if (to === "pas" && !inPool) {
+      ok = await saveReject(k, { at: new Date().toISOString(), name: who });
     } else {
-      const id = await ensurePool(c);
-      ok = !!id;
-      if (id) {
+      const r = await ensurePool(c, false, kind);
+      ok = !!r;
+      if (r) {
+        if (r.created) added = r.kind;
         const status: ScoutStatus = to === "contacter" ? "contacter" : to === "pas" ? "ecarte" : "observation";
-        ok = await saveKey<PoolTracking>("poolTracking", (cur) => ({ ...cur, [id]: { ...(cur[id] ?? {}), status } }), setTrackLocal);
-        if (ok && rejects[k]) await saveKey<Rejects>("sourcingRejects", (cur) => Object.fromEntries(Object.entries(cur).filter(([x]) => x !== k)), setRejLocal);
+        ok = await saveStatus(r.kind, r.id, status);
+        if (ok && rejects[k]) await saveReject(k, null);
       }
     }
     setAdding(null);
-    toast(ok ? `${who} → ${to === "scouting" ? "Scouting" : to === "contacter" ? "À contacter" : "Pas intéressés"} ✓` : "Erreur, réessaie");
+    const dest = to === "scouting" ? "Scouting" : to === "contacter" ? "À contacter" : "Pas intéressés";
+    toast(ok ? `${who} → ${dest}${added ? `, ajouté au ${KIND_LIST[added]}` : ""} ✓` : "Erreur, réessaie");
   };
   /** Remet un compte écarté (hors Scouting) dans « À trier ». */
   const untriage = async (c: Candidate) => {
-    const k = keyOf(c);
-    const ok = await saveKey<Rejects>("sourcingRejects", (cur) => Object.fromEntries(Object.entries(cur).filter(([x]) => x !== k)), setRejLocal);
+    const ok = await saveReject(keyOf(c), null);
     toast(ok ? "Remis dans « À trier »" : "Erreur, réessaie");
   };
 
@@ -778,7 +853,7 @@ function CreatorFinder() {
                 const yt = d?.platform === "youtube";
                 const inPool = pool.get(keyOf(c));
                 const sec = sectionOf(c);
-                const scoutSt: ScoutStatus | null = inPool ? tracking[inPool.id]?.status ?? "observation" : null;
+                const scoutSt: ScoutStatus | null = inPool ? statusIn(inPool) : null;
                 const ok = !!d && !c.why;
                 return (
                   <div key={c.username} className={cn("flex flex-col gap-2.5 px-4 py-3.5 lg:flex-row lg:items-center lg:gap-4", !ok && "opacity-60")}>
@@ -858,6 +933,12 @@ function CreatorFinder() {
                             {sec === "pas" ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
                             {scoutSt ? SCOUT_LABEL[scoutSt] : "Pas intéressé"}
                           </span>
+                          {/* De quel scouting il s'agit : créateurs ou sportifs. */}
+                          {inPool && (
+                            <span title={`Dans le ${KIND_LIST[inPool.kind]}`} className="rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                              {KIND_ONE[inPool.kind]}
+                            </span>
+                          )}
                           <Picker size="xs" ariaLabel={`Changer de section ${c.username}`} className="w-[130px]" pill placeholder="Déplacer…" value="" disabled={adding === c.username}
                             onChange={(v) => {
                               if (v === "trier") void untriage(c);
@@ -911,11 +992,75 @@ function CreatorFinder() {
           contactName={contact.data?.name || `@${contact.username}`}
           subject={`TTP Creators × ${firstName(contact.data, contact.username)}`}
           body={`Bonjour ${firstName(contact.data, contact.username)},\n\nJe te contacte de la part de TTP Creators, une agence qui accompagne des créateurs de contenu dans leurs partenariats avec les marques.\n\nJ'aime beaucoup ton contenu${contact.data?.deals?.length ? ` et tes collaborations (${contact.data.deals.slice(0, 2).map((b) => `@${b}`).join(", ")})` : ""} : je pense qu'on pourrait faire de belles choses ensemble.\n\nÇa te dirait qu'on en parle ?\n\nBelle journée,`}
-          onSent={() => void toScouting(contact, true).then((ok) => ok && toast("Noté « contacté » dans le Scouting ✓"))}
+          onSent={() =>
+            // Pas de question ici : un nouveau compte va dans la liste suggérée, dite dans le toast.
+            void ensurePool(contact, true).then((r) => r && toast(r.created ? `Ajouté au ${KIND_LIST[r.kind]}, noté « contacté » ✓` : "Noté « contacté » dans le Scouting ✓"))}
           onClose={() => setContact(null)}
         />
       )}
+      {askKind && (
+        <KindChoice
+          who={askKind.c.data?.platform === "youtube" ? askKind.c.data?.name || `@${askKind.c.username}` : `@${askKind.c.username}`}
+          suggested={askKind.kind}
+          sport={askKind.sport}
+          onPick={(kind) => {
+            const { c, to } = askKind;
+            setAskKind(null);
+            void triage(c, to, kind);
+          }}
+          onClose={() => setAskKind(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/** Petit choix « Ajouter @x au scouting : Créateur / Sportif », la liste suggérée mise en avant. */
+function KindChoice({ who, suggested, sport, onPick, onClose }: { who: string; suggested: PoolKind; sport: string | null; onPick: (k: PoolKind) => void; onClose: () => void }) {
+  const opts = [
+    { v: "createur" as const, icon: Users, hint: "Scouting créateurs" },
+    { v: "sportif" as const, icon: Trophy, hint: sport ? `Scouting sportifs · ${sport}` : "Scouting sportifs" },
+  ];
+  return (
+    <Overlay className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClose={onClose} label={`Ajouter ${who} au scouting`}>
+      <div role="dialog" aria-label={`Ajouter ${who} au scouting`} className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-1 flex items-start justify-between gap-3">
+          <div className="min-w-0 text-sm font-bold text-foreground">
+            Ajouter <span className="break-all">{who}</span> au scouting
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fermer" className="shrink-0 text-faint transition-colors hover:text-foreground">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <p className="mb-4 text-[12px] text-muted-foreground">
+          {sport ? `Sa bio parle de ${sport.toLocaleLowerCase("fr")} : plutôt un sportif ?` : "Dans quelle liste le ranger ?"}
+        </p>
+        <div className="flex flex-col gap-2">
+          {opts.map((o) => {
+            const on = o.v === suggested;
+            const Icon = o.icon;
+            return (
+              <button
+                key={o.v}
+                type="button"
+                onClick={() => onPick(o.v)}
+                className={cn(
+                  "flex items-center gap-3 rounded-full border px-4 py-2.5 text-left transition-colors",
+                  on ? "border-primary bg-primary text-primary-foreground hover:opacity-90" : "border-border text-foreground hover:bg-rowhover",
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-semibold">{KIND_ONE[o.v]}</span>
+                  <span className={cn("block truncate text-[11px]", on ? "text-primary-foreground/80" : "text-muted-foreground")}>{o.hint}</span>
+                </span>
+                {on && <span className="shrink-0 rounded-full bg-primary-foreground/20 px-2 py-0.5 text-[10px] font-semibold">suggéré</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </Overlay>
   );
 }
 

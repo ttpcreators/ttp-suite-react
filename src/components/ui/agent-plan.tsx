@@ -3,6 +3,7 @@ import { CheckCircle2, Circle, CircleDotDashed, ChevronRight, Plus, RotateCcw, T
 import { SwipeRow } from "@/components/mobile/swipe-row";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /**
  * Liste de tâches « plan » (inspirée d'agent-plan) : chaque tâche a une icône de
@@ -59,6 +60,7 @@ export function AgentPlan({
   const [expanded, setExpanded] = useState<Record<string, boolean>>(defaultExpandedId ? { [defaultExpandedId]: true } : {});
   const [input, setInput] = useState<Record<string, string>>({});
   const [toDelete, setToDelete] = useState<PlanTask | null>(null);
+  const t = useT();
 
   return (
     // Langage Aperçu : UNE liste dans un panneau, lignes séparées par des filets.
@@ -76,10 +78,10 @@ export function AgentPlan({
               actions={[
                 ...(onSetStatus
                   ? [status === "Fait"
-                    ? { key: "reopen", label: "Rouvrir", icon: RotateCcw, tone: "gray" as const, onClick: () => onSetStatus(task.id, "À faire") }
-                    : { key: "done", label: "Fait", icon: CheckCircle2, tone: "green" as const, onClick: () => onSetStatus(task.id, "Fait") }]
+                    ? { key: "reopen", label: t("Rouvrir"), icon: RotateCcw, tone: "gray" as const, onClick: () => onSetStatus(task.id, "À faire") }
+                    : { key: "done", label: t("Fait"), icon: CheckCircle2, tone: "green" as const, onClick: () => onSetStatus(task.id, "Fait") }]
                   : []),
-                ...(onDeleteTask ? [{ key: "delete", label: "Supprimer", icon: Trash2, tone: "red" as const, onClick: () => setToDelete(task) }] : []),
+                ...(onDeleteTask ? [{ key: "delete", label: t("Supprimer"), icon: Trash2, tone: "red" as const, onClick: () => setToDelete(task) }] : []),
               ]}
             >
             <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
@@ -87,7 +89,7 @@ export function AgentPlan({
               <button
                 type="button"
                 onClick={() => onCycleStatus(task.id)}
-                title={`Statut : ${status}. Cliquer pour changer`}
+                title={t("Statut : {status}. Cliquer pour changer", { status: t(status) })}
                 className="shrink-0 rounded-full transition-transform hover:scale-110 active:scale-95"
               >
                 <StatusIcon status={status} className="h-[18px] w-[18px]" />
@@ -112,7 +114,7 @@ export function AgentPlan({
               <button
                 type="button"
                 onClick={() => setExpanded((e) => ({ ...e, [task.id]: !e[task.id] }))}
-                aria-label={open ? "Replier" : "Déplier"}
+                aria-label={open ? t("Replier") : t("Déplier")}
                 aria-expanded={open}
                 className="flex h-8 shrink-0 items-center gap-1 rounded-md px-1.5 text-faint transition-colors hover:bg-rowhover hover:text-foreground"
               >
@@ -132,11 +134,11 @@ export function AgentPlan({
                   <div className="flex flex-col gap-1">
                     {subs.map((s) => (
                       <div key={s.id} className="group flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-rowhover/60">
-                        <button type="button" onClick={() => onToggleSubtask(task.id, s.id)} className="shrink-0 rounded-full transition-transform hover:scale-110" aria-label={s.done ? "Décocher" : "Cocher"}>
+                        <button type="button" onClick={() => onToggleSubtask(task.id, s.id)} className="shrink-0 rounded-full transition-transform hover:scale-110" aria-label={s.done ? t("Décocher") : t("Cocher")}>
                           {s.done ? <CheckCircle2 className="h-4 w-4 text-signaltext" /> : <Circle className="h-4 w-4 text-faint" />}
                         </button>
                         <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
-                        <button type="button" onClick={() => onDelSubtask(task.id, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label="Supprimer">
+                        <button type="button" onClick={() => onDelSubtask(task.id, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label={t("Supprimer")}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -144,9 +146,9 @@ export function AgentPlan({
                     <form
                       onSubmit={(e) => {
                         e.preventDefault();
-                        const t = (input[task.id] ?? "").trim();
-                        if (!t) return;
-                        onAddSubtask(task.id, t);
+                        const text = (input[task.id] ?? "").trim();
+                        if (!text) return;
+                        onAddSubtask(task.id, text);
                         setInput((v) => ({ ...v, [task.id]: "" }));
                       }}
                       className="mt-1 flex items-center gap-2"
@@ -154,10 +156,10 @@ export function AgentPlan({
                       <input
                         value={input[task.id] ?? ""}
                         onChange={(e) => setInput((v) => ({ ...v, [task.id]: e.target.value }))}
-                        placeholder="Ajouter une sous-tâche…"
+                        placeholder={t("Ajouter une sous-tâche…")}
                         className="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-foreground/30"
                       />
-                      <button type="submit" className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-foreground text-background transition-opacity hover:opacity-90" aria-label="Ajouter">
+                      <button type="submit" className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-foreground text-background transition-opacity hover:opacity-90" aria-label={t("Ajouter")}>
                         <Plus className="h-4 w-4" />
                       </button>
                     </form>
@@ -172,15 +174,15 @@ export function AgentPlan({
       })}
       {toDelete && onDeleteTask && (
         <ConfirmDialog
-          title="Supprimer la tâche"
-          message={deleteMessage ? deleteMessage(toDelete) : `Supprimer « ${toDelete.title} » ?`}
-          confirmLabel="Supprimer"
+          title={t("Supprimer la tâche")}
+          message={deleteMessage ? deleteMessage(toDelete) : t("Supprimer « {title} » ?", { title: toDelete.title })}
+          confirmLabel={t("Supprimer")}
           danger
           onCancel={() => setToDelete(null)}
           onConfirm={() => {
-            const t = toDelete;
+            const task = toDelete;
             setToDelete(null);
-            onDeleteTask(t.id);
+            onDeleteTask(task.id);
           }}
         />
       )}

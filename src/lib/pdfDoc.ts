@@ -42,12 +42,12 @@ export function ttpLogoImg(sizePx = 34): string {
   return `<img src="${esc(ttpLogoUrl())}" alt="TTP Creators" width="${sizePx}" height="${sizePx}" style="width:${sizePx}px;height:${sizePx}px;border-radius:${Math.round(sizePx / 5)}px;display:block;flex:none">`;
 }
 
-/** Date du jour au format français (« 7 octobre 2026 »). */
-export function docToday(): string {
+/** Date du jour (« 7 octobre 2026 », ou « 7 October 2026 » pour un document en anglais). */
+export function docToday(locale = "fr-FR"): string {
   try {
-    return new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+    return new Date().toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" });
   } catch {
-    return new Date().toLocaleDateString("fr-FR");
+    return new Date().toLocaleDateString(locale);
   }
 }
 
@@ -259,11 +259,15 @@ export function pdfShell(o: {
   sub?: string;
   ref?: string;
   body: string;
+  /** Document en anglais (espace d'un créateur anglophone) : date et mention du bandeau. */
+  lang?: "fr" | "en";
 }): string {
   return (
     docHead(o.title) +
     `<body><div class="wrap">` +
-    docMast([o.ref ? `<b>Réf. ${esc(o.ref)}</b>` : "", esc(docToday())]) +
+    (o.lang === "en"
+      ? docMast([o.ref ? `<b>Ref. ${esc(o.ref)}</b>` : "", esc(docToday("en-GB"))], "Talent management · Lyon and Geneva")
+      : docMast([o.ref ? `<b>Réf. ${esc(o.ref)}</b>` : "", esc(docToday())])) +
     `<p class="kicker">${esc(o.eyebrow)}</p>` +
     `<h1>${o.heading}</h1>` +
     (o.sub ? `<p class="sub">${esc(o.sub)}</p>` : "") +

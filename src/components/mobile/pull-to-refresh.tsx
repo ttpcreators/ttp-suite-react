@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { refreshNow } from "@/lib/useLive";
+import { useT } from "@/lib/i18n";
 
 /*
  * « Tirer pour actualiser » (mode iPhone) : en haut d'une page, tirer vers le bas
@@ -11,6 +12,7 @@ import { refreshNow } from "@/lib/useLive";
 const THRESHOLD = 72;
 
 export function PullToRefresh({ scrollRef }: { scrollRef: RefObject<HTMLElement | null> }) {
+  const t = useT();
   const [pull, setPull] = useState(0);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -78,7 +80,7 @@ export function PullToRefresh({ scrollRef }: { scrollRef: RefObject<HTMLElement 
         style={{ transform: `scale(${busy ? 1 : 0.6 + Math.min(pull / THRESHOLD, 1) * 0.4})` }}
       >
         <RefreshCw className={cn("h-4 w-4", busy && "animate-spin")} style={busy ? undefined : { transform: `rotate(${pull * 4}deg)` }} />
-        <span className="sr-only">{busy ? "Actualisation…" : ready ? "Relâcher pour actualiser" : "Tirer pour actualiser"}</span>
+        <span className="sr-only">{busy ? t("Actualisation…") : ready ? t("Relâcher pour actualiser") : t("Tirer pour actualiser")}</span>
       </span>
     </div>
   );

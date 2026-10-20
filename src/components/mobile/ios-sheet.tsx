@@ -4,6 +4,7 @@ import { motion, useDragControls, useReducedMotion } from "motion/react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsPhone } from "@/lib/iosUi";
+import { useT } from "@/lib/i18n";
 
 /*
  * Feuilles façon iOS (mode iPhone, téléphone seulement) :
@@ -81,13 +82,15 @@ export function IosSheet({ onClose, children, zIndex = 1000, label }: { onClose:
 export type IosAction = { key: string; label: string; icon?: LucideIcon; danger?: boolean; onClick: () => void };
 
 /** Feuille d'actions iOS : titre/message facultatifs, actions, puis « Annuler » à part. */
-export function IosActionSheet({ title, message, actions, onCancel, cancelLabel = "Annuler" }: {
+export function IosActionSheet({ title, message, actions, onCancel, cancelLabel: cancelLabelProp }: {
   title?: string; message?: string; actions: IosAction[]; onCancel: () => void; cancelLabel?: string;
 }) {
   const reduce = useReducedMotion();
+  const t = useT();
+  const cancelLabel = cancelLabelProp ?? t("Annuler");
   useLockScroll();
   return createPortal(
-    <div className="fixed inset-0 z-[1200] flex items-end justify-center" role="dialog" aria-modal="true" aria-label={title ?? "Actions"}>
+    <div className="fixed inset-0 z-[1200] flex items-end justify-center" role="dialog" aria-modal="true" aria-label={title ?? t("Actions")}>
       <motion.div className="absolute inset-0 bg-black/40" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduce ? 0 : 0.2 }} onClick={onCancel} />
       <motion.div
         className="relative flex w-full flex-col gap-2 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"

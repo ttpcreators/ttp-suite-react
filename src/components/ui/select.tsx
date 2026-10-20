@@ -19,6 +19,7 @@ import type { LucideIcon } from "lucide-react";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
+import { useT } from "@/lib/i18n";
 
 function cn(...inputs: (string | undefined | null | false | Record<string, boolean>)[]) {
   return twMerge(clsx(inputs));
@@ -201,7 +202,9 @@ interface SelectTriggerProps extends Omit<HTMLAttributes<HTMLButtonElement>, "ch
 }
 
 const SelectTrigger = forwardRef<HTMLButtonElement, SelectTriggerProps>(
-  ({ className, variant, icon: Icon, placeholder = "Sélectionner…", error, ...props }, ref) => {
+  ({ className, variant, icon: Icon, placeholder: placeholderProp, error, ...props }, ref) => {
+    const t = useT();
+    const placeholder = placeholderProp ?? t("Sélectionner…");
     const { value, open, setOpen, disabled, triggerRef, labelMap } = useSelectContext();
     const label = value ? labelMap.current.get(value) ?? value : undefined;
 

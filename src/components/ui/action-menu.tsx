@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { MoreHorizontal, AlertTriangle, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { IosActionSheet, useIosPhone } from "@/components/mobile/ios-sheet";
+import { useT } from "@/lib/i18n";
 
 export type ActionItem = {
   key: string;
@@ -16,10 +17,10 @@ export type ActionItem = {
 
 /** Dialogue de confirmation (destructif) — réutilisable seul. */
 export function ConfirmDialog({
-  title = "Confirmer",
+  title: titleProp,
   message,
-  confirmLabel = "Confirmer",
-  cancelLabel = "Annuler",
+  confirmLabel: confirmLabelProp,
+  cancelLabel: cancelLabelProp,
   danger,
   onConfirm,
   onCancel,
@@ -34,6 +35,10 @@ export function ConfirmDialog({
 }) {
   // Mode iPhone : feuille d'actions iOS (bouton rouge si destructif, « Annuler » à part).
   const ios = useIosPhone();
+  const t = useT();
+  const title = titleProp ?? t("Confirmer");
+  const confirmLabel = confirmLabelProp ?? t("Confirmer");
+  const cancelLabel = cancelLabelProp ?? t("Annuler");
   if (ios) {
     return (
       <IosActionSheet
@@ -82,6 +87,7 @@ export function ActionMenu({ items, buttonClassName, align = "right" }: { items:
   const [confirmItem, setConfirmItem] = useState<ActionItem | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const ios = useIosPhone();
+  const t = useT();
 
   const toggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -119,7 +125,7 @@ export function ActionMenu({ items, buttonClassName, align = "right" }: { items:
         ref={btnRef}
         type="button"
         onClick={toggle}
-        title="Actions"
+        title={t("Actions")}
         className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground", buttonClassName)}
       >
         <MoreHorizontal className="h-4 w-4" />
@@ -162,9 +168,9 @@ export function ActionMenu({ items, buttonClassName, align = "right" }: { items:
 
       {confirmItem && (
         <ConfirmDialog
-          title={confirmItem.confirm?.title ?? "Confirmer la suppression"}
-          message={confirmItem.confirm?.message ?? "Cette action est irréversible."}
-          confirmLabel={confirmItem.confirm?.confirmLabel ?? "Supprimer"}
+          title={confirmItem.confirm?.title ?? t("Confirmer la suppression")}
+          message={confirmItem.confirm?.message ?? t("Cette action est irréversible.")}
+          confirmLabel={confirmItem.confirm?.confirmLabel ?? t("Supprimer")}
           danger={confirmItem.danger}
           onCancel={() => setConfirmItem(null)}
           onConfirm={() => {

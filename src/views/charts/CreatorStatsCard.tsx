@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { cn } from "@/lib/utils";
 import { fmtCompact } from "@/lib/timeSeries";
+import { useLang, useT, type Lang } from "@/lib/i18n";
 
 /**
  * Carte de stats INTERACTIVE (inspirée du bar-chart shadcn) : on bascule entre
@@ -39,9 +40,12 @@ const interactionsOf = (e: Entry) =>
     .filter(([k]) => !["views", "reach", "posts"].includes(k))
     .reduce((a, [, v]) => a + num(v), 0);
 
-const fmtVal = (v: number, pct?: boolean) => (pct ? `${v.toFixed(1).replace(".", ",")} %` : fmtCompact(v));
+const fmtVal = (v: number, pct: boolean | undefined, lang: Lang) =>
+  pct ? (lang === "en" ? `${v.toFixed(1)}%` : `${v.toFixed(1).replace(".", ",")} %`) : fmtCompact(v);
 
 export default function CreatorStatsCard({ entries }: { entries: Entry[] }) {
+  const t = useT();
+  const lang = useLang();
   const [active, setActive] = useState<MetricKey>("vues");
 
   // Agrégation par date, tous réseaux confondus. Vues (30 j) = base du calculateur
@@ -53,11 +57,11 @@ export default function CreatorStatsCard({ entries }: { entries: Entry[] }) {
   const points = useMemo(() => {
     const byDate = new Map<number, { label: string; byPlat: Map<string, Entry> }>();
     for (const e of entries) {
-      const t = frTime(e.date);
-      if (!t) continue;
-      const rec = byDate.get(t) ?? { label: (e.date || "").slice(0, 5), byPlat: new Map<string, Entry>() };
+      const ts = frTime(e.date);
+      if (!ts) continue;
+      const rec = byDate.get(ts) ?? { label: (e.date || "").slice(0, 5), byPlat: new Map<string, Entry>() };
       rec.byPlat.set(e.platform ?? "", e);
-      byDate.set(t, rec);
+      byDate.set(ts, rec);
     }
     const lastFoll = new Map<string, number>(); // dernier nombre d'abonnés connu par réseau
     return [...byDate.entries()]
@@ -91,8 +95,8 @@ export default function CreatorStatsCard({ entries }: { entries: Entry[] }) {
       {/* En-tête : titre + onglets de métriques (dernier total) */}
       <div className="flex flex-col items-stretch border-b border-border sm:flex-row">
         <div className="flex flex-1 flex-col justify-center gap-0.5 px-5 py-4">
-          <div className="text-sm font-semibold text-foreground">Mes statistiques</div>
-          <div className="text-[11px] text-faint">D'après les mesures de ton agence</div>
+          <div className="text-sm font-semibold text-foreground">{t("Mes statistiques")}</div>
+          <div className="text-[11px] text-faint">{t("D'après les mesures de ton agence")}</div>
         </div>
         <div className="grid grid-cols-2 gap-px border-t border-border bg-border sm:flex sm:gap-0 sm:overflow-x-auto sm:border-t-0 sm:border-l sm:bg-transparent">
           {METRICS.map((m) => (
@@ -106,9 +110,9 @@ export default function CreatorStatsCard({ entries }: { entries: Entry[] }) {
               )}
             >
               <span className="flex items-center gap-1.5 whitespace-nowrap text-[12px] font-medium text-muted-foreground">
-                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: m.color }} /> {m.label}
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: m.color }} /> {t(m.label)}
               </span>
-              <span className="text-lg font-bold tabular-nums tracking-tight text-foreground">{fmtVal(totals[m.key], m.pct)}</span>
+              <span className="text-lg font-bold tabular-nums tracking-tight text-foreground">{fmtVal(totals[m.key], m.pct, lang)}</span>
             </button>
           ))}
         </div>
@@ -118,7 +122,7 @@ export default function CreatorStatsCard({ entries }: { entries: Entry[] }) {
       <div className="px-2 py-4 sm:px-4">
         {points.length === 0 || points.every((p) => !Number(p[active as keyof typeof p])) ? (
           <div className="grid h-[180px] place-items-center px-4 text-center text-xs text-muted-foreground">
-            {points.length === 0 ? "Pas encore de mesures. Elles apparaîtront ici dès que ton agence en enregistre." : "Pas encore de données pour cet indicateur."}
+            {points.length === 0 ? t("Pas encore de mesures. Elles apparaîtront ici dès que ton agence en enregistre.") : t("Pas encore de données pour cet indicateur.")}
           </div>
         ) : (
           <div className="h-[220px]">
@@ -126,12 +130,12 @@ export default function CreatorStatsCard({ entries }: { entries: Entry[] }) {
               <BarChart data={points} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="4 10" stroke="var(--color-border)" strokeOpacity={0.6} vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickMargin={8} interval="preserveStartEnd" minTickGap={16} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} width={40} tickFormatter={(v) => fmtVal(Number(v), meta.pct)} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} width={40} tickFormatter={(v) => fmtVal(Number(v), meta.pct, lang)} />
                 <Tooltip
                   cursor={{ fill: "var(--color-border)", fillOpacity: 0.25 }}
                   contentStyle={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,.06)" }}
                   labelStyle={{ color: "var(--muted-foreground)", marginBottom: 2 }}
-                  formatter={(value) => [fmtVal(Number(value), meta.pct), meta.label]}
+                  formatter={(value) => [fmtVal(Number(value), meta.pct, lang), t(meta.label)]}
                 />
                 <Bar dataKey={active} radius={[4, 4, 0, 0]} maxBarSize={44}>
                   {points.map((_, i) => (

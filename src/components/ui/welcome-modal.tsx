@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { useT } from "@/lib/i18n";
 
 /**
  * Modale « welcome » réutilisable (titre + description + contenu + action), bâtie
@@ -33,6 +34,7 @@ export function WelcomeModal({
   primaryDisabled?: boolean;
   className?: string;
 }) {
+  const t = useT();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -51,7 +53,7 @@ export function WelcomeModal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={t("Fermer")}
             className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
           >
             <X className="h-4 w-4" />

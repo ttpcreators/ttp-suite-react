@@ -63,3 +63,32 @@ export function guessNiche(text: string, list: Niche[] = CREATOR_NICHES): string
   if (second && best.score - second.score < 1) return null;
   return best.label;
 }
+
+/** Mots qui désignent à eux seuls un sportif (métier, compétition, statut), sans accents. */
+const ATHLETE_WORDS = [
+  "athlete", "athletes", "sportif", "sportive", "sportifs", "joueur", "joueuse", "player",
+  "footballeur", "footballeuse", "basketteur", "basketteuse", "rugbyman", "boxeur", "boxeuse", "nageur", "nageuse",
+  "cycliste", "golfeur", "golfeuse", "danseur", "danseuse", "fighter", "olympian", "olympique", "olympiques", "jo",
+  "champion", "championne", "international", "internationale", "pro", "professionnel", "professionnelle",
+  "nba", "wnba", "atp", "wta", "ufc", "pfl", "top14", "ligue1", "ligue2", "premierleague", "liga", "seriea",
+];
+
+/**
+ * Sportif ou non (Sourcing → Scouting) : un seul mot de métier ou de compétition suffit
+ * (« Footballeur au PSG », « Joueuse WNBA »), contrairement à guessNiche qui en veut
+ * deux. Renvoie le sport le plus probable, « Sport » si le sport précis est inconnu,
+ * ou null si rien n'indique un sportif.
+ */
+export function guessSport(text: string): string | null {
+  const t = norm(text);
+  if (t.trim().length < 2) return null;
+  const has = (w: string) => t.includes(` ${w} `);
+  const strong = ATHLETE_WORDS.some(has) || /\bequipe de france\b|\bteam france\b/.test(t);
+  const scores = SPORTS
+    .map((n) => ({ label: n.label, score: n.words.reduce((sum, w) => sum + (t.split(` ${w} `).length - 1), 0) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+  const best = scores[0];
+  if (best && (strong || best.score >= 2)) return best.label;
+  return strong ? "Sport" : null;
+}

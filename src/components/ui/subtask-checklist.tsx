@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, Trash2, Plus, ChevronRight, ListChecks } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /**
  * Checklist de sous-tâches réutilisable (idées, et potentiellement d'autres
@@ -17,7 +18,7 @@ const newId = () => `st${Date.now().toString(36)}${(_sid += 1)}`;
 export function SubtaskChecklist({
   value,
   onChange,
-  label = "Sous-tâches",
+  label: labelProp,
   className,
 }: {
   value: Subtask[];
@@ -25,16 +26,18 @@ export function SubtaskChecklist({
   label?: string;
   className?: string;
 }) {
+  const t = useT();
+  const label = labelProp ?? t("Sous-tâches");
   const subs = value ?? [];
   const done = subs.filter((s) => s.done).length;
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
 
   const add = () => {
-    const t = input.trim();
-    if (!t) return;
+    const text = input.trim();
+    if (!text) return;
     setInput("");
-    onChange([...subs, { id: newId(), text: t, done: false }]);
+    onChange([...subs, { id: newId(), text, done: false }]);
   };
   const toggle = (id: string) => onChange(subs.map((s) => (s.id === id ? { ...s, done: !s.done } : s)));
   const del = (id: string) => onChange(subs.filter((s) => s.id !== id));
@@ -76,12 +79,12 @@ export function SubtaskChecklist({
                   "grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors",
                   s.done ? "border-primary bg-primary text-primary-foreground" : "border-faint",
                 )}
-                aria-label={s.done ? "Décocher" : "Cocher"}
+                aria-label={s.done ? t("Décocher") : t("Cocher")}
               >
                 {s.done && <Check className="h-3 w-3" />}
               </button>
               <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
-              <button type="button" onClick={() => del(s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label="Supprimer">
+              <button type="button" onClick={() => del(s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-[#E5484D] pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label={t("Supprimer")}>
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -90,10 +93,10 @@ export function SubtaskChecklist({
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ajouter une sous-tâche…"
+              placeholder={t("Ajouter une sous-tâche…")}
               className="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary"
             />
-            <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90" aria-label="Ajouter">
+            <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90" aria-label={t("Ajouter")}>
               <Plus className="h-4 w-4" />
             </button>
           </form>

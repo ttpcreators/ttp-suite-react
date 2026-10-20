@@ -83,4 +83,18 @@ describe("rapport mensuel créateur", () => {
     const k: ReportData = { ...data, collabs: [...data.collabs, { id: "c5", brand: "Asics", cachet: "1,5k€", step: 2, created_at: "2026-10-05T09:00:00Z" }] };
     expect(buildMonthlyReport(k, "2026-10").agency[0]).toMatch(/pour 3\s000 € de cachets/);
   });
+
+  it("en anglais : mois et phrases de l'agence traduits, chiffres identiques", () => {
+    expect(monthLabel("2026-10", "en")).toBe("October 2026");
+    const fr = buildMonthlyReport(data, "2026-10", new Date("2026-11-03T12:00:00Z"));
+    const en = buildMonthlyReport(data, "2026-10", new Date("2026-11-03T12:00:00Z"), "en");
+    expect(en.label).toBe("October 2026");
+    expect(en.earnings).toEqual(fr.earnings);
+    expect(en.agency).toHaveLength(fr.agency.length);
+    expect(en.agency[0]).toMatch(/^1 new collab landed and negotiated for you \(Hoka\), worth 1\s500 € in fees$/);
+    expect(en.agency).toContain("1 campaign published and followed through to the campaign report sent to the brand");
+    expect(en.agency.some((a) => a.startsWith("1 product delivery received (Hoka), worth 180"))).toBe(true);
+    expect(en.agency.some((a) => /^Your audience grew: \+1[.,]5K followers on Instagram$/.test(a))).toBe(true);
+    expect(en.agency.join(" ")).not.toMatch(/collab décrochée|abonnés|pour toi/);
+  });
 });

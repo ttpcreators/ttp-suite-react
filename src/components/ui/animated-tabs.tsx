@@ -9,6 +9,7 @@ import {
 import type { KeyboardEvent, ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /**
  * Onglets animés réutilisables (agence + créateur). Porté depuis un composant
@@ -142,7 +143,9 @@ export type TabsProps = {
   wrap?: boolean;
 };
 
-export function Tabs({ items, value, defaultValue, onValueChange, activation = "automatic", renderPanel, label = "Onglets", className = "", panelClassName = "", size = "md", fullWidth = false, wrap = false }: TabsProps) {
+export function Tabs({ items, value, defaultValue, onValueChange, activation = "automatic", renderPanel, label: labelProp, className = "", panelClassName = "", size = "md", fullWidth = false, wrap = false }: TabsProps) {
+  const t = useT();
+  const label = labelProp ?? t("Onglets");
   const sm = size === "sm";
   const tabs = useTabs({ items, value, defaultValue, onValueChange, activation });
   const reduced = useReducedMotion();

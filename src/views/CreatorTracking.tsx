@@ -18,6 +18,7 @@ import {
   type EditorialProfile, type PlatPrio, type Cadence, type MonthEntry, type JournalEntry, type ExchangeType, type SelfCadence,
 } from "@/lib/creatorTracking";
 import { DateInput, MonthPicker } from "@/components/ui/date-range-picker";
+import { useT } from "@/lib/i18n";
 
 const IN = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15";
 const LBL = "mb-1 block text-[12px] font-medium text-muted-foreground";
@@ -905,6 +906,7 @@ const FMT_ICON: Record<keyof Cadence, LucideIcon> = {
  * journal, les alertes et l'évaluation de l'agence lui restent invisibles.
  */
 export function CreatorRoadmap({ name, preview = false }: { name: string; /** agence en aperçu → pas de push agence */ preview?: boolean }) {
+  const t = useT();
   const [roadmap, setRoadmap] = useState<Record<string, unknown> | null>(null);
   const [selfCad, setSelfCad] = useState<SelfCadence>({});
   const [loading, setLoading] = useState(true);
@@ -956,30 +958,30 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
     const { data: cur, error: readErr } = await supabase.from("creator_roadmap").select("self_cadence").eq("creator", name).maybeSingle();
     if (readErr) {
       setSaving(false);
-      return toast("Erreur, réessaie");
+      return toast(t("Erreur, réessaie"));
     }
     const fresh = normSelfCadence((cur?.self_cadence as SelfCadence) ?? {});
     const next = { ...fresh, [month]: draft };
     const { error } = await supabase.from("creator_roadmap").upsert({ creator: name, self_cadence: next }, { onConflict: "creator" });
     setSaving(false);
-    if (error) return toast("Erreur, réessaie");
+    if (error) return toast(t("Erreur, réessaie"));
     setSelfCad(next);
     if (!preview) notifyAgency("stats", name, `Cadence ${monthLabel(month)} : ${cadenceTotal(draft)} contenus`);
-    toast("Cadence du mois envoyée à l'agence ✓");
+    toast(t("Cadence du mois envoyée à l'agence ✓"));
   };
 
-  if (loading) return <div className="rounded-2xl border border-border bg-surface p-8 text-center text-[13px] text-muted-foreground">Chargement…</div>;
+  if (loading) return <div className="rounded-2xl border border-border bg-surface p-8 text-center text-[13px] text-muted-foreground">{t("Chargement…")}</div>;
   if (loadErr)
     return (
       <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
-        <div className="text-sm font-medium text-foreground">Chargement impossible</div>
-        <p className="mt-1 text-xs text-muted-foreground">Ta feuille de route n'a pas pu être récupérée.</p>
+        <div className="text-sm font-medium text-foreground">{t("Chargement impossible")}</div>
+        <p className="mt-1 text-xs text-muted-foreground">{t("Ta feuille de route n'a pas pu être récupérée.")}</p>
         <button
           type="button"
           onClick={() => setRetry((n) => n + 1)}
           className="mt-3 rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
         >
-          Réessayer
+          {t("Réessayer")}
         </button>
       </div>
     );
@@ -988,35 +990,35 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
   const draftTot = cadenceTotal(draft);
 
   // Libellés complets des formats (pas d'abréviations côté créatrice).
-  const FMT_LABEL: Record<keyof Cadence, string> = { reels: "Reels", carrousels: "Carrousels", stories: "Stories", tiktoks: "TikTok", youtube: "YouTube" };
+  const FMT_LABEL: Record<keyof Cadence, string> = { reels: "Reels", carrousels: t("Carrousels"), stories: "Stories", tiktoks: "TikTok", youtube: "YouTube" };
   const chip = "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[12px] font-medium text-foreground";
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
       {/* ── Ma stratégie (lecture seule, définie avec l'agence) ── */}
       <DashPanel className="p-5 xl:col-span-7">
-        <DashSectionTitle icon={Target} right={<span className="text-[12px] text-muted-foreground">Définie avec ton agence</span>}>
-          Ma stratégie
+        <DashSectionTitle icon={Target} right={<span className="text-[12px] text-muted-foreground">{t("Définie avec ton agence")}</span>}>
+          {t("Ma stratégie")}
         </DashSectionTitle>
 
         {!hasRoadmap ? (
           <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-10 text-center">
             <Compass className="h-6 w-6 text-faint" />
-            <p className="text-[13px] text-muted-foreground">Ta feuille de route n'est pas encore définie.<br />Ton agence la partagera ici prochainement.</p>
+            <p className="text-[13px] text-muted-foreground">{t("Ta feuille de route n'est pas encore définie.")}<br />{t("Ton agence la partagera ici prochainement.")}</p>
           </div>
         ) : (
           <div className="flex flex-col gap-5">
             {/* Niche + ton : bandeau à filets */}
             {(rm.positionnement || rm.tonalite) && (
               <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2">
-                {rm.positionnement && <BentoField icon={Compass} label="Niche & positionnement">{rm.positionnement}</BentoField>}
-                {rm.tonalite && <BentoField icon={Mic} label="Ton de voix">{rm.tonalite}</BentoField>}
+                {rm.positionnement && <BentoField icon={Compass} label={t("Niche & positionnement")}>{rm.positionnement}</BentoField>}
+                {rm.tonalite && <BentoField icon={Mic} label={t("Ton de voix")}>{rm.tonalite}</BentoField>}
               </div>
             )}
 
             {rm.piliers.length > 0 && (
               <div>
-                <div className={LBL}>Piliers de contenu</div>
+                <div className={LBL}>{t("Piliers de contenu")}</div>
                 <div className="mt-1.5 flex flex-wrap gap-2">
                   {rm.piliers.map((p, i) => (
                     <span key={i} className={chip}>
@@ -1029,7 +1031,7 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
 
             {rm.plateformes.length > 0 && (
               <div>
-                <div className={LBL}>Plateformes prioritaires</div>
+                <div className={LBL}>{t("Plateformes prioritaires")}</div>
                 <div className="mt-1.5 flex flex-wrap gap-2">
                   {rm.plateformes.map((pl) => (
                     <span key={pl} className={chip}>
@@ -1044,7 +1046,7 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
             {rm.objectifs90 && (
               <div className="rounded-xl bg-muted p-4">
                 <div className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
-                  <Flag className="h-3.5 w-3.5" /> Objectifs 90 jours
+                  <Flag className="h-3.5 w-3.5" /> {t("Objectifs 90 jours")}
                 </div>
                 <p className="whitespace-pre-wrap text-[14px] font-medium leading-relaxed text-foreground">{rm.objectifs90}</p>
               </div>
@@ -1053,7 +1055,7 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
             {/* Cadence recommandée : bandeau de chiffres */}
             {recoTot > 0 && (
               <div>
-                <div className={LBL}>Cadence recommandée par mois</div>
+                <div className={LBL}>{t("Cadence recommandée par mois")}</div>
                 <div className="mt-1.5 grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-5">
                   {CADENCE_FIELDS.map((f) => {
                     const Icon = FMT_ICON[f.key];
@@ -1081,9 +1083,9 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
             <MonthPicker value={month} onChange={setMonth} max={currentMonth()} />
           }
         >
-          Reporter ma cadence
+          {t("Reporter ma cadence")}
         </DashSectionTitle>
-        <p className="-mt-2 text-[12px] leading-relaxed text-muted-foreground">Ce que tu as réellement publié ce mois-ci, pour suivre ta régularité.</p>
+        <p className="-mt-2 text-[12px] leading-relaxed text-muted-foreground">{t("Ce que tu as réellement publié ce mois-ci, pour suivre ta régularité.")}</p>
 
         <div className="mt-3 divide-y divide-border border-y border-border">
           {CADENCE_FIELDS.map((f) => {
@@ -1103,11 +1105,11 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
                         <span className={cn("block h-full rounded-full transition-all", reached ? "bg-signal" : "bg-foreground/60")} style={{ width: `${pct}%` }} />
                       </span>
                       <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        {reached && <Check className="h-3 w-3 text-signaltext" />}objectif {reco}
+                        {reached && <Check className="h-3 w-3 text-signaltext" />}{t("objectif {n}", { n: reco })}
                       </span>
                     </>
                   ) : (
-                    <span className="text-[11px] text-muted-foreground">pas d'objectif</span>
+                    <span className="text-[11px] text-muted-foreground">{t("pas d'objectif")}</span>
                   )}
                 </span>
                 <input
@@ -1126,11 +1128,11 @@ export function CreatorRoadmap({ name, preview = false }: { name: string; /** ag
           <div className="flex items-baseline gap-1.5">
             <span className="text-[22px] font-semibold leading-none tabular-nums text-foreground">{draftTot}</span>
             <span className="text-[12px] text-muted-foreground">
-              contenu{draftTot > 1 ? "s" : ""}{recoTot > 0 ? ` sur ${recoTot} recommandés` : ""}
+              {draftTot > 1 ? t("contenus") : t("contenu")}{recoTot > 0 ? t(" sur {n} recommandés", { n: recoTot }) : ""}
             </span>
           </div>
           <button type="button" onClick={saveCadence} disabled={saving} className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
-            <Save className="h-3.5 w-3.5" /> {saving ? "Envoi…" : "Envoyer ma cadence"}
+            <Save className="h-3.5 w-3.5" /> {saving ? t("Envoi…") : t("Envoyer ma cadence")}
           </button>
         </div>
       </DashPanel>

@@ -67,6 +67,7 @@ import { fmtAgo, type IgCreator } from "@/lib/instagram";
 type Creator = {
   id: string;
   name: string;
+  lang?: string | null; // langue de son espace : « fr » ou « en »
   handle: string | null;
   niche: string | null;
   platform: string | null;
@@ -845,6 +846,29 @@ export function CreatorDetail({
             >
               <Copy className="h-3.5 w-3.5" /> Copier toutes les infos
             </button>
+            {/* Langue de SON espace (créateur anglophone) : l'espace agence reste en français. */}
+            {c && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
+                <span className="text-[12px] text-muted-foreground">Langue de son espace</span>
+                <div className="flex gap-1" role="group" aria-label="Langue de son espace">
+                  {(["fr", "en"] as const).map((l) => {
+                    const on = (c.lang === "en" ? "en" : "fr") === l;
+                    return (
+                      <button key={l} type="button" aria-pressed={on}
+                        onClick={async () => {
+                          if (on) return;
+                          if (!(await dbUpdate("creators", c.id, { lang: l }))) return toast("Erreur, réessaie (le réglage de langue est-il installé ?)");
+                          setC({ ...c, lang: l });
+                          toast(l === "en" ? `L'espace de ${titleCase(name)} est en anglais ✓` : `L'espace de ${titleCase(name)} est en français ✓`);
+                        }}
+                        className={cn("h-7 rounded-full px-3 text-[12px] font-medium transition-colors", on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+                        {l === "fr" ? "Français" : "English"}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

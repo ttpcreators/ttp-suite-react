@@ -21,6 +21,7 @@ import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/u
 import { cn, titleCase } from "@/lib/utils";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { useLang, useT } from "@/lib/i18n";
 
 /**
  * Suivi engagement — page dédiée à l'ÉVOLUTION des mesures enregistrées dans
@@ -106,6 +107,10 @@ function OpenEngagementButton() {
  * fonction serveur — un créateur ne voit jamais les mesures des autres).
  */
 export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries: SuiviEntry[]; lockedCreator?: string; initialCreator?: string }) {
+  const t = useT();
+  const lang = useLang();
+  // Taux « 3,98 % » en français, « 3.98% » en anglais.
+  const pctFmt = (v: unknown) => (lang === "en" ? `${String(v ?? "")}%` : `${String(v ?? "").replace(".", ",")} %`);
   // Sélecteur créateur (ceux qui ont au moins une mesure)
   const creatorNames = useMemo(() => [...new Set(entries.map((h) => h.creator))], [entries]);
   const [selCreator, setSelCreator] = useState(initialCreator ?? "");
@@ -151,11 +156,11 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
     return (
       <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
         <Activity className="mx-auto h-8 w-8 text-faint" />
-        <div className="mt-3 text-sm font-medium text-foreground">Pas encore de mesures</div>
+        <div className="mt-3 text-sm font-medium text-foreground">{t("Pas encore de mesures")}</div>
         <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
           {lockedCreator
-            ? "Ton évolution apparaîtra ici dès que l'agence aura enregistré tes premières mesures d'engagement."
-            : "Aucune mesure pour l'instant. Enregistre-en une depuis la page Engagement."}
+            ? t("Ton évolution apparaîtra ici dès que l'agence aura enregistré tes premières mesures d'engagement.")
+            : t("Aucune mesure pour l'instant. Enregistre-en une depuis la page Engagement.")}
         </p>
         {!lockedCreator && <OpenEngagementButton />}
       </div>
@@ -186,11 +191,11 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
             />
           </div>
         ) : (
-          <div className="text-sm font-semibold text-foreground">Ton évolution</div>
+          <div className="text-sm font-semibold text-foreground">{t("Ton évolution")}</div>
         )}
         {platforms.length > 0 && (
           <Tabs
-            label="Plateforme"
+            label={t("Plateforme")}
             value={platform}
             onValueChange={setSelPlatform}
             items={platforms.map((pk) => ({ value: pk, label: PLATFORM_LABELS[pk] ?? pk, icon: <PlatformIcon platform={pk} className="h-4 w-4" /> }))}
@@ -202,19 +207,19 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="rounded-2xl border border-border bg-surface p-[18px] shadow-sm">
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-            <Activity className="h-3 w-3" /> Dernier taux
+            <Activity className="h-3 w-3" /> {t("Dernier taux")}
           </div>
-          <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{last ? `${String(last.er).replace(".", ",")} %` : "—"}</div>
+          <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{last ? pctFmt(last.er) : "—"}</div>
           {dEr !== null && (
             <div className={cn("mt-1 flex items-center gap-1 text-[11px] font-semibold", dEr >= 0 ? "text-signaltext" : "text-dangertext")}>
               {dEr >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {dEr >= 0 ? "+" : ""}{String(dEr).replace(".", ",")} pt vs mesure précédente
+              {t("{delta} pt vs mesure précédente", { delta: `${dEr >= 0 ? "+" : ""}${lang === "en" ? String(dEr) : String(dEr).replace(".", ",")}` })}
             </div>
           )}
         </div>
         <div className="rounded-2xl border border-border bg-surface p-[18px] shadow-sm">
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-            <Users className="h-3 w-3" /> Abonnés
+            <Users className="h-3 w-3" /> {t("Abonnés")}
           </div>
           <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{last && last.followers > 0 ? fmtCompact(last.followers) : "—"}</div>
           {dFol !== null && dFol !== 0 && (
@@ -226,27 +231,27 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
         </div>
         <div className="rounded-2xl border border-border bg-surface p-[18px] shadow-sm">
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-            <Hash className="h-3 w-3" /> Mesures
+            <Hash className="h-3 w-3" /> {t("Mesures")}
           </div>
           <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{points.length}</div>
           <div className="mt-1 text-[11px] text-faint">{PLATFORM_LABELS[platform] ?? platform}</div>
         </div>
         <div className="rounded-2xl border border-border bg-surface p-[18px] shadow-sm">
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-            <TrendingUp className="h-3 w-3" /> Meilleur taux
+            <TrendingUp className="h-3 w-3" /> {t("Meilleur taux")}
           </div>
           <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">
-            {points.length ? `${String(Math.max(...points.map((x) => x.er))).replace(".", ",")} %` : "—"}
+            {points.length ? pctFmt(Math.max(...points.map((x) => x.er))) : "—"}
           </div>
         </div>
       </div>
 
       {/* Évolution du taux d'engagement */}
       <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-        <div className="mb-4 text-sm font-semibold">Évolution du taux d'engagement</div>
+        <div className="mb-4 text-sm font-semibold">{t("Évolution du taux d'engagement")}</div>
         {points.length < 2 ? (
           <p className="py-6 text-center text-xs text-muted-foreground">
-            Il faut au moins 2 mesures pour tracer une courbe : enregistre une nouvelle mesure le mois prochain.
+            {t("Il faut au moins 2 mesures pour tracer une courbe : enregistre une nouvelle mesure le mois prochain.")}
           </p>
         ) : (
           <div className="h-[260px]">
@@ -260,11 +265,11 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                <YAxis tickFormatter={(v) => `${v} %`} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={48} />
+                <YAxis tickFormatter={(v) => (lang === "en" ? `${v}%` : `${v} %`)} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={48} />
                 <Tooltip
                   contentStyle={tooltipStyle}
-                  labelFormatter={(_, pl) => (pl?.[0]?.payload?.full ? `Le ${pl[0].payload.full}` : "")}
-                  formatter={(value) => [`${String(value ?? "").replace(".", ",")} %`, "Taux"]}
+                  labelFormatter={(_, pl) => (pl?.[0]?.payload?.full ? t("Le {date}", { date: pl[0].payload.full }) : "")}
+                  formatter={(value) => [pctFmt(value), t("Taux")]}
                 />
                 <Area type="monotone" dataKey="er" stroke="var(--primary)" strokeWidth={2.5} fill="url(#suiviEr)" dot={{ r: 3, fill: "var(--primary)" }} />
               </AreaChart>
@@ -276,10 +281,10 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Évolution des abonnés */}
         <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="mb-4 text-sm font-semibold">Évolution des abonnés</div>
+          <div className="mb-4 text-sm font-semibold">{t("Évolution des abonnés")}</div>
           {points.filter((x) => x.followers > 0).length < 2 ? (
             <p className="py-6 text-center text-xs text-muted-foreground">
-              Renseigne les abonnés à chaque mesure pour suivre leur évolution ici.
+              {t("Renseigne les abonnés à chaque mesure pour suivre leur évolution ici.")}
             </p>
           ) : (
             <div className="h-[220px]">
@@ -296,8 +301,8 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
                   <YAxis tickFormatter={(v) => fmtCompact(Number(v))} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={44} />
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    labelFormatter={(_, pl) => (pl?.[0]?.payload?.full ? `Le ${pl[0].payload.full}` : "")}
-                    formatter={(value) => [fmtCompact(Number(value ?? 0)), "Abonnés"]}
+                    labelFormatter={(_, pl) => (pl?.[0]?.payload?.full ? t("Le {date}", { date: pl[0].payload.full }) : "")}
+                    formatter={(value) => [fmtCompact(Number(value ?? 0)), t("Abonnés")]}
                   />
                   <Area type="monotone" dataKey="followers" stroke="#6366f1" strokeWidth={2.5} fill="url(#suiviFol)" dot={{ r: 3, fill: "#6366f1" }} />
                 </AreaChart>
@@ -308,11 +313,11 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
 
         {/* Volume d'interactions par mesure */}
         <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="mb-4 text-sm font-semibold">Interactions par mesure (30 j)</div>
+          <div className="mb-4 text-sm font-semibold">{t("Interactions par mesure (30 j)")}</div>
           {points.length === 0 ? (
-            <p className="py-6 text-center text-xs text-muted-foreground">Aucune mesure.</p>
+            <p className="py-6 text-center text-xs text-muted-foreground">{t("Aucune mesure.")}</p>
           ) : points.every((x) => !x.interactions) ? (
-            <p className="py-6 text-center text-xs text-muted-foreground">Pas encore de données.</p>
+            <p className="py-6 text-center text-xs text-muted-foreground">{t("Pas encore de données.")}</p>
           ) : (
             <div className="h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -328,8 +333,8 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
                   <YAxis tickFormatter={(v) => fmtCompact(Number(v))} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={44} />
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    labelFormatter={(_, pl) => (pl?.[0]?.payload?.full ? `Le ${pl[0].payload.full}` : "")}
-                    formatter={(value) => [fmtCompact(Number(value ?? 0)), "Interactions"]}
+                    labelFormatter={(_, pl) => (pl?.[0]?.payload?.full ? t("Le {date}", { date: pl[0].payload.full }) : "")}
+                    formatter={(value) => [fmtCompact(Number(value ?? 0)), t("Interactions")]}
                   />
                   <Bar dataKey="interactions" fill="url(#suiviInt)" radius={[6, 6, 0, 0]} maxBarSize={42} />
                 </BarChart>
@@ -341,7 +346,7 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
 
       {/* Détail des mesures */}
       <div className="rounded-2xl border border-border bg-surface p-5">
-        <div className="mb-3 text-[14px] font-semibold">Mesures enregistrées</div>
+        <div className="mb-3 text-[14px] font-semibold">{t("Mesures enregistrées")}</div>
         {/* Liste à filets ; sur téléphone, le détail passe sous la date (plus de colonne écrasée). */}
         <div className="divide-y divide-border border-t border-border">
           {points
@@ -352,17 +357,17 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
                   <span className="shrink-0 text-[12px] font-medium tabular-nums text-foreground sm:w-24">{x.full}</span>
                   <span className="min-w-0 truncate text-[12px] text-muted-foreground">
-                    {fmtCompact(x.interactions)} interactions{x.followers > 0 ? ` · ${fmtCompact(x.followers)} abonnés` : ""}
+                    {t("{n} interactions", { n: fmtCompact(x.interactions) })}{x.followers > 0 ? ` · ${t("{n} abonnés", { n: fmtCompact(x.followers) })}` : ""}
                   </span>
                 </span>
-                <span className="shrink-0 text-[14px] font-semibold tabular-nums">{String(x.er).replace(".", ",")} %</span>
+                <span className="shrink-0 text-[14px] font-semibold tabular-nums">{pctFmt(x.er)}</span>
                 <span
                   className={cn(
                     "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
                     x.verdict === "Moyen" ? "bg-muted text-muted-foreground" : "bg-signalsoft text-signaltext",
                   )}
                 >
-                  {x.verdict}
+                  {t(x.verdict)}
                 </span>
               </div>
             ))}

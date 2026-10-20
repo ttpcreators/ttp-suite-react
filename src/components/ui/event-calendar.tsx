@@ -6,6 +6,9 @@ import { cn } from "@/lib/utils";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { isPhoneNow } from "@/lib/iosUi";
+import { useLang, useT, type Lang } from "@/lib/i18n";
+
+type T = (fr: string, vars?: Record<string, string | number>) => string;
 
 export type Ev = {
   id: string;
@@ -61,8 +64,9 @@ function typeBg(t: string) {
 function typeText(t: string) {
   return TYPE_TEXT[t] ?? "text-indigo";
 }
-function typeLabel(t: string) {
-  return TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t;
+function typeLabel(t: string, tr: T) {
+  const label = TYPE_OPTIONS.find((o) => o.value === t)?.label;
+  return label ? tr(label) : t;
 }
 
 // ─── Overlays lecture seule (briefs / to-do datés) ───────────────────────────
@@ -95,12 +99,12 @@ function chipText(e: Ev) {
   if (e.kind === "post") return "text-pink-500";
   return typeText(e.type);
 }
-function chipLabel(e: Ev) {
-  if (e.kind === "brief") return "Brief";
-  if (e.kind === "todo") return "To-do";
-  if (e.kind === "facture") return "Facture";
-  if (e.kind === "post") return "Post Instagram";
-  return typeLabel(e.type);
+function chipLabel(e: Ev, t: T) {
+  if (e.kind === "brief") return t("Brief");
+  if (e.kind === "todo") return t("To-do");
+  if (e.kind === "facture") return t("Facture");
+  if (e.kind === "post") return t("Post Instagram");
+  return typeLabel(e.type, t);
 }
 
 const KIND_META: { id: Kind; label: string; dot: string }[] = [
@@ -155,14 +159,21 @@ const MONTHS_FR = [
 ];
 const DAYS_FR = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 const DAYS_FR_LONG = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+// Espace créateur en anglais (LangProvider) : mêmes tableaux, en anglais.
+const MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const DAYS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAYS_EN_LONG = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const monthsOf = (lang: Lang) => (lang === "en" ? MONTHS_EN : MONTHS_FR);
+const daysOf = (lang: Lang) => (lang === "en" ? DAYS_EN : DAYS_FR);
 
-function monthTitle(d: Date) {
-  return `${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}`;
+function monthTitle(d: Date, lang: Lang) {
+  return `${monthsOf(lang)[d.getMonth()]} ${d.getFullYear()}`;
 }
-function formatListDay(key: string) {
+function formatListDay(key: string, lang: Lang) {
   const [y, m, dd] = key.split("-").map(Number);
   const d = new Date(y, (m ?? 1) - 1, dd ?? 1);
-  return `${DAYS_FR_LONG[mondayIndex(d)]} ${dd} ${MONTHS_FR[(m ?? 1) - 1]} ${y}`;
+  const long = lang === "en" ? DAYS_EN_LONG : DAYS_FR_LONG;
+  return `${long[mondayIndex(d)]} ${dd} ${monthsOf(lang)[(m ?? 1) - 1]} ${y}`;
 }
 
 // ─── Composant ───────────────────────────────────────────────────────────────
@@ -209,6 +220,8 @@ export function EventCalendar({
   onNavigate?: (kind: "brief" | "todo" | "facture" | "post", ev: Ev) => void;
   creators?: { name: string }[];
 }) {
+  const t = useT();
+  const lang = useLang();
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -321,7 +334,7 @@ export function EventCalendar({
     }
   }
 
-  const headerTitle = view === "week" ? weekRangeTitle(cursor) : monthTitle(cursor);
+  const headerTitle = view === "week" ? weekRangeTitle(cursor, lang) : monthTitle(cursor, lang);
 
   return (
     <div className="flex flex-col gap-4">
@@ -334,7 +347,7 @@ export function EventCalendar({
             type="button"
             onClick={() => shift(-1)}
             className="grid h-8 w-8 place-items-center rounded-full border border-border bg-surface text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-            aria-label="Précédent"
+            aria-label={t("Précédent")}
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -342,7 +355,7 @@ export function EventCalendar({
             type="button"
             onClick={() => shift(1)}
             className="grid h-8 w-8 place-items-center rounded-full border border-border bg-surface text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-            aria-label="Suivant"
+            aria-label={t("Suivant")}
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -351,7 +364,7 @@ export function EventCalendar({
             onClick={goToday}
             className="rounded-full border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
           >
-            Aujourd'hui
+            {t("Aujourd'hui")}
           </button>
           <div className="ml-1 text-base font-semibold capitalize text-foreground">{headerTitle}</div>
         </div>
@@ -360,7 +373,7 @@ export function EventCalendar({
         {/* ViewToggle */}
         <Tabs
           size="md"
-          label="Vue du calendrier"
+          label={t("Vue du calendrier")}
           value={view}
           onValueChange={(next) => {
             const v = next as View;
@@ -370,9 +383,9 @@ export function EventCalendar({
             setView(v);
           }}
           items={[
-            { value: "month", label: "Mois" },
-            { value: "week", label: "Semaine" },
-            { value: "list", label: "Liste" },
+            { value: "month", label: t("Mois") },
+            { value: "week", label: t("Semaine") },
+            { value: "list", label: t("Liste") },
           ]}
         />
       </div>
@@ -393,19 +406,19 @@ export function EventCalendar({
                 "flex items-center gap-1.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold transition-colors hover:bg-rowhover",
                 on ? "text-foreground" : "text-faint",
               )}
-              title={on ? `Masquer : ${k.label}` : `Afficher : ${k.label}`}
+              title={on ? t("Masquer : {label}", { label: t(k.label) }) : t("Afficher : {label}", { label: t(k.label) })}
             >
               <span className={cn("size-2.5 shrink-0 rounded-full transition-opacity", k.dot, !on && "opacity-25")} />
-              {k.label}
+              {t(k.label)}
               <span className="tabular-nums opacity-50">{count}</span>
             </button>
           );
         })}
         <span className="mx-0.5 h-3.5 w-px shrink-0 bg-border" />
-        {TYPE_OPTIONS.map((t) => (
-          <span key={t.value} className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-            <span className={cn("size-2.5 shrink-0 rounded-full", typeBg(t.value))} />
-            {t.label}
+        {TYPE_OPTIONS.map((o) => (
+          <span key={o.value} className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+            <span className={cn("size-2.5 shrink-0 rounded-full", typeBg(o.value))} />
+            {t(o.label)}
           </span>
         ))}
       </div>
@@ -434,12 +447,13 @@ export function EventCalendar({
   );
 }
 
-function weekRangeTitle(cursor: Date) {
+function weekRangeTitle(cursor: Date, lang: Lang) {
   const start = startOfWeek(cursor);
   const end = addDays(start, 6);
   const sameMonth = start.getMonth() === end.getMonth();
-  if (sameMonth) return `${start.getDate()}–${end.getDate()} ${MONTHS_FR[end.getMonth()]} ${end.getFullYear()}`;
-  return `${start.getDate()} ${MONTHS_FR[start.getMonth()]} – ${end.getDate()} ${MONTHS_FR[end.getMonth()]} ${end.getFullYear()}`;
+  const MONTHS = monthsOf(lang);
+  if (sameMonth) return `${start.getDate()}–${end.getDate()} ${MONTHS[end.getMonth()]} ${end.getFullYear()}`;
+  return `${start.getDate()} ${MONTHS[start.getMonth()]} – ${end.getDate()} ${MONTHS[end.getMonth()]} ${end.getFullYear()}`;
 }
 
 // ─── Vue Mois ────────────────────────────────────────────────────────────────
@@ -461,11 +475,12 @@ function MonthView({
   const gridStart = startOfWeek(first);
   const cells = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
   const curMonth = cursor.getMonth();
+  const lang = useLang();
 
   return (
     <div className="overflow-x-auto overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
       <div className="grid min-w-[320px] grid-cols-7 border-b border-border bg-panel sm:min-w-0">
-        {DAYS_FR.map((d) => (
+        {daysOf(lang).map((d) => (
           <div key={d} className="px-2 py-2 text-center text-[12px] font-medium text-muted-foreground">
             {d}
           </div>
@@ -586,6 +601,8 @@ function WeekView({
 }) {
   const start = startOfWeek(cursor);
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  const t = useT();
+  const lang = useLang();
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7">
@@ -609,14 +626,14 @@ function WeekView({
                 isToday && "bg-primary/10",
               )}
             >
-              <span className="text-[12px] font-medium text-muted-foreground">{DAYS_FR[i]}</span>
+              <span className="text-[12px] font-medium text-muted-foreground">{daysOf(lang)[i]}</span>
               <span className={cn("text-sm font-semibold tabular-nums", isToday ? "text-primary" : "text-foreground")}>
                 {d.getDate()}
               </span>
             </button>
             <div className="flex flex-1 flex-col gap-1.5 p-2">
               {dayEvents.length === 0 && (
-                <span className="px-1 py-2 text-[11px] text-faint">Aucun événement</span>
+                <span className="px-1 py-2 text-[11px] text-faint">{t("Aucun événement")}</span>
               )}
               {dayEvents.map((e) => (
                 <button
@@ -631,7 +648,7 @@ function WeekView({
                     <span className="block truncate text-[10px] text-muted-foreground">
                       {e.time && <span className="tabular-nums">{e.time}</span>}
                       {e.time && " · "}
-                      <span className={chipText(e)}>{chipLabel(e)}</span>
+                      <span className={chipText(e)}>{chipLabel(e, t)}</span>
                       {e.who && ` · ${e.who}`}
                     </span>
                   </span>
@@ -648,6 +665,8 @@ function WeekView({
 // ─── Vue Liste ───────────────────────────────────────────────────────────────
 
 function ListView({ events, onEventClick }: { events: Ev[]; onEventClick: (e: Ev) => void }) {
+  const t = useT();
+  const lang = useLang();
   const [filter, setFilter] = useState<"avenir" | "passe" | "tous">("avenir");
   const today = todayKey();
   const groups = useMemo(() => {
@@ -669,29 +688,29 @@ function ListView({ events, onEventClick }: { events: Ev[]; onEventClick: (e: Ev
   }, [events, filter, today]);
 
   const FILTERS: { id: "avenir" | "passe" | "tous"; label: string }[] = [
-    { id: "avenir", label: "À venir" },
-    { id: "passe", label: "Passés" },
-    { id: "tous", label: "Tous" },
+    { id: "avenir", label: t("À venir") },
+    { id: "passe", label: t("Passés") },
+    { id: "tous", label: t("Tous") },
   ];
 
   return (
     <div className="flex flex-col gap-4">
       <Tabs
         size="sm"
-        label="Filtrer les événements"
+        label={t("Filtrer les événements")}
         value={filter}
         onValueChange={(v) => setFilter(v as "avenir" | "passe" | "tous")}
         items={FILTERS.map((f) => ({ value: f.id, label: f.label }))}
       />
       {groups.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-8 text-center text-sm text-muted-foreground shadow-sm">
-          Aucun événement {filter === "passe" ? "passé" : filter === "avenir" ? "à venir" : ""}.
+          {filter === "passe" ? t("Aucun événement passé.") : filter === "avenir" ? t("Aucun événement à venir.") : t("Aucun événement .")}
         </div>
       ) : (
         groups.map(([date, evs]) => (
         <div key={date} className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
           <div className="border-b border-border bg-panel px-4 py-2 text-[12px] font-medium text-muted-foreground">
-            {formatListDay(date)}
+            {formatListDay(date, lang)}
           </div>
           <div>
             {evs.map((e) => (
@@ -708,7 +727,7 @@ function ListView({ events, onEventClick }: { events: Ev[]; onEventClick: (e: Ev
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-foreground">{e.title}</span>
                   <span className="block truncate text-[11px] text-muted-foreground">
-                    <span className={chipText(e)}>{chipLabel(e)}</span>
+                    <span className={chipText(e)}>{chipLabel(e, t)}</span>
                     {e.who && ` · ${e.who}`}
                   </span>
                 </span>
@@ -747,6 +766,8 @@ function EventModal({
   const ro = !!draft.readOnly;
   const canSave = !ro && !busy && draft.title.trim().length > 0 && draft.date.length > 0;
   const [showConfirm, setShowConfirm] = useState(false);
+  const t = useT();
+  const typeOptions = TYPE_OPTIONS.map((o) => ({ value: o.value, label: t(o.label) }));
 
   return (
     <Overlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClose={onClose}>
@@ -760,13 +781,13 @@ function EventModal({
       >
         <div className="mb-4 flex items-center justify-between">
           <div className="text-sm font-semibold text-foreground">
-            {ro ? "Détail de l'événement" : isEdit ? "Modifier l'événement" : "Nouvel événement"}
+            {ro ? t("Détail de l'événement") : isEdit ? t("Modifier l'événement") : t("Nouvel événement")}
           </div>
           <button
             type="button"
             onClick={onClose}
             className="grid h-7 w-7 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-            aria-label="Fermer"
+            aria-label={t("Fermer")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -774,26 +795,26 @@ function EventModal({
 
         {ro && (
           <div className="mb-3 rounded-lg bg-panel px-3 py-2 text-[12px] text-muted-foreground">
-            Événement partagé avec plusieurs personnes : seule l'agence peut le modifier.
+            {t("Événement partagé avec plusieurs personnes : seule l'agence peut le modifier.")}
           </div>
         )}
         {/* fieldset désactivé = champs non modifiables en lecture seule */}
         <fieldset disabled={ro} className={cn("flex min-w-0 flex-col gap-3", ro && "pointer-events-none")}>
           <TextField
-            label="Titre"
+            label={t("Titre")}
             value={draft.title}
             onChange={(v) => setDraft({ ...draft, title: v })}
-            placeholder="Intitulé de l'événement"
+            placeholder={t("Intitulé de l'événement")}
           />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <TextField
-              label="Date"
+              label={t("Date")}
               type="date"
               value={draft.date}
               onChange={(v) => setDraft({ ...draft, date: v })}
             />
             <TextField
-              label="Heure"
+              label={t("Heure")}
               type="time"
               value={draft.time === "—" ? "" : draft.time}
               onChange={(v) => setDraft({ ...draft, time: v })}
@@ -801,14 +822,14 @@ function EventModal({
           </div>
           <div className={cn("grid grid-cols-1 gap-3", !hideWho && "sm:grid-cols-2")}>
             <SelectField
-              label="Type"
+              label={t("Type")}
               value={draft.type}
               onChange={(v) => setDraft({ ...draft, type: v })}
-              options={TYPE_OPTIONS}
+              options={typeOptions}
             />
             {!hideWho && (
               <SelectField
-                label="Avec qui"
+                label={t("Avec qui")}
                 value={draft.who}
                 onChange={(v) => setDraft({ ...draft, who: v })}
                 options={whoOptions}
@@ -816,10 +837,10 @@ function EventModal({
             )}
           </div>
           <TextAreaField
-            label="Description / commentaire"
+            label={t("Description / commentaire")}
             value={draft.description}
             onChange={(v) => setDraft({ ...draft, description: v })}
-            placeholder="Notes, ordre du jour, lien visio… (synchronisé avec Google Agenda)"
+            placeholder={t("Notes, ordre du jour, lien visio… (synchronisé avec Google Agenda)")}
           />
         </fieldset>
 
@@ -831,7 +852,7 @@ function EventModal({
               onClick={() => setShowConfirm(true)}
               className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-[#E5484D] transition-colors hover:bg-rowhover"
             >
-              <Trash2 className="h-3.5 w-3.5" /> Supprimer
+              <Trash2 className="h-3.5 w-3.5" /> {t("Supprimer")}
             </button>
           ) : (
             <span />
@@ -842,7 +863,7 @@ function EventModal({
               onClick={onClose}
               className="rounded-full border border-border bg-surface px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             >
-              {ro ? "Fermer" : "Annuler"}
+              {ro ? t("Fermer") : t("Annuler")}
             </button>
             {!ro && (
               <button
@@ -850,16 +871,16 @@ function EventModal({
                 disabled={!canSave}
                 className="rounded-full bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
               >
-                {busy ? "Enregistrement…" : "Enregistrer"}
+                {busy ? t("Enregistrement…") : t("Enregistrer")}
               </button>
             )}
           </div>
         </div>
         {showConfirm && (
           <ConfirmDialog
-            title="Supprimer l'événement"
-            message="Cette action est irréversible."
-            confirmLabel="Supprimer définitivement"
+            title={t("Supprimer l'événement")}
+            message={t("Cette action est irréversible.")}
+            confirmLabel={t("Supprimer définitivement")}
             danger
             onCancel={() => setShowConfirm(false)}
             onConfirm={() => {

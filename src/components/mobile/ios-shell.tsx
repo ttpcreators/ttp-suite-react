@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import { ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /*
  * Coque « app iPhone » (mode iPhone, téléphone seulement) :
@@ -17,8 +18,9 @@ export type IosTab = { id: string; label: string; icon: LucideIcon; badge?: numb
 export function IosTabBar({ items, active, onSelect, onReselect }: {
   items: IosTab[]; active: string; onSelect: (id: string) => void; onReselect?: (id: string) => void;
 }) {
+  const tr = useT();
   return (
-    <nav aria-label="Navigation principale" className="ios-chrome ios-bar fixed inset-x-0 bottom-0 z-50 border-t border-border/70 md:hidden">
+    <nav aria-label={tr("Navigation principale")} className="ios-chrome ios-bar fixed inset-x-0 bottom-0 z-50 border-t border-border/70 md:hidden">
       <div className="grid h-[50px]" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
         {items.map((t) => {
           const on = t.id === active;

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useLang, useLocale, useT } from "@/lib/i18n";
 import { isoDay, parseDay, rangeDays, rangeLabel, sameRange, type DateRange, type RangePreset } from "@/lib/dateRange";
 
 /**
@@ -16,9 +17,10 @@ import { isoDay, parseDay, rangeDays, rangeLabel, sameRange, type DateRange, typ
  */
 
 const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
+const WEEKDAYS_EN = ["M", "T", "W", "T", "F", "S", "S"];
 
-function monthTitle(y: number, m: number): string {
-  const s = new Date(y, m, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+function monthTitle(y: number, m: number, locale: string): string {
+  const s = new Date(y, m, 1).toLocaleDateString(locale, { month: "long", year: "numeric" });
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
@@ -53,11 +55,13 @@ function Month({
   const end = to ?? (from && hover ? hover : null);
   const lo = from && end ? (from < end ? from : end) : from;
   const hi = from && end ? (from < end ? end : from) : from;
+  const lang = useLang();
+  const locale = useLocale();
   return (
     <div className="w-[224px]">
-      <div className="mb-2 text-center text-[13px] font-semibold text-foreground">{monthTitle(y, m)}</div>
+      <div className="mb-2 text-center text-[13px] font-semibold text-foreground">{monthTitle(y, m, locale)}</div>
       <div className="grid grid-cols-7 text-center text-[11px] text-muted-foreground">
-        {WEEKDAYS.map((w, i) => (
+        {(lang === "en" ? WEEKDAYS_EN : WEEKDAYS).map((w, i) => (
           <div key={i} className="py-1">{w}</div>
         ))}
       </div>
@@ -81,7 +85,7 @@ function Month({
                   "relative mx-auto grid h-8 w-8 place-items-center rounded-full text-[12px] tabular-nums transition-colors",
                   isEdge ? "bg-foreground font-semibold text-background" : "text-foreground hover:bg-rowhover",
                 )}
-                aria-label={parseDay(d).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                aria-label={parseDay(d).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })}
                 aria-pressed={isEdge}
               >
                 {Number(d.slice(8))}
@@ -99,7 +103,7 @@ export function DateRangePicker({
   value,
   onChange,
   presets = [],
-  placeholder = "Toutes les dates",
+  placeholder: placeholderProp,
   align = "end",
   className,
 }: {
@@ -111,6 +115,8 @@ export function DateRangePicker({
   align?: "start" | "center" | "end";
   className?: string;
 }) {
+  const t = useT();
+  const placeholder = placeholderProp ?? t("Toutes les dates");
   const [open, setOpen] = useState(false);
   const today = isoDay(new Date());
   // Brouillon : début + fin (null tant que la fin n'est pas choisie).
@@ -206,10 +212,10 @@ export function DateRangePicker({
           {/* Calendrier : du … au … */}
           <div className="p-3">
             <div className="relative flex gap-5">
-              <button type="button" onClick={() => shift(-1)} aria-label="Mois précédent" className="absolute left-0 top-0 grid h-6 w-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+              <button type="button" onClick={() => shift(-1)} aria-label={t("Mois précédent")} className="absolute left-0 top-0 grid h-6 w-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <button type="button" onClick={() => shift(1)} aria-label="Mois suivant" className="absolute right-0 top-0 grid h-6 w-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+              <button type="button" onClick={() => shift(1)} aria-label={t("Mois suivant")} className="absolute right-0 top-0 grid h-6 w-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                 <ChevronRight className="h-4 w-4" />
               </button>
               <div className="hidden sm:block">
@@ -222,17 +228,17 @@ export function DateRangePicker({
               <span className="text-[12px] text-muted-foreground">
                 {draft ? (
                   <>
-                    <span className="font-medium text-foreground">{rangeLabel(draft)}</span> · {rangeDays(draft)} jour{rangeDays(draft) > 1 ? "s" : ""}
+                    <span className="font-medium text-foreground">{rangeLabel(draft)}</span> · {rangeDays(draft) > 1 ? t("{n} jours", { n: rangeDays(draft) }) : t("{n} jour", { n: rangeDays(draft) })}
                   </>
                 ) : from ? (
-                  "Choisis la date de fin"
+                  t("Choisis la date de fin")
                 ) : (
-                  "Choisis la date de début"
+                  t("Choisis la date de début")
                 )}
               </span>
               <div className="ml-auto flex gap-2">
                 <button type="button" onClick={() => setOpen(false)} className="rounded-full border border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                  Annuler
+                  {t("Annuler")}
                 </button>
                 <button
                   type="button"
@@ -240,7 +246,7 @@ export function DateRangePicker({
                   disabled={!draft}
                   className="rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
                 >
-                  Appliquer
+                  {t("Appliquer")}
                 </button>
               </div>
             </div>
@@ -260,7 +266,7 @@ export function DateRangePicker({
 export function DateInput({
   value,
   onChange,
-  placeholder = "Choisir une date",
+  placeholder: placeholderProp,
   clearable = true,
   className,
   ariaLabel,
@@ -275,6 +281,9 @@ export function DateInput({
   /** Décalage du calendrier (ex. -13 quand le déclencheur est dans un champ à padding). */
   alignOffset?: number;
 }) {
+  const t = useT();
+  const locale = useLocale();
+  const placeholder = placeholderProp ?? t("Choisir une date");
   const [open, setOpen] = useState(false);
   const today = isoDay(new Date());
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
@@ -295,27 +304,27 @@ export function DateInput({
         <button type="button" aria-label={ariaLabel} className={cn("flex items-center gap-2 text-left", className)}>
           <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className={cn("min-w-0 flex-1 truncate tabular-nums", !valid && "text-faint")}>
-            {valid ? parseDay(valid).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : placeholder}
+            {valid ? parseDay(valid).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" }) : placeholder}
           </span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" alignOffset={alignOffset} sideOffset={8} collisionPadding={16} className="w-auto p-3" onOpenAutoFocus={(e) => e.preventDefault()}>
         <div className="relative">
-          <button type="button" onClick={() => shift(-1)} aria-label="Mois précédent" className="absolute left-0 top-0 grid h-6 w-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={() => shift(-1)} aria-label={t("Mois précédent")} className="absolute left-0 top-0 grid h-6 w-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <button type="button" onClick={() => shift(1)} aria-label="Mois suivant" className="absolute right-0 top-0 grid h-6 w-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+          <button type="button" onClick={() => shift(1)} aria-label={t("Mois suivant")} className="absolute right-0 top-0 grid h-6 w-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
             <ChevronRight className="h-4 w-4" />
           </button>
           <Month y={view.getFullYear()} m={view.getMonth()} from={valid} to={valid} hover={null} today={today} onPick={pick} onHover={() => {}} />
         </div>
         <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
           <button type="button" onClick={() => pick(today)} className="rounded-full border border-border px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
-            Aujourd'hui
+            {t("Aujourd'hui")}
           </button>
           {clearable && valid && (
             <button type="button" onClick={() => pick("")} className="rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-              Effacer
+              {t("Effacer")}
             </button>
           )}
         </div>
@@ -326,21 +335,23 @@ export function DateInput({
 
 /** Sélecteur de mois ‹ Septembre 2026 › (jamais après `max`). Valeur « aaaa-mm ». */
 export function MonthPicker({ value, onChange, max }: { value: string; onChange: (v: string) => void; max?: string }) {
+  const t = useT();
+  const locale = useLocale();
   const [y, m] = value.split("-").map(Number);
   const shift = (n: number) => {
     const d = new Date(y, m - 1 + n, 1);
     const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     if (!max || next <= max) onChange(next);
   };
-  const label = new Date(y, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const label = new Date(y, m - 1, 1).toLocaleDateString(locale, { month: "long", year: "numeric" });
   const btn = "grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent";
   return (
     <div className="flex items-center rounded-full border border-border bg-surface p-0.5">
-      <button type="button" onClick={() => shift(-1)} aria-label="Mois précédent" className={btn}>
+      <button type="button" onClick={() => shift(-1)} aria-label={t("Mois précédent")} className={btn}>
         <ChevronLeft className="h-4 w-4" />
       </button>
       <span className="min-w-[112px] text-center text-[12px] font-medium tabular-nums text-foreground">{label.charAt(0).toUpperCase() + label.slice(1)}</span>
-      <button type="button" onClick={() => shift(1)} disabled={!!max && value >= max} aria-label="Mois suivant" className={btn}>
+      <button type="button" onClick={() => shift(1)} disabled={!!max && value >= max} aria-label={t("Mois suivant")} className={btn}>
         <ChevronRight className="h-4 w-4" />
       </button>
     </div>

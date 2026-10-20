@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { LogOut, Moon, type LucideIcon } from "lucide-react";
 import { IosGroup, IosRow, IosSwitch } from "@/components/mobile/ios-shell";
+import { useT } from "@/lib/i18n";
 
 /*
  * Écran « Plus » du mode iPhone (agence et créatrices) : profil, raccourcis,
@@ -22,7 +23,7 @@ function Count({ n }: { n?: number }) {
 }
 
 export function MoreScreen({
-  profile, pinned, sections, onSelect, dark, onToggleTheme, exitLabel = "Se déconnecter", exitIcon = LogOut, onExit, before, badges = {},
+  profile, pinned, sections, onSelect, dark, onToggleTheme, exitLabel: exitLabelProp, exitIcon = LogOut, onExit, before, badges = {},
 }: {
   /** Carte du haut (photo, nom, rôle) : `onClick` ouvre les paramètres. */
   profile: { avatar: ReactNode; name: ReactNode; sub: string; onClick?: () => void };
@@ -39,6 +40,8 @@ export function MoreScreen({
   /** Notifications par page (id) → pastilles. */
   badges?: Record<string, number>;
 }) {
+  const t = useT();
+  const exitLabel = exitLabelProp ?? t("Se déconnecter");
   return (
     <div className="flex flex-col gap-7 pb-4">
       <IosGroup>
@@ -60,7 +63,7 @@ export function MoreScreen({
       {before}
 
       {pinned && pinned.length > 0 && (
-        <IosGroup title="Raccourcis">
+        <IosGroup title={t("Raccourcis")}>
           {pinned.map((it) => (
             <IosRow key={`pin-${it.id}`} icon={it.icon} label={it.label} right={<Count n={badges[it.id]} />} onClick={() => onSelect(it.id)} />
           ))}
@@ -78,8 +81,8 @@ export function MoreScreen({
         </IosGroup>
       ))}
 
-      <IosGroup title="Affichage" footer="Propre à cet appareil.">
-        <IosRow icon={Moon} label="Mode sombre" chevron={false} right={<IosSwitch label="Mode sombre" checked={dark} onChange={onToggleTheme} />} />
+      <IosGroup title={t("Affichage")} footer={t("Propre à cet appareil.")}>
+        <IosRow icon={Moon} label={t("Mode sombre")} chevron={false} right={<IosSwitch label={t("Mode sombre")} checked={dark} onChange={onToggleTheme} />} />
       </IosGroup>
 
       <IosGroup>

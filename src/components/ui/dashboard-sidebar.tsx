@@ -3,6 +3,7 @@ import { Check, ChevronRight, ChevronsUpDown, Columns2, PanelLeftClose, Star, ty
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { VIEW_HINTS } from "@/lib/viewHints";
+import { useLang, useT } from "@/lib/i18n";
 
 /** À quoi sert la page (bulle au survol du menu). */
 const hintOf = (id: string) => (VIEW_HINTS as Record<string, string | undefined>)[id];
@@ -94,12 +95,15 @@ function Row({
   onTogglePin?: () => void;
 }) {
   // Réserve la place à droite : chevron/split (right-1.5) + étoile épingle (right-8).
+  const t = useT();
+  // Les aides au survol décrivent les pages AGENCE (en français) : pas affichées en anglais.
+  const hint = useLang() === "en" ? undefined : hintOf(item.id);
   const pr = onTogglePin
     ? (hasChildren ? "pr-[3.75rem]" : "pr-9")
     : (hasChildren ? "pr-9" : "pr-2.5");
   return (
     <div className="group relative flex items-center">
-      <button type="button" onClick={onClick} onContextMenu={onContext} title={hintOf(item.id)} className={cn(sbItemCls(active), pr)}>
+      <button type="button" onClick={onClick} onContextMenu={onContext} title={hint} className={cn(sbItemCls(active), pr)}>
         <item.icon className={sbIconCls(active)} strokeWidth={1.75} />
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
         {/* Pastille : décalée pour ne pas passer sous le bouton « à côté » ni l'étoile. */}
@@ -116,7 +120,7 @@ function Row({
             e.stopPropagation();
             onToggle?.();
           }}
-          aria-label={open ? "Replier" : "Déplier"}
+          aria-label={open ? t("Replier") : t("Déplier")}
           aria-expanded={open}
           className={cn("absolute right-1.5", ghostBtn)}
         >
@@ -130,8 +134,8 @@ function Row({
               e.stopPropagation();
               onSplit();
             }}
-            title="Ouvrir à côté (2 pages côte à côte)"
-            aria-label="Ouvrir à côté"
+            title={t("Ouvrir à côté (2 pages côte à côte)")}
+            aria-label={t("Ouvrir à côté")}
             className={cn("absolute right-1.5 opacity-0 focus-visible:opacity-100 group-hover:opacity-100", ghostBtn)}
           >
             <Columns2 className="h-3.5 w-3.5" />
@@ -146,8 +150,8 @@ function Row({
             e.stopPropagation();
             onTogglePin();
           }}
-          title={pinned ? "Détacher des raccourcis" : "Épingler aux raccourcis"}
-          aria-label={pinned ? "Détacher des raccourcis" : "Épingler aux raccourcis"}
+          title={pinned ? t("Détacher des raccourcis") : t("Épingler aux raccourcis")}
+          aria-label={pinned ? t("Détacher des raccourcis") : t("Épingler aux raccourcis")}
           aria-pressed={pinned}
           className={cn(
             "absolute right-8 focus-visible:opacity-100",
@@ -215,6 +219,7 @@ function ItemBlock({
 
   // Sous-pages repliées : leurs pastilles remontent sur la ligne parente.
   const shown = hasChildren && !open ? { ...item, badge: sbBadgeTotal(item) || undefined } : item;
+  const t = useT();
   return (
     <div className="flex flex-col">
       <Row
@@ -264,8 +269,8 @@ function ItemBlock({
                           e.stopPropagation();
                           pin();
                         }}
-                        title={pinnedChild ? "Détacher des raccourcis" : "Épingler aux raccourcis"}
-                        aria-label={pinnedChild ? "Détacher des raccourcis" : "Épingler aux raccourcis"}
+                        title={pinnedChild ? t("Détacher des raccourcis") : t("Épingler aux raccourcis")}
+                        aria-label={pinnedChild ? t("Détacher des raccourcis") : t("Épingler aux raccourcis")}
                         aria-pressed={pinnedChild}
                         className={cn("absolute right-1.5 focus-visible:opacity-100", ghostBtn, pinnedChild ? "opacity-100" : "opacity-0 group-hover:opacity-100")}
                       >
@@ -394,6 +399,7 @@ export function SidebarBrand({
   onCollapse?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const t = useT();
   const card = "flex min-w-0 flex-1 items-center gap-2.5 rounded-[10px] border border-border bg-surface p-1.5 pr-2 text-left";
   const inner = (
     <>
@@ -409,13 +415,13 @@ export function SidebarBrand({
       {options ? (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
-            <button type="button" className={cn(card, "transition-colors hover:border-foreground/15 data-[state=open]:border-foreground/15")} aria-label="Changer d'espace">
+            <button type="button" className={cn(card, "transition-colors hover:border-foreground/15 data-[state=open]:border-foreground/15")} aria-label={t("Changer d'espace")}>
               {inner}
               <ChevronsUpDown className="h-4 w-4 shrink-0 text-foreground/40" strokeWidth={1.75} />
             </button>
           </PopoverTrigger>
           <PopoverContent align="start" sideOffset={6} className="w-[224px] p-1.5" onOpenAutoFocus={(e) => e.preventDefault()}>
-            <div className="px-2 pb-1.5 pt-1 text-[12px] text-muted-foreground">Espaces</div>
+            <div className="px-2 pb-1.5 pt-1 text-[12px] text-muted-foreground">{t("Espaces")}</div>
             {options.map((o) => (
               <button
                 key={o.id}
@@ -446,8 +452,8 @@ export function SidebarBrand({
           type="button"
           onClick={onCollapse}
           className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-foreground/40 transition-colors hover:bg-surface/60 hover:text-foreground dark:hover:bg-rowhover"
-          title="Replier le menu"
-          aria-label="Replier le menu"
+          title={t("Replier le menu")}
+          aria-label={t("Replier le menu")}
         >
           <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} />
         </button>

@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { ChevronUp, Paperclip, type LucideIcon } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { MailAvatar } from "@/components/mail-avatar";
+import { translate, useLang, useLocale, useT, type Lang } from "@/lib/i18n";
 import { mailDocument, hasQuote, mailSnippet, fmtSize, downloadAttachment, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
 
 /*
@@ -11,27 +12,28 @@ import { mailDocument, hasQuote, mailSnippet, fmtSize, downloadAttachment, type 
  * ou déplié façon Gmail (historique cité masqué, pièces jointes en cartes).
  */
 
-/** Date d'une ligne de liste, comme Gmail : « 14:32 » aujourd'hui, « 3 oct. » cette année, « 03/10/2025 » avant. */
-export const fmtWhen = (ts: number) => {
+/** Date d'une ligne de liste, comme Gmail : « 14:32 » aujourd'hui, « 3 oct. » cette année, « 03/10/2025 » avant.
+ *  `locale` : celle de useLocale() dans l'espace créateur (français par défaut). */
+export const fmtWhen = (ts: number, locale = "fr-FR") => {
   if (!ts) return "";
   const d = new Date(ts);
   const now = new Date();
-  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString(locale, { day: "numeric", month: "short" });
+  return d.toLocaleDateString(locale, { day: "2-digit", month: "2-digit", year: "numeric" });
 };
-export const fmtFull = (ts: number) =>
-  ts ? new Date(ts).toLocaleString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+export const fmtFull = (ts: number, locale = "fr-FR") =>
+  ts ? new Date(ts).toLocaleString(locale, { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
 /** « il y a 15 min », « il y a 3 h », « il y a 2 jours » ; rien au-delà d'une semaine. */
-export const fmtAgo = (ts: number) => {
+export const fmtAgo = (ts: number, lang: Lang = "fr") => {
   if (!ts) return "";
   const min = Math.round((Date.now() - ts) / 60_000);
-  if (min < 1) return "à l'instant";
-  if (min < 60) return `il y a ${min} min`;
+  if (min < 1) return translate(lang, "à l'instant");
+  if (min < 60) return translate(lang, "il y a {n} min", { n: min });
   const h = Math.round(min / 60);
-  if (h < 24) return `il y a ${h} h`;
+  if (h < 24) return translate(lang, "il y a {n} h", { n: h });
   const d = Math.round(h / 24);
-  return d < 7 ? `il y a ${d} jour${d > 1 ? "s" : ""}` : "";
+  return d < 7 ? translate(lang, d > 1 ? "il y a {n} jours" : "il y a {n} jour", { n: d }) : "";
 };
 
 /** Photo de profil (marque ou expéditeur), comme dans Gmail. L'agence = logo TTP. */
@@ -61,6 +63,7 @@ function FileBadge({ name }: { name: string }) {
 
 /** Corps d'un mail : iframe isolée (aucun script), hauteur suivie en continu. */
 export function MailBody({ m, showQuoted }: { m: MailMessage; showQuoted: boolean }) {
+  const t = useT();
   const ref = useRef<HTMLIFrameElement>(null);
   const [h, setH] = useState(80);
   const doc = useMemo(() => mailDocument(m.html, m.text, showQuoted), [m.html, m.text, showQuoted]);
@@ -79,7 +82,7 @@ export function MailBody({ m, showQuoted }: { m: MailMessage; showQuoted: boolea
   return (
     <iframe
       ref={ref}
-      title={`Message de ${m.from}`}
+      title={t("Message de {from}", { from: m.from })}
       srcDoc={doc}
       // Pas de allow-scripts : aucun code du mail ne peut s'exécuter. allow-same-origin
       // sert uniquement à mesurer la hauteur ; les liens s'ouvrent dans un nouvel onglet.
@@ -100,6 +103,7 @@ const isInline = (a: MailAttachment) => !!(a as MailAttachment & { inline?: bool
 
 /** Bouton « Afficher / Masquer l'historique » (réponses précédentes citées dans le mail). */
 function QuoteToggle({ shown, onClick, className }: { shown: boolean; onClick: () => void; className?: string }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -107,19 +111,20 @@ function QuoteToggle({ shown, onClick, className }: { shown: boolean; onClick: (
       aria-expanded={shown}
       className={`mt-2 self-start rounded-full bg-muted px-2.5 py-1 text-[11.5px] font-medium leading-none text-muted-foreground transition-colors hover:text-foreground ${className ?? ""}`}
     >
-      {shown ? "Masquer l'historique" : "Afficher l'historique"}
+      {shown ? t("Masquer l'historique") : t("Afficher l'historique")}
     </button>
   );
 }
 
 /** Bouton chevron « Replier » d'un message déplié. */
 function FoldButton({ onClick }: { onClick: () => void }) {
+  const t = useT();
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label="Replier"
-      title="Replier"
+      aria-label={t("Replier")}
+      title={t("Replier")}
       className="grid h-8 w-8 place-items-center rounded-full transition-colors hover:bg-rowhover hover:text-foreground"
     >
       <ChevronUp className="h-4 w-4" />
@@ -160,6 +165,9 @@ export function MailItem({
   const files = useMemo(() => m.attachments.filter((a) => !isInline(a)), [m.attachments]);
   const name = m.fromAgency ? "TTP Creators" : m.from;
   const reduce = useReducedMotion();
+  const t = useT();
+  const lang = useLang();
+  const locale = useLocale();
   const enter = reduce ? {} : { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.25, delay: Math.min(index, 6) * 0.04 } };
   const download = (a: MailAttachment) => {
     const run = onDownload ? Promise.resolve(onDownload(a)) : threadId ? downloadAttachment(threadId, a, creator) : null;
@@ -179,12 +187,12 @@ export function MailItem({
           <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center">
             <span className="truncate text-[13px] font-medium text-foreground">{name}</span>
             <span className="col-span-2 row-start-2 truncate text-[13px] text-muted-foreground sm:col-span-1 sm:col-start-2 sm:row-start-1">{snippet}</span>
-            <span className="col-start-2 row-start-1 shrink-0 text-[11px] tabular-nums text-faint sm:col-start-3">{fmtWhen(m.ts)}</span>
+            <span className="col-start-2 row-start-1 shrink-0 text-[11px] tabular-nums text-faint sm:col-start-3">{fmtWhen(m.ts, locale)}</span>
           </span>
         </motion.button>
       );
     }
-    const ago = fmtAgo(m.ts);
+    const ago = fmtAgo(m.ts, lang);
     return (
       <motion.article {...enter} className="flex flex-col py-5">
         <div className="flex cursor-pointer items-start gap-3" onClick={headClick(onToggle)}>
@@ -193,14 +201,14 @@ export function MailItem({
             <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[14px] font-semibold text-foreground">{name}</span>
             <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[12.5px] text-muted-foreground">{m.fromAgency ? m.from : m.fromEmail}</span>
             <span data-sel className="mt-0.5 block w-fit max-w-full cursor-text select-text truncate text-[11.5px] text-faint">
-              à {cleanAddr(m.to)}{m.cc ? ` · cc ${cleanAddr(m.cc)}` : ""}
+              {t("à {to}", { to: cleanAddr(m.to) })}{m.cc ? ` · cc ${cleanAddr(m.cc)}` : ""}
             </span>
           </span>
           <div className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
             <span className="mr-1 hidden text-[12px] tabular-nums text-muted-foreground sm:inline">
-              {fmtFull(m.ts)}{ago && <span className="text-faint"> ({ago})</span>}
+              {fmtFull(m.ts, locale)}{ago && <span className="text-faint"> ({ago})</span>}
             </span>
-            <span className="mr-1 text-[11px] tabular-nums text-faint sm:hidden">{fmtWhen(m.ts)}</span>
+            <span className="mr-1 text-[11px] tabular-nums text-faint sm:hidden">{fmtWhen(m.ts, locale)}</span>
             {actions.map((a) => (
               <button
                 key={a.label}
@@ -226,7 +234,7 @@ export function MailItem({
           <div className="mt-6">
             <div className="mb-2.5 flex items-center justify-between gap-3">
               <span className="text-[13px] font-semibold text-foreground">
-                {files.length} pièce{files.length > 1 ? "s" : ""} jointe{files.length > 1 ? "s" : ""}
+                {files.length > 1 ? t("{n} pièces jointes", { n: files.length }) : t("{n} pièce jointe", { n: files.length })}
               </span>
               {files.length > 1 && (
                 <button
@@ -234,7 +242,7 @@ export function MailItem({
                   onClick={() => void files.reduce<Promise<unknown>>((p, a) => p.then(() => download(a)), Promise.resolve())}
                   className="text-[12.5px] font-medium text-primary hover:underline"
                 >
-                  Tout télécharger
+                  {t("Tout télécharger")}
                 </button>
               )}
             </div>
@@ -244,7 +252,7 @@ export function MailItem({
                   key={a.attachmentId}
                   type="button"
                   onClick={() => void download(a)}
-                  title={`Télécharger ${a.filename}`}
+                  title={t("Télécharger {name}", { name: a.filename })}
                   className="flex w-full items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:bg-rowhover sm:w-[260px]"
                 >
                   <FileBadge name={a.filename} />
@@ -276,7 +284,7 @@ export function MailItem({
         <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-3 sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center">
           <span className="truncate text-[13px] font-medium text-foreground">{name}</span>
           <span className="col-span-2 row-start-2 truncate text-[13px] text-muted-foreground sm:col-span-1 sm:col-start-2 sm:row-start-1">{snippet}</span>
-          <span className="col-start-2 row-start-1 shrink-0 text-[11px] tabular-nums text-faint sm:col-start-3">{fmtWhen(m.ts)}</span>
+          <span className="col-start-2 row-start-1 shrink-0 text-[11px] tabular-nums text-faint sm:col-start-3">{fmtWhen(m.ts, locale)}</span>
         </span>
       </motion.button>
     );
@@ -291,12 +299,12 @@ export function MailItem({
           <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[14px] font-semibold text-foreground">{name}</span>
           <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[12px] text-muted-foreground">{m.fromAgency ? m.from : m.fromEmail}</span>
           <span data-sel className="mt-0.5 block w-fit max-w-full cursor-text select-text truncate text-[11px] text-faint">
-            à {cleanAddr(m.to)}{m.cc ? ` · cc ${cleanAddr(m.cc)}` : ""}
+            {t("à {to}", { to: cleanAddr(m.to) })}{m.cc ? ` · cc ${cleanAddr(m.cc)}` : ""}
           </span>
         </span>
         <div className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
-          <span className="mr-1 hidden text-[11px] tabular-nums text-faint sm:inline">{fmtFull(m.ts)}</span>
-          <span className="mr-1 text-[11px] tabular-nums text-faint sm:hidden">{fmtWhen(m.ts)}</span>
+          <span className="mr-1 hidden text-[11px] tabular-nums text-faint sm:inline">{fmtFull(m.ts, locale)}</span>
+          <span className="mr-1 text-[11px] tabular-nums text-faint sm:hidden">{fmtWhen(m.ts, locale)}</span>
           {actions.map((a) => (
             <motion.button
               key={a.label}
@@ -338,7 +346,7 @@ export function MailItem({
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-[12px] font-medium text-foreground">{a.filename}</span>
-                  <span className="block text-[11px] text-faint">{fmtSize(a.size)} · Télécharger</span>
+                  <span className="block text-[11px] text-faint">{fmtSize(a.size)} · {t("Télécharger")}</span>
                 </span>
               </button>
             ))}

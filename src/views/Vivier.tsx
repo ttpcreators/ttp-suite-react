@@ -13,7 +13,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import GlassStatChart from "@/components/ui/glass-stat-chart";
-import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus, Tag, Camera, Loader2, Hash, Globe } from "lucide-react";
+import { AtSign, Mail, Pencil, Trash2, X, Send, Sparkles, ExternalLink, Plus, Tag, Camera, Loader2, Hash, Globe, Search } from "lucide-react";
 import { igWhyText, fmtEr, fmtPerWeek, noteQuota } from "@/lib/instagram";
 import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
 import { HashtagSearch } from "@/components/HashtagSearch";
@@ -175,6 +175,24 @@ const parseFol = (s: string) => {
   else if (m[2] === "m") n *= 1e6;
   return Math.round(n);
 };
+
+/** Ouvre la page Sourcing sur « Trouver des créateurs » (pour y repérer des sportifs). */
+const goSourcing = () => {
+  try {
+    localStorage.setItem("ttp:sourcing-tab", "createurs");
+  } catch {
+    /* stockage indisponible */
+  }
+  window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "sourcing" }));
+};
+/** Lien discret vers le Sourcing, sur l'onglet Sportifs. */
+function SourcingLink({ className }: { className?: string }) {
+  return (
+    <button type="button" onClick={goSourcing} className={cn("inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:underline", className)}>
+      <Search className="h-3.5 w-3.5" /> Trouver des sportifs avec le Sourcing
+    </button>
+  );
+}
 
 /** Scouting : sous-pages Créateurs / Sportifs (choix remonté à la sidebar). */
 export function Vivier() {
@@ -559,9 +577,11 @@ function ScoutingList({ kind }: { kind: Kind }) {
         <AutoGrowTextField label="Note (tarif, dispo, remarques…)" value={fNote} onChange={setFNote} className="min-w-full" />
       </InlineForm>
 
+      {athletes && rows.length > 0 && <SourcingLink className="mb-3 px-1" />}
       {filtered.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface px-6 py-10 text-center text-sm text-muted-foreground shadow-sm">
           {rows.length === 0 ? K.empty : `Aucun ${K.one} pour ces filtres.`}
+          {athletes && rows.length === 0 && <div className="mt-3"><SourcingLink /></div>}
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-surface divide-y divide-border">

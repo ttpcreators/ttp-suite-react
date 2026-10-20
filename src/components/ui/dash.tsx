@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowRight, ArrowUp, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLang, useT } from "@/lib/i18n";
 
 /** Panneau bordé de l'Aperçu (plat ; en Minuit il se fond dans le fond). */
 export function DashPanel({ children, className }: { children: ReactNode; className?: string }) {
@@ -41,11 +42,15 @@ export function DashWideLink({ label, onClick }: { label: string; onClick: () =>
  */
 
 const pctFr = (n: number, digits = 1) => `${Math.abs(n).toFixed(digits).replace(".", ",")} %`;
+const pctEn = (n: number, digits = 1) => `${Math.abs(n).toFixed(digits)}%`;
 
 /** Variation vs période précédente. `null` = pas de comparaison honnête possible. */
-export function Delta({ value, suffix = "vs période préc." }: { value: number | null; suffix?: string }) {
+export function Delta({ value, suffix: suffixProp }: { value: number | null; suffix?: string }) {
+  const t = useT();
+  const lang = useLang();
+  const suffix = suffixProp ?? t("vs période préc.");
   if (value == null || !Number.isFinite(value)) {
-    return <span className="text-[12px] text-faint">Pas encore de comparaison</span>;
+    return <span className="text-[12px] text-faint">{t("Pas encore de comparaison")}</span>;
   }
   const up = value >= 0;
   return (
@@ -60,8 +65,8 @@ export function Delta({ value, suffix = "vs période préc." }: { value: number 
         {up ? <ArrowUp className="size-3" strokeWidth={3} /> : <ArrowDown className="size-3" strokeWidth={3} />}
       </span>
       <span className={cn("font-medium tabular-nums", up ? "text-signaltext" : "text-dangertext")}>
-        <span className="sr-only">{up ? "Hausse de " : "Baisse de "}</span>
-        {pctFr(value)}
+        <span className="sr-only">{up ? t("Hausse de ") : t("Baisse de ")}</span>
+        {lang === "en" ? pctEn(value) : pctFr(value)}
       </span>
       <span className="text-muted-foreground">{suffix}</span>
     </span>
@@ -162,10 +167,12 @@ export type Segment = { label: string; value: number; className: string };
 
 /** Barre segmentée : chaque part avec son % au-dessus (filet de repère) + légende. */
 export function SegmentBar({ segments }: { segments: Segment[] }) {
+  const t = useT();
+  const pct = useLang() === "en" ? "%" : " %";
   const total = segments.reduce((a, s) => a + Math.max(0, s.value), 0);
   const shown = segments.filter((s) => s.value > 0);
   if (total <= 0 || shown.length === 0) {
-    return <div className="rounded-full bg-foreground/10 py-1.5 text-center text-[11px] text-faint">Rien à répartir pour le moment</div>;
+    return <div className="rounded-full bg-foreground/10 py-1.5 text-center text-[11px] text-faint">{t("Rien à répartir pour le moment")}</div>;
   }
   return (
     <div>
@@ -174,9 +181,9 @@ export function SegmentBar({ segments }: { segments: Segment[] }) {
           const w = (s.value / total) * 100;
           return (
             <div key={s.label} className="min-w-[28px]" style={{ flexBasis: `${w}%`, flexGrow: 0, flexShrink: 1 }}>
-              <div className="text-[12px] tabular-nums text-muted-foreground">{Math.round(w)} %</div>
+              <div className="text-[12px] tabular-nums text-muted-foreground">{Math.round(w)}{pct}</div>
               <div className="ml-px mt-1 h-3 w-px bg-border" />
-              <div className={cn("mt-1 h-3 rounded-full", s.className)} title={`${s.label} : ${Math.round(w)} %`} />
+              <div className={cn("mt-1 h-3 rounded-full", s.className)} title={`${s.label} : ${Math.round(w)}${pct}`} />
             </div>
           );
         })}

@@ -21,6 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { DashPanel, DashSectionTitle } from "@/components/ui/dash";
+import { useT } from "@/lib/i18n";
 
 /**
  * Page GUIDE de l'espace créateur : comment utiliser l'app (mobile + ordi),
@@ -49,6 +50,11 @@ function InfoRow({ icon: Icon, title, children }: { icon: LucideIcon; title: str
 
 const B = ({ children }: { children: React.ReactNode }) => <span className="font-medium text-foreground">{children}</span>;
 
+/** Texte traduit avec des passages en gras balisés **ainsi** (l'ordre des mots change d'une langue à l'autre). */
+function Rich({ text }: { text: string }) {
+  return <>{text.split("**").map((part, i) => (i % 2 ? <B key={i}>{part}</B> : part))}</>;
+}
+
 const PAGES: { icon: LucideIcon; label: string; desc: string }[] = [
   { icon: BarChart3, label: "Accueil", desc: "Vue d'ensemble, envoi de tes stats et raccourcis rapides." },
   { icon: ListChecks, label: "À faire", desc: "Tes tâches, et tout ce que tu as besoin de demander à l'agence." },
@@ -73,11 +79,12 @@ export function CreatorGuide({
   onGoto: (tab: Tab) => void;
   onSendStats: () => void;
 }) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-4">
       {/* Chapeau (le titre « Guide » est déjà l'en-tête de page) */}
       <p className="-mt-2 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-        Bienvenue{firstName ? ` ${firstName}` : ""}. Tout se fait ici, <B>sur mobile comme sur ordinateur</B>&nbsp;: 2 minutes de lecture et tu es autonome.
+        <Rich text={firstName ? t("Bienvenue {name}. Tout se fait ici, **sur mobile comme sur ordinateur**\u00A0: 2 minutes de lecture et tu es autonome.", { name: firstName }) : t("Bienvenue. Tout se fait ici, **sur mobile comme sur ordinateur**\u00A0: 2 minutes de lecture et tu es autonome.")} />
       </p>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
@@ -85,35 +92,35 @@ export function CreatorGuide({
         <div className="flex min-w-0 flex-col gap-4 xl:col-span-8">
           {/* Le réflexe n°1 : les tâches */}
           <DashPanel className="p-5">
-            <DashSectionTitle icon={ListChecks}>Le réflexe le plus important</DashSectionTitle>
-            <div className="text-[20px] font-semibold leading-tight tracking-tight text-foreground">Note tout dans «&nbsp;À faire&nbsp;»</div>
+            <DashSectionTitle icon={ListChecks}>{t("Le réflexe le plus important")}</DashSectionTitle>
+            <div className="text-[20px] font-semibold leading-tight tracking-tight text-foreground">{t("Note tout dans «\u00A0À faire\u00A0»")}</div>
             <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-              Dès que tu as <B>besoin de quelque chose de l'agence</B> (une facture, un contrat, une question, un contenu à valider, une info), <B>ajoute-le dans «&nbsp;À faire&nbsp;»</B> plutôt que par message.
+              <Rich text={t("Dès que tu as **besoin de quelque chose de l'agence** (une facture, un contrat, une question, un contenu à valider, une info), **ajoute-le dans «\u00A0À faire\u00A0»** plutôt que par message.")} />
             </p>
             <ul className="mt-4 divide-y divide-border border-y border-border text-[13px] text-foreground">
-              {["On le voit en direct, rien ne se perd.", "Tu suis l'avancement\u00A0: À faire, En cours, Fait.", "Tu peux découper en sous-tâches et joindre le contexte."].map((t) => (
-                <li key={t} className="flex items-center gap-2.5 py-2.5">
-                  <Check className="h-4 w-4 shrink-0 text-signaltext" /> <span>{t}</span>
+              {["On le voit en direct, rien ne se perd.", "Tu suis l'avancement\u00A0: À faire, En cours, Fait.", "Tu peux découper en sous-tâches et joindre le contexte."].map((line) => (
+                <li key={line} className="flex items-center gap-2.5 py-2.5">
+                  <Check className="h-4 w-4 shrink-0 text-signaltext" /> <span>{t(line)}</span>
                 </li>
               ))}
             </ul>
             <button type="button" onClick={() => onGoto("todo")} className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
-              <ListChecks className="h-4 w-4" /> Ouvrir «&nbsp;À faire&nbsp;»
+              <ListChecks className="h-4 w-4" /> {t("Ouvrir «\u00A0À faire\u00A0»")}
             </button>
           </DashPanel>
 
           {/* Que trouves-tu dans chaque page : grille à filets */}
           <DashPanel>
             <div className="px-5 pt-5">
-              <DashSectionTitle icon={Files}>Ce que tu trouves dans chaque page</DashSectionTitle>
+              <DashSectionTitle icon={Files}>{t("Ce que tu trouves dans chaque page")}</DashSectionTitle>
             </div>
             <div className="grid grid-cols-1 gap-px border-t border-border bg-border sm:grid-cols-2">
               {PAGES.map((p) => (
                 <div key={p.label} className="flex items-start gap-3 bg-surface px-5 py-3.5">
                   <p.icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                   <div className="min-w-0">
-                    <div className="text-[13px] font-semibold text-foreground">{p.label}</div>
-                    <div className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">{p.desc}</div>
+                    <div className="text-[13px] font-semibold text-foreground">{t(p.label)}</div>
+                    <div className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">{t(p.desc)}</div>
                   </div>
                 </div>
               ))}
@@ -124,28 +131,28 @@ export function CreatorGuide({
         {/* ── Colonne pratique ── */}
         <div className="flex min-w-0 flex-col gap-4 xl:col-span-4">
           <DashPanel className="px-5 pt-5">
-            <DashSectionTitle icon={Smartphone}>Installe l'app</DashSectionTitle>
+            <DashSectionTitle icon={Smartphone}>{t("Installe l'app")}</DashSectionTitle>
             <div className="-mt-2 divide-y divide-border">
               <InfoRow icon={Smartphone} title="iPhone (Safari)">
-                Bouton <B>Partager</B>, puis <B>Ajouter à l'écran d'accueil</B>. Ouvre-la ensuite depuis son icône&nbsp;: <B>indispensable pour recevoir les notifications</B>.
+                <Rich text={t("Bouton **Partager**, puis **Ajouter à l'écran d'accueil**. Ouvre-la ensuite depuis son icône\u00A0: **indispensable pour recevoir les notifications**.")} />
               </InfoRow>
               <InfoRow icon={Smartphone} title="Android (Chrome)">
-                Menu <B>trois points</B> en haut à droite, puis <B>Installer l'application</B>. Elle s'ajoute comme une vraie app.
+                <Rich text={t("Menu **trois points** en haut à droite, puis **Installer l'application**. Elle s'ajoute comme une vraie app.")} />
               </InfoRow>
-              <InfoRow icon={Laptop} title="Ordinateur">
-                Va sur <B>app.ttpcreators.pro</B> et mets-la en favori. Le menu est à gauche, avec plus de place pour les graphiques.
+              <InfoRow icon={Laptop} title={t("Ordinateur")}>
+                <Rich text={t("Va sur **app.ttpcreators.pro** et mets-la en favori. Le menu est à gauche, avec plus de place pour les graphiques.")} />
               </InfoRow>
             </div>
           </DashPanel>
 
           <DashPanel className="p-5">
-            <DashSectionTitle icon={BarChart3}>Tes stats, chaque début de mois</DashSectionTitle>
-            <p className="-mt-1 text-[12px] leading-relaxed text-muted-foreground">C'est ce qui prouve ton audience aux marques. Le plus simple&nbsp;:</p>
+            <DashSectionTitle icon={BarChart3}>{t("Tes stats, chaque début de mois")}</DashSectionTitle>
+            <p className="-mt-1 text-[12px] leading-relaxed text-muted-foreground">{t("C'est ce qui prouve ton audience aux marques. Le plus simple\u00A0:")}</p>
             <ol className="mt-3 flex flex-col gap-2.5">
               {[
-                <>Ouvre l'app <B>Edits</B> d'Instagram.</>,
-                <>Onglet <B>Statistiques</B> (en bas à droite).</>,
-                <>Appuie sur <B>Partager</B> et envoie la capture depuis l'Accueil.</>,
+                <Rich key="1" text={t("Ouvre l'app **Edits** d'Instagram.")} />,
+                <Rich key="2" text={t("Onglet **Statistiques** (en bas à droite).")} />,
+                <Rich key="3" text={t("Appuie sur **Partager** et envoie la capture depuis l'Accueil.")} />,
               ].map((step, i) => (
                 <li key={i} className="flex items-start gap-2.5 text-[13px] text-muted-foreground">
                   <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-muted text-[11px] font-semibold tabular-nums text-foreground">{i + 1}</span>
@@ -154,25 +161,25 @@ export function CreatorGuide({
               ))}
             </ol>
             <button type="button" onClick={onSendStats} className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-border px-3.5 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
-              <Share2 className="h-4 w-4" /> Envoyer mes stats
+              <Share2 className="h-4 w-4" /> {t("Envoyer mes stats")}
             </button>
           </DashPanel>
 
           <DashPanel className="p-5">
-            <DashSectionTitle icon={Bell}>Active les notifications</DashSectionTitle>
+            <DashSectionTitle icon={Bell}>{t("Active les notifications")}</DashSectionTitle>
             <p className="-mt-1 text-[12px] leading-relaxed text-muted-foreground">
-              Sur ton téléphone, ouvre l'app depuis son icône puis touche la <B>cloche</B> en haut, puis <B>Activer sur ce téléphone</B>. Tu es prévenue dès qu'un brief, un document ou un débrief arrive.
+              <Rich text={t("Sur ton téléphone, ouvre l'app depuis son icône puis touche la **cloche** en haut, puis **Activer sur ce téléphone**. Tu es prévenue dès qu'un brief, un document ou un débrief arrive.")} />
             </p>
           </DashPanel>
 
           <DashPanel className="px-5 pt-5">
-            <DashSectionTitle icon={Monitor}>Mobile ou ordinateur&nbsp;?</DashSectionTitle>
+            <DashSectionTitle icon={Monitor}>{t("Mobile ou ordinateur\u00A0?")}</DashSectionTitle>
             <div className="-mt-2 divide-y divide-border">
-              <InfoRow icon={Smartphone} title="Sur mobile">
-                Le menu est <B>en bas</B>. Parfait au quotidien&nbsp;: envoyer une stat, cocher une tâche, lire un brief.
+              <InfoRow icon={Smartphone} title={t("Sur mobile")}>
+                <Rich text={t("Le menu est **en bas**. Parfait au quotidien\u00A0: envoyer une stat, cocher une tâche, lire un brief.")} />
               </InfoRow>
-              <InfoRow icon={Laptop} title="Sur ordinateur">
-                Le menu est <B>à gauche</B>. Idéal pour voir les graphiques en grand et gérer plusieurs choses.
+              <InfoRow icon={Laptop} title={t("Sur ordinateur")}>
+                <Rich text={t("Le menu est **à gauche**. Idéal pour voir les graphiques en grand et gérer plusieurs choses.")} />
               </InfoRow>
             </div>
           </DashPanel>
@@ -182,8 +189,8 @@ export function CreatorGuide({
       {/* Rappel final */}
       <button type="button" onClick={() => onGoto("todo")} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface px-5 py-4 text-left transition-colors hover:bg-rowhover">
         <div>
-          <div className="text-[13px] font-semibold text-foreground">Une question&nbsp;? Une demande&nbsp;?</div>
-          <div className="mt-0.5 text-[12px] text-muted-foreground">Note-la dans «&nbsp;À faire&nbsp;»&nbsp;: c'est le plus sûr pour qu'on te réponde vite.</div>
+          <div className="text-[13px] font-semibold text-foreground">{t("Une question\u00A0? Une demande\u00A0?")}</div>
+          <div className="mt-0.5 text-[12px] text-muted-foreground">{t("Note-la dans «\u00A0À faire\u00A0»\u00A0: c'est le plus sûr pour qu'on te réponde vite.")}</div>
         </div>
         <ChevronRight className="h-5 w-5 shrink-0 text-faint" />
       </button>

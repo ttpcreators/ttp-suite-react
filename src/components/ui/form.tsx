@@ -6,6 +6,7 @@ import { IosActionSheet, IosSheet, useIosPhone } from "@/components/mobile/ios-s
 import { useNavActionSlot } from "@/lib/navAction";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "./select";
 import { DateInput } from "./date-range-picker";
+import { useT } from "@/lib/i18n";
 
 // Enveloppe « input group » : la BORDURE + le halo de focus sont portés par le
 // conteneur (pas par l'input), et une icône optionnelle vit à l'intérieur du champ
@@ -19,8 +20,9 @@ const bareCtrl =
 
 /** « + » de la barre de titre (iPhone) : remplace le bouton « + Label » de la page. */
 function NavPlus({ slot, label, onClick, expanded }: { slot: HTMLElement; label: string; onClick: (e: React.MouseEvent) => void; expanded?: boolean }) {
+  const t = useT();
   return createPortal(
-    <button type="button" onClick={onClick} aria-label={`Ajouter : ${label}`} aria-expanded={expanded} className="grid h-11 w-11 place-items-center text-primary">
+    <button type="button" onClick={onClick} aria-label={t("Ajouter : {label}", { label })} aria-expanded={expanded} className="grid h-11 w-11 place-items-center text-primary">
       <Plus className="h-[25px] w-[25px]" strokeWidth={2} />
     </button>,
     slot,
@@ -297,10 +299,11 @@ export function SelectField({
   options: { value: string; label: string; img?: string | null }[];
   className?: string;
 }) {
+  const t = useT();
   return (
     <Field label={label} className={className}>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="h-[42px] w-full rounded-lg bg-surface" placeholder="Sélectionner…" />
+        <SelectTrigger className="h-[42px] w-full rounded-lg bg-surface" placeholder={t("Sélectionner…")} />
         <SelectContent>
           {options.map((o, i) => (
             <SelectItem key={o.value} index={i} value={o.value} img={o.img}>
@@ -342,6 +345,7 @@ export function Picker({
   /** Bouton en pilule (dans une ligne d'actions). */
   pill?: boolean;
 }) {
+  const t = useT();
   const empty = options.find((o) => o.value === "")?.label;
   // La largeur (w-…, flex-1, min-w-…) se règle sur l'enveloppe ; le bouton la remplit.
   return (
@@ -349,7 +353,7 @@ export function Picker({
     <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger
         aria-label={ariaLabel}
-        placeholder={placeholder ?? empty ?? "Sélectionner…"}
+        placeholder={placeholder ?? empty ?? t("Sélectionner…")}
         className={cn(
           "w-full min-w-0 bg-surface",
           pill ? "rounded-full" : "rounded-lg",
@@ -374,7 +378,7 @@ export function InlineForm({
   title,
   onClose,
   onSubmit,
-  submitLabel = "Ajouter",
+  submitLabel: submitLabelProp,
   children,
 }: {
   open: boolean;
@@ -389,7 +393,9 @@ export function InlineForm({
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const ios = useIosPhone();
+  const t = useT();
   if (!open) return null;
+  const submitLabel = submitLabelProp ?? t("Ajouter");
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (busyRef.current) return;
@@ -408,7 +414,7 @@ export function InlineForm({
       <IosSheet onClose={onClose} label={title}>
         <form onSubmit={submit} className="bg-panel">
           <div className="ios-bar sticky top-0 z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-border/70 px-4 pb-3 pt-6">
-            <button type="button" onClick={onClose} className="justify-self-start text-[17px] text-primary">Annuler</button>
+            <button type="button" onClick={onClose} className="justify-self-start text-[17px] text-primary">{t("Annuler")}</button>
             <div className="max-w-[190px] truncate text-center text-[17px] font-semibold text-foreground">{title}</div>
             <button type="submit" disabled={busy} className="justify-self-end text-[17px] font-semibold text-primary disabled:opacity-40">{submitLabel}</button>
           </div>
@@ -445,6 +451,7 @@ export function InlineForm({
 
 /** Petit bouton de suppression pour une ligne. */
 export function DeleteButton({ onClick }: { onClick: () => void }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -453,7 +460,7 @@ export function DeleteButton({ onClick }: { onClick: () => void }) {
         onClick();
       }}
       className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-[#E5484D]"
-      title="Supprimer"
+      title={t("Supprimer")}
     >
       <X className="h-4 w-4" />
     </button>

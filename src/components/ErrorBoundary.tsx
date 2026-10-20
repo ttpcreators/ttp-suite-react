@@ -1,5 +1,17 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { reportError as report } from "@/lib/errorReport";
+import { useT, type Vars } from "@/lib/i18n";
+
+/** Texte traduit dans la langue de l'espace (la barrière est un composant classe, sans hook). */
+function Tr({ fr, vars }: { fr: string; vars?: Vars }) {
+  const t = useT();
+  return <>{t(fr, vars)}</>;
+}
+/** Libellé de zone (« Cette page »…) + « n'a pas pu s'afficher », traduits ensemble. */
+function FailedLabel({ label }: { label?: string }) {
+  const t = useT();
+  return <>{t("{label} n'a pas pu s'afficher", { label: label ? t(label) : t("Cette section") })}</>;
+}
 
 // Erreur de chargement d'un chunk (module dynamique) : arrive quand l'app est
 // restée ouverte pendant un déploiement et demande un ancien fichier au hash
@@ -130,18 +142,18 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="grid min-h-[40vh] place-items-center p-6">
           {stuck ? (
             <div className="max-w-sm text-center">
-              <div className="text-sm font-semibold text-foreground">L'app n'a pas pu se mettre à jour</div>
-              <div className="mt-1 text-xs text-muted-foreground">Vérifie ta connexion internet, puis recharge.</div>
+              <div className="text-sm font-semibold text-foreground"><Tr fr="L'app n'a pas pu se mettre à jour" /></div>
+              <div className="mt-1 text-xs text-muted-foreground"><Tr fr="Vérifie ta connexion internet, puis recharge." /></div>
               <button
                 type="button"
                 onClick={forceUpdate}
                 className="mt-4 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:opacity-90"
               >
-                Recharger l'app
+                <Tr fr="Recharger l'app" />
               </button>
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">Mise à jour de l'app…</div>
+            <div className="text-sm text-muted-foreground"><Tr fr="Mise à jour de l'app…" /></div>
           )}
         </div>
       );
@@ -155,10 +167,10 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="grid min-h-[40vh] place-items-center rounded-xl border border-dashed border-border bg-surface/50 p-6">
           <div className="max-w-sm text-center">
             <div className="text-sm font-semibold text-foreground">
-              {label ?? "Cette section"} n'a pas pu s'afficher
+              <FailedLabel label={label} />
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Le reste de l'app fonctionne. Tu peux réessayer.
+              <Tr fr="Le reste de l'app fonctionne. Tu peux réessayer." />
             </div>
             <div className="mt-4 flex items-center justify-center gap-2">
               <button
@@ -166,14 +178,14 @@ export class ErrorBoundary extends Component<Props, State> {
                 onClick={() => this.setState({ error: null })}
                 className="rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
               >
-                Réessayer
+                <Tr fr="Réessayer" />
               </button>
               <button
                 type="button"
                 onClick={selfHeal}
                 className="rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:opacity-90"
               >
-                Recharger l'app
+                <Tr fr="Recharger l'app" />
               </button>
             </div>
             <div className="mt-3 truncate text-[10px] text-faint" title={msg}>

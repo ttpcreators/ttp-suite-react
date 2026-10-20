@@ -5,6 +5,7 @@ import { dbUpdate } from "@/lib/db";
 import { invalidateCreators } from "@/lib/useCreators";
 import { initials } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
+import { useT } from "@/lib/i18n";
 
 function slug(s: string) {
   return s
@@ -42,6 +43,7 @@ export function AvatarUpload({
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [broken, setBroken] = useState(false);
+  const t = useT();
   useEffect(() => setBroken(false), [photoUrl]);
 
   const interactive = editable && !!creatorId;
@@ -54,11 +56,11 @@ export function AvatarUpload({
     e.target.value = ""; // permet de re-choisir le même fichier
     if (!file || !creatorId) return;
     if (!file.type.startsWith("image/")) {
-      toast("Choisis une image");
+      toast(t("Choisis une image"));
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      toast("Image trop lourde (max 5 Mo)");
+      toast(t("Image trop lourde (max 5 Mo)"));
       return;
     }
     setBusy(true);
@@ -73,7 +75,7 @@ export function AvatarUpload({
     if (upErr) {
       setBusy(false);
       console.warn("[avatar] upload", upErr);
-      toast(`Échec de l'upload : ${(upErr.message || "réessaie").slice(0, 80)}`);
+      toast(t("Échec de l'upload : {error}", { error: (upErr.message || t("réessaie")).slice(0, 80) }));
       return;
     }
     const { data } = supabase.storage.from("avatars").getPublicUrl(path);
@@ -81,13 +83,13 @@ export function AvatarUpload({
     const ok = await dbUpdate("creators", creatorId, { photo_url: url });
     setBusy(false);
     if (!ok) {
-      toast("Photo envoyée mais non enregistrée (droits ?)");
+      toast(t("Photo envoyée mais non enregistrée (droits ?)"));
       return;
     }
     setBroken(false);
     invalidateCreators();
     onUploaded?.(url);
-    toast("Photo mise à jour ✓");
+    toast(t("Photo mise à jour ✓"));
   };
 
   const px = { width: size, height: size };
@@ -98,7 +100,7 @@ export function AvatarUpload({
       onClick={pick}
       role={interactive ? "button" : undefined}
       tabIndex={interactive ? 0 : undefined}
-      aria-label={interactive ? `Changer la photo de ${name}` : undefined}
+      aria-label={interactive ? t("Changer la photo de {name}", { name }) : undefined}
       aria-busy={busy || undefined}
       onKeyDown={
         interactive
@@ -138,7 +140,7 @@ export function AvatarUpload({
           {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-[18px] w-[18px]" />}
         </div>
       )}
-      <input ref={inputRef} type="file" accept="image/*" aria-label="Fichier photo" onChange={onFile} className="hidden" />
+      <input ref={inputRef} type="file" accept="image/*" aria-label={t("Fichier photo")} onChange={onFile} className="hidden" />
     </div>
   );
 }

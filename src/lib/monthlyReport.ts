@@ -10,6 +10,7 @@ import { parseAmount, parseAmountStrict, formatEuro } from "./money";
 import { toISODate } from "./dates";
 import { DEFAULT_COMMISSION, parseCommissionPct } from "./commission";
 import { fmtCompact } from "./timeSeries";
+import { translate, type Lang } from "./i18n";
 
 type Hist = { d: string; f: number }[];
 export type ReportData = {
@@ -50,12 +51,15 @@ export type MonthlyReport = {
   empty: boolean;
 };
 
-const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+const MONTHS: Record<Lang, string[]> = {
+  fr: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"],
+  en: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+};
 
-/** "2026-10" → "octobre 2026". */
-export function monthLabel(month: string): string {
+/** "2026-10" → "octobre 2026" (« October 2026 » en anglais). */
+export function monthLabel(month: string, lang: Lang = "fr"): string {
   const [y, m] = month.split("-").map(Number);
-  return `${MONTHS[(m || 1) - 1]} ${y}`;
+  return `${MONTHS[lang][(m || 1) - 1]} ${y}`;
 }
 /** Mois courant "YYYY-MM" (heure locale). */
 export function currentMonth(now = new Date()): string {
@@ -84,7 +88,9 @@ export function followersOver(hist: Hist | undefined, month: string): { start: n
   return { start, end: inside[inside.length - 1].f };
 }
 
-export function buildMonthlyReport(data: ReportData, month: string, now = new Date()): MonthlyReport {
+/** `lang` : langue des phrases et libellés produits (« Ce que l'agence t'a apporté », mois). */
+export function buildMonthlyReport(data: ReportData, month: string, now = new Date(), lang: Lang = "fr"): MonthlyReport {
+  const tr = (fr: string, vars?: Record<string, string | number>) => translate(lang, fr, vars);
   const year = month.slice(0, 4);
   const rosterRate = parseCommissionPct(data.creator.commission) ?? DEFAULT_COMMISSION;
 
@@ -158,18 +164,37 @@ export function buildMonthlyReport(data: ReportData, month: string, now = new Da
     const amounts = newCollabs.map((c) => parseAmountStrict(c.cachet));
     const total = amounts.reduce<number>((s, a) => s + (a ?? 0), 0);
     const partial = amounts.some((a) => a === null);
-    agency.push(`${newCollabs.length} nouvelle${newCollabs.length > 1 ? "s" : ""} collab${newCollabs.length > 1 ? "s" : ""} décrochée${newCollabs.length > 1 ? "s" : ""} et négociée${newCollabs.length > 1 ? "s" : ""} pour toi (${newCollabs.map((c) => c.brand).join(", ")})${total ? `, pour ${partial ? "au moins " : ""}${formatEuro(Math.round(total))} de cachets` : ""}`);
+    const n = newCollabs.length;
+    const brands = newCollabs.map((c) => c.brand).join(", ");
+    const head = n > 1
+      ? tr("{n} nouvelles collabs décrochées et négociées pour toi ({brands})", { n, brands })
+      : tr("{n} nouvelle collab décrochée et négociée pour toi ({brands})", { n, brands });
+    const amount = formatEuro(Math.round(total));
+    const tail = !total ? "" : partial ? tr(", pour au moins {amount} de cachets", { amount }) : tr(", pour {amount} de cachets", { amount });
+    agency.push(head + tail);
   }
-  if (earnings.share) agency.push(`${formatEuro(earnings.share)} facturés et suivis pour toi : devis, factures et relances, tu n'as rien eu à gérer`);
-  if (published.length) agency.push(`${published.length} campagne${published.length > 1 ? "s" : ""} publiée${published.length > 1 ? "s" : ""} et suivie${published.length > 1 ? "s" : ""} jusqu'au bilan envoyé à la marque`);
-  if (gifts.count) agency.push(`${gifts.count} envoi${gifts.count > 1 ? "s" : ""} de produits reçu${gifts.count > 1 ? "s" : ""}${gifts.brands.length ? ` (${gifts.brands.join(", ")})` : ""}${gifts.value ? `, d'une valeur de ${formatEuro(gifts.value)}` : ""}`);
+  if (earnings.share) agency.push(tr("{amount} facturés et suivis pour toi : devis, factures et relances, tu n'as rien eu à gérer", { amount: formatEuro(earnings.share) }));
+  if (published.length) {
+    const n = published.length;
+    agency.push(n > 1
+      ? tr("{n} campagnes publiées et suivies jusqu'au bilan envoyé à la marque", { n })
+      : tr("{n} campagne publiée et suivie jusqu'au bilan envoyé à la marque", { n }));
+  }
+  if (gifts.count) {
+    const n = gifts.count;
+    agency.push(
+      (n > 1 ? tr("{n} envois de produits reçus", { n }) : tr("{n} envoi de produits reçu", { n })) +
+      (gifts.brands.length ? ` (${gifts.brands.join(", ")})` : "") +
+      (gifts.value ? tr(", d'une valeur de {amount}", { amount: formatEuro(gifts.value) }) : ""),
+    );
+  }
   const grew = stats.filter((s) => s.delta > 0);
-  if (grew.length) agency.push(`Ton audience a grandi : ${grew.map((s) => `+${fmtCompact(s.delta)} abonnés sur ${s.label}`).join(", ")}`);
+  if (grew.length) agency.push(tr("Ton audience a grandi : {list}", { list: grew.map((s) => tr("+{n} abonnés sur {platform}", { n: fmtCompact(s.delta), platform: s.label })).join(", ") }));
 
   const empty = !invoices.length && !earnings.paidOut && !newCollabs.length && !published.length && !stats.length && !engagement && !gifts.count;
   return {
     month,
-    label: monthLabel(month),
+    label: monthLabel(month, lang),
     inProgress: month === currentMonth(now),
     earnings,
     invoices,

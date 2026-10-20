@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from "lucide-react";
 import { Alert, type AlertVariant } from "@/components/ui/alert";
+import { EN } from "@/lib/i18n/en";
 
 /*
  * Notifications du bas (agence + créateur) au design « Alert » :
@@ -21,7 +22,38 @@ let seq = 0;
 const ERROR_RE = /erreur|impossible|échou|échec|indisponible|refus|invalide|introuvable|bloqu|non enregistr|n'a pas (pu|été)/i;
 const WARN_RE = /attention|d'abord|aucun|déjà|trop lourd|max\b|requis|manquant|choisis|ajoute au moins/i;
 
-function inferVariant(message: string): AlertVariant {
+/**
+ * Espace créateur en anglais : les messages arrivent traduits. Pour garder la même
+ * couleur qu'en français, on retrouve le texte français d'origine (clé du dictionnaire,
+ * y compris les modèles à variables « {x} ») avant d'appliquer les motifs ci-dessus.
+ * Un message français n'est jamais une valeur anglaise du dictionnaire : rien ne change
+ * côté agence.
+ */
+let enToFr: { exact: Map<string, string>; templates: [RegExp, string][] } | null = null;
+function frenchOf(message: string): string {
+  if (!enToFr) {
+    const exact = new Map<string, string>();
+    const templates: [RegExp, string][] = [];
+    for (const [fr, en] of Object.entries(EN)) {
+      if (en === fr) continue;
+      exact.set(en, fr);
+      const parts = en.split(/\{\w+\}/);
+      // Modèle à variables, seulement s'il garde assez de texte fixe pour être sûr.
+      if (parts.length > 1 && parts.join("").replace(/[^A-Za-z]/g, "").length >= 6) {
+        const src = parts.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[\\s\\S]*?");
+        templates.push([new RegExp(`^${src}$`), fr]);
+      }
+    }
+    enToFr = { exact, templates };
+  }
+  const hit = enToFr.exact.get(message);
+  if (hit) return hit;
+  for (const [re, fr] of enToFr.templates) if (re.test(message)) return fr;
+  return message;
+}
+
+function inferVariant(raw: string): AlertVariant {
+  const message = frenchOf(raw);
   if (ERROR_RE.test(message)) return "error";
   if (/✓|✅/.test(message)) return "success";
   if (WARN_RE.test(message)) return "warning";

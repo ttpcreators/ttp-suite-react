@@ -4,6 +4,7 @@ import { Area, AreaChart, Line, LineChart, CartesianGrid, XAxis, YAxis, Tooltip 
 import { ChartContainer } from "@/components/ui/chart";
 import { Delta } from "@/components/ui/dash";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { useLocale, useT } from "@/lib/i18n";
 
 /**
  * Carte de courbe réutilisable (agence + créateur) : panneau façon Aperçu, gros
@@ -23,12 +24,12 @@ export default function GlassStatChart({
   title,
   subtitle,
   points,
-  format = (n) => n.toLocaleString("fr-FR"),
+  format: formatProp,
   yFormat = compactAxis,
   color = "var(--primary)",
   defaultType = "area",
   height = 220,
-  compareLabel = "vs préc.",
+  compareLabel: compareLabelProp,
 }: {
   title: string;
   subtitle?: string;
@@ -42,6 +43,10 @@ export default function GlassStatChart({
   compareLabel?: string;
 }) {
   const [type, setType] = useState<"line" | "area">(defaultType);
+  const t = useT();
+  const locale = useLocale();
+  const format = formatProp ?? ((n: number) => n.toLocaleString(locale));
+  const compareLabel = compareLabelProp ?? t("vs préc.");
 
   // Tooltip formaté (euro / compact…) — le `content` custom de Recharts ignore `formatter`.
   const TooltipContent = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value?: number | string }>; label?: string }) =>
@@ -69,12 +74,12 @@ export default function GlassStatChart({
         <Tabs
           className="shrink-0"
           size="sm"
-          label="Type de graphique"
+          label={t("Type de graphique")}
           value={type}
           onValueChange={(v) => setType(v as "line" | "area")}
           items={[
-            { value: "area", label: "Aire" },
-            { value: "line", label: "Ligne" },
+            { value: "area", label: t("Aire") },
+            { value: "line", label: t("Ligne") },
           ]}
         />
       </div>
@@ -89,7 +94,7 @@ export default function GlassStatChart({
       <div className="mt-4">
         {clean.length === 0 ? (
           <div className="grid place-items-center text-center text-xs text-muted-foreground" style={{ height }}>
-            Pas encore de données — la courbe apparaîtra ici.
+            {t("Pas encore de données — la courbe apparaîtra ici.")}
           </div>
         ) : (
           <div style={{ height }}>

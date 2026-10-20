@@ -24,6 +24,9 @@ import {
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
 import { BarButton, RailButton, SearchField, ToolButton, mailRowCls, pillCls } from "@/components/mail-shell";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { useLocale, useT, type Vars } from "@/lib/i18n";
+
+type T = (fr: string, vars?: Vars) => string;
 
 /*
  * Section « Mails » (lecture seule) : les échanges de la boîte agence où apparaît
@@ -58,12 +61,13 @@ const isAuto = (s: MailStatus) => s === "nouvelle" || s === "negociation";
 
 /** Statut discret (pastille + texte) pour les lignes de la liste, avec l'auteur du choix. */
 function StatusDot({ status, by }: { status: string; by?: string }) {
+  const t = useT();
   const m = statusMeta(status);
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[11px] text-muted-foreground">
       <span className={cn("size-1.5 shrink-0 rounded-full", m.dot)} />
-      {m.label}
-      {by && <span className="truncate text-faint">· par {by}</span>}
+      {t(m.label)}
+      {by && <span className="truncate text-faint">{t("· par {who}", { who: by })}</span>}
     </span>
   );
 }
@@ -109,16 +113,16 @@ const CHOICES: { value: MailChoice; label: string; hint: string; icon: LucideIco
 ];
 const choiceMeta = (c: MailChoice) => CHOICES.find((x) => x.value === c) ?? CHOICES[0];
 
-const fmtDay = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "";
-const fmtStamp = (ts: number) =>
-  new Date(ts).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const fmtDay = (iso: string | null, locale: string) =>
+  iso ? new Date(iso).toLocaleDateString(locale, { day: "numeric", month: "short" }) : "";
+const fmtStamp = (ts: number, locale: string) =>
+  new Date(ts).toLocaleString(locale, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 /** Auteur d'un choix, vu par la personne qui regarde (« toi », « ton agence », « Chloé », « l'agence »). */
-const authorName = (by: "creator" | "agency", mode: Mode, creatorName: string) =>
-  mode === "creator" ? (by === "creator" ? "toi" : "ton agence") : by === "creator" ? creatorName : "l'agence";
-const authorSubject = (by: "creator" | "agency", mode: Mode, creatorName: string) =>
-  mode === "creator" ? (by === "creator" ? "Tu as" : "Ton agence a") : by === "creator" ? `${creatorName} a` : "L'agence a";
+const authorName = (by: "creator" | "agency", mode: Mode, creatorName: string, t: T) =>
+  mode === "creator" ? (by === "creator" ? t("toi") : t("ton agence")) : by === "creator" ? creatorName : t("l'agence");
+const authorSubject = (by: "creator" | "agency", mode: Mode, creatorName: string, t: T) =>
+  mode === "creator" ? (by === "creator" ? t("Tu as") : t("Ton agence a")) : by === "creator" ? t("{name} a", { name: creatorName }) : t("L'agence a");
 const VERB: Record<MailChoice, string> = {
   encours: "remis l'échange en cours", valide: "validé l'échange", refuse: "refusé l'échange",
   a_verifier: "passé l'échange en « À vérifier »", a_valider: "passé l'échange en « À valider »",
@@ -149,6 +153,8 @@ function StatusPanel({
   /** Descend jusqu'au champ « Écrire une remarque » (sous les mails) et le sélectionne. */
   onWriteNote: () => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const real = choiceOf(thread.status);
   const forCreator = mode === "creator";
   const tiles = forCreator ? CHOICES.filter((c) => !c.agencyOnly) : CHOICES;
@@ -160,13 +166,13 @@ function StatusPanel({
   const [pending, setPending] = useState<MailChoice | null>(null);
   const [comment, setComment] = useState("");
   const pick = pending ? choiceMeta(pending) : null;
-  const when = fmtDay(thread.decidedAt);
+  const when = fmtDay(thread.decidedAt, locale);
 
   const hintFor = (c: (typeof CHOICES)[number]) => {
-    if (c.value !== current) return c.hint;
+    if (c.value !== current) return t(c.hint);
     // Case active : « Nouvelle demande » / « En négociation », ou qui a tranché et quand.
-    if (c.value === "encours") return statusMeta(thread.status).label;
-    return thread.decidedBy ? `par ${authorName(thread.decidedBy, mode, creatorName)}${when ? `, ${when}` : ""}` : c.hint;
+    if (c.value === "encours") return t(statusMeta(thread.status).label);
+    return thread.decidedBy ? t("par {who}", { who: authorName(thread.decidedBy, mode, creatorName, t) }) + (when ? `, ${when}` : "") : t(c.hint);
   };
 
   const confirm = async () => {
@@ -184,14 +190,14 @@ function StatusPanel({
         <div className={cn("mb-2.5 flex items-start gap-2 rounded-lg border px-2.5 py-2 text-[12px]", agencyStatus.tile)}>
           <agencyStatus.icon className="mt-px h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0">
-            <b>Statut de l'agence : {agencyStatus.label}</b>{when ? ` · ${when.replace(/\.$/, "")}` : ""}
-            <span className="opacity-90"> · {AGENCY_STATUS_HINT[agencyStatus.value]}</span>
+            <b>{t("Statut de l'agence : {label}", { label: t(agencyStatus.label) })}</b>{when ? ` · ${when.replace(/\.$/, "")}` : ""}
+            <span className="opacity-90"> · {t(AGENCY_STATUS_HINT[agencyStatus.value] ?? "")}</span>
           </span>
         </div>
       )}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-        <span className="pr-1 text-[12px] font-semibold text-muted-foreground">{forCreator ? "Ton avis" : "Statut"}</span>
-        <div role="radiogroup" aria-label={forCreator ? "Ton avis" : "Statut de l'échange"} className="flex flex-wrap gap-1.5">
+        <span className="pr-1 text-[12px] font-semibold text-muted-foreground">{forCreator ? t("Ton avis") : t("Statut")}</span>
+        <div role="radiogroup" aria-label={forCreator ? t("Ton avis") : t("Statut de l'échange")} className="flex flex-wrap gap-1.5">
           {tiles.map((c) => {
             const active = c.value === current;
             const picked = c.value === pending;
@@ -212,7 +218,7 @@ function StatusPanel({
                     : "border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
                 )}
               >
-                <Icon className="h-3.5 w-3.5" /> {c.label}
+                <Icon className="h-3.5 w-3.5" /> {t(c.label)}
               </button>
             );
           })}
@@ -221,22 +227,22 @@ function StatusPanel({
         {feedCount > 0 && (
           <button type="button" onClick={onShowFeed}
             className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-            <History className="h-3.5 w-3.5" /> Suivi ({feedCount})
+            <History className="h-3.5 w-3.5" /> {t("Suivi ({n})", { n: feedCount })}
           </button>
         )}
         <button type="button" onClick={onWriteNote}
           className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-          <MessageSquarePlus className="h-3.5 w-3.5" /> Remarque
+          <MessageSquarePlus className="h-3.5 w-3.5" /> {t("Remarque")}
         </button>
       </div>
       {activeMeta && !pick && (
-        <p className="mt-1.5 text-[11.5px] text-muted-foreground">{activeMeta.label} : {hintFor(activeMeta)}</p>
+        <p className="mt-1.5 text-[11.5px] text-muted-foreground">{t("{label} : {hint}", { label: t(activeMeta.label), hint: hintFor(activeMeta) })}</p>
       )}
 
       {pick && (
         <div className="mt-3 rounded-xl border border-border bg-surface p-3">
           <p className="text-[13px] font-medium text-foreground">
-            {forCreator ? `Ton avis : « ${pick.label} » ?` : `Passer cet échange en « ${pick.label} » ?`}
+            {forCreator ? t("Ton avis : « {label} » ?", { label: t(pick.label) }) : t("Passer cet échange en « {label} » ?", { label: t(pick.label) })}
           </p>
           <textarea
             value={comment}
@@ -247,26 +253,26 @@ function StatusPanel({
             }}
             maxLength={1000}
             rows={2}
-            placeholder={forCreator ? "Un mot pour ton manager (facultatif) : pourquoi, tes conditions…" : `Un mot pour ${creatorName} (facultatif)`}
+            placeholder={forCreator ? t("Un mot pour ton manager (facultatif) : pourquoi, tes conditions…") : t("Un mot pour {name} (facultatif)", { name: creatorName })}
             className="mt-2 max-h-40 min-h-[60px] w-full resize-none rounded-md border border-border bg-transparent px-3 py-2 text-[13px] text-foreground outline-none [field-sizing:content] placeholder:text-faint focus:border-primary"
           />
           <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
             <span className="mr-auto w-full text-[11px] text-faint sm:w-auto">
-              {forCreator ? "Ton manager reçoit une notification." : creatorSees ? `${creatorName} reçoit une notification.` : "Sa section Mails n'est pas encore activée : pas de notification."}
+              {forCreator ? t("Ton manager reçoit une notification.") : creatorSees ? t("{name} reçoit une notification.", { name: creatorName }) : t("Sa section Mails n'est pas encore activée : pas de notification.")}
             </span>
             <button type="button" onClick={() => setPending(null)} className="h-9 rounded-lg px-3 text-[13px] text-muted-foreground transition-colors hover:text-foreground">
-              Annuler
+              {t("Annuler")}
             </button>
             <button type="button" onClick={() => void confirm()} disabled={busy}
               className={cn("inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50", pick.confirm)}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Confirmer
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {t("Confirmer")}
             </button>
           </div>
         </div>
       )}
 
       {mode === "preview" && !pick && (
-        <p className="mt-2 text-[11px] text-muted-foreground">Aperçu de ce que voit {creatorName}. Un choix fait ici est noté au nom de l'agence.</p>
+        <p className="mt-2 text-[11px] text-muted-foreground">{t("Aperçu de ce que voit {name}. Un choix fait ici est noté au nom de l'agence.", { name: creatorName })}</p>
       )}
     </div>
   );
@@ -274,6 +280,8 @@ function StatusPanel({
 
 /** Suivi d'un échange : messages du créateur, remarques de l'agence et changements de statut, dans l'ordre. */
 function Feed({ items, mode, creatorName }: { items: FeedItem[]; mode: Mode; creatorName: string }) {
+  const t = useT();
+  const locale = useLocale();
   const asAgency = mode !== "creator";
   return (
     <ul className="mb-3 flex flex-col gap-2.5">
@@ -289,7 +297,7 @@ function Feed({ items, mode, creatorName }: { items: FeedItem[]; mode: Mode; cre
           const author = !known
             ? n.author_name || null
             : byAgency
-              ? (asAgency ? n.author_name || "L'agence" : `Ton agence${n.author_name ? ` · ${n.author_name}` : ""}`)
+              ? (asAgency ? n.author_name || t("L'agence") : t("Ton agence") + (n.author_name ? ` · ${n.author_name}` : ""))
               : asAgency ? creatorName : null;
           return (
             <li key={`n-${n.id}`}
@@ -301,8 +309,8 @@ function Feed({ items, mode, creatorName }: { items: FeedItem[]; mode: Mode; cre
               {author && <p className="mb-0.5 text-[11px] font-semibold text-muted-foreground">{author}</p>}
               <p className="whitespace-pre-wrap text-[13px] text-foreground [overflow-wrap:anywhere]">{n.body}</p>
               <p className="mt-1 text-[11px] text-faint">
-                {fmtStamp(it.at)}
-                {known && !asAgency && !byAgency && (n.agency_read_at ? " · lu" : " · envoyé")}
+                {fmtStamp(it.at, locale)}
+                {known && !asAgency && !byAgency && (n.agency_read_at ? ` · ${t("lu")}` : ` · ${t("envoyé")}`)}
               </p>
             </li>
           );
@@ -317,8 +325,8 @@ function Feed({ items, mode, creatorName }: { items: FeedItem[]; mode: Mode; cre
             <span className="inline-flex max-w-full items-start gap-2 rounded-xl border border-border bg-surface px-2.5 py-1.5 text-[12px] text-muted-foreground">
               <span className={cn("mt-px grid h-4 w-4 shrink-0 place-items-center rounded-full", c.disc)}><Icon className="h-2.5 w-2.5" /></span>
               <span className="min-w-0">
-                <span className="font-medium text-foreground">{authorSubject(e.by_role, mode, creatorName)} {VERB[e.status]}</span>
-                <span className="text-faint"> · {fmtStamp(it.at)}</span>
+                <span className="font-medium text-foreground">{authorSubject(e.by_role, mode, creatorName, t)} {t(VERB[e.status])}</span>
+                <span className="text-faint"> · {fmtStamp(it.at, locale)}</span>
               </span>
             </span>
             {e.comment && (
@@ -364,6 +372,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   /** Alias du créateur (réglage), pour le message « boîte vide ». */
   alias?: string | null;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const asAgency = mode !== "creator";
   const forCreator = asAgency ? creator : undefined;
   const creatorName = prettyName(titleCase(creator));
@@ -683,7 +693,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     const open = thread && thread.id === threadId ? thread : null;
     const lite = threads?.find((x) => x.id === threadId);
     const what = prettyName(lite?.brand || open?.brand || "") || lite?.subject || open?.subject || "un échange";
-    const label = choiceMeta(choice).label;
+    const label = choiceMeta(choice).label; // notifications à l'agence : en français
+    const shownLabel = t(label);
     try {
       if (mode === "creator") {
         // Le créateur ne choisit qu'entre En cours, Validé et Refusé.
@@ -691,7 +702,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         const r = await sendDecision(threadId, choice, word);
         applyDecision(threadId, r);
         notifyAgency("mail", creator, `Avis : ${PUSH_VERB[choice]} ${what}${word ? ` · « ${word} »` : ""}`);
-        toast(`${label} ✓ Ton manager est prévenu`);
+        toast(t("{label} ✓ Ton manager est prévenu", { label: shownLabel }));
       } else {
         const now = new Date().toISOString();
         const row: Record<string, string | null> = choice === "encours"
@@ -704,7 +715,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
             .upsert({ creator, thread_id: threadId, status: row.status, updated_at: now }, { onConflict: "creator,thread_id" }));
         }
         if (error) {
-          toast(/status_check/.test(error.message) ? "Lance d'abord le SQL « remarques » dans Supabase." : "Statut non enregistré, réessaie");
+          toast(/status_check/.test(error.message) ? "Lance d'abord le SQL « remarques » dans Supabase." : t("Statut non enregistré, réessaie"));
           return false;
         }
         // Trace à son nom (sans effet tant que le SQL « historique » n'est pas lancé).
@@ -719,14 +730,14 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           ? { status: autoOf.current.get(threadId) ?? (open ? autoStatusOf(open.messages) : "nouvelle"), decidedBy: null, decidedAt: null }
           : { status: choice, decidedBy: "agency", decidedAt: now });
         if (creatorSees) notifyCreator("mail", creator, `Statut de l'agence · ${what} : ${label}${word ? ` · « ${word} »` : ""}`);
-        toast(`Statut enregistré : ${label} ✓`);
+        toast(t("Statut enregistré : {label} ✓", { label: shownLabel }));
       }
       const events = await getStatusHistory(creator, threadId);
       // Un autre échange a été ouvert entre-temps : on ne touche pas à son historique.
       setHistory((cur) => (cur && cur.id !== threadId ? cur : { id: threadId, events }));
       return true;
     } catch (e) {
-      if (!handleGone(e)) toast(errText(e));
+      if (!handleGone(e)) toast(t(errText(e)));
       return false;
     } finally {
       setDeciding(false);
@@ -749,7 +760,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         const n = await sendManagerNote(thread.id, body);
         addNote(thread.id, { ...n, by_role: "creator" });
         notifyAgency("mail", creator, `Remarque sur ${what} : ${body}`);
-        toast("Remarque envoyée à ton manager ✓");
+        toast(t("Remarque envoyée à ton manager ✓"));
       } else {
         // Remarque de l'agence : visible par le créateur dans le suivi de l'échange.
         const { data: auth } = await supabase.auth.getSession();
@@ -761,17 +772,17 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           author_name: await myDisplayName(), agency_read_at: now,
         }).select("*").single();
         if (error) {
-          toast(/by_role|author_name|row-level/.test(error.message) ? "Lance d'abord le SQL « remarques » dans Supabase." : "Remarque non enregistrée, réessaie");
+          toast(/by_role|author_name|row-level/.test(error.message) ? "Lance d'abord le SQL « remarques » dans Supabase." : t("Remarque non enregistrée, réessaie"));
           return;
         }
         addNote(thread.id, data as MailNote);
         // Texte explicite : le titre de la notification (serveur) parle d'un statut.
         if (creatorSees) notifyCreator("mail", creator, `Nouvelle remarque de ton agence · ${what} : ${body}`);
-        toast(creatorSees ? `Remarque envoyée à ${creatorName} ✓` : "Remarque enregistrée ✓");
+        toast(creatorSees ? t("Remarque envoyée à {name} ✓", { name: creatorName }) : t("Remarque enregistrée ✓"));
       }
       setNote("");
     } catch (e) {
-      if (!handleGone(e)) toast(errText(e));
+      if (!handleGone(e)) toast(t(errText(e)));
     } finally {
       setSending(false);
     }
@@ -852,12 +863,12 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   );
 
   const retry = () => void load({ fresh: true });
-  const unavailable = err ?? "";
+  const unavailable = t(err ?? "");
 
   if (off) {
     return (
       <div ref={rootRef}>
-        <DashPanel><StatePanel icon={Inbox} text="Cette section n'est plus activée." /></DashPanel>
+        <DashPanel><StatePanel icon={Inbox} text={t("Cette section n'est plus activée.")} /></DashPanel>
       </div>
     );
   }
@@ -865,9 +876,9 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     return (
       <div ref={rootRef}>
         {err ? (
-          <DashPanel><StatePanel icon={CircleAlert} text={unavailable} action={{ label: "Réessayer", busy: loading, onClick: retry }} /></DashPanel>
+          <DashPanel><StatePanel icon={CircleAlert} text={unavailable} action={{ label: t("Réessayer"), busy: loading, onClick: retry }} /></DashPanel>
         ) : (
-          <DashPanel className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Chargement des mails…</DashPanel>
+          <DashPanel className="flex items-center justify-center gap-2 p-10 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> {t("Chargement des mails…")}</DashPanel>
         )}
       </div>
     );
@@ -878,7 +889,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         <DashPanel className="flex flex-col items-center gap-2 px-6 py-10 text-center">
           <Inbox className="h-6 w-6 text-faint" />
           <p className="text-[13px] text-muted-foreground">
-            {asAgency ? "Aucun alias ni libellé n'est lié à ce créateur." : "Ta boîte mail n'est pas encore activée. Ton agence s'en occupe."}
+            {asAgency ? t("Aucun alias ni libellé n'est lié à ce créateur.") : t("Ta boîte mail n'est pas encore activée. Ton agence s'en occupe.")}
           </p>
         </DashPanel>
       </div>
@@ -891,17 +902,16 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     noteRef.current?.focus({ preventScroll: true });
   };
   const navIdx = openId ? shown.findIndex((t) => t.id === openId) : -1;
-  const plural = (n: number) => (n > 1 ? "s" : "");
   const shownAlias = (alias ?? listAlias ?? "").trim();
   const emptyText = q
-    ? `Aucun échange ne correspond à « ${query.trim()} ».`
+    ? t("Aucun échange ne correspond à « {q} ».", { q: query.trim() })
     : filter !== "tous"
-      ? "Aucun échange ici."
+      ? t("Aucun échange ici.")
       : asAgency
-        ? "Aucun échange pour le moment."
+        ? t("Aucun échange pour le moment.")
         : shownAlias
-          ? `Les mails envoyés à ${shownAlias} apparaîtront ici.`
-          : "Les mails des marques qui t'écrivent apparaîtront ici.";
+          ? t("Les mails envoyés à {alias} apparaîtront ici.", { alias: shownAlias })
+          : t("Les mails des marques qui t'écrivent apparaîtront ici.");
 
   // Comment les statuts avancent (affiché pour éviter toute confusion, refermable).
   const helpBanner = (
@@ -909,10 +919,10 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
       <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <span className="min-w-0 flex-1">
         {asAgency
-          ? `Ouvre un échange et range-le avec le grand sélecteur : En cours, À vérifier, À valider, Validé ou Refusé. « Ajouter une remarque » lui écrit un mot sur cet échange. ${creatorName} voit tout dans son espace et donne son avis ; chaque changement (qui, quand, son mot) est gardé dans le suivi.`
-          : "Ouvre un échange : le « Statut de l'agence » te dit où il en est, et « Ton avis » (En cours, Validé ou Refusé) lui donne ta réponse. Avec « Ajouter une remarque », écris à ton manager quand tu veux. Il est prévenu ; ses remarques et tout l'historique sont dans le suivi de l'échange."}
+          ? t("Ouvre un échange et range-le avec le grand sélecteur : En cours, À vérifier, À valider, Validé ou Refusé. « Ajouter une remarque » lui écrit un mot sur cet échange. {name} voit tout dans son espace et donne son avis ; chaque changement (qui, quand, son mot) est gardé dans le suivi.", { name: creatorName })
+          : t("Ouvre un échange : le « Statut de l'agence » te dit où il en est, et « Ton avis » (En cours, Validé ou Refusé) lui donne ta réponse. Avec « Ajouter une remarque », écris à ton manager quand tu veux. Il est prévenu ; ses remarques et tout l'historique sont dans le suivi de l'échange.")}
       </span>
-      <button type="button" onClick={() => setHelp(false)} aria-label="Masquer l'aide"
+      <button type="button" onClick={() => setHelp(false)} aria-label={t("Masquer l'aide")}
         className="-mr-1 -mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground">
         <X className="h-3.5 w-3.5" />
       </button>
@@ -921,12 +931,12 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
   // ── Barre d'icônes (ordinateur) : les cinq rangements, avec leur nombre ──
   const rail = (
-    <nav aria-label="Ranger les échanges" className="hidden min-h-0 flex-col items-center gap-1 border-r border-border py-3 lg:flex">
-      <RailButton label="Boîte de réception" caption="Reçus" active badge={(mode === "creator" ? unseen.size : counts.atraiter) || null} onClick={() => setFilter("tous")}>
+    <nav aria-label={t("Ranger les échanges")} className="hidden min-h-0 flex-col items-center gap-1 border-r border-border py-3 lg:flex">
+      <RailButton label={t("Boîte de réception")} caption={t("Reçus")} active badge={(mode === "creator" ? unseen.size : counts.atraiter) || null} onClick={() => setFilter("tous")}>
         <Inbox className="h-[18px] w-[18px]" />
       </RailButton>
       <span className="flex-1" />
-      <RailButton label={help ? "Masquer l'aide" : "Comment ça marche"} caption="Aide" active={help} bar={false} onClick={() => setHelp(!help)}>
+      <RailButton label={help ? t("Masquer l'aide") : t("Comment ça marche")} caption={t("Aide")} active={help} bar={false} onClick={() => setHelp(!help)}>
         <Info className="h-[18px] w-[18px]" />
       </RailButton>
     </nav>
@@ -934,19 +944,19 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
   // ── Même barre, en ligne (téléphone, tablette) ; masquée pendant la lecture ──
   const pills = (
-    <nav aria-label="Ranger les échanges" className={cn("flex gap-1.5 overflow-x-auto border-b border-border p-2 [scrollbar-width:none] lg:hidden", openId && "max-lg:hidden")}>
+    <nav aria-label={t("Ranger les échanges")} className={cn("flex gap-1.5 overflow-x-auto border-b border-border p-2 [scrollbar-width:none] lg:hidden", openId && "max-lg:hidden")}>
       {FILTERS.map((f) => {
         const on = filter === f.key;
         return (
           <button key={f.key} type="button" onClick={() => setFilter(f.key)} aria-pressed={on}
             className={cn(pillCls, on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
             <f.icon className="h-3.5 w-3.5" />
-            {f.short}
+            {t(f.short)}
             <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{counts[f.key]}</span>
           </button>
         );
       })}
-      <button type="button" onClick={() => setHelp(!help)} aria-label={help ? "Masquer l'aide" : "Comment ça marche"} aria-pressed={help}
+      <button type="button" onClick={() => setHelp(!help)} aria-label={help ? t("Masquer l'aide") : t("Comment ça marche")} aria-pressed={help}
         className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors", help ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
         <Info className="h-4 w-4" />
       </button>
@@ -960,74 +970,74 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
       <div className="shrink-0 px-3 pb-2.5 pt-3 sm:px-4">
         <div className="flex items-center gap-1">
           <h2 className="min-w-0 flex-1 truncate pl-1 text-[17px] font-semibold tracking-tight text-foreground">
-            Boîte de réception
+            {t("Boîte de réception")}
           </h2>
-          <ToolButton icon={RefreshCw} label="Actualiser" spin={loading} disabled={loading} onClick={retry} className="h-8 w-8" />
+          <ToolButton icon={RefreshCw} label={t("Actualiser")} spin={loading} disabled={loading} onClick={retry} className="h-8 w-8" />
         </div>
         <Tabs
           className="mt-2 max-lg:hidden"
           size="sm"
           fullWidth
-          label="Rangement affiché"
+          label={t("Rangement affiché")}
           value={filter}
           onValueChange={(v) => setFilter(v as typeof filter)}
-          items={FILTERS.map((f) => ({ value: f.key, label: f.short }))}
+          items={FILTERS.map((f) => ({ value: f.key, label: t(f.short) }))}
         />
         <div className="mt-2">
-          <SearchField size="sm" value={query} onChange={setQuery} placeholder="Rechercher une marque, un objet…" />
+          <SearchField size="sm" value={query} onChange={setQuery} placeholder={t("Rechercher une marque, un objet…")} />
         </div>
         <p className="mt-1.5 flex min-w-0 items-center gap-1.5 truncate pl-1 text-[11.5px] text-muted-foreground" aria-live="polite">
           {cur.dot && <span aria-hidden className={cn("size-2 shrink-0 rounded-[3px]", cur.dot)} />}
-          {q ? `${shown.length} sur ${counts[cur.key]}` : counts[cur.key]} échange{plural(q ? counts[cur.key] : shown.length)}
-          {mode === "creator" && unseen.size > 0 && <span className="font-medium text-foreground">· {unseen.size} à voir</span>}
+          {q ? t("{a} sur {b}", { a: shown.length, b: counts[cur.key] }) : counts[cur.key]} {(q ? counts[cur.key] : shown.length) > 1 ? t("échanges") : t("échange")}
+          {mode === "creator" && unseen.size > 0 && <span className="font-medium text-foreground">{t("· {n} à voir", { n: unseen.size })}</span>}
         </p>
       </div>
       {help && <div className="px-4 pb-3 sm:px-5 lg:hidden">{helpBanner}</div>}
       {err && !listBroken && (
         <div className="flex items-center gap-2 border-t border-border px-4 py-2.5 text-[12px] text-dangertext sm:px-5">
           <CircleAlert className="h-3.5 w-3.5 shrink-0" />
-          <span className="min-w-0 flex-1">{err}</span>
-          <button type="button" onClick={retry} disabled={loading} className="shrink-0 font-semibold underline-offset-2 hover:underline disabled:opacity-50">Réessayer</button>
+          <span className="min-w-0 flex-1">{unavailable}</span>
+          <button type="button" onClick={retry} disabled={loading} className="shrink-0 font-semibold underline-offset-2 hover:underline disabled:opacity-50">{t("Réessayer")}</button>
         </div>
       )}
       {partial && !err && (
         <div className="flex items-center gap-2 border-t border-border px-4 py-2.5 text-[12px] text-muted-foreground sm:px-5">
           <Info className="h-3.5 w-3.5 shrink-0" />
-          <span className="min-w-0 flex-1">Certains échanges n'ont pas pu être chargés.</span>
-          <button type="button" onClick={retry} disabled={loading} className="shrink-0 font-semibold text-foreground underline-offset-2 hover:underline disabled:opacity-50">Réessayer</button>
+          <span className="min-w-0 flex-1">{t("Certains échanges n'ont pas pu être chargés.")}</span>
+          <button type="button" onClick={retry} disabled={loading} className="shrink-0 font-semibold text-foreground underline-offset-2 hover:underline disabled:opacity-50">{t("Réessayer")}</button>
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto border-t border-border" aria-busy={loading}>
         {listBroken ? (
-          <StatePanel icon={CircleAlert} text={unavailable} action={{ label: "Réessayer", busy: loading, onClick: retry }} />
+          <StatePanel icon={CircleAlert} text={unavailable} action={{ label: t("Réessayer"), busy: loading, onClick: retry }} />
         ) : shown.length === 0 ? (
           <StatePanel icon={Mail} text={emptyText} />
         ) : (
           <ul className="divide-y divide-border">
-            {shown.map((t) => {
-              const on = openId === t.id;
-              const fresh = unseen.has(t.id);
+            {shown.map((th) => {
+              const on = openId === th.id;
+              const fresh = unseen.has(th.id);
               return (
-                <li key={t.id}>
-                  <button type="button" aria-current={on || undefined} onClick={() => openFromList(t.id)} className={cn(mailRowCls(on), "items-center py-2.5")}>
-                    <Initial name={prettyName(t.brand)} email={t.brandEmail} size="md" />
+                <li key={th.id}>
+                  <button type="button" aria-current={on || undefined} onClick={() => openFromList(th.id)} className={cn(mailRowCls(on), "items-center py-2.5")}>
+                    <Initial name={prettyName(th.brand)} email={th.brandEmail} size="md" />
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center gap-1.5">
-                        {fresh && <span aria-label="Nouveau" className="size-2 shrink-0 rounded-full bg-primary" />}
+                        {fresh && <span aria-label={t("Nouveau")} className="size-2 shrink-0 rounded-full bg-primary" />}
                         <span className={cn("min-w-0 truncate text-[12.5px] leading-4", fresh ? "font-semibold text-foreground" : "font-medium text-muted-foreground")}>
-                          {prettyName(t.brand) || "Marque"}
+                          {prettyName(th.brand) || t("Marque")}
                         </span>
-                        {t.count > 1 && <span className="shrink-0 text-[11.5px] leading-4 text-faint">{t.count}</span>}
+                        {th.count > 1 && <span className="shrink-0 text-[11.5px] leading-4 text-faint">{th.count}</span>}
                         <span className="flex-1" />
-                        <span className={cn("shrink-0 text-[11px] leading-4 tabular-nums", fresh ? "font-semibold text-foreground" : "text-faint")}>{fmtWhen(t.ts)}</span>
+                        <span className={cn("shrink-0 text-[11px] leading-4 tabular-nums", fresh ? "font-semibold text-foreground" : "text-faint")}>{fmtWhen(th.ts, locale)}</span>
                       </span>
-                      <span className={cn("mt-0.5 block truncate text-[13px] leading-[18px] text-foreground", fresh ? "font-bold" : "font-medium")}>{t.subject || "(sans objet)"}</span>
-                      <span className="mt-0.5 block truncate text-[12.5px] leading-4 text-muted-foreground">{t.excerpt}</span>
+                      <span className={cn("mt-0.5 block truncate text-[13px] leading-[18px] text-foreground", fresh ? "font-bold" : "font-medium")}>{th.subject || t("(sans objet)")}</span>
+                      <span className="mt-0.5 block truncate text-[12.5px] leading-4 text-muted-foreground">{th.excerpt}</span>
                       <span className="mt-1.5 flex min-w-0 items-center gap-3">
-                        <StatusDot status={t.status} by={t.decidedBy ? authorName(t.decidedBy, mode, creatorName) : undefined} />
-                        {t.notes > 0 && (
-                          <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground" title="Remarques">
-                            <MessageSquare className="h-3 w-3" />{t.notes}
+                        <StatusDot status={th.status} by={th.decidedBy ? authorName(th.decidedBy, mode, creatorName, t) : undefined} />
+                        {th.notes > 0 && (
+                          <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground" title={t("Remarques")}>
+                            <MessageSquare className="h-3 w-3" />{th.notes}
                           </span>
                         )}
                       </span>
@@ -1046,36 +1056,36 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const view = openId ? (
     <section className="flex min-h-0 min-w-0 flex-col">
       <div className="flex h-14 shrink-0 items-center gap-0.5 border-b border-border px-2 sm:px-3">
-        <ToolButton icon={ArrowLeft} label="Retour à la liste" onClick={() => setOpenId(null)} />
+        <ToolButton icon={ArrowLeft} label={t("Retour à la liste")} onClick={() => setOpenId(null)} />
         <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5">
           {navIdx >= 0 && shown.length > 1 && (
             <>
-              <ToolButton icon={ChevronLeft} label="Échange précédent" className="h-8 w-8" disabled={navIdx <= 0} onClick={() => setOpenId(shown[navIdx - 1].id)} />
-              <span className="whitespace-nowrap px-1 text-[12.5px] tabular-nums text-muted-foreground">{navIdx + 1} sur {shown.length}</span>
-              <ToolButton icon={ChevronRight} label="Échange suivant" className="h-8 w-8" disabled={navIdx >= shown.length - 1} onClick={() => setOpenId(shown[navIdx + 1].id)} />
+              <ToolButton icon={ChevronLeft} label={t("Échange précédent")} className="h-8 w-8" disabled={navIdx <= 0} onClick={() => setOpenId(shown[navIdx - 1].id)} />
+              <span className="whitespace-nowrap px-1 text-[12.5px] tabular-nums text-muted-foreground">{t("{a} sur {b}", { a: navIdx + 1, b: shown.length })}</span>
+              <ToolButton icon={ChevronRight} label={t("Échange suivant")} className="h-8 w-8" disabled={navIdx >= shown.length - 1} onClick={() => setOpenId(shown[navIdx + 1].id)} />
             </>
           )}
         </div>
-        {thread && <ToolButton icon={History} label={`Voir le suivi (${feed.length})`} onClick={showFeed} />}
-        {thread && <ToolButton icon={MessageSquarePlus} label="Ajouter une remarque" onClick={writeNote} />}
+        {thread && <ToolButton icon={History} label={t("Voir le suivi ({n})", { n: feed.length })} onClick={showFeed} />}
+        {thread && <ToolButton icon={MessageSquarePlus} label={t("Ajouter une remarque")} onClick={writeNote} />}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {threadErr ? (
           <div className="p-4 sm:p-6">
             <div className="rounded-xl border border-border bg-panel/60">
-              <StatePanel icon={CircleAlert} text={threadErr} action={{ label: "Réessayer", onClick: () => setThreadRetry((n) => n + 1) }} />
+              <StatePanel icon={CircleAlert} text={t(threadErr)} action={{ label: t("Réessayer"), onClick: () => setThreadRetry((n) => n + 1) }} />
             </div>
           </div>
         ) : !thread ? (
-          <div className="flex items-center justify-center gap-2 px-5 py-16 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Ouverture…</div>
+          <div className="flex items-center justify-center gap-2 px-5 py-16 text-[13px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> {t("Ouverture…")}</div>
         ) : (
           <div className="px-4 py-6 sm:px-8">
             {help && <div className="mb-6 max-lg:hidden">{helpBanner}</div>}
             <h1 className="text-[18px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere] [text-wrap:balance] sm:text-[20px]">{thread.subject}</h1>
             <p className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
-              <span>{thread.brand ? `${prettyName(thread.brand)} · ` : ""}{thread.messages.length} message{plural(thread.messages.length)}</span>
-              <StatusDot status={thread.status} by={thread.decidedBy ? authorName(thread.decidedBy, mode, creatorName) : undefined} />
+              <span>{thread.brand ? `${prettyName(thread.brand)} · ` : ""}{thread.messages.length > 1 ? t("{n} messages", { n: thread.messages.length }) : t("{n} message", { n: thread.messages.length })}</span>
+              <StatusDot status={thread.status} by={thread.decidedBy ? authorName(thread.decidedBy, mode, creatorName, t) : undefined} />
             </p>
 
             <div className="mt-5">
@@ -1101,14 +1111,14 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
                     {blocked && remoteImgIds.has(m.id) && expanded.has(m.id) && (
                       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg bg-muted/60 px-3 py-2 text-[12px] text-muted-foreground">
                         <ImageOff className="h-3.5 w-3.5 shrink-0" />
-                        <span className="min-w-0 flex-1">Images masquées pour ta confidentialité</span>
+                        <span className="min-w-0 flex-1">{t("Images masquées pour ta confidentialité")}</span>
                         <button type="button"
                           onClick={() => {
                             allowRemoteImages(m.id);
                             setImagesTick((n) => n + 1);
                           }}
                           className="shrink-0 font-semibold text-foreground underline-offset-2 hover:underline">
-                          Afficher les images
+                          {t("Afficher les images")}
                         </button>
                       </div>
                     )}
@@ -1134,12 +1144,12 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
             <div ref={setFeedNode} className="mt-6 scroll-mt-4 rounded-xl border border-border bg-panel/60 p-4 sm:p-5">
               <div className="mb-1 flex items-center gap-2">
                 <History className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="text-[13px] font-semibold text-foreground">{asAgency ? `Suivi avec ${creatorName}` : "Suivi avec ton manager"}</span>
+                <span className="text-[13px] font-semibold text-foreground">{asAgency ? t("Suivi avec {name}", { name: creatorName }) : t("Suivi avec ton manager")}</span>
               </div>
               <p className="mb-3 pl-6 text-[12px] text-muted-foreground">
                 {asAgency
-                  ? `Ses avis, ses questions, tes remarques et chaque changement de statut, avec la date. ${creatorName} voit tout ce suivi ; la marque, jamais.`
-                  : "Tes avis, tes questions, les remarques et les choix de ton agence. La marque ne voit jamais rien de tout ça."}
+                  ? t("Ses avis, ses questions, tes remarques et chaque changement de statut, avec la date. {name} voit tout ce suivi ; la marque, jamais.", { name: creatorName })
+                  : t("Tes avis, tes questions, les remarques et les choix de ton agence. La marque ne voit jamais rien de tout ça.")}
               </p>
               {feed.length > 0 ? <Feed items={feed} mode={mode} creatorName={creatorName} /> : null}
               <div className="overflow-hidden rounded-xl border border-border bg-surface transition-colors focus-within:border-primary">
@@ -1151,14 +1161,14 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submitNote();
                   }}
                   rows={2}
-                  placeholder={asAgency ? `Écrire une remarque à ${creatorName}…` : "Écrire une remarque à mon manager…"}
+                  placeholder={asAgency ? t("Écrire une remarque à {name}…", { name: creatorName }) : t("Écrire une remarque à mon manager…")}
                   className="block max-h-60 min-h-[72px] w-full resize-none bg-transparent px-4 py-3 text-[13px] leading-relaxed text-foreground outline-none [field-sizing:content] placeholder:text-faint"
                 />
                 <div className="flex items-center gap-3 border-t border-border px-3.5 py-2 text-[12px]">
                   <span className="min-w-0 flex-1 truncate text-faint">
                     {mode === "preview"
-                      ? `Aperçu : envoyée à ton nom (agence), pas au nom de ${creatorName}`
-                      : asAgency ? (creatorSees ? `${creatorName} la voit dans son espace` : "Sa section Mails n'est pas encore activée") : "Ton manager est prévenu ; la marque ne la voit jamais"}
+                      ? t("Aperçu : envoyée à ton nom (agence), pas au nom de {name}", { name: creatorName })
+                      : asAgency ? (creatorSees ? t("{name} la voit dans son espace", { name: creatorName }) : t("Sa section Mails n'est pas encore activée")) : t("Ton manager est prévenu ; la marque ne la voit jamais")}
                   </span>
                   <button
                     type="button"
@@ -1166,7 +1176,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
                     disabled={!note.trim() || sending}
                     className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-35"
                   >
-                    {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Envoyer
+                    {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} {t("Envoyer")}
                   </button>
                 </div>
               </div>
@@ -1177,18 +1187,18 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
       {thread && (
         <div className="flex h-14 shrink-0 items-center gap-1 border-t border-border px-2 max-sm:hidden sm:px-3">
-          <BarButton icon={MessageSquarePlus} label="Ajouter une remarque" onClick={writeNote} />
-          <BarButton icon={History} label={`Voir le suivi (${feed.length})`} onClick={showFeed} />
+          <BarButton icon={MessageSquarePlus} label={t("Ajouter une remarque")} onClick={writeNote} />
+          <BarButton icon={History} label={t("Voir le suivi ({n})", { n: feed.length })} onClick={showFeed} />
           <span className="flex-1" />
-          <span className="px-3"><StatusDot status={thread.status} by={thread.decidedBy ? authorName(thread.decidedBy, mode, creatorName) : undefined} /></span>
+          <span className="px-3"><StatusDot status={thread.status} by={thread.decidedBy ? authorName(thread.decidedBy, mode, creatorName, t) : undefined} /></span>
         </div>
       )}
     </section>
   ) : (
     <section className="hidden min-h-0 min-w-0 flex-col items-center justify-center gap-3 px-6 text-center lg:flex">
       <span className="grid h-12 w-12 place-items-center rounded-full bg-muted"><Inbox className="h-5 w-5 text-muted-foreground" /></span>
-      <p className="text-[14px] font-medium text-foreground">Aucun échange ouvert</p>
-      <p className="max-w-[300px] text-[13px] text-muted-foreground">Choisis un échange dans la liste pour le lire ici.</p>
+      <p className="text-[14px] font-medium text-foreground">{t("Aucun échange ouvert")}</p>
+      <p className="max-w-[300px] text-[13px] text-muted-foreground">{t("Choisis un échange dans la liste pour le lire ici.")}</p>
       {help && <div className="mt-2 w-full max-w-[460px]">{helpBanner}</div>}
     </section>
   );

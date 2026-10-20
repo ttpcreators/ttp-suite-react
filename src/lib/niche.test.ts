@@ -19,3 +19,14 @@ describe("guessNiche", () => {
     expect(guessNiche("Boxeuse 🥊 championne de France de boxe", SPORTS)).toBe("Boxe");
   });
 });
+
+describe("sportif ou créateur (Sourcing → Scouting)", () => {
+  it("un seul mot de métier suffit", async () => {
+    const { guessSport } = await import("./niche");
+    expect(guessSport("Footballeur au PSG ⚽️")).toBe("Football");
+    expect(guessSport("Joueuse WNBA · Paris")).toBe("Basket");
+    expect(guessSport("Athlète · équipe de France")).toBe("Sport");
+    expect(guessSport("Maman de 2 · lifestyle et recettes")).toBeNull();
+    expect(guessSport("Running et fitness au quotidien")).toBeNull();
+  });
+});
