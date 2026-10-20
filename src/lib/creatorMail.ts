@@ -8,10 +8,12 @@ import { supabase } from "@/lib/supabase";
  * CÔTÉ SERVEUR). Le navigateur ne reçoit que les fils du créateur.
  */
 
-export type MailStatus = "nouvelle" | "negociation" | "a_verifier" | "a_valider" | "valide" | "refuse";
+export type MailStatus = "nouvelle" | "demarchee" | "negociation" | "a_verifier" | "a_valider" | "valide" | "refuse";
 
 export const MAIL_STATUS: { value: MailStatus; label: string; short: string; dot: string; badge: string }[] = [
   { value: "nouvelle", short: "Nouvelles", label: "Nouvelle demande", dot: "bg-sky-500", badge: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
+  // Fil lancé par l'agence (démarchage), la marque n'a pas encore répondu.
+  { value: "demarchee", short: "Démarchées", label: "Démarchée par l'agence", dot: "bg-primary", badge: "bg-primary/10 text-primary" },
   { value: "negociation", short: "Négociation", label: "En négociation", dot: "bg-amber-500", badge: "bg-amber-500/10 text-amber-700 dark:text-amber-400" },
   { value: "a_verifier", short: "À vérifier", label: "À vérifier", dot: "bg-orange-500", badge: "bg-orange-500/10 text-orange-700 dark:text-orange-400" },
   { value: "a_valider", short: "À valider", label: "À valider", dot: "bg-indigo-500", badge: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" },
@@ -27,7 +29,20 @@ export type MailThreadLite = Decision & {
   count: number; status: MailStatus; notes: number;
   /** Adresse de la marque (pour son logo) ; absente avec une ancienne version du serveur. */
   brandEmail?: string;
+  /** Démarchage : fil lancé par l'agence ; la marque a-t-elle répondu ; date du 1er message. */
+  prospect?: boolean;
+  replied?: boolean;
+  startedTs?: number;
 };
+
+/** Démarchage du mois en cours : marques contactées par l'agence pour ce créateur, et réponses. */
+export function prospectStats(threads: Pick<MailThreadLite, "prospect" | "replied" | "startedTs" | "brand">[], now = new Date()): { pitched: number; replied: number } {
+  const from = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const mine = threads.filter((t) => t.prospect && (t.startedTs ?? 0) >= from);
+  const brands = new Set(mine.map((t) => t.brand.trim().toLowerCase()));
+  const answered = new Set(mine.filter((t) => t.replied).map((t) => t.brand.trim().toLowerCase()));
+  return { pitched: brands.size, replied: answered.size };
+}
 export type MailAttachment = { messageId: string; attachmentId: string; filename: string; mimeType: string; size: number };
 export type MailMessage = {
   id: string; from: string; fromEmail: string; fromAgency: boolean; to: string; cc: string;
@@ -49,9 +64,15 @@ export type MailChoice = "encours" | "a_verifier" | "a_valider" | "valide" | "re
 export const STORED_STATUSES = ["a_verifier", "a_valider", "valide", "refuse"] as const;
 export const choiceOf = (s: MailStatus): MailChoice =>
   (STORED_STATUSES as readonly string[]).includes(s) ? (s as MailChoice) : "encours";
-/** Statut automatique (comme le serveur) : « En négociation » dès que l'agence a répondu. */
+/**
+ * Statut automatique (comme le serveur) :
+ *  - fil lancé par la MARQUE : « Nouvelle demande », puis « En négociation » dès que l'agence a répondu ;
+ *  - fil lancé par l'AGENCE (démarchage) : « Démarchée par l'agence », puis « En négociation » dès que la marque répond.
+ */
 export const autoStatusOf = (messages: Pick<MailMessage, "fromAgency">[]): MailStatus =>
-  messages.slice(1).some((m) => m.fromAgency) ? "negociation" : "nouvelle";
+  messages[0]?.fromAgency
+    ? messages.slice(1).some((m) => !m.fromAgency) ? "negociation" : "demarchee"
+    : messages.slice(1).some((m) => m.fromAgency) ? "negociation" : "nouvelle";
 
 /** Une ligne de l'historique : qui a rangé l'échange, où, quand, avec quel mot. */
 export type MailStatusEvent = {

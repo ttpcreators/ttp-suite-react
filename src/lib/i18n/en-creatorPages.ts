@@ -296,4 +296,17 @@ export const EN_CREATORPAGES: Record<string, string> = {
   ", d'une valeur de {amount}": ", worth {amount}",
   "Ton audience a grandi : {list}": "Your audience grew: {list}",
   "+{n} abonnés sur {platform}": "+{n} followers on {platform}",
+  // Démarchage (boîte mail du créateur)
+  "Démarchage": "Outreach",
+  "Démarchés par l'agence": "Pitched by the agency",
+  "Démarchées": "Pitched",
+  "Démarchée par l'agence": "Pitched by the agency",
+  "L'agence a démarché {n} marques pour toi ce mois-ci": "The agency pitched {n} brands for you this month",
+  "L'agence a démarché {n} marque pour toi ce mois-ci": "The agency pitched {n} brand for you this month",
+  "{n} marques démarchées ce mois-ci": "{n} brands pitched this month",
+  "{n} marque démarchée ce mois-ci": "{n} brand pitched this month",
+  " · {n} ont répondu": " · {n} replied",
+  " · {n} a répondu": " · {n} replied",
+  "Voir": "View",
+  "Tout voir": "View all",
 };

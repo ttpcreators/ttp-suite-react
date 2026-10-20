@@ -149,7 +149,9 @@ describe("creator-mail : avis En cours / Validé / Refusé", () => {
 
   it("statut automatique : « En négociation » dès que l'agence a répondu", () => {
     expect(autoStatusOf([{ fromAgency: false }])).toBe("nouvelle");
-    expect(autoStatusOf([{ fromAgency: true }])).toBe("nouvelle"); // l'agence a écrit en premier
+    expect(autoStatusOf([{ fromAgency: true }])).toBe("demarchee"); // l'agence a écrit en premier : démarchage
+    expect(autoStatusOf([{ fromAgency: true }, { fromAgency: true }])).toBe("demarchee"); // relance sans réponse
+    expect(autoStatusOf([{ fromAgency: true }, { fromAgency: false }])).toBe("negociation"); // la marque a répondu
     expect(autoStatusOf([{ fromAgency: false }, { fromAgency: true }])).toBe("negociation");
   });
 });

@@ -311,7 +311,12 @@ const fromAgency = (m: GMessage) =>
  * puis « En négociation » dès que l'agence a répondu dans le fil. Un statut choisi
  * à la main (table creator_mail_threads) l'emporte toujours.
  */
-const autoStatus = (msgs: GMessage[]) => (msgs.slice(1).some(fromAgency) ? "negociation" : "nouvelle");
+// Fil lancé par l'agence (démarchage, alias du créateur en copie) : « Démarchée par
+// l'agence » tant que la marque n'a pas répondu, puis « En négociation ».
+const autoStatus = (msgs: GMessage[]) =>
+  msgs[0] && fromAgency(msgs[0])
+    ? (msgs.slice(1).some((m) => !fromAgency(m)) ? "negociation" : "demarchee")
+    : (msgs.slice(1).some(fromAgency) ? "negociation" : "nouvelle");
 
 type ThreadRow = { thread_id: string; status: string; brand: string | null; decided_by?: string | null; decided_at?: string | null };
 /**
@@ -388,6 +393,10 @@ async function listThreads(sb: Sb, token: string, s: Settings, fresh: boolean) {
         status: effectiveStatus(row, msgs),
         ...decisionOf(row),
         notes: noteCount.get(t.id) ?? 0,
+        // Démarchage : l'agence a écrit en premier ; la marque a-t-elle répondu depuis ?
+        prospect: fromAgency(msgs[0]),
+        replied: fromAgency(msgs[0]) && msgs.slice(1).some((m) => !fromAgency(m)),
+        startedTs: Number(msgs[0].internalDate ?? 0),
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)

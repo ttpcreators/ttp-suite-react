@@ -2,8 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Picker } from "@/components/ui/form";
 import {
   ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Loader2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X,
-  type LucideIcon,
-} from "lucide-react";
+  type LucideIcon, Megaphone } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -19,8 +18,7 @@ import {
   hasRemoteImages, withoutRemoteImages, remoteImagesAllowed, allowRemoteImages,
   reportMailList, reportAgencyActivity, markThreadSeen, useUnseenMail,
   type Decision, type FeedItem, type MailChoice, type MailNote, type MailStatus, type MailStatusEvent, type MailThread,
-  type MailThreadLite, type MailSettings,
-} from "@/lib/creatorMail";
+  type MailThreadLite, type MailSettings, prospectStats } from "@/lib/creatorMail";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
 import { BarButton, RailButton, SearchField, ToolButton, mailRowCls, pillCls } from "@/components/mail-shell";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -72,12 +70,14 @@ function StatusDot({ status, by }: { status: string; by?: string }) {
   );
 }
 
-const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse"; label: string; short: string; icon: LucideIcon; dot?: string; match: (s: MailStatus) => boolean }[] = [
+const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse" | "demarchage"; label: string; short: string; icon: LucideIcon; dot?: string; match: (t: MailThreadLite) => boolean }[] = [
   { key: "tous", label: "Tous les échanges", short: "Tous", icon: Inbox, match: () => true },
-  { key: "encours", label: "En cours", short: "En cours", icon: Hourglass, dot: "bg-amber-500", match: (s) => s === "nouvelle" || s === "negociation" },
-  { key: "atraiter", label: "À vérifier / valider", short: "À traiter", icon: SearchCheck, dot: "bg-orange-500", match: (s) => s === "a_verifier" || s === "a_valider" },
-  { key: "valide", label: "Validés", short: "Validés", icon: Check, dot: "bg-signal", match: (s) => s === "valide" },
-  { key: "refuse", label: "Refusés", short: "Refusés", icon: X, dot: "bg-danger", match: (s) => s === "refuse" },
+  { key: "encours", label: "En cours", short: "En cours", icon: Hourglass, dot: "bg-amber-500", match: (t) => t.status === "nouvelle" || t.status === "demarchee" || t.status === "negociation" },
+  { key: "atraiter", label: "À vérifier / valider", short: "À traiter", icon: SearchCheck, dot: "bg-orange-500", match: (t) => t.status === "a_verifier" || t.status === "a_valider" },
+  { key: "valide", label: "Validés", short: "Validés", icon: Check, dot: "bg-signal", match: (t) => t.status === "valide" },
+  { key: "refuse", label: "Refusés", short: "Refusés", icon: X, dot: "bg-danger", match: (t) => t.status === "refuse" },
+  // Démarchage : fils lancés par l'agence (alias du créateur en copie), quel que soit leur statut.
+  { key: "demarchage", label: "Démarchés par l'agence", short: "Démarchage", icon: Megaphone, dot: "bg-primary", match: (t) => !!t.prospect },
 ];
 
 /**
@@ -790,12 +790,13 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    for (const f of FILTERS) c[f.key] = (threads ?? []).filter((t) => f.match(t.status)).length;
+    for (const f of FILTERS) c[f.key] = (threads ?? []).filter((t) => f.match(t)).length;
     return c;
   }, [threads]);
   const cur = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
   const q = query.trim().toLowerCase();
-  const shown = (threads ?? []).filter((t) => cur.match(t.status) && (!q || `${t.brand} ${t.subject} ${t.excerpt}`.toLowerCase().includes(q)));
+  const pitch = useMemo(() => prospectStats(threads ?? []), [threads]);
+  const shown = (threads ?? []).filter((t) => cur.match(t) && (!q || `${t.brand} ${t.subject} ${t.excerpt}`.toLowerCase().includes(q)));
 
   // Suivi de l'échange ouvert. Une ancienne décision (avant l'historique) n'est ajoutée
   // qu'une fois l'historique chargé, pour éviter un clignotement. Repli : les remarques
@@ -981,8 +982,23 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           label={t("Rangement affiché")}
           value={filter}
           onValueChange={(v) => setFilter(v as typeof filter)}
-          items={FILTERS.map((f) => ({ value: f.key, label: t(f.short) }))}
+          items={FILTERS.filter((f) => f.key !== "demarchage").map((f) => ({ value: f.key, label: t(f.short) }))}
         />
+        {/* Preuve du démarchage : marques contactées par l'agence ce mois-ci (alias en copie). */}
+        {pitch.pitched > 0 && (
+          <button type="button" onClick={() => setFilter(filter === "demarchage" ? "tous" : "demarchage")} aria-pressed={filter === "demarchage"}
+            className={cn("mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[12px] transition-colors",
+              filter === "demarchage" ? "bg-primary text-primary-foreground" : "bg-primary/[0.07] text-foreground hover:bg-primary/[0.12]")}>
+            <Megaphone className={cn("h-4 w-4 shrink-0", filter === "demarchage" ? "" : "text-primary")} />
+            <span className="min-w-0 flex-1">
+              {mode === "creator"
+                ? t(pitch.pitched > 1 ? "L'agence a démarché {n} marques pour toi ce mois-ci" : "L'agence a démarché {n} marque pour toi ce mois-ci", { n: pitch.pitched })
+                : t(pitch.pitched > 1 ? "{n} marques démarchées ce mois-ci" : "{n} marque démarchée ce mois-ci", { n: pitch.pitched })}
+              {pitch.replied > 0 && <span className={filter === "demarchage" ? "opacity-80" : "text-muted-foreground"}>{t(pitch.replied > 1 ? " · {n} ont répondu" : " · {n} a répondu", { n: pitch.replied })}</span>}
+            </span>
+            <span className="shrink-0 font-semibold">{filter === "demarchage" ? t("Tout voir") : t("Voir")}</span>
+          </button>
+        )}
         <div className="mt-2">
           <SearchField size="sm" value={query} onChange={setQuery} placeholder={t("Rechercher une marque, un objet…")} />
         </div>
