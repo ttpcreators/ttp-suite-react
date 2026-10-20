@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles, X } from "@/components/icons";
+import { Copy, Sparkles, X } from "@/components/icons";
+import { AgentAvatar } from "@/components/agent-avatar";
+import { assignFigurines } from "@/lib/agentAvatars";
+import { useAppState } from "@/lib/appState";
+import { claudeUrl, contextPrompt, threadTranscript, type ContextMessage } from "@/lib/mailThreadContext";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import type { MailBox } from "@/lib/mailSend";
@@ -43,7 +48,10 @@ async function pending(threadId: string, since: string): Promise<Draft | null> {
   return ((data as Draft[] | null) ?? [])[0] ?? null;
 }
 
-export function useClaudeReply(opts: { threadId: string; box: MailBox; subject: string } | undefined, current: string, apply: (text: string) => void) {
+/** Fil affiché dans le lecteur : son texte complet part avec la demande (un seul geste). */
+export type ClaudeThread = { threadId: string; box: MailBox; subject: string; messages?: readonly ContextMessage[] };
+
+export function useClaudeReply(opts: ClaudeThread | undefined, current: string, apply: (text: string) => void) {
   const [ready, setReady] = useState<Draft | null>(null);
   const [waiting, setWaiting] = useState(false);
   const since = useRef(new Date(Date.now() - DAY).toISOString());
@@ -94,24 +102,57 @@ export function useClaudeReply(opts: { threadId: string; box: MailBox; subject: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
-  const start = async (consigne: string) => {
-    if (!opts) return;
-    const prompt = buildPrompt(opts.threadId, opts.box, opts.subject, consigne.trim(), current.trim());
-    since.current = new Date(Date.now() - 60 * 1000).toISOString();
-    try {
-      await navigator.clipboard.writeText(prompt);
-    } catch {
-      /* presse-papiers indisponible : le lien suffit */
+  /**
+   * Demande complète : avec le fil sous les yeux (texte de tous les messages), on l'envoie
+   * en entier, sinon Claude va le lire lui-même avec le connecteur (ancienne demande).
+   */
+  const promptFor = (consigne: string, agent?: string | null) => {
+    if (!opts) return "";
+    if (opts.messages?.length) {
+      const transcript = threadTranscript(opts.subject, opts.box, opts.messages);
+      return contextPrompt({ transcript, threadId: opts.threadId, box: opts.box, agent, consigne, draft: current });
     }
-    window.open(`https://claude.ai/new?q=${encodeURIComponent(prompt)}`, "_blank", "noopener");
+    return buildPrompt(opts.threadId, opts.box, opts.subject, consigne.trim(), current.trim());
+  };
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  /** « Copier le fil » : la demande et tout l'échange, à coller où l'on veut (Claude, ChatGPT…). */
+  const copy = async (consigne: string, agent?: string | null) => {
+    if (!opts) return;
+    toast((await copyText(promptFor(consigne, agent))) ? "Fil complet copié avec la demande : colle-le dans Claude (Cmd+V)" : "Copie impossible sur cet appareil");
+  };
+
+  /** « Demander à Claude / à un agent » : ouvre Claude avec tout le contexte. */
+  const start = async (consigne: string, agent?: string | null) => {
+    if (!opts) return;
+    const prompt = promptFor(consigne, agent);
+    since.current = new Date(Date.now() - 60 * 1000).toISOString();
+    const copied = await copyText(prompt);
+    const { url, full } = claudeUrl(prompt);
+    window.open(url, "_blank", "noopener");
     setWaiting(true);
-    toast("Claude s'ouvre avec la demande (aussi copiée : Cmd+V si besoin). La réponse arrivera ici.");
+    toast(
+      full
+        ? `${agent ?? "Claude"} s'ouvre avec tout l'échange${copied ? " (aussi copié)" : ""}. La réponse arrivera ici.`
+        : copied
+          ? "Échange long : il est copié, colle-le dans Claude (Cmd+V). La réponse arrivera ici."
+          : "Échange trop long pour le lien et copie impossible : utilise « Copier le fil » sur un autre appareil.",
+    );
   };
 
   return {
     ready: ready && current.trim() ? ready : null,
     waiting,
     start,
+    copy,
     insert: () => {
       if (!ready) return;
       apply(ready.body);
@@ -147,32 +188,86 @@ export function ClaudeReplyButton({ open, onToggle, waiting, onCancel }: { open:
   );
 }
 
-/** Ligne de consigne, dans le cadre de réponse (au-dessus de la barre du bas). */
-export function ClaudeConsigne({ onStart, onClose }: { onStart: (consigne: string) => void; onClose: () => void }) {
+type AgentLite = { id: string; nom: string; actif: boolean };
+
+/** Agents de l'app (fondateurs : la liste est protégée, sinon on reste sur « Claude » seul). */
+function useAgents(): AgentLite[] {
+  const [agents, setAgents] = useState<AgentLite[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void supabase.schema("agent").from("agents").select("id, nom, actif, sort_order").order("sort_order").then(({ data, error }) => {
+      if (alive && !error) setAgents((data as AgentLite[] | null) ?? []);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return agents;
+}
+
+/**
+ * Panneau « Rédiger avec Claude », dans le cadre de réponse : à qui demander (Claude
+ * seul ou un agent de TTP), une consigne facultative, puis un seul geste. Tout l'échange
+ * part avec la demande : « Copier le fil » pour le coller où l'on veut, ou « Demander ».
+ */
+export function ClaudeConsigne({ onStart, onCopy, onClose, withThread }: {
+  onStart: (consigne: string, agent?: string | null) => void;
+  onCopy?: (consigne: string, agent?: string | null) => void;
+  onClose: () => void;
+  /** Le texte du fil est disponible (il part avec la demande). */
+  withThread?: boolean;
+}) {
   const [consigne, setConsigne] = useState("");
-  const go = () => { onStart(consigne); setConsigne(""); onClose(); };
+  const [agentId, setAgentId] = useState<string>("");
+  const agents = useAgents();
+  const { data: chosen } = useAppState<Record<string, string>>((st) => (st["agentAvatars"] as Record<string, string>) ?? {});
+  const figs = assignFigurines(agents, chosen);
+  const agent = agents.find((a) => a.id === agentId) ?? null;
+  const who = agent ? agent.nom : "Claude";
+  const go = () => { onStart(consigne, agent?.nom ?? null); setConsigne(""); onClose(); };
+  const chip = (on: boolean) =>
+    cn("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full pl-1 pr-3 text-[12.5px] font-medium transition-colors", on ? "bg-primary text-primary-foreground" : "bg-field text-foreground hover:bg-rowhover");
   return (
-    <div className="border-t border-border bg-primary/[0.04] px-3.5 py-2.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
-        <input
-          autoFocus
-          value={consigne}
-          onChange={(e) => setConsigne(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); go(); }
-            if (e.key === "Escape") onClose();
-          }}
-          placeholder="Consigne pour Claude (facultatif) : accepte pour le 14, décline poliment…"
-          aria-label="Consigne pour Claude"
-          className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 text-[12.5px] text-foreground outline-none placeholder:text-faint focus:border-primary"
-        />
+    <div className="flex flex-col gap-2.5 border-t border-border bg-primary/[0.04] px-3.5 py-3">
+      {/* À qui demander */}
+      <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none]" role="radiogroup" aria-label="Qui rédige la réponse">
+        <button type="button" role="radio" aria-checked={!agent} onClick={() => setAgentId("")} className={chip(!agent)}>
+          <span className={cn("grid h-6 w-6 place-items-center rounded-full", !agent ? "bg-primary-foreground/20" : "bg-surface")}><Sparkles className="h-3.5 w-3.5" /></span>
+          Claude
+        </button>
+        {agents.filter((a) => a.actif).map((a) => (
+          <button key={a.id} type="button" role="radio" aria-checked={agentId === a.id} onClick={() => setAgentId(a.id)} className={chip(agentId === a.id)}>
+            <AgentAvatar figurine={figs[a.id]} className="h-6 w-6 rounded-full" />
+            {a.nom}
+          </button>
+        ))}
+      </div>
+      <input
+        autoFocus
+        value={consigne}
+        onChange={(e) => setConsigne(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); go(); }
+          if (e.key === "Escape") onClose();
+        }}
+        placeholder="Consigne (facultatif) : accepte pour le 14, décline poliment, demande le budget…"
+        aria-label="Consigne pour la réponse"
+        className="h-9 min-w-0 rounded-[10px] border border-border bg-surface px-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
+      />
+      <p className="text-[11.5px] leading-snug text-faint">
+        {withThread ? "Tout l'échange part avec la demande." : "Claude lit le fil avec le connecteur."} La réponse revient ici, rien n'est envoyé.
+      </p>
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <button type="button" onClick={onClose} className="h-8 rounded-full px-3 text-[12px] font-medium text-muted-foreground hover:bg-rowhover">Annuler</button>
+        {onCopy && (
+          <button type="button" onClick={() => { onCopy(consigne, agent?.nom ?? null); }} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-field px-3.5 text-[12px] font-semibold text-foreground hover:bg-rowhover">
+            <Copy className="h-3.5 w-3.5" /> Copier le fil
+          </button>
+        )}
         <button type="button" onClick={go} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12px] font-semibold text-primary-foreground hover:opacity-90">
-          Ouvrir Claude
+          Demander à {who}
         </button>
       </div>
-      <p className="mt-1.5 pl-5 text-[11px] leading-snug text-faint">Claude lit le fil, applique tes consignes du Talent manager et dépose sa réponse ici. Rien n'est envoyé.</p>
     </div>
   );
 }
