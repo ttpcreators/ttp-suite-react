@@ -242,6 +242,23 @@ export const NAV: NavFamily[] = [
 
 export const ALL_ITEMS: NavItem[] = NAV.flatMap((f) => f.items);
 
+/** Section Favoris : UNE seule, ses pages fixes + les pages ajoutées à l'étoile. */
+export const FAVORIS_ID = "favoris";
+/** Pages toujours dans Favoris (pas d'étoile : on ne peut pas les en retirer). */
+export const FAVORIS_BASE: ReadonlySet<string> = new Set(NAV.find((f) => f.id === FAVORIS_ID)?.items.map((i) => i.id) ?? []);
+
+/**
+ * Ajoute les pages mises en favoris (étoile) au bout de la section Favoris, sans
+ * doublon. Sans section Favoris visible (pages rangées), `make` en crée une en tête.
+ */
+export function withFavorites<I extends { id: string }, G extends { id: string; items: I[] }>(groups: G[], extras: I[], make: (items: I[]) => G): G[] {
+  const fav = groups.find((g) => g.id === FAVORIS_ID);
+  const add = extras.filter((e, i) => extras.findIndex((x) => x.id === e.id) === i && !fav?.items.some((it) => it.id === e.id));
+  if (!add.length) return groups;
+  if (fav) return groups.map((g) => (g === fav ? { ...g, items: [...g.items, ...add] } : g));
+  return [make(add), ...groups];
+}
+
 export function findItem(id: ViewId): NavItem | undefined {
   return ALL_ITEMS.find((i) => i.id === id);
 }

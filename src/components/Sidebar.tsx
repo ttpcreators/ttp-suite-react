@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { Building2, LogOut, Moon, PanelLeftOpen, Settings, Sparkles, Star, Sun, Trash2 } from "lucide-react";
-import { NAV, findPinnable, type ViewId } from "@/lib/nav";
+import { NAV, findPinnable, type ViewId, FAVORIS_BASE, FAVORIS_ID, withFavorites } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { AgencyAvatar } from "@/components/ui/agency-avatar";
@@ -15,6 +15,7 @@ import {
   sbRailCls,
   sbBadgeTotal,
   type SbGroup,
+  type SbItem,
 } from "@/components/ui/dashboard-sidebar";
 
 // Pastilles en rouge doux : uniquement l'argent en retard (factures, relances).
@@ -25,7 +26,7 @@ const NAV_GROUPS: SbGroup[] = NAV.map((f) => ({
   label: f.label,
   icon: f.icon,
   fixed: f.fixed,
-  items: f.items.map((i) => ({ id: i.id, label: i.label, icon: i.icon, children: i.children, badgeTone: LATE_BADGE.has(i.id) ? "late" : undefined })),
+  items: f.items.map((i) => ({ id: i.id, label: i.label, icon: i.icon, children: i.children, badgeTone: LATE_BADGE.has(i.id) ? "late" : undefined, noPin: FAVORIS_BASE.has(i.id) })),
 }));
 
 export function Sidebar({
@@ -51,7 +52,7 @@ export function Sidebar({
   onSpaceChange: (s: "agency" | "portal") => void;
   onItemContext?: (id: ViewId, e: ReactMouseEvent) => void;
   onItemSplit?: (id: ViewId) => void;
-  /** Pages épinglées → section « Raccourcis » en tête de la sidebar. */
+  /** Pages mises en favoris (étoile) → ajoutées à la section Favoris. */
   pinned?: ViewId[];
   /** Épingle/détache une page (étoile au survol). */
   onTogglePin?: (id: ViewId) => void;
@@ -67,8 +68,8 @@ export function Sidebar({
   const myName = useMyName(userId);
   const isPinned = (id: string) => (pinned ?? []).includes(id as ViewId);
   const isHidden = (id: string) => (hidden ?? []).includes(id as ViewId);
-  // Section « Raccourcis » (pages épinglées) ajoutée en TÊTE, sans sous-pages
-  // (un raccourci = lien direct). Clic droit sur une page → Épingler / Détacher.
+  // Pages mises en favoris (étoile, clic droit) : ajoutées au bout de la section Favoris,
+  // sans sous-pages (lien direct). Une seule section, jamais de doublon.
   const GROUPS = useMemo<SbGroup[]>(() => {
     // Familles filtrées (on retire les pages masquées, puis les familles vides).
     const b = badges ?? {};
@@ -84,8 +85,8 @@ export function Sidebar({
       .filter((id) => !isHidden(id))
       .map((id) => findPinnable(id))
       .filter((i): i is NonNullable<typeof i> => !!i)
-      .map((i) => ({ id: i.id, label: i.label, icon: i.icon, badge: b[i.id] }));
-    return items.length ? [{ id: "__pins__", label: "Raccourcis", icon: Star, fixed: true, items }, ...base] : base;
+      .map((i) => ({ id: i.id, label: i.label, icon: i.icon, badge: b[i.id], badgeTone: LATE_BADGE.has(i.id) ? ("late" as const) : undefined }));
+    return withFavorites<SbItem, SbGroup>(base, items, (extra) => ({ id: FAVORIS_ID, label: "Favoris", icon: Star, fixed: true, items: extra }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pinned, hidden, badges]);
   // Sidebar repliable en rail d'icônes (mémorisé).

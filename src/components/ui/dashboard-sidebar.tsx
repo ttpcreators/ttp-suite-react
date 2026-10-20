@@ -11,11 +11,12 @@ const hintOf = (id: string) => (VIEW_HINTS as Record<string, string | undefined>
 
 const BASE = import.meta.env.BASE_URL;
 
-/** Sous-page ; `pinnable` = aussi une vraie page, épinglable aux raccourcis (étoile, clic droit). */
+/** Sous-page ; `pinnable` = aussi une vraie page, à mettre en favoris (étoile, clic droit). */
 export type SbChild = { id: string; label: string; pinnable?: boolean; badge?: number };
 /** `badge` = nombre de notifications de la page (pastille ; 0 ou absent = rien). */
-export type SbItem = { id: string; label: string; icon: LucideIcon; badge?: number; badgeTone?: "late"; children?: SbChild[] };
-/** `fixed` = section toujours dépliée (Favoris, Raccourcis), hors accordéon. */
+/** `noPin` : page fixe de Favoris (pas d'étoile). */
+export type SbItem = { id: string; label: string; icon: LucideIcon; badge?: number; badgeTone?: "late"; noPin?: boolean; children?: SbChild[] };
+/** `fixed` = section toujours dépliée (Favoris), hors accordéon. */
 export type SbGroup = { id: string; label: string; icon: LucideIcon; fixed?: boolean; items: SbItem[] };
 
 /*
@@ -44,6 +45,20 @@ export const sbRailCls = (active: boolean) =>
     "grid h-10 w-10 shrink-0 place-items-center rounded-[12px] transition-[color,background-color,transform] duration-[var(--dur-press)] active:scale-95",
     active ? cn(ACTIVE_BG, "text-primary-foreground") : cn("text-primary", HOVER_BG),
   );
+const rowKey = (groupId: string, itemId: string) => `r:${groupId}/${itemId}`;
+const childKey = (itemId: string, childId: string) => `c:${itemId}/${childId}`;
+/**
+ * La ligne qui porte la pastille active, UNE seule : la sous-page choisie si elle est
+ * affichée, sinon la première ligne de la page (Favoris passe avant sa section : une
+ * page ajoutée aux favoris s'allume là-haut, pas deux fois).
+ */
+function pillKeyOf(groups: SbGroup[], activeId: string, activeSub?: string | null): string | null {
+  if (activeSub) {
+    for (const g of groups) for (const i of g.items) if (i.id === activeId && (i.children ?? []).some((c) => c.id === activeSub)) return childKey(i.id, activeSub);
+  }
+  for (const g of groups) for (const i of g.items) if (i.id === activeId) return rowKey(g.id, i.id);
+  return null;
+}
 /** Pastille d'accent de la ligne active : un seul exemplaire qui glisse vers la ligne cliquée. */
 function ActivePill() {
   const reduce = useReducedMotion();
@@ -113,7 +128,7 @@ function Row({
   hasChildren?: boolean;
   open?: boolean;
   onToggle?: () => void;
-  /** Page épinglée (Raccourcis) → étoile pleine, toujours visible. */
+  /** Page en favoris → étoile pleine, toujours visible. */
   pinned?: boolean;
   /** Épingle/détache au survol (étoile). Absent = pas d'étoile. */
   onTogglePin?: () => void;
@@ -175,8 +190,8 @@ function Row({
             e.stopPropagation();
             onTogglePin();
           }}
-          title={pinned ? t("Détacher des raccourcis") : t("Épingler aux raccourcis")}
-          aria-label={pinned ? t("Détacher des raccourcis") : t("Épingler aux raccourcis")}
+          title={pinned ? t("Retirer des favoris") : t("Ajouter aux favoris")}
+          aria-label={pinned ? t("Retirer des favoris") : t("Ajouter aux favoris")}
           aria-pressed={pinned}
           className={cn(
             "absolute right-8 focus-visible:opacity-100",
@@ -200,8 +215,8 @@ function Row({
  */
 function ItemBlock({
   item,
-  activeId,
-  activeSub,
+  groupId,
+  pillKey,
   onSelect,
   onItemContext,
   onItemSplit,
@@ -209,8 +224,9 @@ function ItemBlock({
   onTogglePin,
 }: {
   item: SbItem;
-  activeId: string;
-  activeSub?: string | null;
+  groupId: string;
+  /** Ligne qui porte la pastille active (une seule dans tout le menu, voir pillKeyOf). */
+  pillKey: string | null;
   onSelect: (id: string, sub?: string) => void;
   onItemContext?: (id: string, e: ReactMouseEvent) => void;
   onItemSplit?: (id: string) => void;
@@ -218,8 +234,9 @@ function ItemBlock({
   onTogglePin?: (id: string) => void;
 }) {
   const hasChildren = !!item.children && item.children.length > 0;
-  const parentActive = item.id === activeId;
-  const childActive = hasChildren && parentActive && item.children!.some((c) => c.id === activeSub);
+  const rowActive = pillKey === rowKey(groupId, item.id);
+  const childActive = hasChildren && item.children!.some((c) => pillKey === childKey(item.id, c.id));
+  const parentActive = rowActive || childActive;
   const storageKey = `ttp:sb-item:${item.id}`;
   const [open, setOpen] = useState(() => {
     try {
@@ -250,7 +267,7 @@ function ItemBlock({
     <div className="flex flex-col">
       <Row
         item={shown}
-        active={parentActive && !childActive}
+        active={rowActive}
         hasChildren={hasChildren}
         open={open}
         onToggle={toggle}
@@ -261,7 +278,7 @@ function ItemBlock({
         onContext={onItemContext ? (e) => onItemContext(item.id, e) : undefined}
         onSplit={!hasChildren && onItemSplit ? () => onItemSplit(item.id) : undefined}
         pinned={isPinned?.(item.id)}
-        onTogglePin={onTogglePin ? () => onTogglePin(item.id) : undefined}
+        onTogglePin={onTogglePin && !item.noPin ? () => onTogglePin(item.id) : undefined}
       />
       {hasChildren && (
         <div
@@ -274,7 +291,7 @@ function ItemBlock({
             {/* Guide vertical aligné sur le centre de l'icône parente */}
             <div className="my-0.5 ml-[17px] flex flex-col gap-0.5 border-l border-foreground/10 pl-2">
               {item.children!.map((c) => {
-                const on = parentActive && activeSub === c.id;
+                const on = pillKey === childKey(item.id, c.id);
                 const pin = c.pinnable && onTogglePin ? () => onTogglePin(c.id) : null;
                 const pinnedChild = !!(c.pinnable && isPinned?.(c.id));
                 return (
@@ -297,8 +314,8 @@ function ItemBlock({
                           e.stopPropagation();
                           pin();
                         }}
-                        title={pinnedChild ? t("Détacher des raccourcis") : t("Épingler aux raccourcis")}
-                        aria-label={pinnedChild ? t("Détacher des raccourcis") : t("Épingler aux raccourcis")}
+                        title={pinnedChild ? t("Retirer des favoris") : t("Ajouter aux favoris")}
+                        aria-label={pinnedChild ? t("Retirer des favoris") : t("Ajouter aux favoris")}
                         aria-pressed={pinnedChild}
                         className={cn("absolute right-1.5 focus-visible:opacity-100", ghostBtn, pinnedChild ? "opacity-100" : "opacity-0 group-hover:opacity-100")}
                       >
@@ -323,8 +340,7 @@ function ItemBlock({
  */
 function Group({
   group,
-  activeId,
-  activeSub,
+  pillKey,
   open,
   onToggle,
   onSelect,
@@ -334,8 +350,7 @@ function Group({
   onTogglePin,
 }: {
   group: SbGroup;
-  activeId: string;
-  activeSub?: string | null;
+  pillKey: string | null;
   open: boolean;
   onToggle: () => void;
   onSelect: (id: string, sub?: string) => void;
@@ -344,7 +359,7 @@ function Group({
   isPinned?: (id: string) => boolean;
   onTogglePin?: (id: string) => void;
 }) {
-  const containsActive = group.items.some((i) => i.id === activeId);
+  const containsActive = group.items.some((i) => pillKey === rowKey(group.id, i.id) || (i.children ?? []).some((c) => pillKey === childKey(i.id, c.id)));
   const total = group.items.reduce((s, i) => s + sbBadgeTotal(i), 0);
   const items = (
     <div className="flex flex-col gap-0.5 pb-2">
@@ -352,8 +367,8 @@ function Group({
         <ItemBlock
           key={item.id}
           item={item}
-          activeId={activeId}
-          activeSub={activeSub}
+          groupId={group.id}
+          pillKey={pillKey}
           onSelect={onSelect}
           onItemContext={onItemContext}
           onItemSplit={onItemSplit}
@@ -363,7 +378,7 @@ function Group({
       ))}
     </div>
   );
-  // Section fixe (Favoris, Raccourcis) : intitulé simple, toujours dépliée.
+  // Section fixe (Favoris) : intitulé simple, toujours dépliée.
   if (group.fixed) {
     return (
       <div className="flex flex-col">
@@ -594,7 +609,9 @@ export function SidebarNav({
 }) {
   // Accordéon : une seule section ouverte à la fois. Celle de la page active s'ouvre
   // automatiquement (navigation, recherche) ; un clic sur une autre section bascule.
-  const activeGroupId = groups.find((g) => !g.fixed && g.items.some((i) => i.id === activeId))?.id ?? null;
+  const pillKey = pillKeyOf(groups, activeId, activeSub);
+  const activeGroupId =
+    groups.find((g) => !g.fixed && g.items.some((i) => pillKey === rowKey(g.id, i.id) || (i.children ?? []).some((c) => pillKey === childKey(i.id, c.id))))?.id ?? null;
   const [openGroup, setOpenGroup] = useState<string | null>(activeGroupId);
   useEffect(() => {
     if (activeGroupId) setOpenGroup(activeGroupId);
@@ -610,8 +627,7 @@ export function SidebarNav({
           <Group
             key={g.id}
             group={g}
-            activeId={activeId}
-            activeSub={activeSub}
+            pillKey={pillKey}
             open={openGroup === g.id}
             onToggle={() => setOpenGroup((cur) => (cur === g.id ? null : g.id))}
             onSelect={onSelect}

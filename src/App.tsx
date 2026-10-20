@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
 import { SIGNATURE_KEY, setCurrentSignature, validSig } from "@/lib/agencySignature";
 import { Loader } from "@/components/ui/loader";
-import { Moon, Sun, X, Columns2, SquareArrowRight, Plus, LogOut, Pin, PinOff, Star, House, CircleEllipsis, Search, Trash2 } from "lucide-react";
+import { Moon, Sun, X, Columns2, SquareArrowRight, Plus, LogOut, Star, StarOff, House, CircleEllipsis, Search, Trash2 } from "lucide-react";
 import { cn, titleCase } from "@/lib/utils";
 import { restoreTabs, navigateTab, addTab, closeTab as closeTabState } from "@/lib/tabs";
 import type { Session } from "@supabase/supabase-js";
@@ -23,7 +23,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PageFrame } from "@/components/ui/page-header";
 import { VIEW_HINTS } from "@/lib/viewHints";
 import { Login } from "@/components/Login";
-import { NAV, findItem, findPinnable, viewTitle, type NavItem, type ViewId } from "@/lib/nav";
+import { FAVORIS_BASE, FAVORIS_ID, NAV, findItem, findPinnable, viewTitle, withFavorites, type NavFamily, type NavItem, type ViewId } from "@/lib/nav";
 import { NavSubContext, NavSubSetContext } from "@/lib/navSub";
 import { setTeamSession } from "@/lib/team";
 import { supabase } from "@/lib/supabase";
@@ -584,13 +584,17 @@ export default function App() {
   // localStorage ne doit jamais montrer une page fondateur à un membre).
   const splitShown = splitView && canSee(splitView) ? splitView : null;
 
-  // Raccourcis (pages épinglées), aussi en tête de l'écran « Plus » sur téléphone.
+  // Pages mises en favoris : ajoutées à la section Favoris (menu et écran « Plus »).
   const pinnedNavItems = pinned
     .filter(inNav)
     .map((id) => findPinnable(id))
     .filter((i): i is NavItem => !!i)
-    .map((i) => ({ id: i.id, label: i.label, icon: i.icon, children: i.children }));
-  const navFiltered = NAV.map((f) => ({ ...f, items: f.items.filter((i) => inNav(i.id)) })).filter((f) => f.items.length > 0);
+    .map((i): NavItem => ({ id: i.id, label: i.label, icon: i.icon }));
+  const navFiltered = withFavorites<NavItem, NavFamily>(
+    NAV.map((f) => ({ ...f, items: f.items.filter((i) => inNav(i.id)) })).filter((f) => f.items.length > 0),
+    pinnedNavItems,
+    (items) => ({ id: FAVORIS_ID, label: "Favoris", icon: Star, fixed: true, items }),
+  );
 
   const { items: notifs, dismiss: dismissNotifs } = useNotifications();
   // Pastilles du menu, des onglets iPhone et de l'écran « Plus » : nouveautés pas encore
@@ -618,7 +622,7 @@ export default function App() {
   // ── Affichage iPhone (téléphone) ──
   const iosPhone = useIsPhone();
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Onglets du bas : Accueil + 3 pages (les Raccourcis d'abord, sinon les plus utiles) + Plus.
+  // Onglets du bas : Accueil + 3 pages (les favoris ajoutés d'abord, sinon les plus utiles) + Plus.
   const tabIds = [...new Set<ViewId>([
     "apercu",
     ...pinned.filter((id) => inNav(id) && !!findPinnable(id)),
@@ -908,7 +912,6 @@ export default function App() {
                               sub: isFounder ? "Direction · TTP" : "Équipe · TTP",
                               onClick: () => select("parametres"),
                             }}
-                            pinned={pinnedNavItems}
                             sections={[
                               ...navFiltered.map((f) => ({ id: f.id, label: f.label, items: f.items })),
                               { id: "autres", label: "Autres", items: [{ id: "corbeille", label: "Corbeille", icon: Trash2 }] },
@@ -1065,18 +1068,21 @@ export default function App() {
               >
                 <Plus className="h-4 w-4 text-faint" /> Ouvrir dans un nouvel onglet
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  togglePin(ctxMenu.id);
-                  setCtxMenu(null);
-                }}
-                className="flex w-full items-center gap-2.5 border-t border-border px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-rowhover"
-              >
-                {pinned.includes(ctxMenu.id)
-                  ? <><PinOff className="h-4 w-4 text-faint" /> Détacher des raccourcis</>
-                  : <><Pin className="h-4 w-4 text-faint" /> Épingler aux raccourcis</>}
-              </button>
+              {/* Pages fixes de Favoris : toujours là, rien à ajouter ni retirer. */}
+              {!FAVORIS_BASE.has(ctxMenu.id) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    togglePin(ctxMenu.id);
+                    setCtxMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 border-t border-border px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-rowhover"
+                >
+                  {pinned.includes(ctxMenu.id)
+                    ? <><StarOff className="h-4 w-4 text-faint" /> Retirer des favoris</>
+                    : <><Star className="h-4 w-4 text-faint" /> Ajouter aux favoris</>}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
