@@ -10,7 +10,7 @@ export const FEATURES = {
   /** Espace créateur → « Envoyer mes stats » → « Connecter mon … », et imports du Debrief. */
   connect: {
     instagram: false, // App Review Meta à faire (instagram_business_basic + manage_insights)
-    tiktok: false, // passage en production demandé à TikTok le 2026-10-14
+    tiktok: true, // app TikTok validée le 2026-10-20, clés de Production posées le 2026-10-21
     youtube: false, // app Google en test, mise en pause par Marc
   },
 } as const;
