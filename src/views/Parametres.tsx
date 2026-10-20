@@ -198,7 +198,11 @@ function Card({ anchor, title, hint, right, children }: { anchor?: string; title
   );
 }
 
-/** Pastille d'icône colorée (blanc sur couleur), façon Réglages d'iOS. */
+/**
+ * Pastille d'icône des réglages. Direction « sobre » (choix de Marc) : carré gris et
+ * icône d'encre pour toutes les entrées ; sur l'entrée choisie (pastille bleue), l'icône
+ * passe en blanc. `entry.tile` (anciennes couleurs façon iOS) n'est plus utilisé.
+ */
 function EntryIcon({ entry, active }: { entry: Entry; active?: boolean }) {
   const Icon = entry.icon;
   return (
@@ -206,8 +210,7 @@ function EntryIcon({ entry, active }: { entry: Entry; active?: boolean }) {
       aria-hidden
       className={cn(
         "grid size-[29px] shrink-0 place-items-center rounded-[8px] @2xl:size-[22px] @2xl:rounded-[6px]",
-        entry.tile,
-        active && "@2xl:ring-1 @2xl:ring-primary-foreground/60",
+        active ? "bg-field text-foreground @2xl:bg-primary-foreground/20 @2xl:text-primary-foreground" : "bg-field text-foreground/75",
       )}
     >
       <Icon className="size-[17px] @2xl:size-[13px]" strokeWidth={2.1} />

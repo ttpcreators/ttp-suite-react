@@ -11,9 +11,7 @@ import { StatsBento } from "@/components/ui/stats-bento";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { MailAvatar } from "@/components/mail-avatar";
 import { brandDomainFrom } from "@/lib/mailAvatar";
-import { TONE_SOFT } from "@/lib/statusTone";
 import { StatusPill } from "@/components/ui/status-pill";
-import type { StatusTone } from "@/lib/statusTone";
 import { useEffect, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
@@ -66,14 +64,6 @@ const PHASE_DOT: Record<PhaseKey, string> = {
   mesure: "bg-indigo",
   facturation: "bg-amber",
   cloture: "bg-signal",
-};
-/** Teinte de la tuile de marque, selon la phase (couleurs de statut). */
-const PHASE_TONE: Record<PhaseKey, StatusTone> = {
-  negociation: "wait",
-  production: "progress",
-  mesure: "info",
-  facturation: "ok",
-  cloture: "closed",
 };
 
 /** « Aujourd'hui, 14:32 », « Hier, 18:02 », sinon « 4 oct. ». */
@@ -336,7 +326,7 @@ export function Collabs() {
           brandDomain={brandDomainFrom(brandContacts, row.brand)}
           className={size === "lg" ? "h-14 w-14 rounded-[16px]" : "h-9 w-9 rounded-[11px]"}
           fallback={row.brand.trim().charAt(0).toUpperCase()}
-          fallbackClassName={cn("font-bold", size === "lg" ? "text-[22px]" : "text-[13px]", onAccent ? "bg-primary-foreground/20 text-primary-foreground" : TONE_SOFT[PHASE_TONE[phaseOf(row.step)]])}
+          fallbackClassName={cn("font-bold", size === "lg" ? "text-[22px]" : "text-[13px]", onAccent ? "bg-primary-foreground/20 text-primary-foreground" : "bg-field text-muted-foreground")}
         />
         {row.creator && (
           <CreatorAvatar

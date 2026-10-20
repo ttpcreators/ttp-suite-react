@@ -109,18 +109,20 @@
   --brand-x: #64748b;
   --brand-snapchat: #f59e0b;
 
-  /* Statuts : UN sens par couleur, partout (fond / texte). */
-  --st-ok-bg: #e3f6e8; /* payé, signé, à jour */
+  /* Statuts : UN sens par couleur, partout. Direction « sobre » (choix de Marc) :
+     aucun fond pastel, les fonds de statut prennent le gris neutre des champs et
+     seul le texte (ou l'icône) porte la couleur du statut. */
+  --st-ok-bg: var(--field); /* payé, signé, à jour */
   --st-ok: #1e7b34;
-  --st-progress-bg: #e1eeff; /* en cours, envoyé */
+  --st-progress-bg: var(--field); /* en cours, envoyé */
   --st-progress: #0a5fc2;
-  --st-info-bg: #ddf3f5; /* brief, idée, Megan */
+  --st-info-bg: var(--field); /* brief, idée, Megan */
   --st-info: #0b6f7a;
-  --st-wait-bg: #fff0db; /* à relancer, en attente */
+  --st-wait-bg: var(--field); /* à relancer, en attente */
   --st-wait: #9a5b00;
-  --st-late-bg: #fde6e5; /* argent en retard UNIQUEMENT */
+  --st-late-bg: var(--field); /* argent en retard UNIQUEMENT */
   --st-late: #c4251c;
-  --st-closed-bg: #eeeef0; /* clôturé, écarté */
+  --st-closed-bg: var(--field); /* clôturé, écarté */
   --st-closed: #55555a;
 
   --on-status: #ffffff; /* texte posé sur un aplat de statut */
@@ -202,17 +204,17 @@
   --chart-5: #bf5af2;
   --chart-6: #98989d;
 
-  --st-ok-bg: rgba(48, 209, 88, 0.16);
+  --st-ok-bg: var(--field);
   --st-ok: #30d158;
-  --st-progress-bg: rgba(10, 132, 255, 0.22);
+  --st-progress-bg: var(--field);
   --st-progress: #64a8ff;
-  --st-info-bg: rgba(100, 210, 255, 0.16);
+  --st-info-bg: var(--field);
   --st-info: #64d2ff;
-  --st-wait-bg: rgba(255, 159, 10, 0.18);
+  --st-wait-bg: var(--field);
   --st-wait: #ffb340;
-  --st-late-bg: rgba(255, 69, 58, 0.2);
+  --st-late-bg: var(--field);
   --st-late: #ff6961;
-  --st-closed-bg: rgba(142, 142, 147, 0.2);
+  --st-closed-bg: var(--field);
   --st-closed: #aeaeb2;
 
   --on-status: #000000;
