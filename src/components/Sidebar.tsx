@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { Building2, LogOut, Moon, PanelLeftOpen, Settings, Sparkles, Star, Sun, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Building2, LogOut, Moon, PanelLeftOpen, Search, Settings, Sparkles, Star, Sun, Trash2 } from "lucide-react";
 import { NAV, findPinnable, type ViewId, FAVORIS_BASE, FAVORIS_ID, withFavorites } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
@@ -43,6 +43,8 @@ export function Sidebar({
   hidden,
   userId,
   badges,
+  search,
+  tools,
 }: {
   active: ViewId;
   activeSub?: string | null;
@@ -58,6 +60,10 @@ export function Sidebar({
   onTogglePin?: (id: ViewId) => void;
   /** Pages masquées (ex. membre non-fondateur : Finance & Accès). */
   hidden?: ViewId[];
+  /** Champ de recherche (sous la carte d'espace, comme la maquette). */
+  search?: ReactNode;
+  /** Boutons du pied, à droite de la carte utilisateur (notifications, thème). */
+  tools?: ReactNode;
   /** Compte connecté (photo de profil de la carte utilisateur). */
   userId?: string;
   /** Notifications par page (id du menu) → pastilles. */
@@ -109,7 +115,7 @@ export function Sidebar({
   // ── Rail replié : logo + icônes seules (tooltip au survol) + pied ──
   if (collapsed) {
     return (
-      <aside className="flex h-full w-[68px] shrink-0 flex-col items-center p-2">
+      <aside className="flex h-full w-[68px] shrink-0 flex-col items-center glass rounded-[22px] bg-surface p-2">
         <SidebarLogo className="mt-1 h-9 w-9" />
         <button
           type="button"
@@ -120,6 +126,11 @@ export function Sidebar({
         >
           <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
         </button>
+        {search && (
+          <button type="button" onClick={() => setCollapsed(false)} className={cn(sbRailCls(false), "mt-1 h-8 w-8")} title="Rechercher" aria-label="Rechercher">
+            <Search className="h-4 w-4" strokeWidth={1.75} />
+          </button>
+        )}
         <nav className="mt-3 flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {GROUPS.map((g, gi) => (
             <div key={g.id} className="flex w-full flex-col items-center gap-1">
@@ -160,6 +171,7 @@ export function Sidebar({
   }
 
   const header = (
+    <>
     <SidebarBrand
       title="TTP Suite"
       sub={space === "agency" ? "Espace agence" : "Espace créateurs"}
@@ -169,6 +181,8 @@ export function Sidebar({
         { id: "portal", label: "Créateurs", hint: "Espaces des créateurs", icon: Sparkles, active: space === "portal", onSelect: () => onSpaceChange("portal") },
       ]}
     />
+    {search && <div className="mb-3">{search}</div>}
+    </>
   );
 
   const footer = (
@@ -177,17 +191,22 @@ export function Sidebar({
         <Trash2 className={sbIconCls(active === "corbeille")} strokeWidth={1.75} />
         Corbeille
       </button>
-      <SidebarUser
-        avatar={<AgencyAvatar userId={userId} readOnly className="h-8 w-8" rounded="rounded-full" />}
-        menuAvatar={<AgencyAvatar userId={userId} className="h-8 w-8" rounded="rounded-full" />}
-        name={myName || "Marc & Gianni"}
-        sub="Direction · TTP"
-        actions={[
-          { icon: Settings, label: "Paramètres", onClick: () => onSelect("parametres") },
-          { icon: dark ? Sun : Moon, label: dark ? "Mode clair" : "Mode sombre", onClick: toggleTheme },
-          { icon: LogOut, label: "Se déconnecter", onClick: onLogout },
-        ]}
-      />
+      <div className="flex items-center gap-1 border-t border-border pt-2">
+        <div className="min-w-0 flex-1">
+          <SidebarUser
+            avatar={<AgencyAvatar userId={userId} readOnly className="h-8 w-8" rounded="rounded-full" />}
+            menuAvatar={<AgencyAvatar userId={userId} className="h-8 w-8" rounded="rounded-full" />}
+            name={myName || "Marc & Gianni"}
+            sub="Direction · TTP"
+            actions={[
+              { icon: Settings, label: "Paramètres", onClick: () => onSelect("parametres") },
+              { icon: dark ? Sun : Moon, label: dark ? "Mode clair" : "Mode sombre", onClick: toggleTheme },
+              { icon: LogOut, label: "Se déconnecter", onClick: onLogout },
+            ]}
+          />
+        </div>
+        {tools}
+      </div>
     </>
   );
 

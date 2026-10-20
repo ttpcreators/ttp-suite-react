@@ -453,7 +453,7 @@ export function SidebarBrand({
 }) {
   const [open, setOpen] = useState(false);
   const t = useT();
-  const card = "flex min-w-0 flex-1 items-center gap-2.5 rounded-[10px] border border-border bg-surface p-1.5 pr-2 text-left";
+  const card = "flex min-w-0 flex-1 items-center gap-2.5 rounded-[12px] p-1.5 pr-2 text-left";
   const inner = (
     <>
       <SidebarLogo />
@@ -468,7 +468,7 @@ export function SidebarBrand({
       {options ? (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
-            <button type="button" className={cn(card, "transition-colors hover:border-foreground/15 data-[state=open]:border-foreground/15")} aria-label={t("Changer d'espace")}>
+            <button type="button" className={cn(card, "transition-colors hover:bg-rowhover data-[state=open]:bg-rowhover")} aria-label={t("Changer d'espace")}>
               {inner}
               <ChevronsUpDown className="h-4 w-4 shrink-0 text-foreground/40" strokeWidth={1.75} />
             </button>
@@ -504,7 +504,7 @@ export function SidebarBrand({
         <button
           type="button"
           onClick={onCollapse}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-foreground/40 transition-colors hover:bg-surface/60 hover:text-foreground dark:hover:bg-rowhover"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-foreground/40 transition-colors hover:bg-rowhover hover:text-foreground"
           title={t("Replier le menu")}
           aria-label={t("Replier le menu")}
         >
@@ -541,7 +541,7 @@ export function SidebarUser({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={cn("flex w-full items-center gap-2.5 rounded-[10px] p-1.5 pr-2 text-left transition-colors", HOVER_BG, "data-[state=open]:bg-surface dark:data-[state=open]:bg-rowhover")}
+          className={cn("flex w-full min-w-0 items-center gap-2.5 rounded-[12px] p-1.5 pr-2 text-left transition-colors", HOVER_BG, "data-[state=open]:bg-rowhover")}
         >
           {avatar}
           <span className="min-w-0 flex-1">
@@ -618,7 +618,8 @@ export function SidebarNav({
   }, [activeGroupId]);
 
   return (
-    <aside className="flex h-full w-[240px] shrink-0 flex-col p-3">
+    // Menu = un panneau à part (carte arrondie), comme la zone de contenu.
+    <aside className="flex h-full w-[248px] shrink-0 flex-col glass rounded-[22px] bg-surface p-3">
       <AccentGradientDef />
       {header}
       <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

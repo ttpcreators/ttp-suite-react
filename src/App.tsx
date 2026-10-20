@@ -784,7 +784,9 @@ export default function App() {
 
   // Barre du haut (recherche + profil + notifs + thème) — partagée normal/split.
   const topBar = (
-    <header className="flex items-center gap-4 px-4 pt-5 md:px-6">
+    // Ordinateur : recherche, notifications et thème vivent dans le menu (maquette) ;
+    // cette barre ne sert plus qu'aux écrans étroits hors mode iPhone.
+    <header className="flex items-center gap-4 px-4 pt-5 md:hidden">
       {/* recherche globale (filtre + navigation) */}
       <GlobalSearch query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={navHidden} />
       {/* right cluster */}
@@ -843,7 +845,7 @@ export default function App() {
     <SearchContext.Provider value={{ query, setQuery }}>
     <NavSubSetContext.Provider value={setSub}>
       <div className={iosPhone ? "app-frame h-[100dvh] bg-background" : "app-frame h-[100dvh] bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
-        <div className={cn("flex h-full overflow-hidden", !iosPhone && "rounded-[22px]")}>
+        <div className={cn("flex h-full overflow-hidden", !iosPhone && "md:gap-3.5")}>
           {/* Desktop sidebar */}
           <div className="hidden h-full md:block">
             <Sidebar
@@ -859,6 +861,21 @@ export default function App() {
               hidden={navHidden}
               userId={session.user.id}
               badges={navBadges}
+              search={<GlobalSearch variant="sidebar" query={query} setQuery={setQuery} onOpenCreator={openDetail} onGoto={gotoSearch} hidden={navHidden} />}
+              tools={
+                <>
+                  <Notifications variant="sidebar" items={notifs} onDismiss={dismissNotifs} />
+                  <button
+                    type="button"
+                    onClick={toggleTheme}
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-foreground/60 transition-colors hover:bg-rowhover hover:text-foreground"
+                    aria-label={dark ? "Passer en clair" : "Passer en noir"}
+                    title={dark ? "Passer en clair" : "Passer en noir"}
+                  >
+                    {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  </button>
+                </>
+              }
               onItemSplit={(id) => {
                 if (id !== active) setSplitView(id);
               }}
@@ -899,7 +916,7 @@ export default function App() {
                 ) : (
                   topBar
                 )}
-                <main className={cn("px-4 md:px-6", iosPhone ? "pt-1" : "pt-5")}>
+                <main className={cn("px-4 md:px-8", iosPhone ? "pt-1" : "pt-5 md:pt-8")}>
                   <NavActionSlotContext.Provider value={iosPhone && !phoneScreen ? navSlot : null}>
                   <ErrorBoundary variant="inline" label="Cette page" resetKey={`${space}:${detailCreator ?? ""}:${active}:${phoneScreen ?? ""}`}>
                     <Suspense fallback={PANE_FALLBACK}>
