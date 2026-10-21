@@ -18,6 +18,7 @@ import { cleanSignature } from "@/lib/mailSignature";
 import type { MailMessage } from "@/lib/creatorMail";
 import { Overlay, useIosPhone } from "@/components/mobile/ios-sheet";
 import { ClaudeConsigne, ClaudeReadyBanner, ClaudeReplyButton, useClaudeReply } from "@/components/mail-claude";
+import { MeetButton, MeetDialog, meetReplyText } from "@/components/meet-invite";
 
 /*
  * Outils d'écriture des mails (agence) : réglages (signature collée, délai
@@ -207,8 +208,10 @@ function useEscape(fn: () => void) {
 
 // ── Réponse dans le fil ─────────────────────────────────────────────────────
 export function ReplyBox({
-  placeholder, box, focusKey, focusMode, onSend, variant = "bar", to, toTitle, draftKey, replyAllCc = [], sendLabel, claude,
+  placeholder, box, focusKey, focusMode, onSend, variant = "bar", to, toTitle, draftKey, replyAllCc = [], sendLabel, claude, meet,
 }: {
+  /** « Rendez-vous » : invités proposés (l'interlocuteur du fil), titre, créateur concerné. */
+  meet?: { guests: string[]; title: string; who?: string | null };
   /** « Rédiger avec Claude » (connecteur, sans clé API) : fil concerné. */
   claude?: { threadId: string; subject: string; messages?: readonly ContextMessage[] };
   placeholder: string; box: MailBox; focusKey?: number;
@@ -247,6 +250,19 @@ export function ReplyBox({
     requestAnimationFrame(() => ref.current?.focus());
   });
   const [aiOpen, setAiOpen] = useState(false);
+  const [meetOpen, setMeetOpen] = useState(false);
+  const meetDialog = meet && meetOpen && (
+    <MeetDialog
+      guests={meet.guests}
+      title={meet.title}
+      who={meet.who}
+      onClose={() => setMeetOpen(false)}
+      onDone={(r) => {
+        setText((cur) => (cur.trim() ? `${cur.replace(/\s+$/, "")}\n\n` : "") + meetReplyText(r));
+        requestAnimationFrame(() => ref.current?.focus());
+      }}
+    />
+  );
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -405,6 +421,7 @@ export function ReplyBox({
           <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
           <BoxChip box={box} prefix="Depuis" />
           {claude && <ClaudeReplyButton open={aiOpen} onToggle={() => setAiOpen((v) => !v)} waiting={ai.waiting} onCancel={ai.cancelWait} />}
+          {meet && <MeetButton onClick={() => setMeetOpen(true)} />}
           <span className="flex-1" />
           <span className="text-faint max-sm:hidden">
             {settings.delaySec ? `annulable ${settings.delaySec} s · ` : ""}⌘↵
@@ -418,6 +435,7 @@ export function ReplyBox({
             <Send className="h-3.5 w-3.5" /> Envoyer
           </button>
         </div>
+        {meetDialog}
       </div>
     );
   }
@@ -463,10 +481,12 @@ export function ReplyBox({
         <AttachButton onFiles={(f) => void att.add(f)} total={att.total} />
         <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
         <BoxChip box={box} prefix="Depuis" />
+        {meet && <MeetButton onClick={() => setMeetOpen(true)} />}
         <span className="text-faint">
           {settings.delaySec ? `annulable ${settings.delaySec} s · ` : ""}⌘↵ pour envoyer
         </span>
       </div>
+      {meetDialog}
     </div>
   );
 }

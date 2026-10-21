@@ -2244,6 +2244,7 @@ export function Mails() {
                               placeholder="Écris ta réponse…"
                               onSend={sendReply}
                               claude={{ threadId: thread.threadId, subject: thread.subject, messages: readerMsgs }}
+                              meet={{ guests: plan.to ? [plan.to] : [], title: `TTP Creators x ${replyName || plan.to}`.trim() }}
                             />
                           ) : undefined}
                         />
