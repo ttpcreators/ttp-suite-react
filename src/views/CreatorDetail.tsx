@@ -8,6 +8,7 @@ import { selectTodosFor } from "@/lib/todoCreatorsDb";
 import { cn, titleCase } from "@/lib/utils";
 import { useIosPhone } from "@/components/mobile/ios-sheet";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { FolderTabs, type FolderTabItem } from "@/components/ui/folder-tabs";
 import { frDate, toISODate, todayISO } from "@/lib/dates";
 import { isMainPlatform } from "@/lib/platform";
 import { dbUpdate } from "@/lib/db";
@@ -102,6 +103,14 @@ type Td = { id: string; text: string; done: boolean };
 type Br = { brand: string; deliverables: string | null; due: string | null };
 type Idea = { text: string };
 
+/** Sections de la fiche (mêmes ids que le sélecteur du téléphone, gardés sur l'appareil). */
+const SECTION_TABS: FolderTabItem[] = [
+  { value: "suivi", label: "Accompagnement" },
+  { value: "infos", label: "Infos" },
+  { value: "activite", label: "Activité" },
+  { value: "mails", label: "Mails" },
+];
+
 type Coord = Pick<Creator, "ville" | "phone" | "email" | "address" | "siren" | "birth" | "email_pro" | "instagram" | "tiktok" | "commission" | "handle" | "niche" | "platform" | "status">;
 
 /** Statuts du roster (mêmes valeurs que Roster.tsx). */
@@ -193,10 +202,12 @@ export function CreatorDetail({
   onOpenPortal: (n: string) => void;
 }) {
   const [c, setC] = useState<Creator | null>(null);
-  // Téléphone : la fiche est découpée en sections (au lieu d'une très longue page).
+  // La fiche est découpée en sections (au lieu d'une très longue page) : onglets
+  // « dossier » sur ordinateur, sélecteur collé sous la barre de titre sur téléphone.
+  // Section choisie gardée sur l'appareil, la même pour les deux affichages.
   const iosPhone = useIosPhone();
   const [phoneSeg, setPhoneSeg] = useStickyState("fiche-createur:section", ["suivi", "infos", "activite", "mails"] as const, "suivi");
-  const segHide = (seg: typeof phoneSeg) => (iosPhone && phoneSeg !== seg ? "hidden" : "");
+  const segHide = (seg: typeof phoneSeg) => (phoneSeg !== seg ? "hidden" : "");
   const [inv, setInv] = useState<Inv[]>([]);
   const [td, setTd] = useState<Td[]>([]);
   const [br, setBr] = useState<Br[]>([]);
@@ -512,6 +523,419 @@ export function CreatorDetail({
     perPlatform.length === 0
       ? null
       : (perPlatform.find((p) => isMainPlatform(c?.platform, p.platform)) ?? latestMeasure);
+  // Colonne « réseaux » de la section Infos : carte Plateformes ou une carte Instagram / TikTok / YouTube.
+  const hasNetworks = platCards.length > 0 || !!(c?.id && (c.ig || c.tt || c.yt || hasKitYouTube(c.mediakit)));
+
+  // Les 4 sections de la fiche (mêmes que le sélecteur du téléphone). Toutes restent
+  // montées : seule la section choisie est visible, une saisie en cours n'est pas perdue.
+  const sections = (
+    <>
+      {/* Accompagnement : suivi éditorial, suivi du mois, rapport, journal */}
+      <div className={cn("flex min-w-0 flex-col gap-4", segHide("suivi"))}>
+        <CreatorAlerts name={name} />
+        <EditorialProfileCard name={name} />
+        <MonthlyTracking name={name} />
+        <MonthlyReport name={name} agencyView />
+        <JournalCard name={name} />
+      </div>
+
+      {/* Infos : réseaux à gauche, coordonnées et contrat à droite (une colonne sous xl) */}
+      <div className={cn("grid grid-cols-1 items-start gap-4", hasNetworks && "xl:grid-cols-2", segHide("infos"))}>
+        {hasNetworks && (
+          <div className="flex min-w-0 flex-col gap-4">
+            {/* Plateformes — logo cliquable (ouvre le profil) + abonnés/taux de la
+                dernière mesure d'engagement, datée automatiquement au jour du calcul */}
+            {platCards.length > 0 && (
+              <div className="rounded-2xl border border-border bg-surface p-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  {sectionTitle(Share2, "Plateformes")}
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "suivi" }))}
+                    className="group flex items-center gap-1 text-[12px] text-muted-foreground transition-colors hover:text-foreground"
+                    title="Courbes d'évolution"
+                  >
+                    Voir l'évolution
+                    <ArrowUpRight className="h-3.5 w-3.5 text-faint transition-colors group-hover:text-foreground" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                  {platCards.map((p) => (
+                    <div key={p.key} className="flex items-center gap-3 rounded-xl border border-border bg-panel px-4 py-3">
+                      {p.url ? (
+                        <a
+                          href={p.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={`Ouvrir le ${p.label} de ${titleCase(name)}`}
+                          className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border bg-surface text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                        >
+                          {platIcon(p.key)}
+                        </a>
+                      ) : (
+                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border bg-surface text-faint">
+                          {platIcon(p.key)}
+                        </span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-[12px] font-medium text-muted-foreground">{p.label}</span>
+                          {p.key === "instagram" && liveIg > 0 ? (
+                            <span className="shrink-0 text-[9px] text-faint">Meta · {fmtAgo(c?.ig?.ok)}</span>
+                          ) : (
+                            p.entry && <span className="shrink-0 text-[9px] text-faint">au {p.entry.date}</span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 flex items-baseline gap-3">
+                          <span className="whitespace-nowrap text-lg font-bold tracking-tight">
+                            {p.key === "instagram" && liveIg > 0
+                              ? fmtCompact(liveIg)
+                              : p.entry && numOf(p.entry.followers) > 0 ? fmtCompact(numOf(p.entry.followers)) : "—"}
+                            <span className="ml-1 text-[10px] font-medium text-faint">abonnés</span>
+                          </span>
+                          {p.entry && <span className="text-[12px] font-medium text-muted-foreground">{p.entry.er}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {c?.id && (c.ig || socialLinks.some((l) => l.label === "Instagram")) && (
+              <InstagramCard
+                creatorId={c.id}
+                name={c.name}
+                ig={c.ig}
+                onChange={(ig) => setC((prev) => (prev ? { ...prev, ig } : prev))}
+              />
+            )}
+
+            {c?.id && (c.tt || socialLinks.some((l) => l.label === "TikTok")) && (
+              <TikTokCard
+                creatorId={c.id}
+                name={c.name}
+                tt={c.tt}
+                onChange={(tt) => setC((prev) => (prev ? { ...prev, tt } : prev))}
+              />
+            )}
+
+            {c?.id && (c.yt || socialLinks.some((l) => l.label === "YouTube") || hasKitYouTube(c.mediakit)) && (
+              <YouTubeCard
+                creatorId={c.id}
+                name={c.name}
+                yt={c.yt}
+                onChange={(yt) => setC((prev) => (prev ? { ...prev, yt } : prev))}
+              />
+            )}
+          </div>
+        )}
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="rounded-2xl border border-border bg-surface p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              {sectionTitle(IdCard, "Coordonnées")}
+              <div className="flex items-center gap-2">
+                {c?.commission && (
+                  <div className="hidden rounded-lg bg-muted px-3 py-1.5 text-[12px] font-medium text-foreground sm:block">
+                    Commission {c.commission}
+                  </div>
+                )}
+                {/* (Échéance du contrat : voir la carte « Contrat » juste en dessous.) */}
+                {editing ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={save}
+                      disabled={savingInfo}
+                      className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                    >
+                      <Check className="h-3.5 w-3.5" /> Enregistrer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancel}
+                      className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                      title="Annuler"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Modifier
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {editing ? (
+              <div className="space-y-4">
+                {/* Exclusivité (stockée côté agence) */}
+                <div className="flex items-center gap-2.5 rounded-lg border border-border bg-panel px-3 py-2.5">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={exclusive}
+                    onClick={() => setExclusive((x) => !x)}
+                    className={"relative h-5 w-9 shrink-0 rounded-full transition-colors " + (exclusive ? "bg-primary" : "bg-faint/40")}
+                    title="Basculer l'exclusivité"
+                  >
+                    <span className={"absolute top-0.5 h-4 w-4 rounded-full transition-all " + (exclusive ? "left-[18px] bg-primary-foreground" : "left-0.5 bg-white")} />
+                  </button>
+                  <span className="text-sm font-medium text-foreground">Créateur en exclusivité</span>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {field("Pseudo (@)", "handle")}
+                  {field("Niche", "niche")}
+                  {field("Plateforme", "platform")}
+                  <SelectField
+                    label="Statut"
+                    value={form.status ?? "actif"}
+                    onChange={(v) => setForm((f) => ({ ...f, status: v }))}
+                    options={STATUS_OPTIONS}
+                  />
+                  {field("Ville", "ville")}
+                  {field("Téléphone", "phone")}
+                  {field("Email perso", "email")}
+                  {field("Email pro", "email_pro")}
+                  {field("Instagram", "instagram")}
+                  {field("TikTok", "tiktok")}
+                  {field("Adresse", "address")}
+                  {field("SIREN", "siren")}
+                  {field("Naissance", "birth", "date")}
+                  {field("Commission (%)", "commission")}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                  {copyRow("Ville", form.ville ?? "")}
+                  {copyRow("Téléphone", form.phone ?? "")}
+                  {copyRow("Email perso", form.email ?? "")}
+                  {copyRow("Email pro", form.email_pro ?? "")}
+                  {copyRow("Instagram", form.instagram ?? "")}
+                  {copyRow("TikTok", form.tiktok ?? "")}
+                  {copyRow("Adresse", form.address ?? "")}
+                  {copyRow("SIREN", form.siren ?? "")}
+                  {copyRow("Naissance", frDate(form.birth))}
+                </div>
+                <button
+                  type="button"
+                  onClick={copyAll}
+                  className="mt-3 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                >
+                  <Copy className="h-3.5 w-3.5" /> Copier toutes les infos
+                </button>
+                {/* Langue de SON espace (créateur anglophone) : l'espace agence reste en français. */}
+                {c && (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
+                    <span className="text-[12px] text-muted-foreground">Langue de son espace</span>
+                    <div className="flex gap-1" role="group" aria-label="Langue de son espace">
+                      {(["fr", "en"] as const).map((l) => {
+                        const on = (c.lang === "en" ? "en" : "fr") === l;
+                        return (
+                          <button key={l} type="button" aria-pressed={on}
+                            onClick={async () => {
+                              if (on) return;
+                              if (!(await dbUpdate("creators", c.id, { lang: l }))) return toast("Erreur, réessaie (le réglage de langue est-il installé ?)");
+                              setC({ ...c, lang: l });
+                              toast(l === "en" ? `L'espace de ${titleCase(name)} est en anglais ✓` : `L'espace de ${titleCase(name)} est en français ✓`);
+                            }}
+                            className={cn("h-7 rounded-full px-3 text-[12px] font-medium transition-colors", on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+                            {l === "fr" ? "Français" : "English"}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Contrat — date de fin, connecté à la page Échéances */}
+          <div className="rounded-2xl border border-border bg-surface p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              {sectionTitle(ScrollText, "Contrat")}
+              {!ctEditing && (
+                <button
+                  type="button"
+                  onClick={openCtEdit}
+                  className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> {contractEnd ? "Modifier" : "Définir"}
+                </button>
+              )}
+            </div>
+
+            {ctEditing ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
+                  <div>
+                    <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Date de début</div>
+                    <DateInput
+                      value={ctStart}
+                      onChange={setCtStart}
+                      className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Durée (mois)</div>
+                    <input
+                      type="number"
+                      min={1}
+                      value={ctMonths}
+                      onChange={(e) => setCtMonths(e.target.value)}
+                      className="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Type</div>
+                    <input
+                      value={ctType}
+                      onChange={(e) => setCtType(e.target.value)}
+                      placeholder="représentation"
+                      className="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={saveContract}
+                    disabled={savingCt}
+                    className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    <Check className="h-3.5 w-3.5" /> Enregistrer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCtEditing(false)}
+                    className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                    title="Annuler"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                  <span className="text-[11px] text-faint">Synchronisé avec la page Échéances.</span>
+                </div>
+              </div>
+            ) : contractEnd ? (
+              <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+                <div>
+                  <div className="text-[11px] font-medium text-muted-foreground">Se termine le</div>
+                  <div className="mt-1 text-[22px] font-semibold leading-none tracking-tight tabular-nums">{frDateShort(contractEnd)}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-medium text-muted-foreground">Échéance</div>
+                  <div
+                    className={
+                      "mt-0.5 text-sm font-semibold " +
+                      (contractLeft != null && contractLeft <= 30
+                        ? "text-dangertext"
+                        : contractLeft != null && contractLeft <= 60
+                          ? "text-amber"
+                          : "text-foreground")
+                    }
+                  >
+                    {contractLeft == null
+                      ? "—"
+                      : contractLeft < 0
+                        ? `Expiré depuis ${-contractLeft} j`
+                        : contractLeft === 0
+                          ? "Se termine aujourd'hui"
+                          : `Dans ${contractLeft} j`}
+                  </div>
+                </div>
+                {contractType && (
+                  <div>
+                    <div className="text-[11px] font-medium text-muted-foreground">Type</div>
+                    <div className="mt-0.5 text-sm font-semibold capitalize">{contractType}</div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground">
+                Aucun contrat renseigné. Clique sur « Définir » pour ajouter la date de fin (visible aussi dans Échéances).
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Activité : factures, tâches, briefs, idées */}
+      <div className={cn("grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-4", segHide("activite"))}>
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <div className="mb-3">{sectionTitle(Receipt, "Facturation")}</div>
+          {inv.length === 0 ? (
+            <div className="text-xs text-muted-foreground">Aucune facture.</div>
+          ) : (
+            inv.map((v, i) => (
+              <div key={`${v.ref}-${i}`} className="flex items-center justify-between border-b border-border py-2 last:border-0">
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-medium">{v.party}</div>
+                  <div className="text-[10px] text-faint">#{v.ref}{v.date ? ` · Échéance ${v.date}` : ""}</div>
+                </div>
+                <span className="text-[13px] font-medium tabular-nums">{parseAmount(v.amount) > 0 ? formatEuro(parseAmount(v.amount)) : v.amount || "—"}</span>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <div className="mb-3">{sectionTitle(ListChecks, "À faire")}</div>
+          {td.length === 0 ? (
+            <div className="text-xs text-muted-foreground">Rien à faire.</div>
+          ) : (
+            td.map((t) => (
+              <div key={t.id} className="flex items-center gap-2.5 py-1.5">
+                <span className={"h-4 w-4 shrink-0 rounded-[5px] border " + (t.done ? "border-primary bg-primary" : "border-faint")} />
+                <span className={"text-xs " + (t.done ? "text-faint line-through" : "")}>{t.text}</span>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <div className="mb-3">{sectionTitle(FileText, "Briefs")}</div>
+          {br.length === 0 ? (
+            <div className="text-xs text-muted-foreground">Aucun brief.</div>
+          ) : (
+            br.map((b, i) => (
+              <div key={`${b.brand}-${i}`} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-foreground/40" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-medium">{b.brand}</div>
+                  <div className="truncate text-[10px] text-faint">{b.deliverables} · {frDate(b.due)}</div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <div className="mb-3">{sectionTitle(Lightbulb, "Idées de contenu")}</div>
+          {ideas.length === 0 ? (
+            <div className="text-xs text-muted-foreground">Aucune idée.</div>
+          ) : (
+            ideas.map((x, i) => (
+              <div key={`${x.text}-${i}`} className="flex items-center gap-2.5 py-1.5">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-indigo" />
+                <span className="text-xs">{x.text}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Mails : lien alias/libellé + boîte filtrée (statuts, messages du créateur) */}
+      <div className={segHide("mails")}>
+        <Suspense fallback={null}>
+          <CreatorMailsAgency creator={name} suggestedAlias={c?.email_pro} className={iosPhone ? "mt-0" : undefined} />
+        </Suspense>
+      </div>
+    </>
+  );
 
   return (
     <div>
@@ -626,12 +1050,7 @@ export function CreatorDetail({
               label="Section de la fiche"
               value={phoneSeg}
               onValueChange={(v) => setPhoneSeg(v as typeof phoneSeg)}
-              items={[
-                { value: "suivi", label: "Accompagnement" },
-                { value: "infos", label: "Infos" },
-                { value: "activite", label: "Activité" },
-                { value: "mails", label: "Mails" },
-              ]}
+              items={SECTION_TABS}
             />
           </div>
         </>
@@ -651,409 +1070,17 @@ export function CreatorDetail({
         {stat("Couverture", c?.reach ?? null)}
       </div>
 
-      {/* Tableau de bord (langage Aperçu) : suivi éditorial à gauche, synthèse à droite */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-      <div className={cn("flex min-w-0 flex-col gap-4 xl:col-span-8", segHide("suivi"))}>
-        <CreatorAlerts name={name} />
-        <EditorialProfileCard name={name} />
-        <MonthlyTracking name={name} />
-        <MonthlyReport name={name} agencyView />
-        <JournalCard name={name} />
-      </div>
-      <div className="flex min-w-0 flex-col gap-4 xl:col-span-4">
-
-      {/* Plateformes — logo cliquable (ouvre le profil) + abonnés/taux de la
-          dernière mesure d'engagement, datée automatiquement au jour du calcul */}
-      {platCards.length > 0 && (
-        <div className={cn("rounded-2xl border border-border bg-surface p-5", segHide("infos"))}>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            {sectionTitle(Share2, "Plateformes")}
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "suivi" }))}
-              className="group flex items-center gap-1 text-[12px] text-muted-foreground transition-colors hover:text-foreground"
-              title="Courbes d'évolution"
-            >
-              Voir l'évolution
-              <ArrowUpRight className="h-3.5 w-3.5 text-faint transition-colors group-hover:text-foreground" />
-            </button>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            {platCards.map((p) => (
-              <div key={p.key} className="flex items-center gap-3 rounded-xl border border-border bg-panel px-4 py-3">
-                {p.url ? (
-                  <a
-                    href={p.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={`Ouvrir le ${p.label} de ${titleCase(name)}`}
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border bg-surface text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-                  >
-                    {platIcon(p.key)}
-                  </a>
-                ) : (
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border bg-surface text-faint">
-                    {platIcon(p.key)}
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-[12px] font-medium text-muted-foreground">{p.label}</span>
-                    {p.key === "instagram" && liveIg > 0 ? (
-                      <span className="shrink-0 text-[9px] text-faint">Meta · {fmtAgo(c?.ig?.ok)}</span>
-                    ) : (
-                      p.entry && <span className="shrink-0 text-[9px] text-faint">au {p.entry.date}</span>
-                    )}
-                  </div>
-                  <div className="mt-0.5 flex items-baseline gap-3">
-                    <span className="whitespace-nowrap text-lg font-bold tracking-tight">
-                      {p.key === "instagram" && liveIg > 0
-                        ? fmtCompact(liveIg)
-                        : p.entry && numOf(p.entry.followers) > 0 ? fmtCompact(numOf(p.entry.followers)) : "—"}
-                      <span className="ml-1 text-[10px] font-medium text-faint">abonnés</span>
-                    </span>
-                    {p.entry && <span className="text-[12px] font-medium text-muted-foreground">{p.entry.er}</span>}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {c?.id && (c.ig || socialLinks.some((l) => l.label === "Instagram")) && (
-        <InstagramCard
-          creatorId={c.id}
-          name={c.name}
-          ig={c.ig}
-          onChange={(ig) => setC((prev) => (prev ? { ...prev, ig } : prev))}
-          className={segHide("infos")}
-        />
-      )}
-
-      {c?.id && (c.tt || socialLinks.some((l) => l.label === "TikTok")) && (
-        <TikTokCard
-          creatorId={c.id}
-          name={c.name}
-          tt={c.tt}
-          onChange={(tt) => setC((prev) => (prev ? { ...prev, tt } : prev))}
-          className={segHide("infos")}
-        />
-      )}
-
-      {c?.id && (c.yt || socialLinks.some((l) => l.label === "YouTube") || hasKitYouTube(c.mediakit)) && (
-        <YouTubeCard
-          creatorId={c.id}
-          name={c.name}
-          yt={c.yt}
-          onChange={(yt) => setC((prev) => (prev ? { ...prev, yt } : prev))}
-          className={segHide("infos")}
-        />
-      )}
-
-      <div className={cn("rounded-2xl border border-border bg-surface p-5", segHide("infos"))}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          {sectionTitle(IdCard, "Coordonnées")}
-          <div className="flex items-center gap-2">
-            {c?.commission && (
-              <div className="hidden rounded-lg bg-muted px-3 py-1.5 text-[12px] font-medium text-foreground sm:block">
-                Commission {c.commission}
-              </div>
-            )}
-            {/* (Échéance du contrat : voir la carte « Contrat » juste en dessous.) */}
-            {editing ? (
-              <>
-                <button
-                  type="button"
-                  onClick={save}
-                  disabled={savingInfo}
-                  className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-                >
-                  <Check className="h-3.5 w-3.5" /> Enregistrer
-                </button>
-                <button
-                  type="button"
-                  onClick={cancel}
-                  className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                  title="Annuler"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-              >
-                <Pencil className="h-3.5 w-3.5" /> Modifier
-              </button>
-            )}
-          </div>
-        </div>
-
-        {editing ? (
-          <div className="space-y-4">
-            {/* Exclusivité (stockée côté agence) */}
-            <div className="flex items-center gap-2.5 rounded-lg border border-border bg-panel px-3 py-2.5">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={exclusive}
-                onClick={() => setExclusive((x) => !x)}
-                className={"relative h-5 w-9 shrink-0 rounded-full transition-colors " + (exclusive ? "bg-primary" : "bg-faint/40")}
-                title="Basculer l'exclusivité"
-              >
-                <span className={"absolute top-0.5 h-4 w-4 rounded-full transition-all " + (exclusive ? "left-[18px] bg-primary-foreground" : "left-0.5 bg-white")} />
-              </button>
-              <span className="text-sm font-medium text-foreground">Créateur en exclusivité</span>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {field("Pseudo (@)", "handle")}
-              {field("Niche", "niche")}
-              {field("Plateforme", "platform")}
-              <SelectField
-                label="Statut"
-                value={form.status ?? "actif"}
-                onChange={(v) => setForm((f) => ({ ...f, status: v }))}
-                options={STATUS_OPTIONS}
-              />
-              {field("Ville", "ville")}
-              {field("Téléphone", "phone")}
-              {field("Email perso", "email")}
-              {field("Email pro", "email_pro")}
-              {field("Instagram", "instagram")}
-              {field("TikTok", "tiktok")}
-              {field("Adresse", "address")}
-              {field("SIREN", "siren")}
-              {field("Naissance", "birth", "date")}
-              {field("Commission (%)", "commission")}
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
-              {copyRow("Ville", form.ville ?? "")}
-              {copyRow("Téléphone", form.phone ?? "")}
-              {copyRow("Email perso", form.email ?? "")}
-              {copyRow("Email pro", form.email_pro ?? "")}
-              {copyRow("Instagram", form.instagram ?? "")}
-              {copyRow("TikTok", form.tiktok ?? "")}
-              {copyRow("Adresse", form.address ?? "")}
-              {copyRow("SIREN", form.siren ?? "")}
-              {copyRow("Naissance", frDate(form.birth))}
-            </div>
-            <button
-              type="button"
-              onClick={copyAll}
-              className="mt-3 flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-            >
-              <Copy className="h-3.5 w-3.5" /> Copier toutes les infos
-            </button>
-            {/* Langue de SON espace (créateur anglophone) : l'espace agence reste en français. */}
-            {c && (
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
-                <span className="text-[12px] text-muted-foreground">Langue de son espace</span>
-                <div className="flex gap-1" role="group" aria-label="Langue de son espace">
-                  {(["fr", "en"] as const).map((l) => {
-                    const on = (c.lang === "en" ? "en" : "fr") === l;
-                    return (
-                      <button key={l} type="button" aria-pressed={on}
-                        onClick={async () => {
-                          if (on) return;
-                          if (!(await dbUpdate("creators", c.id, { lang: l }))) return toast("Erreur, réessaie (le réglage de langue est-il installé ?)");
-                          setC({ ...c, lang: l });
-                          toast(l === "en" ? `L'espace de ${titleCase(name)} est en anglais ✓` : `L'espace de ${titleCase(name)} est en français ✓`);
-                        }}
-                        className={cn("h-7 rounded-full px-3 text-[12px] font-medium transition-colors", on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
-                        {l === "fr" ? "Français" : "English"}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Contrat — date de fin, connecté à la page Échéances */}
-      <div className={cn("rounded-2xl border border-border bg-surface p-5", segHide("infos"))}>
-        <div className="mb-4 flex items-center justify-between gap-3">
-          {sectionTitle(ScrollText, "Contrat")}
-          {!ctEditing && (
-            <button
-              type="button"
-              onClick={openCtEdit}
-              className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-            >
-              <Pencil className="h-3.5 w-3.5" /> {contractEnd ? "Modifier" : "Définir"}
-            </button>
-          )}
-        </div>
-
-        {ctEditing ? (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-              <div>
-                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Date de début</div>
-                <DateInput
-                  value={ctStart}
-                  onChange={setCtStart}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                />
-              </div>
-              <div>
-                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Durée (mois)</div>
-                <input
-                  type="number"
-                  min={1}
-                  value={ctMonths}
-                  onChange={(e) => setCtMonths(e.target.value)}
-                  className="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                />
-              </div>
-              <div>
-                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Type</div>
-                <input
-                  value={ctType}
-                  onChange={(e) => setCtType(e.target.value)}
-                  placeholder="représentation"
-                  className="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={saveContract}
-                disabled={savingCt}
-                className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
-                <Check className="h-3.5 w-3.5" /> Enregistrer
-              </button>
-              <button
-                type="button"
-                onClick={() => setCtEditing(false)}
-                className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-                title="Annuler"
-              >
-                <X className="h-4 w-4" />
-              </button>
-              <span className="text-[11px] text-faint">Synchronisé avec la page Échéances.</span>
-            </div>
-          </div>
-        ) : contractEnd ? (
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-            <div>
-              <div className="text-[11px] font-medium text-muted-foreground">Se termine le</div>
-              <div className="mt-1 text-[22px] font-semibold leading-none tracking-tight tabular-nums">{frDateShort(contractEnd)}</div>
-            </div>
-            <div>
-              <div className="text-[11px] font-medium text-muted-foreground">Échéance</div>
-              <div
-                className={
-                  "mt-0.5 text-sm font-semibold " +
-                  (contractLeft != null && contractLeft <= 30
-                    ? "text-dangertext"
-                    : contractLeft != null && contractLeft <= 60
-                      ? "text-amber"
-                      : "text-foreground")
-                }
-              >
-                {contractLeft == null
-                  ? "—"
-                  : contractLeft < 0
-                    ? `Expiré depuis ${-contractLeft} j`
-                    : contractLeft === 0
-                      ? "Se termine aujourd'hui"
-                      : `Dans ${contractLeft} j`}
-              </div>
-            </div>
-            {contractType && (
-              <div>
-                <div className="text-[11px] font-medium text-muted-foreground">Type</div>
-                <div className="mt-0.5 text-sm font-semibold capitalize">{contractType}</div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="text-xs text-muted-foreground">
-            Aucun contrat renseigné. Clique sur « Définir » pour ajouter la date de fin (visible aussi dans Échéances).
-          </div>
-        )}
-      </div>
-
-        <div className={cn("rounded-2xl border border-border bg-surface p-5", segHide("activite"))}>
-          <div className="mb-3">{sectionTitle(Receipt, "Facturation")}</div>
-          {inv.length === 0 ? (
-            <div className="text-xs text-muted-foreground">Aucune facture.</div>
-          ) : (
-            inv.map((v, i) => (
-              <div key={`${v.ref}-${i}`} className="flex items-center justify-between border-b border-border py-2 last:border-0">
-                <div className="min-w-0">
-                  <div className="truncate text-xs font-medium">{v.party}</div>
-                  <div className="text-[10px] text-faint">#{v.ref}{v.date ? ` · Échéance ${v.date}` : ""}</div>
-                </div>
-                <span className="text-[13px] font-medium tabular-nums">{parseAmount(v.amount) > 0 ? formatEuro(parseAmount(v.amount)) : v.amount || "—"}</span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-      </div>
-
-      <div className={cn("mt-4 grid grid-cols-1 gap-4 md:grid-cols-3", iosPhone && "mt-0", segHide("activite"))}>
-        <div className="rounded-2xl border border-border bg-surface p-5">
-          <div className="mb-3">{sectionTitle(ListChecks, "À faire")}</div>
-          {td.length === 0 ? (
-            <div className="text-xs text-muted-foreground">Rien à faire.</div>
-          ) : (
-            td.map((t) => (
-              <div key={t.id} className="flex items-center gap-2.5 py-1.5">
-                <span className={"h-4 w-4 shrink-0 rounded-[5px] border " + (t.done ? "border-primary bg-primary" : "border-faint")} />
-                <span className={"text-xs " + (t.done ? "text-faint line-through" : "")}>{t.text}</span>
-              </div>
-            ))
-          )}
-        </div>
-        <div className="rounded-2xl border border-border bg-surface p-5">
-          <div className="mb-3">{sectionTitle(FileText, "Briefs")}</div>
-          {br.length === 0 ? (
-            <div className="text-xs text-muted-foreground">Aucun brief.</div>
-          ) : (
-            br.map((b, i) => (
-              <div key={`${b.brand}-${i}`} className="flex items-center gap-2.5 border-b border-border py-2 last:border-0">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-foreground/40" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium">{b.brand}</div>
-                  <div className="truncate text-[10px] text-faint">{b.deliverables} · {frDate(b.due)}</div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-        <div className="rounded-2xl border border-border bg-surface p-5">
-          <div className="mb-3">{sectionTitle(Lightbulb, "Idées de contenu")}</div>
-          {ideas.length === 0 ? (
-            <div className="text-xs text-muted-foreground">Aucune idée.</div>
-          ) : (
-            ideas.map((x, i) => (
-              <div key={`${x.text}-${i}`} className="flex items-center gap-2.5 py-1.5">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-indigo" />
-                <span className="text-xs">{x.text}</span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Mails : lien alias/libellé + boîte filtrée (statuts, messages de la créatrice) */}
-      <div className={segHide("mails")}>
-        <Suspense fallback={null}>
-          <CreatorMailsAgency creator={name} suggestedAlias={c?.email_pro} className={iosPhone ? "mt-0" : undefined} />
-        </Suspense>
-      </div>
+      {/* Ordinateur : onglets « dossier » (comme Agents) ; téléphone : le sélecteur collé ci-dessus. */}
+      <FolderTabs
+        label="Sections de la fiche"
+        orderKey="fiche-createur"
+        items={SECTION_TABS}
+        value={phoneSeg}
+        onValueChange={(v) => setPhoneSeg(v as typeof phoneSeg)}
+        phoneTabs={false}
+      >
+        {sections}
+      </FolderTabs>
     </div>
   );
 }

@@ -65,6 +65,7 @@ export function ContractsHome({
   onNew,
   onEdit,
   resume,
+  onCount,
 }: {
   /** Page affichée (sinon gardée montée et masquée : recherche, onglet et filtres restent). */
   active?: boolean;
@@ -72,6 +73,8 @@ export function ContractsHome({
   onEdit: (row: ContractRow, raw: Raw) => void;
   /** Un générateur a été ouvert pendant la session : on peut y revenir sans perdre la saisie. */
   resume?: { label: string; onClick: () => void } | null;
+  /** Nombre de contrats enregistrés (compteur de l'onglet « Tous » de la page Contrats). */
+  onCount?: (n: number) => void;
 }) {
   const creators = useCreators();
   const { data, loading } = useAppState<Hist>((s: AppState) => ({ brand: s["brandContractHistory"], repr: s["contractHistory"] }));
@@ -97,6 +100,9 @@ export function ContractsHome({
     () => buildRows(data?.brand, data?.repr).filter((r) => !removed.has(rowKey(r))).map((r) => (statusOver[rowKey(r)] ? { ...r, status: statusOver[rowKey(r)] } : r)),
     [data, removed, statusOver],
   );
+  useEffect(() => {
+    onCount?.(rows.length);
+  }, [onCount, rows.length]);
 
   const [tab, setTab] = useStickyState<StatusTab>("contrats:statut", ["all", "signed", "pending", "changes"], "all");
   const [q, setQ] = useState("");

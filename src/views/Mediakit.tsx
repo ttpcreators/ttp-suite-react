@@ -17,7 +17,7 @@ import { MediakitEditor } from "@/views/MediakitEditor";
 import { readMediakitTemplates, MEDIAKIT_TEMPLATES_KEY } from "@/lib/mailTemplates";
 import { AgencyTab } from "@/views/MediakitAgence";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
-import { Tabs, type TabItem } from "@/components/ui/animated-tabs";
+import { FolderTabs, type FolderTabItem } from "@/components/ui/folder-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
 
 /**
@@ -728,7 +728,7 @@ function MediakitFiles() {
 }
 
 type MkTab = "creatrices" | "agence" | "files";
-const MK_TABS: TabItem[] = [
+const MK_TABS: FolderTabItem[] = [
   { value: "creatrices", label: "Créateurs" },
   { value: "agence", label: "Agence" },
   { value: "files", label: "Fichiers" },
@@ -751,17 +751,17 @@ export function Mediakit() {
     if (sub === "creatrices" || sub === "agence" || sub === "files") setTab(sub);
   }, [sub]);
   return (
-    <div className="space-y-4">
-      {/* Sous-pages ; le choix est remonté à la sidebar. */}
-      <Tabs
-        label="Sous-pages Media kit"
-        items={MK_TABS}
-        value={tab}
-        onValueChange={(v) => {
-          setTab(v as MkTab);
-          setNavSub(v);
-        }}
-      />
+    // Sous-pages en onglets « dossier » (comme Agents) ; le choix est remonté à la sidebar.
+    <FolderTabs
+      label="Sous-pages Media kit"
+      orderKey="mediakit"
+      items={MK_TABS}
+      value={tab}
+      onValueChange={(v) => {
+        setTab(v as MkTab);
+        setNavSub(v);
+      }}
+    >
       {tab === "creatrices" ? (
         <div>
           <MediakitEditor />
@@ -771,7 +771,7 @@ export function Mediakit() {
       ) : (
         <MediakitFiles />
       )}
-    </div>
+    </FolderTabs>
   );
 }
 

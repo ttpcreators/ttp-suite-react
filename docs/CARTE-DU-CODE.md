@@ -158,7 +158,7 @@ demande via `lazy(lazyImport(...))`. « F » = réservée aux fondateurs (`FOUND
 | Famille | Fichiers |
 |---|---|
 | Mise en page et navigation | `page-header` (`PageFrame`, `PageHeaderRow`), `dashboard-sidebar` (primitives de menu, agence et créateur), `dash`, `welcome-modal`, `scaled-preview` |
-| Onglets et filtres | `animated-tabs` (`Tabs`), `motion-tabs`, `morphing-tabs`, `filter-bar`, `filter-panel`, `period-filter`, `date-range-picker`, `pill-search` |
+| Onglets et filtres | `animated-tabs` (`Tabs`), `motion-tabs`, `morphing-tabs`, `folder-tabs` (onglets « dossier » de la page Agents pour fiche créateur, Contrats, Media kit, Paramètres ; onglets simples sur téléphone), `filter-bar`, `filter-panel`, `period-filter`, `date-range-picker`, `pill-search` |
 | Formulaires | `form` (`AddButton`, `InlineForm`, champs), `select`, `checkbox`, `popover`, `status-select`, `creator-multi-picker`, `recipient-picker`, `image-field`, `avatar-upload`, `signature-picker`, `mediakit-theme-picker`, `subtask-checklist` |
 | Retours et statuts | `toast`, `alert`, `notifications`, `notification-panel`, `undo-send`, `loader`, `status-pill`, `be-ui-animated-badge`, `help-tip`, `tooltips`, `kbd`, `progress` |
 | Données et graphiques | `chart` (recharts), `glass-stat-chart`, `stat-card`, `stats-bento`, `event-calendar`, `agent-plan`, `file-card-collections`, `cobe-globe-stickers` |
@@ -174,7 +174,7 @@ Règle : la logique pure (sans React ni Supabase) vit dans `src/lib/<nom>.ts`, a
 | Domaine | Fichiers |
 |---|---|
 | Socle données | `supabase.ts` (client, clé anon), `db.ts` (insert / update / delete), `appState.ts` (blob agence `__app_state__`), `useLive.ts` (resynchronisation), `viewCache.ts`, `trash.ts` (corbeille), `useCreators.ts`, `money.ts`, `utils.ts`, `dates.ts`, `dateRange.ts`, `timeSeries.ts` |
-| Navigation et interface | `nav.tsx`, `navSub.ts`, `navAction.ts`, `navSeen.ts`, `useNavBadges.ts`, `hiddenPages.ts`, `restrictedViews.ts`, `pageAliases.ts`, `viewHints.ts`, `tabs.ts`, `openIntent.ts`, `deepLink.ts`, `commandPalette.ts`, `search.ts`, `searchKinds.ts`, `useGlobalSearch.ts`, `settingsSearch.ts`, `useStickyState.ts`, `iosUi.ts`, `touch.ts`, `ease.ts`, `hooks/` (gestes) |
+| Navigation et interface | `nav.tsx`, `navSub.ts`, `navAction.ts`, `navSeen.ts`, `useNavBadges.ts`, `hiddenPages.ts`, `restrictedViews.ts`, `pageAliases.ts`, `viewHints.ts`, `tabs.ts`, `openIntent.ts`, `deepLink.ts`, `commandPalette.ts`, `search.ts`, `searchKinds.ts`, `useGlobalSearch.ts`, `settingsSearch.ts`, `folderTabs.ts`, `useStickyState.ts`, `iosUi.ts`, `touch.ts`, `ease.ts`, `hooks/` (gestes) |
 | Apparence | `accent.ts` (accent et thèmes Clair, Verre, Noir, Auto), `theme.ts` (contexte React), `statusTone.ts` (un sens par couleur) |
 | Mise à jour et santé | `appUpdate.ts` (`version.json`, `lazyImport`), `errorReport.ts`, `diagnostics.ts`, `features.ts` (fonctions en attente d'accord Meta, TikTok, Google) |
 | Aujourd'hui et anticipation | `aujourdhui.ts`, `anticipation.ts`, `relance.ts`, `useRelanceInvoices.ts` |

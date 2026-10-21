@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bestHit, entryForTarget, groupHits, pagesVisibility, searchSettings, sectionAnchor, type SettingsEntry } from "./settingsSearch";
+import { bestHit, entriesOfTab, entryAnchor, entryForTarget, groupHits, groupTabId, pagesVisibility, searchSettings, sectionAnchor, settingsTabs, settingsTarget, settingsTargetFor, type SettingsEntry } from "./settingsSearch";
 
 const ENTRIES: SettingsEntry[] = [
   { id: "apparence", label: "Apparence", group: "Général", keywords: ["thème", "sombre"], sections: [{ title: "Apparence" }, { title: "Couleur d'accent", keywords: ["couleur"] }, { title: "Pages affichées", keywords: ["menu"] }] },
@@ -53,6 +53,32 @@ describe("Paramètres : ancres et cibles", () => {
     expect(entryForTarget(ENTRIES, "Point de mi-journée")?.id).toBe("resumes");
     expect(entryForTarget(ENTRIES, "reglage-inconnu")).toBeNull();
     expect(entryForTarget(ENTRIES, null)).toBeNull();
+  });
+});
+
+describe("Paramètres : onglets par groupe", () => {
+  it("un onglet par groupe, dans l'ordre, avec un id stable", () => {
+    expect(settingsTabs(ENTRIES)).toEqual([
+      { value: "general", label: "Général" },
+      { value: "notifications", label: "Notifications" },
+      { value: "compte", label: "Compte" },
+    ]);
+    expect(groupTabId("Prospection et Claude")).toBe("prospection-et-claude");
+    expect(entriesOfTab(ENTRIES, "general").map((e) => e.id)).toEqual(["apparence", "signature"]);
+  });
+
+  it("ouvrir une entrée : son onglet, et le bloc à atteindre sauf pour la première", () => {
+    expect(settingsTarget(ENTRIES, "apparence")).toEqual({ tab: "general", anchor: null });
+    expect(settingsTarget(ENTRIES, "signature")).toEqual({ tab: "general", anchor: entryAnchor("signature") });
+    expect(settingsTarget(ENTRIES, "resumes", "Point de mi-journée")).toEqual({ tab: "notifications", anchor: "reglage-point-de-mi-journee" });
+    expect(settingsTarget(ENTRIES, "inconnu")).toBeNull();
+  });
+
+  it("cible venue d'ailleurs : sous-page ou ancre de carte", () => {
+    expect(settingsTargetFor(ENTRIES, "signature")).toEqual({ tab: "general", anchor: "reglage-volet-signature" });
+    expect(settingsTargetFor(ENTRIES, "#reglage-point-de-mi-journee")).toEqual({ tab: "notifications", anchor: "reglage-point-de-mi-journee" });
+    expect(settingsTargetFor(ENTRIES, "compte")).toEqual({ tab: "compte", anchor: null });
+    expect(settingsTargetFor(ENTRIES, "zzz")).toBeNull();
   });
 });
 
