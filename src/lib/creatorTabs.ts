@@ -1,8 +1,8 @@
 /**
  * Onglets de l'espace créateur (logique PURE, testable sous Node).
  *
- * Mobile d'abord : 5 onglets dans la barre du bas (Accueil, Missions, Messages,
- * Gains, Profil). Toutes les autres rubriques restent ouvertes depuis Profil (et
+ * Mobile d'abord : 5 onglets dans la barre du bas (Accueil, Missions, Mail,
+ * Gains, Plus). Toutes les autres rubriques sont en tuiles en tête de Plus (et
  * depuis le menu ordinateur). L'onglet choisi est mémorisé (`ttp:cs-tab`) ; les
  * anciennes valeurs (« briefs », « facturation »…) sont ramenées vers le nouvel
  * onglet qui les contient, pour que personne n'atterrisse sur un onglet cassé.
@@ -18,7 +18,7 @@ export type CsTab =
 export const CS_MAIN_TABS = ["accueil", "missions", "mails", "gains", "profil"] as const satisfies readonly CsTab[];
 export type CsMainTab = (typeof CS_MAIN_TABS)[number];
 
-/** Toutes les rubriques (principales d'abord, puis celles ouvertes depuis Profil). */
+/** Toutes les rubriques (principales d'abord, puis celles ouvertes depuis Plus). */
 export const CS_ALL_TABS: readonly CsTab[] = [
   ...CS_MAIN_TABS,
   "guide", "evolution", "rapport", "debrief", "roadmap",
@@ -29,7 +29,7 @@ export const CS_ALL_TABS: readonly CsTab[] = [
 /**
  * Anciennes valeurs mémorisées → nouvel onglet. Briefs vit désormais dans Missions
  * (la fiche d'une mission garde statut et script), Facturation dans Gains, et
- * l'ancien écran « Plus » est devenu Profil.
+ * l'onglet « profil » s'affiche « Plus » (rubriques + profil).
  */
 export const CS_TAB_ALIASES: Record<string, CsTab> = {
   briefs: "missions",
@@ -46,7 +46,7 @@ export function normalizeCsTab(saved: string | null | undefined): CsTab {
   return (CS_ALL_TABS as readonly string[]).includes(v) ? (v as CsTab) : "accueil";
 }
 
-/** Onglet du bas allumé pour une rubrique : elle-même si principale, sinon Profil. */
+/** Onglet du bas allumé pour une rubrique : elle-même si principale, sinon Plus (id « profil »). */
 export function ownerTab(tab: CsTab): CsMainTab {
   return (CS_MAIN_TABS as readonly string[]).includes(tab) ? (tab as CsMainTab) : "profil";
 }
@@ -56,7 +56,7 @@ export function isMainTab(tab: CsTab): tab is CsMainTab {
 }
 
 // ── Favoris du créateur : ses rubriques préférées, en tête du menu et sur l'Accueil ──
-/** Rubriques qu'on peut mettre en favori (Accueil et Profil sont toujours dans la barre). */
+/** Rubriques qu'on peut mettre en favori (Accueil et Plus sont toujours dans la barre). */
 export const CS_FAVORABLE: readonly CsTab[] = CS_ALL_TABS.filter((t) => t !== "accueil" && t !== "profil");
 
 /** Liste gardée (texte JSON) → favoris valides, sans doublon, dans l'ordre d'ajout. */

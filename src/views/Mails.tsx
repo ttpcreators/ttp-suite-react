@@ -1,8 +1,9 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { contextPrompt, threadTranscript } from "@/lib/mailThreadContext";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ExpandableActionBar } from "@/components/ui/expandable-action-bar";
 import { Loader, Spin } from "@/components/ui/loader";
-import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, Plus, type LucideIcon } from "@/components/icons";
+import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, Copy, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, Plus, type LucideIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -312,6 +313,7 @@ const SHORTCUTS: [string, string][] = [
   ["r", "Répondre"],
   ["a", "Répondre à tous"],
   ["f", "Transférer"],
+  ["c", "Copier le fil pour Claude"],
   ["e", "Archiver"],
   ["#", "Corbeille"],
   ["⇧ U", "Marquer non lu"],
@@ -1411,6 +1413,22 @@ export function Mails() {
     if (last) setExpanded((s) => new Set([...s, last.id]));
     setReplyFocus({ key: Date.now(), mode: m });
   };
+  /**
+   * « Copier le fil » : toute la discussion (qui, quand, à qui, chaque message sans les
+   * citations répétées) + la demande d'un bon suivi, prête à coller dans Claude.
+   */
+  const copyThread = async () => {
+    if (!thread || !readerMsgs.length) return;
+    const transcript = threadTranscript(thread.subject, thread.box, readerMsgs);
+    const prompt = contextPrompt({ transcript, threadId: thread.threadId, box: thread.box, consigne: "fais un bon suivi de cet échange : réponds à ce qui attend une réponse et propose la prochaine étape" });
+    try {
+      await navigator.clipboard.writeText(prompt);
+      toast(`Fil copié (${readerMsgs.length} message${readerMsgs.length > 1 ? "s" : ""}) : colle-le dans Claude (Cmd+V)`);
+    } catch {
+      toast("Copie impossible sur cet appareil");
+    }
+  };
+
   const forwardLast = () => {
     if (!thread || !readerMsgs.length) return;
     setForward({ msg: readerMsgs[readerMsgs.length - 1], subject: thread.subject, box: thread.box });
@@ -1559,6 +1577,12 @@ export function Mails() {
         if (thread && readerMsgs.length) {
           e.preventDefault();
           forwardLast();
+        }
+        return;
+      case "c":
+        if (thread && readerMsgs.length) {
+          e.preventDefault();
+          void copyThread();
         }
         return;
       case "e": {
@@ -2094,6 +2118,7 @@ export function Mails() {
           )}
         </span>
         <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5 max-md:invisible">{navBtns}</div>
+        <ToolButton icon={Copy} label="Copier le fil pour Claude" text="Copier le fil" shortcut="c" tipSide="bottom" disabled={!loaded} onClick={() => void copyThread()} />
         <ToolButton icon={Reply} label="Répondre" text="Répondre" shortcut="r" className="max-md:hidden" disabled={!loaded} onClick={() => focusReply("reply")} />
         <ToolButton icon={Forward} label="Transférer" text="Transférer" shortcut="f" tipSide="bottom-end" disabled={!loaded} onClick={forwardLast} />
       </div>
