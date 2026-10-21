@@ -40,6 +40,9 @@ import { IosBackButton, IosBarIcon, IosNavBar, IosTabBar, type IosTab } from "@/
 import { MoreScreen } from "@/components/mobile/more-screen";
 import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
 import { OfflineBanner } from "@/components/mobile/offline-banner";
+import { onDeepLink, setCurrentPlace, takeDeepLink } from "@/lib/deepLink";
+import { requestIntent } from "@/lib/openIntent";
+import { useAppBadge, useCloseMailNotifications } from "@/lib/appBadge";
 
 // Vues chargées à la demande (code-splitting → démarrage plus léger, mobile compris).
 const RosterTabs = lazy(() => import("@/views/RosterTabs").then((m) => ({ default: m.RosterTabs })));
@@ -661,12 +664,36 @@ export default function App() {
   }, [screenKey, iosPhone]);
   const scrollTop = () => scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
 
-  // Pastille sur l'icône de l'app (écran d'accueil iPhone) : nombre de notifications.
+  // Pastille sur l'icône de l'app (écran d'accueil iPhone) : nombre de notifications de
+  // la cloche, remise au bon chiffre au retour au premier plan (le service worker l'augmente
+  // à chaque push reçu app fermée). Côté créateur, c'est l'espace créateur qui la tient.
+  const isAgency = profile?.role === "agency";
+  useAppBadge(notifs.length, isAgency);
+
+  // Notifications de mails : ouvrir Mails les retire (comme Gmail) ; le service worker
+  // demande où l'on est pour ne pas afficher un mail qu'on a déjà sous les yeux.
+  const onMails = isAgency && space === "agency" && (active === "mails" || splitShown === "mails");
+  useCloseMailNotifications(onMails);
   useEffect(() => {
-    const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
-    if (!nav.setAppBadge) return;
-    (notifs.length ? nav.setAppBadge(notifs.length) : nav.clearAppBadge?.())?.catch(() => {});
-  }, [notifs.length]);
+    if (isAgency) setCurrentPlace(onMails ? "mails" : space === "agency" ? active : "portal");
+  }, [isAgency, onMails, space, active]);
+
+  // Lien d'ouverture d'une notification (src/lib/deepLink.ts) : Mails, sur le fil du mail.
+  useEffect(() => {
+    if (!isAgency) return;
+    const run = () => {
+      const l = takeDeepLink((x) => x.open === "mails");
+      if (!l || l.open !== "mails") return;
+      requestIntent("mail:open", JSON.stringify({ thread: l.thread, box: l.box }));
+      navigateCurrentTab("mails");
+      setSub(null);
+      setDetailCreator(null);
+      setSpace("agency");
+      setPhoneScreen(null);
+    };
+    run();
+    return onDeepLink(run);
+  }, [isAgency, navigateCurrentTab]);
 
   if (session === undefined) {
     return (

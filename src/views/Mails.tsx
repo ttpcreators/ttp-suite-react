@@ -27,6 +27,7 @@ import { useSearch } from "@/lib/search";
 import { useLiveKey } from "@/lib/useLive";
 import { buildBrandIndex, collabTag, creatorTone, matchCollabs, relanceDays, type BrandIndex, type CollabLite, type MailTag } from "@/lib/mailCollab";
 import { LinkedCollabCard, MailTagChip } from "@/components/mail-collab";
+import { useIntent } from "@/lib/openIntent";
 
 // Espace mails d'un créateur (statuts, remarques, suivi), chargé seulement à la demande.
 const CreatorMailsAgency = lazy(() => import("@/views/CreatorMails").then((m) => ({ default: m.CreatorMailsAgency })));
@@ -1002,6 +1003,10 @@ export function Mails() {
     const msgs = res.messages ?? [];
     threadCache.set(tkey(t.box, t.threadId), { at: Date.now(), msgs });
     applyMsgs(msgs);
+    // Fil ouvert depuis une notification : l'objet n'était pas encore connu.
+    if (!t.subject && msgs[0]?.subject) {
+      setThread((cur) => (cur && keyOf(cur) === keyOf(t) && !cur.subject ? { ...cur, subject: msgs[0].subject } : cur));
+    }
   };
   const retryThread = () => {
     if (!thread) return;
@@ -1342,6 +1347,22 @@ export function Mails() {
     setCreatorView({ name, threadId });
     setMode("creators");
   };
+  // Notification d'un nouveau mail (src/lib/deepLink.ts) : ouvre la Réception sur ce
+  // fil, même avant que la liste soit chargée (l'objet arrive avec le fil).
+  useIntent("mail:open", (data) => {
+    let want: { thread?: unknown; box?: unknown } = {};
+    try {
+      want = JSON.parse(data ?? "{}") as typeof want;
+    } catch {
+      return;
+    }
+    if (mode !== "inbox") goMode("inbox");
+    const threadId = typeof want.thread === "string" ? want.thread : "";
+    if (!threadId) return;
+    const box: MailBox = want.box === "talent" ? "talent" : "partnerships";
+    const known = [...(lists.inbox?.threads ?? []), ...(lists.sent?.threads ?? [])].find((t) => t.threadId === threadId && t.box === box);
+    openThread({ threadId, box, subject: known?.subject ?? "", contact: known?.email ?? "", name: known?.name ?? "" });
+  });
   // Dossier de couleur d'un créateur : filtre la liste (reçus ou envoyés) ; second clic, tout revient.
   const pickCreator = (name: string) => {
     const on = !!creatorFilter && sameName(creatorFilter, name);

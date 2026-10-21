@@ -9,17 +9,11 @@
 // Secrets requis : VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT, CRON_SECRET.
 // ============================================================================
 
-import webpush from "npm:web-push@3.6.7";
 import { getServiceClient, corsHeaders, timingSafeEqualStr } from "../_shared/google.ts";
+import { deepLinkUrl, loadAppBlob, makePayload, pushReady, sendTo, type Audience } from "../_shared/push.ts";
+import type { PushKind } from "../_shared/pushPayload.ts";
 
-const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
-const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
-const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") ?? "mailto:marc@ttpcreators.pro";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
-
-if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-}
 
 // ─── Helpers de date (fuseau Europe/Paris) ───────────────────────────────────
 function parisToday(): string {
@@ -108,7 +102,6 @@ function monthKeyOf(iso: string): string {
 }
 
 type CtDeadline = { creator?: string; start?: string; months?: number; type?: string };
-type Sub = { id: string; endpoint: string; p256dh: string; auth: string };
 
 type Caller = { role: "cron" | "agency" | "creator"; creatorName?: string | null } | null;
 
@@ -137,130 +130,41 @@ async function identify(req: Request): Promise<Caller> {
 /** Préférences de notifications (blob agence `notifPrefs`) — tout activé par défaut. */
 type NotifPrefs = Record<string, boolean | undefined>;
 async function loadPrefs(sb: ReturnType<typeof getServiceClient>): Promise<NotifPrefs> {
-  try {
-    // Même sélection que le client (appState.ts) : la ligne la plus récente —
-    // maybeSingle() planterait si 2 lignes __app_state__ coexistent.
-    const { data } = await sb
-      .from("module_rows").select("a").eq("module", "__app_state__")
-      .order("created_at", { ascending: false }).limit(1);
-    const raw = (data?.[0] as { a?: unknown } | undefined)?.a;
-    const obj = typeof raw === "string" ? JSON.parse(raw) : (raw ?? {});
-    return (obj?.notifPrefs as NotifPrefs) ?? {};
-  } catch {
-    return {};
-  }
+  // Même sélection que le client (appState.ts) : la ligne la plus récente.
+  return ((await loadAppBlob(sb)).notifPrefs as NotifPrefs | undefined) ?? {};
 }
 const prefOn = (prefs: NotifPrefs, key: string) => prefs[key] !== false;
 
 // Textes de notif personnalisés (blob `notifTexts`) — clé → titre. Vide = défaut.
 async function loadNotifTexts(sb: ReturnType<typeof getServiceClient>): Promise<Record<string, string>> {
-  try {
-    const { data } = await sb
-      .from("module_rows").select("a").eq("module", "__app_state__")
-      .order("created_at", { ascending: false }).limit(1);
-    const raw = (data?.[0] as { a?: unknown } | undefined)?.a;
-    const obj = typeof raw === "string" ? JSON.parse(raw) : (raw ?? {});
-    return (obj?.notifTexts as Record<string, string>) ?? {};
-  } catch {
-    return {};
-  }
+  return ((await loadAppBlob(sb)).notifTexts as Record<string, string> | undefined) ?? {};
 }
 const customText = (t: Record<string, string>, key: string, def: string) => (t[key] || "").trim() || def;
 
-/** Envoie un payload aux abonnements AGENCE ; purge les morts (404/410).
- *  Les appareils liés à un compte créateur sont EXCLUS : le digest contient des
- *  infos internes (factures en retard, contrats…) réservées à l'agence. */
-// Notifications sobres (style iPhone) : sans émojis ni tirets, même si un titre
-// personnalisé (Paramètres) en contient. Titre court, une seule ligne de texte.
-function tidyText(t: unknown): string {
-  return String(t ?? "")
-    .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, "")
-    .replace(/\s+[—–]\s+/g, " · ")
-    .replace(/\s*\n+\s*/g, " · ")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-function tidyPayload(payload: string): string {
-  try {
-    const p = JSON.parse(payload);
-    p.title = tidyText(p.title) || "TTP Suite";
-    let body = tidyText(p.body);
-    // Première lettre en majuscule (lignes du résumé assemblées avec « · »).
-    body = body.charAt(0).toUpperCase() + body.slice(1);
-    p.body = body.length > 140 ? body.slice(0, 139).trimEnd() + "…" : body;
-    return JSON.stringify(p);
-  } catch {
-    return payload;
-  }
-}
+/** Une notification : titre, texte, tag ; adresse d'ouverture « / » par défaut. */
+type Msg = { title: string; body: string; tag: string; url?: string };
 
-// audience : « founders » = fondateurs seuls (messages avec de l'argent, la Finance
-// leur est réservée), « members » = les autres comptes agence, défaut = tous.
-async function sendToAll(sb: ReturnType<typeof getServiceClient>, payload: string, audience: "all" | "founders" | "members" = "all") {
-  payload = tidyPayload(payload);
-  const { data: subsRaw } = await sb.from("push_subscriptions").select("id,endpoint,p256dh,auth,user_id");
-  const all = ((subsRaw ?? []) as (Sub & { user_id: string | null })[]);
-  // ALLOWLIST agence : on n'envoie QU'AUX appareils dont le compte est rôle 'agency'.
-  // (Un abonnement sans user_id, ou d'un créateur/compte offboardé, est exclu.)
-  const userIds = [...new Set(all.map((s) => s.user_id).filter(Boolean))] as string[];
-  const agencyIds = new Set<string>();
-  if (userIds.length) {
-    const { data: profs } = await sb.from("profiles").select("user_id,role,agency_role").in("user_id", userIds);
-    for (const pr of (profs ?? []) as { user_id: string; role: string; agency_role: string | null }[]) {
-      if (pr.role === "creator") continue;
-      const founder = pr.agency_role === "founder";
-      if (audience === "all" || (audience === "founders") === founder) agencyIds.add(pr.user_id);
-    }
-  }
-  const subs = all.filter((s) => s.user_id && agencyIds.has(s.user_id));
-  let sent = 0;
-  let removed = 0;
-  let firstError: string | null = null;
-  for (const s of subs) {
-    try {
-      await webpush.sendNotification(
-        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-        payload,
-      );
-      sent++;
-    } catch (e) {
-      const code = (e as { statusCode?: number })?.statusCode;
-      if (!firstError) firstError = `${code ?? ""} ${(e as Error)?.message ?? String(e)}`.trim().slice(0, 200);
-      if (code === 404 || code === 410) {
-        await sb.from("push_subscriptions").delete().eq("id", s.id);
-        removed++;
-      }
-    }
-  }
-  return { sent, removed, firstError, total: subs.length };
+/** Envoie aux appareils AGENCE (rôle 'agency' uniquement) : le digest contient des
+ *  infos internes (factures en retard, contrats…) réservées à l'agence.
+ *  Notifications sobres (style iPhone, _shared/pushPayload.ts) : sans émojis ni tirets,
+ *  même si un titre personnalisé (Paramètres) en contient ; majuscule en tête.
+ *  audience : « founders » = fondateurs seuls (messages avec de l'argent, la Finance
+ *  leur est réservée), « members » = les autres comptes agence, défaut = tous. */
+async function sendToAll(sb: ReturnType<typeof getServiceClient>, msg: Msg, audience: Audience = "all", kind: PushKind = "digest") {
+  return await sendTo(sb, { agency: true, audience }, makePayload({ kind, url: "/", ...msg }, { capitalize: true }));
 }
 
 /** Push vers les appareils d'UN créateur (résolu par profiles.creator_name).
  *  Réservé à l'agence : la résolution se fait côté serveur, pas de fuite croisée. */
-async function pushToCreator(sb: ReturnType<typeof getServiceClient>, creatorName: string, payload: string) {
-  payload = tidyPayload(payload);
-  const { data: profs } = await sb
-    .from("profiles").select("user_id").eq("role", "creator").eq("creator_name", creatorName);
-  const ids = [...new Set((profs ?? []).map((p) => (p as { user_id: string | null }).user_id).filter(Boolean))] as string[];
-  if (!ids.length) return { sent: 0, removed: 0, total: 0, reason: "creator_sans_compte" };
-  const { data: subsRaw } = await sb
-    .from("push_subscriptions").select("id,endpoint,p256dh,auth").in("user_id", ids);
-  const subs = (subsRaw ?? []) as { id: string; endpoint: string; p256dh: string; auth: string }[];
-  let sent = 0;
-  let removed = 0;
-  for (const s of subs) {
-    try {
-      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
-      sent++;
-    } catch (e) {
-      const code = (e as { statusCode?: number })?.statusCode;
-      if (code === 404 || code === 410) {
-        await sb.from("push_subscriptions").delete().eq("id", s.id);
-        removed++;
-      }
-    }
-  }
-  return { sent, removed, total: subs.length };
+async function pushToCreator(sb: ReturnType<typeof getServiceClient>, creatorName: string, msg: Msg, lang: "fr" | "en") {
+  const r = await sendTo(sb, { creator: creatorName }, makePayload({ kind: "agency-activity", url: "/", lang, ...msg }, { capitalize: true }));
+  return r.total ? r : { ...r, reason: "creator_sans_appareil" };
+}
+
+/** Langue de l'espace d'un créateur (creators.lang), français si la colonne manque. */
+async function creatorLang(sb: ReturnType<typeof getServiceClient>, name: string): Promise<"fr" | "en"> {
+  const { data, error } = await sb.from("creators").select("lang").eq("name", name).maybeSingle<{ lang: string | null }>();
+  return !error && data?.lang === "en" ? "en" : "fr";
 }
 
 Deno.serve(async (req: Request) => {
@@ -272,7 +176,7 @@ Deno.serve(async (req: Request) => {
 
   const caller = await identify(req);
   if (!caller) return jsonRes({ error: "unauthorized" }, 401);
-  if (!VAPID_PRIVATE_KEY) return jsonRes({ error: "vapid_not_configured" }, 500);
+  if (!pushReady()) return jsonRes({ error: "vapid_not_configured" }, 500);
 
   const sb = getServiceClient();
   const today = parisToday();
@@ -316,13 +220,11 @@ Deno.serve(async (req: Request) => {
     // Tag STABLE par créateur (pas Date.now()) : deux notifs d'activité du même
     // créateur se REMPLACENT au lieu de s'empiler → borne le spam de notifications
     // qu'un compte créateur pourrait générer en boucle. (audit 2026-07-13)
-    const payload = JSON.stringify({
+    const r = await sendToAll(sb, {
       title: activityTitle,
       body: what,
-      url: "/",
-      tag: `ttp-creator-${who}`.slice(0, 120),
-    });
-    const r = await sendToAll(sb, payload);
+      tag: `ttp-creator-${who}`,
+    }, "all", "creator-activity");
     return jsonRes({ ok: true, creatorActivity: true, ...r });
   }
 
@@ -334,32 +236,16 @@ Deno.serve(async (req: Request) => {
     const { data: u } = await sb.auth.getUser(bearer);
     const uid = u?.user?.id;
     if (!uid) return jsonRes({ error: "unauthorized" }, 401);
-    const { data: subsRaw } = await sb
-      .from("push_subscriptions").select("id,endpoint,p256dh,auth").eq("user_id", uid);
-    const subs = (subsRaw ?? []) as { id: string; endpoint: string; p256dh: string; auth: string }[];
-    const payload = JSON.stringify({
+    const en = caller.role === "creator" && !!caller.creatorName && (await creatorLang(sb, caller.creatorName)) === "en";
+    const r = await sendTo(sb, { userIds: [uid] }, makePayload({
+      kind: "test",
       title: "TTP Suite",
-      body: "Les notifications fonctionnent.",
+      body: en ? "Notifications are working." : "Les notifications fonctionnent.",
       url: "/",
       tag: "ttp-test",
-    });
-    let sent = 0;
-    let removed = 0;
-    let firstError: string | null = null;
-    for (const s of subs) {
-      try {
-        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
-        sent++;
-      } catch (e) {
-        const code = (e as { statusCode?: number })?.statusCode;
-        if (!firstError) firstError = `${code ?? ""} ${(e as Error)?.message ?? ""}`.trim().slice(0, 200);
-        if (code === 404 || code === 410) {
-          await sb.from("push_subscriptions").delete().eq("id", s.id);
-          removed++;
-        }
-      }
-    }
-    return jsonRes({ ok: true, test: true, sent, total: subs.length, removed, firstError });
+      ...(en ? { lang: "en" as const } : {}),
+    }));
+    return jsonRes({ ok: true, test: true, ...r });
   }
 
   // Les modes ci-dessous (agence→créateur, test, digest) sont réservés à l'agence / au cron.
@@ -389,27 +275,44 @@ Deno.serve(async (req: Request) => {
       mediakit: "c_mediakit", "task-done": "c_taskdone", idea: "c_idea", gift: "c_gift",
       invoice: "c_invoice", roadmap: "c_roadmap", mail: "c_mail",
     };
+    // Créateur à l'espace en anglais : titres par défaut en anglais (un titre
+    // personnalisé dans Paramètres reste tel quel).
+    const DEF_EN: Record<string, string> = {
+      document: "New document",
+      brief: "New brief",
+      debrief: "New debrief",
+      event: "New event",
+      mediakit: "Media kit updated",
+      "task-done": "Your request is done",
+      idea: "New idea from the agency",
+      gift: "New gift",
+      invoice: "Invoice updated",
+      roadmap: "Roadmap updated",
+      mail: "An email thread changed status",
+    };
     const kind = String(body.kind ?? "");
-    const title = customText(texts, KEY[kind] ?? "c_task", DEF[kind] ?? "Nouvelle tâche");
-    const payload = JSON.stringify({
+    const lang = await creatorLang(sb, creator);
+    const en = lang === "en";
+    const title = customText(texts, KEY[kind] ?? "c_task", (en ? DEF_EN[kind] : DEF[kind]) ?? (en ? "New task" : "Nouvelle tâche"));
+    const r = await pushToCreator(sb, creator, {
       title,
-      body: what || "Touche pour voir le détail.",
-      url: "/",
+      body: what || (en ? "Tap to see the details." : "Touche pour voir le détail."),
+      // Statut d'un échange : ouvre directement l'onglet Mail du créateur.
+      url: kind === "mail" ? deepLinkUrl({ open: "cs-mails" }) : "/",
       tag: `ttp-agency-${Date.now()}`,
-    });
-    const r = await pushToCreator(sb, creator, payload);
+    }, lang);
     return jsonRes({ ok: true, agencyActivity: true, ...r });
   }
 
   // Mode test (bouton dans l'app) : envoie une notif de contrôle, sans calcul.
   if (body?.test === true) {
-    const payload = JSON.stringify({
+    const payload = {
       title: "TTP Suite",
       body: "Les notifications fonctionnent.",
       url: "/",
       tag: "ttp-test",
-    });
-    const r = await sendToAll(sb, payload);
+    };
+    const r = await sendToAll(sb, payload, "all", "test");
     return jsonRes({ ok: true, test: true, ...r });
   }
 
@@ -438,12 +341,12 @@ Deno.serve(async (req: Request) => {
     const stale = active.filter((c) => String((c as { stats_month?: string | null }).stats_month ?? "") !== month);
     if (stale.length === 0) return jsonRes({ ok: true, sent: 0, reason: "tous à jour", month });
     const names = stale.slice(0, 8).map((c) => capName(String((c as { name?: string }).name ?? "")));
-    const payloadS = JSON.stringify({
+    const payloadS = {
       title: "Données à mettre à jour",
       body: stale.length <= 3 ? `${names.join(", ")} · ${parisMonthLabel()}` : `${stale.length} créateurs pas à jour pour ${parisMonthLabel()}`,
       url: "/",
       tag: `ttp-stats-${today}`, // tag daté → relance chaque jour tant que c'est stale
-    });
+    };
     const rS = await sendToAll(sb, payloadS);
     return jsonRes({ ok: true, statsReminder: true, ...rS, month, stale: stale.length });
   }
@@ -468,12 +371,12 @@ Deno.serve(async (req: Request) => {
     if (tasksLeft) linesA.push(`${tasksLeft} tâche${tasksLeft > 1 ? "s" : ""} à traiter`);
     if (evToday) linesA.push(`${evToday} évènement${evToday > 1 ? "s" : ""}`);
     if (linesA.length === 0) return jsonRes({ ok: true, sent: 0, reason: "rien à signaler (mi-journée)", today });
-    const payloadA = JSON.stringify({
+    const payloadA = {
       title: "Point de 14 h",
       body: linesA.join(" · "),
       url: "/",
       tag: `ttp-afternoon-${today}`,
-    });
+    };
     const rA = await sendToAll(sb, payloadA);
     return jsonRes({ ok: true, afternoon: true, ...rA, today });
   }
@@ -496,12 +399,12 @@ Deno.serve(async (req: Request) => {
     if (eventsWeek) linesW.push(`${eventsWeek} évènement${eventsWeek > 1 ? "s" : ""}`);
     if (tasksWeek) linesW.push(`${tasksWeek} tâche${tasksWeek > 1 ? "s" : ""} à rendre`);
     if (linesW.length === 0) linesW.push("Rien de prévu pour l'instant");
-    const payloadW = JSON.stringify({
+    const payloadW = {
       title: "Ta semaine",
       body: linesW.join(" · "),
       url: "/",
       tag: `ttp-weekly-${monday}`,
-    });
+    };
     const rW = await sendToAll(sb, payloadW);
     return jsonRes({ ok: true, weekly: true, ...rW, week: `${monday}→${sunday}` });
   }
@@ -562,20 +465,20 @@ Deno.serve(async (req: Request) => {
   // et un rappel la veille pour préparer un message ou un cadeau. Pref « digestBirthdays ».
   if (prefOn(prefs, "digestBirthdays")) {
     for (const n of birthdays) {
-      await sendToAll(sb, JSON.stringify({
+      await sendToAll(sb, {
         title: `Anniversaire de ${n}`,
         body: "C'est aujourd'hui.",
         url: "/",
         tag: `ttp-birthday-${today}-${n}`,
-      }));
+      });
     }
     for (const n of birthdaysTomorrow) {
-      await sendToAll(sb, JSON.stringify({
+      await sendToAll(sb, {
         title: `Anniversaire de ${n} demain`,
         body: "Un message ou un petit cadeau ?",
         url: "/",
         tag: `ttp-birthday-eve-${today}-${n}`,
-      }));
+      });
     }
   }
 
@@ -633,7 +536,7 @@ Deno.serve(async (req: Request) => {
   const full = [...lines, ...money];
   if (full.length === 0) return jsonRes({ ok: true, sent: 0, reason: "rien à signaler", today });
 
-  const make = (body: string[]) => JSON.stringify({ title: "Ta journée", body: body.join(" · "), url: "/", tag: `ttp-daily-${today}` });
+  const make = (body: string[]): Msg => ({ title: "Ta journée", body: body.join(" · "), url: "/", tag: `ttp-daily-${today}` });
   const rF = await sendToAll(sb, make(full), "founders");
   const rM = lines.length ? await sendToAll(sb, make(lines), "members") : { sent: 0 };
   return jsonRes({ ok: true, founders: rF, members: rM, digest: full.join(" · "), today });

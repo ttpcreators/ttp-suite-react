@@ -62,6 +62,8 @@ import { OfflineBanner } from "@/components/mobile/offline-banner";
 import { Delta, DashPanel, DashSectionTitle, DashWideLink } from "@/components/ui/dash";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { FEATURES } from "@/lib/features";
+import { onDeepLink, setCurrentPlace, takeDeepLink } from "@/lib/deepLink";
+import { useAppBadge, useCloseMailNotifications } from "@/lib/appBadge";
 
 
 type Creator = {
@@ -480,6 +482,30 @@ export function CreatorSpace({
     if (!mailBadgeOn || tab === "mails") return;
     void import("@/lib/creatorMail").then((m) => m.refreshAgencyActivity(name));
   }, [name, mailBadgeOn, tab, live]);
+  // Pastille de l'icône de l'app = échanges non vus ; l'onglet Mail ouvert retire les
+  // notifications de mails ; le service worker sait qu'on y est (pas de doublon à l'écran).
+  // Jamais en visualisation agence (c'est alors l'app agence qui tient tout ça).
+  useAppBadge(mailBadge, !preview);
+  useCloseMailNotifications(!preview && tab === "mails");
+  useEffect(() => {
+    if (!preview) setCurrentPlace(`cs-${tab}`);
+  }, [preview, tab]);
+  // Notification d'un nouveau mail (src/lib/deepLink.ts) : onglet Mail, sur ce fil.
+  // La boîte est remontée (`mailOpen.n`) pour ouvrir le fil même si elle était déjà affichée.
+  const [mailOpen, setMailOpen] = useState<{ n: number; thread?: string }>({ n: 0 });
+  useEffect(() => {
+    if (preview) return;
+    const run = () => {
+      const l = takeDeepLink((x) => x.open === "cs-mails");
+      if (!l) return;
+      setTabState("mails");
+      setMissionId(null);
+      lsSet("ttp:cs-tab", "mails");
+      setMailOpen((cur) => ({ n: cur.n + 1, thread: l.thread }));
+    };
+    run();
+    return onDeepLink(run);
+  }, [preview]);
   // Mail reste toujours visible (5 onglets fixes) : sans boîte activée, la page
   // l'explique. La pastille compte les échanges qui ont bougé.
   const navGroups = useMemo(() => {
@@ -2019,7 +2045,7 @@ export function CreatorSpace({
             ];
             return (
             <div className="flex flex-col gap-4">
-              <PushCard />
+              <PushCard mails={mailsOn} />
 
               {/* Ta prochaine étape : LA chose à faire maintenant (src/lib/creatorNextStep.ts) */}
               {(() => {
@@ -3325,7 +3351,7 @@ export function CreatorSpace({
           {tab === "mails" && (
             mailsOn ? (
               <Suspense fallback={null}>
-                <CreatorMailbox creator={name} mode={preview ? "preview" : "creator"} alias={mailAlias} />
+                <CreatorMailbox key={mailOpen.n} creator={name} mode={preview ? "preview" : "creator"} alias={mailAlias} initialThreadId={mailOpen.thread} />
               </Suspense>
             ) : (
               <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
