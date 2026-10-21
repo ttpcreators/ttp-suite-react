@@ -1,3 +1,4 @@
+import type { BriefResume } from "@/lib/briefResume";
 import type { StatusTone } from "./statusTone";
 import { STEP_COUNT, isDone, stepDef } from "./collabs";
 import { toISODate } from "./dates";
@@ -20,7 +21,7 @@ export type MissionCollab = {
   brief_id: string | null;
   created_at?: string | null;
 };
-export type MissionBrief = { id: string; brand: string; deliverables: string | null; due: string | null; status: string | null; consignes: string | null };
+export type MissionBrief = { id: string; brand: string; deliverables: string | null; due: string | null; status: string | null; consignes: string | null; resume?: BriefResume | null };
 
 export type Mission = {
   /** « c:<id> » pour une collab, « b:<id> » pour un brief seul. */

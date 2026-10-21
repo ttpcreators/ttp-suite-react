@@ -17,6 +17,8 @@ import { AddButton, InlineForm, TextField, AutoGrowTextField, SelectField, Picke
 import { ActionMenu } from "@/components/ui/action-menu";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useCreators } from "@/lib/useCreators";
+import { BriefResumeView, ResumeClaudeButton, useBriefResumeClaude } from "@/components/brief-resume";
+import { hasResume, listToText, parseResume, RESUME_BLOCKS, textToList, type BriefResume, type ResumeKey } from "@/lib/briefResume";
 import { useLiveKey } from "@/lib/useLive";
 import { toISODate, frDate } from "@/lib/dates";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -40,7 +42,11 @@ type Row = {
   /** PDF joint (facultatif) : uploadé dans le bucket documents, aussi inséré comme
    *  ligne `documents` (type brief) → visible dans Docs + le portail créateur. */
   pdf?: { name: string; path: string; docId?: string } | null;
+  /** Résumé pour le créateur (4 listes), écrit par Claude ou par l'agence. */
+  resume?: BriefResume | null;
 };
+const BRIEF_COLS = "id, brand, creator, deliverables, due, status, budget, objectif, consignes, sort_order, pdf";
+const RESUME_EMPTY: Record<ResumeKey, string> = { faire: "", eviter: "", livrables: "", mentions: "" };
 type BadgeStatus = "success" | "warning" | "danger" | "neutral" | "info" | "loading";
 
 const STATUS_OPTS: StatusOption[] = [
@@ -127,14 +133,15 @@ export function Briefs() {
   const [editScript, setEditScript] = useState("");
   const [editBudget, setEditBudget] = useState("");
   const [editCreator, setEditCreator] = useState("");
+  const [editResume, setEditResume] = useState<Record<ResumeKey, string>>(RESUME_EMPTY);
 
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data, error } = await supabase
-        .from("briefs")
-        .select("id, brand, creator, deliverables, due, status, budget, objectif, consignes, sort_order, pdf")
-        .order("sort_order");
+      // Colonne `resume` absente (SQL pas encore lancé) : on recharge sans elle.
+      const load = (cols: string) => supabase.from("briefs").select(cols).order("sort_order");
+      let { data, error } = await load(`${BRIEF_COLS}, resume`);
+      if (error && /resume/i.test(error.message)) ({ data, error } = await load(BRIEF_COLS));
       if (!active) return;
       if (error) {
         // Rafraîchissement raté : on garde les briefs déjà affichés (l'erreur ne
@@ -143,7 +150,7 @@ export function Briefs() {
         setRows((prev) => prev ?? []);
         return;
       }
-      const list = (data as Row[]) ?? [];
+      const list = ((data as unknown as Row[]) ?? []).map((r) => ({ ...r, resume: parseResume(r.resume) }));
       setError(false);
       setCache("briefs", list);
       setRows(list);
@@ -199,6 +206,7 @@ export function Briefs() {
     setEditScript(row.consignes ?? "");
     setEditBudget(row.budget === "—" ? "" : row.budget ?? "");
     setEditCreator(row.creator ?? "");
+    setEditResume({ faire: listToText(row.resume?.faire), eviter: listToText(row.resume?.eviter), livrables: listToText(row.resume?.livrables), mentions: listToText(row.resume?.mentions) });
   };
   const saveEdit = async (id: string) => {
     if (!editBrand.trim()) {
@@ -212,7 +220,13 @@ export function Briefs() {
       : oldDue && oldDue !== "—" && !toISODate(oldDue)
         ? oldDue
         : "—";
+    const before = (rows ?? []).find((r) => r.id === id)?.resume ?? null;
+    const lists = { faire: textToList(editResume.faire), eviter: textToList(editResume.eviter), livrables: textToList(editResume.livrables), mentions: textToList(editResume.mentions) };
+    const same = RESUME_BLOCKS.every((b) => lists[b.key].join("\n") === (before?.[b.key] ?? []).join("\n"));
+    const nextResume: BriefResume | null = RESUME_BLOCKS.some((b) => lists[b.key].length) ? { ...lists, maj_le: new Date().toISOString(), par: "agence" } : null;
     const patch = {
+      // Le résumé n'est écrit que s'il a changé (la colonne peut ne pas exister encore).
+      ...(same ? {} : { resume: nextResume }),
       brand: editBrand.trim(),
       deliverables: editDeliverables.trim() || "—",
       due: dueVal,
@@ -259,6 +273,8 @@ export function Briefs() {
       setCache("briefs", next);
       return next;
     });
+
+  const claude = useBriefResumeClaude((id, r) => patchRow(id, { resume: r }));
 
   const triggerAttach = (row: Row) => {
     attachTargetRef.current = row;
@@ -364,6 +380,17 @@ export function Briefs() {
               placeholder="Le script à envoyer à la marque…"
               className="min-w-full"
             />
+            <div className="border-t border-border pt-3 text-[12px] font-semibold text-foreground">Résumé pour le créateur</div>
+            {RESUME_BLOCKS.map((b) => (
+              <AutoGrowTextField
+                key={b.key}
+                label={b.label}
+                value={editResume[b.key]}
+                onChange={(v) => setEditResume((r) => ({ ...r, [b.key]: v }))}
+                placeholder="Un point par ligne"
+                className="min-w-full"
+              />
+            ))}
             <button
               type="button"
               onClick={() => saveEdit(row.id)}
@@ -426,6 +453,18 @@ export function Briefs() {
             </div>
             <div className="mt-1 truncate text-[12px] font-medium text-foreground">{row.objectif || "—"}</div>
           </div>
+        </div>
+
+        <div className="mt-2 rounded-xl bg-panel px-3 py-2.5">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="truncate text-[11px] font-medium text-muted-foreground">Pour le créateur</span>
+            <ResumeClaudeButton has={hasResume(row.resume)} waiting={claude.waitingId === row.id} onClick={() => claude.ask(row)} onCancel={claude.cancel} />
+          </div>
+          {hasResume(row.resume) ? (
+            <BriefResumeView resume={row.resume} dense />
+          ) : (
+            <p className="text-[12px] leading-snug text-faint">À faire, à ne pas faire, livrables, mentions : Claude lit le brief et le PDF de la marque.</p>
+          )}
         </div>
 
         <div className="mt-3">

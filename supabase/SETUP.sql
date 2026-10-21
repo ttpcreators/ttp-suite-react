@@ -1375,6 +1375,8 @@ alter table public.contacts add column if not exists last_contacted timestamptz;
 -- BRIEFS : PDF joint (jsonb {name,path,docId}) — cf. sql/briefs-pdf.sql
 -- ----------------------------------------------------------------------------
 alter table public.briefs add column if not exists pdf jsonb;
+-- BRIEFS : résumé pour le créateur (jsonb) — cf. sql/2026-10-21-resume-brief.sql
+alter table public.briefs add column if not exists resume jsonb;
 
 -- ----------------------------------------------------------------------------
 -- VIVIER CRÉATEURS : table creator_pool (agence-only) — cf. sql/creator-pool.sql

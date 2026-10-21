@@ -2,8 +2,8 @@
 // ttp-mcp/tools.ts : les outils de TTP Suite pour Claude.
 // Lecture : point du jour, recherche, roster, fiche créateur, mails, DM Instagram,
 // scouting (créateurs / sportifs), contacts, pipeline, collabs, planning, tâches,
-// factures (fondateurs). Actions : tâche, rendez-vous, brouillon de mail, contact,
-// échange noté, scouting, étape de collab. Claude demande l'accord avant chaque action.
+// factures (fondateurs), briefs. Actions : tâche, rendez-vous, brouillon de mail, contact,
+// échange noté, scouting, étape de collab, résumé de brief. Claude demande l'accord avant chaque action.
 // Jamais exposés : coffre des mots de passe, IBAN, jetons de connexion.
 // ============================================================================
 
@@ -869,10 +869,112 @@ const preparerReponseMail: Tool = {
   },
 };
 
+// ── Briefs : résumé pour le créateur ────────────────────────────────────────
+type BriefRow = { id: string; brand: string; creator: string | null; deliverables: string | null; due: string | null; budget: string | null; objectif: string | null; consignes: string | null; pdf: { name?: string; path?: string } | null; resume?: unknown };
+const BRIEF_COLS = "id, brand, creator, deliverables, due, budget, objectif, consignes, pdf";
+const isUuid = (s: string) => /^[0-9a-f-]{36}$/i.test(s);
+const clean = (v: unknown) => (v == null || v === "—" ? "" : String(v).trim());
+
+/** Texte d'un PDF du bucket documents (PDF de la marque joint au brief), borné. */
+async function pdfText(sb: SupabaseClient, path: string): Promise<string> {
+  const { data, error } = await sb.storage.from("documents").download(path);
+  if (error || !data) throw new Error("PDF illisible");
+  const { extractText, getDocumentProxy } = await import("npm:unpdf@1.8.1");
+  const doc = await getDocumentProxy(new Uint8Array(await data.arrayBuffer()));
+  const { text } = await extractText(doc, { mergePages: true });
+  return String(Array.isArray(text) ? text.join("\n") : text).replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, 40000);
+}
+
+const lireBrief: Tool = {
+  name: "lire_brief",
+  title: "Lire un brief",
+  description: "Lit un brief de collab : marque, créateur et sa langue, livrables, échéance, budget, objectif, script du créateur, TEXTE du PDF de la marque s'il est joint, et le résumé déjà fait. Donner l'id du brief, ou la marque (et le créateur si plusieurs briefs). Sert à résumer le brief avec resumer_brief.",
+  inputSchema: { type: "object", properties: { brief: { type: "string", description: "Id du brief" }, marque: { type: "string" }, createur: { type: "string" } }, additionalProperties: false },
+  run: async (sb, _c, a) => {
+    const id = str(a.brief, 40);
+    let q = sb.from("briefs").select(BRIEF_COLS).order("created_at", { ascending: false }).limit(5);
+    if (id) {
+      if (!isUuid(id)) return fail("Id de brief invalide.");
+      q = q.eq("id", id);
+    } else {
+      const m = str(a.marque, 80);
+      if (!m) return fail("Donne l'id du brief ou la marque.");
+      q = q.ilike("brand", like(m));
+      const c = str(a.createur, 80);
+      if (c) q = q.ilike("creator", like(c));
+    }
+    const { data, error } = await q;
+    if (error) return fail(`Lecture impossible : ${error.message}`);
+    const rows = (data as BriefRow[] | null) ?? [];
+    if (!rows.length) return fail("Aucun brief trouvé.");
+    if (rows.length > 1 && !id) return ok(["Plusieurs briefs correspondent, redemande avec l'id :", ...rows.map((r) => `- ${r.id} · ${r.brand} × ${titleCase(r.creator)} · échéance ${clean(r.due) || "?"}`)].join("\n"));
+    const b = rows[0];
+    const [{ data: res }, { data: cr }] = await Promise.all([
+      sb.from("briefs").select("resume").eq("id", b.id).maybeSingle(),
+      b.creator ? sb.from("creators").select("lang").ilike("name", exact(b.creator)).limit(1) : Promise.resolve({ data: [] }),
+    ]);
+    const lang = ((cr as Json[] | null) ?? [])[0]?.lang === "en" ? "anglais" : "français";
+    let pdf = "";
+    if (b.pdf?.path) {
+      pdf = await pdfText(sb, b.pdf.path).catch(() => "");
+      if (!pdf) pdf = `(PDF « ${b.pdf.name ?? "brief"} » joint mais illisible ici, par exemple un PDF scanné : demande à l'équipe de te le glisser dans la conversation.)`;
+    }
+    const resume = (res as { resume?: Record<string, string[]> } | null)?.resume;
+    return ok([
+      `# Brief ${b.brand} × ${titleCase(b.creator) || "créateur à définir"} (id ${b.id})`,
+      `Langue du créateur : ${lang}`,
+      `Livrables : ${clean(b.deliverables) || "non précisés"}`,
+      `Échéance : ${clean(b.due) || "non précisée"}`,
+      `Budget : ${clean(b.budget) || "non précisé"}`,
+      `Objectif : ${clean(b.objectif) || "non précisé"}`,
+      `\n## Script écrit par le créateur\n${clean(b.consignes) || "Pas encore écrit."}`,
+      `\n## Brief de la marque (PDF)\n${pdf || "Aucun PDF joint."}`,
+      resume ? `\n## Résumé actuel\n${JSON.stringify(resume)}` : "",
+    ].filter(Boolean).join("\n"));
+  },
+};
+
+const listArg = (v: unknown) =>
+  (Array.isArray(v) ? v : [])
+    .map((x) => String(x ?? "").replace(/^\s*(?:[-•*·]|\d+[.)])\s*/, "").replace(/\s*[—–]\s*/g, ", ").replace(/\s+/g, " ").trim().slice(0, 280))
+    .filter(Boolean)
+    .slice(0, 10);
+const listSchema = (d: string) => ({ type: "array", items: { type: "string" }, description: d });
+
+const resumerBrief: Tool = {
+  name: "resumer_brief",
+  title: "Déposer le résumé d'un brief",
+  description: "Écrit le résumé d'un brief dans TTP Suite, affiché en haut du brief pour le créateur (son espace) et pour l'équipe. 4 listes de phrases courtes, tutoiement, dans la langue du créateur, 6 points au plus chacune, rien d'inventé. Remplace le résumé précédent.",
+  write: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      brief: { type: "string", description: "Id du brief (lire_brief)" },
+      a_faire: listSchema("Ce que la marque attend"),
+      a_ne_pas_faire: listSchema("Interdits et erreurs à éviter"),
+      livrables_et_dates: listSchema("Formats, nombre, durée, dates de brouillon et de publication"),
+      mentions_obligatoires: listSchema("#, @, code promo, lien, mention de partenariat"),
+    },
+    required: ["brief"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const id = str(a.brief, 40);
+    if (!isUuid(id)) return fail("Id de brief invalide.");
+    const resume = { faire: listArg(a.a_faire), eviter: listArg(a.a_ne_pas_faire), livrables: listArg(a.livrables_et_dates), mentions: listArg(a.mentions_obligatoires), maj_le: new Date().toISOString(), par: "claude" };
+    if (!resume.faire.length && !resume.eviter.length && !resume.livrables.length && !resume.mentions.length) return fail("Résumé vide.");
+    const { data, error } = await sb.from("briefs").update({ resume }).eq("id", id).select("brand, creator").maybeSingle<{ brand: string; creator: string | null }>();
+    if (error) return fail(/column|resume/i.test(error.message) ? "Le résumé des briefs n'est pas encore installé dans l'app (SQL à lancer)." : `Résumé non déposé : ${error.message}`);
+    if (!data) return fail("Brief introuvable.");
+    return ok(`Résumé déposé sur le brief ${data.brand} × ${titleCase(data.creator)} : le créateur le voit en haut de son brief.`);
+  },
+};
+
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, planning, taches, factures,
   creerTache, creerEvenement, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
+  lireBrief, resumerBrief,
 ];
 
 /** Liste MCP (les outils fondateurs n'apparaissent pas pour un membre). */

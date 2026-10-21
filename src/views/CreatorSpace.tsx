@@ -53,6 +53,8 @@ import { useTheme } from "@/lib/theme";
 import { THEME_CHOICES, type ThemeChoice } from "@/lib/accent";
 import { STEPS, STEP_COUNT } from "@/lib/collabs";
 import { CS_FAVORABLE, CS_MAIN_TABS, isMainTab, normalizeCsTab, ownerTab, parseCsFavorites, toggleCsFavorite, type CsTab } from "@/lib/creatorTabs";
+import { BriefResumeView } from "@/components/brief-resume";
+import { hasResume, parseResume, type BriefResume } from "@/lib/briefResume";
 import { brandInitial, briefKey, buildMissions, CREATOR_PHASES, creatorPhaseIndex, missionState, type Mission, type MissionCollab } from "@/lib/creatorMissions";
 import { creatorSteps, whenLabel, type NextStep } from "@/lib/creatorNextStep";
 import { gainsSummary, invoiceTone } from "@/lib/creatorGains";
@@ -109,7 +111,7 @@ type Idea = { id: string; text: string; status: string | null; sort_order?: numb
 // Barre d'accent (bord gauche de la carte idée) selon le statut.
 const IDEA_ACCENT: Record<string, string> = { "À explorer": "bg-indigo", "À faire": "bg-primary", "En cours": "bg-cyan", "Publiée": "bg-signal" };
 const ideaAccent = (s: string | null) => IDEA_ACCENT[s ?? "À faire"] ?? "bg-primary";
-type Brief = { id: string; brand: string; deliverables: string | null; due: string | null; status: string | null; consignes: string | null };
+type Brief = { id: string; brand: string; deliverables: string | null; due: string | null; status: string | null; consignes: string | null; resume?: BriefResume | null };
 type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string; type: string; who?: string | null; description?: string | null };
 type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null };
 type Invoice = { ref: string; party: string; amount: string | null; date: string | null; status: string | null };
@@ -716,7 +718,11 @@ export function CreatorSpace({
       });
     supabase.from("todos").select("id,text,descr,due,priority,done,status,sort_order,subtasks,attachments").eq("creator", name).order("sort_order").then(({ data, error }) => apply(error) && setTodos((data as Todo[]) ?? []));
     supabase.from("ideas").select("id,text,status,sort_order,subtasks").eq("creator", name).order("sort_order").then(({ data, error }) => apply(error) && setIdeas((data as Idea[]) ?? []));
-    supabase.from("briefs").select("id,brand,deliverables,due,status,consignes").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => apply(error) && setBriefs((data as Brief[]) ?? []));
+    // Colonne `resume` absente (SQL pas encore lancé) : on recharge sans elle.
+    const briefsQ = (cols: string) => supabase.from("briefs").select(cols).eq("creator", name).order("created_at", { ascending: false });
+    void briefsQ("id,brand,deliverables,due,status,consignes,resume")
+      .then((r) => (r.error && /resume/i.test(r.error.message) ? briefsQ("id,brand,deliverables,due,status,consignes") : r))
+      .then(({ data, error }) => apply(error) && setBriefs(((data as unknown as Brief[]) ?? []).map((x) => ({ ...x, resume: parseResume(x.resume) }))));
     supabase.from("gifting").select(GIFT_COLS).eq("creator", name).order("sort_order", { ascending: false }).then(({ data, error }) => apply(error) && setGifts((data as GiftRow[]) ?? []));
     supabase.from("events").select("id,date,day,time,title,type,who,description").or("deleted.is.null,deleted.eq.false").then(({ data, error }) => {
       if (!apply(error)) return;
@@ -3036,6 +3042,14 @@ export function CreatorSpace({
                 {b ? (
                   <div className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
                     <h2 className="text-[18px] font-bold tracking-[-0.01em]">{t("Le brief")}</h2>
+                    {hasResume(b.resume) && (
+                      <div className="mt-3 rounded-[14px] bg-field p-4">
+                        <div className="mb-3 flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+                          <Sparkles className="h-3.5 w-3.5 text-faint" /> {t("L'essentiel du brief")}
+                        </div>
+                        <BriefResumeView resume={b.resume} t={t} />
+                      </div>
+                    )}
                     <dl className="mt-3 flex flex-col gap-2.5 text-[14px]">
                       <div className="flex items-start justify-between gap-3">
                         <dt className="shrink-0 text-muted-foreground">{t("Livrables")}</dt>
