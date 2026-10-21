@@ -31,7 +31,8 @@ describe("favoris du créateur", () => {
   it("garde seulement les rubriques valides, sans doublon", () => {
     expect(parseCsFavorites('["planning","planning","accueil","inconnu","briefs"]')).toEqual(["planning", "missions"]);
     expect(parseCsFavorites("{oups")).toEqual([]);
-    expect(parseCsFavorites(null)).toEqual([]);
+    expect(parseCsFavorites(null)).toEqual(["todo", "mediakit"]); // premier passage : favoris d'office
+    expect(parseCsFavorites("[]")).toEqual([]); // tout retiré par le créateur : reste vide
   });
   it("ajoute puis retire", () => {
     const a = toggleCsFavorite([], "mediakit");

@@ -196,34 +196,41 @@ export function MailItem({
     const ago = fmtAgo(m.ts, lang);
     return (
       <motion.article {...enter} className="flex flex-col py-5">
+        {/* En-tête : le nom prend toute la largeur (avant : écrasé par la date, « Al… aly… »),
+            la date passe sous l'adresse, les actions restent à droite du nom. */}
         <div className="flex cursor-pointer items-start gap-3" onClick={headClick(onToggle)}>
           <Initial name={m.from} email={m.fromEmail} agency={m.fromAgency} size="lg" />
           <span className="min-w-0 flex-1">
-            <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[14px] font-semibold text-foreground">{name}</span>
+            <span className="flex min-w-0 items-center gap-2">
+              <span data-sel className="min-w-0 cursor-text select-text truncate text-[14.5px] font-semibold text-foreground">{name}</span>
+              <span className="min-w-0 flex-1" />
+              <span className="-my-1.5 flex shrink-0 items-center gap-0.5 text-muted-foreground">
+                {actions.map((a) => (
+                  <button
+                    key={a.label}
+                    type="button"
+                    onClick={a.onClick}
+                    title={a.label}
+                    aria-label={a.label}
+                    className="grid h-8 w-8 place-items-center rounded-full transition-colors hover:bg-rowhover hover:text-foreground"
+                  >
+                    <a.icon className="h-4 w-4" />
+                  </button>
+                ))}
+                <FoldButton onClick={onToggle} />
+              </span>
+            </span>
             <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[12.5px] text-muted-foreground">{m.fromAgency ? m.from : m.fromEmail}</span>
-            <span data-sel className="mt-0.5 block w-fit max-w-full cursor-text select-text truncate text-[11.5px] text-faint">
-              {t("à {to}", { to: cleanAddr(m.to) })}{m.cc ? ` · cc ${cleanAddr(m.cc)}` : ""}
+            <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-[11.5px] text-faint">
+              <span className="shrink-0 tabular-nums text-muted-foreground">
+                {fmtFull(m.ts, locale)}{ago && <span className="text-faint"> ({ago})</span>}
+              </span>
+              <span aria-hidden>·</span>
+              <span data-sel className="min-w-0 max-w-full cursor-text select-text truncate">
+                {t("à {to}", { to: cleanAddr(m.to) })}{m.cc ? ` · cc ${cleanAddr(m.cc)}` : ""}
+              </span>
             </span>
           </span>
-          <div className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
-            <span className="mr-1 hidden text-[12px] tabular-nums text-muted-foreground sm:inline">
-              {fmtFull(m.ts, locale)}{ago && <span className="text-faint"> ({ago})</span>}
-            </span>
-            <span className="mr-1 text-[11px] tabular-nums text-faint sm:hidden">{fmtWhen(m.ts, locale)}</span>
-            {actions.map((a) => (
-              <button
-                key={a.label}
-                type="button"
-                onClick={a.onClick}
-                title={a.label}
-                aria-label={a.label}
-                className="grid h-8 w-8 place-items-center rounded-full transition-colors hover:bg-rowhover hover:text-foreground"
-              >
-                <a.icon className="h-4 w-4" />
-              </button>
-            ))}
-            <FoldButton onClick={onToggle} />
-          </div>
         </div>
 
         <div className="mt-4 overflow-hidden rounded-lg bg-white dark:p-4">

@@ -59,8 +59,16 @@ export function isMainTab(tab: CsTab): tab is CsMainTab {
 /** Rubriques qu'on peut mettre en favori (Accueil et Plus sont toujours dans la barre). */
 export const CS_FAVORABLE: readonly CsTab[] = CS_ALL_TABS.filter((t) => t !== "accueil" && t !== "profil");
 
-/** Liste gardée (texte JSON) → favoris valides, sans doublon, dans l'ordre d'ajout. */
+/** Favoris d'office d'un créateur qui n'a encore rien choisi (choix de l'agence, 2026-10-21). */
+export const CS_DEFAULT_FAVORITES: readonly CsTab[] = ["todo", "mediakit"];
+
+/**
+ * Liste gardée (texte JSON) → favoris valides, sans doublon, dans l'ordre d'ajout.
+ * Rien de gardé (premier passage) → les favoris d'office ; une liste vide choisie
+ * par le créateur reste vide.
+ */
 export function parseCsFavorites(raw: string | null | undefined): CsTab[] {
+  if (raw == null) return [...CS_DEFAULT_FAVORITES];
   try {
     const arr = JSON.parse(raw ?? "[]");
     if (!Array.isArray(arr)) return [];
