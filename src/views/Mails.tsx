@@ -2188,7 +2188,7 @@ export function Mails() {
           {/* Grand lecteur : encart « Collab liée » à droite ; sinon en haut du mail. */}
           <div className={cn(threadCollabs.length > 0 && "@3xl:grid @3xl:grid-cols-[minmax(0,1fr)_248px] @3xl:items-start @3xl:gap-8")}>
             <div className="min-w-0">
-              <h1 className="text-[18px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere] [text-wrap:balance] sm:text-[20px]">
+              <h1 className="text-[19px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere] [text-wrap:balance] sm:text-[24px]">
                 {thread.subject || "(sans objet)"}
               </h1>
               <p className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
@@ -2211,19 +2211,15 @@ export function Mails() {
                 <ErrorCard text="Ce fil est vide (mail supprimé ?)." onRetry={retryThread} />
               ) : (
                 <div className="mt-2 flex flex-col divide-y divide-border">
+                  {/* Fil long (maquette) : les anciens messages repliés derrière un bouton en haut. */}
+                  {many && (
+                    <button type="button" onClick={() => setShowAllMsgs(true)}
+                      className="mb-2 h-10 w-full rounded-xl border border-border bg-surface text-[12.5px] font-medium text-muted-foreground shadow-sm shadow-black/[0.02] transition-colors hover:bg-rowhover hover:text-foreground">
+                      Charger {readerMsgs.length - 2 > 1 ? `les ${readerMsgs.length - 2} messages précédents` : "le message précédent"}
+                    </button>
+                  )}
                   {readerMsgs.map((m, i) => {
-                    if (many && i > 0 && i < readerMsgs.length - 2) {
-                      if (i !== 1) return null;
-                      const n = readerMsgs.length - 3;
-                      return (
-                        <button key="older" type="button" onClick={() => setShowAllMsgs(true)}
-                          className="flex w-full items-center gap-3 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground">
-                          <span className="h-px flex-1 bg-border" />
-                          <span className="rounded-full border border-border bg-surface px-3 py-1">{n} message{n > 1 ? "s" : ""} plus ancien{n > 1 ? "s" : ""}</span>
-                          <span className="h-px flex-1 bg-border" />
-                        </button>
-                      );
-                    }
+                    if (many && i < readerMsgs.length - 2) return null;
                     const last = i === readerMsgs.length - 1;
                     return (
                       <div key={m.id} className="flex flex-col">
@@ -2243,6 +2239,20 @@ export function Mails() {
                             { icon: Forward, label: "Transférer", onClick: () => setForward({ msg: m, subject: thread.subject, box: thread.box }) },
                           ]}
                           footer={last ? (
+                            <>
+                            {/* Actions rapides (maquette), sous le dernier message : ordinateur. */}
+                            <div className="-mt-2 mb-4 hidden justify-end gap-2 md:flex">
+                              {[
+                                { icon: Copy, label: "Copier le fil pour Claude (c)", on: () => void copyThread() },
+                                { icon: Forward, label: "Transférer (f)", on: forwardLast },
+                                { icon: Reply, label: "Répondre (r)", on: () => focusReply("reply") },
+                              ].map((b) => (
+                                <button key={b.label} type="button" onClick={b.on} title={b.label} aria-label={b.label}
+                                  className="grid h-10 w-10 place-items-center rounded-xl bg-surface text-muted-foreground shadow-[0_4px_14px_-4px_rgba(15,23,42,0.2)] ring-1 ring-border/70 transition-colors hover:text-foreground">
+                                  <b.icon className="h-4 w-4" />
+                                </button>
+                              ))}
+                            </div>
                             <ReplyBox
                               key={draftKey}
                               variant="card"
@@ -2259,6 +2269,7 @@ export function Mails() {
                               claude={{ threadId: thread.threadId, subject: thread.subject, messages: readerMsgs }}
                               meet={{ guests: plan.to ? [plan.to] : [], title: `TTP Creators x ${replyName || plan.to}`.trim() }}
                             />
+                            </>
                           ) : undefined}
                         />
                       </div>

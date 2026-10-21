@@ -51,12 +51,13 @@ const FILE_TONE: [RegExp, string][] = [
   [/^(png|jpe?g|gif|webp|heic|svg)$/, "bg-pink-500"],
   [/^(mp4|mov|webm|avi)$/, "bg-zinc-700"],
 ];
+/** Tuile de pièce jointe (maquette) : carré arrondi de la couleur du type, trombone blanc. */
 function FileBadge({ name }: { name: string }) {
   const ext = (name.includes(".") ? name.split(".").pop() ?? "" : "").toLowerCase().slice(0, 4);
   const tone = FILE_TONE.find(([re]) => re.test(ext))?.[1] ?? "bg-zinc-500";
   return (
-    <span className={`grid h-9 w-8 shrink-0 place-items-center rounded-md text-[9px] font-bold uppercase tracking-wide text-white ${tone}`}>
-      {ext || "?"}
+    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-[10px] text-white shadow-sm ${tone}`}>
+      <Paperclip className="h-[18px] w-[18px]" strokeWidth={2} />
     </span>
   );
 }
@@ -246,19 +247,19 @@ export function MailItem({
                 </button>
               )}
             </div>
-            <div className="flex flex-wrap gap-2.5">
+            <div className="-mx-2 flex flex-col gap-1 sm:flex-row sm:flex-wrap">
               {files.map((a) => (
                 <button
                   key={a.attachmentId}
                   type="button"
                   onClick={() => void download(a)}
                   title={t("Télécharger {name}", { name: a.filename })}
-                  className="flex w-full items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:bg-rowhover sm:w-[260px]"
+                  className="flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-rowhover sm:w-[280px]"
                 >
                   <FileBadge name={a.filename} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12.5px] font-medium text-foreground">{a.filename}</span>
-                    <span className="block text-[11px] text-faint">{fmtSize(a.size)}</span>
+                    <span className="block truncate text-[13px] font-semibold text-foreground">{a.filename}</span>
+                    <span className="block text-[11.5px] text-muted-foreground">{fmtSize(a.size)}</span>
                   </span>
                 </button>
               ))}
