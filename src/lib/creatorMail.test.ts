@@ -259,6 +259,17 @@ describe("creator-mail : confidentialité dans un fil", () => {
     expect(concernedMessages([labelled, internal, trashed], id, ALIAS, "Label_42")).toEqual([labelled, internal]);
   });
 
+  it("la réponse de l'agence à la marque s'affiche, même sans l'alias en copie", () => {
+    const answer = msg({ From: "talent@ttpcreators.pro", To: "marque@x.com" });
+    const forward = msg({ From: "talent@ttpcreators.pro", To: "partnerships@ttpcreators.pro" });
+    const other = msg({ From: "talent@ttpcreators.pro", To: "autre@y.com" });
+    expect(concernedMessages([brand, answer, forward, other], id, ALIAS, null, "ttpcreators.pro")).toEqual([brand, answer]);
+    // Sans domaine (ancien appel) : comportement d'avant.
+    expect(concernedMessages([brand, answer], id, ALIAS, null)).toEqual([brand]);
+    // Fil sans message qui la concerne : rien.
+    expect(concernedMessages([answer], id, ALIAS, null, "ttpcreators.pro")).toEqual([]);
+  });
+
   it("un libellé absent du fil ne donne pas tout le fil", () => {
     expect(concernedMessages([brand, internal], id, ALIAS, "Label_42")).toEqual([brand]);
   });

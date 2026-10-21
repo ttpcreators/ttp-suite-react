@@ -76,13 +76,31 @@ export function threadMatches(messages: GMessageLite[], alias: Addresses, labelI
  *   • sinon (accès par adresse) → seulement les messages visibles où une de ses adresses apparaît
  *     dans From / To / Cc / Bcc / Delivered-To / X-Original-To / Reply-To.
  * Un échange interne de l'agence dans le même fil, sans elle, reste donc caché.
+ *
+ * Avec `agencyDomain` : les RÉPONSES de l'agence à la marque dans ce fil s'affichent
+ * aussi, même sans l'alias en copie (avant : « 1 message », la réponse paraissait
+ * absente). Réponse = envoyée depuis le domaine de l'agence À une adresse extérieure
+ * déjà présente dans les messages qui la concernent (la marque). Un transfert interne
+ * (agence → agence) reste caché.
  */
 export function concernedMessages<T>(
   items: T[], toLite: (item: T) => GMessageLite, alias: Addresses, labelId: string | null | undefined,
+  agencyDomain?: string,
 ): T[] {
   const visible = items.filter((m) => isVisibleMessage(toLite(m)));
   if (labelId && visible.some((m) => (toLite(m).labelIds ?? []).includes(labelId))) return visible;
-  return visible.filter((m) => messageMatches(toLite(m), alias, null));
+  const mine = visible.filter((m) => messageMatches(toLite(m), alias, null));
+  if (!agencyDomain || !mine.length) return mine;
+  const dom = "@" + agencyDomain.toLowerCase();
+  const own = addressList(alias);
+  const addrs = (m: GMessageLite, names: string[]) =>
+    m.headers.filter((h) => names.includes(h.name.toLowerCase())).flatMap((h) => addressesIn(h.value));
+  // Correspondants extérieurs de l'échange (la marque) : ni l'agence, ni le créateur.
+  const outside = new Set<string>();
+  for (const m of mine) for (const a of addrs(toLite(m), ADDRESS_HEADERS)) if (!a.endsWith(dom) && !own.includes(a)) outside.add(a);
+  const agencyReply = (m: GMessageLite) =>
+    addrs(m, ["from"]).some((a) => a.endsWith(dom)) && addrs(m, ["to", "cc"]).some((a) => outside.has(a));
+  return visible.filter((m) => mine.includes(m) || agencyReply(toLite(m)));
 }
 
 /** Boîtes partagées de l'agence : jamais l'alias d'un créateur (il verrait les mails des autres). */

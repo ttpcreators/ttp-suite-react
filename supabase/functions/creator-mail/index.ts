@@ -322,7 +322,7 @@ async function ownedOrKnown(sb: Sb, s: Settings, threadId: string): Promise<GThr
 }
 
 /** Messages du fil que la créatrice peut voir (une de ses adresses dans le message, ou libellé du fil). */
-const shownMessages = (t: GThread, s: Settings) => concernedMessages(t.messages ?? [], lite, s.addresses, s.label_id);
+const shownMessages = (t: GThread, s: Settings) => concernedMessages(t.messages ?? [], lite, s.addresses, s.label_id, AGENCY_DOMAIN);
 
 // ---------------------------------------------------------------------------
 // Actions
