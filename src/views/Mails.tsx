@@ -11,7 +11,7 @@ import { cn, titleCase } from "@/lib/utils";
 import { getCache, setCache } from "@/lib/viewCache";
 import { invalidateMailUnread } from "@/lib/useMailUnread";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
-import { Kbd, RailButton, SearchField, Tip, ToolButton, mailRowCls, pillCls, type TipSide } from "@/components/mail-shell";
+import { Kbd, RailButton, SearchField, Tip, ToolButton, mailRowCls, pillCls, type TipSide, UnreadToggle } from "@/components/mail-shell";
 import { SwipeRow, type SwipeAction } from "@/components/mobile/swipe-row";
 import { STORED_STATUSES, saveBase64, statusMeta, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
 import { toast } from "@/components/ui/toast";
@@ -1126,10 +1126,19 @@ export function Mails() {
 
   // ── Liste affichée (filtre de boîte + recherche) et navigation ───────────
   const folderList = useMemo(() => effList(lists[folder]?.threads), [lists, folder, applyOv]); // eslint-disable-line react-hooks/exhaustive-deps
-  const boxThreads = useMemo(
+  // « Non lus » : les fils non lus, plus ceux qui l'étaient quand on a activé le filtre
+  // (un mail ouvert ne disparaît pas de la liste pendant qu'on le lit).
+  const [unreadOnly, setUnreadOnly] = useState<Set<string> | null>(null);
+  const boxAll = useMemo(
     () => folderList.filter((t) => (box === "all" || t.box === box) && (!creatorKey || rowCreators(t).includes(creatorKey))),
     [folderList, box, creatorKey, rowCreators],
   );
+  const boxThreads = useMemo(
+    () => (unreadOnly && folder === "inbox" ? boxAll.filter((t) => t.unread || unreadOnly.has(keyOf(t))) : boxAll),
+    [boxAll, unreadOnly, folder],
+  );
+  const unreadHere = useMemo(() => boxAll.filter((t) => t.unread).length, [boxAll]);
+  const toggleUnread = () => setUnreadOnly((cur) => (cur ? null : new Set(boxAll.filter((t) => t.unread).map(keyOf))));
   const inboxQ = inboxQuery.trim().toLowerCase();
   const localMatches = useMemo(
     () => (inboxQ ? boxThreads.filter((t) => `${t.name} ${t.email} ${t.subject} ${decodeEntities(t.snippet)}`.toLowerCase().includes(inboxQ)) : boxThreads),
@@ -1961,15 +1970,18 @@ export function Mails() {
             count: boxCount(b.id) || undefined,
           }))}
         />
-        <div className="mt-2">
-          <SearchField size="sm" inputRef={searchRef} value={inboxQuery} onChange={setInboxQuery} placeholder="Rechercher dans les mails…"
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                e.preventDefault();
-                if (inboxQuery) setInboxQuery("");
-                else e.currentTarget.blur();
-              }
-            }} />
+        <div className="mt-2 flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <SearchField size="sm" inputRef={searchRef} value={inboxQuery} onChange={setInboxQuery} placeholder="Rechercher dans les mails…"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  if (inboxQuery) setInboxQuery("");
+                  else e.currentTarget.blur();
+                }
+              }} />
+          </div>
+          {folder === "inbox" && <UnreadToggle on={!!unreadOnly} count={unreadHere} onToggle={toggleUnread} />}
         </div>
         {creatorFilter && (
           <div className="mt-2 flex min-w-0 items-center gap-2 pl-1">
@@ -2010,7 +2022,9 @@ export function Mails() {
         ) : !boxThreads.length && !inboxQ ? (
           centerNote(
             <Inbox className="h-5 w-5 text-faint" />,
-            creatorFilter
+            unreadOnly && folder === "inbox"
+              ? "Aucun mail non lu. Tout est à jour ✓"
+              : creatorFilter
               ? `Aucun mail de ${titleCase(creatorFilter)} dans les mails chargés.`
               : folder === "sent" ? "Aucun mail envoyé depuis cette boîte." : "Aucun mail dans cette boîte.",
           )

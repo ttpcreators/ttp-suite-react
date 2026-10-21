@@ -182,3 +182,26 @@ export const mailRowCls = (on: boolean) =>
 
 /** Bouton « pilule » de la barre en ligne (téléphone, tablette). */
 export const pillCls = "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-semibold transition-colors";
+
+/**
+ * Filtre « Non lus » à côté de la recherche (agence et créateur). Un fil ouvert pendant
+ * le filtre reste affiché jusqu'à ce qu'on l'enlève (comme Gmail) : la liste ne saute pas.
+ */
+export function UnreadToggle({ on, count, onToggle, label = "Non lus" }: { on: boolean; count: number; onToggle: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={on}
+      title={on ? "Voir tous les mails" : "Voir seulement les non lus"}
+      className={cn(
+        "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-semibold transition-colors",
+        on ? "border-primary bg-primary text-primary-foreground" : "border-border bg-surface text-muted-foreground hover:text-foreground",
+      )}
+    >
+      <span aria-hidden className={cn("size-1.5 rounded-full", on ? "bg-primary-foreground" : "bg-primary")} />
+      {label}
+      {count > 0 && <span className={cn("tabular-nums", on ? "opacity-80" : "text-faint")}>{count}</span>}
+    </button>
+  );
+}

@@ -24,7 +24,7 @@ import {
   type Decision, type FeedItem, type MailChoice, type MailNote, type MailStatus, type MailStatusEvent, type MailThread,
   type MailThreadLite, type MailSettings, prospectStats } from "@/lib/creatorMail";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
-import { BarButton, RailButton, SearchField, ToolButton, mailRowCls, pillCls } from "@/components/mail-shell";
+import { BarButton, RailButton, SearchField, ToolButton, UnreadToggle, mailRowCls, pillCls } from "@/components/mail-shell";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { useLocale, useT, type Vars } from "@/lib/i18n";
 
@@ -426,6 +426,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const fetchedTs = useRef(new Map<string, number>());
   const unseen = useUnseenMail(creator, mode === "creator");
   const [query, setQuery] = useState(""); // recherche dans la liste (marque, objet, extrait)
+  // « Non lus » (créateur) : échanges pas encore vus, plus ceux qui l'étaient à l'activation.
+  const [unreadOnly, setUnreadOnly] = useState<Set<string> | null>(null);
   // Aide « comment ça marche » : affichée tant qu'elle n'a pas été fermée sur cet appareil.
   const [help, setHelpState] = useState(() => {
     try {
@@ -800,7 +802,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const cur = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
   const q = query.trim().toLowerCase();
   const pitch = useMemo(() => prospectStats(threads ?? []), [threads]);
-  const shown = (threads ?? []).filter((t) => cur.match(t) && (!q || `${t.brand} ${t.subject} ${t.excerpt}`.toLowerCase().includes(q)));
+  const shown = (threads ?? []).filter((t) => cur.match(t) && (!unreadOnly || unseen.has(t.id) || unreadOnly.has(t.id)) && (!q || `${t.brand} ${t.subject} ${t.excerpt}`.toLowerCase().includes(q)));
 
   // Suivi de l'échange ouvert. Une ancienne décision (avant l'historique) n'est ajoutée
   // qu'une fois l'historique chargé, pour éviter un clignotement. Repli : les remarques
@@ -921,6 +923,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   };
   const emptyText = q
     ? t("Aucun échange ne correspond à « {q} ».", { q: query.trim() })
+    : unreadOnly
+      ? t("Aucun mail non lu. Tout est à jour ✓")
     : filter !== "tous"
       ? t("Aucun échange ici.")
       : asAgency
@@ -1045,8 +1049,13 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
             <span className="shrink-0 font-semibold">{filter === "demarchage" ? t("Tout voir") : t("Voir")}</span>
           </button>
         )}
-        <div className="mt-2">
-          <SearchField size="sm" value={query} onChange={setQuery} placeholder={t("Rechercher une marque, un objet…")} />
+        <div className="mt-2 flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <SearchField size="sm" value={query} onChange={setQuery} placeholder={t("Rechercher une marque, un objet…")} />
+          </div>
+          {mode === "creator" && (
+            <UnreadToggle label={t("Non lus")} on={!!unreadOnly} count={unseen.size} onToggle={() => setUnreadOnly((cur) => (cur ? null : new Set(unseen)))} />
+          )}
         </div>
         <p className="mt-1.5 flex min-w-0 items-center gap-1.5 truncate pl-1 text-[11.5px] text-muted-foreground" aria-live="polite">
           {cur.dot && <span aria-hidden className={cn("size-2 shrink-0 rounded-[3px]", cur.dot)} />}

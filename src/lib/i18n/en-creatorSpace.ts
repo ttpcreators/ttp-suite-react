@@ -348,6 +348,8 @@ export const EN_CREATORSPACE: Record<string, string> = {
   "Terminé": "Finished",
   "échéance {date}": "due {date}",
   "Mon script": "My script",
+  "Non lus": "Unread",
+  "Aucun mail non lu. Tout est à jour ✓": "No unread mail. All caught up ✓",
   "L'essentiel du brief": "Brief at a glance",
   "À ne pas faire": "Don't",
   "Livrables et dates": "Deliverables and dates",
