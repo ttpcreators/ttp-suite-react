@@ -262,3 +262,45 @@ export function pageDefaultTones(pageId: string): Record<string, FolderTone> {
   for (const t of FOLDER_PAGES.find((p) => p.id === pageId)?.tabs ?? []) if (t.tone) out[t.value] = t.tone;
   return out;
 }
+
+// ── Couleur du cadre des classeurs (Paramètres → Couleurs des classeurs) ───────
+/**
+ * Blob agence `folderFrameColors` = { [page]: "#rrggbb" }, et « * » = tous les classeurs.
+ * Une page sans choix prend « * », sinon le noir d'origine. Réglage d'équipe.
+ */
+export const FOLDER_FRAMES_KEY = "folderFrameColors";
+export const ALL_FRAMES = "*";
+export type FrameMap = Record<string, string>;
+
+export const FRAME_PRESETS: { color: string; label: string }[] = [
+  { color: "#292929", label: "Noir" },
+  { color: "#1f2a44", label: "Bleu nuit" },
+  { color: "#49060e", label: "Bordeaux TTP" },
+  { color: "#1f3b2d", label: "Vert forêt" },
+  { color: "#3b2547", label: "Prune" },
+  { color: "#5b4636", label: "Brun" },
+  { color: "#d6d6dc", label: "Gris clair" },
+  { color: "#ebe4d8", label: "Sable" },
+];
+
+const HEX = /^#[0-9a-f]{6}$/i;
+export function sanitizeFrameMap(raw: unknown): FrameMap {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: FrameMap = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (k.length <= 40 && typeof v === "string" && HEX.test(v)) out[k] = v.toLowerCase();
+  }
+  return out;
+}
+
+/** Couleur du cadre d'une page : son choix, sinon celui de tous les classeurs, sinon rien (d'origine). */
+export function frameColorFor(map: FrameMap | null | undefined, page: string): string | null {
+  return map?.[page] ?? map?.[ALL_FRAMES] ?? null;
+}
+
+/** Cadre clair (texte foncé dessus) ? Luminance relative WCAG. */
+export function isLightColor(hex: string): boolean {
+  if (!HEX.test(hex)) return false;
+  const ch = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2] > 0.45;
+}

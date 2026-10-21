@@ -359,11 +359,11 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
           </div>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+        <div className="flex flex-col gap-2">
           {/* En-tête de tableau (desktop) */}
           <div
             className={cn(
-              "hidden items-center border-b border-border px-5 py-3 text-[12px] text-muted-foreground md:grid",
+              "hidden items-center px-5 pb-1 pt-1 text-[12px] text-muted-foreground md:grid",
               cols,
             )}
           >
@@ -376,7 +376,8 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
             <span />
           </div>
 
-          <div className="divide-y divide-border">
+          {/* Un créateur = une carte, avec un léger espace entre chaque. */}
+          <div className="flex flex-col gap-2">
           {filtered.map((c) => {
             const label = STATUS_LABEL[c.status] ?? "ACTIF";
             const dot = statusDot(c.status);
@@ -385,7 +386,7 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
                 key={c.id}
                 onClick={() => onOpen?.(c.name)}
                 className={cn(
-                  "cursor-pointer px-4 py-3 transition-colors hover:bg-rowhover sm:px-5",
+                  "cursor-pointer rounded-2xl bg-surface px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.05)] ring-1 ring-border/70 transition-[background-color,box-shadow] hover:bg-rowhover hover:shadow-[0_6px_18px_-10px_rgba(15,23,42,0.22)] sm:px-5 dark:bg-white/[0.04]",
                   "flex items-center gap-3 md:grid",
                   cols,
                 )}

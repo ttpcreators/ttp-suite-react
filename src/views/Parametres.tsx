@@ -23,7 +23,8 @@ import { TONE_SOLID } from "@/lib/statusTone";
 import { readSticky, useStickyState } from "@/lib/useStickyState";
 import { FolderTabs } from "@/components/ui/folder-tabs";
 import { FOLDER_PAGES, FOLDER_TONES, TONE_LABEL, TONE_VAR, pageDefaultTones, resolveTabTones, type FolderTone } from "@/lib/folderTabs";
-import { resetPageTones, saveTabTone, useFolderTones } from "@/lib/useFolderTones";
+import { resetPageTones, saveFrameColor, saveTabTone, useFolderFrames, useFolderTones } from "@/lib/useFolderTones";
+import { ALL_FRAMES, FRAME_PRESETS, frameColorFor } from "@/lib/folderTabs";
 import { useNavSub } from "@/lib/navSub";
 import { bestHit, entriesOfTab, entryAnchor, groupHits, pagesVisibility, searchSettings, sectionAnchor, settingsTabs, settingsTarget, settingsTargetFor, type SettingsEntry } from "@/lib/settingsSearch";
 
@@ -571,6 +572,10 @@ function PagesCard() {
  */
 function FolderTonesCard() {
   const custom = useFolderTones();
+  const frames = useFolderFrames();
+  const pickFrame = async (page: string, color: string | null) => {
+    if (!(await saveFrameColor(page, color))) toast("Erreur d'enregistrement, réessaie");
+  };
   const [open, setOpen] = useState<string | null>(null);
   const pick = async (page: string, tab: string, tone: FolderTone | null) => {
     if (!(await saveTabTone(page, tab, tone))) toast("Erreur d'enregistrement, réessaie");
@@ -580,8 +585,13 @@ function FolderTonesCard() {
     else toast("Erreur d'enregistrement, réessaie");
   };
   return (
-    <Card title="Couleurs des classeurs" hint="La couleur de chaque onglet des pages en classeur, pour toute l'équipe.">
+    <Card title="Couleurs des classeurs" hint="La couleur du cadre et de chaque onglet des pages en classeur, pour toute l'équipe.">
       <div className="flex flex-col gap-1.5">
+        {/* Cadre de tous les classeurs d'un coup (une page peut ensuite avoir le sien). */}
+        <div className="flex h-11 min-w-0 items-center gap-3 rounded-[12px] bg-panel px-3">
+          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">Cadre de tous les classeurs</span>
+          <FramePicker label="Cadre de tous les classeurs" value={frames[ALL_FRAMES] ?? null} onPick={(c) => void pickFrame(ALL_FRAMES, c)} />
+        </div>
         {FOLDER_PAGES.map((p) => {
           const tones = resolveTabTones(
             p.tabs.map((t) => t.value),
@@ -609,6 +619,11 @@ function FolderTonesCard() {
               </button>
               {isOpen && (
                 <div className="flex flex-col gap-1 px-3 pb-3">
+                  <div className="flex h-10 min-w-0 items-center gap-3 border-t border-border">
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">Cadre du classeur</span>
+                    {!frames[p.id] && frames[ALL_FRAMES] && <span className="shrink-0 text-[12px] text-faint">comme tous</span>}
+                    <FramePicker label={`Cadre du classeur ${p.label}`} value={frames[p.id] ?? null} shown={frameColorFor(frames, p.id)} onPick={(c) => void pickFrame(p.id, c)} />
+                  </div>
                   {p.tabs.map((t) => (
                     <div key={t.value} className="flex h-10 min-w-0 items-center gap-3 border-t border-border">
                       <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{t.label}</span>
@@ -635,6 +650,62 @@ function FolderTonesCard() {
         })}
       </div>
     </Card>
+  );
+}
+
+/** Couleur du cadre : teintes proposées, couleur perso (sélecteur du système) ou d'origine. */
+function FramePicker({ label, value, shown, onPick }: { label: string; value: string | null; shown?: string | null; onPick: (color: string | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const cur = shown ?? value;
+  const choose = (c: string | null) => {
+    setOpen(false);
+    if (c !== value) onPick(c);
+  };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`${label} : ${cur ?? "noir d'origine"}`}
+          title={cur ? FRAME_PRESETS.find((f) => f.color === cur)?.label ?? cur : "Noir d'origine"}
+          className="h-6 w-10 shrink-0 rounded-full ring-1 ring-border ring-offset-2 ring-offset-panel transition-transform hover:scale-105"
+          style={{ background: cur ?? "#292929" }}
+        />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[248px] rounded-[16px] p-3">
+        <div className="grid grid-cols-4 gap-2" role="group" aria-label={label}>
+          {FRAME_PRESETS.map((f) => (
+            <button
+              key={f.color}
+              type="button"
+              onClick={() => choose(f.color === "#292929" ? null : f.color)}
+              aria-label={f.label}
+              title={f.label}
+              aria-pressed={(value ?? "#292929") === f.color}
+              className={cn("h-8 rounded-[10px] ring-offset-2 ring-offset-popover transition-transform hover:scale-105", (value ?? "#292929") === f.color ? "ring-2 ring-foreground" : "ring-1 ring-border")}
+              style={{ background: f.color }}
+            />
+          ))}
+        </div>
+        <label className="mt-3 flex h-9 cursor-pointer items-center gap-2.5 rounded-[10px] px-2 text-[13px] text-foreground transition-colors hover:bg-rowhover">
+          <input
+            type="color"
+            value={cur ?? "#292929"}
+            onChange={(e) => onPick(e.target.value)}
+            className="h-6 w-6 shrink-0 cursor-pointer rounded-full border-0 bg-transparent p-0"
+            aria-label="Couleur perso"
+          />
+          Couleur perso…
+        </label>
+        <button
+          type="button"
+          onClick={() => choose(null)}
+          className={cn("mt-1 flex h-8 w-full items-center rounded-[10px] px-2 text-left text-[13px] transition-colors hover:bg-rowhover", value === null ? "font-semibold text-foreground" : "text-muted-foreground")}
+        >
+          D'origine
+        </button>
+      </PopoverContent>
+    </Popover>
   );
 }
 

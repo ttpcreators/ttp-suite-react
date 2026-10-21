@@ -2,8 +2,8 @@ import { useMemo, useState, type ReactNode } from "react";
 import { MorphingTabs } from "@/components/ui/morphing-tabs";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { useIsPhone } from "@/lib/iosUi";
-import { TONE_VAR, pageDefaultTones, parseTabOrder, resolveTabTones, sortByOrder, tabLabel, type FolderTone } from "@/lib/folderTabs";
-import { useFolderTones } from "@/lib/useFolderTones";
+import { TONE_VAR, frameColorFor, isLightColor, pageDefaultTones, parseTabOrder, resolveTabTones, sortByOrder, tabLabel, type FolderTone } from "@/lib/folderTabs";
+import { useFolderFrames, useFolderTones } from "@/lib/useFolderTones";
 
 export type FolderTabItem = {
   value: string;
@@ -78,6 +78,9 @@ export function FolderTabs({
     );
   }, [items, orderKey, custom]);
   const toneOf = (v: string) => (tones[v] ? TONE_VAR[tones[v]] : undefined);
+  // Couleur du cadre (Paramètres) : celle de la page, sinon celle de tous les classeurs.
+  const frameColor = frameColorFor(useFolderFrames(), orderKey);
+  const frame = frameColor ? { color: frameColor, light: isLightColor(frameColor) } : null;
 
   if (phone) {
     if (!phoneTabs) return <>{children}</>;
@@ -101,11 +104,13 @@ export function FolderTabs({
       onValueChange={(v) => v && onValueChange(v)}
       onOrderChange={saveOrder}
       maxTabWidth={maxTabWidth}
+      frame={frame}
       items={sortByOrder(items, order).map((it) => ({ id: it.value, label: tabLabel(it.label, it.count), tone: toneOf(it.value) }))}
-      // `overflow-clip` (au lieu de hidden) : mêmes coins arrondis, mais un aperçu
+      // `flow-root` : la marge basse du panneau reste DANS le cadre (sans lui, elle en sortait
+      // et le bas du classeur paraissait coupé). `overflow-clip` (au lieu de hidden) : mêmes coins arrondis, mais un aperçu
       // `sticky` du contenu reste collé en défilant. Panneau au-dessus du rail : une
       // fenêtre `fixed` ouverte depuis le contenu passe devant les onglets.
-      classNames={{ root: "overflow-clip", content: "z-40 overflow-clip" }}
+      classNames={{ root: "flow-root overflow-clip", content: "z-40 overflow-clip" }}
       panel={<div className="min-w-0 p-4 sm:p-5">{children}</div>}
     />
   );

@@ -56,6 +56,11 @@ export interface MorphingTabsProps {
   panel?: ReactNode;
   /** Largeur maximale d'un onglet (176 px par défaut). */
   maxTabWidth?: number;
+  /**
+   * Couleur du cadre choisie dans Paramètres (sinon le noir d'origine). `light` : cadre
+   * clair, les libellés des onglets passent en foncé pour rester lisibles.
+   */
+  frame?: { color: string; light: boolean } | null;
 }
 
 type DragSession = {
@@ -211,7 +216,7 @@ function LiquidSurfacePath({ left, surfaceWidth, tabWidth }: { left: MotionValue
   return <motion.path d={path} fill="currentColor" />;
 }
 
-export function MorphingTabs({ items, value, defaultValue, onValueChange, onOrderChange, onClose, ariaLabel = "Onglets", className, classNames, panel, maxTabWidth = MAX_TAB_WIDTH }: MorphingTabsProps) {
+export function MorphingTabs({ items, value, defaultValue, onValueChange, onOrderChange, onClose, ariaLabel = "Onglets", className, classNames, panel, maxTabWidth = MAX_TAB_WIDTH, frame }: MorphingTabsProps) {
   const reduce = Boolean(useReducedMotion());
   const uid = useId();
   const itemIds = useMemo(() => items.map((item) => item.id), [items]);
@@ -498,7 +503,7 @@ export function MorphingTabs({ items, value, defaultValue, onValueChange, onOrde
   if (!orderedItems.length) return null;
 
   return (
-    <div ref={rootRef} className={cn("relative isolate min-w-0 overflow-hidden rounded-[2rem] bg-[#292929] text-white dark:bg-[#141414]", classNames?.root, className)}>
+    <div ref={rootRef} style={frame ? { background: frame.color } : undefined} className={cn("relative isolate min-w-0 overflow-hidden rounded-[2rem] bg-[#292929] text-white dark:bg-[#141414]", frame?.light && "text-[#181818]", classNames?.root, className)}>
       <div className="relative h-20">
         <div ref={railRef} role="tablist" aria-label={ariaLabel} aria-orientation="horizontal" className={cn("relative z-30 flex h-full gap-3 md:gap-4", classNames?.rail)}>
           {orderedItems.map((item, index) => {
@@ -537,7 +542,7 @@ export function MorphingTabs({ items, value, defaultValue, onValueChange, onOrde
               >
                 <div style={{ width: tabWidth, height: TAB_HEIGHT, marginTop: TAB_TOP }} className="relative flex items-stretch">
                   {!isActive ? (
-                    <span aria-hidden className={cn("absolute inset-x-0 bottom-2 top-0 rounded-[1.25rem] transition-colors duration-200", isDragging ? "bg-[#3a3a3a]" : "bg-transparent group-hover:bg-white/[0.06]")} />
+                    <span aria-hidden className={cn("absolute inset-x-0 bottom-2 top-0 rounded-[1.25rem] transition-colors duration-200", isDragging ? (frame?.light ? "bg-black/[0.08]" : "bg-white/[0.1]") : frame?.light ? "bg-transparent group-hover:bg-black/[0.05]" : "bg-transparent group-hover:bg-white/[0.06]")} />
                   ) : null}
                   {/* Intercalaire : filet de couleur sur le bord haut de l'onglet actif (entre les arrondis). */}
                   {isActive && item.tone ? (
@@ -563,7 +568,7 @@ export function MorphingTabs({ items, value, defaultValue, onValueChange, onOrde
                     onKeyDown={(event) => handleTabKeyDown(item.id, event)}
                     className={cn(
                       "group relative z-10 flex h-full w-full min-w-0 items-center gap-2 overflow-hidden rounded-t-[1.5rem] px-3 text-left outline-none transition-colors",
-                      isActive ? "text-[#181818] dark:text-white" : "pb-2 text-white/70 hover:text-white",
+                      isActive ? "text-[#181818] dark:text-white" : frame?.light ? "pb-2 text-black/60 hover:text-black" : "pb-2 text-white/70 hover:text-white",
                       classNames?.tab,
                     )}
                   >

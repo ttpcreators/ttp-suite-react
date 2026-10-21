@@ -104,3 +104,21 @@ describe("Onglets dossier", () => {
     for (const t of ["marque", "repr", "ugc"] as const) expect(contratsTabFromSub(contratsSubFromTab(t))).toBe(t);
   });
 });
+
+describe("couleur du cadre des classeurs", async () => {
+  const { sanitizeFrameMap, frameColorFor, isLightColor } = await import("./folderTabs");
+  it("garde seulement des couleurs #rrggbb", () => {
+    expect(sanitizeFrameMap({ contrats: "#49060E", x: "rouge", y: 3, "*": "#1f2a44" })).toEqual({ contrats: "#49060e", "*": "#1f2a44" });
+    expect(sanitizeFrameMap(null)).toEqual({});
+  });
+  it("page, puis tous les classeurs, puis d'origine", () => {
+    expect(frameColorFor({ contrats: "#111111", "*": "#222222" }, "contrats")).toBe("#111111");
+    expect(frameColorFor({ "*": "#222222" }, "roster")).toBe("#222222");
+    expect(frameColorFor({}, "roster")).toBeNull();
+  });
+  it("cadre clair ou foncé", () => {
+    expect(isLightColor("#ebe4d8")).toBe(true);
+    expect(isLightColor("#292929")).toBe(false);
+    expect(isLightColor("#49060e")).toBe(false);
+  });
+});

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAppState, invalidateAppState, mergeAppStateKey, useAppState } from "./appState";
-import { FOLDER_TONES_KEY, sanitizeToneMap, withTabTone, type FolderTone, type FolderToneMap } from "./folderTabs";
+import { FOLDER_FRAMES_KEY, FOLDER_TONES_KEY, sanitizeFrameMap, sanitizeToneMap, withTabTone, type FolderTone, type FolderToneMap, type FrameMap } from "./folderTabs";
 
 /*
  * Couleurs des classeurs choisies par l'équipe (Paramètres → Apparence), rangées dans le
@@ -59,6 +59,40 @@ export async function resetPageTones(page: string): Promise<boolean> {
     announce(next);
     const ok = await mergeAppStateKey(FOLDER_TONES_KEY, {}, [page]);
     if (!ok) announce(fresh);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+// ── Couleur du cadre (folderFrameColors) : même mécanique que les teintes d'onglets ──
+const frameListeners = new Set<(m: FrameMap) => void>();
+const announceFrames = (m: FrameMap) => frameListeners.forEach((fn) => fn(m));
+
+export function useFolderFrames(): FrameMap {
+  const { data } = useAppState<FrameMap>((s) => sanitizeFrameMap(s[FOLDER_FRAMES_KEY]));
+  const [local, setLocal] = useState<{ base: FrameMap | null; map: FrameMap } | null>(null);
+  useEffect(() => {
+    const fn = (map: FrameMap) => setLocal({ base: data, map });
+    frameListeners.add(fn);
+    return () => {
+      frameListeners.delete(fn);
+    };
+  }, [data]);
+  return local && local.base === data ? local.map : (data ?? {});
+}
+
+/** Couleur du cadre d'une page (ou « * » = tous les classeurs) ; `null` = d'origine. */
+export async function saveFrameColor(page: string, color: string | null): Promise<boolean> {
+  try {
+    invalidateAppState();
+    const fresh = sanitizeFrameMap((await getAppState())[FOLDER_FRAMES_KEY]);
+    const next: FrameMap = { ...fresh };
+    if (color) next[page] = color.toLowerCase();
+    else delete next[page];
+    announceFrames(next);
+    const ok = color ? await mergeAppStateKey(FOLDER_FRAMES_KEY, { [page]: color.toLowerCase() }) : await mergeAppStateKey(FOLDER_FRAMES_KEY, {}, [page]);
+    if (!ok) announceFrames(fresh);
     return ok;
   } catch {
     return false;
