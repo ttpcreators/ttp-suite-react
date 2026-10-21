@@ -1,4 +1,6 @@
+/// <reference types="vitest/config" />
 import { defineConfig, type Plugin } from "vite";
+import { configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
@@ -18,6 +20,8 @@ export default defineConfig(({ command }) => ({
   base: "./",
   plugins: [react(), tailwindcss(), appVersion()],
   define: { __APP_VERSION__: JSON.stringify(command === "build" ? APP_VERSION : "dev") },
+  // Les copies de travail des agents (.claude/worktrees) ne sont pas testées avec l'app.
+  test: { exclude: [...configDefaults.exclude, ".claude/**"] },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

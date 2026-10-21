@@ -34,6 +34,13 @@ import {
   filterItems,
   localISO,
   parseSnooze,
+  parseHandled,
+  markHandled,
+  unmarkHandled,
+  isHandled,
+  handledToday,
+  HANDLED_KEY,
+  type HandledMap,
   sectionsOf,
   snooze,
   summaryLine,
@@ -86,6 +93,14 @@ function useIsLg(): boolean {
     () => !!lgMq?.matches,
     () => true,
   );
+}
+
+function readHandled(): HandledMap {
+  try {
+    return parseHandled(localStorage.getItem(HANDLED_KEY));
+  } catch {
+    return {};
+  }
 }
 
 function readSnooze(): SnoozeMap {
@@ -247,11 +262,13 @@ type InspectorProps = {
   busy: boolean;
   onPrimary: () => void;
   onSnooze: () => void;
+  /** « C'est fait » : pour tout ce que le bouton principal ne termine pas lui-même. */
+  onHandled?: () => void;
   onClose: () => void;
   onOpenSource: () => void;
 };
 
-function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onPrimary, onSnooze, onClose, onOpenSource }: InspectorProps) {
+function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onPrimary, onSnooze, onHandled, onClose, onOpenSource }: InspectorProps) {
   const [editing, setEditing] = useState(false);
   useEffect(() => setEditing(false), [it.id]);
   const iv = it.invoice;
@@ -398,6 +415,11 @@ function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onP
               {editing ? <><Check className="h-4 w-4" /> Terminé</> : <><Pencil className="h-4 w-4" /> Modifier</>}
             </button>
           )}
+          {onHandled && (
+            <button type="button" onClick={onHandled} className={secondaryBtn}>
+              <Check className="h-4 w-4" /> C'est fait
+            </button>
+          )}
           <button type="button" onClick={onSnooze} className={secondaryBtn}>
             Demain
           </button>
@@ -513,10 +535,23 @@ export function Aujourdhui() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => setNow(new Date()), [live, snoozed, localRem]);
 
-  const { items, done } = useMemo(
+  const built = useMemo(
     () => buildToday({ invoices, reminders, todos, events, briefs, mails, snoozed, money, now }),
     [invoices, reminders, todos, events, briefs, mails, snoozed, money, now],
   );
+  // « C'est fait » (par appareil) : caché pour la journée, compté dans « déjà faites ».
+  const [handled, setHandled] = useState<HandledMap>(readHandled);
+  const todayISO = localISO(now);
+  const items = useMemo(() => built.items.filter((it) => !isHandled(handled, it.id, todayISO)), [built.items, handled, todayISO]);
+  const done = useMemo(() => [...built.done, ...handledToday(handled, todayISO)], [built.done, handled, todayISO]);
+  const saveHandled = (next: HandledMap) => {
+    setHandled(next);
+    try {
+      localStorage.setItem(HANDLED_KEY, JSON.stringify(next));
+    } catch {
+      /* stockage indisponible : vaut pour la session */
+    }
+  };
 
   // Échéances de contrats : blob agence, seulement si la page Échéances est ouverte à ce profil.
   const canContracts = !restricted.includes("echeances");
@@ -595,6 +630,15 @@ export function Aujourdhui() {
   // Brouillons de relance modifiés (par facture).
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+
+  const doHandled = (it: TodayItem) => {
+    saveHandled(markHandled(handled, it.id, it.title, localISO(new Date())));
+    toast("C'est fait ✓");
+  };
+  const undoHandled = (id: string) => {
+    saveHandled(unmarkHandled(handled, id));
+    toast("Remis dans la liste");
+  };
 
   const doSnooze = (it: TodayItem) => {
     const today = localISO(new Date());
@@ -775,6 +819,7 @@ export function Aujourdhui() {
       busy={busy}
       onPrimary={() => act(selected)}
       onSnooze={() => doSnooze(selected)}
+      onHandled={selected.kind === "todo" ? undefined : () => doHandled(selected)}
       onClose={() => {
         setSelectedId(null);
         setSheetOpen(false);
@@ -863,7 +908,12 @@ export function Aujourdhui() {
                         <IconTile tone="ok" size="sm">
                           <Check />
                         </IconTile>
-                        <span className="min-w-0 truncate text-[14px] text-muted-foreground line-through decoration-faint">{d.label}</span>
+                        <span className="min-w-0 flex-1 truncate text-[14px] text-muted-foreground line-through decoration-faint">{d.label}</span>
+                        {d.kind === "fait" && (
+                          <button type="button" onClick={() => undoHandled(d.id)} className="shrink-0 rounded-full px-2.5 py-1 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                            Annuler
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>

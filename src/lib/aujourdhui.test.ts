@@ -214,3 +214,18 @@ describe("heures, commission, email", () => {
     expect(relanceEmail({ ref: "2026-186", party: "JNPR", amount: "600" }, 2).body).toContain("Malgré nos précédentes relances");
   });
 });
+
+describe("« C'est fait » (Aujourd'hui)", () => {
+  it("marque pour la journée, oublie les jours passés, se retire", async () => {
+    const { markHandled, unmarkHandled, isHandled, handledToday, parseHandled } = await import("./aujourdhui");
+    let m = markHandled({ old: { day: "2026-10-20", label: "Vieux" } }, "ev1", "Event Zeina", "2026-10-21");
+    expect(m.old).toBeUndefined();
+    expect(isHandled(m, "ev1", "2026-10-21")).toBe(true);
+    expect(isHandled(m, "ev1", "2026-10-22")).toBe(false);
+    expect(handledToday(m, "2026-10-21")).toEqual([{ id: "ev1", label: "Event Zeina", kind: "fait" }]);
+    m = unmarkHandled(m, "ev1");
+    expect(handledToday(m, "2026-10-21")).toEqual([]);
+    expect(parseHandled("pas du json")).toEqual({});
+    expect(parseHandled(JSON.stringify({ a: { day: "2026-10-21", label: "x" }, b: { day: "hier" } }))).toEqual({ a: { day: "2026-10-21", label: "x" } });
+  });
+});

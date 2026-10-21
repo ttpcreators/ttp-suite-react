@@ -11,3 +11,6 @@ scratch-*.png
 # Fichiers de travail temporaires
 scratch-*
 .scratch/
+
+# Copies de travail des agents (Claude Code)
+.claude/

@@ -84,7 +84,7 @@ export type TodayItem = {
   staleCreators?: string[];
 };
 
-export type DoneEntry = { id: string; label: string; kind: "relance" | "todo" };
+export type DoneEntry = { id: string; label: string; kind: "relance" | "todo" | "fait" };
 
 export type TodaySection = { id: SectionId; title: string; right: string; items: TodayItem[] };
 
@@ -191,6 +191,43 @@ export function snooze(map: SnoozeMap, id: string, until: string, today: string)
   for (const [k, d] of Object.entries(map)) if (d > today) out[k] = d;
   out[id] = until;
   return out;
+}
+
+// ── « C'est fait » : un élément traité à la main (rendez-vous préparé, mail trié…) ──
+// Caché pour la journée et compté dans « déjà faites » ; par appareil, comme « Demain ».
+export type HandledMap = Record<string, { day: string; label: string }>;
+export const HANDLED_KEY = "ttp:ui:aujourdhui:fait";
+export function parseHandled(raw: string | null): HandledMap {
+  try {
+    const v = JSON.parse(raw ?? "{}") as unknown;
+    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+    const out: HandledMap = {};
+    for (const [k, e] of Object.entries(v as Record<string, unknown>)) {
+      const o = e as { day?: unknown; label?: unknown };
+      if (o && typeof o.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.day)) out[k] = { day: o.day, label: typeof o.label === "string" ? o.label : "" };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+/** Marque `id` comme fait aujourd'hui (et oublie les jours passés). */
+export function markHandled(map: HandledMap, id: string, label: string, today: string): HandledMap {
+  const out: HandledMap = {};
+  for (const [k, e] of Object.entries(map)) if (e.day >= today) out[k] = e;
+  out[id] = { day: today, label };
+  return out;
+}
+/** Retire la marque (bouton « Annuler »). */
+export function unmarkHandled(map: HandledMap, id: string): HandledMap {
+  const out = { ...map };
+  delete out[id];
+  return out;
+}
+export const isHandled = (map: HandledMap, id: string, today: string) => map[id]?.day === today;
+/** Éléments faits à la main aujourd'hui, pour la liste « déjà faites ». */
+export function handledToday(map: HandledMap, today: string): DoneEntry[] {
+  return Object.entries(map).filter(([, e]) => e.day === today).map(([id, e]) => ({ id, label: e.label, kind: "fait" as const }));
 }
 
 // ── Commission : même logique que Facturation / Reversements ─────────────────
