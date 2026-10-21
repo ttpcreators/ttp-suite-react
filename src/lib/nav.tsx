@@ -221,6 +221,19 @@ export function withFavorites<I extends { id: string }, G extends { id: string; 
   return [make(add), ...groups];
 }
 
+/**
+ * Ordre choisi pour la section Favoris (glisser-déposer) : les pages rangées d'abord,
+ * dans cet ordre ; les autres (nouvelle étoile…) gardent leur place relative, à la suite.
+ */
+export function orderByIds<T extends { id: string }>(items: T[], order: readonly string[] | null | undefined): T[] {
+  if (!order?.length) return items;
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return items
+    .map((it, i) => ({ it, i, r: rank.get(it.id) ?? Number.POSITIVE_INFINITY }))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((x) => x.it);
+}
+
 export function findItem(id: ViewId): NavItem | undefined {
   return ALL_ITEMS.find((i) => i.id === id);
 }

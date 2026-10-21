@@ -323,6 +323,18 @@ export default function App() {
   const { data: pinnedData } = useAppState<ViewId[]>((s: AppState) => (s["pinnedPages"] as ViewId[]) ?? []);
   const [localPins, setLocalPins] = useState<ViewId[] | null>(null);
   const pinned = localPins ?? pinnedData ?? [];
+  // Ordre de la section Favoris (glisser-déposer), partagé comme les favoris.
+  const { data: favOrderData } = useAppState<string[]>((s: AppState) => (s["favoritesOrder"] as string[]) ?? []);
+  const [localFavOrder, setLocalFavOrder] = useState<string[] | null>(null);
+  const favOrder = localFavOrder ?? favOrderData ?? [];
+  const saveFavOrder = async (ids: string[]) => {
+    const before = favOrder;
+    setLocalFavOrder(ids);
+    if (!(await saveAppStateKey("favoritesOrder", ids))) {
+      setLocalFavOrder(before);
+      toast("Ordre non enregistré, réessaie");
+    }
+  };
   const togglePin = async (id: ViewId) => {
     invalidateAppState();
     const fresh = ((await getAppState())["pinnedPages"] as ViewId[]) ?? [];
@@ -900,6 +912,8 @@ export default function App() {
               onItemContext={onItemContext}
               pinned={pinned.filter(inNav)}
               onTogglePin={togglePin}
+              favOrder={favOrder}
+              onFavReorder={(ids) => void saveFavOrder(ids)}
               hidden={navHidden}
               userId={session.user.id}
               badges={navBadges}

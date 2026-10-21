@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Building2, LogOut, Moon, PanelLeftOpen, Settings, Sparkles, Star, Sun } from "@/components/icons";
-import { NAV, findPinnable, type ViewId, FAVORIS_BASE, FAVORIS_ID, withFavorites } from "@/lib/nav";
+import { NAV, findPinnable, orderByIds, type ViewId, FAVORIS_BASE, FAVORIS_ID, withFavorites } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { TtpSearch, TtpTrash } from "@/components/icons/ttp-icons";
 import { useTheme } from "@/lib/theme";
@@ -41,6 +41,8 @@ export function Sidebar({
   onItemSplit,
   pinned,
   onTogglePin,
+  favOrder,
+  onFavReorder,
   hidden,
   userId,
   badges,
@@ -59,6 +61,9 @@ export function Sidebar({
   pinned?: ViewId[];
   /** Épingle/détache une page (étoile au survol). */
   onTogglePin?: (id: ViewId) => void;
+  /** Ordre choisi pour la section Favoris, et son enregistrement (glisser-déposer). */
+  favOrder?: string[];
+  onFavReorder?: (ids: string[]) => void;
   /** Pages masquées (ex. membre non-fondateur : Finance & Accès). */
   hidden?: ViewId[];
   /** Champ de recherche (sous la carte d'espace, comme la maquette). */
@@ -93,9 +98,10 @@ export function Sidebar({
       .map((id) => findPinnable(id))
       .filter((i): i is NonNullable<typeof i> => !!i)
       .map((i) => ({ id: i.id, label: i.label, icon: i.icon, badge: b[i.id], badgeTone: LATE_BADGE.has(i.id) ? ("late" as const) : undefined }));
-    return withFavorites<SbItem, SbGroup>(base, items, (extra) => ({ id: FAVORIS_ID, label: "Favoris", icon: Star, fixed: true, items: extra }));
+    const withFav = withFavorites<SbItem, SbGroup>(base, items, (extra) => ({ id: FAVORIS_ID, label: "Favoris", icon: Star, fixed: true, items: extra }));
+    return withFav.map((g) => (g.id === FAVORIS_ID ? { ...g, items: orderByIds(g.items, favOrder) } : g));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pinned, hidden, badges]);
+  }, [pinned, hidden, badges, favOrder]);
   // Sidebar repliable en rail d'icônes (mémorisé).
   // try/catch : localStorage lève une exception quand le stockage est bloqué.
   const [collapsed, setCollapsed] = useState(() => {
@@ -221,6 +227,7 @@ export function Sidebar({
       onItemSplit={onItemSplit ? (id) => onItemSplit(id as ViewId) : undefined}
       isPinned={isPinned}
       onTogglePin={onTogglePin ? (id) => onTogglePin(id as ViewId) : undefined}
+      onReorderFixed={onFavReorder}
       header={header}
       footer={footer}
     />

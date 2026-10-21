@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
-import { LayoutGroup, motion, useReducedMotion } from "motion/react";
+import { useRef, useEffect, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
+import { LayoutGroup, Reorder, motion, useReducedMotion } from "motion/react";
 import { Check, ChevronRight, ChevronsUpDown, Columns2, PanelLeftClose, Star, type LucideIcon } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -338,6 +338,46 @@ function ItemBlock({
  * par le parent (accordéon : une seule section ouverte à la fois, la sidebar
  * reste courte). Repliée mais contenant la page active → petit point.
  */
+/** Favoris rangeables : glisser une ligne pour la déplacer, l'ordre part au lâcher. */
+function FixedReorder({ group, onReorder, render }: { group: SbGroup; onReorder: (ids: string[]) => void; render: (item: SbItem) => ReactNode }) {
+  const [ids, setIds] = useState(() => group.items.map((i) => i.id));
+  const sig = group.items.map((i) => i.id).join("|");
+  const dragging = useRef(false);
+  useEffect(() => {
+    if (!dragging.current) setIds(group.items.map((i) => i.id));
+  }, [sig]); // eslint-disable-line react-hooks/exhaustive-deps
+  const byId = new Map(group.items.map((i) => [i.id, i]));
+  return (
+    <Reorder.Group as="div" axis="y" values={ids} onReorder={setIds} className="flex flex-col gap-0.5 pb-2">
+      {ids.map((id) => {
+        const item = byId.get(id);
+        if (!item) return null;
+        return (
+          <Reorder.Item
+            key={id}
+            as="div"
+            value={id}
+            className="relative cursor-grab active:cursor-grabbing"
+            whileDrag={{ scale: 1.02, zIndex: 5 }}
+            onDragStart={() => {
+              dragging.current = true;
+            }}
+            onDragEnd={() => {
+              dragging.current = false;
+              setIds((cur) => {
+                if (cur.join("|") !== sig) onReorder(cur);
+                return cur;
+              });
+            }}
+          >
+            {render(item)}
+          </Reorder.Item>
+        );
+      })}
+    </Reorder.Group>
+  );
+}
+
 function Group({
   group,
   pillKey,
@@ -348,7 +388,10 @@ function Group({
   onItemSplit,
   isPinned,
   onTogglePin,
+  onReorder,
 }: {
+  /** Section fixe (Favoris) : ordre changé par glisser-déposer → liste des ids. */
+  onReorder?: (ids: string[]) => void;
   group: SbGroup;
   pillKey: string | null;
   open: boolean;
@@ -378,12 +421,29 @@ function Group({
       ))}
     </div>
   );
-  // Section fixe (Favoris) : intitulé simple, toujours dépliée.
+  // Section fixe (Favoris) : intitulé simple, toujours dépliée. Avec `onReorder`, on
+  // range les pages en les faisant glisser (l'ordre est gardé au lâcher).
   if (group.fixed) {
     return (
       <div className="flex flex-col">
-        <div className="flex h-7 select-none items-center px-2.5 text-[11.5px] font-semibold text-foreground/50">{group.label}</div>
-        {items}
+        <div
+          className="flex h-7 select-none items-center px-2.5 text-[11.5px] font-semibold text-foreground/50"
+          title={onReorder ? "Fais glisser une page pour changer l'ordre" : undefined}
+        >
+          {group.label}
+        </div>
+        {onReorder ? <FixedReorder group={group} onReorder={onReorder} render={(item) => (
+          <ItemBlock
+            item={item}
+            groupId={group.id}
+            pillKey={pillKey}
+            onSelect={onSelect}
+            onItemContext={onItemContext}
+            onItemSplit={onItemSplit}
+            isPinned={isPinned}
+            onTogglePin={onTogglePin}
+          />
+        )} /> : items}
       </div>
     );
   }
@@ -593,9 +653,12 @@ export function SidebarNav({
   onItemSplit,
   isPinned,
   onTogglePin,
+  onReorderFixed,
   header,
   footer,
 }: {
+  /** Ordre de la section fixe (Favoris) changé par glisser-déposer. */
+  onReorderFixed?: (ids: string[]) => void;
   groups: SbGroup[];
   activeId: string;
   activeSub?: string | null;
@@ -636,6 +699,7 @@ export function SidebarNav({
             onItemSplit={onItemSplit}
             isPinned={isPinned}
             onTogglePin={onTogglePin}
+            onReorder={g.fixed ? onReorderFixed : undefined}
           />
         ))}
         </LayoutGroup>
