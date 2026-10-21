@@ -1,5 +1,5 @@
 import { useStickyState } from "@/lib/useStickyState";
-import { TtpStar, TtpContacts, TtpEvolution, TtpFiles, TtpGains, TtpGift, TtpGuide, TtpHome, TtpIdea, TtpMediakit, TtpMessages, TtpMission, TtpPerson, TtpPlanning, TtpReport, TtpRoad, TtpStats, TtpTodo } from "@/components/icons/ttp-icons";
+import { TtpMail, TtpMore, TtpStar, TtpContacts, TtpEvolution, TtpFiles, TtpGains, TtpGift, TtpGuide, TtpHome, TtpIdea, TtpMediakit, TtpMission, TtpPlanning, TtpReport, TtpRoad, TtpStats, TtpTodo } from "@/components/icons/ttp-icons";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { Spin } from "@/components/ui/loader";
 import { motion, AnimatePresence } from "motion/react";
@@ -120,7 +120,7 @@ type Tab = CsTab;
  * Alimente à la fois le menu desktop (SidebarNav, sections repliables), le rail
  * replié, la barre d'onglets du téléphone et la liste « Toutes les rubriques » de
  * Profil → ils ne peuvent plus diverger.
- * Premier groupe = les 5 onglets de la barre du bas (Accueil, Missions, Messages,
+ * Premier groupe = les 5 onglets de la barre du bas (Accueil, Missions, Mail,
  * Gains, Profil) ; toutes les autres rubriques suivent, rien n'est retiré.
  * Les ids de groupe sont préfixés `cs-` pour ne pas partager l'état d'ouverture
  * (localStorage) avec les groupes de l'espace agence.
@@ -139,9 +139,9 @@ const CREATOR_GROUPS: {
       { id: "accueil", label: "Accueil", icon: TtpHome },
       { id: "missions", label: "Missions", icon: TtpMission },
       // Boîte mail : section activée par l'agence (sinon un message l'explique).
-      { id: "mails", label: "Messages", icon: TtpMessages },
+      { id: "mails", label: "Mail", icon: TtpMail },
       { id: "gains", label: "Gains", icon: TtpGains },
-      { id: "profil", label: "Profil", icon: TtpPerson },
+      { id: "profil", label: "Plus", icon: TtpMore },
     ],
   },
   {
@@ -274,7 +274,7 @@ const TAB_HINTS: Partial<Record<Tab, string>> = {
   missions: "Tes collabs et tes briefs : où en est chaque mission, ce qu'il faut livrer et pour quand.",
   mails: "Les mails des marques qui t'écrivent, suivis avec ton agence.",
   gains: "Ce que tu as gagné, ce qui arrive, et ta facture si l'agence ne l'a pas encore saisie.",
-  profil: "Tes infos, tes réseaux connectés, tes réglages et toutes tes rubriques.",
+  profil: "Toutes tes rubriques, puis tes infos, tes réseaux connectés et tes réglages.",
   todo: "Ce que tu as à faire, et tout ce dont tu as besoin de la part de l'agence.",
   ideas: "Tes idées de contenus et de collabs : l'agence les voit et peut rebondir.",
   gifting: "Les produits que les marques t'ont offerts, et ce qu'ils attendent en retour.",
@@ -480,7 +480,7 @@ export function CreatorSpace({
     if (!mailBadgeOn || tab === "mails") return;
     void import("@/lib/creatorMail").then((m) => m.refreshAgencyActivity(name));
   }, [name, mailBadgeOn, tab, live]);
-  // Messages reste toujours visible (5 onglets fixes) : sans boîte activée, la page
+  // Mail reste toujours visible (5 onglets fixes) : sans boîte activée, la page
   // l'explique. La pastille compte les échanges qui ont bougé.
   const navGroups = useMemo(() => {
     const base = CREATOR_GROUPS.map((g) => ({
@@ -494,7 +494,7 @@ export function CreatorSpace({
   }, [mailsOn, mailBadge, t, favs]);
   const navTabs = useMemo(() => navGroups.filter((g) => g.id !== "favoris").flatMap((g) => g.items), [navGroups]);
 
-  // ── Affichage iPhone (téléphone) : 5 onglets en bas (Accueil, Missions, Messages, Gains, Profil) ──
+  // ── Affichage iPhone (téléphone) : 5 onglets en bas (Accueil, Missions, Mail, Gains, Plus) ──
   const iosPhone = useIsPhone();
   const [navSlot, setNavSlot] = useState<HTMLElement | null>(null); // « + » de l'onglet dans la barre de titre
   const mainRef = useRef<HTMLElement>(null);
@@ -1928,7 +1928,7 @@ export function CreatorSpace({
                 openMission ? (
                   <IosBackButton label={t("Missions")} onClick={() => setMissionId(null)} />
                 ) : !isMainTab(tab) ? (
-                  <IosBackButton label={t("Profil")} onClick={() => setTab("profil")} />
+                  <IosBackButton label={t("Plus")} onClick={() => setTab("profil")} />
                 ) : null
               }
             />
@@ -3489,6 +3489,48 @@ export function CreatorSpace({
                 </div>
               </div>
 
+              {/* Toutes les rubriques en tuiles, juste sous le profil : tout l'espace en un geste.
+                  L'étoile met une rubrique en favori (tête du menu et Accueil). */}
+              <section aria-label={t("Toutes tes rubriques")} className="flex flex-col gap-4">
+                {navGroups
+                  .map((g) => ({ ...g, items: g.id === "favoris" ? g.items : g.items.filter((i) => !isMainTab(i.id)) }))
+                  .filter((g) => g.items.length > 0)
+                  .map((g) => (
+                    <div key={g.id}>
+                      <h2 className="mb-2 px-1 text-[13px] font-semibold uppercase tracking-[0.04em] text-muted-foreground">{g.label}</h2>
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+                        {g.items.map((it) => {
+                          const fav = favs.includes(it.id);
+                          return (
+                            <div key={`${g.id}-${it.id}`} className="relative">
+                              <button
+                                type="button"
+                                onClick={() => setTab(it.id)}
+                                className="flex min-h-[76px] w-full flex-col items-start justify-between gap-2 rounded-[16px] bg-surface p-3 text-left shadow-sm transition-transform active:scale-[0.97]"
+                              >
+                                <it.icon className="h-[22px] w-[22px] text-primary" />
+                                <span className="w-full text-[13px] font-medium leading-tight text-foreground [overflow-wrap:anywhere]">{it.label}</span>
+                              </button>
+                              {isFavorable(it.id) && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleFav(it.id)}
+                                  aria-pressed={fav}
+                                  aria-label={fav ? t("Retirer des favoris") : t("Ajouter aux favoris")}
+                                  className={cn("absolute right-0.5 top-0.5 grid h-10 w-10 place-items-center", fav ? "text-primary" : "text-faint")}
+                                >
+                                  <TtpStar className="h-4 w-4" fill={fav ? "currentColor" : "none"} />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                {!favs.length && <p className="px-1 text-[12.5px] text-faint">{t("Touche l'étoile d'une rubrique pour l'ajouter à tes favoris.")}</p>}
+              </section>
+
               {/* Mes infos (déplacée de l'Accueil) : toggle Statistiques / Coordonnées + chiffres animés */}
               <Card index={0}>
                 <div className="mb-4 flex items-center justify-between gap-3">
@@ -3669,39 +3711,6 @@ export function CreatorSpace({
                 </div>
               </IosGroup>
 
-              {/* Toutes les autres rubriques, groupées comme le menu ordinateur. L'étoile
-                  met une rubrique en favori : elle passe en tête du menu et sur l'Accueil. */}
-              {navGroups
-                .map((g) => ({ ...g, items: g.id === "favoris" ? g.items : g.items.filter((i) => !isMainTab(i.id)) }))
-                .filter((g) => g.items.length > 0)
-                .map((g) => (
-                  <IosGroup key={g.id} title={g.label} footer={g.id === "favoris" ? undefined : g === navGroups.find((x) => x.id !== "favoris" && x.items.some((i) => !isMainTab(i.id))) && !favs.length ? t("Touche l'étoile d'une rubrique pour l'ajouter à tes favoris.") : undefined}>
-                    {g.items.map((it) => (
-                      <IosRow
-                        key={`${g.id}-${it.id}`}
-                        icon={it.icon}
-                        label={it.label}
-                        onClick={() => setTab(it.id)}
-                        right={
-                          isFavorable(it.id) ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleFav(it.id);
-                              }}
-                              aria-pressed={favs.includes(it.id)}
-                              aria-label={favs.includes(it.id) ? t("Retirer des favoris") : t("Ajouter aux favoris")}
-                              className={cn("-my-2 grid h-11 w-11 place-items-center", favs.includes(it.id) ? "text-primary" : "text-faint")}
-                            >
-                              <TtpStar className="h-5 w-5" fill={favs.includes(it.id) ? "currentColor" : "none"} />
-                            </button>
-                          ) : undefined
-                        }
-                      />
-                    ))}
-                  </IosGroup>
-                ))}
               <IosGroup>
                 <IosRow icon={BarChart3} label={t("Envoyer mes stats")} onClick={() => setStatsModalOpen(true)} />
               </IosGroup>

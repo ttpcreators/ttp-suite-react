@@ -503,4 +503,7 @@ export const EN_CREATORSPACE: Record<string, string> = {
   "Choisir": "Choose",
   "Mets tes rubriques préférées en favoris (l'étoile dans Profil) pour les ouvrir d'ici en un geste.": "Star your favorite sections (in Profile) to open them from here in one tap.",
   "Touche l'étoile d'une rubrique pour l'ajouter à tes favoris.": "Tap a section's star to add it to your favorites.",
+  "Mail": "Mail",
+  "Toutes tes rubriques": "All your sections",
+  "Toutes tes rubriques, puis tes infos, tes réseaux connectés et tes réglages.": "All your sections, then your info, connected networks and settings.",
 };
