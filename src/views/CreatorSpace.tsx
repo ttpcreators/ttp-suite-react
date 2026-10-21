@@ -434,18 +434,22 @@ export function CreatorSpace({
   // Section « Mails » : affichée seulement si l'agence l'a activée et liée à un alias/libellé.
   const [mailsOn, setMailsOn] = useState(false);
   const [mailAlias, setMailAlias] = useState<string | null>(null);
+  const [mailAliases, setMailAliases] = useState<string[] | null>(null); // ses adresses en plus
   const mailsReadFor = useRef<string | null>(null); // créateur dont le réglage a été lu
   useEffect(() => {
     let alive = true;
-    supabase.from("creator_mail_settings").select("enabled, alias, label_id").eq("creator", name).maybeSingle()
+    // « * » : marche avant et après l'ajout de la colonne `aliases` (adresses en plus).
+    supabase.from("creator_mail_settings").select("*").eq("creator", name).maybeSingle()
       .then(({ data, error }) => {
         if (!alive) return;
         // Erreur réseau passagère : on garde l'état connu du même créateur (l'onglet ne disparaît pas).
         if (error && mailsReadFor.current === name) return;
         mailsReadFor.current = error ? null : name;
-        const d = error ? null : (data as { enabled: boolean; alias: string | null; label_id: string | null } | null);
-        setMailsOn(!!d?.enabled && !!(d.alias || d.label_id));
+        const d = error ? null : (data as { enabled: boolean; alias: string | null; aliases?: string[] | null; label_id: string | null } | null);
+        const extra = Array.isArray(d?.aliases) ? d.aliases : [];
+        setMailsOn(!!d?.enabled && !!(d.alias || d.label_id || extra.length));
         setMailAlias(d?.alias ?? null);
+        setMailAliases(extra);
       });
     return () => {
       alive = false;
@@ -3325,7 +3329,7 @@ export function CreatorSpace({
           {tab === "mails" && (
             mailsOn ? (
               <Suspense fallback={null}>
-                <CreatorMailbox creator={name} mode={preview ? "preview" : "creator"} alias={mailAlias} />
+                <CreatorMailbox creator={name} mode={preview ? "preview" : "creator"} alias={mailAlias} aliases={mailAliases} />
               </Suspense>
             ) : (
               <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">

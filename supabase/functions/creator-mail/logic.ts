@@ -4,8 +4,9 @@
 //
 // Règle d'appartenance d'un fil à une créatrice (vérifiée CÔTÉ SERVEUR avant de
 // renvoyer quoi que ce soit) : au moins un message « réel » (ni brouillon, ni
-// corbeille, ni spam) du fil porte son libellé manuel, OU fait apparaître son
-// alias dans un en-tête d'adresse (From / To / Cc / Bcc / Delivered-To / X-Original-To / Reply-To).
+// corbeille, ni spam) du fil porte son libellé manuel, OU fait apparaître UNE de
+// ses adresses (alias principal + adresses en plus, ex. son adresse perso) dans un
+// en-tête d'adresse (From / To / Cc / Bcc / Delivered-To / X-Original-To / Reply-To).
 // Dans un fil, la créatrice ne voit que les messages qui la concernent (concernedMessages).
 // ============================================================================
 
@@ -21,6 +22,23 @@ export function normEmail(s: string | null | undefined): string {
   return /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/.test(t) ? t : "";
 }
 
+/** Adresses d'une créatrice : une seule (texte) ou une liste. */
+export type Addresses = string | readonly (string | null | undefined)[];
+
+/**
+ * Liste normalisée des adresses d'une créatrice : l'alias principal (s'il est valide)
+ * puis les adresses en plus, en minuscules, sans doublon ni adresse invalide.
+ */
+export function addressList(alias: Addresses | null | undefined, extra?: readonly (string | null | undefined)[] | null): string[] {
+  const all = [...(typeof alias === "string" || alias == null ? [alias] : alias), ...(extra ?? [])];
+  const out: string[] = [];
+  for (const a of all) {
+    const n = normEmail(a);
+    if (n && !out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
 /** Toutes les adresses présentes dans un en-tête (« Nom <a@b.c>, d@e.f »). */
 export function addressesIn(value: string): string[] {
   const out: string[] = [];
@@ -34,33 +52,33 @@ export function isVisibleMessage(m: GMessageLite): boolean {
   return !(m.labelIds ?? []).some((l) => HIDDEN_LABELS.includes(l));
 }
 
-/** Le message concerne-t-il cette créatrice (alias dans un en-tête OU libellé) ? */
-export function messageMatches(m: GMessageLite, alias: string, labelId: string | null | undefined): boolean {
+/** Le message concerne-t-il cette créatrice (une de ses adresses dans un en-tête OU libellé) ? */
+export function messageMatches(m: GMessageLite, alias: Addresses, labelId: string | null | undefined): boolean {
   if (!isVisibleMessage(m)) return false;
   if (labelId && (m.labelIds ?? []).includes(labelId)) return true;
-  const a = normEmail(alias);
-  if (!a) return false;
+  const mine = addressList(alias);
+  if (!mine.length) return false;
   for (const h of m.headers) {
     if (!ADDRESS_HEADERS.includes(h.name.toLowerCase())) continue;
-    if (addressesIn(h.value).includes(a)) return true;
+    if (addressesIn(h.value).some((a) => mine.includes(a))) return true;
   }
   return false;
 }
 
 /** Le fil appartient-il à la créatrice ? (au moins un message visible correspondant) */
-export function threadMatches(messages: GMessageLite[], alias: string, labelId: string | null | undefined): boolean {
+export function threadMatches(messages: GMessageLite[], alias: Addresses, labelId: string | null | undefined): boolean {
   return messages.some((m) => messageMatches(m, alias, labelId));
 }
 
 /**
  * Messages d'un fil que la créatrice a le droit de voir (dans l'ordre reçu) :
  *   • le fil porte son libellé (sur un message visible) → tous les messages visibles ;
- *   • sinon (accès par alias) → seulement les messages visibles où son alias apparaît
+ *   • sinon (accès par adresse) → seulement les messages visibles où une de ses adresses apparaît
  *     dans From / To / Cc / Bcc / Delivered-To / X-Original-To / Reply-To.
  * Un échange interne de l'agence dans le même fil, sans elle, reste donc caché.
  */
 export function concernedMessages<T>(
-  items: T[], toLite: (item: T) => GMessageLite, alias: string, labelId: string | null | undefined,
+  items: T[], toLite: (item: T) => GMessageLite, alias: Addresses, labelId: string | null | undefined,
 ): T[] {
   const visible = items.filter((m) => isVisibleMessage(toLite(m)));
   if (labelId && visible.some((m) => (toLite(m).labelIds ?? []).includes(labelId))) return visible;
@@ -120,15 +138,15 @@ export function splitAddressList(value: string): string[] {
 }
 
 /**
- * To / Cc montrés à une créatrice : toute adresse de l'agence autre que son alias
+ * To / Cc montrés à une créatrice : toute adresse de l'agence autre que les siennes
  * devient « TTP Creators » (une seule fois). Une adresse extérieure dont le nom
  * affiché cite une adresse de l'agence est réduite à l'adresse seule.
  */
-export function maskAgencyAddresses(value: string, alias: string, agencyDomain: string): string {
+export function maskAgencyAddresses(value: string, alias: Addresses, agencyDomain: string): string {
   if (!value.trim()) return value;
   const dom = "@" + agencyDomain.toLowerCase();
-  const own = normEmail(alias);
-  const isOther = (a: string) => a.endsWith(dom) && a !== own;
+  const own = addressList(alias);
+  const isOther = (a: string) => a.endsWith(dom) && !own.includes(a);
   const out: string[] = [];
   for (const entry of splitAddressList(value)) {
     const angle = /<([^<>]+)>\s*$/.exec(entry);
@@ -144,11 +162,11 @@ export function maskAgencyAddresses(value: string, alias: string, agencyDomain: 
   return out.join(", ");
 }
 
-/** Requête Gmail des fils où l'alias apparaît (envoyés ET reçus). */
-export function aliasQuery(alias: string): string {
-  const a = normEmail(alias);
-  if (!a) return "";
-  return `{to:${a} from:${a} cc:${a} deliveredto:${a}}`;
+/** Requête Gmail des fils où une des adresses apparaît (envoyés ET reçus). */
+export function aliasQuery(alias: Addresses): string {
+  const list = addressList(alias);
+  if (!list.length) return "";
+  return `{${list.map((a) => `to:${a} from:${a} cc:${a} deliveredto:${a}`).join(" ")}}`;
 }
 
 /** Valeur d'un en-tête (insensible à la casse). */

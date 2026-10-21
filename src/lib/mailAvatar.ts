@@ -336,7 +336,8 @@ function creatorPhotos(): Promise<Map<string, string>> {
     const m = new Map<string, string>();
     const [{ data: cs }, { data: st }] = await Promise.all([
       supabase.from("creators").select("name,email_pro,photo_url"),
-      supabase.from("creator_mail_settings").select("creator,alias"),
+      // « * » : avec ses adresses en plus (`aliases`) quand le SQL est lancé, sans sinon.
+      supabase.from("creator_mail_settings").select("*"),
     ]);
     const rows = (cs ?? []) as { name: string; email_pro: string | null; photo_url: string | null }[];
     const byName = new Map(rows.map((c) => [c.name.trim().toLowerCase(), c.photo_url]));
@@ -346,9 +347,11 @@ function creatorPhotos(): Promise<Map<string, string>> {
     for (const c of rows) if (c.email_pro) uses.set(emailOf(c.email_pro), (uses.get(emailOf(c.email_pro)) ?? 0) + 1);
     const own = (e: string) => !!e && !SHARED_BOXES.test(e) && (uses.get(e) ?? 0) <= 1;
     for (const c of rows) if (c.email_pro && c.photo_url && own(emailOf(c.email_pro))) m.set(emailOf(c.email_pro), c.photo_url);
-    for (const s of (st ?? []) as { creator: string; alias: string | null }[]) {
+    for (const s of (st ?? []) as { creator: string; alias: string | null; aliases?: string[] | null }[]) {
       const p = byName.get(s.creator.trim().toLowerCase());
-      if (s.alias && p && !SHARED_BOXES.test(emailOf(s.alias))) m.set(emailOf(s.alias), p);
+      for (const a of [s.alias, ...(Array.isArray(s.aliases) ? s.aliases : [])]) {
+        if (a && p && emailOf(a) && !SHARED_BOXES.test(emailOf(a))) m.set(emailOf(a), p);
+      }
     }
     // Rien de lisible (session pas encore prête) : on retentera plus tard.
     if (!m.size) window.setTimeout(() => { photosLoad = null; }, 30_000);
