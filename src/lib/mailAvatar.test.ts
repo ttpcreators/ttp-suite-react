@@ -103,3 +103,12 @@ describe("monogramme et site d'une marque", () => {
     expect(siteDomain("pas un site")).toBe("");
   });
 });
+
+describe("photo de profil Google", () => {
+  it("passe avant Gravatar et le logo de la marque, jamais pour l'agence", async () => {
+    const { avatarCandidates } = await import("./mailAvatar");
+    const c = avatarCandidates("anna@nike.com", { googlePhoto: "https://lh3.googleusercontent.com/a/x=s96", hash: "h" });
+    expect(c[0]).toEqual({ url: "https://lh3.googleusercontent.com/a/x=s96", kind: "photo", probe: true });
+    expect(avatarCandidates("marc@ttpcreators.pro", { googlePhoto: "https://x", agency: true }).some((x) => x.url === "https://x")).toBe(false);
+  });
+});

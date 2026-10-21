@@ -23,6 +23,8 @@ const SCOPES = [
   "https://www.googleapis.com/auth/gmail.send", // envoyer depuis ta vraie boîte (séquences/relances)
   "https://www.googleapis.com/auth/gmail.readonly", // lire les fils : historique + détection des réponses
   "https://www.googleapis.com/auth/gmail.modify", // mettre un mail à la corbeille depuis l'app (jamais de suppression définitive)
+  "https://www.googleapis.com/auth/contacts.other.readonly", // photos de profil des correspondants (fonction mail-photos)
+  "https://www.googleapis.com/auth/contacts.readonly", // idem, contacts enregistrés
 ].join(" ");
 
 function getAllowedOrigins(): string[] {

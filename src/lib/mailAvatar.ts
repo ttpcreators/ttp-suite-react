@@ -1,10 +1,12 @@
 import { supabase } from "@/lib/supabase";
+import { googlePhoto } from "./googlePhotos";
 
 /*
  * Photos de profil des mails, comme dans Gmail : on essaie dans l'ordre
  *   1. la photo de la créatrice si l'adresse est son alias (fiche Roster) ;
  *   2. le logo TTP pour les adresses de l'agence ;
- *   3. la photo Gravatar de la personne (si elle en a une) ;
+ *   3. la photo de profil Google (Autres contacts des boîtes, fonction mail-photos),
+ *      sinon la photo Gravatar de la personne (si elle en a une) ;
  *   4. le logo de la marque, trouvé grâce au nom de domaine (pas pour gmail.com, hotmail…),
  *      puis celui du domaine principal (« fr.loreal.com » → « loreal.com ») ;
  *   5. si un nom de marque est connu (Contacts, Prospection) : le site d'entreprise
@@ -58,10 +60,12 @@ export function parentDomain(domain: string): string {
  * `brandDomain` = site d'entreprise de la marque appris d'un autre contact.
  */
 export function avatarCandidates(
-  email: string, opts: { agency?: boolean; creatorPhoto?: string | null; hash?: string | null; brandDomain?: string | null } = {},
+  email: string, opts: { agency?: boolean; creatorPhoto?: string | null; hash?: string | null; brandDomain?: string | null; googlePhoto?: string | null } = {},
 ): { url: string; kind: AvatarKind; probe: boolean }[] {
   const out: { url: string; kind: AvatarKind; probe: boolean }[] = [];
   if (opts.creatorPhoto) out.push({ url: opts.creatorPhoto, kind: "photo", probe: false });
+  // Photo de profil Google (comme dans Gmail), avant le logo de la marque.
+  if (opts.googlePhoto && !opts.agency) out.push({ url: opts.googlePhoto, kind: "photo", probe: true });
   if (opts.agency || (email && isAgencyEmail(email))) {
     out.push({ url: AGENCY_LOGO, kind: "photo", probe: false });
     return out;
@@ -247,7 +251,8 @@ export function letterColor(key: string): string {
 }
 
 // ── Résolution (navigateur) ─────────────────────────────────────────────────
-const STORE = "ttp:mail-avatars:v1";
+// v2 : les « rien trouvé » d'avant les photos Google sont oubliés (nouvelle recherche).
+const STORE = "ttp:mail-avatars:v2";
 const DAY = 86_400_000;
 type Stored = Record<string, [string, AvatarKind | "", number]>; // adresse → [url | "", type, date]
 const memory = new Map<string, Avatar>();
@@ -376,6 +381,7 @@ export function resolveAvatar(email: string, agency = false, hint: { brand?: str
   const p = (async (): Promise<Avatar> => {
     const photos = email ? await creatorPhotos() : new Map<string, string>();
     const hash = email && !isAgencyEmail(email) && !agency ? await sha256(email) : null;
+    const gphoto = email && !isAgencyEmail(email) && !agency ? await googlePhoto(email) : null;
     const tried = new Set<string>();
     const keep = (a: Avatar, persist: boolean): Avatar => {
       // La photo d'une créatrice peut changer : pas gardée sur l'appareil.
@@ -391,7 +397,7 @@ export function resolveAvatar(email: string, agency = false, hint: { brand?: str
       // renvoie pour un site inconnu (impossible à distinguer d'une vraie petite icône).
       return w >= (c.kind === "logo" ? 48 : 1) ? keep({ url: c.url, kind: c.kind }, true) : null;
     };
-    const cands = avatarCandidates(email, { agency, creatorPhoto: photos.get(email) ?? null, hash, brandDomain: brand ? hint.brandDomain : null });
+    const cands = avatarCandidates(email, { agency, creatorPhoto: photos.get(email) ?? null, hash, brandDomain: brand ? hint.brandDomain : null, googlePhoto: gphoto });
     for (const c of cands) {
       const a = await attempt(c);
       if (a) return a;
