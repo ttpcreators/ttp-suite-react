@@ -17,6 +17,15 @@
 // après nouvelles tentatives est absent ET signalé (`partial: true`).
 // Les mails de désinscription générés par Gmail sont ignorés.
 //
+// Brouillons : { inbox: true, box?, folder: "drafts" } → { ok, folder: "drafts", threads: [...],
+// partial?, failedBoxes? } : les brouillons Gmail de chaque boîte (50 max, drafts.list puis
+// drafts.get format=full, 8 à la fois ; jeton de lecture). Chaque ligne a la forme d'un fil
+// + draftId, messageId, threadId (fil de la réponse, ou fil propre à un nouveau mail), to / cc /
+// bcc, reply (In-Reply-To présent), inReplyTo, references, byClaude (en-tête X-TTP-Source:
+// claude posé par ttp-mcp), html / text (60 000 car. max chacun, bodyCut si coupé),
+// attachments (noms). ts = internalDate. L'écho `folder: "drafts"` permet à l'app de
+// reconnaître une ancienne version (qui renverrait la boîte de réception).
+//
 // Coup d'œil : { peek: true, box? } → { ok, boxes: { partnerships?: { historyId, unread } … } }
 // (profil Gmail + compteur de fils non lus du label INBOX, 2 appels légers par boîte).
 // ============================================================================
@@ -24,12 +33,14 @@
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 import { boxToken, boxError, talentAddress, type Box } from "../_shared/gmailBox.ts";
 import { gfetch, gmailError, mapPool, GmailError, GfetchError } from "../_shared/gfetch.ts";
+import { draftRow, isDraftId, type DraftRow, type GmailDraft } from "../_shared/gmailDrafts.ts";
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const MAX = 50; // historique : 50 derniers messages par boîte
 const INBOX_MAX = 30;
 const POOL = 8; // lectures Gmail en parallèle
+const DRAFTS_MAX = 50; // brouillons par boîte
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
 
 async function isAgency(req: Request, sb: ReturnType<typeof getServiceClient>): Promise<boolean> {
@@ -111,6 +122,46 @@ Deno.serve(async (req: Request) => {
       return jsonRes({ error: f.error }, f.status);
     }
     return jsonRes({ ok: true, boxes: out, ...(failedBoxes.length ? { partial: true, failedBoxes } : {}) });
+  }
+
+  // ── Brouillons Gmail des boîtes (dont ceux préparés par Claude) ──
+  if (body.inbox && body.folder === "drafts") {
+    async function draftsOf(box: Box): Promise<{ rows: DraftRow[]; partial: boolean }> {
+      const token = await boxToken(sb, box, "read");
+      const lr = await gfetch(`${GMAIL}/drafts?maxResults=${DRAFTS_MAX}`, auth(token));
+      const list = await lr.json().catch(() => ({})) as { drafts?: { id: string }[] };
+      if (!lr.ok) throw gmailError(lr.status, list, "lecture_echouee");
+      const one = async (d: { id: string }): Promise<DraftRow | null | "fail"> => {
+        if (!isDraftId(d.id)) return null;
+        let r: Response;
+        try {
+          r = await gfetch(`${GMAIL}/drafts/${encodeURIComponent(d.id)}?format=full`, auth(token));
+        } catch {
+          return "fail";
+        }
+        if (r.status === 404) return null; // envoyé ou supprimé entre la liste et la lecture
+        const data = await r.json().catch(() => null) as GmailDraft | null;
+        if (!r.ok || !data) return "fail";
+        return draftRow(data, box);
+      };
+      const res = await mapPool(list.drafts ?? [], POOL, one);
+      return { rows: res.filter((x): x is DraftRow => x !== null && x !== "fail"), partial: res.includes("fail") };
+    }
+    const results = await Promise.allSettled(boxes.map(draftsOf));
+    const okBoxes = results.filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof draftsOf>>> => r.status === "fulfilled");
+    if (!okBoxes.length) {
+      const f = failure((results[0] as PromiseRejectedResult).reason);
+      return jsonRes({ error: f.error }, f.status);
+    }
+    const failedBoxes = boxes.filter((_, i) => results[i].status === "rejected");
+    const threads = okBoxes.flatMap((r) => r.value.rows).sort((a, b) => b.ts - a.ts);
+    const partial = failedBoxes.length > 0 || okBoxes.some((r) => r.value.partial);
+    // `folder: "drafts"` en écho : une ancienne version renverrait la boîte de réception sans lui.
+    return jsonRes({
+      ok: true, folder: "drafts", threads,
+      ...(partial ? { partial: true } : {}),
+      ...(failedBoxes.length ? { failedBoxes } : {}),
+    });
   }
 
   // ── Boîte de réception : dernières conversations de la (des) boîte(s) ──
