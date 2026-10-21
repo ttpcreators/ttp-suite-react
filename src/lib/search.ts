@@ -19,3 +19,12 @@ export function matchQuery(
   if (!s) return true;
   return fields.some((f) => String(f ?? "").toLowerCase().includes(s));
 }
+
+/** Recherche d'une page : sans accents ni « @ », chaque mot doit se trouver dans l'un des champs. */
+const fold = (v: unknown) => String(v ?? "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+export function matchWords(q: string, ...fields: unknown[]): boolean {
+  const words = fold(q).split(/\s+/).map((w) => w.replace(/^@+/, "")).filter(Boolean);
+  if (!words.length) return true;
+  const hay = fields.map(fold).join(" ");
+  return words.every((w) => hay.includes(w));
+}

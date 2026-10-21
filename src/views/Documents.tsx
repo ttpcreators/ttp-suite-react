@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
-import { useSearch, matchQuery } from "@/lib/search";
+import { useSearch, matchQuery, matchWords } from "@/lib/search";
+import { PillSearch } from "@/components/ui/pill-search";
 import { useLiveKey } from "@/lib/useLive";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { AddButton, InlineForm, SelectField } from "@/components/ui/form";
@@ -114,6 +115,7 @@ export function Documents() {
   const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("documents"));
   const [error, setError] = useState(false);
   const { query } = useSearch();
+  const [pageQ, setPageQ] = useState("");
   const live = useLiveKey();
   const creators = useCreators();
 
@@ -334,7 +336,7 @@ export function Documents() {
   };
   const periods = periodsFrom((rows ?? []).map(localDay));
   const filtered = (rows ?? [])
-    .filter((row) => matchQuery(query, row.name, row.type, row.creator) && inPeriod(localDay(row), period) && (!creatorFilter || (row.creator ?? "") === creatorFilter))
+    .filter((row) => matchQuery(query, row.name, row.type, row.creator) && matchWords(pageQ, row.name, row.type, row.creator) && inPeriod(localDay(row), period) && (!creatorFilter || (row.creator ?? "") === creatorFilter))
     .sort((a, b) => {
       if (sort === "ancien") return timeOf(a) - timeOf(b);
       if (sort === "nom") return (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" });
@@ -416,7 +418,10 @@ export function Documents() {
 
       {rows !== null && rows.length > 1 && (
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
-          <FilterBar value={sort} options={SORT_OPTIONS} onChange={setSort} placeholder="Trier" />
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <PillSearch size="md" value={pageQ} onChange={setPageQ} placeholder="Rechercher un document…" />
+            <FilterBar value={sort} options={SORT_OPTIONS} onChange={setSort} placeholder="Trier" />
+          </div>
           {/* Mobile : les deux filtres côte à côte, même largeur ; ≥ sm : à droite. */}
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
             {docCreators.length > 0 && (

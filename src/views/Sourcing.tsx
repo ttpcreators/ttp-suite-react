@@ -1,4 +1,6 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { matchWords } from "@/lib/search";
+import { PillSearch } from "@/components/ui/pill-search";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useReducedMotion } from "motion/react";
 import { Spin } from "@/components/ui/loader";
@@ -702,6 +704,7 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
     toast(ok ? "Remis dans « À trier »" : "Erreur, réessaie");
   };
 
+  const [pageQ, setPageQ] = useState("");
   const scored = useMemo(() => (last?.results ?? []).map((c) => ({ c, p: c.data ? scoreOf(c.data) : { score: 0, flags: [] as string[] } })), [last]);
   const shown = useMemo(() => {
     const lo = parseCount(minF);
@@ -710,6 +713,7 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
     const word = norm(bioWord.trim());
     const list = scored.filter(({ c }) => {
       const d = c.data;
+      if (!matchWords(pageQ, c.username, d?.name, d?.handle, d?.bio, d?.email, c.via?.join(" "))) return false;
       if (!d || c.why || d.isBrand) return showOthers;
       const f = d.followers ?? 0;
       if (lo && f < lo) return false;
@@ -725,7 +729,7 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
     const key = ({ c, p }: (typeof scored)[number]) =>
       sort === "er" ? c.data?.er ?? -1 : sort === "count" ? c.count ?? 0 : sort === "followers" ? c.data?.followers ?? -1 : p.score;
     return list.sort((a, b) => key(b) - key(a));
-  }, [scored, minF, maxF, minEr, bioWord, emailF, agencyF, showOthers, sort]);
+  }, [scored, minF, maxF, minEr, bioWord, emailF, agencyF, showOthers, sort, pageQ]);
   const hidden = (last?.results.length ?? 0) - shown.length;
   const bySection = { trier: 0, scouting: 0, contacter: 0, pas: 0, roster: 0 } as Record<Section, number>;
   for (const x of shown) bySection[sectionOf(x.c)]++;
@@ -1107,6 +1111,7 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
           <>
             {/* Filtres en pastilles */}
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <PillSearch value={pageQ} onChange={setPageQ} placeholder="Rechercher dans les résultats…" />
               <FilterChip label={followersLabel} active={!!(minF.trim() || maxF.trim())} onClear={() => { setMinF(""); setMaxF(""); }}>
                 <div className="flex flex-col gap-2">
                   <div className="text-[12px] font-semibold text-foreground">Abonnés</div>

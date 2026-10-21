@@ -5,7 +5,8 @@ import { cn, titleCase } from "@/lib/utils";
 import { parseAmount, formatEuro } from "@/lib/money";
 import { useAppState, type AppState } from "@/lib/appState";
 import { fmtCompact } from "@/lib/timeSeries";
-import { useSearch, matchQuery } from "@/lib/search";
+import { useSearch, matchQuery, matchWords } from "@/lib/search";
+import { PillSearch } from "@/components/ui/pill-search";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
@@ -91,6 +92,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
   const [rows, setRows] = useState<Creator[] | null>(() => getCache<Creator[]>("roster"));
   const [error, setError] = useState(false);
   const { query } = useSearch();
+  const [pageQ, setPageQ] = useState("");
   const live = useLiveKey();
   const { NOW_MONTH, MONTH_LABEL, MONTH_PREP } = currentMonthInfo();
 
@@ -247,7 +249,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
   };
 
   const filtered = rows.filter((c) =>
-    matchQuery(query, c.name, c.handle, c.niche, c.platform),
+    matchQuery(query, c.name, c.handle, c.niche, c.platform) && matchWords(pageQ, c.name, c.handle, c.niche, c.platform, c.status),
   );
 
   // Créateurs actifs pas encore à jour pour le mois courant (pour la bannière).
@@ -332,10 +334,21 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
         <TextField label="Niche" value={niche} onChange={setNiche} />
       </InlineForm>
 
-      {query.trim() && filtered.length === 0 ? (
+      {rows.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <PillSearch value={pageQ} onChange={setPageQ} placeholder="Rechercher un créateur, un @…" />
+          {pageQ.trim() && (
+            <span className="ml-auto whitespace-nowrap text-[13px] tabular-nums text-muted-foreground">
+              {filtered.length} créateur{filtered.length > 1 ? "s" : ""}<span className="text-faint"> / {rows.length}</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {(query.trim() || pageQ.trim()) && filtered.length === 0 ? (
         <div className="rounded-xl border border-border bg-card shadow-sm">
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            Aucun résultat pour « {query} »
+            Aucun résultat pour « {pageQ.trim() || query} »
           </div>
         </div>
       ) : (

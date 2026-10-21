@@ -13,7 +13,8 @@ import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { MailAvatar } from "@/components/mail-avatar";
 import { brandDomainFrom } from "@/lib/mailAvatar";
-import { useSearch, matchQuery } from "@/lib/search";
+import { useSearch, matchQuery, matchWords } from "@/lib/search";
+import { PillSearch } from "@/components/ui/pill-search";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
@@ -339,6 +340,7 @@ export function Contacts() {
   const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("contacts"));
   const [error, setError] = useState(false);
   const { query } = useSearch();
+  const [pageQ, setPageQ] = useState("");
   const live = useLiveKey();
 
   // Réglages prospection (Paramètres → Prospection) : rythme + mode WhatsApp.
@@ -489,7 +491,8 @@ export function Contacts() {
     }
     // Filtre par ville.
     if (cityFilter && (row.city ?? "").trim().toLowerCase() !== cityFilter.toLowerCase()) return false;
-    return matchQuery(query, row.brand, row.person, row.role, row.email, row.tag);
+    return matchQuery(query, row.brand, row.person, row.role, row.email, row.tag)
+      && matchWords(pageQ, row.brand, row.person, row.first_name, row.last_name, row.role, row.email, row.tag, row.city, row.instagram, row.phone, row.creator);
   });
 
   // Fiche affichée : grand écran = le contact choisi (sinon le 1er de la liste) ;
@@ -1497,6 +1500,7 @@ export function Contacts() {
           )}
 
           {/* Mode iPhone : les trois filtres dans une feuille « Filtres » */}
+          {iosPhone && <PillSearch className="mb-2.5 sm:max-w-none" value={pageQ} onChange={setPageQ} placeholder="Rechercher un contact, un mail…" />}
           {iosPhone ? (
             <FilterPanel
               className="mb-4"
@@ -1542,6 +1546,7 @@ export function Contacts() {
           ) : (
             /* Catégorie (segments) + suivi de contact + ville */
             <div className="mb-4 flex flex-wrap items-center gap-2">
+              <PillSearch value={pageQ} onChange={setPageQ} placeholder="Rechercher un contact, un mail…" />
               <Tabs
                 className="min-w-0 max-w-full"
                 label="Filtrer par catégorie"
