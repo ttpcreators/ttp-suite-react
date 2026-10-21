@@ -2490,6 +2490,7 @@ export function Mails() {
               creator={creatorView.name}
               suggestedAlias={emailPro?.get(creatorView.name.trim().toLowerCase()) ?? null}
               initialThreadId={creatorView.threadId}
+              initialFilter={!creatorView.threadId && mailCount(creatorView.name) > 0 ? "atraiter" : undefined}
               onSaved={() => setLinkedTick((n) => n + 1)}
               className="mt-0"
             />

@@ -6,7 +6,8 @@ import { useLiveKey } from "./useLive";
 /*
  * Pastilles de la page Mails (agence) : pour chaque créateur relié, le nombre
  * d'échanges À TRAITER = nouvelles demandes récentes (l'agence n'a pas encore
- * répondu, aucun statut choisi, dernier message de moins de 30 jours) + échanges
+ * répondu, aucun statut choisi, dernier message de moins de 30 jours), échanges « À
+ * vérifier » ou « À valider » + échanges
  * où le créateur a laissé un message que l'agence n'a pas encore lu. Un échange
  * qui coche les deux cases compte une fois.
  *
@@ -32,6 +33,17 @@ const emit = () => subs.forEach((f) => f());
 
 const isTodoNew = (t: Pick<MailThreadLite, "status" | "ts">) =>
   t.status === "nouvelle" && (!t.ts || Date.now() - t.ts < STALE_NEW);
+/**
+ * « À traiter » côté agence : UNE seule définition, pour la pastille du créateur ET
+ * l'onglet « À traiter » de sa boîte (avant : la pastille comptait les nouvelles
+ * demandes, l'onglet ne montrait que « À vérifier / valider » → 11 annoncés, 0 visibles).
+ */
+export const isMailTodo = (t: Pick<MailThreadLite, "status" | "ts">) =>
+  isTodoNew(t) || t.status === "a_verifier" || t.status === "a_valider";
+/** Échanges où le créateur a laissé un message pas encore lu par l'agence. */
+export function creatorUnreadNoteIds(name: string): Set<string> {
+  return unreadNotes.get(key(name)) ?? new Set();
+}
 
 /** Nombre d'échanges à traiter pour ce créateur (0 si rien ou pas encore chargé). */
 export function mailTodoCount(name: string): number {
@@ -48,7 +60,7 @@ export function mailTodoCount(name: string): number {
  */
 export function reportCreatorThreads(creator: string, threads: MailThreadLite[], partial = false) {
   const k = key(creator);
-  const next = new Set(threads.filter(isTodoNew).map((t) => t.id));
+  const next = new Set(threads.filter(isMailTodo).map((t) => t.id));
   if (partial) {
     const listed = new Set(threads.map((t) => t.id));
     nouvelles.get(k)?.forEach((id) => {

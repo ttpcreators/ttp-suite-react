@@ -11,7 +11,7 @@ import { DashPanel, DashSectionTitle } from "@/components/ui/dash";
 import { notifyAgency, notifyCreator } from "@/lib/push";
 import { myDisplayName } from "@/lib/team";
 import { useLive } from "@/lib/useLive";
-import { markCreatorNotesRead, reportCreatorThreads } from "@/lib/creatorMailCounts";
+import { creatorUnreadNoteIds, isMailTodo, markCreatorNotesRead, reportCreatorThreads, useCreatorMailCounts } from "@/lib/creatorMailCounts";
 import { SHARED_BOXES, emailOf } from "@/lib/mailAvatar";
 import {
   SHARED_BOX_MESSAGE, aliasesColumnMissing, allAddresses, checkNewAddress, extraAddresses, joinWith,
@@ -362,7 +362,8 @@ function StatePanel({ icon: Icon, text, action }: { icon: LucideIcon; text: stri
   );
 }
 
-export function CreatorMailbox({ creator, mode, creatorSees = true, initialThreadId, alias, aliases }: {
+export function CreatorMailbox({ creator, mode, creatorSees = true, initialThreadId, initialFilter, alias, aliases }: {
+  initialFilter?: "atraiter";
   creator: string; mode: Mode;
   /** Le créateur a-t-il accès à sa section Mails ? (sinon pas de notification pour lui) */
   creatorSees?: boolean;
@@ -388,6 +389,10 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const [listAliases, setListAliases] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useStickyState<(typeof FILTERS)[number]["key"]>("mails-createur:filtre", FILTERS.map((f) => f.key), "tous");
+  // Arrivée par une pastille « N à traiter » : on montre directement ces échanges.
+  useEffect(() => {
+    if (initialFilter) setFilter(initialFilter);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [openId, setOpenId] = useState<string | null>(null);
   const [thread, setThread] = useState<MailThread | null>(null);
   const [threadErr, setThreadErr] = useState<string | null>(null);
@@ -794,15 +799,23 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     }
   };
 
+  // Agence : « À traiter » = la même définition que la pastille du créateur (page Mails).
+  useCreatorMailCounts([], { active: false }); // suit les messages du créateur lus / non lus
+  const noteIds = asAgency ? creatorUnreadNoteIds(creator) : null;
+  const matchOf = useCallback(
+    (f: (typeof FILTERS)[number]) => (asAgency && f.key === "atraiter" ? (t: MailThreadLite) => isMailTodo(t) || !!noteIds?.has(t.id) : f.match),
+    [asAgency, noteIds],
+  );
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    for (const f of FILTERS) c[f.key] = (threads ?? []).filter((t) => f.match(t)).length;
+    for (const f of FILTERS) c[f.key] = (threads ?? []).filter(matchOf(f)).length;
     return c;
-  }, [threads]);
+  }, [threads, matchOf]);
   const cur = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
   const q = query.trim().toLowerCase();
   const pitch = useMemo(() => prospectStats(threads ?? []), [threads]);
-  const shown = (threads ?? []).filter((t) => cur.match(t) && (!unreadOnly || unseen.has(t.id) || unreadOnly.has(t.id)) && (!q || `${t.brand} ${t.subject} ${t.excerpt}`.toLowerCase().includes(q)));
+  const curMatch = matchOf(cur);
+  const shown = (threads ?? []).filter((t) => curMatch(t) && (!unreadOnly || unseen.has(t.id) || unreadOnly.has(t.id)) && (!q || `${t.brand} ${t.subject} ${t.excerpt}`.toLowerCase().includes(q)));
 
   // Suivi de l'échange ouvert. Une ancienne décision (avant l'historique) n'est ajoutée
   // qu'une fois l'historique chargé, pour éviter un clignotement. Repli : les remarques
@@ -1314,8 +1327,10 @@ function useMailSettings(creator: string) {
  * Fiche créatrice et page Mails (agence) : lien alias / libellé + activation, puis la
  * boîte (statuts, remarques).
  */
-export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, onSaved, className }: {
+export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, initialFilter, onSaved, className }: {
   creator: string; suggestedAlias?: string | null;
+  /** Onglet ouvert d'office (« atraiter » quand on vient d'une pastille « N à traiter »). */
+  initialFilter?: "atraiter";
   /** Échange à ouvrir directement (lien depuis la page Mails). */
   initialThreadId?: string;
   /** Appelé après un changement de réglage (la page Mails relit la liste des créatrices liées). */
@@ -1553,7 +1568,7 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
       </DashPanel>
 
       {linked && !editing && (
-        <CreatorMailbox creator={creator} mode="agency" creatorSees={!!settings?.enabled} initialThreadId={initialThreadId}
+        <CreatorMailbox creator={creator} mode="agency" creatorSees={!!settings?.enabled} initialThreadId={initialThreadId} initialFilter={initialFilter}
           alias={settings?.alias} aliases={settings?.aliases} />
       )}
     </div>
