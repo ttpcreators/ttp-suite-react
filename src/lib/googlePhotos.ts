@@ -4,10 +4,11 @@ import { supabase } from "./supabase";
  * Photo de profil Google d'un correspondant (fonction mail-photos : « Autres contacts »
  * des boîtes partnerships@ et talent@). Les adresses demandées au même moment partent
  * ensemble (une requête par paquet de 100) ; réponses gardées 3 jours sur l'appareil
- * (« rien » : 1 jour). Hors agence, fonction absente ou droit Google manquant → null,
+ * (« rien » : 1 jour, et seulement si les deux boîtes ont répondu : tant qu'un droit
+ * Google manque, un « rien » n'est pas retenu). Hors agence, fonction absente ou droit Google manquant → null,
  * sans erreur : l'avatar passe à la source suivante (Gravatar, logo, initiale).
  */
-const STORE = "ttp:google-photos:v1";
+const STORE = "ttp:google-photos:v2"; // v2 : oublie les « rien » gardés avant les droits Google
 const DAY = 86_400_000;
 type Stored = Record<string, [string, number]>;
 const memory = new Map<string, string | null>();
@@ -43,11 +44,16 @@ async function flush() {
   for (let i = 0; i < emails.length; i += 100) {
     const part = emails.slice(i, i + 100);
     let photos: Record<string, string> = {};
+    let complete = false; // les deux boîtes ont été lues (sinon un « rien » n'est pas fiable)
     if (!disabled) {
       try {
         const { data, error } = await supabase.functions.invoke("mail-photos", { body: { emails: part } });
         if (error) disabled = true;
-        else photos = ((data ?? {}) as { photos?: Record<string, string> }).photos ?? {};
+        else {
+          const res = (data ?? {}) as { photos?: Record<string, string>; boxes?: Record<string, string> };
+          photos = res.photos ?? {};
+          complete = Object.values(res.boxes ?? {}).every((st) => st === "ok" || st === "non_configure");
+        }
       } catch {
         disabled = true;
       }
@@ -59,7 +65,7 @@ async function flush() {
       memory.set(e, url);
       for (const fn of batch.get(e) ?? []) fn(url);
     }
-    if (!disabled) save(results);
+    if (!disabled) save(complete ? results : Object.fromEntries(Object.entries(results).filter(([, url]) => url)));
   }
 }
 
