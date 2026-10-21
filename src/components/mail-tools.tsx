@@ -33,16 +33,6 @@ import { composerPrefill, deleteGmailDraft, gmailDraftLocalKey, type GmailDraftR
 
 const field = "h-9 w-full rounded-lg border border-border bg-surface px-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary";
 
-/** Case « Ajouter ma signature » (désactivée si aucune signature enregistrée). */
-function SignatureToggle({ on, onChange, has }: { on: boolean; onChange: (v: boolean) => void; has: boolean }) {
-  return (
-    <label className={cn("flex cursor-pointer select-none items-center gap-1.5 text-[12px] text-muted-foreground", !has && "opacity-50")}>
-      <input type="checkbox" checked={on && has} disabled={!has} onChange={(e) => onChange(e.target.checked)} className="h-3.5 w-3.5 accent-[var(--color-primary)]" />
-      Signature
-    </label>
-  );
-}
-
 // ── Réglages ────────────────────────────────────────────────────────────────
 export function MailSettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const cur = useMailSettings();
@@ -262,7 +252,8 @@ export function ReplyBox({
   const [bcc, setBcc] = useState(initial?.bcc ?? "");
   const [replyAll, setReplyAll] = useState(!!initial?.replyAll && replyAllCc.length > 0);
   const att = useAttachments();
-  const [sig, setSig] = useState(settings.signatureOn);
+  // Signature : celle des Réglages Mails, ajoutée d'office (plus de case à cocher).
+  const sig = settings.signatureOn;
   const ref = useRef<HTMLTextAreaElement>(null);
   const textRef = useRef(text);
   textRef.current = text;
@@ -296,7 +287,6 @@ export function ReplyBox({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => setSig(settings.signatureOn), [settings.signatureOn]);
 
   // Lien vers le brouillon Gmail repris (supprimé de Gmail après l'envoi) + objet et destinataire.
   const metaRef = useRef(draftMeta);
@@ -447,7 +437,6 @@ export function ReplyBox({
         {claude && aiOpen && !ai.waiting && <ClaudeConsigne withThread={!!claude.messages?.length} onStart={(c, a) => void ai.start(c, a)} onCopy={(c, a) => void ai.copy(c, a)} onClose={() => setAiOpen(false)} />}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-3.5 py-2 text-[12px] text-muted-foreground">
           <AttachButton onFiles={(f) => void att.add(f)} total={att.total} />
-          <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
           <BoxChip box={box} prefix="Depuis" />
           {claude && <ClaudeReplyButton open={aiOpen} onToggle={() => setAiOpen((v) => !v)} waiting={ai.waiting} onCancel={ai.cancelWait} />}
           <ModelPicker vars={modelVars} onPick={(text) => {
@@ -512,7 +501,6 @@ export function ReplyBox({
           Cci
         </button>
         <AttachButton onFiles={(f) => void att.add(f)} total={att.total} />
-        <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
         <BoxChip box={box} prefix="Depuis" />
         <ModelPicker vars={modelVars} onPick={(text) => {
           setText((cur) => insertModel(cur, text));
@@ -566,7 +554,7 @@ function ForwardPanel({
   const att = useAttachments();
   const [note, setNote] = useState(d?.note ?? "");
   const [box, setBox] = useState<MailBox>(d?.box ?? defaultBox);
-  const [sig, setSig] = useState(d?.sig ?? settings.signatureOn);
+  const sig = settings.signatureOn; // celle des Réglages Mails, d'office
   const [ask, setAsk] = useState(false);
   useEffect(() => {
     const files = getDraftFiles(key);
@@ -677,7 +665,6 @@ function ForwardPanel({
           <div className="flex flex-wrap items-center gap-3 border-t border-border px-5 py-3">
             <BoxPicker value={box} onChange={setBox} />
             <AttachButton onFiles={(f) => void att.add(f)} total={att.total} className="text-[12px] text-muted-foreground" />
-            <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
             <button type="button" onClick={send}
               className="ml-auto flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40">
               <Send className="h-4 w-4" /> Transférer
@@ -742,7 +729,7 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
   const [subject, setSubject] = useState(d?.subject ?? "");
   const [body, setBody] = useState(d?.body ?? "");
   const [box, setBox] = useState<MailBox>(d?.box ?? defaultBox);
-  const [sig, setSig] = useState(d?.sig ?? settings.signatureOn);
+  const sig = settings.signatureOn; // celle des Réglages Mails, d'office
   const [ask, setAsk] = useState(false);
   const att = useAttachments();
   useEffect(() => {
@@ -927,7 +914,6 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
                   <Send className="h-4 w-4" /> Envoyer
                 </button>
                 <AttachButton onFiles={(f) => void att.add(f)} total={att.total} />
-                <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
                 <ModelPicker vars={{ marque: brandFromEmail(to.split(/[,;\s]+/)[0]) }} onPick={(text) => setBody((cur) => insertModel(cur, text))} />
                 <span className="ml-auto text-faint">{settings.delaySec ? `Annulable ${settings.delaySec} s · ` : ""}⌘↵</span>
               </div>
@@ -979,7 +965,6 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
         ) : (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-5 py-3 text-[12px] text-muted-foreground">
             <AttachButton onFiles={(f) => void att.add(f)} total={att.total} label="Joindre un fichier" />
-            <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
             <ModelPicker vars={{ marque: brandFromEmail(to.split(/[,;\s]+/)[0]) }} onPick={(text) => setBody((cur) => insertModel(cur, text))} />
             <span className="text-faint max-sm:hidden">{settings.delaySec ? `Annulable ${settings.delaySec} s · ` : ""}⌘↵</span>
             <button type="button" onClick={send}

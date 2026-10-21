@@ -116,3 +116,12 @@ export function insertModel(current: string, model: string): string {
   const cur = current.replace(/\s+$/, "");
   return cur ? `${cur}\n\n${model}` : model;
 }
+
+/** Clé stable d'un modèle (favoris) : son id, sinon « défaut : titre » pour les modèles fournis. */
+export const modelKey = (t: Template) => t.id ?? `def:${t.title}`;
+
+/** Favoris d'abord (dans l'ordre de la liste), pour la section « Favoris » du sélecteur. */
+export function favoriteModels(list: readonly Template[], favs: Readonly<Record<string, unknown>> | null | undefined): Template[] {
+  if (!favs) return [];
+  return list.filter((t) => !!favs[modelKey(t)]);
+}

@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { FileText, Search } from "@/components/icons";
+import { FileText, Search, Star } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useAppState, type AppState } from "@/lib/appState";
-import { DEFAULT_TEMPLATES, fillModel, groupModels, type ModelVars, type Template } from "@/lib/mailModels";
+import { mergeAppStateKey, useAppState, type AppState } from "@/lib/appState";
+import { toast } from "@/components/ui/toast";
+import { DEFAULT_TEMPLATES, favoriteModels, fillModel, groupModels, modelKey, type ModelVars, type Template } from "@/lib/mailModels";
 import { cn } from "@/lib/utils";
 
 /**
@@ -16,12 +17,29 @@ export function ModelPicker({ vars, onPick, className }: { vars?: ModelVars; onP
   const [q, setQ] = useState("");
   const [hover, setHover] = useState<Template | null>(null);
   const { data: custom } = useAppState<Template[]>((s: AppState) => (s["customTemplates"] as Template[]) ?? []);
+  // Favoris de l'équipe (étoile) : section en tête de liste. Clé du blob : mailModelFavorites.
+  const { data: favData } = useAppState<Record<string, unknown>>((s: AppState) => (s["mailModelFavorites"] as Record<string, unknown>) ?? {});
+  const [favLocal, setFavLocal] = useState<Record<string, unknown> | null>(null);
+  const favs = favLocal ?? favData ?? {};
+  const toggleFav = async (t: Template) => {
+    const k = modelKey(t);
+    const on = !favs[k];
+    const next = { ...favs };
+    if (on) next[k] = true;
+    else delete next[k];
+    setFavLocal(next);
+    if (!(await mergeAppStateKey("mailModelFavorites", on ? { [k]: true } : {}, on ? [] : [k]))) {
+      setFavLocal(favs);
+      toast("Favori non enregistré, réessaie");
+    }
+  };
   const groups = useMemo(() => {
     const all = [...DEFAULT_TEMPLATES, ...(custom ?? [])];
     const n = q.trim().toLowerCase();
     const list = n ? all.filter((t) => `${t.title} ${t.body} ${t.category}`.toLowerCase().includes(n)) : all;
-    return groupModels(list);
-  }, [custom, q]);
+    const fav = favoriteModels(list, favs);
+    return [...(fav.length ? [{ category: "Favoris", items: fav }] : []), ...groupModels(list)];
+  }, [custom, q, favs]);
   const pick = (t: Template) => {
     onPick(fillModel(t.body, vars ?? {}), t);
     setOpen(false);
@@ -45,19 +63,35 @@ export function ModelPicker({ vars, onPick, className }: { vars?: ModelVars; onP
               {groups.length === 0 && <p className="px-2 py-4 text-center text-[12.5px] text-muted-foreground">Aucun modèle.</p>}
               {groups.map((g) => (
                 <div key={g.category} className="mb-1.5">
-                  <div className="px-2 pb-1 pt-1.5 text-[11px] font-semibold text-muted-foreground">{g.category}</div>
-                  {g.items.map((t, i) => (
-                    <button
-                      key={(t.id ?? t.title) + i}
-                      type="button"
-                      onMouseEnter={() => setHover(t)}
-                      onFocus={() => setHover(t)}
-                      onClick={() => pick(t)}
-                      className={cn("block w-full truncate rounded-lg px-2 py-1.5 text-left text-[13px] text-foreground transition-colors hover:bg-rowhover", hover === t && "bg-rowhover")}
-                    >
-                      {t.title}
-                    </button>
-                  ))}
+                  <div className="flex items-center gap-1 px-2 pb-1 pt-1.5 text-[11px] font-semibold text-muted-foreground">
+                    {g.category === "Favoris" && <Star className="h-3 w-3 fill-current text-primary" />}
+                    {g.category}
+                  </div>
+                  {g.items.map((t, i) => {
+                    const fav = !!favs[modelKey(t)];
+                    return (
+                      <div key={(t.id ?? t.title) + i} className={cn("group/m flex items-center rounded-lg transition-colors hover:bg-rowhover", hover === t && "bg-rowhover")}>
+                        <button
+                          type="button"
+                          onMouseEnter={() => setHover(t)}
+                          onFocus={() => setHover(t)}
+                          onClick={() => pick(t)}
+                          className="min-w-0 flex-1 truncate px-2 py-1.5 text-left text-[13px] text-foreground"
+                        >
+                          {t.title}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void toggleFav(t)}
+                          aria-label={fav ? "Retirer des favoris" : "Ajouter aux favoris"}
+                          title={fav ? "Retirer des favoris" : "Ajouter aux favoris"}
+                          className={cn("mr-1 grid h-7 w-7 shrink-0 place-items-center rounded-md transition-opacity", fav ? "text-primary" : "text-faint opacity-0 hover:text-foreground group-hover/m:opacity-100 focus-visible:opacity-100 max-sm:opacity-100")}
+                        >
+                          <Star className={cn("h-3.5 w-3.5", fav && "fill-current")} />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
             </div>

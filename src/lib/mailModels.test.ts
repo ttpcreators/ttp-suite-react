@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { brandFromEmail, DEFAULT_TEMPLATES, fillModel, groupModels, insertModel } from "./mailModels";
+import { brandFromEmail, DEFAULT_TEMPLATES, favoriteModels, fillModel, groupModels, insertModel, modelKey } from "./mailModels";
 
 describe("modèles de mails", () => {
   it("remplace les variables connues, garde les autres", () => {
@@ -19,5 +19,12 @@ describe("modèles de mails", () => {
   it("ajoute à la suite ou pose", () => {
     expect(insertModel("", "A")).toBe("A");
     expect(insertModel("Bonjour  \n", "A")).toBe("Bonjour\n\nA");
+  });
+  it("favoris : clé stable et filtre", () => {
+    const perso = { id: "tpl1", category: "Suivi", title: "Merci", body: "x" };
+    expect(modelKey(perso)).toBe("tpl1");
+    expect(modelKey(DEFAULT_TEMPLATES[0])).toBe(`def:${DEFAULT_TEMPLATES[0].title}`);
+    expect(favoriteModels([...DEFAULT_TEMPLATES, perso], { tpl1: true })).toEqual([perso]);
+    expect(favoriteModels(DEFAULT_TEMPLATES, null)).toEqual([]);
   });
 });
