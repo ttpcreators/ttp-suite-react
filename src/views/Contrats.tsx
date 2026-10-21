@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Copy, Check, Plus, Trash2, FileText, FileDown, Eye, X, Maximize2, ArrowLeft } from "@/components/icons";
+import { Copy, Check, Plus, Trash2, FileText, FileDown, Eye, X, Maximize2 } from "@/components/icons";
 import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { printHtml } from "@/lib/printPdf";
@@ -8,8 +8,8 @@ import { TextField } from "@/components/ui/form";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/action-menu";
-import { Tabs } from "@/components/ui/animated-tabs";
-import { PageHeaderRow } from "@/components/ui/page-header";
+import { FolderTabs } from "@/components/ui/folder-tabs";
+import { contratsSubFromTab, contratsTabFromSub, type ContratsTab } from "@/lib/folderTabs";
 import { CasesBar, ContractDocument, FoldSection, HistoryPanel, PanelSection, SettingsPanel, SwitchRow, docIconBtn, docPrimaryBtn } from "@/components/contracts/contract-ui";
 import { RepresentationContract, type ContractHist } from "@/views/RepresentationContract";
 import { ContractsHome } from "@/components/contracts/contracts-home";
@@ -350,6 +350,8 @@ type EditRequest =
  * « Nouveau contrat », « Modifier » ou la sidebar (sous-pages Marque × Créateur /
  * Représentation / UGC), les générateurs. Le générateur reste monté (masqué) pendant
  * qu'on regarde la liste : une saisie en cours n'est jamais perdue.
+ * Onglets « dossier » (comme Agents) : « Tous » = page d'arrivée (sous-page nulle), puis
+ * un onglet par générateur, synchronisés avec les sous-pages de la sidebar.
  */
 export function Contrats() {
   const navSub = useNavSub();
@@ -377,11 +379,28 @@ export function Contrats() {
     setNavSub(row.type);
   };
 
+  // Nombre de contrats enregistrés (compté par la page d'arrivée, déjà chargée).
+  const [total, setTotal] = useState(0);
+  const tabs: { value: ContratsTab; label: string; count?: number }[] = [
+    { value: "tous", label: "Tous", count: total || undefined },
+    { value: "marque", label: TYPE_META.marque.chip },
+    { value: "repr", label: TYPE_META.repr.chip },
+    { value: "ugc", label: TYPE_META.ugc.chip },
+  ];
+
   return (
-    <>
+    <FolderTabs
+      label="Sous-pages Contrats"
+      orderKey="contrats"
+      items={tabs}
+      value={contratsTabFromSub(navSub)}
+      // Même effet qu'un clic sur la sous-page dans la sidebar.
+      onValueChange={(v) => setNavSub(contratsSubFromTab(v as ContratsTab))}
+    >
       <div hidden={!!genType}>
         <ContractsHome
           active={!genType}
+          onCount={setTotal}
           onNew={(t) => {
             // Après un « Modifier », « Nouveau contrat » repart d'un formulaire neuf.
             setEdit((e) => (e.req ? { seq: e.seq + 1, req: null } : e));
@@ -393,14 +412,14 @@ export function Contrats() {
       </div>
       {(genType || lastGen) && (
         <div hidden={!genType}>
-          <ContractGenerator key={edit.seq} active={!!genType} initial={edit.req} onBack={() => setNavSub(null)} />
+          <ContractGenerator key={edit.seq} initial={edit.req} />
         </div>
       )}
-    </>
+    </FolderTabs>
   );
 }
 
-function ContractGenerator({ active, initial, onBack }: { active: boolean; initial: EditRequest | null; onBack: () => void }) {
+function ContractGenerator({ initial }: { initial: EditRequest | null }) {
   const brandInit = initial?.kind === "brand" ? initial : null;
   const form0 = brandInit?.form;
   const creators = useCreators();
@@ -739,27 +758,9 @@ function ContractGenerator({ active, initial, onBack }: { active: boolean; initi
   const [openSec, setOpenSec] = useState<Record<string, boolean>>({ conditions: true, figure: true, clauses: false });
   const toggleSec = (k: string) => setOpenSec((o) => ({ ...o, [k]: !o[k] }));
 
-  // Type de contrat : dans l'en-tête de page, à droite du titre (comme les autres pages).
-  const typeTabs = active && (
-    <PageHeaderRow>
-      <button type="button" onClick={onBack} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 text-[12.5px] font-medium text-foreground transition-colors hover:bg-rowhover">
-        <ArrowLeft className="h-3.5 w-3.5" /> Tous les contrats
-      </button>
-      <Tabs
-        label="Type de contrat"
-        items={(Object.keys(TYPE_META) as CtType[]).map((k) => ({ value: k, label: TYPE_META[k].chip }))}
-        value={ctType}
-        onValueChange={(v) => { setCtType(v as CtType); setNavSub(v as CtType); }}
-      />
-    </PageHeaderRow>
-  );
-
   if (ctType === "repr") {
     return (
-      <>
-        {typeTabs}
-        <RepresentationContract initial={initial?.kind === "repr" ? initial.entry : null} />
-      </>
+      <RepresentationContract initial={initial?.kind === "repr" ? initial.entry : null} />
     );
   }
 
@@ -768,7 +769,6 @@ function ContractGenerator({ active, initial, onBack }: { active: boolean; initi
 
   return (
     <>
-      {typeTabs}
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)]">
         {/* ============ RÉGLAGES ============ */}
         <SettingsPanel>

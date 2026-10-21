@@ -15,7 +15,8 @@ export type MorphingTabsItem = {
   id: string;
   label: string;
   icon?: ReactNode;
-  content: ReactNode;
+  /** Contenu propre à l'onglet (remonté à chaque changement). Inutile si `panel` est fourni. */
+  content?: ReactNode;
   disabled?: boolean;
 };
 
@@ -42,6 +43,14 @@ export interface MorphingTabsProps {
   ariaLabel?: string;
   className?: string;
   classNames?: MorphingTabsClassNames;
+  /**
+   * Contenu commun à tous les onglets, monté une seule fois : il n'est pas remonté au
+   * changement d'onglet (saisies et défilement gardés) et n'a ni flou ni translation
+   * (une fenêtre `fixed` qu'il contient reste calée sur l'écran). Remplace `content`.
+   */
+  panel?: ReactNode;
+  /** Largeur maximale d'un onglet (176 px par défaut). */
+  maxTabWidth?: number;
 }
 
 type DragSession = {
@@ -197,7 +206,7 @@ function LiquidSurfacePath({ left, surfaceWidth, tabWidth }: { left: MotionValue
   return <motion.path d={path} fill="currentColor" />;
 }
 
-export function MorphingTabs({ items, value, defaultValue, onValueChange, onOrderChange, onClose, ariaLabel = "Onglets", className, classNames }: MorphingTabsProps) {
+export function MorphingTabs({ items, value, defaultValue, onValueChange, onOrderChange, onClose, ariaLabel = "Onglets", className, classNames, panel, maxTabWidth = MAX_TAB_WIDTH }: MorphingTabsProps) {
   const reduce = Boolean(useReducedMotion());
   const uid = useId();
   const itemIds = useMemo(() => items.map((item) => item.id), [items]);
@@ -244,16 +253,16 @@ export function MorphingTabs({ items, value, defaultValue, onValueChange, onOrde
   // rétrécissent jusqu'à un minimum lisible, puis l'espace entre eux, puis le minimum.
   const { tabWidth, slotGap } = useMemo(() => {
     const count = order.length;
-    if (!surfaceWidth || count === 0) return { tabWidth: MAX_TAB_WIDTH, slotGap: tabGap };
+    if (!surfaceWidth || count === 0) return { tabWidth: maxTabWidth, slotGap: tabGap };
     const inner = surfaceWidth - SURFACE_INSET * 2;
     const widthAt = (gap: number) => Math.floor((inner - gap * (count - 1)) / count);
-    if (widthAt(tabGap) >= MIN_TAB_WIDTH) return { tabWidth: Math.min(MAX_TAB_WIDTH, widthAt(tabGap)), slotGap: tabGap };
+    if (widthAt(tabGap) >= MIN_TAB_WIDTH) return { tabWidth: Math.min(maxTabWidth, widthAt(tabGap)), slotGap: tabGap };
     if (count > 1 && widthAt(0) >= MIN_TAB_WIDTH) {
       const gap = Math.floor((inner - MIN_TAB_WIDTH * count) / (count - 1));
       return { tabWidth: MIN_TAB_WIDTH, slotGap: Math.max(0, gap) };
     }
     return { tabWidth: Math.max(0, widthAt(0)), slotGap: 0 };
-  }, [order.length, surfaceWidth, tabGap]);
+  }, [maxTabWidth, order.length, surfaceWidth, tabGap]);
 
   const slotLefts = useMemo(() => order.map((_, index) => SURFACE_INSET + index * (tabWidth + slotGap)), [order, slotGap, tabWidth]);
   const dragStartIndex = draggingId ? order.indexOf(draggingId) : -1;
@@ -297,6 +306,20 @@ export function MorphingTabs({ items, value, defaultValue, onValueChange, onOrde
     if (currentValue && itemMap.has(currentValue)) return;
     if (firstEnabledItem && firstEnabledItem.id !== currentValue) setActive(firstEnabledItem.id);
   }, [currentValue, firstEnabledItem, itemMap, setActive]);
+
+  // Contenu commun (`panel`) : simple fondu à chaque changement d'onglet, sans remontage.
+  // (Pas d'arrêt au rendu suivant : `panel` change à chaque rendu, le fondu doit aller au bout.)
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const shownId = useRef(activeId);
+  const panelFade = useRef<ReturnType<typeof animateValue> | null>(null);
+  useEffect(() => {
+    if (shownId.current === activeId) return;
+    shownId.current = activeId;
+    const el = panelRef.current;
+    if (!el || reduce) return;
+    panelFade.current?.stop();
+    panelFade.current = animateValue(el, { opacity: [0, 1] }, { duration: 0.2, ease: EASE_OUT });
+  }, [activeId, reduce]);
 
   const activeOrderIndex = activeId ? order.indexOf(activeId) : -1;
   const activeVisualIndex = activeOrderIndex < 0 ? -1 : visualIndexFor(activeOrderIndex);
@@ -576,6 +599,11 @@ export function MorphingTabs({ items, value, defaultValue, onValueChange, onOrde
         aria-labelledby={`${uid}-tab-${safeId(activeId ?? "empty")}`}
         className={cn("relative z-20 mx-4 mb-4 min-h-64 overflow-hidden rounded-[1.75rem] bg-[#fafaf8] text-[#181818] dark:bg-[#0a0a0a] dark:text-foreground", classNames?.content)}
       >
+        {panel !== undefined ? (
+          <div ref={panelRef} className="min-h-64">
+            {panel}
+          </div>
+        ) : (
         <AnimatePresence mode="popLayout" initial={false}>
           {activeItem ? (
             <motion.div
@@ -590,6 +618,7 @@ export function MorphingTabs({ items, value, defaultValue, onValueChange, onOrde
             </motion.div>
           ) : null}
         </AnimatePresence>
+        )}
       </div>
     </div>
   );

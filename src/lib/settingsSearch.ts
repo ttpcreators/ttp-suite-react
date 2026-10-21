@@ -83,6 +83,60 @@ export function entryForTarget<E extends SettingsEntry>(entries: readonly E[], t
   return entries.find((e) => sectionAnchor(e.label) === anchor || e.sections.some((s) => sectionAnchor(s.title) === anchor)) ?? null;
 }
 
+/*
+ * Onglets « dossier » de Paramètres : un onglet par groupe (« Général », « Notifications »…),
+ * qui empile ses entrées. Chaque entrée a son ancre de bloc (« reglage-volet-<id> »), à côté
+ * des ancres de cartes (« reglage-<titre> »).
+ */
+
+/** Id stable d'un onglet à partir du nom de groupe (« Prospection et Claude » → « prospection-et-claude »). */
+export const groupTabId = (group: string) => sectionAnchor(group).replace(/^reglage-/, "");
+
+/** Ancre du bloc d'une entrée dans son onglet. */
+export const entryAnchor = (entryId: string) => `reglage-volet-${entryId}`;
+
+/** Les onglets, un par groupe, dans l'ordre d'apparition des entrées. */
+export function settingsTabs(entries: readonly SettingsEntry[]): { value: string; label: string }[] {
+  const out: { value: string; label: string }[] = [];
+  for (const e of entries) {
+    const value = groupTabId(e.group);
+    if (!out.some((t) => t.value === value)) out.push({ value, label: e.group });
+  }
+  return out;
+}
+
+/** Entrées d'un onglet, dans leur ordre. */
+export function entriesOfTab<E extends SettingsEntry>(entries: readonly E[], tab: string): E[] {
+  return entries.filter((e) => groupTabId(e.group) === tab);
+}
+
+/**
+ * Où aller pour ouvrir une entrée (et éventuellement une de ses cartes) : l'onglet de son
+ * groupe et l'ancre jusqu'où défiler. Ancre nulle = rester en haut de l'onglet (première
+ * entrée du groupe, sans carte visée). Entrée inconnue = null.
+ */
+export function settingsTarget(entries: readonly SettingsEntry[], entryId: string, sectionTitle?: string | null): { tab: string; anchor: string | null } | null {
+  const entry = entries.find((e) => e.id === entryId);
+  if (!entry) return null;
+  const tab = groupTabId(entry.group);
+  if (sectionTitle) return { tab, anchor: sectionAnchor(sectionTitle) };
+  const first = entriesOfTab(entries, tab)[0];
+  return { tab, anchor: first?.id === entry.id ? null : entryAnchor(entry.id) };
+}
+
+/**
+ * Cible venue d'ailleurs (sous-page de nav, ancre « #reglage-… ») → onglet et ancre. Une
+ * ancre de carte est gardée telle quelle ; un id d'entrée vise le bloc de l'entrée.
+ */
+export function settingsTargetFor(entries: readonly SettingsEntry[], target: string | null | undefined): { tab: string; anchor: string | null } | null {
+  const e = entryForTarget(entries, target);
+  if (!e) return null;
+  const t = (target ?? "").trim().replace(/^#/, "");
+  const res = settingsTarget(entries, e.id);
+  if (!res) return null;
+  return t.startsWith("reglage-") ? { tab: res.tab, anchor: t } : res;
+}
+
 /** Compteur « 31 sur 33 visibles » de « Pages affichées » (pages rangées = masquées). */
 export function pagesVisibility(ids: readonly string[], parked: readonly string[]): { visible: number; total: number } {
   const hidden = new Set(parked);

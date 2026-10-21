@@ -3,7 +3,7 @@ import { SIGNATURE_KEY, scribble, validSig, type SignatureData } from "@/lib/age
 import { SignaturePad } from "@/components/signature-pad";
 import {
   BellRing, Smartphone, Sunrise, History, LogOut, Palette, MessageCircle, Bot, Copy, Unplug, PenLine, Sparkles,
-  Search, ChevronRight, ChevronLeft, X, type LucideIcon,
+  Search, ChevronRight, X, type LucideIcon,
 } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
@@ -20,9 +20,10 @@ import { myDisplayName, saveMyDisplayName } from "@/lib/team";
 import { NAV, type ViewId } from "@/lib/nav";
 import { ALWAYS_SHOWN, HIDDEN_PAGES_EVENT, HIDDEN_PAGES_KEY, hiddenPagesOf } from "@/lib/hiddenPages";
 import { TONE_SOLID } from "@/lib/statusTone";
-import { useStickyState } from "@/lib/useStickyState";
+import { readSticky, useStickyState } from "@/lib/useStickyState";
+import { FolderTabs } from "@/components/ui/folder-tabs";
 import { useNavSub } from "@/lib/navSub";
-import { bestHit, entryForTarget, groupHits, pagesVisibility, searchSettings, sectionAnchor, type SettingsEntry } from "@/lib/settingsSearch";
+import { bestHit, entriesOfTab, entryAnchor, groupHits, pagesVisibility, searchSettings, sectionAnchor, settingsTabs, settingsTarget, settingsTargetFor, type SettingsEntry } from "@/lib/settingsSearch";
 
 /**
  * Préférences de notifications (agence) — stockées dans le blob `notifPrefs`.
@@ -128,18 +129,9 @@ const ENTRIES: Entry[] = [
   },
 ];
 const ENTRY_IDS = ENTRIES.map((e) => e.id);
-
-/** Remet en haut la première zone défilante qui contient `el` (sinon la fenêtre). */
-function scrollToTop(el: HTMLElement | null) {
-  for (let n = el?.parentElement; n; n = n.parentElement) {
-    const oy = getComputedStyle(n).overflowY;
-    if ((oy === "auto" || oy === "scroll") && n.scrollHeight > n.clientHeight) {
-      n.scrollTop = 0;
-      return;
-    }
-  }
-  window.scrollTo(0, 0);
-}
+/** Onglets « dossier » : un par groupe de la liste ci-dessus. */
+const TABS = settingsTabs(ENTRIES);
+const TAB_IDS = TABS.map((t) => t.value);
 
 const reducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
@@ -249,20 +241,14 @@ function Card({ anchor, title, hint, right, children }: { anchor?: string; title
 
 /**
  * Pastille d'icône des réglages. Direction « sobre » (choix de Marc) : carré gris et
- * icône d'encre pour toutes les entrées ; sur l'entrée choisie (pastille bleue), l'icône
- * passe en blanc. `entry.tile` (anciennes couleurs façon iOS) n'est plus utilisé.
+ * icône d'encre pour toutes les entrées. `entry.tile` (anciennes couleurs façon iOS)
+ * n'est plus utilisé.
  */
-function EntryIcon({ entry, active }: { entry: Entry; active?: boolean }) {
+function EntryIcon({ entry }: { entry: Entry }) {
   const Icon = entry.icon;
   return (
-    <span
-      aria-hidden
-      className={cn(
-        "grid size-[29px] shrink-0 place-items-center rounded-[8px] @2xl:size-[22px] @2xl:rounded-[6px]",
-        active ? "bg-field text-foreground @2xl:bg-primary-foreground/20 @2xl:text-primary-foreground" : "bg-field text-foreground/75",
-      )}
-    >
-      <Icon className="size-[17px] @2xl:size-[13px]" strokeWidth={2.1} />
+    <span aria-hidden className="grid size-[29px] shrink-0 place-items-center rounded-[8px] bg-field text-foreground/75">
+      <Icon className="size-[17px]" strokeWidth={2.1} />
     </span>
   );
 }
@@ -856,46 +842,46 @@ export function Parametres() {
     }
   };
 
-  // ── Navigation des réglages : entrée choisie (mémorisée), volet poussé sur téléphone, recherche ──
-  const [activeId, setActiveId] = useStickyState<string>("parametres:entree", ENTRY_IDS, "apparence");
-  const active = ENTRIES.find((e) => e.id === activeId) ?? ENTRIES[0];
-  const [open, setOpen] = useState(false); // téléphone : volet de détail poussé par-dessus la liste
+  // ── Navigation des réglages : onglet « dossier » par groupe (mémorisé), recherche ──
+  // Premier affichage après la refonte : l'onglet de l'entrée qu'on avait ouverte.
+  const [tab, setTab] = useStickyState<string>("parametres:onglet", TAB_IDS, () => {
+    const id = readSticky<string>("parametres:entree", ENTRY_IDS, "apparence");
+    return settingsTarget(ENTRIES, id)?.tab ?? TAB_IDS[0];
+  });
   const [query, setQuery] = useState("");
   const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
   const hits = useMemo(() => searchSettings(ENTRIES, query), [query]);
   const groups = useMemo(() => groupHits(hits), [hits]);
 
+  // Ouvre une entrée (et une carte) : bascule sur l'onglet de son groupe puis défile jusqu'à elle.
   const openEntry = (id: string, sectionTitle?: string | null) => {
-    setActiveId(id);
-    setOpen(true);
-    setPendingAnchor(sectionTitle ? sectionAnchor(sectionTitle) : null);
-    // Téléphone : le volet poussé repart du haut (zone qui défile, sous la barre de titre).
-    if (!sectionTitle) scrollToTop(rootRef.current);
+    const t = settingsTarget(ENTRIES, id, sectionTitle);
+    if (!t) return;
+    setTab(t.tab);
+    setPendingAnchor(t.anchor);
+    setQuery("");
   };
 
   // Cible venue d'ailleurs : sous-page de nav (select("parametres", "signature")) ou ancre #reglage-….
   const navSub = useNavSub();
   useEffect(() => {
     const target = navSub ?? (typeof window !== "undefined" && window.location.hash.startsWith("#reglage-") ? window.location.hash : null);
-    const e = entryForTarget(ENTRIES, target);
-    if (!e || !target) return;
-    setActiveId(e.id);
-    setOpen(true);
-    const anchor = target.replace(/^#/, "");
-    setPendingAnchor(anchor.startsWith("reglage-") ? anchor : null);
-  }, [navSub, setActiveId]);
+    const t = settingsTargetFor(ENTRIES, target);
+    if (!t) return;
+    setTab(t.tab);
+    setPendingAnchor(t.anchor);
+  }, [navSub, setTab]);
 
-  // Carte visée (résultat de recherche, ancre) : défile jusqu'à elle une fois le volet rendu.
+  // Carte ou bloc visé (résultat de recherche, ancre) : défile jusqu'à lui une fois l'onglet rendu.
   useEffect(() => {
     if (!pendingAnchor) return;
     const el = document.getElementById(pendingAnchor);
     if (el) el.scrollIntoView({ block: "start", behavior: reducedMotion() ? "auto" : "smooth" });
     setPendingAnchor(null);
-  }, [pendingAnchor, activeId]);
+  }, [pendingAnchor, tab]);
 
-  const pane = (() => {
-    switch (active.id) {
+  const paneFor = (id: string) => {
+    switch (id) {
       case "apparence":
         return (
           <>
@@ -1114,97 +1100,83 @@ export function Parametres() {
       default:
         return null;
     }
-  })();
+  };
 
   return (
-    // Conteneur de requête : deux volets dès que la PLACE le permet (aussi dans un volet partagé).
-    <div ref={rootRef} className="@container/reglages">
-      <div className="@2xl:grid @2xl:min-h-[calc(100dvh-12rem)] @2xl:grid-cols-[250px_minmax(0,1fr)]">
-        {/* ── Colonne des réglages (téléphone : la liste, masquée quand un volet est poussé) ── */}
-        <aside aria-label="Réglages" className={cn("min-w-0 @2xl:border-r @2xl:border-border @2xl:pr-4", open && "hidden @2xl:block")}>
-          <div className="@2xl:sticky @2xl:top-0">
-            <h1 className="page-title text-[28px] font-bold leading-tight tracking-[-0.025em] text-foreground">Paramètres</h1>
-            <div className="relative mt-3">
-              <Search aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") setQuery("");
-                  if (e.key === "Enter") {
-                    const h = bestHit(hits);
-                    if (h) openEntry(h.entry.id, h.section?.title);
-                  }
-                }}
-                placeholder="Chercher un réglage"
-                aria-label="Chercher un réglage"
-                className="h-9 w-full rounded-[10px] bg-field pl-8 pr-8 text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/30 [&::-webkit-search-cancel-button]:hidden"
-              />
-              {query && (
-                <button type="button" onClick={() => setQuery("")} aria-label="Effacer la recherche" className="absolute right-1.5 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-full text-muted-foreground hover:bg-rowhover">
-                  <X className="size-3.5" />
-                </button>
-              )}
-            </div>
-
-            <nav aria-label="Sommaire des réglages" className="mt-4 flex flex-col gap-5 @2xl:gap-4">
-              {groups.length === 0 && <p className="px-1 text-[13px] text-muted-foreground">Aucun réglage ne correspond.</p>}
-              {groups.map((g) => (
-                <div key={g.group}>
-                  <div className="px-4 pb-1.5 text-[13px] uppercase tracking-[0.02em] text-muted-foreground @2xl:px-2.5 @2xl:pb-1 @2xl:text-[11px] @2xl:font-semibold @2xl:tracking-[0.06em]">
-                    {g.group}
-                  </div>
-                  <div className="flex flex-col overflow-hidden rounded-xl bg-surface @2xl:gap-0.5 @2xl:overflow-visible @2xl:rounded-none @2xl:bg-transparent">
-                    {g.hits.map(({ entry, section }) => {
-                      const sel = entry.id === active.id;
-                      return (
-                        <button
-                          key={entry.id}
-                          type="button"
-                          onClick={() => openEntry(entry.id, section?.title)}
-                          aria-current={sel ? "page" : undefined}
-                          className={cn(
-                            "relative flex min-h-[46px] w-full items-center gap-3 py-2 pl-3.5 pr-3 text-left transition-colors",
-                            // Filet inset façon iOS (téléphone), absent sous la dernière ligne.
-                            "after:absolute after:bottom-0 after:left-[56px] after:right-0 after:h-px after:bg-border/70 last:after:hidden",
-                            "@2xl:min-h-8 @2xl:gap-2.5 @2xl:rounded-[10px] @2xl:px-2.5 @2xl:py-1.5 @2xl:after:hidden",
-                            sel ? "@2xl:bg-primary @2xl:text-primary-foreground" : "hover:bg-rowhover",
-                          )}
-                        >
-                          <EntryIcon entry={entry} active={sel} />
-                          <span className="min-w-0 flex-1">
-                            <span className={cn("block truncate text-[16px] @2xl:text-[13px]", sel ? "text-foreground @2xl:font-medium @2xl:text-primary-foreground" : "text-foreground")}>{entry.label}</span>
-                            {section && section.title !== entry.label && (
-                              <span className={cn("block truncate text-[12px]", sel ? "text-muted-foreground @2xl:text-primary-foreground/80" : "text-muted-foreground")}>{section.title}</span>
-                            )}
-                          </span>
-                          <ChevronRight aria-hidden className="size-[18px] shrink-0 text-faint @2xl:hidden" strokeWidth={2.2} />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </nav>
-          </div>
-        </aside>
-
-        {/* ── Volet de détail (téléphone : poussé par-dessus la liste, avec « ‹ Paramètres ») ── */}
-        <section aria-label={active.label} className={cn("@container min-w-0 @2xl:pl-8", !open && "hidden @2xl:block")}>
-          <button type="button" onClick={() => {
-              setOpen(false);
-              scrollToTop(rootRef.current);
-            }} className="-ml-1.5 mb-2 flex h-9 items-center gap-0.5 text-[17px] text-primary @2xl/reglages:hidden">
-            <ChevronLeft aria-hidden className="size-6" strokeWidth={2.2} /> Paramètres
-          </button>
-          <div className="max-w-3xl">
-            <h2 className="text-[24px] font-bold leading-tight tracking-[-0.02em] text-foreground">{active.label}</h2>
-            <p className="mt-1 text-[14px] leading-snug text-muted-foreground">{active.hint}</p>
-            <div className="mt-5 flex flex-col gap-4">{pane}</div>
-          </div>
-        </section>
+    <div className="@container/reglages">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <h1 className="page-title text-[28px] font-bold leading-tight tracking-[-0.025em] text-foreground">Paramètres</h1>
+        <div className="relative w-full @2xl/reglages:w-72">
+          <Search aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setQuery("");
+              if (e.key === "Enter") {
+                const h = bestHit(hits);
+                if (h) openEntry(h.entry.id, h.section?.title);
+              }
+            }}
+            placeholder="Chercher un réglage"
+            aria-label="Chercher un réglage"
+            className="h-9 w-full rounded-[10px] bg-field pl-8 pr-8 text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/30 [&::-webkit-search-cancel-button]:hidden"
+          />
+          {query && (
+            <button type="button" onClick={() => setQuery("")} aria-label="Effacer la recherche" className="absolute right-1.5 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-full text-muted-foreground hover:bg-rowhover">
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Résultats de la recherche : un clic ouvre l'onglet du réglage et défile jusqu'à lui. */}
+      {query.trim() && (
+        <nav aria-label="Résultats de la recherche" className="mb-6 flex flex-col gap-4">
+          {groups.length === 0 && <p className="px-1 text-[13px] text-muted-foreground">Aucun réglage ne correspond.</p>}
+          {groups.map((g) => (
+            <div key={g.group}>
+              <div className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">{g.group}</div>
+              <div className="flex flex-col overflow-hidden rounded-xl bg-surface">
+                {g.hits.map(({ entry, section }) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    onClick={() => openEntry(entry.id, section?.title)}
+                    className="relative flex min-h-[46px] w-full items-center gap-3 py-2 pl-3.5 pr-3 text-left transition-colors after:absolute after:bottom-0 after:left-[56px] after:right-0 after:h-px after:bg-border/70 last:after:hidden hover:bg-rowhover"
+                  >
+                    <EntryIcon entry={entry} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[14px] text-foreground">{entry.label}</span>
+                      {section && section.title !== entry.label && <span className="block truncate text-[12px] text-muted-foreground">{section.title}</span>}
+                    </span>
+                    <ChevronRight aria-hidden className="size-[18px] shrink-0 text-faint" strokeWidth={2.2} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+      )}
+
+      {/* Un onglet « dossier » par groupe (comme Agents) : ses entrées les unes sous les autres. */}
+      <FolderTabs label="Rubriques des réglages" orderKey="parametres" items={TABS} value={tab} onValueChange={setTab} maxTabWidth={208}>
+        <div className="@container mx-auto flex w-full max-w-3xl flex-col gap-10 py-1">
+          {entriesOfTab(ENTRIES, tab).map((entry) => (
+            <section key={entry.id} id={entryAnchor(entry.id)} aria-label={entry.label} className="scroll-mt-6">
+              <div className="flex items-start gap-3">
+                <EntryIcon entry={entry} />
+                <div className="min-w-0">
+                  <h2 className="text-[20px] font-bold leading-tight tracking-[-0.02em] text-foreground">{entry.label}</h2>
+                  <p className="mt-1 text-[14px] leading-snug text-muted-foreground">{entry.hint}</p>
+                </div>
+              </div>
+              <div className="mt-5 flex flex-col gap-4">{paneFor(entry.id)}</div>
+            </section>
+          ))}
+        </div>
+      </FolderTabs>
     </div>
   );
 }
