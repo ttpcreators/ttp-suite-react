@@ -149,6 +149,7 @@ export const EN_SHARED: Record<string, string> = {
   "Nouveaux briefs & deals": "New briefs & deals",
   "Cadeaux / gifting reçus": "Gifts received",
   "Tâches et documents ajoutés": "New tasks and documents",
+  "Nouveaux mails des marques": "New emails from brands",
   "Activées sur ce téléphone": "On for this phone",
   "Sur iPhone :": "On iPhone:",
   "Partager → Ajouter à l'écran d'accueil": "Share → Add to Home Screen",

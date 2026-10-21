@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { TONE_SOLID, TONE_TILE } from "@/lib/statusTone";
 import { Loader, Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import { ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X, Copy, type LucideIcon, Megaphone } from "@/components/icons";
+import { ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Mail, MessageSquare, MessageSquarePlus, Plus, RefreshCw, SearchCheck, Send, Settings2, Tag, X, Copy, type LucideIcon, Megaphone } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -13,6 +13,9 @@ import { myDisplayName } from "@/lib/team";
 import { useLive } from "@/lib/useLive";
 import { markCreatorNotesRead, reportCreatorThreads } from "@/lib/creatorMailCounts";
 import { SHARED_BOXES, emailOf } from "@/lib/mailAvatar";
+import {
+  SHARED_BOX_MESSAGE, aliasesColumnMissing, allAddresses, checkNewAddress, extraAddresses, joinWith,
+} from "@/lib/mailAddresses";
 import {
   statusMeta, listMails, getMailThread, sendManagerNote, sendDecision, listGmailLabels, getStatusHistory,
   getThreadNotes, buildFeed, choiceOf, autoStatusOf, errorCode, getMailDb, dbStatus, MailError, CREATOR_UNAVAILABLE,
@@ -359,14 +362,16 @@ function StatePanel({ icon: Icon, text, action }: { icon: LucideIcon; text: stri
   );
 }
 
-export function CreatorMailbox({ creator, mode, creatorSees = true, initialThreadId, alias }: {
+export function CreatorMailbox({ creator, mode, creatorSees = true, initialThreadId, alias, aliases }: {
   creator: string; mode: Mode;
   /** Le créateur a-t-il accès à sa section Mails ? (sinon pas de notification pour lui) */
   creatorSees?: boolean;
   /** Échange à ouvrir directement (lien depuis la page Mails de l'agence). */
   initialThreadId?: string;
-  /** Alias du créateur (réglage), pour le message « boîte vide ». */
+  /** Alias du créateur (réglage), affiché tant que la liste n'a pas répondu. */
   alias?: string | null;
+  /** Ses adresses en plus (réglage), idem. */
+  aliases?: string[] | null;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -379,6 +384,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const [err, setErr] = useState<string | null>(null);
   const [partial, setPartial] = useState(false);
   const [listAlias, setListAlias] = useState<string | null>(null);
+  // Toutes ses adresses, vérifiées par le serveur (null = ancienne version du serveur).
+  const [listAliases, setListAliases] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useStickyState<(typeof FILTERS)[number]["key"]>("mails-createur:filtre", FILTERS.map((f) => f.key), "tous");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -470,6 +477,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
       setConfigured(r.configured);
       setPartial(!!r.partial);
       if (typeof r.alias === "string") setListAlias(r.alias);
+      if (Array.isArray(r.aliases)) setListAliases(r.aliases.filter((a): a is string => typeof a === "string"));
       for (const t of r.threads) if (isAuto(t.status)) autoOf.current.set(t.id, t.status);
       setThreads(r.threads);
       if (mode === "creator") reportMailList(creator, r.threads, !!r.partial);
@@ -899,15 +907,26 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     noteRef.current?.focus({ preventScroll: true });
   };
   const navIdx = openId ? shown.findIndex((t) => t.id === openId) : -1;
-  const shownAlias = (alias ?? listAlias ?? "").trim();
+  // Ses adresses : celles vérifiées par le serveur, sinon le réglage (alias + adresses en plus).
+  const shownAddresses = listAliases ?? allAddresses(alias ?? listAlias, aliases);
+  const several = shownAddresses.length > 1;
+  const copyCls = "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-surface px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover";
+  const copyAddress = async (a: string) => {
+    try {
+      await navigator.clipboard.writeText(a);
+      toast(t("Adresse copiée"));
+    } catch {
+      toast(a);
+    }
+  };
   const emptyText = q
     ? t("Aucun échange ne correspond à « {q} ».", { q: query.trim() })
     : filter !== "tous"
       ? t("Aucun échange ici.")
       : asAgency
         ? t("Aucun échange pour le moment.")
-        : shownAlias
-          ? t("Les mails envoyés à {alias} apparaîtront ici.", { alias: shownAlias })
+        : shownAddresses.length
+          ? t("Les mails envoyés à {alias} apparaîtront ici.", { alias: joinWith(shownAddresses, t("ou")) })
           : t("Les mails des marques qui t'écrivent apparaîtront ici.");
 
   // Comment les statuts avancent (affiché pour éviter toute confusion, refermable).
@@ -971,28 +990,35 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           </h2>
           <ToolButton icon={RefreshCw} label={t("Actualiser")} spin={loading} disabled={loading} onClick={retry} className="h-8 w-8" />
         </div>
-        {/* Adresse attribuée par l'agence : le créateur la voit (et la copie) d'un coup d'œil. */}
-        {shownAlias && (
+        {/* Adresses attribuées par l'agence : le créateur les voit (et les copie) d'un coup d'œil. */}
+        {shownAddresses.length === 1 && (
           <div className="mt-1.5 flex min-w-0 items-center gap-2 rounded-[10px] bg-field px-3 py-2">
             <AtSign className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1">
               <span className="block text-[11px] leading-tight text-muted-foreground">{mode === "creator" ? t("Ton adresse mail") : t("Adresse de {name}", { name: creatorName })}</span>
-              <span className="block truncate text-[13.5px] font-semibold text-foreground">{shownAlias}</span>
+              <span className="block truncate text-[13.5px] font-semibold text-foreground">{shownAddresses[0]}</span>
             </span>
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(shownAlias);
-                  toast(t("Adresse copiée"));
-                } catch {
-                  toast(shownAlias);
-                }
-              }}
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-surface px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
-            >
+            <button type="button" onClick={() => void copyAddress(shownAddresses[0])} className={copyCls}>
               <Copy className="h-3.5 w-3.5" /> {t("Copier")}
             </button>
+          </div>
+        )}
+        {several && (
+          <div className="mt-1.5 min-w-0 rounded-[10px] bg-field px-3 py-2">
+            <span className="flex items-center gap-2 text-[11px] leading-tight text-muted-foreground">
+              <AtSign className="h-4 w-4 shrink-0" />
+              {mode === "creator" ? t("Tes adresses mail") : t("Adresses de {name}", { name: creatorName })}
+            </span>
+            <ul className="mt-1 flex flex-col gap-1">
+              {shownAddresses.map((a) => (
+                <li key={a} className="flex min-w-0 items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate pl-6 text-[13.5px] font-semibold text-foreground">{a}</span>
+                  <button type="button" onClick={() => void copyAddress(a)} aria-label={t("Copier {address}", { address: a })} className={copyCls}>
+                    <Copy className="h-3.5 w-3.5" /> {t("Copier")}
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         <Tabs
@@ -1254,15 +1280,21 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 function useMailSettings(creator: string) {
   // undefined = chargement ou table absente (SQL pas encore appliqué) → rien n'est affiché.
   const [s, setS] = useState<MailSettings | null | undefined>(undefined);
+  // Colonne `aliases` (adresses en plus) présente ? Non tant que le SQL des adresses n'est pas lancé.
+  const [hasAliases, setHasAliases] = useState(true);
   const reload = useCallback(async () => {
-    const { data, error } = await supabase.from("creator_mail_settings")
-      .select("creator, alias, label_id, label_name, enabled").eq("creator", creator).maybeSingle<MailSettings>();
-    setS(error ? undefined : data ?? null);
+    const cols = "creator, alias, label_id, label_name, enabled";
+    const read = (c: string) => supabase.from("creator_mail_settings").select(c).eq("creator", creator).maybeSingle<MailSettings>();
+    let r = await read(`${cols}, aliases`);
+    const missing = aliasesColumnMissing(r.error);
+    if (missing) r = await read(cols);
+    setHasAliases(!missing);
+    setS(r.error ? undefined : r.data ?? null);
   }, [creator]);
   useEffect(() => {
     void reload();
   }, [reload]);
-  return { settings: s, reload };
+  return { settings: s, reload, hasAliases };
 }
 
 /**
@@ -1277,9 +1309,12 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
   onSaved?: () => void;
   className?: string;
 }) {
-  const { settings, reload } = useMailSettings(creator);
+  const { settings, reload, hasAliases } = useMailSettings(creator);
   const [editing, setEditing] = useState(false);
   const [alias, setAlias] = useState("");
+  // Adresses en plus de l'alias (ex. son adresse perso) et adresse en cours de saisie.
+  const [extras, setExtras] = useState<string[]>([]);
+  const [newAddress, setNewAddress] = useState("");
   const [labelId, setLabelId] = useState("");
   const [labels, setLabels] = useState<{ id: string; name: string }[] | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1288,31 +1323,68 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
     // Une boîte commune (talent@, partnerships@…) n'est jamais proposée comme alias.
     const suggested = suggestedAlias && !SHARED_BOXES.test(emailOf(suggestedAlias)) ? emailOf(suggestedAlias) : "";
     setAlias(settings?.alias ?? suggested);
+    setExtras(extraAddresses(settings?.alias, settings?.aliases));
+    setNewAddress("");
     setLabelId(settings?.label_id ?? "");
     setEditing(true);
     if (!labels) listGmailLabels().then(setLabels).catch(() => setLabels([]));
   };
 
-  const save = async (patch: Partial<MailSettings>) => {
+  /** Adresse saisie ajoutée à la liste (null si refusée : le message est affiché). */
+  const takeNewAddress = (list: string[]): string[] | null => {
+    if (!newAddress.trim()) return list;
+    const r = checkNewAddress(newAddress, { alias, aliases: list });
+    if ("error" in r) {
+      toast(r.error);
+      return null;
+    }
+    setNewAddress("");
+    return [...list, r.address];
+  };
+  const addExtra = () => {
+    const next = takeNewAddress(extras);
+    if (next) setExtras(next);
+  };
+
+  /**
+   * Enregistre le réglage. "pending" : enregistré SANS les adresses en plus (SQL des
+   * adresses pas encore lancé) ; l'alias principal, le libellé et l'activation le sont.
+   */
+  const save = async (patch: Partial<MailSettings>): Promise<boolean | "pending"> => {
     setSaving(true);
-    const row = {
+    const row: Partial<MailSettings> & { creator: string; updated_at: string } = {
       creator,
       alias: settings?.alias ?? null,
       label_id: settings?.label_id ?? null,
       label_name: settings?.label_name ?? null,
       enabled: settings?.enabled ?? false,
+      ...(hasAliases ? { aliases: settings?.aliases ?? [] } : {}),
       ...patch,
       updated_at: new Date().toISOString(),
     };
-    const { error } = await supabase.from("creator_mail_settings").upsert(row, { onConflict: "creator" });
+    // Colonne absente et rien à y mettre : on ne l'envoie pas.
+    if (!hasAliases && !row.aliases?.length) delete row.aliases;
+    const upsert = (r: typeof row) => supabase.from("creator_mail_settings").upsert(r, { onConflict: "creator" });
+    let { error } = await upsert(row);
+    let pending = false;
+    if (error && "aliases" in row && aliasesColumnMissing(error)) {
+      const { aliases: _skipped, ...rest } = row;
+      ({ error } = await upsert(rest));
+      pending = !error && !!_skipped?.length;
+    }
     setSaving(false);
     if (error) {
-      toast("Réglage non enregistré");
+      // Refus de la base : adresse déjà prise par un autre créateur, boîte commune…
+      toast(error.code === "P0001" && error.message ? error.message
+        : error.code === "23505" ? "Cette adresse est déjà utilisée par un autre créateur"
+          : error.code === "23514" ? SHARED_BOX_MESSAGE
+            : "Réglage non enregistré");
       return false;
     }
+    if (pending) toast("Mise à jour en attente : lance le SQL des adresses");
     await reload();
     onSaved?.();
-    return true;
+    return pending ? "pending" : true;
   };
 
   const submit = async () => {
@@ -1323,18 +1395,25 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
     }
     // Sinon elle verrait TOUS les mails de cette boîte, pas seulement les siens.
     if (a && SHARED_BOXES.test(a)) {
-      toast("C'est une boîte commune : mets son alias à lui (ex. prenom@ttpcreators.pro)");
+      toast(SHARED_BOX_MESSAGE);
       return;
     }
+    // Adresse tapée sans cliquer sur « Ajouter » : elle compte aussi.
+    const list = takeNewAddress(extras);
+    if (!list) return;
+    const more = extraAddresses(a, list);
+    setExtras(more);
     const lbl = labels?.find((l) => l.id === labelId);
-    if (await save({ alias: a || null, label_id: labelId || null, label_name: lbl?.name ?? null })) {
+    const ok = await save({ alias: a || null, aliases: more, label_id: labelId || null, label_name: lbl?.name ?? null });
+    if (ok) {
       setEditing(false);
-      toast("Boîte mail liée ✓");
+      if (ok === true) toast("Boîte mail liée ✓");
     }
   };
 
   if (settings === undefined) return null;
-  const linked = !!(settings?.alias || settings?.label_id);
+  const savedExtras = extraAddresses(settings?.alias, settings?.aliases);
+  const linked = !!(settings?.alias || settings?.label_id || savedExtras.length);
 
   return (
     <div className={cn("mt-4 flex flex-col gap-4", className)}>
@@ -1381,8 +1460,40 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
                   ]} />
               </label>
             </div>
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Autres adresses (facultatif, ex. son adresse perso)</span>
+              {extras.length > 0 && (
+                <ul className="flex flex-col gap-1.5">
+                  {extras.map((x) => (
+                    <li key={x} className="flex h-9 min-w-0 items-center gap-2 rounded-md border border-border bg-surface pl-3 pr-1">
+                      <AtSign className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{x}</span>
+                      <button type="button" onClick={() => setExtras(extras.filter((e) => e !== x))} aria-label={`Retirer ${x}`}
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex min-w-0 gap-2">
+                <input value={newAddress} onChange={(e) => setNewAddress(e.target.value)} placeholder="prenom.nom@gmail.com" inputMode="email" autoComplete="off"
+                  aria-label="Autre adresse"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addExtra();
+                    }
+                  }}
+                  className="h-9 min-w-0 flex-1 rounded-md border border-border bg-surface px-3 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary" />
+                <button type="button" onClick={addExtra} disabled={!newAddress.trim()}
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-40">
+                  <Plus className="h-3.5 w-3.5" /> Ajouter une adresse
+                </button>
+              </div>
+            </div>
             <p className="text-[12px] text-muted-foreground">
-              Il verra uniquement les échanges où cet alias apparaît (expéditeur, destinataire ou copie) et ceux qui portent ce libellé. Lecture seule : il ne peut ni répondre ni supprimer.
+              Il verra uniquement les échanges où une de ses adresses apparaît (expéditeur, destinataire ou copie) et ceux qui portent ce libellé. Lecture seule : il ne peut ni répondre ni supprimer.
             </p>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setEditing(false)} className="h-9 rounded-lg px-3 text-[13px] text-muted-foreground hover:text-foreground">Annuler</button>
@@ -1399,6 +1510,12 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
                 <AtSign className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <span className="truncate">{settings?.alias || <span className="text-faint">Aucun alias</span>}</span>
               </span>
+              {savedExtras.map((x) => (
+                <span key={x} className="flex min-w-0 items-center gap-1.5 text-foreground">
+                  <AtSign className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{x}</span>
+                </span>
+              ))}
               {settings?.label_name && (
                 <span className="flex min-w-0 items-center gap-1.5 text-foreground">
                   <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> <span className="truncate">{settings.label_name}</span>
@@ -1422,7 +1539,10 @@ export function CreatorMailsAgency({ creator, suggestedAlias, initialThreadId, o
         )}
       </DashPanel>
 
-      {linked && !editing && <CreatorMailbox creator={creator} mode="agency" creatorSees={!!settings?.enabled} initialThreadId={initialThreadId} />}
+      {linked && !editing && (
+        <CreatorMailbox creator={creator} mode="agency" creatorSees={!!settings?.enabled} initialThreadId={initialThreadId}
+          alias={settings?.alias} aliases={settings?.aliases} />
+      )}
     </div>
   );
 }

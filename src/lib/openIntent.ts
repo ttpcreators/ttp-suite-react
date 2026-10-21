@@ -3,11 +3,12 @@ import { useEffect, useRef } from "react";
 /**
  * Demande d'ouverture d'un formulaire ou d'une fiche dans une autre page : « + »
  * d'Aujourd'hui, « Nouvelle tâche » / « Nouvelle collab » de la palette ⌘K, « Ouvrir »
- * d'une collab bloquée. On pose l'intention (avec, au besoin, l'id visé), puis on
+ * d'une collab bloquée, fil de mail d'une notification (« mail:open », données
+ * `{"thread","box"}` en JSON). On pose l'intention (avec, au besoin, l'id visé), puis on
  * navigue : la page la consomme à son montage, ou tout de suite si elle est déjà montée
  * (onglets gardés en vie). Une intention ne sert qu'une fois.
  */
-export type OpenIntent = "todo:new" | "collab:new" | "collab:open";
+export type OpenIntent = "todo:new" | "collab:new" | "collab:open" | "mail:open";
 
 const EVENT = "ttp-intent";
 let pending: OpenIntent | null = null;

@@ -3,7 +3,10 @@
 // ----------------------------------------------------------------------------
 // Détecte les nouveaux emails REÇUS sur les boîtes agence (Gmail) depuis le dernier
 // passage, les enregistre dans email_activity (direction='in') pour la cloche, et
-// envoie un push aux appareils agence (si pref emailReceivedPush).
+// envoie un push aux appareils agence (si pref emailReceivedPush) : une notification
+// par fil (expéditeur, objet, extrait), au-delà de 3 fils un résumé (_shared/mailNotif.ts).
+// Mails des créateurs : un mail venu de l'extérieur et adressé à l'une des adresses d'un
+// créateur dont le Mail est activé prévient aussi ce créateur (sa langue, son fil).
 // Boîtes : partnerships@ (connexion de l'app) + talent@ (compte de service, si configuré).
 //
 // Appelé par pg_cron (Bearer CRON_SECRET) OU par l'agence (JWT) pour un check manuel.
@@ -16,21 +19,22 @@
 // gmail_message_id, donc ni doublon ni nouvelle alerte au passage suivant).
 // ============================================================================
 
-import webpush from "npm:web-push@3.6.7";
 import { getServiceClient, getAccessToken, corsHeaders, timingSafeEqualStr } from "../_shared/google.ts";
 import { boxToken, talentAddress, type Box } from "../_shared/gmailBox.ts";
 import { gfetch, mapPool } from "../_shared/gfetch.ts";
+import { sendTo } from "../_shared/push.ts";
+import { agencyMailPayloads, creatorMailPayloads, creatorsForMail, type CreatorMailSetting, type Lang, type NewMail } from "../_shared/mailNotif.ts";
 
-const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
-const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
-const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") ?? "mailto:marc@ttpcreators.pro";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
-if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const LIST_PAGE = 100; // ids par page de liste
 const LIST_CAP = 500; // ids listés au plus par boîte et par passage
 const PER_RUN = 100; // messages traités au plus par boîte et par passage
+// En-têtes lus : la notification (expéditeur, objet) et les destinataires (mails des créateurs).
+const META_HEADERS = ["From", "Subject", "Message-ID", "To", "Cc", "Delivered-To", "X-Original-To"]
+  .map((h) => `metadataHeaders=${h}`).join("&");
 type Sb = ReturnType<typeof getServiceClient>;
 type Header = { name: string; value: string };
 
@@ -77,7 +81,7 @@ async function saveStateKey(sb: Sb, key: string, value: unknown) {
   else await sb.from("module_rows").insert({ module: "__app_state__", a: json });
 }
 
-type Fresh = { id: string; threadId: string; from: string; subject: string; snippet: string; ts: number; rfcId: string; box: Box };
+type Fresh = NewMail & { rfcId: string };
 
 /**
  * Nouveaux messages d'une boîte depuis `cursor` (ms). Liste paginée (Gmail : du plus
@@ -104,7 +108,7 @@ async function scanBox(box: Box, token: string, cursor: number): Promise<{ fresh
   const batch = ids.slice(-PER_RUN);
   const metas = await mapPool(batch, 8, async (id): Promise<Fresh | null | "fail"> => {
     try {
-      const mr = await gfetch(`${GMAIL}/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Message-ID`, auth);
+      const mr = await gfetch(`${GMAIL}/messages/${encodeURIComponent(id)}?format=metadata&${META_HEADERS}`, auth);
       if (mr.status === 404) return null; // supprimé entre-temps
       const m = await mr.json().catch(() => null);
       if (!mr.ok || !m) return "fail";
@@ -112,9 +116,13 @@ async function scanBox(box: Box, token: string, cursor: number): Promise<{ fresh
       if (!ts || ts <= cursor) return null;
       const headers: Header[] = m.payload?.headers ?? [];
       const h = (n: string) => headers.find((x) => x.name.toLowerCase() === n)?.value ?? "";
+      // Plusieurs Delivered-To possibles (transferts) : tous gardés.
+      const all = (n: string) => headers.filter((x) => x.name.toLowerCase() === n).map((x) => x.value).join(", ");
       return {
         id: m.id, threadId: m.threadId, from: h("from"), subject: h("subject"),
-        snippet: String(m.snippet ?? "").slice(0, 180), ts, rfcId: h("message-id").trim(), box,
+        snippet: String(m.snippet ?? "").slice(0, 300), ts, rfcId: h("message-id").trim(), box,
+        to: h("to"), cc: h("cc"), deliveredTo: all("delivered-to"), originalTo: all("x-original-to"),
+        labelIds: Array.isArray(m.labelIds) ? m.labelIds : [],
       };
     } catch {
       return "fail";
@@ -133,25 +141,49 @@ function parseFrom(from: string): { email: string; name: string } {
   return { email, name: (nm ? nm[1] : from.replace(/[<>]/g, "")).trim() };
 }
 
-/** Push aux appareils AGENCE uniquement (allowlist par rôle), purge 404/410. */
-async function pushAgency(sb: Sb, payload: string): Promise<number> {
-  const { data: subsRaw } = await sb.from("push_subscriptions").select("id,endpoint,p256dh,auth,user_id");
-  const all = (subsRaw ?? []) as { id: string; endpoint: string; p256dh: string; auth: string; user_id: string | null }[];
-  const userIds = [...new Set(all.map((s) => s.user_id).filter(Boolean))] as string[];
-  const agency = new Set<string>();
-  if (userIds.length) {
-    const { data: profs } = await sb.from("profiles").select("user_id,role").in("user_id", userIds);
-    for (const p of (profs ?? []) as { user_id: string; role: string }[]) if (p.role !== "creator") agency.add(p.user_id);
-  }
-  let sent = 0;
-  for (const s of all.filter((s) => s.user_id && agency.has(s.user_id))) {
-    try {
-      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
-      sent++;
-    } catch (e) {
-      const code = (e as { statusCode?: number })?.statusCode;
-      if (code === 404 || code === 410) await sb.from("push_subscriptions").delete().eq("id", s.id);
+/**
+ * Réglages Mail des créateurs dont le Mail est activé. La colonne `aliases` (adresses
+ * en plus) est lue si elle existe ; sinon l'alias seul (base pas encore migrée).
+ */
+async function creatorMailSettings(sb: Sb): Promise<CreatorMailSetting[]> {
+  const full = await sb.from("creator_mail_settings").select("creator, alias, aliases, label_id, enabled").eq("enabled", true);
+  if (!full.error) return (full.data ?? []) as CreatorMailSetting[];
+  const base = await sb.from("creator_mail_settings").select("creator, alias, label_id, enabled").eq("enabled", true);
+  if (base.error) console.error("gmail-poll réglages Mail créateurs", base.error.message);
+  return (base.data ?? []) as CreatorMailSetting[];
+}
+
+/** Langue de l'espace de chaque créateur (creators.lang), français si la colonne manque. */
+async function creatorLangs(sb: Sb, names: string[]): Promise<Map<string, Lang>> {
+  const out = new Map<string, Lang>();
+  if (!names.length) return out;
+  const { data, error } = await sb.from("creators").select("name, lang").in("name", names);
+  if (error) return out;
+  for (const r of (data ?? []) as { name: string; lang: string | null }[]) out.set(r.name, r.lang === "en" ? "en" : "fr");
+  return out;
+}
+
+/**
+ * Prévient chaque créateur concerné par les nouveaux mails : pas de réglage côté
+ * créateur pour l'instant, donc activé par défaut dès que son Mail est activé.
+ */
+async function pushCreators(sb: Sb, mails: Fresh[]): Promise<number> {
+  if (!mails.length) return 0;
+  const settings = await creatorMailSettings(sb);
+  if (!settings.length) return 0;
+  const byCreator = new Map<string, Fresh[]>();
+  for (const m of mails) {
+    for (const c of creatorsForMail(m, settings, AGENCY_DOMAIN)) {
+      const list = byCreator.get(c) ?? [];
+      list.push(m);
+      byCreator.set(c, list);
     }
+  }
+  if (!byCreator.size) return 0;
+  const langs = await creatorLangs(sb, [...byCreator.keys()]);
+  let sent = 0;
+  for (const [creator, list] of byCreator) {
+    sent += (await sendTo(sb, { creator }, creatorMailPayloads(list, langs.get(creator) ?? "fr"))).sent;
   }
   return sent;
 }
@@ -226,7 +258,7 @@ Deno.serve(async (req: Request) => {
     // Le constructeur de requête Supabase n'a pas de .catch : on lit { error }.
     const { error } = await sb.from("email_activity").insert({
       contact_email: email, contact_name: name, direction: "in",
-      subject: f.subject, snippet: f.snippet, source: "inbox",
+      subject: f.subject, snippet: f.snippet.slice(0, 180), source: "inbox",
       thread_id: f.threadId, gmail_message_id: f.id,
     });
     if (error) {
@@ -247,20 +279,32 @@ Deno.serve(async (req: Request) => {
 
   let pushed = 0;
   if (added.length && prefs.emailReceivedPush !== false) {
-    const newest = [...added].sort((a, b) => b.ts - a.ts);
-    const first = parseFrom(newest[0].from);
-    const maxTs = newest[0].ts;
-    const payload = JSON.stringify({
-      title: added.length === 1 ? `Email de ${first.name}` : `${added.length} nouveaux emails`,
-      body: newest[0].subject || first.email,
-      url: "/",
-      tag: `ttp-inbox-${maxTs}`,
+    // Agence uniquement (rôle 'agency') : une notification par fil, au-delà de 3 fils un résumé.
+    pushed = (await sendTo(sb, { agency: true }, agencyMailPayloads(added))).sent;
+  }
+
+  // Créateurs : la copie du mail dans la boîte que lit leur section Mail (talent@ si
+  // configurée, sinon partnerships@, comme creator-mail : mêmes ids de fil). Seuls les
+  // mails nouveaux de CE passage (dédoublonnés par le journal) comptent.
+  let creatorPushed = 0;
+  if (added.length) {
+    const creatorBox: Box = talentAddress() ? "talent" : "partnerships";
+    const addedKeys = new Set(added.flatMap((f) => (f.rfcId ? [f.id, f.rfcId] : [f.id])));
+    const seenIds = new Set<string>();
+    const forCreators = fresh.filter((f) => {
+      if (f.box !== creatorBox || seenIds.has(f.id)) return false;
+      seenIds.add(f.id);
+      return addedKeys.has(f.id) || (!!f.rfcId && addedKeys.has(f.rfcId));
     });
-    pushed = await pushAgency(sb, payload);
+    try {
+      creatorPushed = await pushCreators(sb, forCreators);
+    } catch (e) {
+      console.error("gmail-poll push créateurs", (e as Error)?.message);
+    }
   }
 
   return jsonRes({
-    ok: true, new: added.length, pushed,
+    ok: true, new: added.length, pushed, creatorPushed,
     ...(baseline ? { baseline: true } : {}),
     ...(more ? { more: true } : {}),
     ...(failedBoxes.length ? { partial: true, failedBoxes } : {}),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  addressesIn, aliasQuery, aliasRefused, brandOf, cleanComment, concernedMessages, displayName, isMailStatus, isSharedBox,
+  addressList, addressesIn, aliasQuery, aliasRefused, brandOf, cleanComment, concernedMessages, displayName, isMailStatus, isSharedBox,
   maskAgencyAddresses, messageMatches, normEmail, parseChoice, splitAddressList, threadMatches, type GMessageLite,
 } from "../../supabase/functions/creator-mail/logic.ts";
 import { autoStatusOf, buildFeed, choiceOf, type MailNote, type MailStatusEvent } from "./creatorMail";
@@ -50,6 +50,67 @@ describe("creator-mail : appartenance d'un fil", () => {
     const t = [msg({ From: "marque@x.com", To: "talents@ttpcreators.pro" }), msg({ From: "talents@ttpcreators.pro", Cc: ALIAS })];
     expect(threadMatches(t, ALIAS, null)).toBe(true);
     expect(threadMatches(t, "autre@ttpcreators.pro", null)).toBe(false);
+  });
+});
+
+describe("creator-mail : plusieurs adresses par créateur", () => {
+  const PERSO = "lea.martin@gmail.com";
+  const MINE = [ALIAS, PERSO];
+
+  it("liste normalisée : principale d'abord, minuscules, sans doublon ni adresse invalide", () => {
+    expect(addressList(" LEA@ttpcreators.pro ", ["Lea.Martin@Gmail.com", "lea@ttpcreators.pro", "", null, "pas-un-mail"]))
+      .toEqual([ALIAS, PERSO]);
+    expect(addressList(null, [PERSO])).toEqual([PERSO]);
+    expect(addressList(null, null)).toEqual([]);
+    expect(addressList([ALIAS, ALIAS.toUpperCase()])).toEqual([ALIAS]);
+  });
+
+  it("un fil correspond si n'importe laquelle de ses adresses apparaît", () => {
+    expect(messageMatches(msg({ To: "Léa <Lea.Martin@gmail.com>" }), MINE, null)).toBe(true);
+    expect(messageMatches(msg({ Cc: ALIAS }), MINE, null)).toBe(true);
+    expect(messageMatches(msg({ From: PERSO }), MINE, null)).toBe(true);
+    expect(messageMatches(msg({ "Delivered-To": PERSO }), MINE, null)).toBe(true);
+    expect(messageMatches(msg({ To: "autre@gmail.com" }), MINE, null)).toBe(false);
+    expect(messageMatches(msg({ To: "lea.martin@gmail.com.evil.com" }), MINE, null)).toBe(false);
+    expect(threadMatches([msg({ From: "marque@x.com", To: PERSO })], MINE, null)).toBe(true);
+    expect(threadMatches([msg({ From: "marque@x.com", To: PERSO })], [ALIAS], null)).toBe(false);
+  });
+
+  it("liste vide : seul le libellé compte", () => {
+    expect(messageMatches(msg({ To: ALIAS }), [], null)).toBe(false);
+    expect(messageMatches(msg({ To: "x@y.com" }, ["INBOX", "Label_42"]), [], "Label_42")).toBe(true);
+  });
+
+  it("dans un fil, elle voit les messages de toutes ses adresses, pas les échanges internes", () => {
+    const id = (m: GMessageLite) => m;
+    const a = msg({ From: "marque@x.com", To: ALIAS });
+    const b = msg({ From: "autre@y.com", To: PERSO });
+    const internal = msg({ From: "marc@ttpcreators.pro", To: "partnerships@ttpcreators.pro" });
+    expect(concernedMessages([a, internal, b], id, MINE, null)).toEqual([a, b]);
+  });
+
+  it("ses propres adresses ne sont jamais masquées en « TTP Creators »", () => {
+    expect(maskAgencyAddresses(`lea@ttpcreators.pro, marc@ttpcreators.pro, ${PERSO}`, MINE, "ttpcreators.pro"))
+      .toBe(`lea@ttpcreators.pro, TTP Creators, ${PERSO}`);
+    const second = "lea.pro@ttpcreators.pro";
+    expect(maskAgencyAddresses(second, [ALIAS, second], "ttpcreators.pro")).toBe(second);
+    expect(maskAgencyAddresses(second, [ALIAS], "ttpcreators.pro")).toBe("TTP Creators");
+  });
+
+  it("requête Gmail : toutes les adresses dans un seul OU, les adresses douteuses écartées", () => {
+    expect(aliasQuery(MINE)).toBe(
+      `{to:${ALIAS} from:${ALIAS} cc:${ALIAS} deliveredto:${ALIAS} to:${PERSO} from:${PERSO} cc:${PERSO} deliveredto:${PERSO}}`,
+    );
+    expect(aliasQuery([ALIAS, "x} OR in:anywhere {"])).toBe(`{to:${ALIAS} from:${ALIAS} cc:${ALIAS} deliveredto:${ALIAS}}`);
+    expect(aliasQuery([])).toBe("");
+  });
+
+  it("chaque adresse est refusée si un autre créateur l'utilise (principale ou en plus)", () => {
+    const others = addressList("chloe@ttpcreators.pro", ["chloe.perso@gmail.com"]);
+    const opts = { talent: "talent@ttpcreators.pro", agencyDomain: "ttpcreators.pro", otherAliases: others };
+    expect(MINE.filter((a) => !aliasRefused(a, opts))).toEqual(MINE);
+    expect(aliasRefused("Chloe.Perso@gmail.com", opts)).toBe(true);
+    expect(aliasRefused("partnerships@ttpcreators.pro", opts)).toBe(true);
   });
 });
 

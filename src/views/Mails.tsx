@@ -5,6 +5,7 @@ import { ExpandableActionBar } from "@/components/ui/expandable-action-bar";
 import { Loader, Spin } from "@/components/ui/loader";
 import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, Copy, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, Plus, type LucideIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
+import { allAddresses } from "@/lib/mailAddresses";
 import { cn, titleCase } from "@/lib/utils";
 import { getCache, setCache } from "@/lib/viewCache";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
@@ -27,6 +28,7 @@ import { useSearch } from "@/lib/search";
 import { useLiveKey } from "@/lib/useLive";
 import { buildBrandIndex, collabTag, creatorTone, matchCollabs, relanceDays, type BrandIndex, type CollabLite, type MailTag } from "@/lib/mailCollab";
 import { LinkedCollabCard, MailTagChip } from "@/components/mail-collab";
+import { useIntent } from "@/lib/openIntent";
 
 // Espace mails d'un créateur (statuts, remarques, suivi), chargé seulement à la demande.
 const CreatorMailsAgency = lazy(() => import("@/views/CreatorMails").then((m) => ({ default: m.CreatorMailsAgency })));
@@ -534,16 +536,21 @@ export function Mails() {
   // Tous les créateurs du Roster y sont : un créateur pas encore relié affiche
   // de quoi relier son adresse mail.
   const allCreators = useCreators();
-  const [linked, setLinked] = useState<{ creator: string; alias: string | null; enabled: boolean }[]>([]);
+  // `addresses` : toutes ses adresses (alias principal + adresses en plus), en minuscules.
+  const [linked, setLinked] = useState<{ creator: string; alias: string | null; addresses: string[]; enabled: boolean }[]>([]);
   const [linkedTick, setLinkedTick] = useState(0);
   const [emailPro, setEmailPro] = useState<Map<string, string> | null>(null);
   const [creatorView, setCreatorView] = useState<{ name: string; threadId?: string } | null>(null);
   useEffect(() => {
     let alive = true;
-    void supabase.from("creator_mail_settings").select("creator, alias, label_id, enabled").then(({ data }) => {
+    // « * » : marche avant et après l'ajout de la colonne `aliases` (adresses en plus).
+    void supabase.from("creator_mail_settings").select("*").then(({ data }) => {
       if (!alive) return;
-      const rows = (data ?? []) as { creator: string; alias: string | null; label_id: string | null; enabled: boolean }[];
-      setLinked(rows.filter((r) => r.alias || r.label_id).sort((a, b) => a.creator.localeCompare(b.creator)));
+      const rows = (data ?? []) as { creator: string; alias: string | null; aliases?: string[] | null; label_id: string | null; enabled: boolean }[];
+      setLinked(rows
+        .map((r) => ({ creator: r.creator, alias: r.alias, addresses: allAddresses(r.alias, r.aliases), label_id: r.label_id, enabled: r.enabled }))
+        .filter((r) => r.addresses.length || r.label_id)
+        .sort((a, b) => a.creator.localeCompare(b.creator)));
     });
     return () => {
       alive = false;
@@ -562,10 +569,10 @@ export function Mails() {
   // (relues seulement quand la page Mails est affichée : `rootRef`)
   const mailCount = useCreatorMailCounts(linked.map((l) => l.creator), { rootRef });
   const mailTotal = linked.reduce((sum, l) => sum + mailCount(l.creator), 0);
-  // Alias → créateur (avatar sur les lignes de talent@).
+  // Adresse (alias ou adresse en plus) → créateur (avatar sur les lignes de talent@).
   const aliasOwner = useMemo(() => {
     const m = new Map<string, string>();
-    for (const l of linked) if (l.alias) m.set(l.alias.trim().toLowerCase(), l.creator);
+    for (const l of linked) for (const a of l.addresses) m.set(a, l.creator);
     return m;
   }, [linked]);
   const photoOf = (n: string) => allCreators.find((c) => sameName(c.name, n))?.photo_url ?? null;
@@ -1002,6 +1009,10 @@ export function Mails() {
     const msgs = res.messages ?? [];
     threadCache.set(tkey(t.box, t.threadId), { at: Date.now(), msgs });
     applyMsgs(msgs);
+    // Fil ouvert depuis une notification : l'objet n'était pas encore connu.
+    if (!t.subject && msgs[0]?.subject) {
+      setThread((cur) => (cur && keyOf(cur) === keyOf(t) && !cur.subject ? { ...cur, subject: msgs[0].subject } : cur));
+    }
   };
   const retryThread = () => {
     if (!thread) return;
@@ -1342,6 +1353,22 @@ export function Mails() {
     setCreatorView({ name, threadId });
     setMode("creators");
   };
+  // Notification d'un nouveau mail (src/lib/deepLink.ts) : ouvre la Réception sur ce
+  // fil, même avant que la liste soit chargée (l'objet arrive avec le fil).
+  useIntent("mail:open", (data) => {
+    let want: { thread?: unknown; box?: unknown } = {};
+    try {
+      want = JSON.parse(data ?? "{}") as typeof want;
+    } catch {
+      return;
+    }
+    if (mode !== "inbox") goMode("inbox");
+    const threadId = typeof want.thread === "string" ? want.thread : "";
+    if (!threadId) return;
+    const box: MailBox = want.box === "talent" ? "talent" : "partnerships";
+    const known = [...(lists.inbox?.threads ?? []), ...(lists.sent?.threads ?? [])].find((t) => t.threadId === threadId && t.box === box);
+    openThread({ threadId, box, subject: known?.subject ?? "", contact: known?.email ?? "", name: known?.name ?? "" });
+  });
   // Dossier de couleur d'un créateur : filtre la liste (reçus ou envoyés) ; second clic, tout revient.
   const pickCreator = (name: string) => {
     const on = !!creatorFilter && sameName(creatorFilter, name);
@@ -1390,7 +1417,7 @@ export function Mails() {
     if (!thread || thread.box !== "talent" || !linked.length) return null;
     const addrs = new Set((threadMsgs ?? []).flatMap((m) => addrsOf(`${m.from} ${m.to ?? ""} ${m.cc ?? ""}`)));
     for (const a of allKnown().find((t) => keyOf(t) === keyOf(thread))?.to ?? []) addrs.add(a.toLowerCase());
-    return linked.find((l) => l.alias && addrs.has(l.alias.toLowerCase())) ?? null;
+    return linked.find((l) => l.addresses.some((a) => addrs.has(a))) ?? null;
   }, [thread, threadMsgs, linked, lists, search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Collab(s) active(s) liée(s) au fil ouvert : adresses de tous ses messages, alias, objet.
@@ -1766,7 +1793,7 @@ export function Mails() {
                   key={l.creator}
                   swatch={creatorTone(l.creator)}
                   label={titleCase(l.creator)}
-                  title={`Mails de ${titleCase(l.creator)}${l.alias ? ` (${l.alias})` : ""}`}
+                  title={`Mails de ${titleCase(l.creator)}${l.addresses.length ? ` (${l.addresses.join(", ")})` : ""}`}
                   active={creatorOn(l.creator)}
                   count={creatorUnread.get(l.creator.trim().toLowerCase())}
                   onClick={() => pickCreator(l.creator)}
@@ -2406,7 +2433,9 @@ export function Mails() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-semibold text-foreground">{titleCase(n)}</span>
                     <span className={cn("block truncate text-[12px]", l ? "text-muted-foreground" : "text-faint")}>
-                      {l ? l.alias ?? "Libellé Gmail" : "Pas encore relié"}
+                      {l
+                        ? l.addresses.length > 1 ? `${l.addresses[0]} +${l.addresses.length - 1}` : l.addresses[0] ?? "Libellé Gmail"
+                        : "Pas encore relié"}
                     </span>
                   </span>
                   {mailCount(n) > 0 && (

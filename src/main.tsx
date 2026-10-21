@@ -6,6 +6,7 @@ import { ErrorBoundary, recoverStaleApp } from './components/ErrorBoundary.tsx'
 import { initAccent } from './lib/accent'
 import { initIosUi } from './lib/iosUi'
 import { installGlobalErrorReporting } from './lib/errorReport'
+import { initDeepLinks } from './lib/deepLink'
 import { Tooltips } from './components/ui/tooltips'
 
 // Couleur d'accent personnalisée (localStorage) posée AVANT le rendu → pas de flash.
@@ -17,6 +18,10 @@ document.addEventListener('touchstart', () => {}, { passive: true })
 
 // Tout bug non rattrapé (JS, action qui échoue) est remonté : journal + alerte agence.
 installGlobalErrorReporting()
+
+// Lien d'ouverture d'une notification (« /?open=mails&thread=… ») : lu une fois, retiré
+// de l'adresse ; ceux qui arrivent app ouverte passent par le service worker.
+initDeepLinks()
 
 // Après un déploiement, l'app restée ouverte peut demander un ancien chunk (hash
 // remplacé) → Vite émet `vite:preloadError`. On remet l'app à jour automatiquement ;
