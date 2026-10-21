@@ -1,22 +1,24 @@
 // ============================================================================
 // creator-mail/index.ts : section « Mails » de l'Espace Créateur (LECTURE SEULE).
 // ----------------------------------------------------------------------------
-// Une créatrice voit les fils Gmail de la boîte agence où apparaît SON alias
-// (ou qui portent son libellé manuel). Tout le filtrage est fait ICI, côté
+// Une créatrice voit les fils Gmail de la boîte agence où apparaît UNE de SES
+// adresses (alias principal + adresses en plus, colonne `aliases`) ou qui portent
+// son libellé manuel. Tout le filtrage est fait ICI, côté
 // serveur : le navigateur ne reçoit jamais un mail qui ne la concerne pas.
 //
 // Sécurité :
 //   1. Identité = JWT Supabase vérifié (sb.auth.getUser) → profiles.role /
 //      creator_name. Le client ne choisit JAMAIS sa créatrice ; seule l'agence
 //      peut passer { creator } (aperçu « vue créatrice »).
-//   2. Réglage lu en base (creator_mail_settings) : section activée + alias/libellé.
+//   2. Réglage lu en base (creator_mail_settings) : section activée + adresses/libellé.
+//      Colonne `aliases` absente (SQL pas encore lancé) : lecture sans elle.
 //   3. Chaque accès à un fil (ouverture, pièce jointe, note, avis) revérifie que
 //      le fil appartient à la créatrice (logic.threadMatches) ; sinon 404. Dans un fil,
 //      elle ne voit que les messages qui la concernent (logic.concernedMessages : son
 //      alias dans les en-têtes du message, ou le libellé qui vaut pour tout le fil) ;
 //      les autres adresses de l'agence en To/Cc deviennent « TTP Creators ».
-//   3 bis. Alias refusé (talent@, boîte partagée, alias d'un autre créateur) → « non
-//      configuré ». Section désactivée : toute action autre que `list` → 403.
+//   3 bis. Adresse refusée (talent@, boîte partagée, adresse d'un autre créateur) :
+//      ignorée ; plus aucune adresse ni libellé → « non configuré ». Section désactivée : toute action autre que `list` → 403.
 //   4. Accès Gmail : compte de service (secret GMAIL_SA_KEY + GMAIL_IMPERSONATE,
 //      délégation de domaine, scope gmail.readonly) ; à défaut, la connexion
 //      Gmail de l'agence déjà en place (google_tokens). Jamais côté client.
@@ -29,6 +31,7 @@
 //
 // Entrée (POST JSON) : { action: "list" | "thread" | "attachment" | "note" | "decision" | "labels",
 //                        creator?, threadId?, messageId?, attachmentId?, body?, decision?, comment? }
+// `list` renvoie aussi `alias` (adresse principale) et `aliases` (toutes ses adresses).
 // « decision » (créatrice) : decision = "encours" | "valide" | "refuse", comment facultatif,
 // noté dans creator_mail_status_log (l'agence, elle, écrit directement via la RLS).
 // ============================================================================
@@ -38,7 +41,7 @@ import { getServiceClient, getAccessToken, corsHeaders } from "../_shared/google
 import { serviceAccountToken, talentAddress } from "../_shared/gmailBox.ts";
 import { gfetch, classifyGmail, mapPool, charsetOf, decodeGmailBody, type GfetchOptions } from "../_shared/gfetch.ts";
 import {
-  aliasQuery, aliasRefused, brandAddressOf, brandOf, cleanComment, concernedMessages, displayName, header, isVisibleMessage,
+  addressList, aliasQuery, aliasRefused, brandAddressOf, brandOf, cleanComment, concernedMessages, displayName, header, isVisibleMessage,
   maskAgencyAddresses, normEmail, parseChoice, threadMatches,
   type GHeader, type GMessageLite,
 } from "./logic.ts";
@@ -52,7 +55,9 @@ const NOTE_COLUMNS = "id, body, created_at, agency_read_at, by_role, author_name
 
 type Sb = ReturnType<typeof getServiceClient>;
 type Me = { userId: string; agency: boolean; creator: string | null };
-type Settings = { creator: string; alias: string | null; label_id: string | null; enabled: boolean };
+type SettingsRow = { creator: string; alias: string | null; aliases?: string[] | null; label_id: string | null; enabled: boolean };
+/** Réglage vérifié : `addresses` = ses adresses acceptées (principale d'abord). */
+type Settings = SettingsRow & { addresses: string[] };
 
 // ---------------------------------------------------------------------------
 // Cache mémoire (par instance de fonction) : la PROMESSE est gardée, donc deux
@@ -243,26 +248,46 @@ function clean(html: string): string {
 // ---------------------------------------------------------------------------
 // Réglage + appartenance
 // ---------------------------------------------------------------------------
+/** Colonne `aliases` absente (SQL des adresses pas encore lancé) ? */
+const missingAliases = (e: { code?: string; message?: string } | null) =>
+  !!e && (e.code === "42703" || e.code === "PGRST204" || /aliases/.test(e.message ?? ""));
+
 /**
- * Réglage de la créatrice. Un alias refusé (talent@, boîte partagée, ou alias d'un
- * autre créateur dont la section est active) est ignoré : sans libellé, la section
- * est alors « non configurée ». En cas de doute (lecture impossible) : refusé.
+ * Lecture de creator_mail_settings avec la colonne `aliases`, ou sans elle si le SQL
+ * des adresses n'est pas encore lancé (la fonction peut être déployée avant).
+ */
+async function selectSettings<T>(
+  run: (cols: string) => PromiseLike<{ data: T | null; error: { code?: string; message?: string } | null }>,
+  cols: string,
+): Promise<{ data: T | null; error: { code?: string; message?: string } | null }> {
+  const r = await run(`${cols}, aliases`);
+  return missingAliases(r.error) ? await run(cols) : r;
+}
+
+/**
+ * Réglage de la créatrice. Une adresse refusée (talent@, boîte partagée, ou adresse
+ * d'un autre créateur dont la section est active) est ignorée : sans adresse ni
+ * libellé, la section est alors « non configurée ». En cas de doute (lecture
+ * impossible) : toutes ses adresses sont refusées.
  */
 async function settingsFor(sb: Sb, creator: string): Promise<Settings | null> {
-  const { data } = await sb.from("creator_mail_settings")
-    .select("creator, alias, label_id, enabled").eq("creator", creator).maybeSingle<Settings>();
+  const { data } = await selectSettings<SettingsRow>(
+    (cols) => sb.from("creator_mail_settings").select(cols).eq("creator", creator).maybeSingle<SettingsRow>(),
+    "creator, alias, label_id, enabled",
+  );
   if (!data) return null;
-  const alias = normEmail(data.alias);
-  if (!alias) return data;
-  const { data: others, error } = await sb.from("creator_mail_settings")
-    .select("creator, alias").eq("enabled", true).neq("creator", creator);
+  const mine = addressList(data.alias, data.aliases);
+  const main = normEmail(data.alias) || null;
+  if (!mine.length) return { ...data, alias: main, addresses: [] };
+  const { data: others, error } = await selectSettings<{ alias: string | null; aliases?: string[] | null }[]>(
+    (cols) => sb.from("creator_mail_settings").select(cols).eq("enabled", true).neq("creator", creator)
+      .returns<{ alias: string | null; aliases?: string[] | null }[]>(),
+    "creator, alias",
+  );
   if (error) console.error("creator-mail réglages", error.message);
-  const refused = !!error || aliasRefused(alias, {
-    talent: talentAddress(),
-    agencyDomain: AGENCY_DOMAIN,
-    otherAliases: ((others ?? []) as { alias: string | null }[]).map((o) => o.alias),
-  });
-  return refused ? { ...data, alias: null } : data;
+  const otherAliases = (others ?? []).flatMap((o) => addressList(o.alias, o.aliases));
+  const addresses = error ? [] : mine.filter((a) => !aliasRefused(a, { talent: talentAddress(), agencyDomain: AGENCY_DOMAIN, otherAliases }));
+  return { ...data, alias: main && addresses.includes(main) ? main : null, addresses };
 }
 
 async function loadThread(token: string, threadId: string): Promise<GThread> {
@@ -275,7 +300,7 @@ async function ownedThread(token: string, s: Settings, threadId: string): Promis
   const t = await loadThread(token, threadId);
   // Seuls les messages visibles comptent (un mail à la corbeille ne donne plus accès au fil).
   const visible = (t.messages ?? []).filter((m) => isVisibleMessage(lite(m)));
-  if (!visible.length || !threadMatches(visible.map(lite), s.alias ?? "", s.label_id)) throw new HttpError(404, "introuvable");
+  if (!visible.length || !threadMatches(visible.map(lite), s.addresses, s.label_id)) throw new HttpError(404, "introuvable");
   return t;
 }
 
@@ -296,8 +321,8 @@ async function ownedOrKnown(sb: Sb, s: Settings, threadId: string): Promise<GThr
   }
 }
 
-/** Messages du fil que la créatrice peut voir (alias dans le message, ou libellé du fil). */
-const shownMessages = (t: GThread, s: Settings) => concernedMessages(t.messages ?? [], lite, s.alias ?? "", s.label_id);
+/** Messages du fil que la créatrice peut voir (une de ses adresses dans le message, ou libellé du fil). */
+const shownMessages = (t: GThread, s: Settings) => concernedMessages(t.messages ?? [], lite, s.addresses, s.label_id);
 
 // ---------------------------------------------------------------------------
 // Actions
@@ -335,9 +360,9 @@ const decisionOf = (row: ThreadRow | null | undefined) =>
 
 /** Fils Gmail de la créatrice (métadonnées). `partial` : un fil n'a pas pu être lu. */
 function gmailThreads(token: string, s: Settings, fresh: boolean): Promise<{ threads: GThread[]; partial: boolean }> {
-  return cached(`l:${s.alias ?? ""}:${s.label_id ?? ""}`, 60_000, async () => {
+  return cached(`l:${s.addresses.join(",")}:${s.label_id ?? ""}`, 60_000, async () => {
     const ids = new Set<string>();
-    const q = aliasQuery(s.alias ?? "");
+    const q = aliasQuery(s.addresses);
     if (q) {
       const r = await gmail<{ threads?: { id: string }[] }>(token, `/threads?maxResults=${LIST_MAX}&q=${encodeURIComponent(q)}`);
       for (const t of r.threads ?? []) ids.add(t.id);
@@ -374,7 +399,7 @@ async function listThreads(sb: Sb, token: string, s: Settings, fresh: boolean) {
     .map((t) => {
       const msgs = (t.messages ?? []).filter((m) => isVisibleMessage(lite(m)));
       // Revérification serveur : la recherche Gmail est approximative.
-      if (!msgs.length || !threadMatches(msgs.map(lite), s.alias ?? "", s.label_id)) return null;
+      if (!msgs.length || !threadMatches(msgs.map(lite), s.addresses, s.label_id)) return null;
       // Aperçu, date et nombre : seulement les messages qui la concernent.
       const shown = shownMessages(t, s);
       if (!shown.length) return null;
@@ -425,8 +450,8 @@ async function threadView(sb: Sb, token: string, s: Settings, threadId: string) 
       fromEmail: fromAddr,
       fromAgency: fromAddr.endsWith("@" + AGENCY_DOMAIN),
       // Les autres adresses de l'agence (collègues, boîtes partagées) → « TTP Creators ».
-      to: maskAgencyAddresses(header(hs, "To"), s.alias ?? "", AGENCY_DOMAIN),
-      cc: maskAgencyAddresses(header(hs, "Cc"), s.alias ?? "", AGENCY_DOMAIN),
+      to: maskAgencyAddresses(header(hs, "To"), s.addresses, AGENCY_DOMAIN),
+      cc: maskAgencyAddresses(header(hs, "Cc"), s.addresses, AGENCY_DOMAIN),
       ts: Number(m.internalDate ?? 0),
       html: html ? clean(html) : "",
       text: html ? "" : text,
@@ -507,7 +532,7 @@ Deno.serve(async (req: Request) => {
     const disabled = !me.agency && (!s || !s.enabled);
     if (disabled && action !== "list") return res({ error: "section_desactivee" }, 403);
     // Section désactivée ou non configurée : rien n'est lu dans Gmail.
-    if (!s || disabled || (!normEmail(s.alias) && !s.label_id)) {
+    if (!s || disabled || (!s.addresses.length && !s.label_id)) {
       return res({ ok: true, configured: false, threads: [] });
     }
 
@@ -554,7 +579,11 @@ Deno.serve(async (req: Request) => {
     const token = await gmailToken(sb);
     if (action === "list") {
       const { threads, partial } = await listThreads(sb, token, s, body.fresh === true);
-      return res({ ok: true, configured: true, threads, ...(partial ? { partial: true } : {}) });
+      // `alias` : adresse principale (compatibilité) ; `aliases` : toutes ses adresses.
+      return res({
+        ok: true, configured: true, threads, alias: s.alias ?? s.addresses[0] ?? null, aliases: s.addresses,
+        ...(partial ? { partial: true } : {}),
+      });
     }
     if (action === "thread") return res({ ok: true, thread: await threadView(sb, token, s, threadId) });
     if (action === "attachment") {

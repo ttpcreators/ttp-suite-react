@@ -56,7 +56,10 @@ export type MailNote = {
 export type MailThread = Decision & {
   id: string; subject: string; brand: string; status: MailStatus; messages: MailMessage[]; notes: MailNote[];
 };
-export type MailSettings = { creator: string; alias: string | null; label_id: string | null; label_name: string | null; enabled: boolean };
+/** Réglage Mails d'un créateur. `aliases` : ses adresses en plus de l'alias (absent tant que le SQL n'est pas lancé). */
+export type MailSettings = {
+  creator: string; alias: string | null; aliases?: string[] | null; label_id: string | null; label_name: string | null; enabled: boolean;
+};
 
 /** Rangement choisi à la main avec le grand sélecteur d'un échange. */
 export type MailChoice = "encours" | "a_verifier" | "a_valider" | "valide" | "refuse";
@@ -374,8 +377,11 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
   return payload;
 }
 
-/** Réponse de la liste. `partial` : des fils n'ont pas pu être lus ; `alias` : selon la version du serveur. */
-export type MailList = { configured: boolean; threads: MailThreadLite[]; partial?: boolean; alias?: string | null };
+/**
+ * Réponse de la liste. `partial` : des fils n'ont pas pu être lus ; `alias` (adresse principale)
+ * et `aliases` (toutes ses adresses) : selon la version du serveur.
+ */
+export type MailList = { configured: boolean; threads: MailThreadLite[]; partial?: boolean; alias?: string | null; aliases?: string[] };
 /**
  * `creator` n'est pris en compte par le serveur que pour un compte agence.
  * `fresh` (« Actualiser ») : ignore le cache du serveur (sans effet sur une ancienne version).

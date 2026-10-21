@@ -313,4 +313,8 @@ export const EN_CREATORPAGES: Record<string, string> = {
   "Adresse de {name}": "{name}'s address",
   "Adresse copiée": "Address copied",
   "Copier": "Copy",
+  "Tes adresses mail": "Your email addresses",
+  "Adresses de {name}": "{name}'s addresses",
+  "Copier {address}": "Copy {address}",
+  "ou": "or",
 };
