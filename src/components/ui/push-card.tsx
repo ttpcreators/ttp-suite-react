@@ -11,8 +11,10 @@ import { useT } from "@/lib/i18n";
  * (activation & « comment recevoir »), pour ne pas occuper tout l'écran.
  * Toute la logique d'états (iOS écran d'accueil, refus, activé + test) est
  * préservée via usePush.
+ * `mails` : le Mail du créateur est activé → ses nouveaux mails sont notifiés aussi
+ * (gmail-poll ; pas de réglage à part pour l'instant, activé par défaut).
  */
-export function PushCard() {
+export function PushCard({ mails = false }: { mails?: boolean }) {
   const { state, busy, enable, disable, sendTest } = usePush();
   const [testing, setTesting] = useState(false);
   const [actOpen, setActOpen] = useState(false);
@@ -77,7 +79,7 @@ export function PushCard() {
         primaryDisabled={busy || testing}
       >
         <ul className="flex flex-col gap-2">
-          {["Nouveaux briefs & deals", "Cadeaux / gifting reçus", "Tâches et documents ajoutés"].map((line) => (
+          {[...(mails ? ["Nouveaux mails des marques"] : []), "Nouveaux briefs & deals", "Cadeaux / gifting reçus", "Tâches et documents ajoutés"].map((line) => (
             <li key={line} className="flex items-center gap-2 text-[13px] text-muted-foreground">
               <Check className="h-4 w-4 shrink-0 text-signaltext" /> {t(line)}
             </li>

@@ -1022,7 +1022,7 @@ export function Parametres() {
               <PrefRow label="Afficher dans la cloche" hint="L'activité des 7 derniers jours en haut des notifications de l'app." checked={on(prefs.bellCreatorActivity)} onChange={(v) => setPref("bellCreatorActivity", v)} />
             </Card>
             <Card title="Emails" hint="Quand un email arrive sur la boîte de l'agence (Gmail connecté).">
-              <PrefRow label="Notification sur le téléphone" hint="Un push dès qu'un nouvel email arrive." checked={on(prefs.emailReceivedPush)} onChange={(v) => setPref("emailReceivedPush", v)} />
+              <PrefRow label="Notification sur le téléphone" hint="Un push par fil dès qu'un mail arrive (expéditeur, objet, début du message), un résumé au-delà de 3." checked={on(prefs.emailReceivedPush)} onChange={(v) => setPref("emailReceivedPush", v)} />
               <PrefRow label="Afficher dans la cloche" hint="Les nouveaux emails en haut des notifications de l'app." checked={on(prefs.emailReceivedBell)} onChange={(v) => setPref("emailReceivedBell", v)} />
             </Card>
             <Card title="Alertes techniques" hint="Pour être prévenu si un bug survient dans l'app : chez toi, un collègue ou un créateur.">

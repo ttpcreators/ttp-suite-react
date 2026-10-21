@@ -9,55 +9,12 @@
 // (mais on journalise toujours). Respecte la préférence notifPrefs.pushErrors.
 // ============================================================================
 
-import webpush from "npm:web-push@3.6.7";
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
-
-const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
-const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
-const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") ?? "mailto:marc@ttpcreators.pro";
-if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-}
-
-type Sub = { id: string; endpoint: string; p256dh: string; auth: string; user_id: string | null };
-
-/** Push vers les appareils AGENCE uniquement ; purge les abonnements morts. */
-async function pushAgency(sb: ReturnType<typeof getServiceClient>, payload: string): Promise<number> {
-  const { data: subsRaw } = await sb.from("push_subscriptions").select("id,endpoint,p256dh,auth,user_id");
-  const all = (subsRaw ?? []) as Sub[];
-  const userIds = [...new Set(all.map((s) => s.user_id).filter(Boolean))] as string[];
-  const agencyIds = new Set<string>();
-  if (userIds.length) {
-    const { data: profs } = await sb.from("profiles").select("user_id,role").in("user_id", userIds);
-    for (const pr of (profs ?? []) as { user_id: string; role: string }[]) {
-      if (pr.role !== "creator") agencyIds.add(pr.user_id);
-    }
-  }
-  const subs = all.filter((s) => s.user_id && agencyIds.has(s.user_id));
-  let sent = 0;
-  for (const s of subs) {
-    try {
-      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
-      sent++;
-    } catch (e) {
-      const code = (e as { statusCode?: number })?.statusCode;
-      if (code === 404 || code === 410) await sb.from("push_subscriptions").delete().eq("id", s.id);
-    }
-  }
-  return sent;
-}
+import { loadNotifPrefs, makePayload, pushReady, sendTo } from "../_shared/push.ts";
 
 /** notifPrefs depuis le blob agence (tout activé par défaut). */
 async function pushErrorsEnabled(sb: ReturnType<typeof getServiceClient>): Promise<boolean> {
-  try {
-    const { data } = await sb.from("module_rows").select("a").eq("module", "__app_state__")
-      .order("created_at", { ascending: false }).limit(1);
-    const raw = (data?.[0] as { a?: unknown } | undefined)?.a;
-    const obj = typeof raw === "string" ? JSON.parse(raw) : (raw ?? {});
-    return (obj?.notifPrefs?.pushErrors as boolean | undefined) !== false;
-  } catch {
-    return true;
-  }
+  return (await loadNotifPrefs(sb)).pushErrors !== false;
 }
 
 Deno.serve(async (req: Request) => {
@@ -116,18 +73,19 @@ Deno.serve(async (req: Request) => {
   }
 
   let pushed = 0;
-  if (!flooding && occurrences <= 1 && (anyRecent ?? 1) <= 1 && VAPID_PRIVATE_KEY && (await pushErrorsEnabled(sb))) {
+  if (!flooding && occurrences <= 1 && (anyRecent ?? 1) <= 1 && pushReady() && (await pushErrorsEnabled(sb))) {
     // SÉCURITÉ (audit 2026-07-13) : endpoint non authentifié → NE PAS mettre de texte
     // contrôlé par l'appelant (message/page) dans la notif, sinon vecteur de phishing
     // vers les téléphones agence. Corps générique ; le détail reste dans error_log.
     // Tag FIXE → les pushs se remplacent au lieu de s'empiler (anti-spam).
-    const payload = JSON.stringify({
+    const payload = makePayload({
+      kind: "error",
       title: "Erreur dans l'app",
       body: "Détail dans Diagnostique.",
       url: "/",
       tag: "ttp-error",
     });
-    pushed = await pushAgency(sb, payload);
+    pushed = (await sendTo(sb, { agency: true }, payload)).sent;
   }
 
   return jsonRes({ ok: true, logged: true, occurrences, pushed });
