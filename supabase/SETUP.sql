@@ -2143,3 +2143,103 @@ create policy nav_seen_own on public.nav_seen for all to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 revoke all on public.nav_seen from anon;
 grant select, insert, update on public.nav_seen to authenticated;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- To-do · plusieurs créateurs (2026-10-21, sql/2026-10-21-taches-plusieurs-createurs.sql).
+-- todos.creators (text[]) = tous les créateurs ; todos.creator = le premier.
+-- Remplace la policy todos_scoped (section 5) par lecture / création / modification /
+-- suppression séparées : un créateur lit et modifie les tâches partagées avec lui,
+-- ne crée que pour lui-même, ne supprime que celles dont il est le premier créateur,
+-- et ne peut pas changer la liste (trigger todos_a_creators_guard).
+-- ════════════════════════════════════════════════════════════════════════════
+alter table public.todos add column if not exists creators text[] not null default '{}';
+create index if not exists todos_creators_gin on public.todos using gin (creators);
+
+create or replace function public.todos_creators_sync() returns trigger
+  language plpgsql set search_path = public, pg_temp as $$
+declare
+  clean text[];
+begin
+  -- Ancien client : seul `creator` a changé → la liste devient ce seul nom.
+  if tg_op = 'UPDATE'
+     and new.creator is distinct from old.creator
+     and new.creators is not distinct from old.creators then
+    new.creators := case when nullif(btrim(new.creator), '') is null then '{}'::text[]
+                         else array[btrim(new.creator)] end;
+  end if;
+  -- Noms rognés, vides retirés, doublons (casse ignorée) retirés, ordre gardé.
+  select coalesce(array_agg(x.n order by x.pos), '{}'::text[]) into clean
+    from (
+      select distinct on (lower(btrim(u.n))) btrim(u.n) as n, u.pos
+        from unnest(coalesce(new.creators, '{}'::text[])) with ordinality as u(n, pos)
+       where nullif(btrim(u.n), '') is not null
+       order by lower(btrim(u.n)), u.pos
+    ) x;
+  if cardinality(clean) = 0 and nullif(btrim(new.creator), '') is not null then
+    clean := array[btrim(new.creator)];
+  end if;
+  new.creators := clean;
+  new.creator := clean[1];  -- null si la liste est vide (tâche agence)
+  return new;
+end $$;
+
+-- Triggers BEFORE par ordre alphabétique : la garde (a_) avant la mise en ordre (b_).
+create or replace function public.todos_creators_guard() returns trigger
+  language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if auth.uid() is not null and not public.is_agency() then
+    if tg_op = 'INSERT' then
+      new.creators := case when nullif(btrim(new.creator), '') is null then '{}'::text[]
+                           else array[btrim(new.creator)] end;
+    else
+      new.creator  := old.creator;
+      new.creators := old.creators;
+    end if;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists todos_creators_sync on public.todos;
+drop trigger if exists todos_b_creators_sync on public.todos;
+create trigger todos_b_creators_sync before insert or update on public.todos
+  for each row execute function public.todos_creators_sync();
+drop trigger if exists todos_creators_guard on public.todos;
+drop trigger if exists todos_a_creators_guard on public.todos;
+create trigger todos_a_creators_guard before insert or update on public.todos
+  for each row execute function public.todos_creators_guard();
+
+drop policy if exists todos_scoped on public.todos;
+drop policy if exists todos_read   on public.todos;
+drop policy if exists todos_insert on public.todos;
+drop policy if exists todos_update on public.todos;
+drop policy if exists todos_delete on public.todos;
+create policy todos_read on public.todos for select to authenticated
+  using (public.is_agency() or creator = public.my_creator() or public.my_creator() = any(creators));
+create policy todos_insert on public.todos for insert to authenticated
+  with check (public.is_agency() or creator = public.my_creator());
+create policy todos_update on public.todos for update to authenticated
+  using (public.is_agency() or creator = public.my_creator() or public.my_creator() = any(creators))
+  with check (public.is_agency() or creator = public.my_creator() or public.my_creator() = any(creators));
+create policy todos_delete on public.todos for delete to authenticated
+  using (public.is_agency() or creator = public.my_creator());
+
+-- Pièces jointes : aussi celles des tâches partagées (remplace la version plus haut).
+drop policy if exists documents_obj_creator_own_read on storage.objects;
+create policy documents_obj_creator_own_read on storage.objects for select to authenticated
+  using (
+    bucket_id = 'documents' and (
+      name like 'creator-uploads/' || auth.uid()::text || '/%'
+      or exists (
+        select 1 from public.todos t, jsonb_array_elements(coalesce(t.attachments, '[]'::jsonb)) a
+         where a->>'path' = storage.objects.name
+           and (t.creator = public.my_creator() or public.my_creator() = any(t.creators))
+           -- seulement un fichier rangé sous CETTE tâche (pas un chemin recopié, 2026-10-15)
+           and storage.objects.name like 'todo-attachments/' || t.id::text || '/%'
+      )
+    )
+  );
+
+update public.todos
+   set creators = array[btrim(creator)]
+ where cardinality(creators) = 0
+   and nullif(btrim(creator), '') is not null;

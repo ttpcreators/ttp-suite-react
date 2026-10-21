@@ -12,7 +12,7 @@ import {
   TextField,
   SelectField,
   AutoGrowTextField,
-  Picker,
+  Field,
 } from "@/components/ui/form";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
@@ -20,7 +20,7 @@ import { Tabs } from "@/components/ui/animated-tabs";
 import { IconTile } from "@/components/ui/icon-tile";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Kbd } from "@/components/ui/kbd";
-import { CreatorAvatar } from "@/components/ui/creator-avatar";
+import { CreatorMultiPicker, CreatorStack } from "@/components/ui/creator-multi-picker";
 import { SwipeRow } from "@/components/mobile/swipe-row";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
@@ -31,6 +31,9 @@ import { useIsPhone } from "@/lib/iosUi";
 import { toISODate, todayISO } from "@/lib/dates";
 import { useStickyState } from "@/lib/useStickyState";
 import { parseQuickAdd } from "@/lib/todoQuickAdd";
+import { creatorsLabel, creatorsPatch, hasCreator, joinNames, todoCreators } from "@/lib/todoCreators";
+import { noteCreatorsColumn, todosHaveCreators } from "@/lib/todoCreatorsDb";
+import { appendPoint, latestPoint, parsePoints } from "@/lib/todoProgress";
 import { TONE_DOT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
 import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -60,7 +63,10 @@ type Row = {
   descr: string | null;
   tag: string | null;
   due: string | null;
+  /** Premier créateur de la liste (gardé pour les anciens lecteurs). */
   creator: string | null;
+  /** Tous les créateurs de la tâche (colonne ajoutée par le SQL 2026-10-21 ; absente avant). */
+  creators?: string[] | null;
   priority: Priority;
   source: Source;
   done: boolean;
@@ -168,6 +174,36 @@ function useIsDesktop(): boolean {
   );
 }
 
+/**
+ * Fiche de droite : sa hauteur suit la place visible sous elle (de son haut jusqu'au bas
+ * de l'écran, 20 px de marge). Sans ça, tant que la page n'a pas défilé, le bas de la
+ * fiche (points d'avancement, boutons) sortait de l'écran.
+ */
+function useFitViewport(ref: React.RefObject<HTMLElement | null>, active: boolean) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!active || !el) return;
+    let raf = 0;
+    const fit = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const top = Math.max(el.getBoundingClientRect().top, 20);
+        el.style.maxHeight = `${Math.max(320, Math.round(window.innerHeight - top - 20))}px`;
+      });
+    };
+    fit();
+    // Le défilement se fait dans le conteneur de l'app (pas la fenêtre) : écoute en capture.
+    window.addEventListener("scroll", fit, { capture: true, passive: true });
+    window.addEventListener("resize", fit);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", fit, { capture: true });
+      window.removeEventListener("resize", fit);
+      el.style.maxHeight = "";
+    };
+  }, [ref, active]);
+}
+
 // Filtre créateur : null = tous, "__agency__" = agence, sinon nom du créateur.
 type CreatorFilter = null | "__agency__" | string;
 // Filtre priorité : null = toutes, sinon la priorité.
@@ -203,9 +239,9 @@ export function Todo() {
   const [note, setNote] = useState("");
   const [due, setDue] = useState("");
   const [priority, setPriority] = useState<Priority>("moyenne");
-  const [creator, setCreator] = useState("");
+  const [creatorList, setCreatorList] = useState<string[]>([]);
   // Bouton dédié « Tâche agence » : ouvre le formulaire verrouillé sur l'agence
-  // (creator vide) et masque le champ « Pour qui » → tâche interne, sans créateur.
+  // (aucun créateur) et masque le champ « Pour qui » → tâche interne, sans créateur.
   const [forceAgency, setForceAgency] = useState(false);
   // « + » d'Aujourd'hui ou « Nouvelle tâche » de la palette ⌘K : ouvre le formulaire.
   useIntent("todo:new", () => {
@@ -251,11 +287,20 @@ export function Todo() {
   };
   // « Points d'avancement » : un nouveau point s'ajoute à la suite du commentaire.
   const [pointInput, setPointInput] = useState("");
+  const pointRef = useRef<HTMLInputElement>(null);
+  // « Où j'en suis » (haut de la fiche) : descend jusqu'au champ d'ajout d'un point.
+  const focusPoint = (id: string) => {
+    if (noteEditId === id) return;
+    const el = pointRef.current;
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.focus({ preventScroll: true });
+  };
   const addPoint = async (row: Row) => {
     const t = pointInput.trim();
     if (!t) return;
-    const cur = (notes[row.id] ?? "").trim();
-    if (await saveNote(row.id, cur ? `${cur}\n${t}` : t)) {
+    // Point daté (« 21/10/2026 · … ») ajouté à la suite des précédents.
+    if (await saveNote(row.id, appendPoint(notes[row.id], t))) {
       setPointInput("");
       toast("Point d'avancement ajouté ✓");
     } else {
@@ -372,7 +417,7 @@ export function Todo() {
 
   // Prévient le créateur (si notifs activées) quand SA tâche/demande est terminée.
   const notifyTaskDone = (row: Row, status: string) => {
-    if (status === "Fait" && row.creator) notifyCreator("task-done", row.creator, `✅ Ta demande est faite : « ${row.text} »`);
+    if (status === "Fait") for (const name of todoCreators(row)) notifyCreator("task-done", name, `✅ Ta demande est faite : « ${row.text} »`);
   };
 
   /**
@@ -403,7 +448,7 @@ export function Todo() {
   const [editNote, setEditNote] = useState("");
   const [editDue, setEditDue] = useState("");
   const [editPriority, setEditPriority] = useState<Priority>("moyenne");
-  const [editCreator, setEditCreator] = useState("");
+  const [editCreators, setEditCreators] = useState<string[]>([]);
 
   // Ouvre le mode édition en pré-remplissant depuis la tâche.
   const openEdit = (row: Row) => {
@@ -412,7 +457,7 @@ export function Todo() {
     setEditNote(notes[row.id] ?? "");
     setEditDue(toISODate(row.due));
     setEditPriority(row.priority);
-    setEditCreator(row.creator ?? "");
+    setEditCreators(todoCreators(row));
     setEditingId(row.id);
   };
 
@@ -432,10 +477,10 @@ export function Todo() {
     const patch = {
       text: editText.trim(),
       descr: editDescr.trim() || null,
-      tag: editCreator ? "CRÉATEUR" : "AGENCE",
       due: dueVal,
-      creator: editCreator || null,
       priority: editPriority,
+      // creator (le premier), tag, et creators si la colonne existe.
+      ...creatorsPatch(editCreators, await todosHaveCreators()),
     };
     if (!(await dbUpdate("todos", row.id, patch))) {
       toast("Erreur, réessaie");
@@ -456,12 +501,12 @@ export function Todo() {
     setPane(null);
     if (await patchTodo(row.id, () => ({ due: iso }))) toast(`Échéance reportée au ${dueLabel(iso)} ✓`);
   };
-  // « Déléguer » : change « Pour qui » (champ `creator` existant, comme dans « Modifier »).
-  const delegate = async (row: Row, name: string) => {
-    setPane(null);
-    if ((row.creator ?? "") === name) return;
-    const ok = await patchTodo(row.id, () => ({ creator: name || null, tag: name ? "CRÉATEUR" : "AGENCE" }));
-    if (ok) toast(name ? `Tâche confiée à ${titleCase(name)} ✓` : "Tâche rendue à l'agence ✓");
+  // « Déléguer » : change « Pour qui » (un ou plusieurs créateurs, comme dans « Modifier »).
+  // Le panneau reste ouvert : on peut cocher plusieurs créateurs à la suite.
+  const delegate = async (row: Row, list: string[]) => {
+    const patch = creatorsPatch(list, await todosHaveCreators());
+    const ok = await patchTodo(row.id, () => patch);
+    if (ok) toast(patch.creator ? `Tâche confiée à ${creatorsLabel(list)} ✓` : "Tâche rendue à l'agence ✓");
   };
 
   useEffect(() => {
@@ -480,6 +525,7 @@ export function Todo() {
         return;
       }
       const list = (data as Row[]) ?? [];
+      noteCreatorsColumn(list);
       setError(false);
       setCache("todos", list);
       setRows(list);
@@ -490,13 +536,13 @@ export function Todo() {
   }, [live]);
 
   /** Création d'une tâche (formulaire complet ET barre d'ajout rapide). Renvoie la ligne créée. */
-  const createTodo = async (f: { text: string; descr: string; note: string; due: string; priority: Priority; creator: string }): Promise<Row | null> => {
+  const createTodo = async (f: { text: string; descr: string; note: string; due: string; priority: Priority; creators: string[] }): Promise<Row | null> => {
     const row = {
       text: f.text.trim(),
       descr: f.descr.trim() || null,
-      tag: f.creator ? "CRÉATEUR" : "AGENCE",
       due: f.due.trim() || "—",
-      creator: f.creator || null,
+      // creator (le premier), tag, et creators si la colonne existe.
+      ...creatorsPatch(f.creators, await todosHaveCreators()),
       priority: f.priority,
       source: "agency" as Source,
       done: false,
@@ -508,11 +554,12 @@ export function Todo() {
       return null;
     }
     const createdRow = created as unknown as Row;
+    if (!("creators" in row) && f.creators.length > 1) toast("Un seul créateur enregistré : la mise à jour de la base (SQL) n'est pas encore faite");
     setRows((prev) => [createdRow, ...(prev ?? [])]);
     // Le commentaire ne bloque jamais la réinitialisation du formulaire (saveNote ne lève pas).
     if (f.note.trim() && !(await saveNote(createdRow.id, f.note))) toast("Avancement non enregistré, réessaie");
-    // Push au créateur concerné (s'il a activé les notifs sur son téléphone).
-    if (f.creator) notifyCreator("task", f.creator, f.text.trim());
+    // Push à chaque créateur concerné (s'il a activé les notifs sur son téléphone).
+    for (const name of todoCreators({ creators: f.creators })) notifyCreator("task", name, f.text.trim());
     toast("Tâche ajoutée ✓");
     return createdRow;
   };
@@ -522,7 +569,7 @@ export function Todo() {
       toast("Renseigne la tâche");
       return;
     }
-    if (!(await createTodo({ text, descr, note, due, priority, creator }))) return;
+    if (!(await createTodo({ text, descr, note, due, priority, creators: forceAgency ? [] : creatorList }))) return;
     setFormOpen(false);
     setForceAgency(false);
     setText("");
@@ -530,7 +577,7 @@ export function Todo() {
     setNote("");
     setDue("");
     setPriority("moyenne");
-    setCreator("");
+    setCreatorList([]);
   };
 
   // ── Barre d'ajout rapide (« N » pour y aller) ──
@@ -545,16 +592,23 @@ export function Todo() {
       return;
     }
     setQuickBusy(true);
-    const created = await createTodo({
-      text: parsed.title,
-      descr: "",
-      note: "",
-      due: parsed.due ?? "",
-      priority: parsed.priority ?? "moyenne",
-      creator: parsed.creator ?? "",
-    });
-    setQuickBusy(false);
-    if (created) setQuick("");
+    try {
+      const created = await createTodo({
+        text: parsed.title,
+        descr: "",
+        note: "",
+        due: parsed.due ?? "",
+        priority: parsed.priority ?? "moyenne",
+        creators: parsed.creators,
+      });
+      if (created) setQuick("");
+    } catch {
+      toast("Erreur, réessaie");
+    } finally {
+      // Jamais laissé bloqué après une erreur ; le champ garde le focus pour la suivante.
+      setQuickBusy(false);
+      quickRef.current?.focus({ preventScroll: true });
+    }
   };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -583,11 +637,12 @@ export function Todo() {
 
   // Base : recherche + filtre créateur (les tuiles du haut comptent sur cette base).
   const scoped = (rows ?? []).filter((row) => {
-    if (!matchQuery(query, row.text, row.descr, row.creator, row.tag)) return false;
+    if (!matchQuery(query, row.text, row.descr, todoCreators(row).join(" "), row.tag)) return false;
+    // Filtre créateur : une tâche partagée compte pour CHACUN de ses créateurs.
     if (creatorFilter === "__agency__") {
-      if (row.creator) return false;
+      if (todoCreators(row).length) return false;
     } else if (creatorFilter != null) {
-      if (row.creator !== creatorFilter) return false;
+      if (!hasCreator(row, creatorFilter)) return false;
     }
     return true;
   });
@@ -658,7 +713,15 @@ export function Todo() {
 
   // ── Sélection (fiche) ──
   const creatorByName = new Map(creators.map((c) => [c.name, c]));
+  const photoOf = (name: string) => creatorByName.get(name)?.photo_url ?? null;
+  /** « Pour » d'une tâche : la liste, « Justine + 2 » (court) et « Justine, Léna et Inès » (complet). */
+  const whoOf = (row: Row) => {
+    const names = todoCreators(row);
+    return { names, short: names.length ? creatorsLabel(names) : "Agence", full: names.length ? joinNames(names) : "Agence" };
+  };
   const showInspector = isDesktop && viewMode === "liste" && rows !== null && rows.length > 0;
+  const asideRef = useRef<HTMLElement>(null);
+  useFitViewport(asideRef, showInspector);
   const inspected = ordered.find((r) => r.id === selId) ?? ordered[0] ?? null;
   const sheetRow = sheetOpen && (!isDesktop || viewMode === "colonnes") ? (rows ?? []).find((r) => r.id === selId) ?? null : null;
   const pick = (id: string) => {
@@ -698,6 +761,7 @@ export function Todo() {
     const status = statusOf(row);
     const day = shortDay(row.created_at);
     const atts = row.attachments?.length ?? 0;
+    const who = whoOf(row);
     return (
       <li key={row.id}>
         <SwipeRow
@@ -736,8 +800,8 @@ export function Todo() {
                 {row.text}
               </div>
               <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-muted-foreground">
-                <Who name={row.creator} photo={row.creator ? creatorByName.get(row.creator)?.photo_url : null} size="xs" />
-                <span className="font-medium text-foreground/80">{row.creator ? titleCase(row.creator) : "Agence"}</span>
+                <CreatorStack names={who.names} photoOf={photoOf} size="xs" />
+                <span className="font-medium text-foreground/80" title={who.full}>{who.short}</span>
                 {/* La date (déjà dans la fiche) laisse la place au titre sur téléphone. */}
                 {row.source === "creator" ? (
                   <span>
@@ -802,15 +866,9 @@ export function Todo() {
             { value: "basse", label: "Basse" },
           ]}
         />
-        <SelectField
-          label="Pour qui"
-          value={editCreator}
-          onChange={setEditCreator}
-          options={[
-            { value: "", label: "L'agence (tâche interne)" },
-            ...creators.map((c) => ({ value: c.name, label: titleCase(c.name) })),
-          ]}
-        />
+        <Field label="Pour qui">
+          <CreatorMultiPicker ariaLabel="Pour qui" value={editCreators} onChange={setEditCreators} creators={creators} agencyLabel="L'agence (tâche interne)" />
+        </Field>
       </div>
       <div className="flex items-center justify-end gap-2">
         <button
@@ -837,6 +895,9 @@ export function Todo() {
     const dueText = dueLabel(row.due);
     const created = row.created_at ? new Date(row.created_at) : null;
     const paneKind = pane?.id === row.id ? pane.kind : null;
+    const who = whoOf(row);
+    const points = parsePoints(notes[row.id]);
+    const last = latestPoint(notes[row.id]);
     const closeBtn = inSheet && (
       <button
         type="button"
@@ -862,7 +923,7 @@ export function Todo() {
 
     return (
       <>
-        <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-1 [&>*]:shrink-0">
+        <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-1 pb-4 [&>*]:shrink-0">
           {/* Titre : rond à cocher + intitulé, menu ⋯ (toutes les actions) */}
           <div className="flex items-start gap-3">
             <DoneCircle done={row.done} high={row.priority === "haute"} onToggle={() => toggleDone(row)} size="lg" />
@@ -888,11 +949,28 @@ export function Todo() {
 
           {row.descr && <p className="-mt-2 whitespace-pre-wrap text-[14px] leading-relaxed text-muted-foreground">{row.descr}</p>}
 
+          {/* Où j'en suis : le dernier point d'avancement, visible sans faire défiler. */}
+          <button
+            type="button"
+            onClick={() => focusPoint(row.id)}
+            className="flex w-full flex-col gap-1 rounded-[14px] bg-panel px-3.5 py-3 text-left transition-colors hover:bg-rowhover"
+          >
+            <span className="flex items-baseline justify-between gap-2">
+              <span className="text-[12px] font-semibold text-muted-foreground">Où j'en suis</span>
+              {last?.date && <span className="text-[11px] tabular-nums text-faint">le {last.date}</span>}
+            </span>
+            {last ? (
+              <span className="line-clamp-3 whitespace-pre-wrap text-[13px] leading-snug text-foreground [overflow-wrap:anywhere]">{last.text}</span>
+            ) : (
+              <span className="text-[13px] leading-snug text-muted-foreground">Aucun point pour l'instant. Ajoute où tu en es.</span>
+            )}
+          </button>
+
           {/* Infos groupées */}
           <dl className="divide-y divide-border overflow-hidden rounded-[14px] bg-panel">
             <InfoRow label="Pour">
-              <Who name={row.creator} photo={row.creator ? creatorByName.get(row.creator)?.photo_url : null} size="sm" />
-              <span className="truncate font-medium">{row.creator ? titleCase(row.creator) : "Agence"}</span>
+              <CreatorStack names={who.names} photoOf={photoOf} size="sm" />
+              <span className="min-w-0 truncate font-medium" title={who.full}>{who.full}</span>
             </InfoRow>
             <InfoRow label="Statut">
               {/* Segments plutôt qu'un menu : rien à ouvrir, marche aussi dans la feuille iPhone. */}
@@ -1051,9 +1129,16 @@ export function Todo() {
                   </button>
                 </div>
               </div>
-            ) : notes[row.id] ? (
+            ) : points.length ? (
               <div className="rounded-[14px] bg-panel px-3.5 py-2.5">
-                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{notes[row.id]}</p>
+                <ol className="flex flex-col gap-1.5">
+                  {points.map((p, i) => (
+                    <li key={i} className="flex flex-col">
+                      {p.date && <span className="text-[11px] tabular-nums text-faint">{p.date}</span>}
+                      <span className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground [overflow-wrap:anywhere]">{p.text}</span>
+                    </li>
+                  ))}
+                </ol>
                 <button type="button" onClick={() => startNote(row.id)} className="mt-1 text-[12px] font-medium text-primary hover:underline">
                   Modifier
                 </button>
@@ -1069,6 +1154,7 @@ export function Todo() {
               className="flex h-11 items-center gap-2 rounded-full bg-field pl-4 pr-1.5"
             >
               <input
+                ref={pointRef}
                 value={pointInput}
                 onChange={(e) => setPointInput(e.target.value)}
                 placeholder="Où en es-tu ?"
@@ -1087,9 +1173,9 @@ export function Todo() {
           </section>
         </div>
 
-        {/* Actions, en bas de la fiche */}
-        {/* Colonne de droite : collées au bas de l'écran tant que la fiche le dépasse. */}
-        <div className={cn("mt-4 shrink-0", !inSheet && "sticky bottom-0 z-10 -mx-5 -mb-5 rounded-b-[22px] bg-surface px-5 pb-5")}>
+        {/* Actions, en bas de la fiche : hors de la zone qui défile (jamais par-dessus son contenu).
+            La fiche tient dans l'écran (useFitViewport), donc elles restent visibles. */}
+        <div className="mt-3 shrink-0">
         <div className="flex flex-col gap-2 border-t border-border pt-4">
           {paneKind === "reporter" && (
             <div className="flex flex-col gap-2 rounded-[14px] bg-panel p-3">
@@ -1123,16 +1209,14 @@ export function Todo() {
           {paneKind === "deleguer" && (
             <div className="flex flex-col gap-2 rounded-[14px] bg-panel p-3">
               <span className="text-[12px] font-medium text-muted-foreground">Confier la tâche à</span>
-              <Picker
+              <CreatorMultiPicker
                 size="sm"
                 pill
                 ariaLabel="Pour qui"
-                value={row.creator ?? ""}
-                onChange={(v) => void delegate(row, v)}
-                options={[
-                  { value: "", label: "L'agence (tâche interne)" },
-                  ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url })),
-                ]}
+                value={todoCreators(row)}
+                onChange={(list) => void delegate(row, list)}
+                creators={creators}
+                agencyLabel="L'agence (tâche interne)"
               />
             </div>
           )}
@@ -1189,6 +1273,7 @@ export function Todo() {
               colRows.map((row) => {
                 const late = lateDays(row);
                 const subs = row.subtasks ?? [];
+                const who = whoOf(row);
                 return (
                   <div
                     key={row.id}
@@ -1212,8 +1297,8 @@ export function Todo() {
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">
-                        <Who name={row.creator} photo={row.creator ? creatorByName.get(row.creator)?.photo_url : null} size="xs" />
-                        <span className="truncate">{row.creator ? titleCase(row.creator) : "Agence"}</span>
+                        <CreatorStack names={who.names} photoOf={photoOf} size="xs" />
+                        <span className="truncate" title={who.full}>{who.short}</span>
                       </span>
                       <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                         {subs.length > 0 && (
@@ -1254,7 +1339,7 @@ export function Todo() {
   } else if (rows.length === 0) {
     content = (
       <div className="rounded-[20px] bg-surface px-4 py-3">
-        <p className="text-sm text-muted-foreground">Aucune tâche pour l'instant. Ajoute-en une avec « + Tâche » ou la barre du bas.</p>
+        <p className="text-sm text-muted-foreground">Aucune tâche pour l'instant. Ajoute-en une avec « + Tâche » ou la barre d'ajout rapide.</p>
       </div>
     );
   } else if (viewMode === "colonnes") {
@@ -1312,7 +1397,7 @@ export function Todo() {
               hint: "Tâche interne, sans créateur",
               icon: Building2,
               onClick: () => {
-                setCreator("");
+                setCreatorList([]);
                 setForceAgency(true);
                 setFormOpen(true);
               },
@@ -1384,15 +1469,9 @@ export function Todo() {
             {forceAgency ? (
               <p className="text-[11px] text-faint">Tâche interne à l'agence (pas de créateur).</p>
             ) : (
-              <SelectField
-                label="Pour qui"
-                value={creator}
-                onChange={setCreator}
-                options={[
-                  { value: "", label: "L'agence (tâche interne)" },
-                  ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url })),
-                ]}
-              />
+              <Field label="Pour qui">
+                <CreatorMultiPicker ariaLabel="Pour qui" value={creatorList} onChange={setCreatorList} creators={creators} agencyLabel="L'agence (tâche interne)" />
+              </Field>
             )}
           </InlineForm>
 
@@ -1467,19 +1546,18 @@ export function Todo() {
             );
           })()}
 
-          {content}
-
-          {/* Ajout rapide, collé en bas de la colonne (au-dessus de la barre d'onglets sur iPhone) */}
+          {/* Ajout rapide, en haut de la liste (à sa place, ne flotte plus par-dessus les cartes).
+              « N » y amène le curseur. Pendant l'envoi le champ passe en lecture seule (pas
+              désactivé : il garde le focus pour enchaîner la tâche suivante). */}
           {rows !== null && (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 void submitQuick();
               }}
-              // La marge basse du défilement de l'app (pb-[…+6.5rem] sur iPhone) garde déjà la barre au-dessus des onglets.
-              className="sticky bottom-3 z-20 mt-4"
+              className="mb-4"
             >
-              <label className="flex h-11 items-center gap-2.5 rounded-full border border-border bg-surface px-4 shadow-sm transition-colors focus-within:border-primary">
+              <label className="flex h-11 w-full items-center gap-2.5 rounded-full border border-border bg-surface px-4 transition-colors focus-within:border-primary">
                 <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <input
                   ref={quickRef}
@@ -1488,23 +1566,27 @@ export function Todo() {
                   onKeyDown={(e) => {
                     if (e.key === "Escape") e.currentTarget.blur();
                   }}
-                  disabled={quickBusy}
+                  readOnly={quickBusy}
+                  aria-busy={quickBusy || undefined}
                   enterKeyHint="done"
                   aria-label="Nouvelle tâche (ajout rapide)"
-                  placeholder={isPhone ? "Nouvelle tâche, ex. « Relancer demain @Léna »" : "Nouvelle tâche, ex. « Relancer Nutripure demain @Léna !haute »"}
-                  className="min-w-0 flex-1 bg-transparent text-[14px] text-foreground outline-none placeholder:text-faint disabled:opacity-60"
+                  placeholder={isPhone ? "Nouvelle tâche, ex. « Relancer demain @Léna »" : "Nouvelle tâche, ex. « Relancer Nutripure demain @Léna @Justine !haute »"}
+                  className={cn("min-w-0 flex-1 bg-transparent text-[14px] text-foreground outline-none placeholder:text-faint", quickBusy && "opacity-60")}
                 />
                 <Kbd className="shrink-0 max-md:hidden">N</Kbd>
               </label>
             </form>
           )}
+
+          {content}
         </div>
 
         {/* Fiche de la tâche sélectionnée (grand écran, vue liste) */}
         {showInspector && (
           <aside
             aria-label="Fiche de la tâche"
-            className="sticky top-5 flex h-[calc(100dvh-4.5rem)] flex-col rounded-[22px] bg-surface p-5"
+            ref={asideRef}
+            className="sticky top-5 flex max-h-[calc(100dvh-2.5rem)] flex-col rounded-[22px] bg-surface p-5"
           >
             {inspected ? (
               renderInspector(inspected, false)
@@ -1519,7 +1601,7 @@ export function Todo() {
       {sheetRow && (
         <Overlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" label={sheetRow.text} onClose={closeSheet}>
           <div
-            className="flex max-h-[88vh] w-full max-w-md flex-col rounded-[22px] bg-surface p-5 shadow-sm"
+            className="flex max-h-[88vh] max-h-[88dvh] w-full max-w-md flex-col rounded-[22px] bg-surface p-5 shadow-sm"
             onClick={(e) => e.stopPropagation()}
           >
             {renderInspector(sheetRow, true)}
@@ -1582,24 +1664,6 @@ function DoneCircle({ done, high, onToggle, size = "md" }: { done: boolean; high
         strokeWidth={3}
       />
     </button>
-  );
-}
-
-/** Petit avatar du créateur (photo, sinon initiale) ; icône agence si pas de créateur. */
-function Who({ name, photo, size }: { name: string | null; photo?: string | null; size: "xs" | "sm" }) {
-  const cls = size === "xs" ? "h-4 w-4 rounded-[5px] text-[9px]" : "h-6 w-6 rounded-full text-[11px]";
-  if (!name) {
-    return (
-      <span aria-hidden className={cn("grid shrink-0 place-items-center bg-field text-muted-foreground", cls)}>
-        <Building2 className={size === "xs" ? "h-2.5 w-2.5" : "h-3.5 w-3.5"} />
-      </span>
-    );
-  }
-  if (photo) return <CreatorAvatar name={name} photoUrl={photo} alt="" className={cn("shrink-0", cls)} />;
-  return (
-    <span aria-hidden className={cn("grid shrink-0 place-items-center bg-field font-bold text-muted-foreground", cls)}>
-      {titleCase(name).charAt(0)}
-    </span>
   );
 }
 
