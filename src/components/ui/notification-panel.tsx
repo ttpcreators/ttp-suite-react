@@ -369,7 +369,7 @@ export function NotificationPanel({
                 type="button"
                 onClick={() => setTab(t.id)}
                 aria-current={active ? "page" : undefined}
-                className={cn("relative shrink-0 px-2.5 py-2.5 text-[14px] font-medium transition-colors", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
+                className={cn("relative shrink-0 px-2 py-2.5 text-[13.5px] font-medium transition-colors sm:px-2.5 sm:text-[14px]", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
               >
                 <span className="inline-flex items-center gap-1.5">
                   {t.label}

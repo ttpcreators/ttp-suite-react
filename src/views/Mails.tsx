@@ -2563,7 +2563,7 @@ export function Mails() {
       </div>
 
       <div className="@container min-h-0 flex-1 overflow-y-auto">
-        <div className={cn("mx-auto w-full px-4 pb-6 pt-4 max-md:pb-24 sm:px-8", threadCollabs.length ? "max-w-[1140px]" : "max-w-[860px]")}>
+        <div className={cn("mx-auto w-full px-4 pb-6 pt-4 max-md:pb-40 sm:px-8", threadCollabs.length ? "max-w-[1140px]" : "max-w-[860px]")}>
           {/* Grand lecteur : encart « Collab liée » à droite ; sinon en haut du mail. */}
           <div className={cn(threadCollabs.length > 0 && "@3xl:grid @3xl:grid-cols-[minmax(0,1fr)_248px] @3xl:items-start @3xl:gap-8")}>
             <div className="min-w-0">
@@ -2680,8 +2680,9 @@ export function Mails() {
         </div>
       </div>
 
-      {/* Téléphone : actions principales en bas, au-dessus des onglets de l'app. */}
-      <div className="ios-chrome ios-bar fixed inset-x-0 bottom-[calc(50px+env(safe-area-inset-bottom))] z-40 flex h-12 items-center gap-1 border-t border-border/70 px-2 md:hidden">
+      {/* Téléphone : actions principales en pilule flottante, AU-DESSUS de la barre d'onglets
+          (62 px + sa marge basse), comme elle (avant : glissée dessous, à moitié cachée). */}
+      <div className="ios-chrome ios-bar fixed inset-x-4 bottom-[calc(62px+max(0.75rem,env(safe-area-inset-bottom))+0.5rem)] z-40 flex h-12 items-center gap-1 rounded-full px-1.5 shadow-[0_8px_24px_-12px_rgba(15,23,42,0.35)] ring-1 ring-border/60 md:hidden">
         <button type="button" onClick={() => focusReply("reply")} disabled={!loaded}
           className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground disabled:opacity-40">
           <Reply className="h-4 w-4" /> Répondre
