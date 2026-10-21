@@ -15,11 +15,17 @@
 // Lu / non lu / archiver (jeton « modify ») : { threadId, box?, action: "read"|"unread"|"archive"|"unarchive" }
 //   → { ok: true, action } (l'écho prouve que la version déployée sait le faire).
 //   Erreurs : gmail_scope_manquant 403, limite_gmail 429, google_non_connecte 401, action_echouee 502.
+// Supprimer un brouillon Gmail (jeton « modify ») : { action: "draft-delete", draftId, box? }
+//   → { ok: true, action } (déjà supprimé ou envoyé : ok aussi, avec `gone: true`).
+//   draftId invalide → 400 draft_requis. Jamais d'envoi ici : l'envoi passe par gmail-send.
+// Chaque message porte `draft: true` s'il est un brouillon (libellé DRAFT) : l'app ne
+// l'affiche pas comme un message du fil et le propose dans sa zone de réponse.
 // ============================================================================
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 import { boxToken, boxError, parseBox } from "../_shared/gmailBox.ts";
 import { gfetch, classifyGmail, gmailMessage, charsetOf, decodeGmailBody, GfetchError } from "../_shared/gfetch.ts";
+import { isDraftId } from "../_shared/gmailDrafts.ts";
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
@@ -143,7 +149,7 @@ Deno.serve(async (req: Request) => {
   const sb = getServiceClient();
   if (!(await isAgency(req, sb))) return jsonRes({ error: "unauthorized" }, 401);
 
-  let body: { threadId?: string; contact?: string; box?: string; action?: string; messageId?: string; attachmentId?: string } = {};
+  let body: { threadId?: string; contact?: string; box?: string; action?: string; messageId?: string; attachmentId?: string; draftId?: string } = {};
   try {
     body = await req.json();
   } catch {
@@ -178,6 +184,34 @@ Deno.serve(async (req: Request) => {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       if (r.status === 404) return jsonRes({ error: "introuvable" }, 404);
+      const c = classifyGmail(r.status, data, "action_echouee");
+      return jsonRes({ error: c.error, detail: gmailMessage(r.status, data) }, c.status);
+    }
+    return jsonRes({ ok: true, action });
+  }
+  // ── Supprimer un brouillon Gmail (après envoi depuis l'app, ou à la demande) ──
+  if (action === "draft-delete") {
+    const draftId = String(body.draftId ?? "").trim();
+    if (!isDraftId(draftId)) return jsonRes({ error: "draft_requis" }, 400);
+    let dtoken: string;
+    try {
+      dtoken = await boxToken(sb, parseBox(body.box), "modify");
+    } catch (e) {
+      const be = boxError(e);
+      return jsonRes({ error: be.error }, be.status);
+    }
+    let r: Response;
+    try {
+      r = await gfetch(`${GMAIL}/drafts/${encodeURIComponent(draftId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${dtoken}` },
+      });
+    } catch (e) {
+      return jsonRes({ error: "action_echouee", detail: e instanceof GfetchError ? e.kind : "reseau" }, 502);
+    }
+    if (r.status === 404) return jsonRes({ ok: true, action, gone: true }); // déjà supprimé ou envoyé
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
       const c = classifyGmail(r.status, data, "action_echouee");
       return jsonRes({ error: c.error, detail: gmailMessage(r.status, data) }, c.status);
     }
@@ -231,7 +265,7 @@ Deno.serve(async (req: Request) => {
     return jsonRes({ error: c.error, detail: gmailMessage(r.status, data) }, c.status);
   }
 
-  type RawMsg = { id: string; internalDate?: string; payload?: Part & { headers?: Header[] } };
+  type RawMsg = { id: string; internalDate?: string; labelIds?: string[]; payload?: Part & { headers?: Header[] } };
   const raw = ((data as { messages?: RawMsg[] }).messages ?? []);
   const fromAgency = (from: string) => (from.match(/[^\s<>"]+@[^\s<>"]+/)?.[0] ?? "").toLowerCase().endsWith("@" + AGENCY_DOMAIN);
   // Images intégrées : les messages les plus récents d'abord (budget du fil).
@@ -266,6 +300,7 @@ Deno.serve(async (req: Request) => {
       inReplyTo: h("in-reply-to"),
       references: h("references"),
       replyTo: h("reply-to"),
+      ...((m.labelIds ?? []).includes("DRAFT") ? { draft: true } : {}),
     };
   }
   const messages = built.sort((a, b) => a.ts - b.ts); // ordre chronologique (conversation)

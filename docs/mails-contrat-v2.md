@@ -17,6 +17,12 @@ alors pas le changement). Erreurs : `gmail_scope_manquant` 403, `limite_gmail` 4
 `google_non_connecte` 401, `action_echouee` 502.
 Sans `action` : lecture du fil (comportement actuel, voir plus bas).
 
+## gmail-thread : supprimer un brouillon (2026-10-21, jeton « modify »)
+Entrée : `{ action: "draft-delete", draftId, box? }` (`draftId` : lettres, chiffres, tiret, 64 max, sinon 400 `draft_requis`).
+→ `DELETE drafts/{id}`. Sortie : `{ ok: true, action }` ; brouillon déjà absent (envoyé, supprimé) → `{ ok: true, action, gone: true }`.
+Une ancienne version répond `action_inconnue` (400) sans rien faire : l'app garde le brouillon et le dit.
+Appelé par l'app après un envoi réussi depuis un brouillon Gmail (échec : le mail envoyé reste envoyé, simple message), ou par « Supprimer le brouillon » (avec confirmation ; suppression définitive dans Gmail).
+
 ## gmail-history
 ### Boîte de réception (`inbox: true`)
 Entrée : `{ inbox: true, box: "all"|"partnerships"|"talent", folder?: "inbox"|"sent", q?: string (≤ 200 car., recherche Gmail), pageTokens?: { partnerships?: string; talent?: string } }`
@@ -24,6 +30,13 @@ Sortie : `{ ok, threads: Thread[], nextPageTokens?: { partnerships?: string; tal
 - `Thread` = champs actuels + `to: string[]` (adresses To/Cc/Delivered-To de tous les messages du fil, en minuscules, uniques, 20 max) + `archived: boolean` (fil sans le label INBOX, utile en recherche).
 - Avec `q` : recherche dans tout Gmail (`in:anywhere` ajouté si le dossier est « inbox »), sans exclure promotions/réseaux.
 - Un fil illisible après nouvelles tentatives → absent + `partial: true` (jamais en silence).
+### Brouillons (`inbox: true, folder: "drafts"`) (2026-10-21)
+Entrée : `{ inbox: true, box: "all"|"partnerships"|"talent", folder: "drafts" }` (jeton de lecture suffisant).
+Sortie : `{ ok, folder: "drafts", threads: DraftRow[], partial?: true, failedBoxes?: (…)[] }`
+- 50 brouillons max par boîte : `drafts.list` puis `drafts.get?format=full` (8 lectures à la fois).
+- `DraftRow` = forme d'un fil (`subject`, `name`/`email` = premier destinataire, `snippet`, `ts` = internalDate, `count: 1`, `direction: "out"`, `unread: false`, `archived: false`, `box`) + `draftId`, `messageId`, `threadId` (fil de la réponse, ou fil propre d'un nouveau mail), `to`/`cc`/`bcc` (adresses), `reply` (en-tête In-Reply-To présent), `inReplyTo`, `references`, `byClaude` (en-tête `X-TTP-Source: claude`, posé par `ttp-mcp` / `creer_brouillon_mail`), `html`/`text` (60 000 car. max chacun, `bodyCut: true` si coupé), `attachments` (noms, non repris par l'app).
+- L'écho `folder: "drafts"` est obligatoire : une ancienne version renvoie la boîte de réception sans lui, l'app affiche alors « Brouillons pas encore installés… » (et les brouillons gardés sur l'appareil).
+- App : une réponse (`reply` + `threadId`) s'ouvre dans son fil, zone de réponse pré-remplie (la copie locale garde `gdraft: { id, box }`) ; un nouveau mail s'ouvre dans « Nouveau mail » (copie locale `gdraft:<boîte>:<id>` seulement si modifié). Envoi par `gmail-send` comme d'habitude, puis `draft-delete`. Jamais d'envoi automatique.
 ### Coup d'œil (`peek: true`) — 1 appel léger par boîte
 Entrée : `{ peek: true, box: "all"|"partnerships"|"talent" }`
 Sortie : `{ ok, boxes: { partnerships?: { historyId: string; unread: number }, talent?: {…} } }` (`unread` = `threadsUnread` du label INBOX).
@@ -31,6 +44,7 @@ Sortie : `{ ok, boxes: { partnerships?: { historyId: string; unread: number }, t
 
 ## gmail-thread
 Chaque message ajoute : `messageIdHeader` (Message-ID), `inReplyTo`, `references`, `replyTo` (en-tête Reply-To, vide si absent).
+- `draft: true` (2026-10-21) sur un message brouillon (libellé DRAFT) : l'app ne l'affiche pas dans le fil (ni pour calculer la réponse) et propose « Reprendre » dans la zone de réponse.
 - `direction` décidée par le domaine de l'agence (expéditeur hors @ttpcreators.pro = "in").
 - Corps décodés selon le `charset` de chaque partie (windows-1252, iso-8859-1…).
 - Pièces : `inline: true` + `cid` pour les images intégrées ; dans `html`, les `cid:` des images ≤ 200 Ko (5 max) sont remplacés par des `data:` ; les pièces `inline` ne doivent pas être listées comme pièces jointes par l'app.

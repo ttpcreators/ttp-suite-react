@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ContextMessage } from "@/lib/mailThreadContext";
 import { createPortal } from "react-dom";
-import { ChevronUp, Minus, PenLine, Reply, Send, Settings2, X } from "@/components/icons";
+import { ChevronUp, CircleAlert, Minus, PenLine, Reply, Send, Settings2, X } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -19,6 +19,7 @@ import type { MailMessage } from "@/lib/creatorMail";
 import { Overlay, useIosPhone } from "@/components/mobile/ios-sheet";
 import { ClaudeConsigne, ClaudeReadyBanner, ClaudeReplyButton, useClaudeReply } from "@/components/mail-claude";
 import { MeetButton, MeetDialog, meetReplyText } from "@/components/meet-invite";
+import { composerPrefill, deleteGmailDraft, gmailDraftLocalKey, type GmailDraftRow, type ReplyDraft } from "@/lib/mailDrafts";
 
 /*
  * Outils d'écriture des mails (agence) : réglages (signature collée, délai
@@ -150,18 +151,32 @@ export function MailSettingsDialog({ open, onClose }: { open: boolean; onClose: 
 }
 
 // ── Brouillons ──────────────────────────────────────────────────────────────
-type ReplyDraft = DraftBase & { text: string; cc: string; bcc: string; replyAll: boolean };
 type FwdDraft = DraftBase & { to: string; cc: string; bcc: string; note: string; box: MailBox; keepOriginal: boolean; sig: boolean };
 type NewDraft = DraftBase & { to: string; cc: string; bcc: string; subject: string; body: string; box: MailBox; sig: boolean };
 
-/** Fils qui ont un brouillon de réponse (clés `replyDraftKey`), mis à jour en direct. */
-export function useReplyDraftKeys(): Set<string> {
-  const [keys, setKeys] = useState<Set<string>>(() => new Set(draftKeys("reply:")));
+/**
+ * Brouillons gardés sur cet appareil, mis à jour en direct : réponses (clés
+ * `replyDraftKey`, « reply:… ») et nouveau mail (« new »).
+ */
+export function useDeviceDraftKeys(): Set<string> {
+  const reply = useDraftKeys("reply:");
+  const fresh = useDraftKeys(NEW_KEY);
+  return useMemo(() => new Set([...reply, ...fresh]), [reply, fresh]);
+}
+/** Un brouillon local compte s'il contient quelque chose (texte d'une réponse, champ d'un nouveau mail). */
+function hasDraft(k: string): boolean {
+  if (k.startsWith("reply:")) return !!readDraft<ReplyDraft>(k)?.text?.trim();
+  const d = readDraft<NewDraft>(k);
+  return !!d && !!(d.to?.trim() || d.subject?.trim() || d.body?.trim() || d.cc?.trim() || d.bcc?.trim());
+}
+const draftMatch = (prefix: string, k: string) => (prefix === NEW_KEY ? k === NEW_KEY : k.startsWith(prefix));
+function useDraftKeys(prefix: string): Set<string> {
+  const [keys, setKeys] = useState<Set<string>>(() => new Set(draftKeys(prefix).filter((k) => draftMatch(prefix, k) && hasDraft(k))));
   useEffect(
     () =>
       subscribeDrafts((k) => {
-        if (!k.startsWith("reply:")) return;
-        const has = !!readDraft<ReplyDraft>(k)?.text?.trim();
+        if (!draftMatch(prefix, k)) return;
+        const has = hasDraft(k);
         setKeys((cur) => {
           if (cur.has(k) === has) return cur;
           const n = new Set(cur);
@@ -170,7 +185,7 @@ export function useReplyDraftKeys(): Set<string> {
           return n;
         });
       }),
-    [],
+    [prefix],
   );
   return keys;
 }
@@ -208,8 +223,10 @@ function useEscape(fn: () => void) {
 
 // ── Réponse dans le fil ─────────────────────────────────────────────────────
 export function ReplyBox({
-  placeholder, box, focusKey, focusMode, onSend, variant = "bar", to, toTitle, draftKey, replyAllCc = [], sendLabel, claude, meet,
+  placeholder, box, focusKey, focusMode, onSend, variant = "bar", to, toTitle, draftKey, replyAllCc = [], sendLabel, claude, meet, draftMeta,
 }: {
+  /** Objet et destinataire du fil, gardés avec le brouillon (dossier « Brouillons »). */
+  draftMeta?: { subject: string; to: string };
   /** « Rendez-vous » : invités proposés (l'interlocuteur du fil), titre, créateur concerné. */
   meet?: { guests: string[]; title: string; who?: string | null };
   /** « Rédiger avec Claude » (connecteur, sans clé API) : fil concerné. */
@@ -277,11 +294,19 @@ export function ReplyBox({
   }, []);
   useEffect(() => setSig(settings.signatureOn), [settings.signatureOn]);
 
+  // Lien vers le brouillon Gmail repris (supprimé de Gmail après l'envoi) + objet et destinataire.
+  const metaRef = useRef(draftMeta);
+  metaRef.current = draftMeta;
+  const draftExtra = (key: string): Partial<ReplyDraft> => {
+    const g = readDraftRaw<ReplyDraft>(key)?.gdraft;
+    const m = metaRef.current;
+    return { ...(g ? { gdraft: g } : {}), ...(m?.subject ? { subject: m.subject } : {}), ...(m?.to ? { toLabel: m.to } : {}) };
+  };
   // Brouillon : gardé à chaque frappe, effacé quand la zone est vidée (pas pendant un envoi).
   useEffect(() => {
     if (!draftKey) return;
     if (text.trim()) {
-      writeDraft(draftKey, { text, cc, bcc, replyAll, at: Date.now() } satisfies ReplyDraft);
+      writeDraft(draftKey, { ...draftExtra(draftKey), text, cc, bcc, replyAll, at: Date.now() } satisfies ReplyDraft);
       return;
     }
     const cur = readDraftRaw<ReplyDraft>(draftKey);
@@ -341,7 +366,7 @@ export function ReplyBox({
     const files = att.files;
     const snap = { text, cc, bcc, replyAll };
     if (draftKey) {
-      writeDraft(draftKey, { ...snap, at: Date.now() } satisfies ReplyDraft);
+      writeDraft(draftKey, { ...draftExtra(draftKey), ...snap, at: Date.now() } satisfies ReplyDraft);
       setDraftFiles(draftKey, files);
       markDraftSending(draftKey);
     }
@@ -654,9 +679,17 @@ function ForwardPanel({
 
 // ── Nouveau mail libre (n'importe quelle adresse, boîte au choix) ────────────
 export function NewMailDialog({
-  open, defaultBox, onClose, onSent, onReopen, floating, expandKey,
+  open, defaultBox, onClose, onSent, onReopen, floating, expandKey, gmailDraft, onGmailDraftDone,
 }: {
   open: boolean; defaultBox: MailBox; onClose: () => void; onSent?: () => void;
+  /**
+   * Brouillon Gmail repris (dossier « Brouillons ») : la fenêtre est pré-remplie, ses
+   * modifications sont gardées sur cet appareil, et le brouillon est supprimé de Gmail
+   * une fois le mail envoyé depuis l'app.
+   */
+  gmailDraft?: GmailDraftRow | null;
+  /** Brouillon Gmail envoyé (et supprimé de Gmail si `deleted`). */
+  onGmailDraftDone?: (d: GmailDraftRow, deleted: boolean) => void;
   /** Envoi échoué ou annulé : rouvrir la fenêtre avec son contenu. */
   onReopen?: () => void;
   /**
@@ -668,16 +701,29 @@ export function NewMailDialog({
   expandKey?: number;
 }) {
   if (!open) return null;
-  return <NewMailPanel defaultBox={defaultBox} onClose={onClose} onSent={onSent} onReopen={onReopen} floating={floating} expandKey={expandKey} />;
+  const key = gmailDraft ? gmailDraftLocalKey(gmailDraft) : NEW_KEY;
+  return (
+    <NewMailPanel key={key} draftKey={key} gmailDraft={gmailDraft ?? null} onGmailDraftDone={onGmailDraftDone}
+      defaultBox={defaultBox} onClose={onClose} onSent={onSent} onReopen={onReopen} floating={floating} expandKey={expandKey} />
+  );
 }
 
 const NEW_KEY = "new";
 
-function NewMailPanel({ defaultBox, onClose, onSent, onReopen, floating, expandKey }: {
+/** Brouillon Gmail → contenu de la fenêtre (avant toute modification sur l'appareil). */
+function gmailSeed(g: GmailDraftRow): Omit<NewDraft, "sig" | "at"> {
+  return { ...composerPrefill(g), box: g.box };
+}
+
+function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox, onClose, onSent, onReopen, floating, expandKey }: {
+  draftKey: string; gmailDraft: GmailDraftRow | null; onGmailDraftDone?: (d: GmailDraftRow, deleted: boolean) => void;
   defaultBox: MailBox; onClose: () => void; onSent?: () => void; onReopen?: () => void; floating?: boolean; expandKey?: number;
 }) {
   const settings = useMailSettings();
-  const [d] = useState(() => readDraft<NewDraft>(NEW_KEY));
+  // Brouillon Gmail : la copie modifiée sur cet appareil d'abord, sinon le brouillon tel quel.
+  const [seed] = useState(() => (gmailDraft ? gmailSeed(gmailDraft) : null));
+  const [local] = useState(() => readDraft<NewDraft>(dkey));
+  const d: Partial<NewDraft> | null = local ?? seed;
   const [to, setTo] = useState(d?.to ?? "");
   const [cc, setCc] = useState(d?.cc ?? "");
   const [bcc, setBcc] = useState(d?.bcc ?? "");
@@ -688,18 +734,21 @@ function NewMailPanel({ defaultBox, onClose, onSent, onReopen, floating, expandK
   const [ask, setAsk] = useState(false);
   const att = useAttachments();
   useEffect(() => {
-    const files = getDraftFiles(NEW_KEY);
+    const files = getDraftFiles(dkey);
     if (files.length) att.setFiles(files);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const hasContent = !!(to.trim() || cc.trim() || bcc.trim() || subject.trim() || body.trim() || att.files.length);
+  // Brouillon Gmail : une copie locale n'est gardée que s'il a été modifié sur cet appareil.
+  const changed = !seed || to !== seed.to || cc !== seed.cc || bcc !== seed.bcc || subject !== seed.subject || body !== seed.body || box !== seed.box || att.files.length > 0;
+  const keepLocal = hasContent && changed;
   // Brouillon gardé tant que la fenêtre est ouverte.
   useEffect(() => {
-    if (hasContent) writeDraft(NEW_KEY, { to, cc, bcc, subject, body, box, sig, at: Date.now() } satisfies NewDraft);
-    else if (readDraftRaw<NewDraft>(NEW_KEY) && !readDraftRaw<NewDraft>(NEW_KEY)?.sendingAt) writeDraft(NEW_KEY, null);
-    setDraftFiles(NEW_KEY, att.files);
-  }, [hasContent, to, cc, bcc, subject, body, box, sig, att.files]);
+    if (keepLocal) writeDraft(dkey, { to, cc, bcc, subject, body, box, sig, at: Date.now() } satisfies NewDraft);
+    else if (readDraftRaw<NewDraft>(dkey) && !readDraftRaw<NewDraft>(dkey)?.sendingAt) writeDraft(dkey, null);
+    setDraftFiles(dkey, att.files);
+  }, [keepLocal, to, cc, bcc, subject, body, box, sig, att.files]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fenêtre flottante (pas sur téléphone) : réductible, Cc / Cci repliés par défaut.
   const phone = useIosPhone();
@@ -708,7 +757,12 @@ function NewMailPanel({ defaultBox, onClose, onSent, onReopen, floating, expandK
   const [copyOpen, setCopyOpen] = useState(!!(d?.cc || d?.bcc));
   const requestClose = () => {
     if (!hasContent) {
-      writeDraft(NEW_KEY, null);
+      writeDraft(dkey, null);
+      return onClose();
+    }
+    if (gmailDraft) {
+      // Le brouillon reste dans Gmail ; les modifications faites ici restent sur cet appareil.
+      if (changed) toast("Modifications gardées sur cet appareil (le brouillon Gmail n'est pas modifié)");
       return onClose();
     }
     if (ask) return onClose(); // 2ᵉ demande : on garde le brouillon
@@ -736,12 +790,12 @@ function NewMailPanel({ defaultBox, onClose, onSent, onReopen, floating, expandK
       to: dest.ok[0], cc: copy.ok, bcc: hidden.ok, subject: subject.trim(), html, box,
       attachments: att.files, source: "manual",
     };
-    writeDraft(NEW_KEY, { to, cc, bcc, subject, body, box, sig, at: Date.now() } satisfies NewDraft);
-    setDraftFiles(NEW_KEY, att.files);
-    markDraftSending(NEW_KEY);
+    writeDraft(dkey, { to, cc, bcc, subject, body, box, sig, at: Date.now() } satisfies NewDraft);
+    setDraftFiles(dkey, att.files);
+    markDraftSending(dkey);
     const label = `Mail à ${dest.ok[0]}`;
     const reopen = () => {
-      restoreDraft(NEW_KEY);
+      restoreDraft(dkey);
       onReopen?.();
     };
     scheduleSend(label, settings.delaySec, async () => {
@@ -750,12 +804,33 @@ function NewMailPanel({ defaultBox, onClose, onSent, onReopen, floating, expandK
         toast(sendFailText(r.error));
         return reopen();
       }
-      clearSentDraft(NEW_KEY);
-      toast(`Mail envoyé depuis ${BOX_LABEL[box]} ✓`);
+      clearSentDraft(dkey);
       onSent?.();
+      if (!gmailDraft) return toast(`Mail envoyé depuis ${BOX_LABEL[box]} ✓`);
+      // Envoyé : le brouillon Gmail part de Brouillons (un échec ne touche pas au mail envoyé).
+      const del = await deleteGmailDraft({ id: gmailDraft.draftId, box: gmailDraft.box });
+      toast(del.ok
+        ? `Mail envoyé depuis ${BOX_LABEL[box]} ✓`
+        : "Mail envoyé ✓ Le brouillon Gmail n'a pas pu être supprimé : retire-le depuis Brouillons.");
+      onGmailDraftDone?.(gmailDraft, del.ok);
     }, { onCancel: reopen });
     onClose();
   };
+
+  // Brouillon Gmail : ce que l'app ne reprend pas (pièces jointes, fin d'un texte très long).
+  const gmailNotes = gmailDraft
+    ? [
+        gmailDraft.attachments.length ? `Pièces jointes du brouillon Gmail non reprises (${gmailDraft.attachments.join(", ")}) : joins-les de nouveau avant d'envoyer.` : "",
+        gmailDraft.bodyCut ? "Brouillon très long : le texte a été coupé, vérifie-le avant d'envoyer." : "",
+      ].filter(Boolean)
+    : [];
+  const gmailNote = gmailNotes.length > 0 && (
+    <div role="note" className="flex items-start gap-2 border-b border-border bg-muted/50 px-4 py-2 text-[12px] text-muted-foreground">
+      <CircleAlert className="mt-px h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 flex-1">{gmailNotes.join(" ")}</span>
+    </div>
+  );
+  const title = gmailDraft ? "Brouillon Gmail" : d ? "Brouillon" : "Nouveau message";
 
   if (float) {
     const row = "flex min-h-10 items-center gap-3 border-b border-border px-4";
@@ -777,7 +852,7 @@ function NewMailPanel({ defaultBox, onClose, onSent, onReopen, floating, expandK
             </button>
           ) : (
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="text-[13px] font-semibold text-foreground">{d ? "Brouillon" : "Nouveau message"}</span>
+              <span className="text-[13px] font-semibold text-foreground">{title}</span>
               <span className="text-[12px] text-muted-foreground">de</span>
               <BoxPicker value={box} onChange={setBox} />
             </div>
@@ -794,6 +869,7 @@ function NewMailPanel({ defaultBox, onClose, onSent, onReopen, floating, expandK
         {!min && (
           <>
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+              {gmailNote}
               <div className={row}>
                 <span aria-hidden className="w-10 shrink-0 text-[12.5px] text-muted-foreground">À</span>
                 <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="adresse@exemple.com" className={bare} autoFocus inputMode="email" aria-label="Destinataire" />
@@ -831,7 +907,7 @@ function NewMailPanel({ defaultBox, onClose, onSent, onReopen, floating, expandK
               {att.files.length > 0 && <div className="px-4 pb-3"><AttachChips files={att.files} onRemove={att.remove} /></div>}
             </div>
             {ask ? (
-              <KeepDraftBar onKeep={onClose} onDiscard={() => { writeDraft(NEW_KEY, null); onClose(); }} />
+              <KeepDraftBar onKeep={onClose} onDiscard={() => { writeDraft(dkey, null); onClose(); }} />
             ) : (
               <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-4 py-2.5 text-[12px] text-muted-foreground">
                 <button type="button" onClick={send}
@@ -855,11 +931,12 @@ function NewMailPanel({ defaultBox, onClose, onSent, onReopen, floating, expandK
       <div className="flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-border bg-surface shadow-xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 border-b border-border px-5 py-3.5">
           <PenLine className="h-4 w-4 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-foreground">{d ? "Nouveau mail · brouillon" : "Nouveau mail"}</span>
+          <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-foreground">{gmailDraft ? "Brouillon Gmail" : d ? "Nouveau mail · brouillon" : "Nouveau mail"}</span>
           <button type="button" onClick={requestClose} aria-label="Fermer" className="grid h-8 w-8 place-items-center rounded-full text-faint hover:bg-rowhover hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
+        {gmailNote}
         <div className="flex-1 space-y-2.5 overflow-y-auto px-5 py-4">
           <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
             <span>Envoyer depuis</span>
@@ -885,7 +962,7 @@ function NewMailPanel({ defaultBox, onClose, onSent, onReopen, floating, expandK
           <AttachChips files={att.files} onRemove={att.remove} />
         </div>
         {ask ? (
-          <KeepDraftBar onKeep={onClose} onDiscard={() => { writeDraft(NEW_KEY, null); onClose(); }} />
+          <KeepDraftBar onKeep={onClose} onDiscard={() => { writeDraft(dkey, null); onClose(); }} />
         ) : (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-5 py-3 text-[12px] text-muted-foreground">
             <AttachButton onFiles={(f) => void att.add(f)} total={att.total} label="Joindre un fichier" />

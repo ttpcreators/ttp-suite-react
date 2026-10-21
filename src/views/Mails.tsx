@@ -4,7 +4,12 @@ import { contextPrompt, threadTranscript } from "@/lib/mailThreadContext";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ExpandableActionBar } from "@/components/ui/expandable-action-bar";
 import { Loader, Spin } from "@/components/ui/loader";
-import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, Copy, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, Plus, type LucideIcon } from "@/components/icons";
+import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, Copy, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, Plus, FilePen, Smartphone, type LucideIcon } from "@/components/icons";
+import { ConfirmDialog } from "@/components/ui/action-menu";
+import {
+  deleteGmailDraft, draftBodyText, draftDeleteErrText, gmailDraftLocalKey, isReplyDraft, parseDraftsRes, parseReplyDraftKey, seedReplyDraft,
+  type GmailDraftRow, type ReplyDraft,
+} from "@/lib/mailDrafts";
 import { supabase } from "@/lib/supabase";
 import { allAddresses } from "@/lib/mailAddresses";
 import { cn, titleCase } from "@/lib/utils";
@@ -19,8 +24,8 @@ import { parseTouches, nextKind, touchId, type Touch } from "@/lib/touches";
 import { updateTouches } from "@/lib/touchesDb";
 import { MailComposer, type ComposerContact } from "@/components/mail-composer";
 import { BoxChip, BoxDot } from "@/components/mail-box-chip";
-import { BOX_LABEL, BOX_STYLE, replyDraftKey, sendFailText, sendGmail, type MailBox, type OutAttachment } from "@/lib/mailSend";
-import { ForwardDialog, MailSettingsDialog, NewMailDialog, ReplyBox, useReplyDraftKeys, type ForwardReopen } from "@/components/mail-tools";
+import { BOX_LABEL, BOX_STYLE, readDraft, readDraftRaw, replyDraftKey, sendFailText, sendGmail, writeDraft, type MailBox, type OutAttachment } from "@/lib/mailSend";
+import { ForwardDialog, MailSettingsDialog, NewMailDialog, ReplyBox, useDeviceDraftKeys, type ForwardReopen } from "@/components/mail-tools";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useCreators } from "@/lib/useCreators";
@@ -62,6 +67,8 @@ type ThreadMsg = {
   direction: "in" | "out"; ts: number; attachments?: MailAttachment[];
   /** En-têtes ajoutés par la v2 de gmail-thread (absents avec une ancienne version). */
   messageIdHeader?: string; inReplyTo?: string; references?: string; replyTo?: string;
+  /** Brouillon Gmail du fil (libellé DRAFT) : pas affiché comme un message. */
+  draft?: boolean;
 };
 type InboxThread = {
   threadId: string; subject: string; name: string; email: string; snippet: string;
@@ -74,6 +81,10 @@ type PageTokens = Partial<Record<MailBox, string>>;
 type ListRes = { ok?: boolean; threads?: InboxThread[]; nextPageTokens?: PageTokens; partial?: boolean; failedBoxes?: string[]; error?: string };
 type ListState = { threads: InboxThread[]; next: PageTokens | null; partial: boolean; failedBoxes: MailBox[]; pages: number; v2: boolean };
 type ThreadRes = { ok?: boolean; messages?: ThreadMsg[]; error?: string };
+/** Messages d'un fil à afficher : sans les brouillons (ils reviennent dans la zone de réponse). */
+const shownMsgs = (r: ThreadRes) => (r.messages ?? []).filter((m) => !m.draft);
+type DraftsRes = { ok?: boolean; error?: string; folder?: unknown; threads?: unknown; partial?: boolean; failedBoxes?: unknown };
+type DraftsState = { rows: GmailDraftRow[]; partial: boolean; failedBoxes: MailBox[]; old: boolean };
 type ActionRes = { ok?: boolean; action?: string; error?: string };
 type PeekRes = { ok?: boolean; boxes?: Partial<Record<MailBox, { historyId?: string; unread?: number }>>; error?: string };
 /** Fil visé par une action (archiver, corbeille, lu / non lu). */
@@ -106,6 +117,8 @@ const threadCache = new Map<string, { at: number; msgs: ThreadMsg[] }>();
 const prefetching = new Set<string>();
 let actionsOldAt = 0; // gmail-thread n'a pas reconnu `action` (ancienne version déployée)
 let searchOldAt = 0; // gmail-history n'a pas reconnu `q`
+let draftsOldAt = 0; // gmail-history n'a pas reconnu le dossier « drafts »
+const DRAFTS_OLD_TEXT = "Brouillons pas encore installés : la mise à jour des fonctions Gmail n'est pas encore déployée.";
 let peekOff = false; // gmail-history n'a pas reconnu `peek` : actualisation complète toutes les 2 min
 let peekSig = ""; // derniers historyId vus (coup d'œil)
 // Lu / non lu, archivé, corbeille pas encore confirmés par une liste FRAÎCHE du serveur :
@@ -314,10 +327,11 @@ const hasTokens = (p: PageTokens | null | undefined, box: "all" | MailBox) =>
  * Mise en page façon client mail : barre d'icônes (dossiers), liste avec son
  * en-tête (titre, boîtes, recherche), lecture.
  */
-type Mode = "inbox" | "sent" | "contacts" | "creators";
+type Mode = "inbox" | "sent" | "drafts" | "contacts" | "creators";
 const MODES: { id: Mode; label: string; short: string; wide: string; icon: LucideIcon; shortcut?: string }[] = [
   { id: "inbox", label: "Boîte de réception", short: "Reçus", wide: "Réception", icon: Inbox, shortcut: "g puis i" },
   { id: "sent", label: "Envoyés", short: "Envoyés", wide: "Envoyés", icon: Send, shortcut: "g puis s" },
+  { id: "drafts", label: "Brouillons", short: "Brouillons", wide: "Brouillons", icon: FilePen, shortcut: "g puis d" },
   { id: "contacts", label: "Contacts", short: "Contacts", wide: "Contacts", icon: BookUser },
   { id: "creators", label: "Par créateur", short: "Créateurs", wide: "Suivi créateurs", icon: UsersRound },
 ];
@@ -341,6 +355,7 @@ const SHORTCUTS: [string, string][] = [
   ["Échap", "Fermer le mail"],
   ["g puis i", "Boîte de réception"],
   ["g puis s", "Envoyés"],
+  ["g puis d", "Brouillons"],
   ["?", "Cette aide"],
 ];
 
@@ -544,6 +559,49 @@ function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhot
     </li>
   );
 }
+
+/** Un brouillon (Gmail ou gardé sur cet appareil), en carte comme les fils de la liste. */
+function DraftRow({ k, subject, to, email, snippet, ts, box, showBox, byClaude, hint, on, onOpen, onDelete }: {
+  k: string; subject: string; to: string; email: string; snippet: string; ts: number; box: MailBox | null; showBox: boolean;
+  byClaude?: boolean; hint?: string; on: boolean; onOpen: () => void; onDelete: () => void;
+}) {
+  return (
+    <li className={mailCardCls(on)} data-key={k}>
+      {showBox && box && <span aria-hidden title={BOX_LABEL[box]} className={cn("absolute right-0 top-3.5 z-[1] h-5 w-[3px] rounded-l-full", BOX_STYLE[box].dot)} />}
+      <SwipeRow actions={[{ key: "delete", label: "Supprimer", icon: Trash2, tone: "red", onClick: onDelete }]}>
+        <button type="button" aria-current={on || undefined} onClick={onOpen} className={cn(mailCardBtnCls, "bg-surface dark:bg-transparent")}>
+          <span className="flex w-full min-w-0 items-start gap-3">
+            <Initial name={to || email || "?"} email={email} size="md" />
+            <span className="min-w-0 flex-1 pt-px">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="min-w-0 truncate text-[13px] font-semibold leading-[18px] text-foreground">{subject || "(sans objet)"}</span>
+                <span className="flex-1" />
+                {ts > 0 && <span className="shrink-0 pl-1 text-[11px] leading-4 tabular-nums text-faint lg:group-focus-within:invisible lg:group-hover:invisible">{fmtWhen(ts)}</span>}
+              </span>
+              <span className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                <span className="min-w-0 truncate text-[12.5px] leading-4 text-muted-foreground">
+                  <span className="font-normal">À : </span>{to || "(aucun destinataire)"}
+                </span>
+                <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10.5px] font-medium leading-4 text-muted-foreground">Brouillon</span>
+                {byClaude && <span title="Préparé par Claude (connecteur)" className="shrink-0 text-[11px] leading-4 text-faint">par Claude</span>}
+                {hint && <span className="shrink-0 text-[11px] leading-4 text-faint">{hint}</span>}
+              </span>
+            </span>
+          </span>
+          {snippet && <span className="line-clamp-2 w-full text-[12.5px] leading-[18px] text-muted-foreground">{snippet}</span>}
+        </button>
+      </SwipeRow>
+      <div className="pointer-events-none absolute right-3 top-2 z-[2] hidden items-center gap-0.5 rounded-full bg-surface p-0.5 opacity-0 shadow-sm ring-1 ring-border transition-opacity lg:flex lg:group-focus-within:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-hover:pointer-events-auto lg:group-hover:opacity-100">
+        <RowAction icon={Trash2} label="Supprimer le brouillon" onClick={onDelete} danger />
+      </div>
+    </li>
+  );
+}
+/** Brouillon proposé dans le dossier : Gmail (supprimable dans Gmail) ou gardé sur cet appareil. */
+type DraftItem =
+  | { kind: "gmail"; key: string; row: GmailDraftRow }
+  | { kind: "reply"; key: string; box: MailBox; threadId: string; subject: string; to: string; email: string; text: string; at: number; contact?: string; name?: string }
+  | { kind: "new"; key: string; subject: string; to: string; text: string; at: number };
 
 export function Mails() {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -1028,13 +1086,57 @@ export function Mails() {
   const [newMailOpen, setNewMailOpen] = useState(false); // mail libre, n'importe quelle adresse
   const [newMailKey, setNewMailKey] = useState(0); // fenêtre flottante : ré-agrandie à chaque demande
   const openNewMail = () => {
+    setNewMailDraft(null);
     setNewMailOpen(true);
     setNewMailKey((n) => n + 1);
   };
   const [composerOpen, setComposerOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null); // ligne choisie au clavier (j / k)
-  const draftSet = useReplyDraftKeys();
+  const draftSet = useDeviceDraftKeys(); // réponses (« reply:… ») et nouveau mail (« new ») sur cet appareil
+  // Brouillon Gmail ouvert dans « Nouveau mail » (null = mail libre).
+  const [newMailDraft, setNewMailDraft] = useState<GmailDraftRow | null>(null);
+
+  // ── Brouillons Gmail (dossier « Brouillons ») ────────────────────────────
+  const [drafts, setDrafts] = useState<DraftsState | null>(() => getCache<DraftsState>("mails:drafts"));
+  useEffect(() => {
+    setCache("mails:drafts", drafts);
+  }, [drafts]);
+  const [draftsBusy, setDraftsBusy] = useState(false);
+  const [draftsErr, setDraftsErr] = useState<string | null>(null);
+  const draftsReq = useRef(0);
+  const draftsAt = useRef(0); // dernière demande de la liste
+  const refreshDrafts = useCallback(async (force = false) => {
+    // Ancienne version déployée : on ne redemande qu'après 10 min (ou à la demande).
+    if (!force && Date.now() - draftsOldAt < OLD_RETRY_MS) return;
+    const id = ++draftsReq.current;
+    draftsAt.current = Date.now();
+    setDraftsBusy(true);
+    const p = parseDraftsRes(await invokeJson<DraftsRes>("gmail-history", { inbox: true, box: "all", folder: "drafts" }));
+    if (id !== draftsReq.current) return;
+    setDraftsBusy(false);
+    if (p.kind === "error") return setDraftsErr(p.error);
+    setDraftsErr(null);
+    if (p.kind === "old") {
+      draftsOldAt = Date.now();
+      return setDrafts({ rows: [], partial: false, failedBoxes: [], old: true });
+    }
+    draftsOldAt = 0;
+    // Boîte qui n'a pas répondu : ses brouillons déjà affichés restent.
+    setDrafts((prev) => {
+      const kept = (prev?.rows ?? []).filter((r) => p.failedBoxes.includes(r.box));
+      return { rows: [...p.rows, ...kept].sort((a, b) => b.ts - a.ts), partial: p.partial, failedBoxes: p.failedBoxes, old: false };
+    });
+  }, []);
+  // Brouillons Gmail retirés tout de suite (envoyés ou supprimés), en attendant la liste du serveur.
+  const [goneDrafts, setGoneDrafts] = useState<Set<string>>(() => new Set());
+  const gmailDraftRows = useMemo(() => (drafts?.rows ?? []).filter((r) => !goneDrafts.has(`${r.box}:${r.draftId}`)), [drafts, goneDrafts]);
+  // Fils qui ont une réponse en brouillon dans Gmail (marque « Brouillon » dans la liste, encart dans le fil).
+  const gmailReplyDrafts = useMemo(() => {
+    const m = new Map<string, GmailDraftRow>();
+    for (const r of gmailDraftRows) if (isReplyDraft(r) && !m.has(tkey(r.box, r.threadId))) m.set(tkey(r.box, r.threadId), r);
+    return m;
+  }, [gmailDraftRows]);
 
   const applyMsgs = (msgs: ThreadMsg[]) => {
     setThreadMsgs(msgs);
@@ -1045,7 +1147,7 @@ export function Mails() {
     const res = await invokeJson<ThreadRes>("gmail-thread", { threadId: t.threadId, contact: t.contact, box: t.box });
     if (id !== threadReq.current) return; // un autre fil a été ouvert entre-temps
     if (!res.ok) return setThreadErr(res.error ?? "erreur");
-    const msgs = res.messages ?? [];
+    const msgs = shownMsgs(res);
     threadCache.set(tkey(t.box, t.threadId), { at: Date.now(), msgs });
     applyMsgs(msgs);
     // Fil ouvert depuis une notification : l'objet n'était pas encore connu.
@@ -1200,7 +1302,7 @@ export function Mails() {
       prefetching.add(key);
       void invokeJson<ThreadRes>("gmail-thread", { threadId: next.threadId, contact: (next.contact ?? "").toLowerCase(), box: next.box }).then((r) => {
         prefetching.delete(key);
-        if (r.ok) threadCache.set(key, { at: Date.now(), msgs: r.messages ?? [] });
+        if (r.ok) threadCache.set(key, { at: Date.now(), msgs: shownMsgs(r) });
       });
     };
     // requestIdleCallback absent sur Safari : petit délai à la place.
@@ -1343,6 +1445,8 @@ export function Mails() {
   // ── Coup d'œil toutes les 60 s (page visible) + au retour sur la fenêtre ─
   const folderRef = useRef(folder);
   folderRef.current = folder;
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   useEffect(() => {
     let alive = true;
     let lastCheck = 0;
@@ -1366,7 +1470,10 @@ export function Mails() {
         return; // coupure réseau : on réessaiera au prochain tour
       }
       const sig = Object.entries(res.boxes).map(([b, v]) => `${b}:${v?.historyId ?? ""}`).sort().join("|");
-      if (peekSig && sig !== peekSig) void refreshList(folderRef.current);
+      if (peekSig && sig !== peekSig) {
+        void refreshList(folderRef.current);
+        if (modeRef.current === "drafts") void refreshDrafts(); // un brouillon créé (Claude, Gmail) change aussi l'historique
+      }
       peekSig = sig;
     };
     const first = window.setTimeout(() => void check(), 4000);
@@ -1385,7 +1492,7 @@ export function Mails() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onFocus);
     };
-  }, [refreshList]);
+  }, [refreshList, refreshDrafts]);
 
   // ── Dossiers ─────────────────────────────────────────────────────────────
   const setMode = (m: Mode) => {
@@ -1522,6 +1629,8 @@ export function Mails() {
       return false;
     }
     const subject = t.subject.replace(/^\s*re\s*:\s*/i, "");
+    // Réponse reprise d'un brouillon Gmail : il sera retiré de Gmail une fois la réponse partie.
+    const gd = draftKey ? readDraftRaw<ReplyDraft>(draftKey)?.gdraft : undefined;
     const res = await sendGmail(
       {
         to: p.to, cc, subject: `Re: ${subject}`, html, threadId: t.threadId, source: "manual", box: t.box, bcc, attachments,
@@ -1534,7 +1643,11 @@ export function Mails() {
       toast(sendFailText(res.error));
       return false;
     }
-    toast("Réponse envoyée ✓");
+    if (gd) {
+      void finishGmailDraft({ draftId: gd.id, box: gd.box }).then((ok) =>
+        toast(ok ? "Réponse envoyée ✓" : "Réponse envoyée ✓ Le brouillon Gmail n'a pas pu être supprimé : retire-le depuis Brouillons."),
+      );
+    } else toast("Réponse envoyée ✓");
     const key = keyOf(t);
     threadCache.delete(key);
     // Le fil passe « Répondu » tout de suite (Gmail met quelques secondes à l'indexer), puis
@@ -1552,7 +1665,7 @@ export function Mails() {
     // Recharge le fil pour afficher la réponse, seulement s'il est encore ouvert.
     const fresh = await invokeJson<ThreadRes>("gmail-thread", { threadId: t.threadId, contact: t.contact, box: t.box });
     if (fresh.ok) {
-      const msgs = fresh.messages ?? [];
+      const msgs = shownMsgs(fresh);
       threadCache.set(key, { at: Date.now(), msgs });
       const now = threadRef.current;
       if (now && keyOf(now) === key) {
@@ -1573,6 +1686,122 @@ export function Mails() {
     if (!r.ok || !r.data) return toast(r.error === "piece_trop_lourde" ? "Pièce jointe trop lourde (20 Mo max)." : r.error === "reseau" ? "Téléchargement interrompu, réessaie" : "Téléchargement impossible");
     saveBase64(r.data, a.filename);
   };
+
+  // ── Brouillons : ouvrir, envoyer, supprimer ─────────────────────────────
+  const [replyNonce, setReplyNonce] = useState(0); // remonte la zone de réponse (brouillon repris)
+  const pendingReplyFocus = useRef<string | null>(null);
+  const [delAsk, setDelAsk] = useState<DraftItem | null>(null);
+  const gkey = (r: { box: MailBox; draftId: string }) => `${r.box}:${r.draftId}`;
+  const hideDraft = (r: { box: MailBox; draftId: string }, gone: boolean) =>
+    setGoneDrafts((s) => {
+      if (s.has(gkey(r)) === gone) return s;
+      const n = new Set(s);
+      if (gone) n.add(gkey(r));
+      else n.delete(gkey(r));
+      return n;
+    });
+  /** Mail parti depuis l'app : le brouillon Gmail repris est supprimé (vrai si Gmail confirme). */
+  const finishGmailDraft = async (r: { box: MailBox; draftId: string }): Promise<boolean> => {
+    hideDraft(r, true);
+    const del = await deleteGmailDraft({ id: r.draftId, box: r.box });
+    if (!del.ok) hideDraft(r, false);
+    window.setTimeout(() => void refreshDrafts(), 2_000);
+    return del.ok;
+  };
+  /** Prépare la zone de réponse du fil avec le brouillon Gmail (sans écraser une réponse commencée ici). */
+  const resumeReplyDraft = (r: GmailDraftRow, subject: string) => {
+    const key = replyDraftKey(r.box, r.threadId);
+    const had = !!readDraft<ReplyDraft>(key)?.text?.trim();
+    const res = seedReplyDraft(key, r, { subject, toLabel: prettyName(r.name) || r.email });
+    if (res === "kept") {
+      toast(had ? "Une réponse commencée sur cet appareil existe déjà pour ce fil : elle est gardée." : "Brouillon Gmail vide : rien à reprendre.");
+    }
+    setReplyNonce((n) => n + 1);
+    pendingReplyFocus.current = tkey(r.box, r.threadId);
+  };
+  const openGmailDraft = (r: GmailDraftRow) => {
+    if (isReplyDraft(r)) {
+      // Réponse dans un fil : le fil s'ouvre, la zone de réponse reprend le brouillon (fil gardé groupé).
+      const known = allKnown().find((t) => t.box === r.box && t.threadId === r.threadId);
+      const subject = known?.subject || r.subject;
+      resumeReplyDraft(r, subject);
+      openThread({ threadId: r.threadId, subject, box: r.box, contact: known?.email ?? r.email, name: known?.name ?? r.name });
+      return;
+    }
+    setNewMailDraft(r);
+    setNewMailOpen(true);
+    setNewMailKey((n) => n + 1);
+  };
+  // Fil ouvert depuis un brouillon : la zone de réponse prend le focus une fois le fil chargé.
+  useEffect(() => {
+    if (!thread || !threadMsgs?.length || pendingReplyFocus.current !== keyOf(thread)) return;
+    pendingReplyFocus.current = null;
+    focusReply("reply");
+  }, [thread, threadMsgs]); // eslint-disable-line react-hooks/exhaustive-deps
+  const deleteDraftItem = async (it: DraftItem) => {
+    if (it.kind !== "gmail") {
+      writeDraft(it.key, null);
+      if (it.kind === "reply") setReplyNonce((n) => n + 1);
+      return toast("Brouillon supprimé de cet appareil ✓");
+    }
+    const r = it.row;
+    hideDraft(r, true);
+    const del = await deleteGmailDraft({ id: r.draftId, box: r.box });
+    if (!del.ok) {
+      hideDraft(r, false);
+      return toast(draftDeleteErrText(del.error));
+    }
+    // Copies locales liées à ce brouillon : retirées aussi.
+    writeDraft(gmailDraftLocalKey(r), null);
+    if (isReplyDraft(r)) {
+      const k = replyDraftKey(r.box, r.threadId);
+      if (readDraftRaw<ReplyDraft>(k)?.gdraft?.id === r.draftId) {
+        writeDraft(k, null);
+        setReplyNonce((n) => n + 1);
+      }
+    }
+    toast("Brouillon supprimé ✓");
+    window.setTimeout(() => void refreshDrafts(), 1_500);
+  };
+  // Chargement : en ouvrant le dossier, et une fois en fond (compteur du dossier).
+  useEffect(() => {
+    if (mode === "drafts") void refreshDrafts();
+  }, [mode, refreshDrafts]);
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      if (document.visibilityState !== "visible" || !rootRef.current?.getClientRects().length) return;
+      if (Date.now() - draftsAt.current > 30_000) void refreshDrafts();
+    }, 5_000);
+    return () => window.clearTimeout(t);
+  }, [refreshDrafts]);
+
+  // Brouillons affichés : Gmail d'abord, puis ceux gardés sur cet appareil (filtre de boîte).
+  const gmailDraftsShown = useMemo(() => gmailDraftRows.filter((r) => box === "all" || r.box === box), [gmailDraftRows, box]);
+  const deviceDrafts = useMemo<DraftItem[]>(() => {
+    const listed = new Set(gmailDraftRows.map(gkey));
+    const out: DraftItem[] = [];
+    for (const k of draftSet) {
+      if (k === "new") {
+        const d = readDraft<{ to?: string; subject?: string; body?: string; box?: MailBox; at: number }>(k);
+        if (!d || (box !== "all" && d.box && d.box !== box)) continue;
+        out.push({ kind: "new", key: k, subject: d.subject ?? "", to: d.to ?? "", text: d.body ?? "", at: d.at });
+        continue;
+      }
+      const p = parseReplyDraftKey(k);
+      const d = p ? readDraft<ReplyDraft>(k) : null;
+      if (!p || !d?.text?.trim() || (box !== "all" && p.box !== box)) continue;
+      if (d.gdraft && listed.has(`${d.gdraft.box}:${d.gdraft.id}`)) continue; // déjà dans la liste Gmail
+      const known = allKnown().find((t) => t.box === p.box && t.threadId === p.threadId);
+      out.push({
+        kind: "reply", key: k, box: p.box, threadId: p.threadId,
+        subject: d.subject || known?.subject || "",
+        to: d.toLabel || (known ? prettyName(known.name) || known.email : ""),
+        email: known?.email ?? "", text: d.text, at: d.at, contact: known?.email, name: known?.name,
+      });
+    }
+    return out.sort((a, b) => ("at" in b ? b.at : 0) - ("at" in a ? a.at : 0));
+  }, [draftSet, gmailDraftRows, box, mode, lists, search]); // eslint-disable-line react-hooks/exhaustive-deps
+  const draftsCount = gmailDraftsShown.length + deviceDrafts.length;
 
   // ── Raccourcis clavier ───────────────────────────────────────────────────
   const gAt = useRef(0);
@@ -1600,7 +1829,7 @@ export function Mails() {
   keyHandler.current = (e: KeyboardEvent) => {
     const k = e.key;
     // Fenêtre ouverte (nouveau mail, transfert, réglages…) : aucun raccourci.
-    const dialog = newMailOpen || !!forward || settingsOpen || composerOpen || !!document.querySelector('[role="dialog"]:not([data-mails-help]), [aria-modal="true"], [role="alertdialog"]');
+    const dialog = newMailOpen || !!forward || settingsOpen || composerOpen || !!delAsk || !!document.querySelector('[role="dialog"]:not([data-mails-help]), [aria-modal="true"], [role="alertdialog"]');
     if (dialog) return;
     if (k === "?" || (k === "Escape" && helpOpen)) {
       e.preventDefault();
@@ -1609,9 +1838,9 @@ export function Mails() {
     }
     if (gAt.current && Date.now() - gAt.current < 1500) {
       gAt.current = 0;
-      if (k === "i" || k === "s") {
+      if (k === "i" || k === "s" || k === "d") {
         e.preventDefault();
-        goMode(k === "i" ? "inbox" : "sent");
+        goMode(k === "i" ? "inbox" : k === "s" ? "sent" : "drafts");
         return;
       }
     }
@@ -1637,7 +1866,7 @@ export function Mails() {
       (mode === "contacts" ? contactSearchRef : searchRef).current?.focus();
       return;
     }
-    if (mode === "contacts" && !thread) return;
+    if ((mode === "contacts" || mode === "drafts") && !thread) return;
     switch (k) {
       case "j":
       case "k":
@@ -1768,7 +1997,7 @@ export function Mails() {
           caption={m.short}
           shortcut={m.shortcut}
           active={mode === m.id}
-          badge={m.id === "inbox" ? unreadShown || null : m.id === "creators" ? mailTotal || null : null}
+          badge={m.id === "inbox" ? unreadShown || null : m.id === "creators" ? mailTotal || null : m.id === "drafts" ? draftsCount || null : null}
           onClick={() => goMode(m.id)}
         >
           <m.icon className="h-[18px] w-[18px]" />
@@ -1829,7 +2058,7 @@ export function Mails() {
               label={m.wide}
               title={m.shortcut ? `${m.label} (${m.shortcut})` : m.label}
               active={mode === m.id}
-              count={m.id === "inbox" ? unreadShown : m.id === "creators" ? mailTotal : null}
+              count={m.id === "inbox" ? unreadShown : m.id === "creators" ? mailTotal : m.id === "drafts" ? draftsCount : null}
               onClick={() => goMode(m.id)}
             />
           ))}
@@ -1882,7 +2111,7 @@ export function Mails() {
       </button>
       {MODES.map((m) => {
         const on = mode === m.id;
-        const n = m.id === "inbox" ? unreadShown : m.id === "creators" ? mailTotal : 0;
+        const n = m.id === "inbox" ? unreadShown : m.id === "creators" ? mailTotal : m.id === "drafts" ? draftsCount : 0;
         return (
           <button key={m.id} type="button" onClick={() => goMode(m.id)} aria-pressed={on}
             className={cn(pillCls, on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
@@ -1914,7 +2143,7 @@ export function Mails() {
   // ── Liste : boîte de réception / envoyés ────────────────────────────────
   const busyNow = listBusy[folder];
   const errNow = listErr[folder];
-  const boxCount = (id: "all" | MailBox) => (folder === "inbox" ? unreadBy[id] : 0);
+  const boxCount = (id: "all" | MailBox) => (mode === "inbox" ? unreadBy[id] : 0);
   const boxSelect = (
     <label className="relative flex shrink-0 items-center lg:hidden">
       <span className="sr-only">Boîte affichée</span>
@@ -1966,7 +2195,7 @@ export function Mails() {
         on={on}
         cursor={cursor === key}
         showBox={box === "all"}
-        draft={draftSet.has(replyDraftKey(t.box, t.threadId))}
+        draft={draftSet.has(replyDraftKey(t.box, t.threadId)) || gmailReplyDrafts.has(key)}
         creator={owner}
         creatorPhoto={owner ? photoOf(owner) : null}
         tags={tagsOf(t)}
@@ -2095,6 +2324,119 @@ export function Mails() {
     </section>
   );
 
+  // ── Liste : brouillons (Gmail + cet appareil) ───────────────────────────
+  const draftsOld = !!drafts?.old;
+  const sectionHead = (icon: ReactNode, text: string, extra?: ReactNode) => (
+    <div className="flex items-center gap-2 border-t border-border bg-muted/40 px-4 py-2 text-[11.5px] font-semibold uppercase tracking-wide text-muted-foreground first:border-t-0 sm:px-5">
+      {icon} {text} {extra}
+    </div>
+  );
+  const draftOpenKey = thread ? keyOf(thread) : null;
+  const gmailDraftItem = (r: GmailDraftRow) => {
+    const k = `g:${gkey(r)}`;
+    return (
+      <DraftRow
+        key={k}
+        k={k}
+        subject={r.subject}
+        to={prettyName(r.name) || r.email || r.to[0] || ""}
+        email={r.email}
+        snippet={decodeEntities(r.snippet) || draftBodyText(r).slice(0, 200)}
+        ts={r.ts}
+        box={r.box}
+        showBox={box === "all"}
+        byClaude={r.byClaude}
+        hint={isReplyDraft(r) ? "réponse" : undefined}
+        on={isReplyDraft(r) && draftOpenKey === tkey(r.box, r.threadId)}
+        onOpen={() => openGmailDraft(r)}
+        onDelete={() => setDelAsk({ kind: "gmail", key: k, row: r })}
+      />
+    );
+  };
+  const deviceDraftItem = (it: DraftItem) => {
+    if (it.kind === "gmail") return null;
+    const reply = it.kind === "reply";
+    return (
+      <DraftRow
+        key={it.key}
+        k={it.key}
+        subject={it.subject || (reply ? "(objet inconnu)" : "(sans objet)")}
+        to={it.to}
+        email={reply ? it.email : addrOf(it.to)}
+        snippet={it.text.replace(/\s+/g, " ").trim().slice(0, 200)}
+        ts={it.at}
+        box={reply ? it.box : null}
+        showBox={box === "all"}
+        hint={reply ? "réponse" : "nouveau mail"}
+        on={reply && draftOpenKey === tkey(it.box, it.threadId)}
+        onOpen={() => (reply ? openThread({ threadId: it.threadId, subject: it.subject, box: it.box, contact: it.contact, name: it.name }) : openNewMail())}
+        onDelete={() => setDelAsk(it)}
+      />
+    );
+  };
+  const draftsCol = (
+    <section className={cn(listCls, readerOpen && "max-lg:hidden")} aria-label="Brouillons">
+      <div className="shrink-0 border-b border-border px-3 pb-2.5 pt-3 sm:px-4">
+        <div className="flex items-center gap-1">
+          <h2 className="min-w-0 flex-1 truncate pl-1 text-[17px] font-semibold tracking-tight text-foreground">Brouillons</h2>
+          {boxSelect}
+          <ToolButton icon={RefreshCw} label="Actualiser" spin={draftsBusy} disabled={draftsBusy} onClick={() => void refreshDrafts(true)} className="h-8 w-8" />
+        </div>
+        <Tabs
+          className="mt-2 max-lg:hidden"
+          size="sm"
+          fullWidth
+          label="Boîte affichée"
+          value={box}
+          onValueChange={(v) => setBox(v as "all" | MailBox)}
+          items={BOX_FILTERS.map((b) => ({ value: b.id, label: b.label, dot: b.id === "all" ? undefined : BOX_STYLE[b.id].dot }))}
+        />
+        <p className="mt-1.5 truncate pl-1 text-[11.5px] text-muted-foreground" aria-live="polite">
+          {drafts || draftsOld ? `${draftsCount} brouillon${draftsCount > 1 ? "s" : ""}` : draftsBusy ? "Chargement…" : ""}
+        </p>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto" aria-busy={draftsBusy}>
+        {draftsErr && (
+          <ErrorBanner
+            text={loadErrText(draftsErr, "Impossible de lire les brouillons Gmail.")}
+            onRetry={() => void refreshDrafts(true)}
+            onReconnect={needsReconnect(draftsErr) ? () => void reconnectGoogle() : undefined}
+          />
+        )}
+        {draftsOld && <ErrorBanner tone="info" text={DRAFTS_OLD_TEXT} onRetry={() => void refreshDrafts(true)} />}
+        {drafts?.partial && !draftsOld && (
+          <ErrorBanner
+            tone="info"
+            text={drafts.failedBoxes.length
+              ? `${boxesText(drafts.failedBoxes)} ${drafts.failedBoxes.length > 1 ? "ne répondent" : "ne répond"} pas pour l'instant : ses brouillons affichés peuvent dater.`
+              : "Certains brouillons n'ont pas pu être lus : la liste peut être incomplète."}
+            onRetry={() => void refreshDrafts(true)}
+          />
+        )}
+        {!drafts && !draftsErr && draftsBusy && !deviceDrafts.length ? (
+          <ListSkeleton rows={4} />
+        ) : !gmailDraftsShown.length && !deviceDrafts.length ? (
+          centerNote(<FilePen className="h-5 w-5 text-faint" />, "Aucun brouillon")
+        ) : (
+          <>
+            {gmailDraftsShown.length > 0 && (
+              <>
+                {deviceDrafts.length > 0 && sectionHead(<Mail className="h-3.5 w-3.5" />, "Dans Gmail")}
+                <ul className={mailCardListCls}>{gmailDraftsShown.map(gmailDraftItem)}</ul>
+              </>
+            )}
+            {deviceDrafts.length > 0 && (
+              <>
+                {sectionHead(<Smartphone className="h-3.5 w-3.5" />, "Sur cet appareil")}
+                <ul className={mailCardListCls}>{deviceDrafts.map(deviceDraftItem)}</ul>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  );
+
   // ── Liste : contacts ─────────────────────────────────────────────────────
   const contactsCol = (
     <section className={cn(listCls, readerOpen && "max-lg:hidden")} aria-label="Contacts">
@@ -2178,6 +2520,9 @@ export function Mails() {
   const tgt: Target | null = thread ? { threadId: thread.threadId, box: thread.box, subject: thread.subject } : null;
   const loaded = !!threadMsgs && readerMsgs.length > 0;
   const draftKey = thread ? replyDraftKey(thread.box, thread.threadId) : "";
+  // Réponse en brouillon dans Gmail pour ce fil, pas encore reprise dans la zone de réponse.
+  const threadGmailDraft = thread ? gmailReplyDrafts.get(keyOf(thread)) : undefined;
+  const gmailDraftWaiting = !!threadGmailDraft && readDraftRaw<ReplyDraft>(draftKey)?.gdraft?.id !== threadGmailDraft.draftId;
   const listName = thread ? selected?.label ?? (prettyName(thread.name) || thread.contact) : "";
   const many = readerMsgs.length > 4 && !showAllMsgs;
   const navBtns = navIdx >= 0 && navList.length > 1 && (
@@ -2286,8 +2631,21 @@ export function Mails() {
                                 </button>
                               ))}
                             </div>
+                            {gmailDraftWaiting && threadGmailDraft && (
+                              <div role="status" className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/50 px-3.5 py-2 text-[12.5px] text-muted-foreground">
+                                <FilePen className="h-3.5 w-3.5 shrink-0" />
+                                <span className="min-w-0 flex-1">
+                                  Un brouillon de réponse attend dans Gmail{threadGmailDraft.byClaude ? " (préparé par Claude)" : ""}.
+                                </span>
+                                <button type="button" onClick={() => resumeReplyDraft(threadGmailDraft, thread.subject)}
+                                  className="h-7 shrink-0 rounded-full bg-primary px-3 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                                  Reprendre
+                                </button>
+                              </div>
+                            )}
                             <ReplyBox
-                              key={draftKey}
+                              key={`${draftKey}:${replyNonce}`}
+                              draftMeta={{ subject: thread.subject, to: replyName || plan.to }}
                               variant="card"
                               to={replyName}
                               toTitle={plan.to}
@@ -2434,11 +2792,15 @@ export function Mails() {
   const emptyReader = (
     <section className="hidden min-h-0 min-w-0 flex-col items-center justify-center gap-3 px-6 text-center lg:flex">
       <span className="grid h-12 w-12 place-items-center rounded-full bg-muted"><Mail className="h-5 w-5 text-muted-foreground" /></span>
-      <p className="text-[14px] font-medium text-foreground">{mode === "contacts" ? "Aucun contact ouvert" : "Aucun mail ouvert"}</p>
+      <p className="text-[14px] font-medium text-foreground">{mode === "contacts" ? "Aucun contact ouvert" : mode === "drafts" ? "Aucun brouillon ouvert" : "Aucun mail ouvert"}</p>
       <p className="max-w-[320px] text-[13px] text-muted-foreground">
-        {mode === "contacts" ? "Choisis un contact pour voir tous vos échanges, dans les deux boîtes." : "Choisis un mail dans la liste pour le lire ici."}
+        {mode === "contacts"
+          ? "Choisis un contact pour voir tous vos échanges, dans les deux boîtes."
+          : mode === "drafts"
+            ? "Choisis un brouillon pour le reprendre : une réponse s'ouvre dans son fil, un nouveau mail dans la fenêtre d'écriture. Rien ne part sans ton clic sur Envoyer."
+            : "Choisis un mail dans la liste pour le lire ici."}
       </p>
-      {mode !== "contacts" && (
+      {mode !== "contacts" && mode !== "drafts" && (
         <p className="flex flex-wrap items-center justify-center gap-1.5 text-[12px] text-faint">
           <Kbd className="bg-muted text-muted-foreground">j</Kbd><Kbd className="bg-muted text-muted-foreground">k</Kbd> pour parcourir,
           <Kbd className="bg-muted text-muted-foreground">?</Kbd> pour tous les raccourcis
@@ -2551,7 +2913,7 @@ export function Mails() {
           creatorsCol
         ) : (
           <>
-            {mode === "contacts" ? contactsCol : inboxCol}
+            {mode === "contacts" ? contactsCol : mode === "drafts" ? draftsCol : inboxCol}
             {thread ? threadReader : mode === "contacts" && selected ? contactReader : emptyReader}
           </>
         )}
@@ -2614,8 +2976,31 @@ export function Mails() {
         defaultBox={box === "talent" ? "talent" : "partnerships"}
         onClose={() => setNewMailOpen(false)}
         onSent={() => void refreshList("sent")}
-        onReopen={openNewMail}
+        onReopen={newMailDraft ? () => openGmailDraft(newMailDraft) : openNewMail}
+        gmailDraft={newMailDraft}
+        onGmailDraftDone={(d, deleted) => {
+          if (deleted) hideDraft(d, true);
+          window.setTimeout(() => void refreshDrafts(), 2_000);
+        }}
       />
+
+      {/* Supprimer un brouillon (Gmail : définitif ; appareil : copie locale). */}
+      {delAsk && (
+        <ConfirmDialog
+          title="Supprimer ce brouillon ?"
+          message={delAsk.kind === "gmail"
+            ? `« ${delAsk.row.subject || "(sans objet)"} » sera supprimé de Gmail (${BOX_LABEL[delAsk.row.box]}). Un brouillon supprimé ne se récupère pas.`
+            : `« ${delAsk.subject || "(sans objet)"} » sera supprimé de cet appareil.`}
+          confirmLabel="Supprimer"
+          danger
+          onCancel={() => setDelAsk(null)}
+          onConfirm={() => {
+            const it = delAsk;
+            setDelAsk(null);
+            void deleteDraftItem(it);
+          }}
+        />
+      )}
 
       {/* Composeur : nouveau mail depuis un modèle (prospection / relance) */}
       <MailComposer

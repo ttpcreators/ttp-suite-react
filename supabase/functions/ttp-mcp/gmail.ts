@@ -147,7 +147,8 @@ const clean = (s: string) => s.replace(/[\r\n]+/g, " ").trim();
 /** Brouillon Gmail (nouveau mail, ou réponse dans un fil existant). Rien n'est envoyé. */
 export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, subject: string, message: string, threadId?: string): Promise<{ id: string }> {
   const token = await tokenFor(sb, box, "modify");
-  const headers: string[] = [`To: ${clean(to)}`, `Subject: ${encWord(clean(subject))}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64"];
+  // X-TTP-Source : la page Mails de l'app affiche « par Claude » sur ce brouillon.
+  const headers: string[] = [`To: ${clean(to)}`, `Subject: ${encWord(clean(subject))}`, "X-TTP-Source: claude", "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64"];
   if (threadId) {
     // Réponse : rattachée au dernier message du fil (le fil reste groupé chez la marque).
     const t = await gjson(token, `${GMAIL}/threads/${encodeURIComponent(threadId)}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References`);

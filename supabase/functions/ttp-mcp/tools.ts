@@ -563,7 +563,7 @@ const brouillonMail: Tool = {
     const fil = str(a.fil, 40);
     try {
       await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined);
-      return ok(`Brouillon prêt dans ${box}@ pour ${to} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail.`);
+      return ok(`Brouillon prêt dans ${box}@ pour ${to} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail ou l'app (Mails, dossier Brouillons).`);
     } catch (e) {
       return fail(`Brouillon non créé : ${(e as Error).message}`);
     }
