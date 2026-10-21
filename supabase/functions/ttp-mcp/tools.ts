@@ -394,13 +394,30 @@ const planning: Tool = {
 const taches: Tool = {
   name: "taches",
   title: "Tâches",
-  description: "To-do de l'agence : tâches ouvertes (par défaut) ou faites, avec échéance, priorité et créateur concerné.",
+  description: "To-do de l'agence : tâches ouvertes (par défaut) ou faites, avec échéance, priorité et créateurs concernés (une tâche peut en avoir plusieurs).",
   inputSchema: { type: "object", properties: { faites: { type: "boolean" }, createur: { type: "string" } }, additionalProperties: false },
   run: async (sb, _c, a) => {
-    let q = sb.from("todos").select("text, descr, due, creator, priority, status, done_at").eq("done", a.faites === true).order("sort_order").limit(60);
-    if (str(a.createur)) q = q.ilike("creator", like(str(a.createur)));
-    const { data } = await q;
-    return ok([`# Tâches ${a.faites === true ? "faites" : "ouvertes"}`, lines(((data as Json[] | null) ?? []).map((t) => `- ${t.text}${t.creator ? ` (${titleCase(String(t.creator))})` : ""}${t.due ? ` · échéance ${t.due}` : ""}${t.priority ? ` · ${t.priority}` : ""}${t.descr ? `\n  ${String(t.descr).slice(0, 160)}` : ""}`), "Aucune.")].join("\n"));
+    const who = str(a.createur);
+    // Nom exact du roster : pour trouver aussi les tâches PARTAGÉES (todos.creators).
+    const found = who ? await rosterName(sb, str(who, 80)) : null;
+    const named = found && "name" in found ? found.name : null;
+    const query = (cols: string, multi: boolean) => {
+      let q = sb.from("todos").select(cols).eq("done", a.faites === true).order("sort_order").limit(60);
+      if (who) q = multi && named ? q.or(`creator.ilike.${JSON.stringify(like(who))},creators.cs.{${JSON.stringify(named)}}`) : q.ilike("creator", like(who));
+      return q;
+    };
+    let res = await query("text, descr, due, creator, creators, priority, status, done_at", true);
+    // Colonne `creators` absente (SQL pas encore lancé) : ancienne lecture.
+    if (res.error && /creators/i.test(res.error.message)) res = await query("text, descr, due, creator, priority, status, done_at", false);
+    if (res.error) return fail(`Lecture des tâches impossible : ${res.error.message}`);
+    const namesOf = (t: Json) => {
+      const list = Array.isArray(t.creators) ? (t.creators as unknown[]).map((x) => String(x ?? "").trim()).filter(Boolean) : [];
+      return list.length ? list : t.creator ? [String(t.creator)] : [];
+    };
+    return ok([`# Tâches ${a.faites === true ? "faites" : "ouvertes"}`, lines(((res.data as unknown as Json[] | null) ?? []).map((t) => {
+      const names = namesOf(t);
+      return `- ${t.text}${names.length ? ` (${names.map((n) => titleCase(n)).join(", ")})` : ""}${t.due ? ` · échéance ${t.due}` : ""}${t.priority ? ` · ${t.priority}` : ""}${t.descr ? `\n  ${String(t.descr).slice(0, 160)}` : ""}`;
+    }), "Aucune.")].join("\n"));
   },
 };
 
@@ -440,6 +457,7 @@ const creerTache: Tool = {
       details: { type: "string" },
       echeance: { type: "string", description: "AAAA-MM-JJ (facultatif)" },
       createur: { type: "string", description: "Créateur concerné (facultatif)" },
+      createurs: { type: "array", items: { type: "string" }, maxItems: 20, description: "Plusieurs créateurs concernés (facultatif) : tâche partagée, visible dans l'espace de chacun" },
       priorite: { type: "string", enum: ["haute", "moyenne", "basse"] },
     },
     required: ["titre"],
@@ -450,20 +468,31 @@ const creerTache: Tool = {
     if (!titre) return fail("Titre manquant.");
     const due = /^\d{4}-\d{2}-\d{2}$/.test(str(a.echeance)) ? str(a.echeance) : null;
     // Nom officiel du roster : l'app et la RLS comparent le nom EXACT (sinon tâche invisible chez le créateur).
-    let who: string | null = null;
-    if (str(a.createur)) {
-      const found = await rosterName(sb, str(a.createur, 80));
+    // `createur` (un seul, comme avant) puis `createurs` (plusieurs), sans doublon.
+    const asked = [str(a.createur, 80), ...(Array.isArray(a.createurs) ? a.createurs.slice(0, 20).map((x) => str(x, 80)) : [])].filter(Boolean);
+    const names: string[] = [];
+    for (const n of asked) {
+      const found = await rosterName(sb, n);
       if ("error" in found) return fail(found.error);
-      who = found.name;
+      if (!names.some((x) => x.toLowerCase() === found.name.toLowerCase())) names.push(found.name);
     }
     const { data: top } = await sb.from("todos").select("sort_order").order("sort_order", { ascending: true }).limit(1);
     const order = ((top as { sort_order: number }[] | null)?.[0]?.sort_order ?? 0) - 1;
-    const { error } = await sb.from("todos").insert({
-      text: titre, descr: str(a.details, 2000) || null, due: due ?? "—", creator: who,
+    const row = {
+      text: titre, descr: str(a.details, 2000) || null, due: due ?? "—", creator: names[0] ?? null,
       priority: ["haute", "moyenne", "basse"].includes(str(a.priorite)) ? str(a.priorite) : "moyenne",
       source: "agency", status: "À faire", sort_order: order, tag: ctx.name ? `Claude · ${ctx.name}` : "Claude",
-    });
-    return error ? fail(`Tâche non créée : ${error.message}`) : ok(`Tâche créée : « ${titre} »${due ? ` pour le ${frDay(due)}` : ""}.`);
+    };
+    let { error } = await sb.from("todos").insert({ ...row, creators: names });
+    // Colonne `creators` absente (SQL pas encore lancé) : seul le premier créateur est enregistré.
+    let onlyFirst = false;
+    if (error && /creators/i.test(error.message)) {
+      ({ error } = await sb.from("todos").insert(row));
+      onlyFirst = names.length > 1;
+    }
+    if (error) return fail(`Tâche non créée : ${error.message}`);
+    const pour = names.length ? ` pour ${names.map((n) => titleCase(n)).join(", ")}` : "";
+    return ok(`Tâche créée : « ${titre} »${pour}${due ? `, échéance le ${frDay(due)}` : ""}.${onlyFirst ? ` (Seul ${titleCase(names[0])} est enregistré : la base n'a pas encore la mise à jour « plusieurs créateurs ».)` : ""}`);
   },
 };
 

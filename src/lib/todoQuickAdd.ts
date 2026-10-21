@@ -1,17 +1,21 @@
 /*
  * To-do « ajout rapide » : lecture légère d'une phrase tapée dans la barre du bas
  * (règles pures, testées). Ex. « Relancer Nutripure demain @Léna !haute » :
- *   @Prénom ou @Prénom Nom  → créateur (s'il existe, sans tenir compte des accents)
+ *   @Prénom ou @Prénom Nom  → créateur (s'il existe, sans tenir compte des accents) ;
+ *                             plusieurs « @Léna @Justine » = tâche partagée
  *   !haute / !moyenne / !basse → priorité
  *   aujourd'hui, demain, lundi … dimanche → échéance (prochaine occurrence)
+ *   25/10 ou 25/10/2026 → échéance (sans année : la prochaine fois que ce jour arrive)
  * Les mots reconnus sont retirés du titre ; un mot non reconnu reste tel quel.
  */
 
 export type QuickAddPriority = "haute" | "moyenne" | "basse";
 export type QuickAddResult = {
   title: string;
-  /** Nom du créateur tel qu'enregistré (creators.name), ou null. */
+  /** Premier créateur cité, tel qu'enregistré (creators.name), ou null. */
   creator: string | null;
+  /** Tous les créateurs cités, dans l'ordre, sans doublon (vide si aucun). */
+  creators: string[];
   priority: QuickAddPriority | null;
   /** Échéance "YYYY-MM-DD" (date locale), ou null. */
   due: string | null;
@@ -47,6 +51,22 @@ function dueOf(word: string, now: Date): string | null {
   const w = norm(bare(word));
   if (w === "aujourd'hui" || w === "aujourdhui") return plusDays(now, 0);
   if (w === "demain") return plusDays(now, 1);
+  // « 25/10 » (prochaine occurrence : l'an prochain si la date est passée) ou « 25/10/2026 ».
+  const dm = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?$/.exec(w);
+  if (dm) {
+    const day = Number(dm[1]);
+    const month = Number(dm[2]);
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const year = dm[3] ? Number(dm[3].length === 2 ? `20${dm[3]}` : dm[3]) : now.getFullYear();
+    const at = (y: number) => {
+      const d = new Date(y, month - 1, day);
+      return d.getMonth() === month - 1 && d.getDate() === day ? d : null; // 31/02, 12/2025…
+    };
+    const d = at(year);
+    if (!d) return null;
+    const next = !dm[3] && d < today ? at(year + 1) : d;
+    return next ? isoDay(next) : null;
+  }
   const wd = WEEKDAYS.indexOf(w);
   if (wd < 0) return null;
   const ahead = (wd - now.getDay() + 7) % 7 || 7;
@@ -72,10 +92,10 @@ function creatorAt(words: string[], i: number, creators: readonly { name: string
   return hits.length === 1 ? { name: hits[0].name, used: 1 } : null;
 }
 
-export function parseQuickAdd(input: string, creators: readonly { name: string }[], now: Date = new Date()): QuickAddResult {
+export function parseQuickAdd(input: string, roster: readonly { name: string }[], now: Date = new Date()): QuickAddResult {
   const words = input.split(/\s+/).filter(Boolean);
   const kept: string[] = [];
-  let creator: string | null = null;
+  const creators: string[] = [];
   let priority: QuickAddPriority | null = null;
   let due: string | null = null;
   for (let i = 0; i < words.length; i++) {
@@ -87,10 +107,10 @@ export function parseQuickAdd(input: string, creators: readonly { name: string }
         continue;
       }
     }
-    if (w.startsWith("@") && !creator) {
-      const hit = creatorAt(words, i, creators);
+    if (w.startsWith("@")) {
+      const hit = creatorAt(words, i, roster);
       if (hit) {
-        creator = hit.name;
+        if (!creators.includes(hit.name)) creators.push(hit.name);
         i += hit.used - 1;
         continue;
       }
@@ -104,5 +124,5 @@ export function parseQuickAdd(input: string, creators: readonly { name: string }
     }
     kept.push(w);
   }
-  return { title: kept.join(" "), creator, priority, due };
+  return { title: kept.join(" "), creator: creators[0] ?? null, creators, priority, due };
 }

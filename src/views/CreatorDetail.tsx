@@ -4,6 +4,7 @@ import { fmtCompact } from "@/lib/timeSeries";
 import { useEffect, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X, ArrowUpRight, Share2, IdCard, ScrollText, Receipt, ListChecks, FileText, Lightbulb, Mail, TrendingUp, type LucideIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
+import { selectTodosFor } from "@/lib/todoCreatorsDb";
 import { cn, titleCase } from "@/lib/utils";
 import { useIosPhone } from "@/components/mobile/ios-sheet";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -270,7 +271,8 @@ export function CreatorDetail({
       if (row && !editingRef.current) setForm(coordOf(row));
     });
     supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).then(({ data, error }) => { if (error) console.error("Factures créateur:", error); if (alive) setInv((data as Inv[]) ?? []); });
-    supabase.from("todos").select("id,text,done").eq("creator", name).then(({ data, error }) => { if (error) console.error("À faire créateur:", error); if (alive) setTd((data as Td[]) ?? []); });
+    // Ses tâches + celles partagées avec d'autres créateurs (todos.creators).
+    void selectTodosFor<Td>(name, "id,text,done").then(({ data, error }) => { if (error) console.error("À faire créateur:", error); if (alive) setTd(data ?? []); });
     supabase.from("briefs").select("brand,deliverables,due").eq("creator", name).then(({ data, error }) => { if (error) console.error("Briefs créateur:", error); if (alive) setBr((data as Br[]) ?? []); });
     supabase.from("ideas").select("text").eq("creator", name).then(({ data, error }) => { if (error) console.error("Idées créateur:", error); if (alive) setIdeas((data as Idea[]) ?? []); });
     return () => {

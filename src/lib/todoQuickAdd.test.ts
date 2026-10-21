@@ -9,6 +9,7 @@ describe("todoQuickAdd", () => {
     expect(parseQuickAdd("Relancer Nutripure demain @Léna !haute", CREATORS, NOW)).toEqual({
       title: "Relancer Nutripure",
       creator: "LÉNA MARTIN",
+      creators: ["LÉNA MARTIN"],
       priority: "haute",
       due: "2026-10-21",
     });
@@ -48,7 +49,50 @@ describe("todoQuickAdd", () => {
     expect(parseQuickAdd("Caler lundi ou mardi !haute !basse", CREATORS, NOW)).toEqual({
       title: "Caler ou mardi !basse",
       creator: null,
+      creators: [],
       priority: "haute",
+      due: "2026-10-26",
+    });
+  });
+
+  it("plusieurs @ : tâche partagée, dans l'ordre, sans doublon", () => {
+    expect(parseQuickAdd("Shooting @Léna @Inès demain", CREATORS, NOW)).toMatchObject({
+      title: "Shooting",
+      creator: "LÉNA MARTIN",
+      creators: ["LÉNA MARTIN", "Inès"],
+      due: "2026-10-21",
+    });
+    expect(parseQuickAdd("Appel @Paul Morel @lena @Léna", CREATORS, NOW)).toMatchObject({
+      title: "Appel",
+      creators: ["Paul Morel", "LÉNA MARTIN"],
+    });
+    expect(parseQuickAdd("Voir @Zoé @Inès", CREATORS, NOW)).toMatchObject({ title: "Voir @Zoé", creators: ["Inès"] });
+  });
+
+  it("échéance en chiffres : 25/10, 25/10/2026, date passée = l'an prochain, date impossible ignorée", () => {
+    expect(parseQuickAdd("Facture 25/10", CREATORS, NOW)).toMatchObject({ title: "Facture", due: "2026-10-25" });
+    expect(parseQuickAdd("Facture 5/1", CREATORS, NOW).due).toBe("2027-01-05");
+    expect(parseQuickAdd("Facture 20/10", CREATORS, NOW).due).toBe("2026-10-20"); // aujourd'hui
+    expect(parseQuickAdd("Bilan 03/11/2026,", CREATORS, NOW)).toMatchObject({ title: "Bilan", due: "2026-11-03" });
+    expect(parseQuickAdd("Bilan 03/11/27", CREATORS, NOW).due).toBe("2027-11-03");
+    expect(parseQuickAdd("Note 31/02", CREATORS, NOW)).toMatchObject({ title: "Note 31/02", due: null });
+    expect(parseQuickAdd("Exercice 12/2025", CREATORS, NOW)).toMatchObject({ title: "Exercice 12/2025", due: null });
+  });
+
+  it("phrase complète de la barre, accents et inconnus", () => {
+    expect(parseQuickAdd("Relancer Nutripure demain @Lena @Justine !haute", [...CREATORS, { name: "JUSTINE GENTET" }], NOW)).toEqual({
+      title: "Relancer Nutripure",
+      creator: "LÉNA MARTIN",
+      creators: ["LÉNA MARTIN", "JUSTINE GENTET"],
+      priority: "haute",
+      due: "2026-10-21",
+    });
+    // Un @nom inconnu reste dans le texte (rien n'est perdu), le reste est lu.
+    expect(parseQuickAdd("Appeler @Zoé lundi !basse", CREATORS, NOW)).toEqual({
+      title: "Appeler @Zoé",
+      creator: null,
+      creators: [],
+      priority: "basse",
       due: "2026-10-26",
     });
   });

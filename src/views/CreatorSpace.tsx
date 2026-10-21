@@ -58,6 +58,8 @@ import { BriefResumeView } from "@/components/brief-resume";
 import { hasResume, parseResume, type BriefResume } from "@/lib/briefResume";
 import { brandInitial, briefKey, buildMissions, CREATOR_PHASES, creatorPhaseIndex, missionState, type Mission, type MissionCollab } from "@/lib/creatorMissions";
 import { creatorSteps, whenLabel, type NextStep } from "@/lib/creatorNextStep";
+import { sharedWithText } from "@/lib/todoCreators";
+import { selectTodosFor } from "@/lib/todoCreatorsDb";
 import { gainsSummary, invoiceTone } from "@/lib/creatorGains";
 import { daysBetween as daysBetweenIso } from "@/lib/aujourdhui";
 import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
@@ -99,7 +101,7 @@ type Creator = {
 };
 type Subtask = { id: string; text: string; done: boolean };
 type Attachment = { name: string; size: string; path: string };
-type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; status?: string | null; sort_order?: number; subtasks?: Subtask[] | null; attachments?: Attachment[] | null };
+type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; status?: string | null; sort_order?: number; subtasks?: Subtask[] | null; attachments?: Attachment[] | null; creator?: string | null; creators?: string[] | null };
 
 let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
@@ -717,7 +719,8 @@ export function CreatorSpace({
         if (apply(error)) setCreator((data?.[0] as Creator) ?? null);
         if (alive) setCreatorReady(true);
       });
-    supabase.from("todos").select("id,text,descr,due,priority,done,status,sort_order,subtasks,attachments").eq("creator", name).order("sort_order").then(({ data, error }) => apply(error) && setTodos((data as Todo[]) ?? []));
+    // Ses tâches + celles partagées avec lui (todos.creators) ; repli sur `creator` sans le SQL.
+    void selectTodosFor<Todo>(name, "id,text,descr,due,priority,done,status,sort_order,subtasks,attachments").then(({ data, error }) => apply(error) && setTodos(data ?? []));
     supabase.from("ideas").select("id,text,status,sort_order,subtasks").eq("creator", name).order("sort_order").then(({ data, error }) => apply(error) && setIdeas((data as Idea[]) ?? []));
     // Colonne `resume` absente (SQL pas encore lancé) : on recharge sans elle.
     const briefsQ = (cols: string) => supabase.from("briefs").select(cols).eq("creator", name).order("created_at", { ascending: false });
@@ -1431,6 +1434,11 @@ export function CreatorSpace({
   // Change le statut d'une tâche depuis la vue colonnes (done dérivé de « Fait »).
   // Supprimer une tâche (menu ⋯, ou glisser la ligne en mode iPhone).
   const deleteTodo = async (td: Todo) => {
+    // Tâche partagée dont il n'est pas le premier créateur : seule l'agence (ou le premier) la retire.
+    if (!preview && td.creator && td.creator !== name) {
+      toast(t("Tâche partagée : demande à l'agence de la retirer"));
+      return;
+    }
     if (await dbDelete("todos", td.id)) {
       setTodos((prev) => prev.filter((x) => x.id !== td.id));
       toast(t("Supprimé"));
@@ -2632,10 +2640,11 @@ export function CreatorSpace({
                             <div key={td.id} className="rounded-xl border border-border bg-surface p-3">
                               <button type="button" onClick={() => setTaskView(td)} className="block w-full text-left">
                                 <span className={"block line-clamp-2 break-words text-[12.5px] font-medium leading-snug " + (td.done ? "text-muted-foreground line-through" : "text-foreground")}>{td.text}</span>
-                                {((td.subtasks?.length ?? 0) > 0 || (td.attachments?.length ?? 0) > 0) && (
+                                {((td.subtasks?.length ?? 0) > 0 || (td.attachments?.length ?? 0) > 0 || !!sharedWithText(td, name, t)) && (
                                   <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[10px] text-faint">
                                     {(td.subtasks?.length ?? 0) > 0 && <span>{t("{done}/{total} sous-tâches", { done: (td.subtasks ?? []).filter((s) => s.done).length, total: td.subtasks!.length })}</span>}
                                     {(td.attachments?.length ?? 0) > 0 && <span>📎 {td.attachments!.length}</span>}
+                                    {sharedWithText(td, name, t) && <span>{sharedWithText(td, name, t)}</span>}
                                   </span>
                                 )}
                               </button>
@@ -2671,6 +2680,8 @@ export function CreatorSpace({
                         <>
                           {td.due && td.due !== "—" && <span>{t("Échéance {date}", { date: frDate(td.due) })}</span>}
                           {(td.attachments?.length ?? 0) > 0 && <span>📎 {td.attachments!.length}</span>}
+                          {/* Tâche partagée : les autres créateurs, discrètement. */}
+                          {sharedWithText(td, name, t) && <span>{sharedWithText(td, name, t)}</span>}
                         </>
                       ),
                       right: (
@@ -4029,6 +4040,7 @@ export function CreatorSpace({
             {taskView.due && taskView.due !== "—" && (
               <div className="mt-4 text-xs text-faint">{t("Échéance · {date}", { date: frDate(taskView.due) })}</div>
             )}
+            {sharedWithText(taskView, name, t) && <div className="mt-2 text-xs text-faint">{sharedWithText(taskView, name, t)}</div>}
 
             {/* Sous-tâches (checklist) */}
             {(() => {
