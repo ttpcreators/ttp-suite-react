@@ -88,7 +88,8 @@ const STATUS_LABEL: Record<string, string> = {
 const statusDot = (status: string): string =>
   status === "inactif" ? "bg-neutral-400" : status === "pause" ? "bg-amber" : status === "live" ? "bg-danger" : "bg-signal";
 
-export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
+/** `onShow` : ramène la page sur l'onglet Liste (clic sur « + Créateur » depuis un autre onglet). */
+export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; onShow?: () => void }) {
   const [rows, setRows] = useState<Creator[] | null>(() => getCache<Creator[]>("roster"));
   const [error, setError] = useState(false);
   const { query } = useSearch();
@@ -290,7 +291,13 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
           {rows.length} créateur{rows.length > 1 ? "s" : ""} représenté
           {rows.length > 1 ? "s" : ""}
         </div>
-        <AddButton label="Créateur" onClick={() => setFormOpen(true)} />
+        <AddButton
+          label="Créateur"
+          onClick={() => {
+            onShow?.();
+            setFormOpen(true);
+          }}
+        />
       </PageHeaderRow>
 
       {/* Chiffres clés (bandeau à filets, comme l'Aperçu) */}

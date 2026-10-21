@@ -43,6 +43,13 @@ demande via `lazy(lazyImport(...))`. « F » = réservée aux fondateurs (`FOUND
 
 ### Pages du menu agence
 
+Pages en onglets « dossier » (classeur, `FolderTabs`, id de page = `orderKey`, liste et
+couleurs par défaut dans `FOLDER_PAGES` de `src/lib/folderTabs.ts`) : fiche créateur,
+Roster, Scouting, Media kit, Sourcing, Contrats, Planning, Accès, Paramètres. Leurs onglets
+suivent les sous-pages de la sidebar dans les deux sens. Couleurs d'intercalaire réglables
+pour toute l'équipe dans Paramètres → Apparence → « Couleurs des classeurs » (blob
+`folderTabTones`, `src/lib/useFolderTones.ts`).
+
 | Fichier | Id de nav (sous-pages) | Page |
 |---|---|---|
 | `Aujourdhui.tsx` | `aujourdhui` | Accueil : actions du jour triées par urgence (argent en retard, agenda, tâches, mails, demain), puis « À anticiper ». |
@@ -110,6 +117,7 @@ demande via `lazy(lazyImport(...))`. « F » = réservée aux fondateurs (`FOUND
 | Phrase sous le titre de chaque page | `src/lib/viewHints.ts` |
 | Synonymes pour la recherche et ⌘K | `src/lib/pageAliases.ts` |
 | Pages rangées (masquées pour toute l'agence) | `src/lib/hiddenPages.ts` (blob `hiddenPages`) |
+| Couleurs des onglets « dossier » (pour toute l'agence) | `src/lib/folderTabs.ts` (`FOLDER_PAGES`, `resolveTabTones`), `src/lib/useFolderTones.ts` (blob `folderTabTones`) |
 | Favoris et leur ordre | `withFavorites`, `orderByIds` dans `nav.tsx` (blob `pinnedPages`, `favoritesOrder`) |
 | Sous-page active | `src/lib/navSub.ts` (`useNavSub`, `useSetNavSub`) |
 | Pastilles du menu | `src/lib/useNavBadges.ts`, `src/lib/navSeen.ts` |
@@ -158,7 +166,7 @@ demande via `lazy(lazyImport(...))`. « F » = réservée aux fondateurs (`FOUND
 | Famille | Fichiers |
 |---|---|
 | Mise en page et navigation | `page-header` (`PageFrame`, `PageHeaderRow`), `dashboard-sidebar` (primitives de menu, agence et créateur), `dash`, `welcome-modal`, `scaled-preview` |
-| Onglets et filtres | `animated-tabs` (`Tabs`), `motion-tabs`, `morphing-tabs`, `folder-tabs` (onglets « dossier » de la page Agents pour fiche créateur, Contrats, Media kit, Paramètres ; onglets simples sur téléphone), `filter-bar`, `filter-panel`, `period-filter`, `date-range-picker`, `pill-search` |
+| Onglets et filtres | `animated-tabs` (`Tabs`), `motion-tabs`, `morphing-tabs`, `folder-tabs` (onglets « dossier » de la page Agents, avec code couleur, pour fiche créateur, Roster, Scouting, Media kit, Sourcing, Contrats, Planning, Accès, Paramètres ; onglets simples avec pastille sur téléphone), `filter-bar`, `filter-panel`, `period-filter`, `date-range-picker`, `pill-search` |
 | Formulaires | `form` (`AddButton`, `InlineForm`, champs), `select`, `checkbox`, `popover`, `status-select`, `creator-multi-picker`, `recipient-picker`, `image-field`, `avatar-upload`, `signature-picker`, `mediakit-theme-picker`, `subtask-checklist` |
 | Retours et statuts | `toast`, `alert`, `notifications`, `notification-panel`, `undo-send`, `loader`, `status-pill`, `be-ui-animated-badge`, `help-tip`, `tooltips`, `kbd`, `progress` |
 | Données et graphiques | `chart` (recharts), `glass-stat-chart`, `stat-card`, `stats-bento`, `event-calendar`, `agent-plan`, `file-card-collections`, `cobe-globe-stickers` |
@@ -174,7 +182,7 @@ Règle : la logique pure (sans React ni Supabase) vit dans `src/lib/<nom>.ts`, a
 | Domaine | Fichiers |
 |---|---|
 | Socle données | `supabase.ts` (client, clé anon), `db.ts` (insert / update / delete), `appState.ts` (blob agence `__app_state__`), `useLive.ts` (resynchronisation), `viewCache.ts`, `trash.ts` (corbeille), `useCreators.ts`, `money.ts`, `utils.ts`, `dates.ts`, `dateRange.ts`, `timeSeries.ts` |
-| Navigation et interface | `nav.tsx`, `navSub.ts`, `navAction.ts`, `navSeen.ts`, `useNavBadges.ts`, `hiddenPages.ts`, `restrictedViews.ts`, `pageAliases.ts`, `viewHints.ts`, `tabs.ts`, `openIntent.ts`, `deepLink.ts`, `commandPalette.ts`, `search.ts`, `searchKinds.ts`, `useGlobalSearch.ts`, `settingsSearch.ts`, `folderTabs.ts`, `useStickyState.ts`, `iosUi.ts`, `touch.ts`, `ease.ts`, `hooks/` (gestes) |
+| Navigation et interface | `nav.tsx`, `navSub.ts`, `navAction.ts`, `navSeen.ts`, `useNavBadges.ts`, `hiddenPages.ts`, `restrictedViews.ts`, `pageAliases.ts`, `viewHints.ts`, `tabs.ts`, `openIntent.ts`, `deepLink.ts`, `commandPalette.ts`, `search.ts`, `searchKinds.ts`, `useGlobalSearch.ts`, `settingsSearch.ts`, `folderTabs.ts`, `useFolderTones.ts`, `useVisitedTabs.ts`, `useStickyState.ts`, `iosUi.ts`, `touch.ts`, `ease.ts`, `hooks/` (gestes) |
 | Apparence | `accent.ts` (accent et thèmes Clair, Verre, Noir, Auto), `theme.ts` (contexte React), `statusTone.ts` (un sens par couleur) |
 | Mise à jour et santé | `appUpdate.ts` (`version.json`, `lazyImport`), `errorReport.ts`, `diagnostics.ts`, `features.ts` (fonctions en attente d'accord Meta, TikTok, Google) |
 | Aujourd'hui et anticipation | `aujourdhui.ts`, `anticipation.ts`, `relance.ts`, `useRelanceInvoices.ts` |
