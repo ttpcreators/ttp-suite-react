@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { TONE_SOLID, TONE_TILE } from "@/lib/statusTone";
 import { Loader, Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import { ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Mail, MessageSquare, MessageSquarePlus, Plus, RefreshCw, SearchCheck, Send, Settings2, Tag, X, Copy, type LucideIcon, Megaphone } from "@/components/icons";
+import { ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Mail, MessageSquare, MessageSquarePlus, Plus, RefreshCw, SearchCheck, Send, Settings2, Tag, X, Copy, type LucideIcon, Megaphone, EyeOff } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -1209,6 +1209,12 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
                           {t("Afficher les images")}
                         </button>
                       </div>
+                    )}
+                    {asAgency && m.hiddenFromCreator && (
+                      <p className="mt-3 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                        <EyeOff className="h-3.5 w-3.5 shrink-0" />
+                        {creatorName.split(" ")[0]} ne voit pas ce message : son adresse n'était pas en copie.
+                      </p>
                     )}
                     <MailItem
                       variant="plain"

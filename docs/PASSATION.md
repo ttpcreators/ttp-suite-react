@@ -140,8 +140,10 @@ Plusieurs **audits adversariaux** menés et corrigés (identité/privilège, OWA
   par le trigger `creators_guard` ; factures en écriture agence uniquement.
 - Fonctions edge : `report-error` corps de notif générique (anti-phishing) ; garde-fou
   anti-flood.
-- **Le seul secret « sensible »** = les mots de passe en clair dans le code (choix assumé de
-  l'utilisateur — voir mémoire). Rien d'autre (aucune service_role key / token dans le repo).
+- **Aucun secret dans le code ni dans le dépôt** (ni clé service_role, ni jeton, ni mot de
+  passe). Les identifiants des boîtes gérées pour certains créateurs sont rangés en base, dans
+  le blob agence `credVault` (lisible par l'agence seulement, RLS), par choix assumé de
+  l'utilisateur : voir `src/views/CredentialVault.tsx`.
 
 ---
 

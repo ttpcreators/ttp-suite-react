@@ -47,6 +47,8 @@ export type MailAttachment = { messageId: string; attachmentId: string; filename
 export type MailMessage = {
   id: string; from: string; fromEmail: string; fromAgency: boolean; to: string; cc: string;
   ts: number; html: string; text: string; attachments: MailAttachment[];
+  /** Vue agence : réponse envoyée sans l'adresse du créateur, il ne la voit pas dans son espace. */
+  hiddenFromCreator?: boolean;
 };
 export type MailNote = {
   id: string; body: string; created_at: string; agency_read_at: string | null;

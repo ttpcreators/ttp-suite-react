@@ -80,3 +80,7 @@ docs/             documentation (index : docs/README.md)
 
 Voir **[`docs/README.md`](docs/README.md)** : architecture, passation, contrats des
 fonctions, validations Meta et Google, archives.
+
+Pour modifier le code (humain ou IA) : **[`CLAUDE.md`](CLAUDE.md)** (règles et pièges),
+[`docs/CARTE-DU-CODE.md`](docs/CARTE-DU-CODE.md) (où vit chaque chose) et
+[`docs/RECETTES.md`](docs/RECETTES.md) (changements courants pas à pas).

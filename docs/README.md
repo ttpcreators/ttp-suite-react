@@ -2,8 +2,10 @@
 
 | Document | Pour quoi |
 |---|---|
-| [`../CLAUDE.md`](../CLAUDE.md) | Règles de travail sur le projet (déploiement, base, sécurité, PDF) |
+| [`../CLAUDE.md`](../CLAUDE.md) | **Point d'entrée** : produit, règles de travail, conventions, pièges connus (aussi pour toute IA ; les autres outils passent par [`../AGENTS.md`](../AGENTS.md)) |
 | [`../supabase/sql/README.md`](../supabase/sql/README.md) | **État de la base et des fonctions** : ce qui est appliqué, ce qui reste à faire |
+| [`CARTE-DU-CODE.md`](CARTE-DU-CODE.md) | Carte du code : pages, composants, modules, Edge Functions, tests |
+| [`RECETTES.md`](RECETTES.md) | Changements courants pas à pas : page, onglet créateur, colonne, fonction, outil Claude, PDF, mise en ligne, retour arrière |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Architecture, flux de données, sécurité |
 | [`PASSATION.md`](PASSATION.md) | Reprendre le projet de zéro : accès, produits, déploiement, pièges (socle de juillet 2026) |
 | [`mails-contrat-v2.md`](mails-contrat-v2.md) | Contrat entre l'app et les fonctions Gmail |

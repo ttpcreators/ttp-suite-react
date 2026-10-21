@@ -57,7 +57,11 @@ type Sb = ReturnType<typeof getServiceClient>;
 type Me = { userId: string; agency: boolean; creator: string | null };
 type SettingsRow = { creator: string; alias: string | null; aliases?: string[] | null; label_id: string | null; enabled: boolean };
 /** Réglage vérifié : `addresses` = ses adresses acceptées (principale d'abord). */
-type Settings = SettingsRow & { addresses: string[] };
+type Settings = SettingsRow & {
+  addresses: string[];
+  /** Appel de l'agence (vue « Suivi créateurs ») : voit aussi ses réponses envoyées sans l'alias. */
+  agencyView?: boolean;
+};
 
 // ---------------------------------------------------------------------------
 // Cache mémoire (par instance de fonction) : la PROMESSE est gardée, donc deux
@@ -322,7 +326,12 @@ async function ownedOrKnown(sb: Sb, s: Settings, threadId: string): Promise<GThr
 }
 
 /** Messages du fil que la créatrice peut voir (une de ses adresses dans le message, ou libellé du fil). */
-const shownMessages = (t: GThread, s: Settings) => concernedMessages(t.messages ?? [], lite, s.addresses, s.label_id, AGENCY_DOMAIN);
+// Le CRÉATEUR ne voit que les messages où une de ses adresses apparaît (une réponse de
+// l'agence sans lui en copie lui reste cachée, choix de Marc). L'AGENCE voit en plus ses
+// réponses à la marque dans le fil, marquées « non visible par le créateur ».
+const shownMessages = (t: GThread, s: Settings) =>
+  concernedMessages(t.messages ?? [], lite, s.addresses, s.label_id, s.agencyView ? AGENCY_DOMAIN : undefined);
+const creatorSees = (t: GThread, s: Settings) => new Set(concernedMessages(t.messages ?? [], lite, s.addresses, s.label_id).map((m) => m.id));
 
 // ---------------------------------------------------------------------------
 // Actions
@@ -434,6 +443,7 @@ async function threadView(sb: Sb, token: string, s: Settings, threadId: string) 
   const budget = { left: INLINE_TOTAL_MAX };
   const messages = [];
   const shown = shownMessages(t, s);
+  const seen = s.agencyView ? creatorSees(t, s) : null;
   for (const m of shown) {
     const hs = m.payload?.headers ?? [];
     const ex = extract(m.payload, m.id);
@@ -456,6 +466,7 @@ async function threadView(sb: Sb, token: string, s: Settings, threadId: string) 
       html: html ? clean(html) : "",
       text: html ? "" : text,
       attachments,
+      ...(seen && !seen.has(m.id) ? { hiddenFromCreator: true } : {}),
     });
   }
   const [{ data: row }, { data: notes }] = await Promise.all([
@@ -526,7 +537,8 @@ Deno.serve(async (req: Request) => {
     // Créatrice concernée : la sienne, ou (agence seulement) celle demandée.
     const creator = me.agency ? String(body.creator ?? "").trim() : me.creator ?? "";
     if (!creator) return res({ error: "creatrice_inconnue" }, 400);
-    const s = await settingsFor(sb, creator);
+    const s0 = await settingsFor(sb, creator);
+    const s: Settings | null = s0 && { ...s0, agencyView: me.agency };
     // Section désactivée (créatrice) : seule la liste répond (« non configurée ») ;
     // toute autre action est refusée. L'agence garde l'aperçu avant activation.
     const disabled = !me.agency && (!s || !s.enabled);
