@@ -2243,3 +2243,11 @@ update public.todos
    set creators = array[btrim(creator)]
  where cardinality(creators) = 0
    and nullif(btrim(creator), '') is not null;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- Sauvegarde mensuelle (2026-10-21, sql/2026-10-21-sauvegarde-mensuelle.sql) : bucket
+-- privé « backups » (aucune politique, serveur seulement). Le cron est dans le fichier daté.
+-- ════════════════════════════════════════════════════════════════════════════
+insert into storage.buckets (id, name, public)
+values ('backups', 'backups', false)
+on conflict (id) do update set public = false;

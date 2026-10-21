@@ -202,3 +202,9 @@ verify_jwt = false
 # jetons (hachés, 1 h, révocables dans Paramètres → Claude).
 [functions.ttp-mcp]
 verify_jwt = false
+
+# monthly-backup : sauvegarde mensuelle par mail, appelée par pg_cron avec le
+# CRON_SECRET (pas un JWT) ou par un fondateur depuis Paramètres → verify_jwt=false ;
+# l'auth (secret ou fondateur) est vérifiée dans le code.
+[functions.monthly-backup]
+verify_jwt = false

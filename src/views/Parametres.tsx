@@ -102,6 +102,7 @@ const ENTRIES: Entry[] = [
       { title: "Point de mi-journée", keywords: ["14h", "après-midi", "rappel"] },
       { title: "Résumé de la semaine", keywords: ["lundi", "semaine"] },
       { title: "Données créateurs à jour", keywords: ["stats", "roster", "mensuel", "abonnés"] },
+      { title: "Sauvegarde mensuelle", keywords: ["sauvegarde", "backup", "csv", "export", "media kit", "crash"] },
     ],
   },
   {
@@ -180,6 +181,54 @@ function PrefRow({
 }
 
 /** Carte du volet de droite. `anchor` = titre d'origine de la section (ancre « reglage-… »). */
+/**
+ * Sauvegarde mensuelle par mail (fonction monthly-backup, cron le 1er du mois) : les
+ * fondateurs reçoivent une archive avec les CSV, les réglages (sans le coffre) et les
+ * media kits. Bouton pour l'envoyer tout de suite.
+ */
+function BackupCard() {
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("monthly-backup", { body: {}, timeout: 150_000 });
+      if (error) {
+        const ctx = (error as { context?: { json?: () => Promise<unknown>; status?: number } }).context;
+        const j = ctx && typeof ctx.json === "function" ? ((await ctx.json().catch(() => null)) as { error?: string; code?: string } | null) : null;
+        toast(
+          j?.code === "NOT_FOUND" ? "Sauvegarde pas encore installée : la fonction monthly-backup n'est pas déployée."
+            : j?.error === "unauthorized" ? "Réservé aux fondateurs."
+            : j?.error === "google_non_connecte" ? "Reconnecte Google (Planning) : l'envoi passe par partnerships@."
+            : j?.error === "aucun_destinataire" ? "Aucun fondateur avec une adresse mail trouvé."
+            : "Sauvegarde non envoyée, réessaie dans un instant.",
+        );
+        return;
+      }
+      const d = (data ?? {}) as { recipients?: number; attached?: boolean; bytes?: number };
+      const mb = ((d.bytes ?? 0) / 1024 / 1024).toFixed(1).replace(".", ",");
+      toast(`Sauvegarde envoyée ✓ (${mb} Mo${d.attached ? ", jointe au mail" : ", lien dans le mail"})`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card
+      title="Sauvegarde mensuelle"
+      hint="Le 1er de chaque mois, les fondateurs reçoivent par mail une archive : un fichier CSV par liste (contacts, roster, collabs, briefs, factures, to-do, planning, scouting…), les réglages de l'agence (sans le coffre des mots de passe) et les media kits en PDF, créateurs et agence. Si l'app tombe un jour, l'essentiel est dans ta boîte mail."
+      right={
+        <button
+          type="button"
+          onClick={() => void run()}
+          disabled={busy}
+          className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {busy ? "Envoi en cours…" : "Envoyer maintenant"}
+        </button>
+      }
+    />
+  );
+}
+
 function Card({ anchor, title, hint, right, children }: { anchor?: string; title?: string; hint?: ReactNode; right?: ReactNode; children?: ReactNode }) {
   const id = anchor ?? title;
   return (
@@ -1000,6 +1049,7 @@ export function Parametres() {
                 onChange={(v) => setPref("digestStats", v)}
               />
             </Card>
+            <BackupCard />
           </>
         );
       case "activite":
