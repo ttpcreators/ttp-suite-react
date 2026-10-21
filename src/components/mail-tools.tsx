@@ -19,6 +19,8 @@ import type { MailMessage } from "@/lib/creatorMail";
 import { Overlay, useIosPhone } from "@/components/mobile/ios-sheet";
 import { ClaudeConsigne, ClaudeReadyBanner, ClaudeReplyButton, useClaudeReply } from "@/components/mail-claude";
 import { MeetButton, MeetDialog, meetReplyText } from "@/components/meet-invite";
+import { ModelPicker } from "@/components/mail-models";
+import { brandFromEmail, insertModel, type ModelVars } from "@/lib/mailModels";
 import { composerPrefill, deleteGmailDraft, gmailDraftLocalKey, type GmailDraftRow, type ReplyDraft } from "@/lib/mailDrafts";
 
 /*
@@ -223,8 +225,10 @@ function useEscape(fn: () => void) {
 
 // ── Réponse dans le fil ─────────────────────────────────────────────────────
 export function ReplyBox({
-  placeholder, box, focusKey, focusMode, onSend, variant = "bar", to, toTitle, draftKey, replyAllCc = [], sendLabel, claude, meet, draftMeta,
+  placeholder, box, focusKey, focusMode, onSend, variant = "bar", to, toTitle, draftKey, replyAllCc = [], sendLabel, claude, meet, draftMeta, modelVars,
 }: {
+  /** Variables des modèles de mails ({marque}, {créateur}, {prénom}) pour ce fil. */
+  modelVars?: ModelVars;
   /** Objet et destinataire du fil, gardés avec le brouillon (dossier « Brouillons »). */
   draftMeta?: { subject: string; to: string };
   /** « Rendez-vous » : invités proposés (l'interlocuteur du fil), titre, créateur concerné. */
@@ -446,6 +450,10 @@ export function ReplyBox({
           <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
           <BoxChip box={box} prefix="Depuis" />
           {claude && <ClaudeReplyButton open={aiOpen} onToggle={() => setAiOpen((v) => !v)} waiting={ai.waiting} onCancel={ai.cancelWait} />}
+          <ModelPicker vars={modelVars} onPick={(text) => {
+            setText((cur) => insertModel(cur, text));
+            requestAnimationFrame(() => ref.current?.focus());
+          }} />
           {meet && <MeetButton onClick={() => setMeetOpen(true)} />}
           <span className="flex-1" />
           <span className="text-faint max-sm:hidden">
@@ -506,6 +514,10 @@ export function ReplyBox({
         <AttachButton onFiles={(f) => void att.add(f)} total={att.total} />
         <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
         <BoxChip box={box} prefix="Depuis" />
+        <ModelPicker vars={modelVars} onPick={(text) => {
+          setText((cur) => insertModel(cur, text));
+          requestAnimationFrame(() => ref.current?.focus());
+        }} />
         {meet && <MeetButton onClick={() => setMeetOpen(true)} />}
         <span className="text-faint">
           {settings.delaySec ? `annulable ${settings.delaySec} s · ` : ""}⌘↵ pour envoyer
@@ -916,6 +928,7 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
                 </button>
                 <AttachButton onFiles={(f) => void att.add(f)} total={att.total} />
                 <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
+                <ModelPicker vars={{ marque: brandFromEmail(to.split(/[,;\s]+/)[0]) }} onPick={(text) => setBody((cur) => insertModel(cur, text))} />
                 <span className="ml-auto text-faint">{settings.delaySec ? `Annulable ${settings.delaySec} s · ` : ""}⌘↵</span>
               </div>
             )}
@@ -967,6 +980,7 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-5 py-3 text-[12px] text-muted-foreground">
             <AttachButton onFiles={(f) => void att.add(f)} total={att.total} label="Joindre un fichier" />
             <SignatureToggle on={sig} onChange={setSig} has={!!settings.signatureHtml} />
+            <ModelPicker vars={{ marque: brandFromEmail(to.split(/[,;\s]+/)[0]) }} onPick={(text) => setBody((cur) => insertModel(cur, text))} />
             <span className="text-faint max-sm:hidden">{settings.delaySec ? `Annulable ${settings.delaySec} s · ` : ""}⌘↵</span>
             <button type="button" onClick={send}
               className="ml-auto flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40">

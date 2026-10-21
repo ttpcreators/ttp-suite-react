@@ -15,6 +15,7 @@ import { allAddresses } from "@/lib/mailAddresses";
 import { cn, titleCase } from "@/lib/utils";
 import { getCache, setCache } from "@/lib/viewCache";
 import { invalidateMailUnread } from "@/lib/useMailUnread";
+import { brandFromEmail } from "@/lib/mailModels";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
 import { Kbd, RailButton, SearchField, Tip, ToolButton, mailCardBtnCls, mailCardCls, mailCardListCls, mailRowCls, pillCls, type TipSide, UnreadToggle } from "@/components/mail-shell";
 import { SwipeRow, type SwipeAction } from "@/components/mobile/swipe-row";
@@ -2659,6 +2660,11 @@ export function Mails() {
                               onSend={sendReply}
                               claude={{ threadId: thread.threadId, subject: thread.subject, messages: readerMsgs }}
                               meet={{ guests: plan.to ? [plan.to] : [], title: `TTP Creators x ${replyName || plan.to}`.trim() }}
+                              modelVars={{
+                                marque: brandFromEmail(plan.to),
+                                createur: threadCreator ? titleCase(threadCreator.creator) : null,
+                                prenom: replyName && !replyName.includes("@") ? replyName.split(" ")[0] : null,
+                              }}
                             />
                             </>
                           ) : undefined}
