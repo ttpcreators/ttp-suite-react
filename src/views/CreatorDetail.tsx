@@ -1,4 +1,5 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { lazyImport } from "@/lib/appUpdate";
 import { fmtCompact } from "@/lib/timeSeries";
 import { useEffect, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { ArrowLeft, ExternalLink, Copy, Pencil, Check, X, ArrowUpRight, Share2, IdCard, ScrollText, Receipt, ListChecks, FileText, Lightbulb, Mail, TrendingUp, type LucideIcon } from "@/components/icons";
@@ -14,7 +15,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useLiveKey } from "@/lib/useLive";
 import { useAppState, mergeAppStateKey, listAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 
-const CreatorMailsAgency = lazy(() => import("./CreatorMails").then((m) => ({ default: m.CreatorMailsAgency })));
+const CreatorMailsAgency = lazy(lazyImport(() => import("./CreatorMails").then((m) => ({ default: m.CreatorMailsAgency }))));
 import { parseAmount, formatEuro } from "@/lib/money";
 
 type CtDeadline = { id?: string; creator: string; start: string; months: number; type?: string; note?: string };

@@ -1,10 +1,11 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { lazyImport } from "@/lib/appUpdate";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import { Activity, Check, Save, Pencil, X, Calculator, Gauge, History } from "@/components/icons";
 import { TickMeter } from "@/components/ui/dash";
 import { supabase } from "@/lib/supabase";
 
-const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
+const GlassStatChart = lazy(lazyImport(() => import("@/components/ui/glass-stat-chart")));
 import { useCreators, invalidateCreators } from "@/lib/useCreators";
 import { dbUpdate } from "@/lib/db";
 import { useAppState, listAppStateKey, getAppState, invalidateAppState } from "@/lib/appState";

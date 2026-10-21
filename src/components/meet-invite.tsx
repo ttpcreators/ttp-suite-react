@@ -53,8 +53,9 @@ async function createMeet(body: Record<string, unknown>): Promise<{ ok: true; me
     const { data, error } = await supabase.functions.invoke("meet-invite", { body });
     if (error) {
       const ctx = (error as { context?: { json?: () => Promise<unknown> } }).context;
-      const j = ctx && typeof ctx.json === "function" ? ((await ctx.json().catch(() => null)) as { error?: string } | null) : null;
-      return { ok: false, error: j?.error ?? (/not found|404/i.test(error.message) ? "absente" : "reseau") };
+      const j = ctx && typeof ctx.json === "function" ? ((await ctx.json().catch(() => null)) as { error?: string; code?: string } | null) : null;
+      if (j?.code === "NOT_FOUND" || /not found/i.test(error.message)) return { ok: false, error: "absente" };
+      return { ok: false, error: j?.error ?? "reseau" };
     }
     const d = (data ?? {}) as { ok?: boolean; meetUrl?: string; invited?: number; error?: string };
     return d.ok ? { ok: true, meetUrl: d.meetUrl ?? "", invited: d.invited ?? 0 } : { ok: false, error: d.error ?? "agenda_echec" };
@@ -82,7 +83,7 @@ export function MeetDialog({ guests, title, who, onClose, onDone }: { guests: st
     const r = await createMeet({ title: t, date, time, duration, guests: g.ok, meet, invite, note, who: who ?? undefined });
     setBusy(false);
     if (!r.ok) {
-      return toast(r.error === "absente" ? "Rendez-vous pas encore disponible : la fonction meet-invite n'est pas déployée." : ERR[r.error] ?? "Rendez-vous non créé, réessaie.");
+      return toast(r.error === "absente" ? "Rendez-vous pas encore installé : la fonction meet-invite n'est pas encore déployée." : ERR[r.error] ?? (r.error === "reseau" ? "Pas de réponse du serveur, réessaie." : "Google Agenda a refusé le rendez-vous, réessaie."));
     }
     const when = meetWhen(date, time, duration);
     toast(r.invited ? `Invitation envoyée à ${r.invited} invité${r.invited > 1 ? "s" : ""} ✓` : "Rendez-vous ajouté à l'agenda ✓");

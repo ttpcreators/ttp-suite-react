@@ -1,9 +1,10 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { lazyImport } from "@/lib/appUpdate";
 import { fmtCompact } from "@/lib/timeSeries";
 import { useMemo, useState, lazy, Suspense } from "react";
 import { Activity, TrendingUp, TrendingDown, Users, Hash } from "@/components/icons";
 
-const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
+const GlassStatChart = lazy(lazyImport(() => import("@/components/ui/glass-stat-chart")));
 import {
   AreaChart,
   Area,

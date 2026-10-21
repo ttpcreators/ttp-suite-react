@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { reportError as report } from "@/lib/errorReport";
 import { useT, type Vars } from "@/lib/i18n";
+import { Loader } from "@/components/ui/loader";
 
 /** Texte traduit dans la langue de l'espace (la barrière est un composant classe, sans hook). */
 function Tr({ fr, vars }: { fr: string; vars?: Vars }) {
@@ -21,7 +22,7 @@ export function isChunkError(err: unknown): boolean {
   // `_result.default` / `._result` = internes de React.lazy quand un chunk périmé
   // n'a pas pu se charger (iOS Safari remonte ce TypeError au lieu du "Failed to
   // fetch"). On le traite comme une erreur de chunk → rechargement, pas un bug.
-  return /dynamically imported module|Importing a module script failed|module script failed|Failed to fetch|ChunkLoadError|error loading dynamically|_result\.default|\._result\b/i.test(m);
+  return /dynamically imported module|Importing a module script failed|module script failed|Failed to fetch|ChunkLoadError|error loading dynamically|Unable to preload CSS|_result\.default|\._result\b/i.test(m);
 }
 
 const RELOAD_KEY = "ttp:chunk-reload";
@@ -97,14 +98,18 @@ type Props = {
   resetKey?: unknown;
 };
 
-type State = { error: Error | null; stuck: boolean };
+type State = { error: Error | null; stuck: boolean; retrying: boolean };
+
+/** Dernier nouvel essai automatique (une page qui replante aussitôt affiche alors le message). */
+let lastAutoRetry = 0;
 
 /**
  * Barrière d'erreur : empêche qu'un crash de rendu (une vue, une fonctionnalité)
  * fasse tomber toute l'app en page blanche. Affiche un écran de récupération.
  */
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null, stuck: false };
+  state: State = { error: null, stuck: false, retrying: false };
+  private retryTimer: number | undefined;
 
   static getDerivedStateFromError(error: Error): Partial<State> {
     return { error };
@@ -119,14 +124,27 @@ export class ErrorBoundary extends Component<Props, State> {
       if (!recoverStaleApp()) this.setState({ stuck: true });
       return;
     }
+    // Zone de page : un souci passager (données pas encore arrivées…) se règle souvent
+    // au 2e rendu. On réessaie une fois en silence avant d'afficher un message.
+    if (this.props.variant === "inline" && Date.now() - lastAutoRetry > 10_000) {
+      lastAutoRetry = Date.now();
+      this.setState({ retrying: true });
+      this.retryTimer = window.setTimeout(() => this.setState({ error: null, retrying: false }), 250);
+    } else if (this.state.retrying) {
+      this.setState({ retrying: false });
+    }
     // + remontée serveur : journal + notif push à l'agence.
     report(error, { componentStack: info.componentStack ?? "", page: String(this.props.resetKey ?? this.props.label ?? "") || undefined, source: "écran" });
+  }
+
+  componentWillUnmount() {
+    window.clearTimeout(this.retryTimer);
   }
 
   componentDidUpdate(prev: Props) {
     // Quand on change de vue/onglet, on retente le rendu (efface l'erreur).
     if (this.state.error && prev.resetKey !== this.props.resetKey) {
-      this.setState({ error: null, stuck: false });
+      this.setState({ error: null, stuck: false, retrying: false });
     }
   }
 
@@ -153,13 +171,21 @@ export class ErrorBoundary extends Component<Props, State> {
               </button>
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground"><Tr fr="Mise à jour de l'app…" /></div>
+            // Rechargement en cours : le même écran de chargement qu'une page, aucun message.
+            <Loader variant="dot-matrix" size={26} className="text-muted-foreground" />
           )}
         </div>
       );
     }
 
     const { variant = "full", label } = this.props;
+    if (this.state.retrying) {
+      return (
+        <div className="grid min-h-[40vh] place-items-center p-6">
+          <Loader variant="dot-matrix" size={26} className="text-muted-foreground" />
+        </div>
+      );
+    }
     const msg = error?.message ? String(error.message).slice(0, 300) : "Erreur inconnue";
 
     if (variant === "inline") {

@@ -1,4 +1,5 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { lazyImport } from "@/lib/appUpdate";
 import { contextPrompt, threadTranscript } from "@/lib/mailThreadContext";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ExpandableActionBar } from "@/components/ui/expandable-action-bar";
@@ -32,7 +33,7 @@ import { LinkedCollabCard, MailTagChip } from "@/components/mail-collab";
 import { useIntent } from "@/lib/openIntent";
 
 // Espace mails d'un créateur (statuts, remarques, suivi), chargé seulement à la demande.
-const CreatorMailsAgency = lazy(() => import("@/views/CreatorMails").then((m) => ({ default: m.CreatorMailsAgency })));
+const CreatorMailsAgency = lazy(lazyImport(() => import("@/views/CreatorMails").then((m) => ({ default: m.CreatorMailsAgency }))));
 
 /**
  * Page « Mails » de l'agence, façon client mail : dossiers (reçus, envoyés,

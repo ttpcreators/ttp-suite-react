@@ -23,7 +23,7 @@ const NOISE = [
 ];
 
 /** Erreur de chargement d'un ancien fichier après un déploiement (rechargement, pas un bug). */
-const CHUNK = /dynamically imported module|Importing a module script failed|module script failed|ChunkLoadError|error loading dynamically|_result\.default|\._result\b/i;
+const CHUNK = /dynamically imported module|Importing a module script failed|module script failed|ChunkLoadError|error loading dynamically|Unable to preload CSS|_result\.default|\._result\b/i;
 
 /** Page affichée au moment du bug (titre de la page, sinon l'adresse). */
 function currentPage(): string {

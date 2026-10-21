@@ -1,12 +1,23 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
+// Numéro de cette mise en ligne : l'app compare le sien à `version.json` (src/lib/appUpdate.ts).
+const APP_VERSION = (process.env.GITHUB_SHA || Date.now().toString(36)).slice(0, 12);
+const appVersion = (): Plugin => ({
+  name: "ttp-app-version",
+  apply: "build",
+  generateBundle() {
+    this.emitFile({ type: "asset", fileName: "version.json", source: JSON.stringify({ v: APP_VERSION }) });
+  },
+});
+
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   base: "./",
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), appVersion()],
+  define: { __APP_VERSION__: JSON.stringify(command === "build" ? APP_VERSION : "dev") },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -35,4 +46,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

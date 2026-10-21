@@ -1,4 +1,5 @@
 import { StrictMode } from 'react'
+import { startUpdateWatch } from './lib/appUpdate'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
@@ -29,6 +30,8 @@ initDeepLinks()
 window.addEventListener('vite:preloadError', (e) => {
   if (recoverStaleApp()) e.preventDefault()
 })
+// Nouvelle version en ligne : repérée à l'avance, chargée à la page suivante (sans écran d'erreur).
+startUpdateWatch()
 
 // Service worker dès le démarrage (avant : seulement en activant les notifications) :
 // il garde les fichiers de l'app sur l'appareil → ouverture rapide, même sans réseau.

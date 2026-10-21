@@ -1,4 +1,5 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { lazyImport } from "@/lib/appUpdate";
 import { TtpMail, TtpMore, TtpStar, TtpContacts, TtpEvolution, TtpFiles, TtpGains, TtpGift, TtpGuide, TtpHome, TtpIdea, TtpMediakit, TtpMission, TtpPlanning, TtpReport, TtpRoad, TtpStats, TtpTodo } from "@/components/icons/ttp-icons";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { Spin } from "@/components/ui/loader";
@@ -246,7 +247,7 @@ function frTime(s: string): number {
 }
 
 // Graphique recharts lazy-chargé : sort la lib (~101 Ko gzip) du premier écran créateur.
-const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
+const GlassStatChart = lazy(lazyImport(() => import("@/components/ui/glass-stat-chart")));
 // Libellé + couleur de marque par plateforme (glass abonnés par réseau).
 const FOLLOWER_PLAT: Record<string, { label: string; color: string }> = {
   instagram: { label: "Instagram", color: "var(--brand-instagram)" },
@@ -255,10 +256,10 @@ const FOLLOWER_PLAT: Record<string, { label: string; color: string }> = {
   x: { label: "X", color: "var(--brand-x)" },
   snapchat: { label: "Snapchat", color: "var(--brand-snapchat)" },
 };
-const CreatorStatsCard = lazy(() => import("./charts/CreatorStatsCard"));
-const GlobeStickers = lazy(() => import("@/components/ui/cobe-globe-stickers"));
-const CreatorMailbox = lazy(() => import("./CreatorMails").then((m) => ({ default: m.CreatorMailbox })));
-const DashArea = lazy(() => import("./charts/DashArea"));
+const CreatorStatsCard = lazy(lazyImport(() => import("./charts/CreatorStatsCard")));
+const GlobeStickers = lazy(lazyImport(() => import("@/components/ui/cobe-globe-stickers")));
+const CreatorMailbox = lazy(lazyImport(() => import("./CreatorMails").then((m) => ({ default: m.CreatorMailbox }))));
+const DashArea = lazy(lazyImport(() => import("./charts/DashArea")));
 
 /** Salutation selon l'heure (comme l'Aperçu agence). */
 function greetingWord(): string {

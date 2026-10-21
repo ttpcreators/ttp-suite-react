@@ -1,8 +1,9 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { lazyImport } from "@/lib/appUpdate";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import { Users, TrendingUp, TrendingDown, Receipt, Wallet, Clock, FileText, Contact as ContactIcon, Activity } from "@/components/icons";
 
-const GlassStatChart = lazy(() => import("@/components/ui/glass-stat-chart"));
+const GlassStatChart = lazy(lazyImport(() => import("@/components/ui/glass-stat-chart")));
 import { supabase } from "@/lib/supabase";
 import { parseAmount, formatEuro, useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { titleCase, cn } from "@/lib/utils";
