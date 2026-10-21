@@ -14,3 +14,20 @@ scratch-*
 
 # Copies de travail des agents (Claude Code)
 .claude/
+
+# Clés et certificats : jamais dans Git (le dépôt est public)
+*.p8
+*.p12
+*.pem
+*.key
+
+# Fichiers locaux du CLI Supabase (projet lié, versions, adresse du pooler)
+supabase/.temp/
+
+# Banc d'aperçu local (captures d'écran des agents), jamais livré
+preview-app.html
+vite.preview.config.ts
+src/__preview__/
+
+# Système
+.DS_Store
