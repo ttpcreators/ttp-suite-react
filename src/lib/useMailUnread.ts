@@ -9,6 +9,11 @@ type PeekRes = { ok?: boolean; boxes?: Partial<Record<MailBox, { historyId?: str
 const MIN_GAP = 60_000; // au plus un coup d'œil par minute
 let last: { at: number; value: MailUnread } = { at: 0, value: null };
 
+/** Un mail vient d'être lu / remis non lu dans l'app : le prochain affichage redemande. */
+export function invalidateMailUnread(): void {
+  last = { ...last, at: 0 };
+}
+
 /**
  * Mails non lus par boîte, via le « coup d'œil » de gmail-history (le même appel léger
  * que la page Mails fait chaque minute : `{ peek: true, box: "all" }`). null tant que

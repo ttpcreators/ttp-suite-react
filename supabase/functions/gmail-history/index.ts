@@ -82,18 +82,22 @@ Deno.serve(async (req: Request) => {
   const auth = (token: string) => ({ headers: { Authorization: `Bearer ${token}` } });
 
   // ── Coup d'œil : a-t-il bougé ? (historyId + non lus de la boîte de réception) ──
+  // Non lus = les MÊMES fils que la liste de la page Mails (sans Promotions ni Réseaux
+  // sociaux). Avant : le compteur Gmail de INBOX, qui les compte → un mail lu dans
+  // l'app restait « non lu » sur Aujourd'hui.
   if (body.peek) {
+    const unreadQ = encodeURIComponent("in:inbox is:unread -category:promotions -category:social");
     const peekOf = async (box: Box) => {
       const token = await boxToken(sb, box, "read");
       const [pr, lr] = await Promise.all([
         gfetch(`${GMAIL}/profile`, auth(token), { timeoutMs: 8_000 }),
-        gfetch(`${GMAIL}/labels/INBOX`, auth(token), { timeoutMs: 8_000 }),
+        gfetch(`${GMAIL}/threads?q=${unreadQ}&maxResults=100&fields=threads/id`, auth(token), { timeoutMs: 8_000 }),
       ]);
       const pd = await pr.json().catch(() => ({})) as { historyId?: string | number };
-      const ld = await lr.json().catch(() => ({})) as { threadsUnread?: number };
+      const ld = await lr.json().catch(() => ({})) as { threads?: { id: string }[] };
       if (!pr.ok) throw gmailError(pr.status, pd, "lecture_echouee");
       if (!lr.ok) throw gmailError(lr.status, ld, "lecture_echouee");
-      return { historyId: String(pd.historyId ?? ""), unread: Number(ld.threadsUnread ?? 0) };
+      return { historyId: String(pd.historyId ?? ""), unread: (ld.threads ?? []).length };
     };
     const results = await Promise.allSettled(boxes.map(peekOf));
     const out: Partial<Record<Box, { historyId: string; unread: number }>> = {};

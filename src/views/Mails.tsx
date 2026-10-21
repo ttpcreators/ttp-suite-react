@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { allAddresses } from "@/lib/mailAddresses";
 import { cn, titleCase } from "@/lib/utils";
 import { getCache, setCache } from "@/lib/viewCache";
+import { invalidateMailUnread } from "@/lib/useMailUnread";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
 import { Kbd, RailButton, SearchField, Tip, ToolButton, mailRowCls, pillCls, type TipSide } from "@/components/mail-shell";
 import { SwipeRow, type SwipeAction } from "@/components/mobile/swipe-row";
@@ -102,6 +103,11 @@ let actionsOldAt = 0; // gmail-thread n'a pas reconnu `action` (ancienne version
 let searchOldAt = 0; // gmail-history n'a pas reconnu `q`
 let peekOff = false; // gmail-history n'a pas reconnu `peek` : actualisation complète toutes les 2 min
 let peekSig = ""; // derniers historyId vus (coup d'œil)
+// Lu / non lu, archivé, corbeille pas encore confirmés par une liste FRAÎCHE du serveur :
+// gardés quand on quitte la page (sinon la liste en cache remontrait l'ancien état).
+const pendingOv = new Map<string, Override>();
+/** Délai après lequel une liste du serveur fait foi, même si elle contredit l'app (nouveau message…). */
+const OV_TRUST_MS = 90_000;
 
 /** Date façon Gmail : « 14:32 » aujourd'hui, « 3 oct. » cette année, « 03/10/2025 » avant. */
 function fmtDate(d: string): string {
@@ -749,7 +755,11 @@ export function Mails() {
   const lastLoad = useRef<Record<Folder, number>>({ inbox: 0, sent: 0 });
 
   // Changements affichés avant confirmation (lu / non lu, archivé, corbeille).
-  const [overrides, setOverrides] = useState<Map<string, Override>>(() => new Map());
+  const [overrides, setOverrides] = useState<Map<string, Override>>(() => new Map(pendingOv));
+  useEffect(() => {
+    pendingOv.clear();
+    for (const [k, o] of overrides) pendingOv.set(k, o);
+  }, [overrides]);
   const putOv = (key: string, o: Override) => setOverrides((m) => new Map(m).set(key, o));
   const dropOv = (key: string, at: number) =>
     setOverrides((m) => {
@@ -766,6 +776,7 @@ export function Mails() {
 
   const refreshList = useCallback(async (f: Folder) => {
     const id = ++listReq.current[f];
+    const started = Date.now();
     setListBusy((b) => ({ ...b, [f]: true }));
     const res = await invokeJson<ListRes>("gmail-history", { inbox: true, box: "all", folder: f });
     if (id !== listReq.current[f]) return; // une actualisation plus récente est en cours
@@ -778,12 +789,19 @@ export function Mails() {
     }
     setListErr((e) => ({ ...e, [f]: null }));
     setLists((prev) => ({ ...prev, [f]: mergeList(prev[f], res) }));
-    // Les changements confirmés depuis plus de 45 s sont désormais dans la liste du serveur.
+    // Un changement confirmé n'est retiré que quand une liste DEMANDÉE APRÈS lui le
+    // montre aussi (Gmail met quelques secondes à se mettre à jour, et une actualisation
+    // partie avant le clic revient avec l'ancien état : « lu » repassait en « non lu »).
+    // Au-delà de 90 s, la liste du serveur fait foi (ex. nouveau message dans le fil).
+    const freshRows = new Map((res.threads ?? []).map((t) => [keyOf(t), t]));
     setOverrides((m) => {
-      const now = Date.now();
       let n: Map<string, Override> | null = null;
       for (const [k, o] of m) {
-        if (o.done && now - o.done > 45_000) {
+        if (!o.done || started < o.done + 3_000) continue;
+        const row = freshRows.get(k);
+        if (!row && f !== "inbox") continue; // fil d'un autre dossier : jugé par sa propre liste
+        const agrees = o.hidden ? !row || (f === "inbox" && o.hidden === "archive" && row.archived === true) : !row || row.unread === o.unread;
+        if (agrees || started > o.done + OV_TRUST_MS) {
           n ??= new Map(m);
           n.delete(k);
         }
@@ -1060,6 +1078,7 @@ export function Mails() {
       if (r !== "ok") return dropOv(key, at); // ancienne version ou erreur : reste non lu, sans message
       patchThreads((x) => (keyOf(x) === key ? { ...x, unread: false } : x));
       doneOv(key, at);
+      invalidateMailUnread();
     });
   };
   const setRead = async (t: Target, unread: boolean) => {
@@ -1071,6 +1090,7 @@ export function Mails() {
     const r = await callAction(t, unread ? "unread" : "read");
     if (r === "ok") {
       patchThreads((x) => (keyOf(x) === key ? { ...x, unread } : x));
+      invalidateMailUnread();
       return doneOv(key, at);
     }
     dropOv(key, at);
