@@ -20,6 +20,9 @@
         if (t === "dark" || t === "noir" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches)) {
           document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').setAttribute("content", "black-translucent");
           document.querySelector('meta[name="theme-color"]').setAttribute("content", "#000000");
+        } else if (t === "verre") {
+          // Haut de l'écran (barre d'état) dans la teinte du thème Verre, dès le lancement.
+          document.querySelector('meta[name="theme-color"]').setAttribute("content", "#edf0f7");
         }
       } catch (e) {}
     </script>

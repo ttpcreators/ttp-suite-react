@@ -182,10 +182,26 @@ export function setThemeChoice(choice: ThemeChoice): void {
   }
 }
 
+/** Style de barre d'état lu au lancement (iPhone : l'app installée ne le relit qu'au prochain lancement). */
+let launchBarStyle: string | null = null;
+let relaunchToldFor: string | null = null;
+const isStandalone = () =>
+  (navigator as Navigator & { standalone?: boolean }).standalone === true || window.matchMedia?.("(display-mode: standalone)").matches === true;
+
 /** Pose le thème sur <html> : attribut data-theme, classe .dark (variante Tailwind) et barre d'état. */
 export function applyTheme(theme: ResolvedTheme): void {
   const el = document.documentElement;
   const dark = theme === "noir";
+  const bar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  launchBarStyle ??= bar?.getAttribute("content") ?? "default";
+  const wanted = dark ? "black-translucent" : "default";
+  // App installée sur iPhone : passer de clair à noir (ou l'inverse) ne change le haut de
+  // l'écran (heure, batterie) qu'au prochain lancement. On le dit une fois, clairement.
+  if (wanted !== launchBarStyle && relaunchToldFor !== wanted && isStandalone()) {
+    relaunchToldFor = wanted;
+    window.setTimeout(() => void import("@/components/ui/toast").then(({ toast }) =>
+      toast("Ferme puis rouvre l'app : le haut de l'écran prendra aussi ce thème.", { duration: 7000 })), 300);
+  }
   el.dataset.theme = theme;
   el.classList.toggle("dark", dark);
   // Couleur de la barre d'état (iPhone : appliquée au prochain lancement de l'app installée).
