@@ -10,6 +10,8 @@ import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { FolderTabs } from "@/components/ui/folder-tabs";
+import { useVisitedTabs } from "@/lib/useVisitedTabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { HelpTip } from "@/components/ui/help-tip";
@@ -21,7 +23,6 @@ import { Kbd } from "@/components/ui/kbd";
 import { dbInsert, dbUpdate } from "@/lib/db";
 import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { guessSport } from "@/lib/niche";
-import { useIsPhone } from "@/lib/iosUi";
 import { TONE_DOT, TONE_SOFT, TONE_TEXT } from "@/lib/statusTone";
 import { PEPITE, scoreBreakdown, scoreOf, scoreTone, type ScoreBreakdown } from "@/lib/sourcingScore";
 import { Overlay } from "@/components/mobile/ios-sheet";
@@ -311,23 +312,14 @@ export function Sourcing() {
       /* stockage indisponible */
     }
   };
-  const phone = useIsPhone();
-  const cur = TOOLS.find((t) => t.v === tab) ?? TOOLS[0];
-  // Haut de la colonne principale : les trois outils en un grand sélecteur, et à quoi sert celui choisi.
-  const toolBar = (
-    <div className="mb-5">
-      <p className="mb-2 text-[12px] font-semibold text-muted-foreground">Instagram, TikTok et YouTube</p>
-      <Tabs
-        size="lg"
-        fullWidth
-        label="Outil de sourcing"
-        value={tab}
-        onValueChange={pick}
-        items={TOOLS.map((t) => ({ value: t.v, label: phone ? t.short : t.title, icon: <t.icon className="h-4 w-4" /> }))}
-      />
-      <p className="mt-2.5 text-[13px] leading-snug text-muted-foreground">{cur.text}</p>
-    </div>
+  // Haut de chaque outil : à quoi il sert (les outils eux-mêmes sont les onglets « dossier »).
+  const intro = (t: (typeof TOOLS)[number]) => (
+    <p className="mb-5 text-[13px] leading-snug text-muted-foreground">
+      <span className="font-semibold text-foreground">Instagram, TikTok et YouTube.</span> {t.text}
+    </p>
   );
+  // Un outil ouvert une fois reste monté (masqué) : recherche et saisies gardées au retour.
+  const visited = useVisitedTabs(tab);
   return (
     <>
       <PageHeaderRow>
@@ -339,14 +331,34 @@ export function Sourcing() {
         </div>
       </PageHeaderRow>
       {guide && <SourcingGuide initial={tab as GuideTool} onClose={closeGuide} />}
-      {tab === "createurs" ? (
-        <CreatorFinder top={toolBar} paused={guide} onGuide={() => setGuide(true)} />
-      ) : (
-        <>
-          {toolBar}
-          {tab === "radar" ? <RadarTool /> : <RivalWatch />}
-        </>
-      )}
+      {/* Les trois outils en onglets « dossier » (comme Agents) ; libellés courts sur téléphone. */}
+      <FolderTabs
+        label="Outil de sourcing"
+        orderKey="sourcing"
+        items={TOOLS.map((t) => ({ value: t.v, label: t.title, short: t.short }))}
+        value={tab}
+        onValueChange={pick}
+        maxTabWidth={232}
+      >
+        {visited.includes("createurs") && (
+          <div hidden={tab !== "createurs"}>
+            {/* Raccourcis clavier (j, k, s, c, x) coupés quand l'outil est masqué. */}
+            <CreatorFinder top={intro(TOOLS[0])} paused={guide || tab !== "createurs"} onGuide={() => setGuide(true)} />
+          </div>
+        )}
+        {visited.includes("radar") && (
+          <div hidden={tab !== "radar"}>
+            {intro(TOOLS[1])}
+            <RadarTool />
+          </div>
+        )}
+        {visited.includes("concurrents") && (
+          <div hidden={tab !== "concurrents"}>
+            {intro(TOOLS[2])}
+            <RivalWatch />
+          </div>
+        )}
+      </FolderTabs>
     </>
   );
 }

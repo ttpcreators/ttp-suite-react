@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Send } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { EventCalendar, type Ev } from "@/components/ui/event-calendar";
 import { GoogleConnect } from "@/components/ui/google-connect";
@@ -11,7 +10,8 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { toISODate, todayISO } from "@/lib/dates";
 import { notifyCreator } from "@/lib/push";
-import { Tabs } from "@/components/ui/animated-tabs";
+import { FolderTabs, type FolderTabItem } from "@/components/ui/folder-tabs";
+import { useVisitedTabs } from "@/lib/useVisitedTabs";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
 import { IgPlanner } from "@/components/IgPlanner";
 import { KIND_LABEL, type PlanKind } from "@/lib/igPlanner";
@@ -34,30 +34,34 @@ export function Planning() {
     setTab(v);
     setNavSub(v);
   };
+  // Onglet ouvert une fois = gardé monté (masqué) : une légende de post en cours n'est pas perdue.
+  const visited = useVisitedTabs(tab);
   return (
-    <div className="space-y-4">
-      <Tabs
-        label="Sous-pages Planning"
-        items={[
-          { value: "agenda", label: "Agenda", icon: <CalendarDays className="h-3.5 w-3.5" /> },
-          { value: "instagram", label: "Posts Instagram", icon: <Send className="h-3.5 w-3.5" /> },
-        ]}
-        value={tab}
-        onValueChange={(v) => go(v === "instagram" ? "instagram" : "agenda")}
-      />
-      {tab === "agenda" ? (
-        <Agenda
-          onOpenPost={(id) => {
-            setFocus(id);
-            go("instagram");
-          }}
-        />
-      ) : (
-        <IgPlanner focusId={focus} onFocused={() => setFocus(null)} />
+    // Sous-pages en onglets « dossier » (comme Agents), synchronisées avec la sidebar.
+    <FolderTabs label="Sous-pages Planning" orderKey="planning" items={PLANNING_TABS} value={tab} onValueChange={(v) => go(v === "instagram" ? "instagram" : "agenda")}>
+      {visited.includes("agenda") && (
+        <div hidden={tab !== "agenda"}>
+          <Agenda
+            onOpenPost={(id) => {
+              setFocus(id);
+              go("instagram");
+            }}
+          />
+        </div>
       )}
-    </div>
+      {visited.includes("instagram") && (
+        <div hidden={tab !== "instagram"}>
+          <IgPlanner focusId={focus} onFocused={() => setFocus(null)} />
+        </div>
+      )}
+    </FolderTabs>
   );
 }
+
+const PLANNING_TABS: FolderTabItem[] = [
+  { value: "agenda", label: "Agenda" },
+  { value: "instagram", label: "Posts Instagram" },
+];
 
 /** Date locale « YYYY-MM-DD » et heure « HH:mm » d'un horodatage. */
 function localDay(iso: string): { date: string; time: string } | null {

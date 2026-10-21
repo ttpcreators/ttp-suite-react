@@ -1,5 +1,70 @@
 import { describe, expect, it } from "vitest";
-import { contratsSubFromTab, contratsTabFromSub, parseTabOrder, sortByOrder, tabFromSub, tabLabel } from "./folderTabs";
+import {
+  FOLDER_PAGES, FOLDER_TONES, TONE_LABEL, TONE_VAR, contratsSubFromTab, contratsTabFromSub, isFolderTone, pageDefaultTones, parseTabOrder,
+  resolveTabTones, sanitizePageTones, sanitizeToneMap, sortByOrder, tabFromSub, tabLabel, withTabTone, withVisited,
+} from "./folderTabs";
+
+describe("Classeurs : code couleur", () => {
+  it("chaque teinte a un jeton CSS et un nom en français", () => {
+    for (const t of FOLDER_TONES) {
+      expect(TONE_VAR[t]).toMatch(/^var\(--chart-\d\)$/);
+      expect(TONE_LABEL[t]).toBeTruthy();
+    }
+  });
+
+  it("teintes automatiques stables : même résultat quel que soit l'ordre des onglets", () => {
+    const a = resolveTabTones(["alpha", "beta", "gamma"]);
+    const b = resolveTabTones(["gamma", "alpha", "beta"]);
+    expect(a).toEqual(b);
+    // Sur une page, les teintes automatiques ne se répètent pas tant que la palette suffit.
+    expect(new Set(Object.values(a)).size).toBe(3);
+    // Rose et gris ne sont jamais tirés au hasard.
+    for (const t of Object.values(resolveTabTones(["a", "b", "c", "d", "e"]))) expect(["pink", "grey"]).not.toContain(t);
+  });
+
+  it("plus d'onglets que de teintes : on recommence la palette sans planter", () => {
+    const vals = ["a", "b", "c", "d", "e", "f", "g"];
+    const out = resolveTabTones(vals);
+    expect(Object.keys(out).sort()).toEqual(vals);
+    for (const t of Object.values(out)) expect(isFolderTone(t)).toBe(true);
+  });
+
+  it("priorité : choix de l'équipe, puis défaut de la page, puis automatique (sans reprendre une teinte prise)", () => {
+    const out = resolveTabTones(["x", "y", "z"], { x: "blue", y: "green" }, { y: "pink" });
+    expect(out.x).toBe("blue");
+    expect(out.y).toBe("pink");
+    expect(["blue", "pink"]).not.toContain(out.z);
+  });
+
+  it("valeurs inconnues ignorées sans planter", () => {
+    expect(sanitizePageTones({ a: "blue", b: "fuchsia", c: 3, d: null })).toEqual({ a: "blue" });
+    expect(sanitizePageTones("oups")).toEqual({});
+    expect(sanitizePageTones(["blue"])).toEqual({});
+    expect(sanitizeToneMap({ roster: { roster: "teal", suivi: "rainbow" }, vide: { a: "x" }, cassé: 12 })).toEqual({ roster: { roster: "teal" } });
+    expect(sanitizeToneMap(null)).toEqual({});
+    expect(resolveTabTones(["a"], { a: "nope" as never }, { a: "nope" })).toEqual({ a: expect.any(String) });
+  });
+
+  it("choisir puis revenir à l'automatique", () => {
+    expect(withTabTone({ a: "blue" }, "b", "orange")).toEqual({ a: "blue", b: "orange" });
+    expect(withTabTone({ a: "blue", b: "orange" }, "b", null)).toEqual({ a: "blue" });
+    expect(withTabTone("illisible", "a", "grey")).toEqual({ a: "grey" });
+  });
+
+  it("pages en classeur : ids uniques, défauts valides et lus par page", () => {
+    const ids = FOLDER_PAGES.map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const p of FOLDER_PAGES) for (const t of p.tabs) if (t.tone) expect(isFolderTone(t.tone)).toBe(true);
+    expect(pageDefaultTones("parametres").notifications).toBe("orange");
+    expect(pageDefaultTones("inconnue")).toEqual({});
+  });
+
+  it("onglets visités : ajoutés une fois", () => {
+    expect(withVisited(["a"], "b")).toEqual(["a", "b"]);
+    const v = ["a", "b"] as const;
+    expect(withVisited(v, "a")).toBe(v);
+  });
+});
 
 describe("Onglets dossier", () => {
   it("compteur dans le libellé, rien quand il est nul", () => {

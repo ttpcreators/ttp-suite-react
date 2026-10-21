@@ -18,6 +18,11 @@ export type MorphingTabsItem = {
   /** Contenu propre à l'onglet (remonté à chaque changement). Inutile si `panel` est fourni. */
   content?: ReactNode;
   disabled?: boolean;
+  /**
+   * Couleur d'intercalaire (valeur CSS, ex. `var(--chart-1)`), FACULTATIVE : pastille avant
+   * le libellé et filet en haut de l'onglet actif. Sans elle, l'onglet reste tel quel (Agents).
+   */
+  tone?: string;
 };
 
 export type MorphingTabsClassNames = {
@@ -534,6 +539,10 @@ export function MorphingTabs({ items, value, defaultValue, onValueChange, onOrde
                   {!isActive ? (
                     <span aria-hidden className={cn("absolute inset-x-0 bottom-2 top-0 rounded-[1.25rem] transition-colors duration-200", isDragging ? "bg-[#3a3a3a]" : "bg-transparent group-hover:bg-white/[0.06]")} />
                   ) : null}
+                  {/* Intercalaire : filet de couleur sur le bord haut de l'onglet actif (entre les arrondis). */}
+                  {isActive && item.tone ? (
+                    <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 z-20 h-[3px] rounded-full" style={{ background: item.tone }} />
+                  ) : null}
                   <button
                     ref={(node) => {
                       tabButtonRefs.current[item.id] = node;
@@ -566,6 +575,7 @@ export function MorphingTabs({ items, value, defaultValue, onValueChange, onOrde
                       )}
                     />
                     {item.icon ? <span aria-hidden className={cn("grid size-8 shrink-0 place-items-center", classNames?.icon)}>{item.icon}</span> : null}
+                    {item.tone ? <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: item.tone }} /> : null}
                     <span className={cn("min-w-0 truncate whitespace-nowrap text-base font-medium leading-none tracking-[-0.025em]", classNames?.label)}>{item.label}</span>
                   </button>
                   {onClose ? (

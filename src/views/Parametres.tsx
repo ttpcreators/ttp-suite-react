@@ -3,7 +3,7 @@ import { SIGNATURE_KEY, scribble, validSig, type SignatureData } from "@/lib/age
 import { SignaturePad } from "@/components/signature-pad";
 import {
   BellRing, Smartphone, Sunrise, History, LogOut, Palette, MessageCircle, Bot, Copy, Unplug, PenLine, Sparkles,
-  Search, ChevronRight, X, type LucideIcon,
+  Search, ChevronRight, ChevronDown, X, type LucideIcon,
 } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
@@ -22,6 +22,8 @@ import { ALWAYS_SHOWN, HIDDEN_PAGES_EVENT, HIDDEN_PAGES_KEY, hiddenPagesOf } fro
 import { TONE_SOLID } from "@/lib/statusTone";
 import { readSticky, useStickyState } from "@/lib/useStickyState";
 import { FolderTabs } from "@/components/ui/folder-tabs";
+import { FOLDER_PAGES, FOLDER_TONES, TONE_LABEL, TONE_VAR, pageDefaultTones, resolveTabTones, type FolderTone } from "@/lib/folderTabs";
+import { resetPageTones, saveTabTone, useFolderTones } from "@/lib/useFolderTones";
 import { useNavSub } from "@/lib/navSub";
 import { bestHit, entriesOfTab, entryAnchor, groupHits, pagesVisibility, searchSettings, sectionAnchor, settingsTabs, settingsTarget, settingsTargetFor, type SettingsEntry } from "@/lib/settingsSearch";
 
@@ -65,12 +67,13 @@ const INK_TILE = "bg-foreground text-background";
 const ENTRIES: Entry[] = [
   {
     id: "apparence", label: "Apparence", group: "Général", icon: Palette, tile: "bg-primary text-primary-foreground",
-    hint: "Thème et couleur de cet appareil, pages du menu de toute l'équipe.",
-    keywords: ["thème", "look", "couleur"],
+    hint: "Thème et couleur de cet appareil. Pages du menu et couleurs des classeurs de toute l'équipe.",
+    keywords: ["thème", "look", "couleur", "classeur"],
     sections: [
       { title: "Apparence", keywords: ["thème", "clair", "verre", "noir", "sombre", "auto", "mode nuit"] },
       { title: "Couleur d'accent", keywords: ["couleur", "accent", "dégradé", "boutons"] },
       { title: "Pages affichées", keywords: ["menu", "masquer", "ranger", "cacher", "pages"] },
+      { title: "Couleurs des classeurs", keywords: ["couleur", "onglet", "onglets", "classeur", "classeurs", "intercalaire", "dossier"] },
     ],
   },
   {
@@ -562,6 +565,126 @@ function PagesCard() {
 }
 
 /**
+ * Couleurs des classeurs (pour toute l'équipe, blob `folderTabTones`) : une ligne par page
+ * en onglets « dossier », dépliée pour choisir la couleur de chaque onglet parmi la palette
+ * (jetons des graphiques) ou « Automatique » (couleur par défaut de la page).
+ */
+function FolderTonesCard() {
+  const custom = useFolderTones();
+  const [open, setOpen] = useState<string | null>(null);
+  const pick = async (page: string, tab: string, tone: FolderTone | null) => {
+    if (!(await saveTabTone(page, tab, tone))) toast("Erreur d'enregistrement, réessaie");
+  };
+  const reset = async (page: string) => {
+    if (await resetPageTones(page)) toast("Couleurs d'origine remises ✓");
+    else toast("Erreur d'enregistrement, réessaie");
+  };
+  return (
+    <Card title="Couleurs des classeurs" hint="La couleur de chaque onglet des pages en classeur, pour toute l'équipe.">
+      <div className="flex flex-col gap-1.5">
+        {FOLDER_PAGES.map((p) => {
+          const tones = resolveTabTones(
+            p.tabs.map((t) => t.value),
+            pageDefaultTones(p.id),
+            custom[p.id],
+          );
+          const isOpen = open === p.id;
+          const changed = !!custom[p.id];
+          return (
+            <div key={p.id} className="rounded-[12px] bg-panel">
+              <button
+                type="button"
+                onClick={() => setOpen(isOpen ? null : p.id)}
+                aria-expanded={isOpen}
+                className="flex h-10 w-full min-w-0 items-center gap-3 rounded-[12px] px-3 text-left transition-colors hover:bg-rowhover"
+              >
+                <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{p.label}</span>
+                {changed && <span className="shrink-0 text-[12px] text-muted-foreground">Personnalisé</span>}
+                <span aria-hidden className="flex shrink-0 items-center gap-1">
+                  {p.tabs.map((t) => (
+                    <span key={t.value} className="size-2.5 rounded-full" style={{ background: TONE_VAR[tones[t.value]] }} />
+                  ))}
+                </span>
+                <ChevronDown aria-hidden className={cn("size-4 shrink-0 text-faint transition-transform", isOpen && "rotate-180")} />
+              </button>
+              {isOpen && (
+                <div className="flex flex-col gap-1 px-3 pb-3">
+                  {p.tabs.map((t) => (
+                    <div key={t.value} className="flex h-10 min-w-0 items-center gap-3 border-t border-border">
+                      <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{t.label}</span>
+                      <TonePicker
+                        label={`Couleur de l'onglet ${t.label} (${p.label})`}
+                        shown={tones[t.value]}
+                        chosen={custom[p.id]?.[t.value] ?? null}
+                        onPick={(tone) => void pick(p.id, t.value, tone)}
+                      />
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={!changed}
+                    onClick={() => void reset(p.id)}
+                    className="mt-1 self-start text-[13px] font-medium text-primary hover:underline disabled:cursor-default disabled:text-muted-foreground disabled:no-underline"
+                  >
+                    Revenir aux couleurs d'origine
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+/** Pastille d'un onglet : un clic ouvre la palette (7 couleurs + « Automatique »). */
+function TonePicker({ label, shown, chosen, onPick }: { label: string; shown: FolderTone; chosen: FolderTone | null; onPick: (tone: FolderTone | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const choose = (tone: FolderTone | null) => {
+    setOpen(false);
+    if (tone !== chosen) onPick(tone);
+  };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`${label} : ${TONE_LABEL[shown]}`}
+          title={TONE_LABEL[shown]}
+          className="size-6 shrink-0 rounded-full ring-1 ring-border ring-offset-2 ring-offset-panel transition-transform hover:scale-110"
+          style={{ background: TONE_VAR[shown] }}
+        />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-auto rounded-[16px] p-3">
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label={label}>
+          {FOLDER_TONES.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => choose(t)}
+              aria-label={TONE_LABEL[t]}
+              aria-pressed={chosen === t}
+              title={TONE_LABEL[t]}
+              className={cn("size-6 shrink-0 rounded-full ring-offset-2 ring-offset-popover transition-transform hover:scale-110", chosen === t ? "ring-2 ring-foreground" : "ring-1 ring-border")}
+              style={{ background: TONE_VAR[t] }}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => choose(null)}
+          aria-pressed={chosen === null}
+          className={cn("mt-2 flex h-8 w-full items-center rounded-[10px] px-2 text-left text-[13px] transition-colors hover:bg-rowhover", chosen === null ? "font-semibold text-foreground" : "text-muted-foreground")}
+        >
+          Automatique
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
  * Connecteur Claude : adresse à ajouter dans Claude, connexions actives de CE compte
  * (coupables en un clic) et journal de ce que Claude a consulté ou fait.
  */
@@ -888,6 +1011,7 @@ export function Parametres() {
             <ThemeCard />
             <AccentCard />
             <PagesCard />
+            <FolderTonesCard />
           </>
         );
       case "signature":

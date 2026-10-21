@@ -1,7 +1,9 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { fmtCompact } from "@/lib/timeSeries";
 import { Spin } from "@/components/ui/loader";
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { FolderTabs } from "@/components/ui/folder-tabs";
+import { useVisitedTabs } from "@/lib/useVisitedTabs";
 import { supabase } from "@/lib/supabase";
 import { cn, initials } from "@/lib/utils";
 import { useSearch, matchQuery, matchWords } from "@/lib/search";
@@ -265,22 +267,41 @@ export function Vivier() {
   useEffect(() => {
     if (sub === "createurs" || sub === "sportifs") setKind(sub);
   }, [sub]);
-  // Créateurs / Sportifs : contrôle segmenté de l'en-tête (rendu par la liste, qui tient l'en-tête).
-  const switcher = (
-    <Tabs
+  // Une liste ouverte une fois reste montée (masquée) : une fiche en cours de saisie n'est
+  // pas perdue en changeant d'onglet, et l'autre liste n'est chargée qu'à sa première visite.
+  const visited = useVisitedTabs(kind);
+  // Nombre de profils par liste : celui de la liste chargée, sinon celui du cache de la visite.
+  const [counts, setCounts] = useState<Record<Kind, number | undefined>>(() => ({
+    createurs: getCache<Row[]>(KIND.createurs.cache)?.length,
+    sportifs: getCache<Row[]>(KIND.sportifs.cache)?.length,
+  }));
+  const onCount = useCallback((k: Kind, n: number) => setCounts((c) => (c[k] === n ? c : { ...c, [k]: n })), []);
+  // Créateurs / Sportifs en onglets « dossier » (comme Agents), synchronisés avec la sidebar.
+  return (
+    <FolderTabs
       label="Sous-pages Scouting"
+      orderKey="vivier"
+      items={[
+        { value: "createurs", label: "Créateurs", count: counts.createurs },
+        { value: "sportifs", label: "Sportifs", count: counts.sportifs },
+      ]}
       value={kind}
       onValueChange={(v) => {
-        setKind(v as Kind);
+        setKind(v === "sportifs" ? "sportifs" : "createurs");
         setNavSub(v);
       }}
-      items={[{ value: "createurs", label: "Créateurs" }, { value: "sportifs", label: "Sportifs" }]}
-    />
+    >
+      {KINDS.filter((k) => visited.includes(k)).map((k) => (
+        <div key={k} hidden={k !== kind}>
+          <ScoutingList kind={k} active={k === kind} onCount={onCount} />
+        </div>
+      ))}
+    </FolderTabs>
   );
-  return <ScoutingList key={kind} kind={kind} switcher={switcher} />;
 }
+const KINDS: Kind[] = ["createurs", "sportifs"];
 
-function ScoutingList({ kind, switcher }: { kind: Kind; switcher: ReactNode }) {
+function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; onCount: (k: Kind, n: number) => void }) {
   const K = KIND[kind];
   const athletes = kind === "sportifs";
   const NICHES = athletes ? SPORTS : CREATOR_NICHES;
@@ -452,6 +473,11 @@ function ScoutingList({ kind, switcher }: { kind: Kind; switcher: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live]);
 
+  // Nombre de profils, affiché sur l'onglet de la liste.
+  useEffect(() => {
+    if (rows) onCount(kind, rows.length);
+  }, [rows, kind, onCount]);
+
   // Catégories (niche) : « Mode » et « mode » comptent pour une seule, la plus fréquente d'abord.
   const tagList = useMemo(() => {
     const m = new Map<string, { key: string; label: string; count: number }>();
@@ -531,12 +557,12 @@ function ScoutingList({ kind, switcher }: { kind: Kind; switcher: ReactNode }) {
     }
   };
 
-  // En-tête : Créateurs / Sportifs à gauche ; quota Meta, Hashtag et « + » à droite.
-  const header = (withActions: boolean) => (
-    <PageHeaderRow>
-      {switcher}
-      {withActions && (
-        <div className="flex items-center gap-2">
+  // En-tête de la page (liste visible seulement) : quota Meta, Hashtag et « + ». Créateurs /
+  // Sportifs sont les onglets « dossier » de la page.
+  const header = (withActions: boolean) =>
+    active && withActions ? (
+      <PageHeaderRow>
+        <div className="ml-auto flex items-center gap-2">
           <MetaQuotaBadge compact />
           {FEATURES.hashtagSearch && (
             <button type="button" onClick={() => setHashOpen((o) => !o)} aria-pressed={hashOpen} className={cn("flex h-9 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors", hashOpen ? "border-primary text-primary" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
@@ -545,9 +571,8 @@ function ScoutingList({ kind, switcher }: { kind: Kind; switcher: ReactNode }) {
           )}
           <AddButton round label={K.add} onClick={openAdd} />
         </div>
-      )}
-    </PageHeaderRow>
-  );
+      </PageHeaderRow>
+    ) : null;
 
   if (missing && rows === null) return <>{header(false)}<div className="rounded-[22px] border border-dashed border-border bg-surface px-6 py-10 text-center text-sm text-muted-foreground">Le scouting des {K.many} n'est pas encore activé : une mise à jour est en attente.</div></>;
   if (error && rows === null) return <>{header(false)}<div className="rounded-[22px] bg-surface px-4 py-6 text-sm text-muted-foreground">Impossible de charger le Scouting.</div></>;

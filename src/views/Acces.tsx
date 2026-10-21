@@ -13,7 +13,8 @@ import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/f
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
 import { PageHeaderRow } from "@/components/ui/page-header";
-import { Tabs } from "@/components/ui/animated-tabs";
+import { FolderTabs } from "@/components/ui/folder-tabs";
+import { useVisitedTabs } from "@/lib/useVisitedTabs";
 import { AgencyAvatar } from "@/components/ui/agency-avatar";
 import { guessName, saveAgencyName } from "@/lib/team";
 
@@ -261,6 +262,7 @@ export function Acces() {
   useEffect(() => {
     if (navSub === "comptes" || navSub === "emails") setSection(navSub);
   }, [navSub]);
+  const visited = useVisitedTabs(section);
 
   const [formOpen, setFormOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -471,26 +473,29 @@ export function Acces() {
   );
 
   return (
-    <>
-      {/* Sous-pages : Comptes app / E-mails créateurs */}
-      <Tabs
-        className="mb-4"
-        label="Sous-pages des accès"
-        items={[
-          { value: "comptes", label: "Comptes app" },
-          { value: "emails", label: "Identifiants des créateurs" },
-        ]}
-        value={section}
-        onValueChange={(v) => {
-          const id = v as "comptes" | "emails";
-          setSection(id);
-          setNavSub(id);
-        }}
-      />
-
-      {section === "emails" ? (
-        <CredentialVault />
-      ) : (
+    // Sous-pages en onglets « dossier » (comme Agents) : Comptes app / E-mails créateurs,
+    // synchronisées avec la sidebar. Le coffre, ouvert une fois, reste monté (masqué).
+    <FolderTabs
+      label="Sous-pages des accès"
+      orderKey="acces"
+      maxTabWidth={240}
+      items={[
+        { value: "comptes", label: "Comptes app", count: loading || error ? undefined : rows.length },
+        { value: "emails", label: "Identifiants des créateurs", short: "Identifiants" },
+      ]}
+      value={section}
+      onValueChange={(v) => {
+        const id = v === "emails" ? "emails" : "comptes";
+        setSection(id);
+        setNavSub(id);
+      }}
+    >
+      {visited.includes("emails") && (
+        <div hidden={section !== "emails"}>
+          <CredentialVault />
+        </div>
+      )}
+      {section === "comptes" && (
       <>
       <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
@@ -600,6 +605,6 @@ export function Acces() {
       )}
       </>
       )}
-    </>
+    </FolderTabs>
   );
 }

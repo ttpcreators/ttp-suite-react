@@ -32,6 +32,8 @@ export type TabItem = {
   count?: number;
   /** Pastille de couleur avant le libellé (classe Tailwind, ex. "bg-signal"). */
   dot?: string;
+  /** Pastille de couleur en valeur CSS (ex. "var(--chart-1)"), quand aucune classe n'existe. */
+  dotColor?: string;
   /** Masque le libellé (l'icône reste) : toujours, ou seulement sur mobile. */
   hideLabel?: "always" | "mobile";
 };
@@ -214,7 +216,9 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
                 item.disabled ? "cursor-default text-faint" : selected ? "font-semibold text-foreground" : "text-foreground/80 hover:text-foreground",
               )}
             >
-              {item.dot && <span className={cn("size-1.5 shrink-0 rounded-full", item.dot)} />}
+              {(item.dot || item.dotColor) && (
+                <span className={cn("size-1.5 shrink-0 rounded-full", item.dot)} style={item.dotColor ? { background: item.dotColor } : undefined} />
+              )}
               {item.icon}
               {item.hideLabel !== "always" && (
                 <span className={cn(item.hideLabel === "mobile" && "max-sm:sr-only")}>{item.label}</span>
