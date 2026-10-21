@@ -101,3 +101,29 @@ describe("todoQuickAdd", () => {
     expect(parseQuickAdd("  !haute demain  ", CREATORS, NOW).title).toBe("");
   });
 });
+
+describe("liste des créateurs sous « @ »", async () => {
+  const { mentionAt, mentionSuggestions, insertMention, parseQuickAdd } = await import("./todoQuickAdd");
+  const roster = [{ name: "léna pasquale" }, { name: "justine gentet" }, { name: "pierre gentet" }, { name: "léa berenger" }, { name: "lea martin" }];
+  it("repère le mot en cours qui commence par @", () => {
+    expect(mentionAt("Relancer @lé", 12)).toEqual({ start: 9, query: "lé" });
+    expect(mentionAt("Relancer @", 10)).toEqual({ start: 9, query: "" });
+    expect(mentionAt("mail@marque.com", 15)).toBeNull();
+    expect(mentionAt("Relancer @Léna demain", 21)).toBeNull();
+  });
+  it("propose par prénom puis par nom, sans accents", () => {
+    expect(mentionSuggestions("le", roster).map((c) => c.name)).toEqual(["léa berenger", "lea martin", "léna pasquale"]);
+    expect(mentionSuggestions("gent", roster).map((c) => c.name)).toEqual(["justine gentet", "pierre gentet"]);
+    expect(mentionSuggestions("", roster)).toHaveLength(5);
+    // Une lettre : seulement les prénoms ou noms qui COMMENCENT par elle.
+    expect(mentionSuggestions("j", roster).map((c) => c.name)).toEqual(["justine gentet"]);
+  });
+  it("insère @Prénom (ou le nom complet si le prénom est en double), relisible par l'ajout rapide", () => {
+    const a = insertMention("Relancer @ju demain", 9, 12, "justine gentet", roster);
+    expect(a.text).toBe("Relancer @Justine demain");
+    expect(a.caret).toBe(18);
+    const b = insertMention("Appeler @le", 8, 11, "lea martin", [...roster, { name: "lea durand" }]);
+    expect(b.text).toBe("Appeler @Lea Martin ");
+    expect(parseQuickAdd(a.text, roster).creators ?? [parseQuickAdd(a.text, roster).creator]).toContain("justine gentet");
+  });
+});

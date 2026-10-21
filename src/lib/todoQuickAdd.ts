@@ -126,3 +126,43 @@ export function parseQuickAdd(input: string, roster: readonly { name: string }[]
   }
   return { title: kept.join(" "), creator: creators[0] ?? null, creators, priority, due };
 }
+
+// ── Liste des créateurs sous « @ » (barre d'ajout rapide) ─────────────────────
+
+/** Le mot en cours de frappe commence par « @ » ? → sa position et ce qui suit l'@. */
+export function mentionAt(text: string, caret: number): { start: number; query: string } | null {
+  const before = text.slice(0, caret);
+  const m = /(^|\s)@([^\s@]*)$/.exec(before);
+  if (!m) return null;
+  return { start: caret - m[2].length - 1, query: m[2] };
+}
+
+/** Créateurs proposés pour ce début de nom (prénom ou nom, sans accents), 8 au plus. */
+export function mentionSuggestions<T extends { name: string }>(query: string, roster: readonly T[], max = 8): T[] {
+  const q = norm(query);
+  const scored = roster
+    .map((c) => {
+      const n = norm(c.name);
+      const words = n.split(/\s+/);
+      const rank = !q ? 1 : words[0].startsWith(q) ? 0 : words.some((w) => w.startsWith(q)) ? 1 : q.length >= 3 && n.includes(q) ? 2 : -1;
+      return { c, rank };
+    })
+    .filter((x) => x.rank >= 0)
+    .sort((a, b) => a.rank - b.rank || a.c.name.localeCompare(b.c.name, "fr"));
+  return scored.slice(0, max).map((x) => x.c);
+}
+
+/**
+ * Remplace « @dé… » par le créateur choisi : « @Prénom » si le prénom est unique dans
+ * le roster, sinon « @Prénom Nom » (que parseQuickAdd sait relire). Renvoie le texte et
+ * la position du curseur, juste après l'espace ajouté.
+ */
+export function insertMention(text: string, start: number, caret: number, name: string, roster: readonly { name: string }[]): { text: string; caret: number } {
+  const cap = (s: string) => s.replace(/(^|[\s'-])(\p{L})/gu, (_, a: string, b: string) => a + b.toUpperCase());
+  const first = name.trim().split(/\s+/)[0];
+  const unique = roster.filter((c) => norm(c.name).split(/\s+/)[0] === norm(first)).length === 1;
+  const token = "@" + cap(unique ? first : name.trim().replace(/\s+/g, " "));
+  const after = text.slice(caret).replace(/^\S*/, "");
+  const head = text.slice(0, start) + token + " ";
+  return { text: head + after.replace(/^\s+/, ""), caret: head.length };
+}

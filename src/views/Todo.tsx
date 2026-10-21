@@ -30,7 +30,8 @@ import { useLiveKey } from "@/lib/useLive";
 import { useIsPhone } from "@/lib/iosUi";
 import { toISODate, todayISO } from "@/lib/dates";
 import { useStickyState } from "@/lib/useStickyState";
-import { parseQuickAdd } from "@/lib/todoQuickAdd";
+import { CreatorAvatar } from "@/components/ui/creator-avatar";
+import { insertMention, mentionAt, mentionSuggestions, parseQuickAdd } from "@/lib/todoQuickAdd";
 import { creatorsLabel, creatorsPatch, hasCreator, joinNames, todoCreators } from "@/lib/todoCreators";
 import { noteCreatorsColumn, todosHaveCreators } from "@/lib/todoCreatorsDb";
 import { appendPoint, latestPoint, parsePoints } from "@/lib/todoProgress";
@@ -582,6 +583,26 @@ export function Todo() {
 
   // ── Barre d'ajout rapide (« N » pour y aller) ──
   const [quick, setQuick] = useState("");
+  // « @ » dans l'ajout rapide : liste des créateurs sous la barre (flèches, Entrée, clic).
+  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const [mentionIdx, setMentionIdx] = useState(0);
+  const mentionList = mention ? mentionSuggestions(mention.query, creators) : [];
+  const syncMention = (el: HTMLInputElement) => {
+    const m = mentionAt(el.value, el.selectionStart ?? el.value.length);
+    setMention(m);
+    if (!m || m.query !== mention?.query) setMentionIdx(0);
+  };
+  const pickMention = (name: string) => {
+    const el = quickRef.current;
+    if (!el || !mention) return;
+    const r = insertMention(quick, mention.start, el.selectionStart ?? quick.length, name, creators);
+    setQuick(r.text);
+    setMention(null);
+    requestAnimationFrame(() => {
+      el.focus({ preventScroll: true });
+      el.setSelectionRange(r.caret, r.caret);
+    });
+  };
   const [quickBusy, setQuickBusy] = useState(false);
   const quickRef = useRef<HTMLInputElement>(null);
   const submitQuick = async () => {
@@ -1555,17 +1576,44 @@ export function Todo() {
                 e.preventDefault();
                 void submitQuick();
               }}
-              className="mb-4"
+              className="relative mb-4"
             >
               <label className="flex h-11 w-full items-center gap-2.5 rounded-full border border-border bg-surface px-4 transition-colors focus-within:border-primary">
                 <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <input
                   ref={quickRef}
                   value={quick}
-                  onChange={(e) => setQuick(e.target.value)}
+                  onChange={(e) => {
+                    setQuick(e.target.value);
+                    syncMention(e.currentTarget);
+                  }}
+                  onSelect={(e) => syncMention(e.currentTarget)}
+                  onBlur={() => window.setTimeout(() => setMention(null), 120)}
                   onKeyDown={(e) => {
+                    if (mentionList.length) {
+                      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                        e.preventDefault();
+                        const d = e.key === "ArrowDown" ? 1 : -1;
+                        setMentionIdx((i) => (i + d + mentionList.length) % mentionList.length);
+                        return;
+                      }
+                      if (e.key === "Enter" || e.key === "Tab") {
+                        e.preventDefault();
+                        pickMention(mentionList[Math.min(mentionIdx, mentionList.length - 1)].name);
+                        return;
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        setMention(null);
+                        return;
+                      }
+                    }
                     if (e.key === "Escape") e.currentTarget.blur();
                   }}
+                  role="combobox"
+                  aria-expanded={mentionList.length > 0}
+                  aria-controls="quick-mention-list"
+                  aria-autocomplete="list"
                   readOnly={quickBusy}
                   aria-busy={quickBusy || undefined}
                   enterKeyHint="done"
@@ -1575,6 +1623,30 @@ export function Todo() {
                 />
                 <Kbd className="shrink-0 max-md:hidden">N</Kbd>
               </label>
+              {mentionList.length > 0 && (
+                <ul
+                  id="quick-mention-list"
+                  role="listbox"
+                  aria-label="Créateurs"
+                  className="absolute left-4 top-[calc(100%+6px)] z-30 w-[min(300px,calc(100%-2rem))] overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-[0_12px_32px_-12px_rgba(15,23,42,0.3)]"
+                >
+                  {mentionList.map((c, i) => (
+                    <li key={c.id ?? c.name} role="option" aria-selected={i === mentionIdx}>
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onMouseEnter={() => setMentionIdx(i)}
+                        onClick={() => pickMention(c.name)}
+                        className={cn("flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13.5px] text-foreground transition-colors", i === mentionIdx ? "bg-rowhover" : "hover:bg-rowhover")}
+                      >
+                        <CreatorAvatar name={c.name} photoUrl={c.photo_url} className="h-6 w-6 shrink-0 rounded-full text-[9px]" />
+                        <span className="min-w-0 truncate">{titleCase(c.name)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </form>
           )}
 
