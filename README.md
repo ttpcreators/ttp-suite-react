@@ -1,77 +1,82 @@
 # TTP Suite
 
-Application de gestion pour l'agence de créateurs **TTP Creators** — en ligne sur
+L'outil de gestion de l'agence de talents **TTP Creators** (Lyon · Genève), en ligne sur
 **[app.ttpcreators.pro](https://app.ttpcreators.pro)**.
 
-Deux espaces dans une seule app : **Agence** (pilotage complet) et **Créateur**
-(chaque créateur ne voit que ses données). Facturation, roster, briefs, planning,
-media kits, contrats, debriefs, suivi d'engagement, et un **cockpit email** (envoi
-Gmail/Resend, historique, relances, alertes de réception).
+Une seule app, deux espaces :
 
-**Modules récents** :
-- **Gifting** — suivi des cadeaux/dotations marques (agence + créateur) : provenance
-  (email de l'interlocuteur), contenu attendu ou non, statut, et rappel des mentions
-  obligatoires (« Produit offert »/« Cadeau », loi n° 2023-451).
-- **Debrief** — calculateur de taux d'engagement à partir des captures d'insights
-  (deux bases : couverture / abonnés), captures jointes, et fiche détail au clic.
-- **Contrats** — socle de clauses durci au droit français (droit à l'image ≠ droit
-  d'auteur, présomption mannequin, vigilance URSSAF ≥ 5 000 € HT).
+- **Agence** : roster, scouting et sourcing, contacts, collabs (11 étapes), briefs,
+  contrats, facturation et reversements, planning (Google Agenda), mails (partnerships@ et
+  talent@), media kits, gifting, statistiques, agents IA.
+- **Créateur** : ses missions et briefs, sa boîte mail, ses gains, ses factures, son media
+  kit, ses statistiques. Chaque créateur ne voit que ses propres données.
+
+Le site vitrine (et les media kits publics) vit dans un dépôt à part,
+[`websitettpcreators`](https://github.com/ttpcreators/websitettpcreators). Les deux
+partagent la même base Supabase.
 
 ---
 
 ## Stack
 
-| Couche | Techno |
+| Couche | Outils |
 |---|---|
-| Front | React 19 · Vite · TypeScript (strict) · Tailwind v4 · shadcn/Radix · recharts |
-| Back | Supabase (Postgres + RLS + Auth + Storage) |
-| Serveur | Edge Functions Deno (`supabase/functions/*`) |
-| Intégrations | Google OAuth (Agenda + Gmail) · Web Push (VAPID) · Resend |
-| Hébergement | GitHub Pages (déploiement auto via GitHub Actions au `git push`) |
+| Interface | React 19 · Vite · TypeScript strict · Tailwind v4 · shadcn/Radix · motion · recharts |
+| Données | Supabase : Postgres + RLS, Auth, Storage |
+| Serveur | Edge Functions Deno (`supabase/functions/`) |
+| Intégrations | Google (Agenda, Gmail, Meet) · Instagram · TikTok · YouTube · Web Push · connecteur Claude (MCP) |
+| Hébergement | GitHub Pages, déployé automatiquement à chaque push sur `main` |
 
 ## Démarrer
 
 ```bash
 npm install
-npm run dev      # serveur local
-npm run build    # build de prod (tsc + vite) — DOIT passer avant tout commit
-npm run lint     # oxlint
+npm run dev     # serveur local
+npm run build   # porte de qualité : oxlint + vitest + tsc + vite build
 ```
 
-## Déploiement
+`npm run build` doit passer avant chaque commit.
 
-- **Front** : automatique — chaque `git push` sur `main` → GitHub Actions → Pages.
-- **Edge Functions** : manuel —
-  `supabase functions deploy <nom> --project-ref zizvggziggswhrbuyhuo`
-- **Base de données** : SQL manuel — voir [`supabase/sql/`](supabase/sql/) (migrations
-  titrées) et [`supabase/SETUP.sql`](supabase/SETUP.sql) (schéma complet, source de vérité).
+## Mettre en ligne
 
-## Structure
+| Quoi | Comment |
+|---|---|
+| L'app | `git push` sur `main` : GitHub Actions construit et publie (1 à 2 min) |
+| Une Edge Function | `supabase functions deploy <nom> --project-ref zizvggziggswhrbuyhuo` (à la main) |
+| La base | SQL lancé à la main dans Supabase ; état de chaque migration dans [`supabase/sql/README.md`](supabase/sql/README.md) |
+
+Une app ouverte pendant une mise en ligne se met à jour toute seule à la page suivante
+(`version.json`, voir [`src/lib/appUpdate.ts`](src/lib/appUpdate.ts)).
+
+## Organisation du dépôt
 
 ```
 src/
-  views/         une page = un fichier .tsx (Facturation, Roster, Mails, Debrief…)
-  components/    Login, Sidebar, GlobalSearch + ui/ (composants réutilisables)
-  lib/           appState (blob), db, dates, nav, push, search, platform…
+  views/          une page = un fichier (Mails, Collabs, Facturation, CreatorSpace…)
+  components/     composants partagés ; ui/ = briques d'interface
+  lib/            logique pure et testée (*.test.ts), accès aux données, i18n
 supabase/
-  functions/     Edge Functions Deno (google-*, gmail-*, send-email, *-history…)
-  SETUP.sql      schéma + sécurité complets (à relancer pour tout recréer)
-  sql/           migrations manuelles titrées (une par fichier) + README index
-docs/            documentation (architecture, prompt d'audit)
+  SETUP.sql       schéma complet + sécurité (source de vérité)
+  sql/            une migration datée par changement + README = tableau d'état
+  functions/      Edge Functions (gmail-*, google-*, ig-*, tt-*, yt-*, ttp-mcp…)
+public/           icônes, service worker (sw.js), polices des PDF
+connecteur/       page d'accord du connecteur Claude
+docs/             documentation (index : docs/README.md)
 ```
 
-## Conventions clés
+## Conventions
 
-- **Modèle de données** : la plupart des données sont dans des tables Postgres avec
-  **RLS** (agence = tout · créateur = les siennes). Les réglages agence sont dans **un
-  seul blob JSON** (`module_rows` ligne `__app_state__`), agence-only, via
-  [`src/lib/appState.ts`](src/lib/appState.ts). Toute écriture du blob **relit frais**
-  (`invalidateAppState` + `getAppState`) avant de fusionner.
-- **Frontière créateur↔agence** : un créateur ne lit jamais le blob agence ; chaque
-  passerelle est une Edge Function qui filtre côté serveur sur `creator_name`
-  (`creator-history`, `debrief-history`).
-- **Sécurité** : seule la clé **anon** est côté client. Les secrets (service_role,
-  VAPID privé, OAuth, CRON_SECRET, Resend) sont des secrets Supabase. Voir
-  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+- **Branches** : `main` = production. Chaque chantier se fait sur une branche courte,
+  fusionnée puis supprimée.
+- **Sauvegardes** : tags `sauvegarde-AAAA-MM-JJ` avant les gros changements.
+- **Commits** : en français, une phrase qui dit ce qui change.
+- **Base** : l'assistant prépare le SQL et les fonctions, l'équipe les applique, puis le
+  tableau d'état est mis à jour ([`supabase/sql/README.md`](supabase/sql/README.md)).
+- **Sécurité** : seule la clé publique `anon` est dans le code ; les données sont protégées
+  par RLS (agence = tout, créateur = les siennes). Tous les secrets sont des secrets
+  Supabase, jamais dans ce dépôt.
 
-📄 Détails d'architecture, sécurité et flux : **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**.
+## Documentation
+
+Voir **[`docs/README.md`](docs/README.md)** : architecture, passation, contrats des
+fonctions, validations Meta et Google, archives.

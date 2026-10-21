@@ -1,5 +1,8 @@
 # 🤝 PASSATION — Projet TTP Creators
 
+> **Octobre 2026** : ce socle date de juillet. L'état courant est dans [`../CLAUDE.md`](../CLAUDE.md)
+> et dans le tableau d'état [`../supabase/sql/README.md`](../supabase/sql/README.md).
+
 > **But de ce document** : permettre à n'importe qui (toi sur un autre compte, un futur
 > dev, ou une nouvelle session Claude) de **reprendre le projet entièrement**, sans rien
 > perdre. Il décrit le socle **durable** : projet, accès, architecture, déploiement, base,
@@ -12,7 +15,7 @@
 > d'engagement, contrats durcis au droit FR, refonte de la navigation, perfs, espace
 > créateur enrichi, PDF refondus…). Tout est décrit — avec **les décisions de sécurité à
 > ne pas défaire** et les **points restés ouverts** — dans :
-> **[`docs/HANDOFF-2026-07-18.md`](docs/HANDOFF-2026-07-18.md)**.
+> **[`docs/archives/HANDOFF-2026-07-18.md`](archives/HANDOFF-2026-07-18.md)**.
 > Le présent fichier reste valable pour le socle ; le handoff fait foi pour l'état courant.
 
 ---
@@ -88,11 +91,11 @@ Si elle échoue, ne pas commit. (La vitrine, elle, fait juste `vite build`.)
 
 ## 5. La base de données (Supabase)
 
-- **Schéma = source de vérité : [`supabase/SETUP.sql`](supabase/SETUP.sql)** (tables,
+- **Schéma = source de vérité : [`supabase/SETUP.sql`](../supabase/SETUP.sql)** (tables,
   fonctions `is_agency()` / `my_creator()`, RLS, Storage, rôle agence). À relancer pour tout
   recréer de zéro.
-- **Migrations** = [`supabase/sql/`](supabase/sql/), une par changement. **Le fichier
-  [`supabase/sql/README.md`](supabase/sql/README.md) est le TABLEAU DE BORD** : il liste
+- **Migrations** = [`supabase/sql/`](../supabase/sql/), une par changement. **Le fichier
+  [`supabase/sql/README.md`](../supabase/sql/README.md) est le TABLEAU DE BORD** : il liste
   chaque migration avec son statut (✅ appliqué en prod / ⏳ à faire). **Le lire en premier.**
 - La **clé anon** (dans le code) est **publique par design**. Les données sont protégées par
   **RLS** (Row Level Security). Modèle : **lecture large, écriture stricte**
@@ -173,7 +176,7 @@ Plusieurs **audits adversariaux** menés et corrigés (identité/privilège, OWA
 
 Ouvre le dossier `ttp-suite-react/` avec Claude Code et dis simplement :
 
-> « Lis `PASSATION.md`, `CLAUDE.md` et `supabase/sql/README.md`, puis dis-moi l'état actuel
+> « Lis `docs/PASSATION.md`, `CLAUDE.md` et `supabase/sql/README.md`, puis dis-moi l'état actuel
 >   du projet et ce qui reste à faire. »
 
 Tu seras opérationnel en une minute.

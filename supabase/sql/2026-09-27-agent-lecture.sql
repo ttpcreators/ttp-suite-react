@@ -4,7 +4,7 @@
 -- ============================================================================
 -- L'agent IA ne lira JAMAIS les tables `public` directement : uniquement ces
 -- vues, qui exposent le nécessaire SANS les colonnes sensibles repérées dans
--- AUDIT_AGENT.md (banque, montants de facture, CA/commission, date de
+-- docs/archives/AUDIT_AGENT.md (banque, montants de facture, CA/commission, date de
 -- naissance, téléphone/adresse/SIREN/email perso des créatrices, contenu des
 -- messages, jetons, blob brut).
 --
