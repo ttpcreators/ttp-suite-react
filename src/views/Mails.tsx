@@ -82,7 +82,11 @@ type Target = { threadId: string; box: MailBox; subject: string };
 type OpenRef = { threadId: string; subject: string; box: MailBox; contact?: string; name?: string };
 type OpenThread = { contact: string; name: string; subject: string; threadId: string; box: MailBox };
 /** Changement affiché avant la confirmation du serveur (retiré s'il n'est pas confirmé). */
-type Override = { unread?: boolean; hidden?: "archive" | "trash"; at: number; done?: number };
+type Override = {
+  unread?: boolean; hidden?: "archive" | "trash"; at: number; done?: number;
+  /** Réponse envoyée depuis l'app : le fil s'affiche « Répondu » tout de suite, avant que Gmail l'ait indexée. */
+  reply?: { ts: number; snippet: string };
+};
 type SearchState = { q: string; folder: Folder; threads: InboxThread[]; busy: boolean; err: string | null; off: boolean };
 type UndoState = { kind: "trash" | "archive"; t: Target; row: InboxThread | null; folder: Folder; done: Promise<boolean>; at: number };
 
@@ -124,6 +128,12 @@ function displayName(from: string): string {
 function prettyName(n: string): string {
   if (!n || n !== n.toUpperCase() || !/[A-Z]/.test(n)) return n;
   return n.toLowerCase().replace(/\p{L}[\p{L}'’-]*/gu, (w) => (w.length <= 3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)));
+}
+/** Extrait d'une réponse envoyée (sans signature ni citation), comme Gmail l'afficherait. */
+function htmlToSnippet(html: string): string {
+  const d = document.createElement("div");
+  d.innerHTML = html.replace(/<(br|\/p|\/div)[^>]*>/gi, " ");
+  return (d.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
 }
 /** Décode les entités HTML des extraits Gmail (« l&#39;ensemble » → « l'ensemble »). */
 const entityCache = new Map<string, string>();
@@ -505,6 +515,12 @@ function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhot
                   </span>
                 )}
                 {draft && <span className="shrink-0 text-[11.5px] italic leading-4 text-dangertext">Brouillon</span>}
+                {/* Dernier message = le nôtre : on a répondu, la balle est chez eux. */}
+                {folder === "inbox" && t.direction === "out" && (
+                  <span title="Tu as répondu en dernier" className="inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-px text-[10.5px] font-medium leading-4 text-muted-foreground">
+                    <Reply className="h-3 w-3" /> Répondu
+                  </span>
+                )}
                 {t.archived && <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Archivé</span>}
               </span>
             </span>
@@ -799,7 +815,9 @@ export function Mails() {
         if (!o.done || started < o.done + 3_000) continue;
         const row = freshRows.get(k);
         if (!row && f !== "inbox") continue; // fil d'un autre dossier : jugé par sa propre liste
-        const agrees = o.hidden ? !row || (f === "inbox" && o.hidden === "archive" && row.archived === true) : !row || row.unread === o.unread;
+        const agrees = o.reply
+          ? !row || row.ts > o.reply.ts || (row.direction === "out" && row.ts >= o.reply.ts - 120_000)
+          : o.hidden ? !row || (f === "inbox" && o.hidden === "archive" && row.archived === true) : !row || row.unread === o.unread;
         if (agrees || started > o.done + OV_TRUST_MS) {
           n ??= new Map(m);
           n.delete(k);
@@ -828,7 +846,11 @@ export function Mails() {
       const o = overrides.get(keyOf(t));
       if (!o) return t;
       if (o.hidden) return null;
-      return o.unread !== undefined && o.unread !== t.unread ? { ...t, unread: o.unread } : t;
+      let r = o.unread !== undefined && o.unread !== t.unread ? { ...t, unread: o.unread } : t;
+      // Notre réponse est plus récente que ce que la liste connaît : elle devient le dernier message.
+      // Un message reçu APRÈS notre réponse (t.ts plus récent) reprend la main.
+      if (o.reply && t.ts <= o.reply.ts) r = { ...r, direction: "out", snippet: o.reply.snippet, ts: o.reply.ts, unread: false, count: t.direction === "out" && t.ts >= o.reply.ts - 5_000 ? t.count : t.count + 1 };
+      return r;
     },
     [overrides],
   );
@@ -1515,7 +1537,18 @@ export function Mails() {
     toast("Réponse envoyée ✓");
     const key = keyOf(t);
     threadCache.delete(key);
-    void refreshList(folderRef.current);
+    // Le fil passe « Répondu » tout de suite (Gmail met quelques secondes à l'indexer), puis
+    // les listes (reçus ET envoyés) sont relues à 0, 5 et 15 s pour se caler sur Gmail.
+    const at = Date.now();
+    const snippet = htmlToSnippet(html);
+    setOverrides((m) => new Map(m).set(key, { ...(m.get(key) ?? {}), unread: false, reply: { ts: at, snippet }, at, done: at }));
+    invalidateMailUnread();
+    for (const ms of [0, 5_000, 15_000]) {
+      window.setTimeout(() => {
+        void refreshList("inbox");
+        if (lists.sent || folderRef.current === "sent") void refreshList("sent");
+      }, ms);
+    }
     // Recharge le fil pour afficher la réponse, seulement s'il est encore ouvert.
     const fresh = await invokeJson<ThreadRes>("gmail-thread", { threadId: t.threadId, contact: t.contact, box: t.box });
     if (fresh.ok) {
