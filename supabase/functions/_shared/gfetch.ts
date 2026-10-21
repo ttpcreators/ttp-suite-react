@@ -172,13 +172,28 @@ export function charsetOf(headers: Hdr[] | undefined): string {
   return m ? m[1].trim().toLowerCase() : "utf-8";
 }
 
-/** Texte d'une partie (base64url) décodé avec son charset (windows-1252, iso-8859-1…), repli UTF-8. */
+/** Charsets « un octet = un caractère » souvent annoncés à tort (Outlook, Exchange). */
+const LEGACY = /^(us-ascii|ascii|iso-8859-1|iso-8859-15|latin1|windows-1252|cp1252)$/;
+
+/**
+ * Texte d'une partie (base64url) décodé avec son charset (windows-1252, iso-8859-1…), repli UTF-8.
+ * Certains serveurs (Exchange…) annoncent iso-8859-1 alors que le texte est en UTF-8 : décodé
+ * tel quel, on lisait « trÃ¨s » au lieu de « très ». Si les octets forment de l'UTF-8 valide
+ * avec des accents, c'est de l'UTF-8 (un vrai texte latin-1 ne l'est quasiment jamais).
+ */
 export function decodeGmailBody(data: string, charset = "utf-8"): string {
   let bytes: Uint8Array;
   try {
     bytes = b64urlToBytes(data);
   } catch {
     return "";
+  }
+  if (LEGACY.test((charset || "").toLowerCase()) && bytes.some((b) => b >= 0x80)) {
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      /* pas de l'UTF-8 : vrai latin-1, décodé ci-dessous */
+    }
   }
   try {
     return new TextDecoder(charset || "utf-8").decode(bytes);
