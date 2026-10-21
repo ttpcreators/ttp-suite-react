@@ -147,6 +147,26 @@ ul.ticks li::before{content:"—";position:absolute;left:0;color:var(--accent)}
 @media print{.wrap{max-width:none;padding:0}}
 `;
 
+/**
+ * Nom de fichier proposé à l'enregistrement PDF (= `<title>` du document).
+ * Assemble les morceaux non vides (« Facture TTP-2026-004 », « Nike x Sarah ») avec
+ * un tiret simple et retire ce qu'un nom de fichier n'accepte pas (/ : * ? " < > | …).
+ */
+export function pdfFileTitle(...parts: (string | null | undefined)[]): string {
+  return parts
+    .map((p) =>
+      String(p ?? "")
+        .replace(/[\u2013\u2014]/g, "-")
+        .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter(Boolean)
+    .join(" - ")
+    .slice(0, 120)
+    .trim();
+}
+
 /** `<head>` complet : titre (= nom de fichier proposé), polices, style commun + style propre. */
 export function docHead(title: string, extraCss = ""): string {
   return (

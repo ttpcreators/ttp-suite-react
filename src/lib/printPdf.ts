@@ -4,7 +4,9 @@
  * (vectoriel, pas une image floue), pagination gérée par le CSS @media print.
  *
  * Utilise un iframe caché same-origin (pas de pop-up → jamais bloqué), retiré
- * après impression. Le nom de fichier proposé = le <title> du document HTML.
+ * après impression. Le nom de fichier proposé = le <title> du document HTML : Chrome
+ * prend celui de la PAGE (pas de l'iframe), donc on le prête à la page le temps
+ * d'imprimer, puis on remet l'ancien.
  */
 export function printHtml(html: string): void {
   const iframe = document.createElement("iframe");
@@ -18,9 +20,11 @@ export function printHtml(html: string): void {
   iframe.srcdoc = html; // same-origin → contentWindow.print() autorisé
 
   let done = false;
+  const pageTitle = document.title;
   const cleanup = () => {
     if (done) return;
     done = true;
+    document.title = pageTitle;
     setTimeout(() => iframe.remove(), 1000); // laisse le dialogue s'ouvrir
   };
 
@@ -40,11 +44,13 @@ export function printHtml(html: string): void {
     const timeout = new Promise<void>((r) => setTimeout(r, 3000));
     void Promise.race([ready, timeout]).then(() => {
       try {
+        if (doc.title.trim()) document.title = doc.title.trim();
         win.focus();
         win.addEventListener("afterprint", cleanup);
         win.print();
         setTimeout(cleanup, 60000); // filet si afterprint ne se déclenche pas
       } catch {
+        document.title = pageTitle;
         iframe.remove();
       }
     });

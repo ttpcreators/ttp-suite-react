@@ -40,7 +40,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { totalsOf, type LineItem, type Totals } from "@/lib/invoice";
 import { printHtml } from "@/lib/printPdf";
-import { docHead, ttpLogoImg } from "@/lib/pdfDoc";
+import { docHead, pdfFileTitle, ttpLogoImg } from "@/lib/pdfDoc";
 import { notifyCreator } from "@/lib/push";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Overlay } from "@/components/mobile/ios-sheet";
@@ -263,9 +263,8 @@ function invoiceHTML(o: {
   brand: string;
   creator: string | null;
   totals: Totals;
-  statusLabel: string;
 }): string {
-  const { issuer, bank, details: d, ref, brand, creator, totals, statusLabel } = o;
+  const { issuer, bank, details: d, ref, brand, creator, totals } = o;
 
   const issuerLegal = [
     issuer.legalForm,
@@ -344,15 +343,20 @@ table.lines tr{break-inside:avoid}
 .legal{margin-top:10mm;padding-top:3.5mm;border-top:.5pt solid var(--soft);font-size:7.6pt;line-height:1.6;color:var(--faint)}
 `;
 
-  return `${docHead(`Facture ${ref}`, css)}<body><div class="wrap">
+  // Nom de fichier proposé : « Facture TTP-2026-004 - Nike x Sarah ». Aucun statut
+  // (« En retard », « Payée »…) sur le document : c'est une info interne.
+  const who = brand || d.clientName || "";
+  const first = creator ? titleCase(creator).split(" ")[0].toLowerCase() : "";
+  const withCreator = creator && !who.toLowerCase().includes(first) ? `${who} x ${titleCase(creator)}` : who;
+  const fileTitle = pdfFileTitle(`Facture ${ref}`, withCreator);
+  return `${docHead(fileTitle, css)}<body><div class="wrap">
 <header class="mast"><span class="id">${ttpLogoImg(30)}<span><span class="wm">${esc(issuer.name)}</span></span></span>
-<span class="r"><b>N° ${esc(ref)}</b><br>${esc(statusLabel)}</span></header>
+<span class="r"><b>N° ${esc(ref)}</b></span></header>
 <p class="kicker">Facture</p>
 <h1>N° <i>${esc(ref)}</i></h1>
 <dl class="meta">
   <div class="row"><dt>Émise le</dt><span class="lead"></span><dd>${frDate(d.issueDate)}</dd></div>
   <div class="row"><dt>Échéance</dt><span class="lead"></span><dd>${frDate(d.dueDate)}</dd></div>
-  <div class="row"><dt>Statut</dt><span class="lead"></span><dd>${esc(statusLabel)}</dd></div>
 </dl>
 
 <div class="parties">
@@ -799,7 +803,7 @@ export function Facturation() {
     const bank = banks.find((b) => b.id === d.bankId) ?? null;
     const party = r.party ?? "";
     const brand = party.includes("×") ? party.split("×")[0].trim() : party;
-    return invoiceHTML({ issuer, bank, details: d, ref: r.ref, brand, creator: r.creator, totals: t, statusLabel: metaOf(r.status).label });
+    return invoiceHTML({ issuer, bank, details: d, ref: r.ref, brand, creator: r.creator, totals: t });
   }
 
   // Export = impression navigateur → « Enregistrer au format PDF » : vrai PDF
@@ -900,7 +904,6 @@ export function Facturation() {
           brand: draft.brand,
           creator: draft.creator || null,
           totals: draftTotals,
-          statusLabel: metaOf(draft.status).label,
         })
       : "";
   const dirty = !!draft && draftSnapshot(draft) !== baseline;

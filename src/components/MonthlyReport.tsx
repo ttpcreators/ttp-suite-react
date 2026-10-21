@@ -5,7 +5,7 @@ import { cn, titleCase } from "@/lib/utils";
 import { formatEuro } from "@/lib/money";
 import { fmtCompact } from "@/lib/timeSeries";
 import { printHtml } from "@/lib/printPdf";
-import { docTitle, esc, pdfKpis, pdfMeta, pdfSection, pdfShell, pdfTicks } from "@/lib/pdfDoc";
+import { docTitle, esc, pdfFileTitle, pdfKpis, pdfMeta, pdfSection, pdfShell, pdfTicks } from "@/lib/pdfDoc";
 import { buildMonthlyReport, currentMonth, shiftMonth, type MonthlyReport as Report, type ReportData } from "@/lib/monthlyReport";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useLang, useT, type Lang, type Vars } from "@/lib/i18n";
@@ -64,7 +64,7 @@ function monthlyReportPdf(r: Report, name: string, t: T, lang: Lang): string {
     (stats.length ? pdfSection(t("Tes chiffres"), pdfTicks(stats)) : "") +
     (r.agency.length ? pdfSection(t("Ce que l'agence t'a apporté"), pdfTicks(r.agency)) : "");
   return pdfShell({
-    title: t("Rapport {month} {name}", { month: r.label, name: titleCase(name) }),
+    title: pdfFileTitle(t("Rapport {month} {name}", { month: r.label, name: titleCase(name) })),
     eyebrow: t("Rapport mensuel"),
     heading: docTitle(cap(r.label), titleCase(name)),
     sub: r.inProgress ? t("Mois en cours : les chiffres continuent d'arriver.") : undefined,

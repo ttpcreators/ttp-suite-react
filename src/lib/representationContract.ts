@@ -1,4 +1,4 @@
-import { CONTRACT_CSS, contractHead, contractTitle, docHead, docToday } from "@/lib/pdfDoc";
+import { CONTRACT_CSS, contractHead, contractTitle, docHead, docToday, pdfFileTitle } from "@/lib/pdfDoc";
 import { sigImgHtml } from "./agencySignature";
 /**
  * Générateur de CONTRAT DE REPRÉSENTATION (agence × créateur) — data-driven.
@@ -355,7 +355,8 @@ export function representationHTML(config: Record<string, string>): string {
   // « CONTRAT DE REPRÉSENTATION — TALENT MANAGEMENT — EXCLUSIF » → titre + précisions.
   const [headTitle, ...more] = c.title.split(/\s+—\s+/);
   const details = [...more.map(sentence), c.subtitle].filter(Boolean).join(" · ");
-  return `${docHead(c.title, CONTRACT_CSS)}<body><div class="wrap ct">
+  const fileTitle = pdfFileTitle("Contrat de représentation", config.variante === "nonexclusif" ? "non exclusif" : "exclusif", config.talentNom);
+  return `${docHead(fileTitle, CONTRACT_CSS)}<body><div class="wrap ct">
 ${contractHead(RC_META.brandTitle, RC_META.brandSubtitle, ["<b>Contrat de représentation</b>", esc(docToday()), "Confidentiel"])}
 ${contractTitle(sentence(headTitle || c.title), details)}
 <section class="ct-art" style="margin-top:9mm"><h2>Préambule</h2>${htmlBody(c.preambule)}</section>

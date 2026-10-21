@@ -15,7 +15,7 @@ import { RepresentationContract, type ContractHist } from "@/views/Representatio
 import { ContractsHome } from "@/components/contracts/contracts-home";
 import { TYPE_META as REG_TYPE_META, type ContractRow, type ContractStatus } from "@/lib/contractRegistry";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
-import { CONTRACT_CSS, contractHead, contractTitle, docHead, docToday } from "@/lib/pdfDoc";
+import { CONTRACT_CSS, contractHead, contractTitle, docHead, docToday, pdfFileTitle } from "@/lib/pdfDoc";
 import { nbspFr } from "@/lib/representationContract";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { durationToMonths } from "@/lib/contractDuration";
@@ -290,7 +290,7 @@ function contractHTML(o: {
     )
     .join("");
   const kind = meta.label.charAt(0) + meta.label.slice(1).toLowerCase().replace("× créateur", "× Créateur").replace("ugc", "UGC");
-  return `${docHead(`Contrat ${ref}`, CONTRACT_CSS)}<body><div class="wrap ct">
+  return `${docHead(pdfFileTitle(`Contrat ${ref}`, [brand, ctName].filter(Boolean).join(" x ")), CONTRACT_CSS)}<body><div class="wrap ct">
 ${contractHead("TTP Creators", "Talent management · Lyon et Genève", [`<b>${esc(kind)}</b>`, `Réf. ${esc(ref)} · ${esc(docToday())}`, "Confidentiel"])}
 ${contractTitle(meta.title, `${ctName} × ${brand || "[Marque]"}`)}
 <p class="ct-intro">${esc(parties)}</p>

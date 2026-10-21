@@ -22,7 +22,7 @@ import { useCreators } from "@/lib/useCreators";
 import { titleCase } from "@/lib/utils";
 import { DebriefCalculator, ShotStrip, useShotUrls, resolveShots, type CalcState } from "@/views/DebriefCalculator";
 import { printHtml } from "@/lib/printPdf";
-import { pdfShell, pdfHeading, pdfMeta, pdfSection, pdfKpis, pdfTicks, pdfShots } from "@/lib/pdfDoc";
+import { pdfFileTitle, pdfShell, pdfHeading, pdfMeta, pdfSection, pdfKpis, pdfTicks, pdfShots } from "@/lib/pdfDoc";
 import { totalsOf as engTotals, parseNum as engParse, fmtCompact, fmtPct, allHaveReach, singlePlatform } from "@/lib/engagement";
 import { campaignCosts } from "@/lib/pricing";
 import { PageHeaderRow } from "@/components/ui/page-header";
@@ -210,7 +210,7 @@ function debriefPdfHTML(d: Debrief, shotUrls: Record<string, string> = {}): stri
     (d.renewal?.trim() ? pdfSection("Et ensuite ?", `<p class="lede">${escHtml(d.renewal.trim())}</p>`) : "") +
     (shots.length ? pdfSection("Captures des statistiques", pdfShots(shots)) : "");
   return pdfShell({
-    title: `Debrief ${d.brand}${d.creator ? " x " + titleCase(d.creator) : ""}`,
+    title: pdfFileTitle("Debrief", [d.brand, d.creator ? titleCase(d.creator) : ""].filter(Boolean).join(" x ")),
     eyebrow: "Bilan de campagne",
     heading: pdfHeading(d.brand, d.creator ? titleCase(d.creator) : undefined),
     sub: d.period && d.period !== "—" ? d.period : undefined,

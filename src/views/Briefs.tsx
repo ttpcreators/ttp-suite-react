@@ -11,7 +11,7 @@ import { useEffect, useRef, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { printHtml } from "@/lib/printPdf";
-import { pdfShell, pdfHeading, pdfMeta, pdfSection } from "@/lib/pdfDoc";
+import { pdfFileTitle, pdfShell, pdfHeading, pdfMeta, pdfSection } from "@/lib/pdfDoc";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, AutoGrowTextField, SelectField, Picker } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
@@ -92,7 +92,7 @@ function briefHTML(row: Row): string {
     );
   return pdfShell({
     // Le <title> devient le nom de fichier proposé à l'enregistrement PDF.
-    title: `Brief ${row.brand}${row.creator ? " x " + titleCase(row.creator) : ""}`,
+    title: pdfFileTitle("Brief", [row.brand, row.creator ? titleCase(row.creator) : ""].filter(Boolean).join(" x ")),
     eyebrow: "Brief & script",
     heading: pdfHeading(row.brand, row.creator ? titleCase(row.creator) : undefined),
     body,
