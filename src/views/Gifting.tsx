@@ -576,7 +576,7 @@ export function Gifting() {
       </InlineForm>
 
       {/* Classeur : un onglet par étape du cadeau (src/lib/gifting.ts) */}
-      <FolderTabs label="Étapes des cadeaux" orderKey="gifting" items={tabItems} value={tab} onValueChange={(v) => setTab(v as GiftTab)}>
+      <FolderTabs label="Étapes des cadeaux" orderKey="gifting" maxTabWidth={220} items={tabItems} value={tab} onValueChange={(v) => setTab(v as GiftTab)}>
         {list.length > 0 && (
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <PillSearch value={pageQ} onChange={setPageQ} placeholder="Rechercher une marque, un créateur…" />
