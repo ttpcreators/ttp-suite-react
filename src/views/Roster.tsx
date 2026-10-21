@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { typeHandle } from "@/lib/touches";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { parseAmount, formatEuro } from "@/lib/money";
@@ -325,7 +326,7 @@ export function Roster({ onOpen }: { onOpen?: (name: string) => void }) {
         <TextField
           label="Handle"
           value={handle}
-          onChange={setHandle}
+          onChange={(v) => setHandle(typeHandle(v))}
           placeholder="@pseudo"
         />
         <TextField label="Niche" value={niche} onChange={setNiche} />

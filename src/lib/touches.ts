@@ -155,6 +155,18 @@ export function waHref(phone: string | null | undefined, mode: WaMode): string |
   return mode === "web" ? `https://web.whatsapp.com/send?phone=${d}` : `https://wa.me/${d}`;
 }
 
+/**
+ * Champ « @ » pendant la frappe : un pseudo n'a jamais d'espace, donc on les retire
+ * (« @ » puis coller « lamarque » → « @lamarque ») ; un lien de profil Instagram ou
+ * TikTok collé devient « @pseudo » ; « @@ » redevient « @ ».
+ */
+export function typeHandle(raw: string): string {
+  const s = raw.replace(/\s+/g, "");
+  const url = /(?:instagram\.com|tiktok\.com)\/@?([A-Za-z0-9._]+)/i.exec(s);
+  if (url) return `@${url[1]}`;
+  return s.replace(/^@+/, "@");
+}
+
 /** Pseudo Instagram nettoyé (accepte « @pseudo » ou une URL de profil complète). */
 export function igHandle(raw?: string | null): string {
   return (raw ?? "").trim().replace(/^@/, "").replace(/^(https?:\/\/)?(www\.)?instagram\.com\//i, "").replace(/[/?].*$/, "").replace(/\s/g, "");

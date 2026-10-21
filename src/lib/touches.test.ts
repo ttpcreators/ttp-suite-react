@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { waLink, igHandle } from "./touches";
+import { waLink, igHandle, typeHandle } from "./touches";
 import { applyTouchChange } from "./touchesDb";
 
 describe("waLink", () => {
@@ -39,5 +39,17 @@ describe("applyTouchChange", () => {
   });
   it("suppression par id", () => {
     expect(applyTouchChange([a, b], { remove: "a" }).map((t) => t.id)).toEqual(["gm1"]);
+  });
+});
+
+describe("typeHandle (champ @)", () => {
+  it("colle le pseudo au @ et nettoie les liens", () => {
+    expect(typeHandle("@ lamarque")).toBe("@lamarque");
+    expect(typeHandle("@  la marque ")).toBe("@lamarque");
+    expect(typeHandle("@@lamarque")).toBe("@lamarque");
+    expect(typeHandle("@")).toBe("@");
+    expect(typeHandle("lamarque")).toBe("lamarque");
+    expect(typeHandle("@https://www.instagram.com/la.marque/?hl=fr")).toBe("@la.marque");
+    expect(typeHandle("https://www.tiktok.com/@lamarque")).toBe("@lamarque");
   });
 });

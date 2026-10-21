@@ -2,7 +2,7 @@ import { useStickyState } from "@/lib/useStickyState";
 import { supabase } from "@/lib/supabase";
 import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, MapPin, MessageCircle, AtSign, Phone, BriefcaseBusiness, Check, Plus, ChevronDown, ClipboardList, NotebookPen, type LucideIcon } from "@/components/icons";
 import {
-  parseTouches, sortTouches, lastTouch, needsRelance, nextKind, waLink, waHref, touchId, buildTouchesPatch,
+  parseTouches, sortTouches, lastTouch, needsRelance, nextKind, waLink, waHref, touchId, buildTouchesPatch, typeHandle,
   CANAL_LABELS, KIND_LABELS, RELANCE_DAYS, type Touch, type TouchCanal, type TouchKind, type WaMode, type ProspectSettings,
 } from "@/lib/touches";
 import { relanceInfo, agoLabel, agoShort, relanceCountdown } from "@/lib/contactRelance";
@@ -1606,7 +1606,7 @@ export function Contacts() {
             />
             <TextField label="Email" value={email} onChange={setEmail} type="email" />
             <TextField label="Téléphone" value={phone} onChange={setPhone} />
-            <TextField label="Instagram" value={insta} onChange={setInsta} placeholder="@lamarque" className="sm:min-w-[150px]" />
+            <TextField label="Instagram" value={insta} onChange={(v) => setInsta(typeHandle(v))} placeholder="@lamarque" className="sm:min-w-[150px]" />
             <TextField label="Ville" value={city} onChange={setCity} placeholder="Paris" className="sm:min-w-[130px]" />
           </InlineForm>
 
