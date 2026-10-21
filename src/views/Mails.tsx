@@ -11,7 +11,7 @@ import { cn, titleCase } from "@/lib/utils";
 import { getCache, setCache } from "@/lib/viewCache";
 import { invalidateMailUnread } from "@/lib/useMailUnread";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
-import { Kbd, RailButton, SearchField, Tip, ToolButton, mailRowCls, pillCls, type TipSide, UnreadToggle } from "@/components/mail-shell";
+import { Kbd, RailButton, SearchField, Tip, ToolButton, mailCardBtnCls, mailCardCls, mailCardListCls, mailRowCls, pillCls, type TipSide, UnreadToggle } from "@/components/mail-shell";
 import { SwipeRow, type SwipeAction } from "@/components/mobile/swipe-row";
 import { STORED_STATUSES, saveBase64, statusMeta, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
 import { toast } from "@/components/ui/toast";
@@ -337,9 +337,9 @@ const SHORTCUTS: [string, string][] = [
 /** Lignes fantômes pendant le premier chargement de la liste. */
 function ListSkeleton({ rows = 8 }: { rows?: number }) {
   return (
-    <ul aria-hidden className="divide-y divide-border">
+    <ul aria-hidden className={mailCardListCls}>
       {Array.from({ length: rows }, (_, i) => (
-        <li key={i} className="flex gap-3 px-4 py-3 sm:px-5">
+        <li key={i} className="flex gap-3 rounded-xl bg-surface px-3.5 py-3 ring-1 ring-border/70 dark:bg-white/[0.05]">
           <span className="size-9 shrink-0 animate-pulse rounded-full bg-muted" />
           <span className="flex min-w-0 flex-1 flex-col gap-2 pt-0.5">
             <span className="flex gap-2">
@@ -463,7 +463,7 @@ function FolderRow({ label, active, count, onClick, icon: Icon, swatch, title, s
   );
 }
 
-/** Une conversation de la liste (≈ 72 px) : expéditeur, objet, extrait sur une ligne. */
+/** Une conversation de la liste, en carte : objet, expéditeur, heure, extrait sur deux lignes. */
 function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhoto, tags, onOpen, onArchive, onTrash, onToggleRead }: {
   t: InboxThread; folder: Folder; on: boolean; cursor: boolean; showBox: boolean; draft: boolean;
   creator: string | null; creatorPhoto: string | null;
@@ -477,52 +477,50 @@ function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhot
     { key: "trash", label: "Corbeille", icon: Trash2, tone: "red", onClick: onTrash },
   ];
   return (
-    <li className="group relative" data-key={keyOf(t)}>
+    <li className={mailCardCls(on, cursor)} data-key={keyOf(t)}>
+      {/* Bord coloré : la boîte du fil (violet = partnerships@, vert = talent@). */}
+      {showBox && <span aria-hidden title={BOX_LABEL[t.box]} className={cn("absolute right-0 top-3.5 z-[1] h-5 w-[3px] rounded-l-full", BOX_STYLE[t.box].dot)} />}
       <SwipeRow actions={swipe}>
-        <button
-          type="button"
-          aria-current={on || undefined}
-          onClick={onOpen}
-          className={cn(mailRowCls(on), "items-center py-2.5", cursor && !on && "bg-surface/60 shadow-[inset_3px_0_0_var(--color-primary)] dark:bg-white/[0.04]")}
-        >
-          <Initial name={name} email={t.email} size="md" />
-          <span className="min-w-0 flex-1">
-            <span className="flex min-w-0 items-center gap-1.5">
-              {t.unread && <span className="size-2 shrink-0 rounded-full bg-primary"><span className="sr-only">Non lu</span></span>}
-              <span className={cn("min-w-0 truncate text-[12.5px] leading-4", t.unread ? "font-semibold text-foreground" : "font-medium text-muted-foreground")}>
-                {folder === "sent" && <span className="font-normal">À : </span>}
-                {name}
-              </span>
-              {t.count > 1 && <span className="shrink-0 text-[11.5px] leading-4 text-faint">{t.count}</span>}
-              {creator && (
-                <span title={`Créateur : ${titleCase(creator)}`} className="shrink-0">
-                  <CreatorAvatar name={creator} photoUrl={creatorPhoto} className="h-4 w-4 rounded-full text-[7px]" />
+        <button type="button" aria-current={on || undefined} onClick={onOpen} className={cn(mailCardBtnCls, "bg-surface dark:bg-transparent")}>
+          <span className="flex w-full min-w-0 items-start gap-3">
+            <Initial name={name} email={t.email} size="md" />
+            <span className="min-w-0 flex-1 pt-px">
+              <span className="flex min-w-0 items-center gap-1.5">
+                {t.unread && <span className="size-2 shrink-0 rounded-full bg-primary"><span className="sr-only">Non lu</span></span>}
+                <span className={cn("min-w-0 truncate text-[13px] leading-[18px] text-foreground", t.unread ? "font-bold" : "font-semibold")}>{t.subject || "(sans objet)"}</span>
+                <span className="flex-1" />
+                <span className={cn("shrink-0 pl-1 text-[11px] leading-4 tabular-nums lg:group-focus-within:invisible lg:group-hover:invisible", t.unread ? "font-semibold text-foreground" : "text-faint")}>
+                  {fmtWhen(t.ts)}
                 </span>
-              )}
-              {draft && <span className="shrink-0 text-[11.5px] italic leading-4 text-dangertext">Brouillon</span>}
-              <span className="flex-1" />
-              <span className={cn("shrink-0 text-[11px] leading-4 tabular-nums lg:group-focus-within:invisible lg:group-hover:invisible", t.unread ? "font-semibold text-foreground" : "text-faint")}>
-                {fmtWhen(t.ts)}
+              </span>
+              <span className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                <span className={cn("min-w-0 truncate text-[12.5px] leading-4", t.unread ? "font-medium text-foreground" : "text-muted-foreground")}>
+                  {folder === "sent" && <span className="font-normal">À : </span>}
+                  {name}
+                </span>
+                {t.count > 1 && <span className="shrink-0 text-[11.5px] leading-4 text-faint">{t.count}</span>}
+                {creator && (
+                  <span title={`Créateur : ${titleCase(creator)}`} className="shrink-0">
+                    <CreatorAvatar name={creator} photoUrl={creatorPhoto} className="h-4 w-4 rounded-full text-[7px]" />
+                  </span>
+                )}
+                {draft && <span className="shrink-0 text-[11.5px] italic leading-4 text-dangertext">Brouillon</span>}
+                {t.archived && <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Archivé</span>}
               </span>
             </span>
-            <span className={cn("mt-0.5 block truncate text-[13px] leading-[18px] text-foreground", t.unread ? "font-bold" : "font-medium")}>{t.subject || "(sans objet)"}</span>
-            <span className="mt-0.5 flex min-w-0 items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-[12.5px] leading-4 text-muted-foreground">
-                {t.direction === "out" && folder === "inbox" && <span className="text-faint">Toi : </span>}
-                {decodeEntities(t.snippet)}
-              </span>
-              {t.archived && <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Archivé</span>}
-              {showBox && <span title={BOX_LABEL[t.box]} className="flex shrink-0"><BoxDot box={t.box} /></span>}
-            </span>
-            {!!tags?.length && (
-              <span className="mt-1.5 flex flex-wrap gap-1">
-                {tags.map((g) => <MailTagChip key={g.key} tag={g} />)}
-              </span>
-            )}
           </span>
+          <span className="line-clamp-2 w-full text-[12.5px] leading-[18px] text-muted-foreground">
+            {t.direction === "out" && folder === "inbox" && <span className="text-faint">Toi : </span>}
+            {decodeEntities(t.snippet)}
+          </span>
+          {!!tags?.length && (
+            <span className="flex flex-wrap gap-1">
+              {tags.map((g) => <MailTagChip key={g.key} tag={g} />)}
+            </span>
+          )}
         </button>
       </SwipeRow>
-      <div className="pointer-events-none absolute right-3 top-1.5 hidden items-center gap-0.5 rounded-full bg-surface p-0.5 opacity-0 shadow-sm ring-1 ring-border transition-opacity lg:flex lg:group-focus-within:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-hover:pointer-events-auto lg:group-hover:opacity-100">
+      <div className="pointer-events-none absolute right-3 top-2 z-[2] hidden items-center gap-0.5 rounded-full bg-surface p-0.5 opacity-0 shadow-sm ring-1 ring-border transition-opacity lg:flex lg:group-focus-within:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-hover:pointer-events-auto lg:group-hover:opacity-100">
         {folder === "inbox" && !t.archived && <RowAction icon={Archive} label="Archiver" shortcut="e" onClick={onArchive} />}
         <RowAction icon={Trash2} label="Corbeille" shortcut="#" onClick={onTrash} danger />
         <RowAction icon={t.unread ? MailOpen : Mail} label={t.unread ? "Marquer comme lu" : "Marquer non lu"} shortcut={t.unread ? undefined : "⇧U"} onClick={onToggleRead} />
@@ -2033,7 +2031,7 @@ export function Mails() {
             {inboxQ && !localMatches.length && (
               <p className="px-5 py-4 text-[12.5px] text-muted-foreground">Aucun mail de la liste ne correspond à « {inboxQuery.trim()} ».</p>
             )}
-            <ul className="divide-y divide-border">{localMatches.map(rowFor)}</ul>
+            <ul className={mailCardListCls}>{localMatches.map(rowFor)}</ul>
             {inboxQ && searchLive && search && !search.off && (
               <div className="border-t border-border">
                 <div className="flex items-center gap-2 bg-muted/40 px-4 py-2 text-[11.5px] font-semibold uppercase tracking-wide text-muted-foreground sm:px-5">
@@ -2046,7 +2044,7 @@ export function Mails() {
                 ) : !search.busy && !remote.length ? (
                   <p className="px-5 py-3 text-[12.5px] text-muted-foreground">Rien de plus dans Gmail.</p>
                 ) : (
-                  <ul className="divide-y divide-border">{remote.map(rowFor)}</ul>
+                  <ul className={mailCardListCls}>{remote.map(rowFor)}</ul>
                 )}
               </div>
             )}

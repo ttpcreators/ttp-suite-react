@@ -176,6 +176,21 @@ export function SearchField({ value, onChange, placeholder, size = "md", inputRe
   );
 }
 
+/** Liste en cartes (maquette « boîte mail ») : cartes blanches espacées sur le fond gris. */
+export const mailCardListCls = "flex flex-col gap-2 p-2.5 sm:p-3";
+/** Carte d'un fil : relief léger, plus marqué quand il est ouvert (ou au clavier). */
+export const mailCardCls = (on: boolean, cursor = false) =>
+  cn(
+    "group relative overflow-hidden rounded-xl bg-surface ring-1 transition-shadow dark:bg-white/[0.05]",
+    on
+      ? "shadow-[0_8px_24px_-10px_rgba(15,23,42,0.28)] ring-primary/35"
+      : cursor
+        ? "shadow-[0_1px_2px_rgba(15,23,42,0.05)] ring-primary/30"
+        : "shadow-[0_1px_2px_rgba(15,23,42,0.05)] ring-border/70 hover:shadow-[0_6px_18px_-10px_rgba(15,23,42,0.22)]",
+  );
+/** Intérieur cliquable d'une carte. */
+export const mailCardBtnCls = "flex w-full flex-col gap-2 px-3.5 py-3 text-left";
+
 /** Ligne de la liste : fond blanc quand ouverte, léger survol sinon. */
 export const mailRowCls = (on: boolean) =>
   cn("flex w-full gap-3 px-4 text-left transition-colors sm:px-5", on ? "bg-surface dark:bg-white/[0.07]" : "hover:bg-surface/60 dark:hover:bg-white/[0.04]");

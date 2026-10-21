@@ -24,7 +24,7 @@ import {
   type Decision, type FeedItem, type MailChoice, type MailNote, type MailStatus, type MailStatusEvent, type MailThread,
   type MailThreadLite, type MailSettings, prospectStats } from "@/lib/creatorMail";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
-import { BarButton, RailButton, SearchField, ToolButton, UnreadToggle, mailRowCls, pillCls } from "@/components/mail-shell";
+import { BarButton, RailButton, SearchField, ToolButton, UnreadToggle, mailCardBtnCls, mailCardCls, mailCardListCls, pillCls } from "@/components/mail-shell";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { useLocale, useT, type Vars } from "@/lib/i18n";
 
@@ -1084,34 +1084,38 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         ) : shown.length === 0 ? (
           <StatePanel icon={Mail} text={emptyText} />
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className={mailCardListCls}>
             {shown.map((th) => {
               const on = openId === th.id;
               const fresh = unseen.has(th.id);
               return (
-                <li key={th.id}>
-                  <button type="button" aria-current={on || undefined} onClick={() => openFromList(th.id)} className={cn(mailRowCls(on), "items-center py-2.5")}>
-                    <Initial name={prettyName(th.brand)} email={th.brandEmail} size="md" />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        {fresh && <span aria-label={t("Nouveau")} className="size-2 shrink-0 rounded-full bg-primary" />}
-                        <span className={cn("min-w-0 truncate text-[12.5px] leading-4", fresh ? "font-semibold text-foreground" : "font-medium text-muted-foreground")}>
-                          {prettyName(th.brand) || t("Marque")}
+                <li key={th.id} className={mailCardCls(on)}>
+                  <button type="button" aria-current={on || undefined} onClick={() => openFromList(th.id)} className={mailCardBtnCls}>
+                    <span className="flex w-full min-w-0 items-start gap-3">
+                      <Initial name={prettyName(th.brand)} email={th.brandEmail} size="md" />
+                      <span className="min-w-0 flex-1 pt-px">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          {fresh && <span aria-label={t("Nouveau")} className="size-2 shrink-0 rounded-full bg-primary" />}
+                          <span className={cn("min-w-0 truncate text-[13px] leading-[18px] text-foreground", fresh ? "font-bold" : "font-semibold")}>{th.subject || t("(sans objet)")}</span>
+                          <span className="flex-1" />
+                          <span className={cn("shrink-0 pl-1 text-[11px] leading-4 tabular-nums", fresh ? "font-semibold text-foreground" : "text-faint")}>{fmtWhen(th.ts, locale)}</span>
                         </span>
-                        {th.count > 1 && <span className="shrink-0 text-[11.5px] leading-4 text-faint">{th.count}</span>}
-                        <span className="flex-1" />
-                        <span className={cn("shrink-0 text-[11px] leading-4 tabular-nums", fresh ? "font-semibold text-foreground" : "text-faint")}>{fmtWhen(th.ts, locale)}</span>
-                      </span>
-                      <span className={cn("mt-0.5 block truncate text-[13px] leading-[18px] text-foreground", fresh ? "font-bold" : "font-medium")}>{th.subject || t("(sans objet)")}</span>
-                      <span className="mt-0.5 block truncate text-[12.5px] leading-4 text-muted-foreground">{th.excerpt}</span>
-                      <span className="mt-1.5 flex min-w-0 items-center gap-3">
-                        <StatusDot status={th.status} by={th.decidedBy ? authorName(th.decidedBy, mode, creatorName, t) : undefined} />
-                        {th.notes > 0 && (
-                          <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground" title={t("Remarques")}>
-                            <MessageSquare className="h-3 w-3" />{th.notes}
+                        <span className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                          <span className={cn("min-w-0 truncate text-[12.5px] leading-4", fresh ? "font-medium text-foreground" : "text-muted-foreground")}>
+                            {prettyName(th.brand) || t("Marque")}
                           </span>
-                        )}
+                          {th.count > 1 && <span className="shrink-0 text-[11.5px] leading-4 text-faint">{th.count}</span>}
+                        </span>
                       </span>
+                    </span>
+                    <span className="line-clamp-2 w-full text-[12.5px] leading-[18px] text-muted-foreground">{th.excerpt}</span>
+                    <span className="flex min-w-0 items-center gap-3">
+                      <StatusDot status={th.status} by={th.decidedBy ? authorName(th.decidedBy, mode, creatorName, t) : undefined} />
+                      {th.notes > 0 && (
+                        <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground" title={t("Remarques")}>
+                          <MessageSquare className="h-3 w-3" />{th.notes}
+                        </span>
+                      )}
                     </span>
                   </button>
                 </li>

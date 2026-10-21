@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { animate, motion, useMotionValue, useReducedMotion } from "motion/react";
+import { animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import type { LucideIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useIosPhone } from "@/components/mobile/ios-sheet";
@@ -25,6 +25,9 @@ export function SwipeRow({ actions, children, className }: { actions: SwipeActio
   const ios = useIosPhone();
   const reduce = useReducedMotion();
   const x = useMotionValue(0);
+  // Actions cachées tant que la ligne n'est pas tirée : sinon leur couleur déborde
+  // aux coins arrondis d'une carte (liseré rouge autour des mails).
+  const actionsShown = useTransform(x, (v) => (v < -0.5 ? 1 : 0));
   const [open, setOpen] = useState(false);
   if (!ios || actions.length === 0) return <>{children}</>;
   const W = actions.length * BTN_W;
@@ -35,7 +38,7 @@ export function SwipeRow({ actions, children, className }: { actions: SwipeActio
   };
   return (
     <div className={cn("relative overflow-hidden", className)}>
-      <div className="absolute inset-y-0 right-0 flex" style={{ width: W }} aria-hidden={!open}>
+      <motion.div className="absolute inset-y-0 right-0 flex" style={{ width: W, opacity: actionsShown }} aria-hidden={!open}>
         {actions.map((a) => (
           <button
             key={a.key}
@@ -52,7 +55,7 @@ export function SwipeRow({ actions, children, className }: { actions: SwipeActio
             {a.label}
           </button>
         ))}
-      </div>
+      </motion.div>
       <motion.div
         style={{ x, touchAction: "pan-y" }}
         drag="x"
