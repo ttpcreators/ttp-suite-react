@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { ChevronUp, Paperclip, type LucideIcon } from "@/components/icons";
+import { Check, ChevronUp, Copy, Paperclip, type LucideIcon } from "@/components/icons";
 import { toast } from "@/components/ui/toast";
 import { MailAvatar } from "@/components/mail-avatar";
 import { translate, useLang, useLocale, useT, type Lang } from "@/lib/i18n";
@@ -134,6 +134,36 @@ function FoldButton({ onClick }: { onClick: () => void }) {
 }
 
 /**
+ * Adresse de l'expéditeur : un clic la copie (pour l'ajouter aux contacts, la coller
+ * dans un mail…). Icône « copier » au survol, coche verte une fois copiée.
+ */
+function CopyAddress({ email, className }: { email: string; className: string }) {
+  const t = useT();
+  const [done, setDone] = useState(false);
+  const copy = () => {
+    void navigator.clipboard
+      ?.writeText(email)
+      .then(() => {
+        setDone(true);
+        toast(t("Adresse copiée"));
+        setTimeout(() => setDone(false), 1500);
+      })
+      .catch(() => toast(email));
+  };
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={t("Copier {address}", { address: email })}
+      className={`group/addr flex w-fit max-w-full items-center gap-1.5 text-left transition-colors hover:text-foreground ${className}`}
+    >
+      <span className="min-w-0 truncate">{email}</span>
+      {done ? <Check className="h-3.5 w-3.5 shrink-0 text-ok" /> : <Copy className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover/addr:opacity-100 max-sm:opacity-60" />}
+    </button>
+  );
+}
+
+/**
  * Clic dans l'en-tête d'un message déplié : replie, sauf sur un bouton, un lien,
  * le texte (nom, adresse : sélectionnables) ou pendant une sélection.
  */
@@ -220,7 +250,11 @@ export function MailItem({
                 <FoldButton onClick={onToggle} />
               </span>
             </span>
-            <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[12.5px] text-muted-foreground">{m.fromAgency ? m.from : m.fromEmail}</span>
+            {m.fromAgency || !m.fromEmail ? (
+              <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[12.5px] text-muted-foreground">{m.fromAgency ? m.from : m.fromEmail}</span>
+            ) : (
+              <CopyAddress email={m.fromEmail} className="text-[12.5px] text-muted-foreground" />
+            )}
             <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-[11.5px] text-faint">
               <span className="shrink-0 tabular-nums text-muted-foreground">
                 {fmtFull(m.ts, locale)}{ago && <span className="text-faint"> ({ago})</span>}
@@ -305,7 +339,11 @@ export function MailItem({
         <Initial name={m.from} email={m.fromEmail} agency={m.fromAgency} />
         <span className="min-w-0 flex-1">
           <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[14px] font-semibold text-foreground">{name}</span>
-          <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[12px] text-muted-foreground">{m.fromAgency ? m.from : m.fromEmail}</span>
+          {m.fromAgency || !m.fromEmail ? (
+            <span data-sel className="block w-fit max-w-full cursor-text select-text truncate text-[12px] text-muted-foreground">{m.fromAgency ? m.from : m.fromEmail}</span>
+          ) : (
+            <CopyAddress email={m.fromEmail} className="text-[12px] text-muted-foreground" />
+          )}
           <span data-sel className="mt-0.5 block w-fit max-w-full cursor-text select-text truncate text-[11px] text-faint">
             {t("à {to}", { to: cleanAddr(m.to) })}{m.cc ? ` · cc ${cleanAddr(m.cc)}` : ""}
           </span>
