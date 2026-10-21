@@ -254,6 +254,19 @@ export const FOLDER_PAGES: readonly FolderPage[] = [
       { value: "compte", label: "Compte", tone: "grey" },
     ],
   },
+  {
+    // Onglets = étapes d'un cadeau (src/lib/gifting.ts, GIFT_TABS) : couleurs des statuts
+    // (orange = en attente, bleu = en cours, vert = fait, gris = clos et vue d'ensemble).
+    id: "gifting",
+    label: "Gifting",
+    tabs: [
+      { value: "tous", label: "Tous", tone: "grey" },
+      { value: "attente", label: "Contenu attendu", tone: "orange" },
+      { value: "recus", label: "Reçus", tone: "blue" },
+      { value: "publies", label: "Publiés", tone: "green" },
+      { value: "clos", label: "Clôturés", tone: "grey" },
+    ],
+  },
 ];
 
 /** Couleurs par défaut d'une page (vide si la page n'est pas listée : tout est automatique). */

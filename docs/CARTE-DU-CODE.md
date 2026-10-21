@@ -71,7 +71,7 @@ pour toute l'équipe dans Paramètres → Apparence → « Couleurs des classeur
 | `Briefs.tsx` | `briefs` | Briefs et scripts, PDF, résumé pour le créateur (« Résumer avec Claude »). |
 | `Contrats.tsx` | `contrats` (`marque`, `repr`, `ugc`) | Page d'arrivée des contrats et générateurs Marque × Créateur et UGC ; rend `RepresentationContract.tsx` pour `repr`. |
 | `Echeances.tsx` | `echeances` (F) | Fins de contrat, alertes à 30 et 60 jours. |
-| `Gifting.tsx` | `gifting` | Produits offerts et contenus attendus. |
+| `Gifting.tsx` | `gifting` | Produits offerts et contenus attendus : bandeau de chiffres, classeur par étape (`GIFT_TABS` de `src/lib/gifting.ts`), cartes ou liste. |
 | `Debrief.tsx` | `debrief` | Bilans de campagne pour les marques (PDF, mail) ; calculateur dans `DebriefCalculator.tsx`. |
 | `Idees.tsx` | `ideas` | Idées de contenus et de collabs. |
 | `Facturation.tsx` | `facturation` (F) | Factures : éditeur, statuts, PDF. |
