@@ -155,8 +155,8 @@ export function IosRow({ icon: Icon, label, detail, onClick, chevron = true, des
           <Icon className="h-[17px] w-[17px]" strokeWidth={1.9} />
         </span>
       ) : null)}
-      {label && <span className={cn("min-w-0 flex-1 truncate text-[16px]", destructive ? "text-dangertext" : indent ? "text-muted-foreground" : "text-foreground")}>{label}</span>}
-      {detail != null && <span className="max-w-[45%] shrink-0 truncate text-[15px] text-muted-foreground">{detail}</span>}
+      {label && <span className={cn("min-w-0 flex-1 truncate text-[15px]", destructive ? "text-dangertext" : indent ? "text-muted-foreground" : "text-foreground")}>{label}</span>}
+      {detail != null && <span className="max-w-[45%] shrink-0 truncate text-[14px] text-muted-foreground">{detail}</span>}
       {right}
       {chevron && onClick && <ChevronRight className="h-[18px] w-[18px] shrink-0 text-faint" strokeWidth={2.2} />}
     </>
@@ -179,8 +179,8 @@ export function IosRow({ icon: Icon, label, detail, onClick, chevron = true, des
               <Icon className="h-[17px] w-[17px]" strokeWidth={1.9} />
             </span>
           ) : null)}
-          {label && <span className={cn("min-w-0 flex-1 truncate text-[16px]", destructive ? "text-dangertext" : indent ? "text-muted-foreground" : "text-foreground")}>{label}</span>}
-          {detail != null && <span className="max-w-[45%] shrink-0 truncate text-[15px] text-muted-foreground">{detail}</span>}
+          {label && <span className={cn("min-w-0 flex-1 truncate text-[15px]", destructive ? "text-dangertext" : indent ? "text-muted-foreground" : "text-foreground")}>{label}</span>}
+          {detail != null && <span className="max-w-[45%] shrink-0 truncate text-[14px] text-muted-foreground">{detail}</span>}
         </button>
         {right}
         {chevron && <ChevronRight className="pointer-events-none h-[18px] w-[18px] shrink-0 text-faint" strokeWidth={2.2} />}

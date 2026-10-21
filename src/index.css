@@ -552,7 +552,7 @@ body {
 @media (max-width: 767px) {
   /* Grand titre iOS (34 pt) en tête de chaque page. */
   .ios-ui .page-title {
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 700;
     letter-spacing: -0.025em;
     line-height: 1.1;
@@ -626,20 +626,30 @@ body {
   }
 }
 
-/* Mode iPhone : lisibilité. Aucun texte sous 12 px, texte courant à 14-15 px
-   (l'ordinateur est réglé plus serré, en 13 px). Retours de Marc : pas trop gros,
-   mais bien lisible. Seulement dans les pages et les feuilles, pas dans les barres. */
+/* Mode iPhone : échelle de texte façon app iOS, compacte et lisible (retour de Marc :
+   « légèrement trop gros »). Texte courant 14 px, détails 12 à 13 px, rien sous 11 px ;
+   les titres et gros chiffres descendent d'un cran. Pages et feuilles seulement. */
 @media (max-width: 767px) {
-  .ios-ui :is(main, .ios-sheet) :is(.text-\[9px\], .text-\[9\.5px\], .text-\[10px\], .text-\[10\.5px\]) { font-size: 11.5px; }
-  .ios-ui :is(main, .ios-sheet) .text-\[11px\] { font-size: 12px; }
-  .ios-ui :is(main, .ios-sheet) .text-\[11\.5px\] { font-size: 12.5px; }
-  .ios-ui :is(main, .ios-sheet) .text-\[12px\] { font-size: 13px; }
-  .ios-ui :is(main, .ios-sheet) .text-\[12\.5px\] { font-size: 13.5px; }
-  .ios-ui :is(main, .ios-sheet) .text-\[13px\] { font-size: 14px; }
-  .ios-ui :is(main, .ios-sheet) .text-\[13\.5px\] { font-size: 14.5px; }
-  .ios-ui :is(main, .ios-sheet) .text-\[14px\] { font-size: 15px; }
-  .ios-ui :is(main, .ios-sheet) .text-xs { font-size: 13px; }
-  .ios-ui :is(main, .ios-sheet) .text-sm { font-size: 14.5px; }
+  .ios-ui :is(main, .ios-sheet) :is(.text-\[8px\], .text-\[9px\], .text-\[9\.5px\], .text-\[10px\], .text-\[10\.5px\]) { font-size: 11px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[11px\] { font-size: 11.5px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[11\.5px\] { font-size: 12px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[12px\] { font-size: 12.5px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[12\.5px\] { font-size: 13px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[13px\] { font-size: 13.5px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[13\.5px\] { font-size: 13.5px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[14px\] { font-size: 14px; }
+  .ios-ui :is(main, .ios-sheet) .text-\[14\.5px\] { font-size: 14px; }
+  .ios-ui :is(main, .ios-sheet) :is(.text-\[15px\], .text-body) { font-size: 14.5px; }
+  .ios-ui :is(main, .ios-sheet) :is(.text-\[16px\], .text-base) { font-size: 15px; }
+  .ios-ui :is(main, .ios-sheet) :is(.text-\[17px\], .text-row, .text-lg) { font-size: 16px; }
+  .ios-ui :is(main, .ios-sheet) :is(.text-\[18px\], .text-\[19px\]) { font-size: 17px; }
+  .ios-ui :is(main, .ios-sheet) :is(.text-\[20px\], .text-xl) { font-size: 18px; }
+  .ios-ui :is(main, .ios-sheet) :is(.text-\[22px\], .text-section, .text-2xl) { font-size: 19px; }
+  .ios-ui :is(main, .ios-sheet) :is(.text-\[24px\], .text-\[26px\]) { font-size: 21px; }
+  .ios-ui :is(main, .ios-sheet) :is(.text-\[28px\], .text-3xl) { font-size: 24px; }
+  .ios-ui :is(main, .ios-sheet) :is(.text-\[30px\], .text-\[32px\], .text-\[34px\], .text-\[36px\], .text-\[40px\], .text-4xl) { font-size: 28px; }
+  .ios-ui :is(main, .ios-sheet) .text-xs { font-size: 12.5px; }
+  .ios-ui :is(main, .ios-sheet) .text-sm { font-size: 14px; }
 }
 
 /* Mode iPhone : tout ce qui se touche fait au moins 44 px sous le doigt (règle Apple).
