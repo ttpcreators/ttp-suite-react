@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { TONE_SOLID, TONE_TILE } from "@/lib/statusTone";
 import { Loader, Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import { ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X, type LucideIcon, Megaphone } from "@/components/icons";
+import { ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Mail, MessageSquare, MessageSquarePlus, RefreshCw, SearchCheck, Send, Settings2, Tag, X, Copy, type LucideIcon, Megaphone } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -971,6 +971,30 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           </h2>
           <ToolButton icon={RefreshCw} label={t("Actualiser")} spin={loading} disabled={loading} onClick={retry} className="h-8 w-8" />
         </div>
+        {/* Adresse attribuée par l'agence : le créateur la voit (et la copie) d'un coup d'œil. */}
+        {shownAlias && (
+          <div className="mt-1.5 flex min-w-0 items-center gap-2 rounded-[10px] bg-field px-3 py-2">
+            <AtSign className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] leading-tight text-muted-foreground">{mode === "creator" ? t("Ton adresse mail") : t("Adresse de {name}", { name: creatorName })}</span>
+              <span className="block truncate text-[13.5px] font-semibold text-foreground">{shownAlias}</span>
+            </span>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(shownAlias);
+                  toast(t("Adresse copiée"));
+                } catch {
+                  toast(shownAlias);
+                }
+              }}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-surface px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
+            >
+              <Copy className="h-3.5 w-3.5" /> {t("Copier")}
+            </button>
+          </div>
+        )}
         <Tabs
           className="mt-2 max-lg:hidden"
           size="sm"
