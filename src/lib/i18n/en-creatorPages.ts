@@ -309,4 +309,8 @@ export const EN_CREATORPAGES: Record<string, string> = {
   " · {n} a répondu": " · {n} replied",
   "Voir": "View",
   "Tout voir": "View all",
+  "Ton adresse mail": "Your email address",
+  "Adresse de {name}": "{name}'s address",
+  "Adresse copiée": "Address copied",
+  "Copier": "Copy",
 };
