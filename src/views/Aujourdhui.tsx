@@ -250,7 +250,7 @@ function InfoRows({ rows }: { rows: [string, ReactNode][] }) {
   );
 }
 
-const secondaryBtn = "flex h-11 flex-1 items-center justify-center gap-1.5 rounded-full bg-field px-4 text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover";
+const secondaryBtn = "flex h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full bg-field px-3 text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover";
 
 type InspectorProps = {
   it: TodayItem;
@@ -417,7 +417,7 @@ function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onP
           )}
           {onHandled && (
             <button type="button" onClick={onHandled} className={secondaryBtn}>
-              <Check className="h-4 w-4" /> C'est fait
+              <Check className="h-4 w-4 shrink-0" /> <span className="whitespace-nowrap">C'est fait</span>
             </button>
           )}
           <button type="button" onClick={onSnooze} className={secondaryBtn}>

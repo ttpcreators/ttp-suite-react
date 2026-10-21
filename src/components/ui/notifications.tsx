@@ -1,6 +1,6 @@
 import * as React from "react";
 import { TtpBell, TtpBrief, TtpContract, TtpInvoice, TtpMail, TtpPerson, TtpPlanning, TtpPulse, TtpSpark } from "@/components/icons/ttp-icons";
-import { BellRing, type LucideIcon } from "@/components/icons";
+import { type LucideIcon } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { NotificationPanel, type PanelItem } from "@/components/ui/notification-panel";
 import { usePush } from "@/lib/push";
@@ -52,29 +52,29 @@ function PushRow() {
     }
   };
   return (
-    <div className="border-b border-border px-4 py-3">
+    <div className="border-b border-border px-4 py-2.5">
       {state === "enabled" ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-[12px] font-medium text-signaltext">
-              <BellRing className="h-3.5 w-3.5" /> Activées sur ce téléphone
-            </span>
-            <button
-              type="button"
-              onClick={disable}
-              disabled={busy}
-              className="shrink-0 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-            >
-              Désactiver
-            </button>
-          </div>
+        // Une seule ligne discrète : état à gauche, « Tester » et « Désactiver » à droite.
+        <div className="flex items-center gap-3 text-[13px]">
+          <span className="flex min-w-0 flex-1 items-center gap-2 font-medium text-signaltext">
+            <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-ok" />
+            <span className="truncate">Activées sur cet appareil</span>
+          </span>
           <button
             type="button"
             onClick={runTest}
             disabled={testing}
-            className="w-full rounded-lg border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+            className="shrink-0 font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
           >
-            {testing ? "Envoi…" : "Envoyer un test 🔔"}
+            {testing ? "Envoi…" : "Tester"}
+          </button>
+          <button
+            type="button"
+            onClick={disable}
+            disabled={busy}
+            className="shrink-0 font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+          >
+            Désactiver
           </button>
         </div>
       ) : state === "needs-install" ? (
@@ -94,9 +94,9 @@ function PushRow() {
             if (!ok && Notification.permission === "granted") toast("Activation échouée — réessaie");
           }}
           disabled={busy}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-3 py-2 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          <BellRing className="h-3.5 w-3.5" /> {busy ? "Activation…" : "Activer sur ce téléphone"}
+          {busy ? "Activation…" : "Activer les notifications sur cet appareil"}
         </button>
       )}
     </div>
@@ -200,7 +200,7 @@ export function Notifications({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[400px] max-w-[calc(100vw-1rem)] overflow-hidden p-0"
+        className="w-[440px] max-w-[calc(100vw-1rem)] overflow-hidden p-0"
         side={variant === "sidebar" ? "right" : undefined}
         align="end"
         sideOffset={variant === "sidebar" ? 14 : 8}

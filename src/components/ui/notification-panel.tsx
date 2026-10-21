@@ -67,9 +67,9 @@ export type NotificationPanelProps = {
 function Avatar({ item }: { item: PanelItem }) {
   const Icon = item.icon;
   return (
-    <span className="relative block h-8 w-8 shrink-0">
-      <span aria-hidden className={cn("grid h-8 w-8 place-items-center rounded-full bg-field text-[11px] font-semibold", item.tone === "late" ? "text-late" : item.tone === "wait" ? "text-wait" : "text-muted-foreground")}>
-        {item.initials ? item.initials : <Icon className="h-4 w-4" />}
+    <span className="relative block h-9 w-9 shrink-0">
+      <span aria-hidden className={cn("grid h-9 w-9 place-items-center rounded-full bg-field text-[12px] font-semibold", item.tone === "late" ? "text-late" : item.tone === "wait" ? "text-wait" : "text-muted-foreground")}>
+        {item.initials ? item.initials : <Icon className="h-[18px] w-[18px]" />}
       </span>
       {/* Genre d'évènement, lisible sans lire la phrase */}
       {item.initials && (
@@ -240,18 +240,19 @@ function Row({
         }
       }}
       className={cn(
-        "group/row relative flex w-full cursor-default gap-3 px-4 py-3 text-left transition-colors focus-visible:outline-offset-[-2px]",
-        item.unread ? "bg-primary/[0.04] hover:bg-primary/[0.07]" : "hover:bg-rowhover",
+        // Carte à part (plus de lignes collées) : relief léger, non lue = liseré de l'accent.
+        "group/row relative flex w-full cursor-default gap-3 rounded-xl bg-surface px-3.5 py-3 text-left shadow-[0_1px_2px_rgba(15,23,42,0.05)] ring-1 transition-[box-shadow,background-color] focus-visible:outline-offset-[-2px] hover:shadow-[0_6px_16px_-10px_rgba(15,23,42,0.25)] dark:bg-white/[0.05]",
+        item.unread ? "ring-primary/30" : "ring-border/70",
       )}
     >
       <Avatar item={item} />
       <div className="min-w-0 flex-1">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <p className={cn("m-0 text-[13px] leading-[1.45]", item.unread ? "font-semibold text-foreground" : "font-medium text-foreground/90")}>{item.title}</p>
-            {item.description && <p className="m-0 mt-0.5 line-clamp-2 text-[12.5px] leading-[1.45] text-muted-foreground">{item.description}</p>}
+            <p className={cn("m-0 text-[14.5px] leading-[1.4]", item.unread ? "font-semibold text-foreground" : "font-medium text-foreground/90")}>{item.title}</p>
+            {item.description && <p className="m-0 mt-0.5 line-clamp-2 text-[13.5px] leading-[1.45] text-muted-foreground">{item.description}</p>}
             {/* Moment et endroit, sur une ligne discrète */}
-            <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11.5px] text-faint">
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-faint">
               <span>{item.time}</span>
               {item.context && (
                 <>
@@ -346,12 +347,12 @@ export function NotificationPanel({
   return (
     <div data-notification-panel="" className={cn("w-full overflow-hidden bg-popover text-foreground", className)}>
       <div className="flex items-center justify-between gap-3 px-4 pb-0.5 pt-3.5">
-        <h2 className="m-0 text-[15px] font-semibold tracking-[-0.01em]">Notifications</h2>
+        <h2 className="m-0 text-[18px] font-semibold tracking-[-0.015em]">Notifications</h2>
         <button
           type="button"
           onClick={() => onMarkAllRead?.()}
           disabled={unread === 0}
-          className="inline-flex items-center gap-1.5 rounded-[8px] px-1.5 py-1 text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
         >
           <CheckCheck className="h-3.5 w-3.5" />
           Tout marquer comme lu
@@ -368,7 +369,7 @@ export function NotificationPanel({
                 type="button"
                 onClick={() => setTab(t.id)}
                 aria-current={active ? "page" : undefined}
-                className={cn("relative shrink-0 px-2 py-2.5 text-[13px] font-medium transition-colors", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
+                className={cn("relative shrink-0 px-2.5 py-2.5 text-[14px] font-medium transition-colors", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
               >
                 <span className="inline-flex items-center gap-1.5">
                   {t.label}
@@ -396,7 +397,7 @@ export function NotificationPanel({
 
       {top}
 
-      <div data-notif-list="" style={{ maxHeight }} className="divide-y divide-border overflow-y-auto overscroll-contain [scrollbar-width:thin]">
+      <div data-notif-list="" style={{ maxHeight }} className="flex flex-col gap-2 overflow-y-auto overscroll-contain bg-panel/60 p-2.5 [scrollbar-width:thin] dark:bg-transparent">
         <AnimatePresence initial={false}>
           {shown.map((item) => (
             <motion.div
@@ -432,8 +433,8 @@ export function NotificationPanel({
             <span className="grid h-10 w-10 place-items-center rounded-[12px] bg-field text-muted-foreground">
               <Bell className="h-[18px] w-[18px]" />
             </span>
-            <p className="m-0 text-[13px] font-medium text-foreground">{tab === "archived" ? "Rien d'archivé" : tab === "todo" ? "Rien à traiter" : "Tu es à jour"}</p>
-            <p className="m-0 text-[12.5px] text-muted-foreground">{tab === "archived" ? "Les notifications archivées arrivent ici." : "Les nouveautés s'afficheront ici."}</p>
+            <p className="m-0 text-[14.5px] font-medium text-foreground">{tab === "archived" ? "Rien d'archivé" : tab === "todo" ? "Rien à traiter" : "Tu es à jour"}</p>
+            <p className="m-0 text-[13px] text-muted-foreground">{tab === "archived" ? "Les notifications archivées arrivent ici." : "Les nouveautés s'afficheront ici."}</p>
           </div>
         ) : null}
       </div>
