@@ -18,6 +18,7 @@ import { FolderTabs } from "@/components/ui/folder-tabs";
 import { useVisitedTabs } from "@/lib/useVisitedTabs";
 import { AgencyAvatar } from "@/components/ui/agency-avatar";
 import { guessName, saveAgencyName } from "@/lib/team";
+import { CreatorPickerField } from "@/components/ui/creator-picker";
 
 type AccessAccount = {
   email: string;
@@ -460,15 +461,7 @@ export function Acces() {
         />
       )}
       {role === "creator" && (
-        <SelectField
-          label="Créateur"
-          value={creatorName}
-          onChange={setCreatorName}
-          options={[
-            { value: "", label: "— Choisir —" },
-            ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url })),
-          ]}
-        />
+        <CreatorPickerField label="Créateur" value={creatorName} onChange={setCreatorName} creators={creators} />
       )}
     </InlineForm>
   );

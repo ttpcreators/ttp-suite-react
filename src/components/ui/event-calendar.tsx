@@ -1,7 +1,8 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, X, Trash2 } from "@/components/icons";
-import { TextField, TextAreaField, SelectField } from "@/components/ui/form";
+import { Field, TextField, TextAreaField, SelectField } from "@/components/ui/form";
+import { CreatorPicker } from "@/components/ui/creator-picker";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { cn } from "@/lib/utils";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -219,7 +220,7 @@ export function EventCalendar({
   fixedWho?: string;
   /** Clic sur une échéance brief/to-do/facture (lecture seule) → navigation vers sa page. */
   onNavigate?: (kind: "brief" | "todo" | "facture" | "post", ev: Ev) => void;
-  creators?: { name: string }[];
+  creators?: { name: string; photo_url?: string | null }[];
 }) {
   const t = useT();
   const lang = useLang();
@@ -253,12 +254,12 @@ export function EventCalendar({
     return m;
   }, [visibleEvents]);
 
-  const whoOptions = useMemo(() => {
+  // « Avec qui » : le roster (photos), plus les noms déjà utilisés qui n'y sont plus.
+  const whoExtra = useMemo(() => {
     const names = new Set<string>();
-    for (const c of creators) if (c.name) names.add(c.name);
-    for (const e of events) if (e.who) names.add(e.who);
-    return [{ value: "", label: "—" }, ...[...names].sort().map((n) => ({ value: n, label: n }))];
-  }, [creators, events]);
+    for (const e of events) if (e.who && e.who !== "—") names.add(e.who);
+    return [...names].sort();
+  }, [events]);
 
   // Navigation
   function goToday() {
@@ -436,7 +437,8 @@ export function EventCalendar({
         <EventModal
           draft={draft}
           setDraft={setDraft}
-          whoOptions={whoOptions}
+          creators={creators}
+          whoExtra={whoExtra}
           hideWho={fixedWho !== undefined}
           busy={busy}
           onSubmit={submit}
@@ -747,7 +749,8 @@ function ListView({ events, onEventClick }: { events: Ev[]; onEventClick: (e: Ev
 function EventModal({
   draft,
   setDraft,
-  whoOptions,
+  creators,
+  whoExtra,
   hideWho = false,
   busy = false,
   onSubmit,
@@ -756,7 +759,8 @@ function EventModal({
 }: {
   draft: Draft;
   setDraft: (d: Draft) => void;
-  whoOptions: { value: string; label: string }[];
+  creators: { name: string; photo_url?: string | null }[];
+  whoExtra: string[];
   hideWho?: boolean;
   busy?: boolean;
   onSubmit: () => void;
@@ -806,6 +810,7 @@ function EventModal({
             value={draft.title}
             onChange={(v) => setDraft({ ...draft, title: v })}
             placeholder={t("Intitulé de l'événement")}
+            mentions={hideWho ? undefined : creators}
           />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <TextField
@@ -829,18 +834,22 @@ function EventModal({
               options={typeOptions}
             />
             {!hideWho && (
-              <SelectField
-                label={t("Avec qui")}
-                value={draft.who}
-                onChange={(v) => setDraft({ ...draft, who: v })}
-                options={whoOptions}
-              />
+              <Field label={t("Avec qui")}>
+                <CreatorPicker
+                  ariaLabel={t("Avec qui")}
+                  value={draft.who === "—" ? "" : draft.who}
+                  onChange={(v) => setDraft({ ...draft, who: v })}
+                  creators={creators}
+                  extraNames={whoExtra}
+                />
+              </Field>
             )}
           </div>
           <TextAreaField
             label={t("Description / commentaire")}
             value={draft.description}
             onChange={(v) => setDraft({ ...draft, description: v })}
+            mentions={hideWho ? undefined : creators}
             placeholder={t("Notes, ordre du jour, lien visio… (synchronisé avec Google Agenda)")}
           />
         </fieldset>

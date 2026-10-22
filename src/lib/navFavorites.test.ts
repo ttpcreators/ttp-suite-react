@@ -9,6 +9,14 @@ describe("withFavorites", () => {
   it("ajoute les pages en favoris au bout de la section Favoris", () => {
     expect(withFavorites(groups, [{ id: "facturation" }], make)[0].items.map((i) => i.id)).toEqual(["apercu", "mails", "facturation"]);
   });
+  it("retire la page de sa famille (pas de doublon dans le menu)", () => {
+    const g2: G[] = [...groups, { id: "talents", items: [{ id: "roster" }, { id: "scouting" }] }];
+    const out = withFavorites(g2, [{ id: "facturation" }, { id: "roster" }], make);
+    expect(out.map((g) => [g.id, g.items.map((i) => i.id)])).toEqual([
+      [FAVORIS_ID, ["apercu", "mails", "facturation", "roster"]],
+      ["talents", ["scouting"]],
+    ]);
+  });
   it("ne crée jamais de doublon", () => {
     const out = withFavorites(groups, [{ id: "mails" }, { id: "stats" }, { id: "stats" }], make);
     expect(out[0].items.map((i) => i.id)).toEqual(["apercu", "mails", "stats"]);

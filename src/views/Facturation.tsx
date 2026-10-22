@@ -1,3 +1,4 @@
+import { takeInvoicePrefill } from "@/lib/invoicePrefill";
 import { fmtDay, toISODate } from "@/lib/dates";
 import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -45,6 +46,7 @@ import { docHead, pdfFileTitle, ttpLogoImg } from "@/lib/pdfDoc";
 import { notifyCreator } from "@/lib/push";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { CreatorPicker } from "@/components/ui/creator-picker";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -440,6 +442,31 @@ const editorPrimaryBtn =
 const ghostBtn =
   "rounded-lg border border-border bg-surface px-4 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground";
 
+/** Nouvelle facture vide (brouillon, TVA 20 % par défaut, modifiable par facture). */
+function blankDraft(refs: string[], bankId: string): Draft {
+  return {
+    id: null,
+    ref: nextRefFrom(refs),
+    brand: "",
+    creator: "",
+    status: "brouillon",
+    clientName: "",
+    clientEmail: "",
+    clientAddress: "",
+    clientSiret: "",
+    clientVat: "",
+    tpoRef: "",
+    issueDate: todayISO(),
+    dueDate: todayISO(),
+    items: [{ id: uid(), label: "", qty: 1, unit: 0 }],
+    franchise: false,
+    vatRate: 20,
+    commissionRate: DEFAULT_COMMISSION,
+    bankId,
+    notes: "",
+  };
+}
+
 // ─── Vue ─────────────────────────────────────────────────────────────────────
 
 export function Facturation() {
@@ -515,6 +542,19 @@ export function Facturation() {
     setDetails((appData.invoiceDetails as Record<string, Details>) ?? {});
     setCommissions((appData.creatorCommission as Record<string, number>) ?? {});
   }, [appData]);
+
+  // « Créer le devis » depuis Tarifs : nouvelle facture en brouillon, lignes remplies, pas
+  // encore enregistrée (quitter sans enregistrer demande confirmation).
+  useEffect(() => {
+    if (!rows || !appData) return;
+    const p = takeInvoicePrefill();
+    if (!p) return;
+    const blank = blankDraft(rows.map((r) => r.ref), ((appData.invoiceBankAccounts as BankAccount[]) ?? [])[0]?.id ?? "");
+    const lines = p.lines.map((l) => ({ id: uid(), label: l.label, qty: 1, unit: l.unit }));
+    setDraft({ ...blank, creator: p.creator, brand: p.brand, items: lines.length ? lines : blank.items });
+    setBaseline(draftSnapshot(blank));
+    setConfirmLeave(false);
+  }, [rows, appData]);
 
 
   // Erreur seulement si rien n'est chargé : un raté de rafraîchissement garde la liste.
@@ -617,27 +657,7 @@ export function Facturation() {
 
   // ── Éditeur ──
   function openCreate() {
-    const d: Draft = {
-      id: null,
-      ref: nextRefFrom(invoices.map((r) => r.ref)),
-      brand: "",
-      creator: "",
-      status: "brouillon",
-      clientName: "",
-      clientEmail: "",
-      clientAddress: "",
-      clientSiret: "",
-      clientVat: "",
-      tpoRef: "",
-      issueDate: todayISO(),
-      dueDate: todayISO(),
-      items: [{ id: uid(), label: "", qty: 1, unit: 0 }],
-      franchise: false, // nouvelles factures : TVA 20 % par défaut (modifiable par facture)
-      vatRate: 20,
-      commissionRate: DEFAULT_COMMISSION,
-      bankId: banks[0]?.id ?? "",
-      notes: "",
-    };
+    const d = blankDraft(invoices.map((r) => r.ref), banks[0]?.id ?? "");
     setDraft(d);
     setBaseline(draftSnapshot(d));
     setConfirmLeave(false);
@@ -887,7 +907,6 @@ export function Facturation() {
   }
 
   const draftTotals = draft ? totalsOf(draft.items, draft.franchise, draft.vatRate, draft.commissionRate) : null;
-  const creatorOptions = [{ value: "", label: "Aucun" }, ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url }))];
   const bankOptions = [
     { value: "", label: banks.length ? "Aucun compte" : "Ajoute d'abord un compte" },
     ...banks.map((b) => ({ value: b.id, label: b.label || b.iban || "Compte" })),
@@ -1012,8 +1031,9 @@ export function Facturation() {
               <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
                 <TextField label="Marque / campagne" value={draft.brand} onChange={(v) => setDraft({ ...draft, brand: v })} placeholder="Saucony" />
                 <Field label="Créateur">
-                  <Picker
+                  <CreatorPicker
                     ariaLabel="Créateur"
+                    creators={creators}
                     value={draft.creator}
                     onChange={(v) =>
                       // Taux du roster appliqué : la saisie brute de commission est oubliée (sinon l'ancien taux resterait affiché)
@@ -1024,7 +1044,6 @@ export function Facturation() {
                         raw: v ? Object.fromEntries(Object.entries(draft.raw ?? {}).filter(([k]) => k !== "commission")) : draft.raw,
                       })
                     }
-                    options={creatorOptions}
                   />
                 </Field>
                 <TextField label="Client (nom ou société)" value={draft.clientName} onChange={(v) => setDraft({ ...draft, clientName: v })} />

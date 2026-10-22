@@ -209,16 +209,31 @@ export const FAVORIS_ID = "favoris";
 /** Pages toujours dans Favoris (pas d'étoile : on ne peut pas les en retirer). */
 export const FAVORIS_BASE: ReadonlySet<string> = new Set(NAV.find((f) => f.id === FAVORIS_ID)?.items.map((i) => i.id) ?? []);
 
+/** Étoiles au plus (pages ajoutées à Favoris) : au-delà, les étoiles ne veulent plus rien dire. */
+export const MAX_PINS = 5;
+
 /**
  * Ajoute les pages mises en favoris (étoile) au bout de la section Favoris, sans
- * doublon. Sans section Favoris visible (pages rangées), `make` en crée une en tête.
+ * doublon : une page en favori quitte sa famille (Talents, Prospection…), et une famille
+ * vidée disparaît. Sans section Favoris visible (pages rangées), `make` en crée une en tête.
  */
 export function withFavorites<I extends { id: string }, G extends { id: string; items: I[] }>(groups: G[], extras: I[], make: (items: I[]) => G): G[] {
   const fav = groups.find((g) => g.id === FAVORIS_ID);
   const add = extras.filter((e, i) => extras.findIndex((x) => x.id === e.id) === i && !fav?.items.some((it) => it.id === e.id));
   if (!add.length) return groups;
-  if (fav) return groups.map((g) => (g === fav ? { ...g, items: [...g.items, ...add] } : g));
-  return [make(add), ...groups];
+  const moved = new Set(add.map((a) => a.id));
+  const strip = (items: I[]) =>
+    items
+      .filter((it) => !moved.has(it.id))
+      .map((it) => {
+        const kids = (it as { children?: { id: string }[] }).children;
+        return kids?.some((c) => moved.has(c.id)) ? { ...it, children: kids.filter((c) => !moved.has(c.id)) } : it;
+      });
+  const rest = groups
+    .map((g) => (g === fav ? g : { ...g, items: strip(g.items) }))
+    .filter((g) => g === fav || g.items.length > 0);
+  if (fav) return rest.map((g) => (g === fav ? { ...g, items: [...g.items, ...add] } : g));
+  return [make(add), ...rest];
 }
 
 /**

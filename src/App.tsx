@@ -28,7 +28,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PageFrame } from "@/components/ui/page-header";
 import { VIEW_HINTS } from "@/lib/viewHints";
 import { Login } from "@/components/Login";
-import { FAVORIS_BASE, FAVORIS_ID, NAV, findItem, findPinnable, viewTitle, withFavorites, type NavFamily, type NavItem, type ViewId } from "@/lib/nav";
+import { FAVORIS_BASE, FAVORIS_ID, MAX_PINS, NAV, findItem, findPinnable, viewTitle, withFavorites, type NavFamily, type NavItem, type ViewId } from "@/lib/nav";
 import { NavSubContext, NavSubSetContext } from "@/lib/navSub";
 import { setTeamSession } from "@/lib/team";
 import { supabase } from "@/lib/supabase";
@@ -338,6 +338,10 @@ export default function App() {
   const togglePin = async (id: ViewId) => {
     invalidateAppState();
     const fresh = ((await getAppState())["pinnedPages"] as ViewId[]) ?? [];
+    if (!fresh.includes(id) && fresh.length >= MAX_PINS) {
+      toast(`${MAX_PINS} favoris au plus : retire d'abord une étoile`);
+      return;
+    }
     const next = fresh.includes(id) ? fresh.filter((x) => x !== id) : [...fresh, id];
     setLocalPins(next);
     if (!(await saveAppStateKey("pinnedPages", next))) setLocalPins(fresh);

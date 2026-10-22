@@ -2,7 +2,6 @@ import { fmtDay } from "@/lib/dates";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { TtpBrief, TtpCollabs, TtpContract, TtpInvoice, TtpMail, TtpPhone, TtpPlanning, TtpSpark, TtpStats, TtpTodo } from "@/components/icons/ttp-icons";
 import { createPortal } from "react-dom";
-import { motion, useReducedMotion } from "motion/react";
 import { ArrowUpRight, Check, ChevronRight, Pencil, Plus, X, type LucideIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
@@ -62,6 +61,7 @@ import { anticipationLine, buildAnticipation, collapseItems, contractTypeLabel, 
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { IconTile } from "@/components/ui/icon-tile";
+import { ProgressRing } from "@/components/ui/progress-ring";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Kbd } from "@/components/ui/kbd";
 import { AddButton } from "@/components/ui/form";
@@ -157,33 +157,6 @@ function primaryLabel(it: TodayItem): string {
     case "stats":
       return "Ouvrir le roster";
   }
-}
-
-// ─── Anneau de progression ───────────────────────────────────────────────────
-
-function ProgressRing({ value }: { value: number }) {
-  const reduce = useReducedMotion();
-  const r = 18;
-  const c = 2 * Math.PI * r;
-  const v = Math.max(0, Math.min(1, value));
-  return (
-    <svg viewBox="0 0 44 44" className="h-11 w-11 shrink-0 -rotate-90" aria-hidden>
-      <circle cx="22" cy="22" r={r} fill="none" strokeWidth="4" className="stroke-field" />
-      <motion.circle
-        cx="22"
-        cy="22"
-        r={r}
-        fill="none"
-        strokeWidth="4"
-        strokeLinecap="round"
-        className="stroke-primary"
-        strokeDasharray={c}
-        initial={reduce ? false : { strokeDashoffset: c }}
-        animate={{ strokeDashoffset: c * (1 - v) }}
-        transition={{ duration: reduce ? 0 : 0.6, ease: "easeOut" }}
-      />
-    </svg>
-  );
 }
 
 // ─── Ligne ───────────────────────────────────────────────────────────────────

@@ -10,12 +10,20 @@ import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { supabase } from "@/lib/supabase";
+import { useLiveKey } from "@/lib/useLive";
+import { stepDef } from "@/lib/collabs";
+import { autoChecked, isChecked, mergeChecklists, toSaved, type CollabLite, type ShownChecklist } from "@/lib/checklistCollab";
 
-/** Une checklist nommée : `done` mappe { stepId: true } pour les étapes cochées. */
+/**
+ * Une checklist nommée : `done` mappe { stepId: true } pour les étapes cochées à la main ;
+ * `collabId` : collab reliée, dont l'étape coche le reste toute seule (src/lib/checklistCollab.ts).
+ */
 export type Checklist = {
   id: string;
   name: string;
   done: Record<string, boolean>;
+  collabId?: string;
 };
 
 /** Étape d'une phase : id STABLE (persisté dans `done`). */
@@ -70,13 +78,13 @@ const PHASES: Phase[] = [
 
 const TOTAL_STEPS = PHASES.reduce((n, p) => n + p.steps.length, 0);
 
-/** Nombre d'étapes cochées (bornées au template) d'une checklist. */
-function doneCountOf(ck: Checklist): number {
-  return PHASES.reduce(
-    (n, p) => n + p.steps.filter((st) => ck.done[st.id]).length,
-    0
-  );
+/** Nombre d'étapes cochées (à la main ou par la collab), bornées au template. */
+function doneCountOf(ck: ShownChecklist): number {
+  return PHASES.reduce((n, p) => n + p.steps.filter((st) => isChecked(ck, st.id)).length, 0);
 }
+/** Sous le nom : l'étape de la collab reliée, puis l'avancement. */
+const subLine = (ck: ShownChecklist, dc: number) =>
+  `${ck.collab ? `${stepDef(ck.collab.step).short} · ` : ""}${dc} / ${TOTAL_STEPS} étapes`;
 
 const DEFAULT_CHECKLISTS: Checklist[] = [
   { id: "default", name: "Collaboration type", done: {} },
@@ -96,6 +104,24 @@ export function Checklist() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [pendingDel, setPendingDel] = useState<null | { message: string; run: () => void }>(null);
+  // Collabs : chacune a sa checklist (créée d'office), cochée selon son étape.
+  const [collabs, setCollabs] = useState<CollabLite[]>([]);
+  const live = useLiveKey();
+  useEffect(() => {
+    let alive = true;
+    void supabase
+      .from("collabs")
+      .select("id, brand, creator, step, status")
+      .order("sort_order")
+      .then(({ data: rows, error }) => {
+        if (alive && !error && rows) setCollabs(rows as CollabLite[]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [live]);
+
+  const shown = mergeChecklists(lists, collabs);
 
   // Synchronise l'état local dès que le blob est chargé.
   useEffect(() => {
@@ -188,17 +214,19 @@ export function Checklist() {
 
   const toggleStep = async (id: string) => {
     const ckId = selectedId;
-    const cur = lists.find((c) => c.id === ckId);
-    if (!cur) return;
+    const cur = shown.find((c) => c.id === ckId);
+    if (!cur || autoChecked(id, cur.collab?.step)) return; // cochée par la collab
     // Valeur CIBLE (pas une inversion) : appliquée telle quelle sur l'état frais.
     const target = !cur.done[id];
+    // Checklist créée d'office (pas encore enregistrée) ou reliée par son nom : on l'enregistre
+    // avec sa collab au premier changement.
     const apply = (arr: Checklist[]) =>
-      arr.map((c) => {
+      (arr.some((c) => c.id === ckId) ? arr : [...arr, toSaved({ ...cur, done: {} })]).map((c) => {
         if (c.id !== ckId) return c;
         const done = { ...c.done };
         if (target) done[id] = true;
         else delete done[id];
-        return { ...c, done };
+        return { ...c, done, ...(cur.collab ? { collabId: cur.collab.id } : {}) };
       });
     setLists(apply(lists)); // optimiste
     await persistFresh(apply);
@@ -220,7 +248,7 @@ export function Checklist() {
     );
   }
 
-  const selected = lists.find((c) => c.id === selectedId) ?? null;
+  const selected = shown.find((c) => c.id === selectedId) ?? null;
 
   /* La boîte de confirmation est rendue dans les DEUX vues : la vue liste sortait en
      `return` avant de l'atteindre, donc le bouton supprimer armait `pendingDel` sans
@@ -245,10 +273,10 @@ export function Checklist() {
       <div>
         <PageHeaderRow>
           <div className="text-sm text-muted-foreground">
-            {lists.length} checklist{lists.length > 1 ? "s" : ""}
+            {shown.length} checklist{shown.length > 1 ? "s" : ""}
           </div>
           <div className="flex items-center gap-2">
-            {lists.length > 0 && (
+            {shown.length > 0 && (
               <Tabs
                 label="Affichage des checklists"
                 items={[
@@ -282,13 +310,13 @@ export function Checklist() {
           />
         </InlineForm>
 
-        {lists.length === 0 ? (
+        {shown.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border bg-panel/50 px-5 py-10 text-center text-[13px] text-muted-foreground">
-            Aucune checklist. Crée-en une par collaboration (ex. « Sézane × Léa, mars ») pour cocher les étapes au fur et à mesure.
+            Aucune checklist.
           </div>
         ) : view === "cards" ? (
           <div className="grid gap-3 sm:grid-cols-2">
-            {lists.map((ck) => {
+            {shown.map((ck) => {
               const dc = doneCountOf(ck);
               const pct = TOTAL_STEPS ? Math.round((dc / TOTAL_STEPS) * 100) : 0;
               return (
@@ -306,14 +334,14 @@ export function Checklist() {
                         {ck.name}
                       </div>
                       <div className="mt-0.5 text-[11px] text-faint tabular-nums">
-                        {dc} / {TOTAL_STEPS} étapes
+                        {subLine(ck, dc)}
                       </div>
                     </button>
                     <div className="flex items-center gap-2">
                       <span className="text-lg font-bold tabular-nums text-foreground">
                         {pct}%
                       </span>
-                      <DeleteButton onClick={() => askRemove(ck)} />
+                      {!ck.collab && <DeleteButton onClick={() => askRemove(ck)} />}
                     </div>
                   </div>
                   <button type="button" onClick={() => setSelectedId(ck.id)} aria-label={`Ouvrir ${ck.name}`}>
@@ -325,7 +353,7 @@ export function Checklist() {
           </div>
         ) : view === "list" ? (
           <div className="overflow-hidden rounded-2xl border border-border bg-panel shadow-sm">
-            {lists.map((ck) => {
+            {shown.map((ck) => {
               const dc = doneCountOf(ck);
               const pct = TOTAL_STEPS ? Math.round((dc / TOTAL_STEPS) * 100) : 0;
               return (
@@ -335,13 +363,13 @@ export function Checklist() {
                 >
                   <button type="button" onClick={() => setSelectedId(ck.id)} className="min-w-0 flex-1 text-left">
                     <div className="truncate text-[13px] font-semibold text-foreground">{ck.name}</div>
-                    <div className="mt-0.5 text-[11px] text-faint tabular-nums">{dc} / {TOTAL_STEPS} étapes</div>
+                    <div className="mt-0.5 text-[11px] text-faint tabular-nums">{subLine(ck, dc)}</div>
                   </button>
                   <div className="hidden w-40 shrink-0 sm:block">
                     <Progress value={pct} className="h-1.5" />
                   </div>
                   <span className="w-12 shrink-0 text-right text-sm font-bold tabular-nums text-foreground">{pct}%</span>
-                  <DeleteButton onClick={() => askRemove(ck)} />
+                  {!ck.collab && <DeleteButton onClick={() => askRemove(ck)} />}
                 </div>
               );
             })}
@@ -358,7 +386,7 @@ export function Checklist() {
                 </tr>
               </thead>
               <tbody>
-                {lists.map((ck) => {
+                {shown.map((ck) => {
                   const dc = doneCountOf(ck);
                   const pct = TOTAL_STEPS ? Math.round((dc / TOTAL_STEPS) * 100) : 0;
                   return (
@@ -368,7 +396,7 @@ export function Checklist() {
                           {ck.name}
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-right text-[12px] tabular-nums text-muted-foreground">{dc} / {TOTAL_STEPS}</td>
+                      <td className="px-4 py-3 text-right text-[12px] tabular-nums text-muted-foreground">{ck.collab ? `${stepDef(ck.collab.step).short} · ` : ""}{dc} / {TOTAL_STEPS}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
                           <div className="hidden w-24 sm:block"><Progress value={pct} className="h-1.5" /></div>
@@ -376,7 +404,7 @@ export function Checklist() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex justify-end"><DeleteButton onClick={() => askRemove(ck)} /></div>
+                        <div className="flex justify-end">{!ck.collab && <DeleteButton onClick={() => askRemove(ck)} />}</div>
                       </td>
                     </tr>
                   );
@@ -425,17 +453,18 @@ export function Checklist() {
                 <div className="truncate text-sm font-semibold text-foreground">
                   {selected.name}
                 </div>
-                <button
+                {!selected.virtual && <button
                   type="button"
                   onClick={() => startEdit(selected)}
                   className="shrink-0 rounded-md p-1 text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                   aria-label="Modifier le titre"
                 >
                   <Pencil className="h-3.5 w-3.5" />
-                </button>
+                </button>}
               </div>
             )}
             <div className="mt-0.5 text-[11px] text-faint">
+              {selected.collab ? `Collab : ${stepDef(selected.collab.step).label} · ` : ""}
               {doneCount} / {TOTAL_STEPS} étapes faites
             </div>
           </div>
@@ -443,7 +472,7 @@ export function Checklist() {
             <div className="text-3xl font-bold tracking-tight tabular-nums text-foreground">
               {pct}%
             </div>
-            {doneCount > 0 && (
+            {Object.keys(selected.done).length > 0 && (
               <button
                 type="button"
                 onClick={resetSelected}
@@ -460,7 +489,7 @@ export function Checklist() {
       {/* Phases */}
       <div className="space-y-4">
         {PHASES.map((phase) => {
-          const phaseDone = phase.steps.filter((st) => selected.done[st.id]).length;
+          const phaseDone = phase.steps.filter((st) => isChecked(selected, st.id)).length;
           return (
             <div
               key={phase.title}
@@ -477,13 +506,16 @@ export function Checklist() {
 
               <ul className="space-y-1">
                 {phase.steps.map((step) => {
-                  const checked = !!selected.done[step.id];
+                  const auto = autoChecked(step.id, selected.collab?.step);
+                  const checked = auto || !!selected.done[step.id];
                   return (
                     <li key={step.id}>
                       <button
                         type="button"
                         onClick={() => toggleStep(step.id)}
-                        className="group flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-rowhover"
+                        disabled={auto}
+                        title={auto ? "Cochée par la collab" : undefined}
+                        className="group flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-rowhover disabled:cursor-default disabled:hover:bg-transparent"
                       >
                         {/* Case animée */}
                         <span

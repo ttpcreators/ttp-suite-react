@@ -8,6 +8,7 @@ import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/c
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { CreatorPickerField } from "@/components/ui/creator-picker";
 
 /**
  * Alertes d'échéance de contrats : on enregistre les contrats actifs (créateur,
@@ -86,7 +87,6 @@ export function Echeances() {
   const [draft, setDraft] = useState<Blank>(blank());
   const [pendingDel, setPendingDel] = useState<null | { message: string; run: () => void }>(null);
 
-  const creatorOptions = creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url }));
 
   const rows = useMemo(() => {
     return list
@@ -253,11 +253,11 @@ export function Echeances() {
         onSubmit={submit}
         submitLabel={editId ? "Enregistrer" : "Ajouter"}
       >
-        <SelectField label="Créateur" value={draft.creator} onChange={(v) => setDraft({ ...draft, creator: v })} options={creatorOptions} className="sm:min-w-[180px]" />
+        <CreatorPickerField label="Créateur" value={draft.creator} onChange={(v) => setDraft({ ...draft, creator: v })} creators={creators} className="sm:min-w-[180px]" />
         <SelectField label="Type" value={draft.type} onChange={(v) => setDraft({ ...draft, type: v })} options={TYPE_OPTIONS} className="sm:min-w-[150px]" />
         <TextField label="Date de début" type="date" value={draft.start} onChange={(v) => setDraft({ ...draft, start: v })} className="sm:min-w-[150px]" />
         <TextField label="Durée (mois)" type="number" value={draft.months} onChange={(v) => setDraft({ ...draft, months: v })} className="sm:min-w-[110px]" />
-        <TextField label="Note (optionnel)" value={draft.note} onChange={(v) => setDraft({ ...draft, note: v })} className="sm:min-w-[150px]" />
+        <TextField label="Note (optionnel)" value={draft.note} onChange={(v) => setDraft({ ...draft, note: v })} className="sm:min-w-[150px]" mentions={creators} />
       </InlineForm>
 
       {rows.length === 0 ? (

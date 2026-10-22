@@ -15,7 +15,7 @@ import { supabase } from "@/lib/supabase";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
 import { notifyCreator } from "@/lib/push";
-import { AddButton, InlineForm, TextField, SelectField } from "@/components/ui/form";
+import { AddButton, InlineForm, TextField } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { useCreators } from "@/lib/useCreators";
@@ -31,6 +31,7 @@ import { Overlay } from "@/components/mobile/ios-sheet";
 import { buildRecap, publicationDate, readyForRecap, type CollabForRecap, type StepRow } from "@/lib/campaignRecap";
 import { dbUpdate } from "@/lib/db";
 import { EMPTY, fmtDay, todayISO } from "@/lib/dates";
+import { CreatorPickerField } from "@/components/ui/creator-picker";
 
 /** Une petite statistique de campagne (label / valeur). */
 type Kpi = { l: string; v: string };
@@ -313,10 +314,6 @@ export function Debrief() {
   // partent avec les mêmes URL signées (7 j de validité côté marque).
   const shareShotUrls = useShotUrls(shareD?.calc?.shots);
 
-  const creatorOptions = [
-    { value: "", label: "— Choisir —" },
-    ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url })),
-  ];
 
   function resetForm() {
     setBrand("");
@@ -661,11 +658,11 @@ export function Debrief() {
           placeholder="Ex : Sézane, collection été"
           className="sm:min-w-[200px] flex-[2]"
         />
-        <SelectField
+        <CreatorPickerField
           label="Créateur"
           value={creator}
           onChange={setCreator}
-          options={creatorOptions}
+          creators={creators}
           className="sm:min-w-[170px] flex-1"
         />
         <TextField

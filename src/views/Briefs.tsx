@@ -25,6 +25,7 @@ import { getCache, setCache } from "@/lib/viewCache";
 import { openLater } from "@/lib/openLater";
 import { notifyCreator } from "@/lib/push";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { CreatorPickerField } from "@/components/ui/creator-picker";
 
 type Row = {
   id: string;
@@ -344,7 +345,6 @@ export function Briefs() {
     toast("PDF retiré");
   };
 
-  const creatorOptions = [{ value: "", label: "—" }, ...creators.map((c) => ({ value: c.name, label: c.name, img: c.photo_url }))];
 
   const ALL = "__all__";
   // Base : recherche + créatrice (sans le statut) → sert aussi aux compteurs des pastilles de statut.
@@ -372,7 +372,7 @@ export function Briefs() {
             <TextField label="Échéance" type="date" value={editDue} onChange={setEditDue} />
             <TextField label="Objectif" value={editObjectif} onChange={setEditObjectif} />
             <TextField label="Budget" value={editBudget} onChange={setEditBudget} />
-            <SelectField label="Créateur" value={editCreator} onChange={setEditCreator} options={creatorOptions} />
+            <CreatorPickerField label="Créateur" value={editCreator} onChange={setEditCreator} creators={creators} />
             <AutoGrowTextField
               label="Script"
               value={editScript}
@@ -609,7 +609,7 @@ export function Briefs() {
 
       <InlineForm open={formOpen} title="Nouveau brief" onClose={() => setFormOpen(false)} onSubmit={submit}>
         <TextField label="Marque" value={brand} onChange={setBrand} />
-        <SelectField label="Créateur" value={creator} onChange={setCreator} options={creatorOptions} />
+        <CreatorPickerField label="Créateur" value={creator} onChange={setCreator} creators={creators} />
         <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />
         <TextField label="Échéance" type="date" value={due} onChange={setDue} />
         <TextField label="Budget" value={budget} onChange={setBudget} />

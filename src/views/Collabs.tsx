@@ -17,7 +17,7 @@ import { useEffect, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
-import { AddButton, InlineForm, TextField, AutoGrowTextField, SelectField, Picker } from "@/components/ui/form";
+import { AddButton, InlineForm, TextField, AutoGrowTextField, Picker } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useCreators } from "@/lib/useCreators";
@@ -32,6 +32,7 @@ import { fmtCompact } from "@/lib/timeSeries";
 import { igRefresh, igWhyText, postKind, useIgColumn, type IgCollab } from "@/lib/instagram";
 import type { TtCollab } from "@/lib/tiktok";
 import type { YtCollab } from "@/lib/youtube";
+import { CreatorPickerField } from "@/components/ui/creator-picker";
 
 type Row = {
   id: string;
@@ -465,7 +466,6 @@ export function Collabs() {
       return n;
     });
 
-  const creatorOptions = [{ value: "", label: "—" }, ...creators.map((c) => ({ value: c.name, label: c.name, img: c.photo_url }))];
 
   const ALL = "__all__";
   // Tous les filtres, sauf éventuellement une facette (pour compter ses pastilles sur les autres filtres).
@@ -603,13 +603,13 @@ export function Collabs() {
           </div>
           <div className="flex flex-col gap-3">
             <TextField label="Marque" value={eBrand} onChange={setEBrand} />
-            <SelectField label="Créateur" value={eCreator} onChange={setECreator} options={creatorOptions} />
+            <CreatorPickerField label="Créateur" value={eCreator} onChange={setECreator} creators={creators} />
             <TextField label="Libellé de la collab" value={eTitle} onChange={setETitle} placeholder="ex Campagne été" />
             <TextField label="Contact marque" value={eContact} onChange={setEContact} />
             <TextField label="Livrables" value={eDeliverables} onChange={setEDeliverables} placeholder="ex 3 posts · 1 reel" />
             <TextField label="Cachet" value={eCachet} onChange={setECachet} />
             <TextField label="Site de la marque (pour son logo)" value={eSite} onChange={setESite} placeholder="ex. seoni.fr" />
-            <AutoGrowTextField label="Note" value={eNote} onChange={setENote} placeholder="Contexte, angle, points d'attention…" />
+            <AutoGrowTextField label="Note" value={eNote} onChange={setENote} placeholder="Contexte, angle, points d'attention…" mentions={creators} />
             <button
               type="button"
               onClick={() => saveEdit(row.id)}
@@ -1118,12 +1118,12 @@ export function Collabs() {
 
       <InlineForm open={formOpen} title="Nouvelle collab" onClose={() => setFormOpen(false)} onSubmit={submit}>
         <TextField label="Marque" value={brand} onChange={setBrand} />
-        <SelectField label="Créateur" value={creator} onChange={setCreator} options={creatorOptions} />
+        <CreatorPickerField label="Créateur" value={creator} onChange={setCreator} creators={creators} />
         <TextField label="Libellé de la collab" value={title} onChange={setTitle} placeholder="ex Campagne été" />
         <TextField label="Contact marque" value={contact} onChange={setContact} />
         <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />
         <TextField label="Cachet" value={cachet} onChange={setCachet} />
-        <AutoGrowTextField label="Note" value={note} onChange={setNote} placeholder="Contexte, angle, points d'attention…" className="min-w-full" />
+        <AutoGrowTextField label="Note" value={note} onChange={setNote} placeholder="Contexte, angle, points d'attention…" className="min-w-full" mentions={creators} />
       </InlineForm>
 
       {content}

@@ -866,9 +866,9 @@ export function Todo() {
       className="flex flex-col gap-4"
     >
       <div className="flex flex-wrap items-end gap-3">
-        <TextField label="Tâche" value={editText} onChange={setEditText} className="min-w-full" />
-        <AutoGrowTextField label="Description" value={editDescr} onChange={setEditDescr} className="min-w-full" />
-        <TextField label="Avancement" value={editNote} onChange={setEditNote} className="min-w-full" placeholder="Infos en plus, rappel, lien…" />
+        <TextField label="Tâche" value={editText} onChange={setEditText} className="min-w-full" mentions={creators} />
+        <AutoGrowTextField label="Description" value={editDescr} onChange={setEditDescr} className="min-w-full" mentions={creators} />
+        <TextField label="Avancement" value={editNote} onChange={setEditNote} className="min-w-full" placeholder="Infos en plus, rappel, lien…" mentions={creators} />
         <TextField label="Échéance" type="date" value={editDue} onChange={setEditDue} />
         <SelectField
           label="Priorité"
@@ -1537,9 +1537,9 @@ export function Todo() {
             }}
             onSubmit={submit}
           >
-            <TextField label="Tâche" value={text} onChange={setText} icon={Type} placeholder="Ex : Contacter la marque…" />
-            <AutoGrowTextField label="Description" value={descr} onChange={setDescr} icon={AlignLeft} placeholder="Détaille la tâche, le champ s'agrandit tout seul…" className="min-w-full" />
-            <TextField label="Avancement (optionnel)" value={note} onChange={setNote} icon={MessageSquarePlus} placeholder="Infos en plus, rappel, lien…" />
+            <TextField label="Tâche" value={text} onChange={setText} icon={Type} placeholder="Ex : Contacter la marque…" mentions={creators} />
+            <AutoGrowTextField label="Description" value={descr} onChange={setDescr} icon={AlignLeft} mentions={creators} placeholder="Détaille la tâche, le champ s'agrandit tout seul…" className="min-w-full" />
+            <TextField label="Avancement (optionnel)" value={note} onChange={setNote} icon={MessageSquarePlus} placeholder="Infos en plus, rappel, lien…" mentions={creators} />
             <TextField label="Échéance" type="date" value={due} onChange={setDue} icon={CalendarClock} />
             <SelectField
               label="Priorité"

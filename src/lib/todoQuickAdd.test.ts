@@ -126,4 +126,11 @@ describe("liste des créateurs sous « @ »", async () => {
     expect(b.text).toBe("Appeler @Lea Martin ");
     expect(parseQuickAdd(a.text, roster).creators ?? [parseQuickAdd(a.text, roster).creator]).toContain("justine gentet");
   });
+  it("marche aussi dans un texte sur plusieurs lignes (notes, descriptions)", () => {
+    const text = "Ordre du jour\n@pi";
+    expect(mentionAt(text, text.length)).toEqual({ start: 14, query: "pi" });
+    const r = insertMention(text, 14, text.length, "pierre gentet", roster);
+    expect(r.text).toBe("Ordre du jour\n@Pierre ");
+    expect(r.caret).toBe(r.text.length);
+  });
 });

@@ -20,6 +20,7 @@ import { PeriodFilter, periodsFrom, inPeriod } from "@/components/ui/period-filt
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { CreatorPickerField } from "@/components/ui/creator-picker";
 
 type GView = "cards" | "list";
 
@@ -85,10 +86,6 @@ export function Gifting() {
   const periods = periodsFrom(list.map((g) => g.received_on));
   const shown = period ? list.filter((g) => inPeriod(g.received_on, period)) : list;
 
-  const creatorOptions = [
-    { value: "", label: "— Choisir —" },
-    ...creators.map((c) => ({ value: c.name, label: titleCase(c.name), img: c.photo_url })),
-  ];
 
   function resetForm() {
     setEditId(null);
@@ -263,7 +260,7 @@ export function Gifting() {
         onSubmit={save}
         submitLabel={editId ? "Enregistrer" : "Ajouter"}
       >
-        <SelectField label="Créateur" value={creator} onChange={setCreator} options={creatorOptions} className="sm:min-w-[170px] flex-1" />
+        <CreatorPickerField label="Créateur" value={creator} onChange={setCreator} creators={creators} className="sm:min-w-[170px] flex-1" />
         <TextField label="Marque / expéditeur" value={brand} onChange={setBrand} placeholder="ex Sézane" className="sm:min-w-[170px] flex-1" />
         <TextField label="Produit / cadeau" value={product} onChange={setProduct} placeholder="ex Sac cuir + foulard" className="sm:min-w-[200px] flex-[2]" />
         <TextField label="Valeur estimée" value={value} onChange={setValue} placeholder="ex ≈ 220 €" className="sm:min-w-[120px] flex-1" />
@@ -291,7 +288,7 @@ export function Gifting() {
         )}
 
         <AutoGrowTextField label="Mentions à rappeler au créateur" value={mentions} onChange={setMentions} placeholder={DEFAULT_MENTIONS} className="min-w-full" minRows={2} />
-        <AutoGrowTextField label="Note (infos libres)" value={note} onChange={setNote} placeholder="Contexte, historique, préférences…" className="min-w-full" minRows={2} />
+        <AutoGrowTextField label="Note (infos libres)" value={note} onChange={setNote} placeholder="Contexte, historique, préférences…" className="min-w-full" minRows={2} mentions={creators} />
       </InlineForm>
 
       {/* Contenu */}

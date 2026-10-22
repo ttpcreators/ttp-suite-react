@@ -11,8 +11,7 @@ import {
   InlineForm,
   TextField,
   AutoGrowTextField,
-  SelectField,
-} from "@/components/ui/form";
+  } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { useCreators } from "@/lib/useCreators";
@@ -26,6 +25,7 @@ import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type Ap
 import { getCache, setCache } from "@/lib/viewCache";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { CreatorPickerField } from "@/components/ui/creator-picker";
 
 type Row = {
   id: string;
@@ -334,13 +334,8 @@ export function Idees() {
         onClose={() => setFormOpen(false)}
         onSubmit={submit}
       >
-        <AutoGrowTextField label="Idée" value={text} onChange={setText} placeholder="Décris ton idée — le champ s'agrandit tout seul…" className="min-w-full" />
-        <SelectField
-          label="Pour quel créateur ? (apparaît dans son espace)"
-          value={formCreator}
-          onChange={setFormCreator}
-          options={[{ value: "", label: "Idée générale (aucun créateur)" }, ...creatorOptions]}
-        />
+        <AutoGrowTextField label="Idée" value={text} onChange={setText} placeholder="Décris ton idée — le champ s'agrandit tout seul…" className="min-w-full" mentions={creators} />
+        <CreatorPickerField label="Créateur" value={formCreator} onChange={setFormCreator} creators={creators} emptyLabel="Idée générale" />
         <TextField label="Commentaire (optionnel)" value={note} onChange={setNote} placeholder="Infos, rappel, lien…" />
       </InlineForm>
 

@@ -22,6 +22,7 @@ import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { CreatorPickerField } from "@/components/ui/creator-picker";
 
 type Row = {
   id: string;
@@ -407,12 +408,7 @@ export function Documents() {
           {fileName && <span className="truncate text-[10px] text-faint">{fileName}</span>}
         </label>
         <SelectField label="Type" value={docType} onChange={setDocType} options={TYPE_OPTIONS} />
-        <SelectField
-          label="Créateur (optionnel)"
-          value={docCreator}
-          onChange={setDocCreator}
-          options={[{ value: "", label: "—" }, ...creators.map((c) => ({ value: c.name, label: c.name }))]}
-        />
+        <CreatorPickerField label="Créateur" value={docCreator} onChange={setDocCreator} creators={creators} />
       </InlineForm>
 
       {rows !== null && rows.length > 1 && (

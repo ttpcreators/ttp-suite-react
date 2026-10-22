@@ -13,7 +13,7 @@ export const VIEW_HINTS: Partial<Record<ViewId, string>> = {
   roster: "Tes créateurs : abonnés, engagement, CA, et qui doit mettre ses chiffres à jour.",
   engagement: "Calcule le taux d'engagement d'un créateur à partir de ses statistiques.",
   suivi: "L'évolution des abonnés et de l'engagement de tes créateurs dans le temps.",
-  pricing: "Combien facturer une collab : le prix se calcule à partir des vraies vues du créateur et de ton barème.",
+  pricing: "Combien facturer une collab. Influence : le créateur publie sur son compte, le prix vient des vues attendues, de la niche et de l'engagement. UGC : forfait par contenu, qui monte surtout avec les droits d'exploitation. Fourchette HT indicative.",
   mediakit: "Le media kit de chaque créateur : ce que tu remplis ici se met à jour en ligne.",
   collabs: "Chaque collaboration, de la signature au paiement, en 11 étapes.",
   briefs: "Le brief et le script de chaque campagne : à faire valider, puis à transmettre.",

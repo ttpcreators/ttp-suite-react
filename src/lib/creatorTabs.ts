@@ -11,7 +11,7 @@
 export type CsTab =
   | "accueil" | "missions" | "mails" | "gains" | "profil"
   | "guide" | "evolution" | "rapport" | "debrief" | "roadmap"
-  | "todo" | "ideas" | "gifting" | "planning"
+  | "aujourdhui" | "todo" | "ideas" | "gifting" | "planning"
   | "mediakit" | "documents" | "contacts";
 
 /** Les 5 onglets de la barre du bas, dans l'ordre de la maquette. */
@@ -22,7 +22,7 @@ export type CsMainTab = (typeof CS_MAIN_TABS)[number];
 export const CS_ALL_TABS: readonly CsTab[] = [
   ...CS_MAIN_TABS,
   "guide", "evolution", "rapport", "debrief", "roadmap",
-  "todo", "ideas", "gifting", "planning",
+  "aujourdhui", "todo", "ideas", "gifting", "planning",
   "mediakit", "documents", "contacts",
 ];
 

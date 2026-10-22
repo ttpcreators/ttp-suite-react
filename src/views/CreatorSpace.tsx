@@ -1,6 +1,6 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { lazyImport } from "@/lib/appUpdate";
-import { TtpMail, TtpMore, TtpStar, TtpContacts, TtpEvolution, TtpFiles, TtpGains, TtpGift, TtpGuide, TtpHome, TtpIdea, TtpMediakit, TtpMission, TtpPlanning, TtpReport, TtpRoad, TtpStats, TtpTodo } from "@/components/icons/ttp-icons";
+import { TtpMail, TtpMore, TtpStar, TtpContacts, TtpEvolution, TtpFiles, TtpGains, TtpGift, TtpGuide, TtpHome, TtpIdea, TtpMediakit, TtpMission, TtpPlanning, TtpReport, TtpRoad, TtpStats, TtpToday, TtpTodo } from "@/components/icons/ttp-icons";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { Spin } from "@/components/ui/loader";
 import { motion, AnimatePresence } from "motion/react";
@@ -58,6 +58,7 @@ import { BriefResumeView } from "@/components/brief-resume";
 import { hasResume, parseResume, type BriefResume } from "@/lib/briefResume";
 import { brandInitial, briefKey, buildMissions, CREATOR_PHASES, creatorPhaseIndex, missionState, type Mission, type MissionCollab } from "@/lib/creatorMissions";
 import { creatorSteps, whenLabel, type NextStep } from "@/lib/creatorNextStep";
+import { CreatorToday } from "@/components/CreatorToday";
 import { sharedWithText } from "@/lib/todoCreators";
 import { selectTodosFor } from "@/lib/todoCreatorsDb";
 import { gainsSummary, invoiceTone } from "@/lib/creatorGains";
@@ -156,6 +157,7 @@ const CREATOR_GROUPS: {
     label: "Mon travail",
     icon: ListChecks,
     items: [
+      { id: "aujourdhui", label: "Aujourd'hui", icon: TtpToday },
       { id: "todo", label: "À faire", icon: TtpTodo },
       { id: "ideas", label: "Idées", icon: TtpIdea },
       { id: "gifting", label: "Gifting", icon: TtpGift },
@@ -282,6 +284,7 @@ const TAB_HINTS: Partial<Record<Tab, string>> = {
   mails: "Les mails des marques qui t'écrivent, suivis avec ton agence.",
   gains: "Ce que tu as gagné, ce qui arrive, et ta facture si l'agence ne l'a pas encore saisie.",
   profil: "Toutes tes rubriques, puis tes infos, tes réseaux connectés et tes réglages.",
+  aujourdhui: "Tout ce qui t'attend, rangé par moment : contenus à rendre, rendez-vous, tâches, stats et factures. « Demain » repousse une action d'un jour, « C'est fait » la range.",
   todo: "Ce que tu as à faire, et tout ce dont tu as besoin de la part de l'agence.",
   ideas: "Tes idées de contenus et de collabs : l'agence les voit et peut rebondir.",
   gifting: "Les produits que les marques t'ont offerts, et ce qu'ils attendent en retour.",
@@ -1419,16 +1422,17 @@ export function CreatorSpace({
     .filter((i) => i.status !== "brouillon")
     .reduce((a, i) => a + parseAmount(i.amount), 0);
 
-  const markTodo = async (td: Todo, next: boolean) => {
+  const markTodo = async (td: Todo, next: boolean): Promise<boolean> => {
     // On écrit done ET status ensemble (comme l'agence) → l'affichage statut/kanban
     // reste cohérent des deux côtés (audit : ne pas laisser status désynchronisé).
     const status = next ? "Fait" : "À faire";
     if (await dbUpdate("todos", td.id, { done: next, status })) {
       setTodos((prev) => prev.map((x) => (x.id === td.id ? { ...x, done: next, status } : x)));
       toast(next ? t("Fait ✓") : t("À refaire"));
-    } else {
-      toast(t("Erreur — réessaie"));
+      return true;
     }
+    toast(t("Erreur — réessaie"));
+    return false;
   };
 
   // Change le statut d'une tâche depuis la vue colonnes (done dérivé de « Fait »).
@@ -2010,6 +2014,19 @@ export function CreatorSpace({
             <CreatorGuide firstName={firstName} onGoto={(t) => setTab(t as Tab)} onSendStats={() => setStatsModalOpen(true)} />
           )}
 
+          {/* Aujourd'hui : les actions rangées par moment (src/components/CreatorToday.tsx) */}
+          {tab === "aujourdhui" && (
+            <CreatorToday
+              data={{ briefs, collabs, todos, events, invoices, statsStale }}
+              onOpen={openStep}
+              onDoneTodo={async (id) => {
+                const td = todos.find((x) => x.id === id);
+                return td ? markTodo(td, true) : false;
+              }}
+              isHigh={(id) => todos.some((x) => x.id === id && x.priority === "haute")}
+            />
+          )}
+
           {/* Accueil */}
           {tab === "accueil" && (() => {
             // Abonnés CUMULÉS dans le temps : les réseaux ne sont pas relevés le même
@@ -2151,9 +2168,14 @@ export function CreatorSpace({
               {/* À faire : les étapes suivantes, une action par ligne */}
               {steps.length > 1 && (
                 <section>
-                  <h2 className="mb-2.5 flex items-baseline gap-2 px-1 text-[20px] font-bold tracking-[-0.02em]">
-                    {t("À faire")} <span className="text-[16px] font-semibold tabular-nums text-muted-foreground">{steps.length - 1}</span>
-                  </h2>
+                  <div className="mb-2.5 flex items-baseline justify-between gap-2 px-1">
+                    <h2 className="flex items-baseline gap-2 text-[20px] font-bold tracking-[-0.02em]">
+                      {t("À faire")} <span className="text-[16px] font-semibold tabular-nums text-muted-foreground">{steps.length - 1}</span>
+                    </h2>
+                    <button type="button" onClick={() => setTab("aujourdhui")} className="-my-2 px-1 py-2 text-[14px] font-medium text-primary">
+                      {t("Tout voir")}
+                    </button>
+                  </div>
                   <div className="overflow-hidden rounded-[20px] border border-border bg-surface shadow-sm">
                     {steps.slice(1, 5).map((s, i) => {
                       const Icon = STEP_ICON[s.kind];

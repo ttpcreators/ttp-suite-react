@@ -106,7 +106,7 @@ export const INF_PLATFORMS: InfPlatform[] = [
       { key: "reel", label: "Reel", cpm: [16, 32], rate: 0.3 },
       { key: "post", label: "Post feed", cpm: [9, 18], rate: 0.12 },
       { key: "carrousel", label: "Carrousel", cpm: [10, 20], rate: 0.15 },
-      { key: "story", label: "Story (×3)", cpm: [7, 14], rate: 0.07 },
+      { key: "story", label: "3 stories", cpm: [7, 14], rate: 0.07 },
     ],
   },
   {
@@ -129,7 +129,7 @@ export const INF_PLATFORMS: InfPlatform[] = [
   {
     key: "snapchat",
     label: "Snapchat",
-    formats: [{ key: "story", label: "Story (×3)", cpm: [6, 12], rate: 0.15 }],
+    formats: [{ key: "story", label: "3 stories", cpm: [6, 12], rate: 0.15 }],
   },
   { key: "x", label: "X", formats: [{ key: "post", label: "Post", cpm: [4, 9], rate: 0.05 }] },
 ];
@@ -223,7 +223,7 @@ export const EXCLUSIVITY = [
 ];
 export const USAGE_RIGHTS = [
   { value: "none", label: "Aucun", m: 0 },
-  { value: "organique", label: "Repost par la marque (organique)", m: 0.15 },
+  { value: "organique", label: "Repost par la marque", m: 0.15 },
   { value: "ads1", label: "Pub · 1 mois", m: 0.2 },
   { value: "ads3", label: "Pub · 3 mois", m: 0.35 },
   { value: "ads6", label: "Pub · 6 mois", m: 0.5 },
@@ -305,10 +305,10 @@ export type UgcType = { key: string; label: string; base: [number, number] };
 
 /** Forfaits UGC 2026 (€ par livrable, production incluant un montage simple). */
 export const UGC_TYPES: UgcType[] = [
-  { key: "video_court", label: "Vidéo courte (≤ 30s)", base: [120, 280] },
-  { key: "video_long", label: "Vidéo longue (30 à 60 s)", base: [180, 400] },
+  { key: "video_court", label: "Vidéo courte, 30 s max", base: [120, 280] },
+  { key: "video_long", label: "Vidéo longue, 30 à 60 s", base: [180, 400] },
   { key: "photo", label: "Photo", base: [50, 130] },
-  { key: "carrousel", label: "Carrousel photos (3 à 5)", base: [120, 250] },
+  { key: "carrousel", label: "Carrousel de 3 à 5 photos", base: [120, 250] },
   { key: "unboxing", label: "Unboxing / démo produit", base: [150, 320] },
   { key: "hook", label: "Hook / variante suppl.", base: [40, 90] },
 ];
@@ -323,7 +323,7 @@ export const ugcLevelMult = (v: string): number => UGC_LEVELS.find((l) => l.valu
 
 /** Droits d'exploitation par la marque (en % du contenu). Le cœur du prix UGC. */
 export const UGC_USAGE = [
-  { value: "none", label: "Aucun (organique marque)", m: 0 },
+  { value: "none", label: "Aucun", m: 0 },
   { value: "ads3", label: "Ads · 3 mois", m: 0.3 },
   { value: "ads6", label: "Ads · 6 mois", m: 0.5 },
   { value: "ads12", label: "Ads · 12 mois", m: 0.8 },

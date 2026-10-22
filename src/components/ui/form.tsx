@@ -7,6 +7,7 @@ import { useNavActionSlot } from "@/lib/navAction";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "./select";
 import { DateInput } from "./date-range-picker";
 import { useT } from "@/lib/i18n";
+import { useCreatorMention, type MentionCreator } from "./creator-mention";
 
 // Enveloppe « input group » : la BORDURE + le halo de focus sont portés par le
 // conteneur (pas par l'input), et une icône optionnelle vit à l'intérieur du champ
@@ -185,6 +186,7 @@ export function TextField({
   type = "text",
   className,
   icon: Icon,
+  mentions,
 }: {
   label: string;
   value: string;
@@ -193,7 +195,11 @@ export function TextField({
   type?: string;
   className?: string;
   icon?: LucideIcon;
+  /** Roster : « @ » propose les créateurs (photo + nom) et insère « @Léna ». */
+  mentions?: readonly MentionCreator[];
 }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const mention = useCreatorMention(ref, type === "text" ? mentions : undefined, value, onChange);
   // Dates : même calendrier que le sélecteur de période (pas le calendrier natif).
   if (type === "date") {
     return (
@@ -206,15 +212,21 @@ export function TextField({
   }
   return (
     <Field label={label} className={className}>
-      <div className={shellCls}>
+      <div className={cn(shellCls, mention.popup !== null && "relative")}>
         {Icon && <Icon className="h-4 w-4 shrink-0 text-faint" />}
         <input
+          ref={ref}
           type={type}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            onChange(e.target.value);
+            mention.sync(e.currentTarget);
+          }}
+          {...mention.fieldProps}
           placeholder={placeholder}
           className={cn(bareCtrl, "py-2.5")}
         />
+        {mention.popup}
       </div>
     </Field>
   );
@@ -228,6 +240,7 @@ export function TextAreaField({
   rows = 3,
   className,
   icon: Icon,
+  mentions,
 }: {
   label: string;
   value: string;
@@ -236,18 +249,28 @@ export function TextAreaField({
   rows?: number;
   className?: string;
   icon?: LucideIcon;
+  /** Roster : « @ » propose les créateurs (photo + nom) et insère « @Léna ». */
+  mentions?: readonly MentionCreator[];
 }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const mention = useCreatorMention(ref, mentions, value, onChange);
   return (
     <Field label={label} className={className}>
-      <div className={shellTopCls}>
+      <div className={cn(shellTopCls, mention.popup !== null && "relative")}>
         {Icon && <Icon className="mt-0.5 h-4 w-4 shrink-0 text-faint" />}
         <textarea
+          ref={ref}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            onChange(e.target.value);
+            mention.sync(e.currentTarget);
+          }}
+          {...mention.fieldProps}
           placeholder={placeholder}
           rows={rows}
           className={cn(bareCtrl, "resize-y leading-relaxed")}
         />
+        {mention.popup}
       </div>
     </Field>
   );
@@ -263,6 +286,7 @@ export function AutoGrowTextField({
   minRows = 2,
   className,
   icon: Icon,
+  mentions,
 }: {
   label: string;
   value: string;
@@ -271,8 +295,11 @@ export function AutoGrowTextField({
   minRows?: number;
   className?: string;
   icon?: LucideIcon;
+  /** Roster : « @ » propose les créateurs (photo + nom) et insère « @Léna ». */
+  mentions?: readonly MentionCreator[];
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const mention = useCreatorMention(ref, mentions, value, onChange);
   // Recale la hauteur sur le contenu à chaque changement de valeur (y compris
   // quand le formulaire est réinitialisé après envoi → revient à minRows).
   useLayoutEffect(() => {
@@ -283,16 +310,21 @@ export function AutoGrowTextField({
   }, [value]);
   return (
     <Field label={label} className={className}>
-      <div className={shellTopCls}>
+      <div className={cn(shellTopCls, mention.popup !== null && "relative")}>
         {Icon && <Icon className="mt-0.5 h-4 w-4 shrink-0 text-faint" />}
         <textarea
           ref={ref}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            onChange(e.target.value);
+            mention.sync(e.currentTarget);
+          }}
+          {...mention.fieldProps}
           placeholder={placeholder}
           rows={minRows}
           className={cn(bareCtrl, "resize-none overflow-hidden leading-relaxed")}
         />
+        {mention.popup}
       </div>
     </Field>
   );
