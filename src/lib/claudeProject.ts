@@ -1,48 +1,45 @@
 /**
  * Bouton « Demander à Claude » de la fiche contact (demande de Marc, 2026-10-22).
- *  - Compte de Marc : ouvre SA conversation Claude (ci-dessous), dans l'app Claude du Mac.
- *    Une conversation existante n'accepte pas de texte pré-rempli : la fiche du contact est
- *    copiée et se colle avec Cmd+V.
- *  - Autres comptes (Gianni…) : la conversation de Marc ne leur est pas accessible ; on ouvre
- *    une NOUVELLE conversation sur LEUR Claude, zone de message déjà remplie avec la fiche.
- * Lien `claude://claude.ai/…` (schéma déclaré par l'app Claude), site claude.ai en secours.
+ * Ouvre une NOUVELLE conversation, la barre de texte déjà remplie avec la fiche du contact
+ * (`claude.ai/new?q=…`). Une conversation existante n'accepte pas de texte pré-rempli
+ * (vérifié 2026-10-22), d'où la nouvelle conversation.
+ *  - Compte de Marc : la conversation s'ouvre DANS son projet « Assistant mail/message -
+ *    TTP Creators » (`&project=<id>`, vérifié : projet sélectionné + texte présent).
+ *  - Autres comptes (Gianni…) : le projet de Marc ne leur est pas accessible ; nouvelle
+ *    conversation sur LEUR Claude, avec la même fiche.
+ * Lien `claude://claude.ai/…` (schéma déclaré par l'app Claude du Mac), site en secours.
  */
-const PERSONAL_CHATS: Record<string, string> = {
-  "marcbouraoui@gmail.com": "claude.ai/chat/fc5ff6e6-5ee9-4a82-9c6b-0ada019bac5f",
-  "marc@ttpcreators.pro": "claude.ai/chat/fc5ff6e6-5ee9-4a82-9c6b-0ada019bac5f",
+const PERSONAL_PROJECTS: Record<string, string> = {
+  "marcbouraoui@gmail.com": "019f77a8-6eef-7680-9b95-532e9cc66f6e",
+  "marc@ttpcreators.pro": "019f77a8-6eef-7680-9b95-532e9cc66f6e",
 };
 
-/** Conversation Claude personnelle de ce compte, sinon null. */
-export function personalChat(email: string | null | undefined): string | null {
-  return PERSONAL_CHATS[(email ?? "").trim().toLowerCase()] ?? null;
+/** Projet Claude personnel de ce compte, sinon null. */
+export function personalProject(email: string | null | undefined): string | null {
+  return PERSONAL_PROJECTS[(email ?? "").trim().toLowerCase()] ?? null;
 }
 
-function target(path: string, scheme: "claude" | "https", text?: string): string {
-  const base = `${scheme}://${path}`;
-  if (!text) return base;
+function target(scheme: "claude" | "https", text: string, project: string | null): string {
+  const params: string[] = [];
   const q = encodeURIComponent(text);
-  return q.length <= 6000 ? `${base}?q=${q}` : base;
+  if (q.length <= 6000) params.push(`q=${q}`);
+  if (project) params.push(`project=${encodeURIComponent(project)}`);
+  return `${scheme}://claude.ai/new${params.length ? `?${params.join("&")}` : ""}`;
 }
 
-/**
- * Ouvre Claude dans l'app (site en secours au bout d'1,5 s si l'app ne répond pas).
- * `chat` = conversation personnelle (texte collé à la main) ; sinon nouvelle conversation
- * pré-remplie avec `text`.
- */
-export function openClaude(chat: string | null, text: string): void {
-  const path = chat ?? "claude.ai/new";
-  const q = chat ? undefined : text;
+/** Ouvre Claude dans l'app (site en secours au bout d'1,5 s si l'app ne répond pas). */
+export function openClaude(project: string | null, text: string): void {
   let left = false;
   const away = () => {
     left = true;
   };
   window.addEventListener("blur", away, { once: true });
   document.addEventListener("visibilitychange", away, { once: true });
-  window.location.href = target(path, "claude", q);
+  window.location.href = target("claude", text, project);
   window.setTimeout(() => {
     window.removeEventListener("blur", away);
     document.removeEventListener("visibilitychange", away);
-    if (!left && document.visibilityState === "visible") window.open(target(path, "https", q), "_blank", "noopener");
+    if (!left && document.visibilityState === "visible") window.open(target("https", text, project), "_blank", "noopener");
   }, 1500);
 }
 
