@@ -1,16 +1,12 @@
 /**
- * Bouton « Demander à Claude » de la fiche contact : ouvre la conversation Claude de Marc
- * avec le contexte du contact.
+ * Bouton « Demander à Claude » de la fiche contact : ouvre une NOUVELLE conversation dans
+ * l'app Claude du Mac (`claude://claude.ai/new?q=…`, schéma déclaré par l'app ; le site en
+ * secours), la zone de message déjà remplie avec la fiche du contact. Une conversation
+ * existante n'accepte pas de texte pré-rempli (essai 2026-10-22 : rien n'apparaissait),
+ * d'où la nouvelle conversation. Le texte est aussi copié (Cmd+V si trop long pour le lien).
  */
-/**
- * Conversation Claude choisie par Marc (2026-10-22) pour les demandes depuis une fiche contact.
- * Ouverte dans l'app Claude du Mac (`claude://claude.ai/…`, schéma déclaré par l'app), sinon
- * sur le site. Le contexte du contact est copié dans le presse-papiers et passé aussi en `?q=`
- * (pris en compte si Claude le permet pour une conversation existante ; sinon Cmd+V).
- */
-const CLAUDE_CHAT_PATH = "claude.ai/chat/fc5ff6e6-5ee9-4a82-9c6b-0ada019bac5f";
-
-function withText(base: string, text?: string): string {
+function newChat(scheme: "claude" | "https", text?: string): string {
+  const base = `${scheme}://claude.ai/new`;
   if (!text) return base;
   const q = encodeURIComponent(text);
   return q.length <= 6000 ? `${base}?q=${q}` : base;
@@ -24,11 +20,11 @@ export function openClaudeProject(text?: string): void {
   };
   window.addEventListener("blur", away, { once: true });
   document.addEventListener("visibilitychange", away, { once: true });
-  window.location.href = withText(`claude://${CLAUDE_CHAT_PATH}`, text);
+  window.location.href = newChat("claude", text);
   window.setTimeout(() => {
     window.removeEventListener("blur", away);
     document.removeEventListener("visibilitychange", away);
-    if (!left && document.visibilityState === "visible") window.open(withText(`https://${CLAUDE_CHAT_PATH}`, text), "_blank", "noopener");
+    if (!left && document.visibilityState === "visible") window.open(newChat("https", text), "_blank", "noopener");
   }, 1500);
 }
 
@@ -54,6 +50,8 @@ export function contactBrief(c: {
 }): string {
   const who = [clean(c.person), clean(c.role)].filter(Boolean).join(", ");
   const lines: Line[] = [
+    "Tu es l'assistant mails et messages de TTP Creators (agence de talents, créateurs de contenu et sportifs). Aide-moi avec ce contact de marque. Si le connecteur TTP Suite est branché, sers-t'en pour retrouver nos échanges et nos créateurs. N'invente aucun chiffre ni engagement.",
+    "",
     `Contact TTP Creators : ${clean(c.brand) || "(marque inconnue)"}${who ? ` · ${who}` : ""}`,
     clean(c.email) && `Email : ${clean(c.email)}`,
     clean(c.phone) && `Téléphone : ${clean(c.phone)}`,
