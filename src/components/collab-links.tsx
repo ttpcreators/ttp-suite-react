@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link2, Plus } from "@/components/icons";
+import { Link2, Plus, Sparkles } from "@/components/icons";
 import { SelectField, Picker } from "@/components/ui/form";
 import { StatusPill } from "@/components/ui/status-pill";
 import { HelpTip } from "@/components/ui/help-tip";
@@ -160,7 +160,7 @@ export function useCollabAutoTasks(): [boolean, (v: boolean) => Promise<void>] {
 }
 
 /** Fiche collab : brief, tâches, rendez-vous, factures et gifting reliés (et suggérés). */
-export function CollabLinkedPanel({ collab, onCreateInvoice }: { collab: CollabLite; onCreateInvoice?: () => void }) {
+export function CollabLinkedPanel({ collab, onCreateInvoice, onPrepareRecap }: { collab: CollabLite; onCreateInvoice?: () => void; onPrepareRecap?: () => void }) {
   const ready = useCollabLinkReady();
   const live = useLiveKey();
   const [data, setData] = useState<LinkData | null>(null);
@@ -184,6 +184,8 @@ export function CollabLinkedPanel({ collab, onCreateInvoice }: { collab: CollabL
   };
 
   const showInvoice = !!onCreateInvoice && collab.step >= 7;
+  // Bilan pour la marque : proposé à l'étape 10, bouton principal à l'étape 11 « Bilan ».
+  const showRecap = !!onPrepareRecap && collab.step >= 10;
   return (
     <div className="rounded-[20px] bg-panel p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -194,6 +196,20 @@ export function CollabLinkedPanel({ collab, onCreateInvoice }: { collab: CollabL
             <p>« Suggéré » : même marque et même créateur, pas encore relié.</p>
           </HelpTip>
         </h3>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+        {showRecap && (
+          <button
+            type="button"
+            onClick={onPrepareRecap}
+            title="Bilan prérempli avec les livrables, les chiffres des posts et le montant, à envoyer à la marque"
+            className={cn(
+              "flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold transition-colors",
+              collab.step >= 11 ? "bg-primary text-primary-foreground hover:opacity-90" : "bg-field text-foreground hover:bg-rowhover",
+            )}
+          >
+            <Sparkles className="h-4 w-4" /> Préparer le bilan
+          </button>
+        )}
         {showInvoice && (
           <button
             type="button"
@@ -206,6 +222,7 @@ export function CollabLinkedPanel({ collab, onCreateInvoice }: { collab: CollabL
             <Plus className="h-4 w-4" /> Créer la facture
           </button>
         )}
+        </div>
       </div>
       {!groups ? (
         <p className="text-[13px] text-muted-foreground">Chargement…</p>

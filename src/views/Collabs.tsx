@@ -26,7 +26,7 @@ import { fmtDay, fmtDayAny } from "@/lib/dates";
 import { getCache, setCache } from "@/lib/viewCache";
 import { STEPS, STEP_COUNT, PHASES, stepDef, phaseOf, isDone, type PhaseKey } from "@/lib/collabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
-import { useIntent } from "@/lib/openIntent";
+import { requestIntent, useIntent } from "@/lib/openIntent";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { fmtCompact } from "@/lib/timeSeries";
 import { igRefresh, igWhyText, postKind, useIgColumn, type IgCollab } from "@/lib/instagram";
@@ -444,6 +444,12 @@ export function Collabs() {
     });
     if (!ok) return toast("Impossible de préparer la facture");
     window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "facturation" }));
+  };
+
+  // « Préparer le bilan » (étape 11) : la page Bilan s'ouvre sur le bilan prérempli de la collab.
+  const prepareRecap = (row: Row) => {
+    requestIntent("collab:recap", row.id);
+    window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "debrief" }));
   };
 
   // Faire avancer / positionner l'étape (le trigger côté base date le changement).
@@ -1013,6 +1019,7 @@ export function Collabs() {
         <CollabLinkedPanel
           collab={{ id: row.id, brand: row.brand, creator: row.creator, step: row.step, status: row.status, cachet: row.cachet }}
           onCreateInvoice={() => createInvoice(row)}
+          onPrepareRecap={() => prepareRecap(row)}
         />
       </div>
     );
