@@ -335,7 +335,8 @@ export function Pricing() {
       />
 
       {/* Téléphone : le prix reste visible en haut pendant la saisie. */}
-      <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-border bg-background/95 px-4 py-3 backdrop-blur lg:hidden">{priceCard}</div>
+      {/* Téléphone : collée SOUS la barre de titre iOS (collante elle aussi : 44 px + encoche). */}
+      <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-border bg-background/95 px-4 py-3 backdrop-blur max-md:top-[calc(env(safe-area-inset-top)+2.75rem)] lg:hidden">{priceCard}</div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         {/* ============ ENTRÉES : Qui, Quoi, Conditions ============ */}
@@ -382,16 +383,17 @@ export function Pricing() {
                         <div className="grid grid-cols-2 gap-2">
                           <label className="flex flex-col gap-1">
                             <span className="text-[11px] text-muted-foreground">Abonnés</span>
-                            <input value={a.followers} onChange={(e) => setAudOf(k, { followers: e.target.value })} placeholder="12K" className={INPUT} />
+                            <input inputMode="decimal" value={a.followers} onChange={(e) => setAudOf(k, { followers: e.target.value })} placeholder="12 000" className={INPUT} />
                           </label>
                           <label className="flex flex-col gap-1">
                             <span className="text-[11px] text-muted-foreground">Engagement %</span>
-                            <input value={a.er} onChange={(e) => setAudOf(k, { er: e.target.value })} placeholder="3,5" title={a.erBase === "views" ? "Sur les vues" : "Sur les abonnés"} className={INPUT} />
+                            <input inputMode="decimal" value={a.er} onChange={(e) => setAudOf(k, { er: e.target.value })} placeholder="3,5" title={a.erBase === "views" ? "Sur les vues" : "Sur les abonnés"} className={INPUT} />
                           </label>
                           {video && (
                             <label className="flex flex-col gap-1">
                               <span className="text-[11px] text-muted-foreground">Vues par contenu</span>
                               <input
+                                inputMode="decimal"
                                 value={a.views}
                                 onChange={(e) => setAudOf(k, { views: e.target.value, src: e.target.value ? "saisie" : a.src })}
                                 placeholder={estimate ? `≈ ${fmtCompact(estimate)}` : "estimées"}
@@ -403,13 +405,13 @@ export function Pricing() {
                           {story && (
                             <label className="flex flex-col gap-1">
                               <span className="text-[11px] text-muted-foreground">Vues story</span>
-                              <input value={a.storyViews} onChange={(e) => setAudOf(k, { storyViews: e.target.value })} placeholder="estimées" className={INPUT} />
+                              <input inputMode="decimal" value={a.storyViews} onChange={(e) => setAudOf(k, { storyViews: e.target.value })} placeholder="estimées" className={INPUT} />
                             </label>
                           )}
                           {short && (
                             <label className="flex flex-col gap-1">
                               <span className="text-[11px] text-muted-foreground">Vues Shorts</span>
-                              <input value={a.shortViews ?? ""} onChange={(e) => setAudOf(k, { shortViews: e.target.value })} placeholder="estimées" className={INPUT} />
+                              <input inputMode="decimal" value={a.shortViews ?? ""} onChange={(e) => setAudOf(k, { shortViews: e.target.value })} placeholder="estimées" className={INPUT} />
                             </label>
                           )}
                         </div>
@@ -712,6 +714,7 @@ function ResultDetail({ mode, lines, majorations, result, remisePct, onRemise }:
             Remise
             <input
               type="number"
+              inputMode="numeric"
               min={0}
               max={50}
               value={remisePct}

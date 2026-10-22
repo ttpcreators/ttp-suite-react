@@ -37,3 +37,28 @@ describe("gains du créateur", () => {
     expect(gainsSummary([], NOW)).toEqual({ cashed: 0, pending: 0, late: 0, toReceive: 0, upcoming: 0, billed: 0, lateParties: [] });
   });
 });
+
+describe("gains nets du créateur", () => {
+  it("part nette = brut moins la commission, rien sous le seuil", async () => {
+    const { netShare } = await import("./creatorGains");
+    expect(netShare(1000, 20)).toBe(800);
+    expect(netShare(80, 20)).toBe(80);
+  });
+  it("statuts en mots simples et totaux nets", async () => {
+    const { netGains, payoutStatus } = await import("./creatorGains");
+    expect(payoutStatus({ status: "payee" }).label).toBe("Versé");
+    expect(payoutStatus({ status: "retard" }).label).toBe("En cours");
+    expect(payoutStatus({ status: "brouillon" }).label).toBe("À venir");
+    const g = netGains(
+      [
+        inv({ status: "brouillon", amount: "500", party: "Seoni" }),
+        inv({ status: "payee", amount: "1000", party: "Nike" }),
+        inv({ status: "payee", amount: "200", party: "Asics" }),
+        inv({ status: "retard", amount: "300", party: "JNPR" }),
+      ],
+      20,
+      NOW,
+    );
+    expect(g).toEqual({ coming: 400 + 240, paid: 800 + 160, late: 240, last: { amount: 800, party: "Nike" } });
+  });
+});

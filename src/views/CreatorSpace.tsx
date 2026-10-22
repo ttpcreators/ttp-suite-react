@@ -6,9 +6,12 @@ import { Spin } from "@/components/ui/loader";
 import { motion, AnimatePresence } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { fmtCompact } from "@/lib/timeSeries";
-import { LayoutDashboard, ListChecks, SquareCheckBig, ChevronRight, Camera, PenLine, CircleCheck, Lightbulb, FileText, Sparkles, Globe2, CalendarDays, Files, Image as ImageIcon, Receipt, Upload, Mail, ShieldCheck, Package, LogOut, Moon, Sun, Pencil, Check, Trash2, TrendingUp, ExternalLink, BarChart3, Contact, X, Copy, List, Columns3, PanelLeftOpen, Share2, Plus, Eye, ArrowLeft } from "@/components/icons";
+import { LayoutDashboard, ListChecks, SquareCheckBig, ChevronRight, Camera, PenLine, CircleCheck, FileText, MessageSquare, Sparkles, Globe2, CalendarDays, Files, Image as ImageIcon, Receipt, Upload, Mail, ShieldCheck, Package, LogOut, Moon, Sun, Pencil, Check, Trash2, TrendingUp, ExternalLink, BarChart3, Contact, X, Copy, List, Columns3, PanelLeftOpen, Share2, Plus, Eye, ArrowLeft } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
-import { titleCase, cn } from "@/lib/utils";
+import { titleCase, cn, initials } from "@/lib/utils";
+import { useEdgeSwipeBack } from "@/lib/useEdgeSwipeBack";
+import { UndoBar, undoable } from "@/components/creator-undo";
+import { HelpTip } from "@/components/ui/help-tip";
 import { fmtDay, frDate, todayISO, toISODate } from "@/lib/dates";
 import { notifyAgency, notifyCreator } from "@/lib/push";
 import { PushCard } from "@/components/ui/push-card";
@@ -40,7 +43,6 @@ import { ScaledPreview } from "@/components/ui/scaled-preview";
 import { WelcomeModal } from "@/components/ui/welcome-modal";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
 import { SubtaskChecklist } from "@/components/ui/subtask-checklist";
-import { AgentPlan, type PlanTask } from "@/components/ui/agent-plan";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, type Gift as GiftRow } from "@/lib/gifting";
 import { PageFrame, PageHeaderRow } from "@/components/ui/page-header";
@@ -49,19 +51,22 @@ import { NavActionSlotContext } from "@/lib/navAction";
 import { IosBackButton, IosGroup, IosNavBar, IosRow, IosTabBar } from "@/components/mobile/ios-shell";
 import { StatusPill } from "@/components/ui/status-pill";
 import { IconTile } from "@/components/ui/icon-tile";
-import { TONE_SOFT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
+import { TONE_TEXT, type StatusTone } from "@/lib/statusTone";
 import { useTheme } from "@/lib/theme";
 import { THEME_CHOICES, type ThemeChoice } from "@/lib/accent";
-import { STEPS, STEP_COUNT } from "@/lib/collabs";
-import { CS_FAVORABLE, CS_MAIN_TABS, isMainTab, normalizeCsTab, ownerTab, parseCsFavorites, toggleCsFavorite, type CsTab } from "@/lib/creatorTabs";
-import { BriefResumeView } from "@/components/brief-resume";
+import { CS_FAVORABLE, CS_MAIN_TABS, csFavoritesShown, isMainTab, normalizeCsTab, ownerTab, parseCsFavorites, toggleCsFavorite, type CsTab } from "@/lib/creatorTabs";
 import { hasResume, parseResume, type BriefResume } from "@/lib/briefResume";
-import { brandInitial, briefKey, buildMissions, CREATOR_PHASES, creatorPhaseIndex, missionState, type Mission, type MissionCollab } from "@/lib/creatorMissions";
+import { brandInitial, briefKey, buildMissions, CREATOR_STAGES, creatorStage, missionAction, missionState, type Mission, type MissionCollab } from "@/lib/creatorMissions";
+import { BriefBlocks, MissionCard, MissionStages } from "@/components/creator-missions";
+import { SkeletonCard, SkeletonFigure, SkeletonList } from "@/components/creator-skeleton";
 import { creatorSteps, whenLabel, type NextStep } from "@/lib/creatorNextStep";
 import { CreatorToday } from "@/components/CreatorToday";
 import { sharedWithText } from "@/lib/todoCreators";
 import { selectTodosFor } from "@/lib/todoCreatorsDb";
-import { gainsSummary, invoiceTone } from "@/lib/creatorGains";
+import { agencyAwaits, progressColumnMissing } from "@/lib/todoProgress";
+import { CreatorTodos } from "@/components/CreatorTodos";
+import { invoiceTone, netGains, netShare, payoutStatus } from "@/lib/creatorGains";
+import { DEFAULT_COMMISSION, parseCommissionPct } from "@/lib/commission";
 import { daysBetween as daysBetweenIso } from "@/lib/aujourdhui";
 import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
 import { OfflineBanner } from "@/components/mobile/offline-banner";
@@ -102,15 +107,10 @@ type Creator = {
 };
 type Subtask = { id: string; text: string; done: boolean };
 type Attachment = { name: string; size: string; path: string };
-type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; status?: string | null; sort_order?: number; subtasks?: Subtask[] | null; attachments?: Attachment[] | null; creator?: string | null; creators?: string[] | null };
+type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; status?: string | null; sort_order?: number; subtasks?: Subtask[] | null; attachments?: Attachment[] | null; creator?: string | null; creators?: string[] | null; created_at?: string | null; source?: string | null; progress?: string | null };
 
 let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
-// Priorité : barre d'accent (bord gauche de la carte) + pilule.
-const PRIO_ACCENT: Record<string, string> = { haute: "bg-priority", moyenne: "bg-foreground/50", basse: "bg-foreground/30" };
-const PRIO_PILL: Record<string, string> = { haute: "bg-field text-priority", moyenne: "bg-muted text-muted-foreground", basse: "border border-border text-muted-foreground" };
-const prioAccent = (p: string | null) => PRIO_ACCENT[p ?? "moyenne"] ?? PRIO_ACCENT.moyenne;
-const prioPill = (p: string | null) => PRIO_PILL[p ?? "moyenne"] ?? PRIO_PILL.moyenne;
 type Idea = { id: string; text: string; status: string | null; sort_order?: number; subtasks?: Subtask[] | null };
 // Barre d'accent (bord gauche de la carte idée) selon le statut.
 const IDEA_ACCENT: Record<string, string> = { "À explorer": "bg-indigo", "À faire": "bg-primary", "En cours": "bg-cyan", "Publiée": "bg-signal" };
@@ -146,10 +146,11 @@ const CREATOR_GROUPS: {
     items: [
       { id: "accueil", label: "Accueil", icon: TtpHome },
       { id: "missions", label: "Missions", icon: TtpMission },
-      // Boîte mail : section activée par l'agence (sinon un message l'explique).
-      { id: "mails", label: "Mail", icon: TtpMail },
       { id: "gains", label: "Gains", icon: TtpGains },
-      { id: "profil", label: "Plus", icon: TtpMore },
+      // Messages (boîte mail) : section activée par l'agence (sinon un message l'explique).
+      { id: "mails", label: "Messages", icon: TtpMail },
+      // Le Menu : ouvert par l'avatar en haut à droite au téléphone.
+      { id: "profil", label: "Menu", icon: TtpMore },
     ],
   },
   {
@@ -343,12 +344,6 @@ const PRIORITY_OPTIONS = [
 ];
 const prioBadge = (p: string | null) => (p === "haute" ? "danger" : p === "basse" ? "neutral" : "warning");
 
-type TodoFilter = "encours" | "terminees" | "toutes";
-const TODO_FILTERS: { id: TodoFilter; label: string }[] = [
-  { id: "encours", label: "À faire" },
-  { id: "terminees", label: "Faites" },
-  { id: "toutes", label: "Toutes" },
-];
 const TODO_STATUS_OPTS: StatusOption[] = [
   { value: "À faire", label: "À faire", dot: "bg-wait" },
   { value: "En cours", label: "En cours", dot: "bg-progress" },
@@ -409,7 +404,6 @@ export function CreatorSpace({
       todo: tr(TODO_STATUS_OPTS),
       prio: tr(PRIORITY_OPTIONS),
       gift: tr(GIFT_STATUS),
-      todoFilters: tr(TODO_FILTERS),
     };
   }, [t]);
   // En visualisation agence, ce libellé est lu par l'agence : il reste en français.
@@ -427,6 +421,8 @@ export function CreatorSpace({
       return next;
     });
   const isFavorable = (id: string) => (CS_FAVORABLE as readonly string[]).includes(id);
+  // Affichés : Accueil, À faire, Idées et Mail d'office (pour tous les créateurs), puis ceux choisis.
+  const shownFavs = useMemo(() => csFavoritesShown(favs), [favs]);
   // Mission ouverte (fiche) dans l'onglet Missions ; null = la liste.
   const [missionId, setMissionId] = useState<string | null>(null);
   const setTab = (next: Tab | string) => {
@@ -437,6 +433,7 @@ export function CreatorSpace({
   };
   const [confirmDoneTodo, setConfirmDoneTodo] = useState<Todo | null>(null); // anti-missclick « fait »
   const [taskView, setTaskView] = useState<Todo | null>(null); // fiche tâche (texte complet)
+  const [progressOn, setProgressOn] = useState(false); // colonne todos.progress présente (SQL 2026-10-22)
   const [subInput, setSubInput] = useState(""); // saisie nouvelle sous-tâche
   const attFileRef = useRef<HTMLInputElement>(null);
   const [attUploading, setAttUploading] = useState(false);
@@ -527,12 +524,16 @@ export function CreatorSpace({
       items: g.items.map((i) => ({ ...i, label: t(i.label), ...(i.id === "mails" && mailsOn ? { badge: mailBadge || undefined } : {}) })),
     }));
     const all = base.flatMap((g) => g.items);
-    const favItems = favs.map((id) => all.find((i) => i.id === id)).filter((i): i is (typeof all)[number] => !!i);
-    return favItems.length ? [{ id: "favoris", label: t("Favoris"), icon: TtpStar, fixed: true, items: favItems }, ...base] : base;
-  }, [mailsOn, mailBadge, t, favs]);
-  const navTabs = useMemo(() => navGroups.filter((g) => g.id !== "favoris").flatMap((g) => g.items), [navGroups]);
+    const favItems = shownFavs.map((id) => all.find((i) => i.id === id)).filter((i): i is (typeof all)[number] => !!i);
+    if (!favItems.length) return base;
+    // Une rubrique en favori quitte sa famille (pas de doublon dans le menu) ; famille vidée = retirée.
+    const moved = new Set(favItems.map((i) => i.id));
+    const rest = base.map((g) => ({ ...g, items: g.items.filter((i) => !moved.has(i.id)) })).filter((g) => g.items.length > 0);
+    return [{ id: "favoris", label: t("Favoris"), icon: TtpStar, fixed: true, items: favItems }, ...rest];
+  }, [mailsOn, mailBadge, t, shownFavs]);
+  const navTabs = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
 
-  // ── Affichage iPhone (téléphone) : 5 onglets en bas (Accueil, Missions, Mail, Gains, Plus) ──
+  // ── Affichage iPhone (téléphone) : 4 onglets en bas (Accueil, Missions, Gains, Messages), Menu sous l'avatar ──
   const iosPhone = useIsPhone();
   const [navSlot, setNavSlot] = useState<HTMLElement | null>(null); // « + » de l'onglet dans la barre de titre
   const mainRef = useRef<HTMLElement>(null);
@@ -540,6 +541,12 @@ export function CreatorSpace({
   const screenKey = missionId ? `${tab}:${missionId}` : tab;
   const scrollMem = useRef(new Map<string, number>());
   const lastScroll = useRef(0);
+  // Retour par glissement depuis le bord gauche : fiche mission → Missions, rubrique du Menu → Menu.
+  useEdgeSwipeBack(
+    mainRef,
+    missionId ? () => setMissionId(null) : !isMainTab(tab) && tab !== "profil" ? () => setTab("profil") : null,
+    iosPhone,
+  );
   const prevScreen = useRef(screenKey);
   useLayoutEffect(() => {
     const el = mainRef.current;
@@ -625,6 +632,8 @@ export function CreatorSpace({
   );
   const [todos, setTodos] = useState<Todo[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
+  const [ideaSubsOpen, setIdeaSubsOpen] = useState<Set<string>>(() => new Set());
+  const [infosOpen, setInfosOpen] = useState(false); // Menu : « Mes infos » repliées par défaut
   const [briefs, setBriefs] = useState<Brief[]>([]);
   const [gifts, setGifts] = useState<GiftRow[]>([]);
   const [events, setEvents] = useState<Ev[]>([]);
@@ -633,18 +642,15 @@ export function CreatorSpace({
   const [contacts, setContacts] = useState<Contact[]>([]);
   // Collabs du créateur (lecture seule : RLS `collabs_scoped`, écriture réservée à l'agence).
   const [collabs, setCollabs] = useState<MissionCollab[]>([]);
+  // Premier chargement terminé (squelettes en attendant, jamais d'écran vide trompeur).
+  const [ready, setReady] = useState({ collabs: false, briefs: false, invoices: false });
+  const markReady = (k: keyof typeof ready) => setReady((r) => (r[k] ? r : { ...r, [k]: true }));
 
-  // todo filter
-  const [todoFilter, setTodoFilter] = useStickyState<TodoFilter>("espace:taches", ["encours", "terminees", "toutes"], "encours");
 
   // "Mes infos" edit state
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<Creator>>({});
   const [infoTab, setInfoTab] = useStickyState("espace:infos", ["stats", "coord"] as const, "stats"); // carte Mes infos : onglet actif
-  const [todoView, setTodoView] = useState<"liste" | "colonnes">(
-    () => (lsGet("ttp:cs-todo-view") === "colonnes" ? "colonnes" : "liste"),
-  );
-  useEffect(() => { lsSet("ttp:cs-todo-view", todoView); }, [todoView]);
   // Sidebar desktop repliable en rail (mémorisé).
   const [sbCollapsed, setSbCollapsed] = useState(() => lsGet("ttp:cs-sidebar-collapsed") === "1");
   useEffect(() => { lsSet("ttp:cs-sidebar-collapsed", sbCollapsed ? "1" : "0"); }, [sbCollapsed]);
@@ -723,13 +729,27 @@ export function CreatorSpace({
         if (alive) setCreatorReady(true);
       });
     // Ses tâches + celles partagées avec lui (todos.creators) ; repli sur `creator` sans le SQL.
-    void selectTodosFor<Todo>(name, "id,text,descr,due,priority,done,status,sort_order,subtasks,attachments").then(({ data, error }) => apply(error) && setTodos(data ?? []));
+    // Points d'avancement (`progress`, SQL 2026-10-22) : sans la colonne, on recharge sans elle.
+    const TODO_COLS = "id,text,descr,due,priority,done,status,sort_order,subtasks,attachments,created_at,source";
+    void selectTodosFor<Todo>(name, `${TODO_COLS},progress`).then(async ({ data, error }) => {
+      if (error && progressColumnMissing(error)) {
+        if (alive) setProgressOn(false);
+        const r = await selectTodosFor<Todo>(name, TODO_COLS);
+        if (apply(r.error)) setTodos(r.data ?? []);
+        return;
+      }
+      if (alive && !error) setProgressOn(true);
+      if (apply(error)) setTodos(data ?? []);
+    });
     supabase.from("ideas").select("id,text,status,sort_order,subtasks").eq("creator", name).order("sort_order").then(({ data, error }) => apply(error) && setIdeas((data as Idea[]) ?? []));
     // Colonne `resume` absente (SQL pas encore lancé) : on recharge sans elle.
     const briefsQ = (cols: string) => supabase.from("briefs").select(cols).eq("creator", name).order("created_at", { ascending: false });
     void briefsQ("id,brand,deliverables,due,status,consignes,resume")
       .then((r) => (r.error && /resume/i.test(r.error.message) ? briefsQ("id,brand,deliverables,due,status,consignes") : r))
-      .then(({ data, error }) => apply(error) && setBriefs(((data as unknown as Brief[]) ?? []).map((x) => ({ ...x, resume: parseResume(x.resume) }))));
+      .then(({ data, error }) => {
+        if (alive) markReady("briefs");
+        if (apply(error)) setBriefs(((data as unknown as Brief[]) ?? []).map((x) => ({ ...x, resume: parseResume(x.resume) })));
+      });
     supabase.from("gifting").select(GIFT_COLS).eq("creator", name).order("sort_order", { ascending: false }).then(({ data, error }) => apply(error) && setGifts((data as GiftRow[]) ?? []));
     supabase.from("events").select("id,date,day,time,title,type,who,description").or("deleted.is.null,deleted.eq.false").then(({ data, error }) => {
       if (!apply(error)) return;
@@ -738,11 +758,17 @@ export function CreatorSpace({
     });
     supabase.from("documents").select("id,name,type,size,path,created_at").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => apply(error) && setDocs((data as Doc[]) ?? []));
     // Plus récente d'abord (« Dernière facture » = invoices[0]) ; `date` est un texte, on trie sur created_at.
-    supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => apply(error) && setInvoices((data as Invoice[]) ?? []));
+    supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => {
+      if (alive) markReady("invoices");
+      if (apply(error)) setInvoices((data as Invoice[]) ?? []);
+    });
     // Contacts propres au créateur (RLS : il ne voit QUE ses lignes, jamais celles de l'agence).
     supabase.from("contacts").select("id,brand,person,role,email,phone,sort_order").eq("creator", name).order("sort_order").then(({ data, error }) => apply(error) && setContacts((data as Contact[]) ?? []));
     // Missions : étape de chaque collab (sans le cachet ni la note interne de l'agence).
-    supabase.from("collabs").select("id,brand,title,deliverables,step,status,brief_id,created_at").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => apply(error) && setCollabs((data as MissionCollab[]) ?? []));
+    supabase.from("collabs").select("id,brand,title,deliverables,step,status,brief_id,created_at").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => {
+      if (alive) markReady("collabs");
+      if (apply(error)) setCollabs((data as MissionCollab[]) ?? []);
+    });
     return () => {
       alive = false;
     };
@@ -788,7 +814,7 @@ export function CreatorSpace({
     if (!(await dbUpdate("briefs", id, { status }))) {
       // Échec : on remet l'ancien statut.
       setBriefs((list) => list.map((b) => (b.id === id ? { ...b, status: prev } : b)));
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
     }
   };
 
@@ -811,7 +837,7 @@ export function CreatorSpace({
     setBriefScriptId(null);
     if (!(await dbUpdate("briefs", id, { consignes: txt || null }))) {
       setBriefs((list) => list.map((b) => (b.id === id ? { ...b, consignes: prev } : b)));
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
       return;
     }
     pingAgency("idee", `Script — ${briefs.find((b) => b.id === id)?.brand ?? ""}`);
@@ -825,7 +851,7 @@ export function CreatorSpace({
     if (!(await dbUpdate("gifting", id, { status }))) {
       // Échec : on remet l'ancien statut, sinon l'UI ment jusqu'au prochain refetch.
       setGifts((list) => list.map((g) => (g.id === id ? { ...g, status: prev } : g)));
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
     }
   };
   const [giOpen, setGiOpen] = useState(false);
@@ -863,7 +889,7 @@ export function CreatorSpace({
     };
     const created = await dbInsert("gifting", row);
     if (!created) {
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
       return;
     }
     setGifts([created as unknown as GiftRow, ...gifts]);
@@ -889,7 +915,7 @@ export function CreatorSpace({
       const { data: u } = await supabase.auth.getUser();
       const uid = u?.user?.id;
       if (!uid) {
-        toast(t("Session expirée — reconnecte-toi"));
+        toast(t("Session expirée. Reconnecte-toi."));
         return;
       }
       const ext = (file.name.split(".").pop() || "pdf").toLowerCase().replace(/[^a-z0-9]/g, "") || "pdf";
@@ -899,7 +925,7 @@ export function CreatorSpace({
         upsert: false,
       });
       if (up.error) {
-        toast(t("Envoi échoué — réessaie"));
+        toast(t("Envoi interrompu. Vérifie ta connexion et réessaie."));
         return;
       }
       const created = await dbInsert("documents", {
@@ -913,7 +939,7 @@ export function CreatorSpace({
       if (!created) {
         // Ligne refusée → on ne laisse pas un fichier orphelin dans le bucket.
         await supabase.storage.from("documents").remove([path]).catch(() => {});
-        toast(t("Envoi échoué — réessaie"));
+        toast(t("Envoi interrompu. Vérifie ta connexion et réessaie."));
         return;
       }
       setDocs((prev) => [created as unknown as Doc, ...prev]);
@@ -922,6 +948,82 @@ export function CreatorSpace({
     } finally {
       setInvUploading(false);
     }
+  };
+
+  // ── « Envoyer mon contenu » : photos et vidéos depuis la pellicule, rangées dans SON dossier
+  // du bucket `documents` (même stockage et mêmes droits que le dépôt de facture), avec une
+  // barre de progression (URL d'envoi signée + XHR, la librairie ne donne pas l'avancement).
+  const contentFileRef = useRef<HTMLInputElement>(null);
+  const contentFor = useRef<Mission | null>(null);
+  const [contentUp, setContentUp] = useState<{ brand: string; pct: number; done: boolean } | null>(null);
+  const CONTENT_MAX = 50 * 1024 * 1024;
+  const pickContent = (m: Mission) => {
+    contentFor.current = m;
+    contentFileRef.current?.click(); // dans le clic (sinon le téléphone bloque le sélecteur)
+  };
+  const putWithProgress = (url: string, file: File, onPct: (n: number) => void) =>
+    new Promise<boolean>((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", url);
+      xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
+      xhr.setRequestHeader("x-upsert", "false");
+      xhr.upload.onprogress = (e) => e.lengthComputable && onPct(e.loaded / e.total);
+      xhr.onload = () => resolve(xhr.status >= 200 && xhr.status < 300);
+      xhr.onerror = () => resolve(false);
+      xhr.send(file);
+    });
+  const sendContentFiles = async (list: FileList | null) => {
+    const m = contentFor.current;
+    const files = [...(list ?? [])];
+    if (!m || !files.length) return;
+    if (files.some((f) => f.size > CONTENT_MAX)) {
+      toast(t("Fichier trop lourd : 50 Mo au plus. Envoie-le par WeTransfer."), { variant: "error" });
+      return;
+    }
+    const { data: u } = await supabase.auth.getUser();
+    const uid = u?.user?.id;
+    if (!uid) {
+      toast(t("Session expirée. Reconnecte-toi."), { variant: "error" });
+      return;
+    }
+    const total = files.reduce((n, f) => n + f.size, 0) || 1;
+    let sent = 0;
+    setContentUp({ brand: m.brand, pct: 0, done: false });
+    const added: Doc[] = [];
+    for (const [i, file] of files.entries()) {
+      const ext = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
+      const path = `creator-uploads/${uid}/contenu-${Date.now()}-${i}.${ext}`;
+      const signed = await supabase.storage.from("documents").createSignedUploadUrl(path);
+      const ok = signed.data?.signedUrl
+        ? await putWithProgress(signed.data.signedUrl, file, (f) => setContentUp({ brand: m.brand, pct: (sent + f * file.size) / total, done: false }))
+        : false;
+      if (!ok) {
+        setContentUp(null);
+        toast(t("Envoi interrompu. Vérifie ta connexion et réessaie."), { variant: "error" });
+        return;
+      }
+      sent += file.size;
+      const created = await dbInsert("documents", {
+        creator: name,
+        name: `${t("Contenu")} ${m.brand} · ${fmtDay(new Date(), locale)}${files.length > 1 ? ` (${i + 1})` : ""}`,
+        type: "contenu",
+        size: `${Math.max(1, Math.round(file.size / 1024))} Ko`,
+        path,
+        sort_order: 0,
+      });
+      if (!created) {
+        await supabase.storage.from("documents").remove([path]).catch(() => {});
+        setContentUp(null);
+        toast(t("Envoi interrompu. Réessaie dans un instant."), { variant: "error" });
+        return;
+      }
+      added.push(created as unknown as Doc);
+    }
+    setDocs((prev) => [...added, ...prev]);
+    pingAgency("contenu", `${t("Contenu envoyé")} · ${m.brand}`);
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.([10, 40, 10]);
+    setContentUp({ brand: m.brand, pct: 1, done: true });
+    window.setTimeout(() => setContentUp(null), 2200);
   };
 
   // ── Envoi des CAPTURES DE STATS par le créateur (pour son media kit).
@@ -1003,7 +1105,7 @@ export function CreatorSpace({
       const { data: u } = await supabase.auth.getUser();
       const uid = u?.user?.id;
       if (!uid) {
-        toast(t("Session expirée — reconnecte-toi"));
+        toast(t("Session expirée. Reconnecte-toi."));
         return;
       }
       let ok = 0;
@@ -1016,7 +1118,7 @@ export function CreatorSpace({
         const path = `creator-uploads/${uid}/stats-${Date.now()}-${ok}.${ext}`;
         const up = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined, upsert: false });
         if (up.error) {
-          toast(t("Envoi échoué — réessaie"));
+          toast(t("Envoi interrompu. Vérifie ta connexion et réessaie."));
           continue;
         }
         const created = await dbInsert("documents", {
@@ -1088,7 +1190,7 @@ export function CreatorSpace({
     };
     const created = await dbInsert("todos", row);
     if (!created) {
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
       return;
     }
     setTodos([created as unknown as Todo, ...todos]);
@@ -1110,7 +1212,7 @@ export function CreatorSpace({
     const row = { text: idText.trim(), creator: name, status: "À faire", source: src, sort_order: nextOrder(ideas) };
     const created = await dbInsert("ideas", row);
     if (!created) {
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
       return;
     }
     setIdeas([created as unknown as Idea, ...ideas]);
@@ -1126,7 +1228,7 @@ export function CreatorSpace({
     setIdeas((list) => list.map((y) => (y.id === x.id ? { ...y, status } : y)));
     if (!(await dbUpdate("ideas", x.id, { status }))) {
       setIdeas((list) => list.map((y) => (y.id === x.id ? { ...y, status: prev } : y)));
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
     }
   };
 
@@ -1136,7 +1238,7 @@ export function CreatorSpace({
     if (!(await dbUpdate("ideas", id, { subtasks }))) {
       // Retour arrière seulement si rien n'a changé depuis (pas d'écrasement d'un clic plus récent).
       setIdeas((list) => list.map((y) => (y.id === id && y.subtasks === subtasks ? { ...y, subtasks: prev } : y)));
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
     }
   };
 
@@ -1151,7 +1253,7 @@ export function CreatorSpace({
     setIdeaEditId(null);
     if (!(await dbUpdate("ideas", id, { text: txt }))) {
       setIdeas((list) => list.map((x) => (x.id === id ? { ...x, text: prev } : x)));
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
     } else toast(t("Idée modifiée ✓"));
   };
 
@@ -1189,16 +1291,19 @@ export function CreatorSpace({
     ) : (
       <div key={x.id} className="relative overflow-hidden rounded-2xl border border-border bg-surface p-4 pl-5 shadow-sm">
         <span className={cn("absolute left-0 top-0 h-full w-1", ideaAccent(x.status))} />
-        <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{x.text}</div>
-        <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2.5">
+        <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-foreground">{x.text}</div>
+        <div className="mt-2.5 flex items-center justify-between gap-2">
           <div className="w-[150px] max-w-[60%]">
             <StatusSelect value={x.status ?? "À faire"} options={opts.idea} onChange={(s) => setIdeaStatus(x, s)} />
           </div>
           <ActionMenu
             items={[
+              ...(!(x.subtasks ?? []).length && !ideaSubsOpen.has(x.id)
+                ? [{ key: "subs", label: t("Découper"), icon: ListChecks, onClick: () => setIdeaSubsOpen((s) => new Set(s).add(x.id)) }]
+                : []),
               {
                 key: "edit",
-                label: t("Modifier l'idée"),
+                label: t("Modifier"),
                 icon: Pencil,
                 onClick: () => {
                   setIdeaEditId(x.id);
@@ -1210,21 +1315,15 @@ export function CreatorSpace({
                 label: t("Supprimer"),
                 icon: Trash2,
                 danger: true,
-                onClick: async () => {
-                  if (await dbDelete("ideas", x.id)) {
-                    setIdeas((prev) => prev.filter((y) => y.id !== x.id));
-                    toast(t("Supprimé"));
-                  } else {
-                    toast(t("Erreur — réessaie"));
-                  }
-                },
-                confirm: { title: t("Supprimer l'idée"), message: t("Supprimer «\u00A0{name}\u00A0»\u00A0? Cette action est irréversible.", { name: x.text }) },
+                onClick: () => removeUndoable(setIdeas, ideas, x, "ideas", t("Idée supprimée")),
               },
             ]}
           />
         </div>
-        {/* Sous-tâches (checklist repliable) */}
-        <SubtaskChecklist className="mt-3" value={x.subtasks ?? []} onChange={(next) => saveIdeaSubtasks(x.id, next)} />
+        {/* Sous-tâches : seulement si l'idée en a, ou si on vient de choisir « Découper » */}
+        {((x.subtasks ?? []).length > 0 || ideaSubsOpen.has(x.id)) && (
+          <SubtaskChecklist className="mt-3" value={x.subtasks ?? []} onChange={(next) => saveIdeaSubtasks(x.id, next)} />
+        )}
       </div>
     );
 
@@ -1246,7 +1345,7 @@ export function CreatorSpace({
     };
     const created = await dbInsert("contacts", row);
     if (!created) {
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
       return;
     }
     setContacts([created as unknown as Contact, ...contacts]);
@@ -1287,7 +1386,7 @@ export function CreatorSpace({
     setCtEditId(null);
     if (!(await dbUpdate("contacts", id, patch))) {
       if (prev) setContacts((list) => list.map((x) => (x.id === id ? prev : x)));
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
     } else toast(t("Contact modifié ✓"));
   };
 
@@ -1333,7 +1432,7 @@ export function CreatorSpace({
     // date arrive vide (toISODate a renvoyé "") → on la PRÉSERVE au lieu de l'effacer.
     if (!patch.birth && creator.birth && !toISODate(creator.birth)) delete patch.birth;
     if (!(await dbUpdate("creators", creator.id, patch))) {
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
       return;
     }
     setCreator({ ...creator, ...patch });
@@ -1412,8 +1511,6 @@ export function CreatorSpace({
       })}
     </div>
   );
-  const filteredTodos =
-    todoFilter === "encours" ? todos.filter((t) => !t.done) : todoFilter === "terminees" ? todos.filter((t) => t.done) : todos;
 
   // « Total facturé » = factures réellement émises. Un brouillon de l'agence n'est pas
   // encore facturé → ne doit pas être annoncé comme tel à la créatrice (même règle que
@@ -1431,24 +1528,41 @@ export function CreatorSpace({
       toast(next ? t("Fait ✓") : t("À refaire"));
       return true;
     }
-    toast(t("Erreur — réessaie"));
+    toast(t("Ça n'a pas marché. Réessaie dans un instant."));
     return false;
   };
 
   // Change le statut d'une tâche depuis la vue colonnes (done dérivé de « Fait »).
   // Supprimer une tâche (menu ⋯, ou glisser la ligne en mode iPhone).
+  /** Retire une ligne d'une liste puis la remet à sa place (bandeau « Annuler »). */
+  function removeUndoable<T extends { id: string }>(
+    set: (fn: (prev: T[]) => T[]) => void,
+    list: T[],
+    row: T,
+    table: string,
+    label: string,
+  ) {
+    const at = Math.max(0, list.findIndex((y) => y.id === row.id));
+    undoable(label, {
+      apply: () => set((prev) => prev.filter((y) => y.id !== row.id)),
+      revert: () =>
+        set((prev) => {
+          if (prev.some((y) => y.id === row.id)) return prev;
+          const next = [...prev];
+          next.splice(Math.min(at, next.length), 0, row);
+          return next;
+        }),
+      commit: () => dbDelete(table, row.id),
+      failText: t("Suppression impossible. Réessaie dans un instant."),
+    });
+  }
   const deleteTodo = async (td: Todo) => {
     // Tâche partagée dont il n'est pas le premier créateur : seule l'agence (ou le premier) la retire.
     if (!preview && td.creator && td.creator !== name) {
       toast(t("Tâche partagée : demande à l'agence de la retirer"));
       return;
     }
-    if (await dbDelete("todos", td.id)) {
-      setTodos((prev) => prev.filter((x) => x.id !== td.id));
-      toast(t("Supprimé"));
-    } else {
-      toast(t("Erreur — réessaie"));
-    }
+    removeUndoable(setTodos, todos, td, "todos", t("Tâche supprimée"));
   };
   const setTodoStatus = async (td: Todo, status: string) => {
     const done = status === "Fait";
@@ -1456,7 +1570,7 @@ export function CreatorSpace({
     setTodos((list) => list.map((x) => (x.id === td.id ? { ...x, status, done } : x)));
     if (!(await dbUpdate("todos", td.id, { status, done }))) {
       setTodos((list) => list.map((x) => (x.id === td.id ? { ...x, ...prev } : x)));
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
     }
   };
 
@@ -1477,7 +1591,7 @@ export function CreatorSpace({
     }
     const patch = { text: teText.trim(), descr: teDesc.trim(), priority: tePrio };
     if (!(await dbUpdate("todos", tdEditId, patch))) {
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
       return;
     }
     setTodos((prev) => prev.map((x) => (x.id === tdEditId ? { ...x, ...patch } : x)));
@@ -1512,7 +1626,7 @@ export function CreatorSpace({
       todosRef.current = todosRef.current.map(revert);
       setTodos((prev) => prev.map(revert));
       setTaskView((prev) => (prev ? revert(prev) : prev));
-      toast(t("Erreur — réessaie"));
+      toast(t("Ça n'a pas marché. Réessaie dans un instant."));
       return false;
     };
     const p = (todoQueue.current[id] ?? Promise.resolve(true)).then(run, run);
@@ -1537,14 +1651,14 @@ export function CreatorSpace({
     try {
       const { data: u } = await supabase.auth.getUser();
       const uid = u?.user?.id;
-      if (!uid) { toast(t("Session expirée — reconnecte-toi")); return; }
+      if (!uid) { toast(t("Session expirée. Reconnecte-toi.")); return; }
       const added: Attachment[] = [];
       for (const file of list) {
         if (file.size > 15 * 1024 * 1024) { toast(t("«\u00A0{file}\u00A0» trop lourd (max 15 Mo)", { file: file.name })); continue; }
         const ext = (file.name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
         const path = `creator-uploads/${uid}/todo-attachments/${todo.id}/${Date.now()}-${added.length}${ext ? "." + ext : ""}`;
         const up = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined, upsert: false });
-        if (up.error) { toast(t("Envoi échoué — réessaie")); continue; }
+        if (up.error) { toast(t("Envoi interrompu. Vérifie ta connexion et réessaie.")); continue; }
         added.push({ name: file.name, size: `${Math.max(1, Math.round(file.size / 1024))} Ko`, path });
       }
       if (added.length) await patchTodo(todo.id, (x) => ({ attachments: [...(x.attachments ?? []), ...added] }));
@@ -1787,8 +1901,20 @@ export function CreatorSpace({
     () => creatorSteps({ briefs, collabs, todos, events, invoices, statsStale, now: new Date() }),
     [briefs, collabs, todos, events, invoices, statsStale],
   );
-  const gains = useMemo(() => gainsSummary(invoices), [invoices]);
+  // Ce qu'elle touche vraiment : brut moins la commission de SA fiche (src/lib/creatorGains.ts).
+  const rate = parseCommissionPct(creator?.commission) ?? DEFAULT_COMMISSION;
+  const net = useMemo(() => netGains(invoices, rate), [invoices, rate]);
   const themeCtx = useTheme();
+  // Mode sombre automatique : une créatrice qui n'a rien choisi suit le réglage du téléphone.
+  useEffect(() => {
+    if (preview) return;
+    try {
+      if (localStorage.getItem("ttp:theme") == null) themeCtx.setTheme("auto");
+    } catch {
+      /* stockage indisponible : on garde le thème du moment */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Dates courtes dans la langue de l'espace (« jeudi 23 octobre », « 23 oct. »).
   const isoDate = (iso: string) => {
@@ -1796,13 +1922,22 @@ export function CreatorSpace({
     return new Date(y, m - 1, d);
   };
   const longDay = (iso: string) => fmtDay(isoDate(iso), locale);
-  const capFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const shortDay = (iso: string) => fmtDay(isoDate(iso), locale);
+  // Durées courtes, comme partout dans l'espace : « dans 3 j », « 2 j de retard ».
   const whenText = (days: number | null) => {
     const w = whenLabel(days);
-    return w ? t(w.key, w.vars) : null;
+    if (!w) return null;
+    if (w.key === "Dans {n} jours") return t("dans {n} j", w.vars);
+    if (w.key === "Depuis {n} jours") return t("{n} j de retard", w.vars);
+    return t(w.key, w.vars);
   };
 
+  /** « Gymshark x Lea » → « Gymshark » : son propre nom est inutile dans son espace. */
+  const brandOnly = (party: string | null | undefined) => {
+    const p = (party ?? "").trim();
+    const first = (name.split(/\s+/)[0] ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return (first ? p.replace(new RegExp(`\\s*[x×]\\s*${first}(?:\\s.*)?$`, "i"), "") : p) || p;
+  };
   /** Ouvre la fiche d'une mission (et, au besoin, l'éditeur de script de son brief). */
   const goMission = (m: Mission, writeScript = false) => {
     setTab("missions");
@@ -1855,17 +1990,19 @@ export function CreatorSpace({
     const when = whenText(s.days) ?? (s.due ? shortDay(s.due) : null);
     return [t(s.detail, s.detailVars), when].filter(Boolean).join(" · ");
   };
-  /** « Étape 4 sur 11 · Tournage », ou le statut du brief pour un brief seul. */
-  const missionLine = (m: Mission) =>
-    m.step != null
-      ? t("Étape {n} sur {total} · {label}", { n: m.step, total: STEP_COUNT, label: t(STEPS[m.step - 1]?.short ?? "") })
-      : t("Brief · {status}", { status: opts.brief.find((o) => o.value === briefKey(m.brief?.status ?? "attente"))?.label ?? "" });
+  /** Où en est la mission, en étapes de créatrice (« Contenu envoyé »), jamais « étape 4 sur 11 ». */
+  const missionLine = (m: Mission) => {
+    const st = creatorStage(m);
+    return st < 0 ? t("Brief bientôt") : t(CREATOR_STAGES[st]);
+  };
   // Contact de la marque : uniquement les contacts du créateur lui-même (RLS).
   const brandContact = (brand: string) => contacts.find((c) => c.brand.trim().toLowerCase() === brand.trim().toLowerCase()) ?? null;
 
   return (
     <LangProvider lang={lang}>
-    <div className={iosPhone ? "app-frame flex h-[100dvh] flex-col bg-background" : "app-frame flex h-[100dvh] flex-col bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
+    {/* Retour au toucher (espace créateur) : chaque bouton s'enfonce un instant, 200 ms, ease-out. */}
+    <style>{`@media (prefers-reduced-motion: no-preference){.cs-press button{transition:transform .2s ease-out,background-color .2s ease-out,color .2s ease-out,opacity .2s ease-out}.cs-press button:not(:disabled):active{transform:scale(.97)}}`}</style>
+    <div className={iosPhone ? "cs-press app-frame flex h-[100dvh] flex-col bg-background" : "cs-press app-frame flex h-[100dvh] flex-col bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
       {preview && (
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-primary/30 bg-primary/[0.06] px-3 py-2">
           <div className="flex items-center gap-2 text-[12px] font-semibold text-primary">
@@ -1965,7 +2102,7 @@ export function CreatorSpace({
         <main
           ref={mainRef}
           onScroll={iosPhone ? (e) => { lastScroll.current = e.currentTarget.scrollTop; } : undefined}
-          className={cn("flex min-w-0 flex-1 flex-col overflow-y-auto px-4 pb-4 [&>*]:shrink-0 md:px-6 md:pb-8 md:pt-6", iosPhone ? "pt-0" : "pt-4")}
+          className={cn("flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-clip px-4 pb-4 [&>*]:shrink-0 md:px-6 md:pb-8 md:pt-6", iosPhone ? "pt-0" : "pt-4")}
         >
           {iosPhone && (
             <IosNavBar
@@ -1976,8 +2113,24 @@ export function CreatorSpace({
               left={
                 openMission ? (
                   <IosBackButton label={t("Missions")} onClick={() => setMissionId(null)} />
-                ) : !isMainTab(tab) ? (
-                  <IosBackButton label={t("Plus")} onClick={() => setTab("profil")} />
+                ) : !isMainTab(tab) && tab !== "profil" ? (
+                  <IosBackButton label={t("Menu")} onClick={() => setTab("profil")} />
+                ) : null
+              }
+              right={
+                tab !== "profil" ? (
+                  <button
+                    type="button"
+                    onClick={() => setTab("profil")}
+                    aria-label={t("Ouvrir le menu")}
+                    className="grid h-11 w-11 place-items-center rounded-full transition-transform duration-200 ease-out active:scale-90"
+                  >
+                    {creator?.photo_url ? (
+                      <img src={creator.photo_url} alt="" className="h-8 w-8 rounded-full object-cover" />
+                    ) : (
+                      <span className="grid h-8 w-8 place-items-center rounded-full bg-field text-[12px] font-semibold text-foreground">{initials(name)}</span>
+                    )}
+                  </button>
                 ) : null
               }
             />
@@ -1993,13 +2146,16 @@ export function CreatorSpace({
                 </div>
                 <h1 className="page-title mt-0.5 text-[30px] font-bold leading-tight tracking-[-0.025em] [overflow-wrap:anywhere] md:text-[34px]">{t(greetingWord())} {firstName}</h1>
               </div>
-              <AvatarUpload
-                creatorId={creator?.id}
-                name={name}
-                photoUrl={creator?.photo_url ?? null}
-                size={52}
-                onUploaded={(url) => setCreator((c) => (c ? { ...c, photo_url: url } : c))}
-              />
+              {/* Téléphone : l'avatar est dans la barre du haut (il ouvre le Menu). */}
+              {!iosPhone && (
+                <AvatarUpload
+                  creatorId={creator?.id}
+                  name={name}
+                  photoUrl={creator?.photo_url ?? null}
+                  size={52}
+                  onUploaded={(url) => setCreator((c) => (c ? { ...c, photo_url: url } : c))}
+                />
+              )}
             </div>
           )}
 
@@ -2079,10 +2235,21 @@ export function CreatorSpace({
               { label: t("CA encaissé"), value: formatEuro(caEncaisse), foot: t("sur {amount} facturés", { amount: formatEuro(totalFacture) }) },
               { label: t("À faire"), value: String(openTodos.length), foot: `${plural(briefs.length, "{n} brief", "{n} briefs")} · ${plural(ideas.length, "{n} idée", "{n} idées")}` },
             ];
+            if (!(ready.collabs && ready.briefs && ready.invoices)) {
+              return (
+                <div role="status" aria-label={t("Chargement de ton accueil")} className="flex flex-col gap-4">
+                  <SkeletonCard action className="min-h-[200px]" />
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <SkeletonCard />
+                    <SkeletonCard />
+                  </div>
+                </div>
+              );
+            }
             return (
             <div className="flex flex-col gap-4">
-              <PushCard mails={mailsOn} />
-
+              {/* Règle des 3 questions (Marc, 2026-10-22), visibles sans défiler :
+                  1. quoi faire maintenant, 2. combien je vais toucher, 3. quelqu'un m'attend ? */}
               {/* Ta prochaine étape : LA chose à faire maintenant (src/lib/creatorNextStep.ts) */}
               {(() => {
                 const s = steps[0];
@@ -2108,7 +2275,7 @@ export function CreatorSpace({
                     </div>
                     <h2 className="mt-3 text-[24px] font-bold leading-tight tracking-[-0.02em] [overflow-wrap:anywhere] md:text-[28px]">{t(s.title, s.vars)}</h2>
                     <p className="mt-1.5 line-clamp-3 text-[14px] leading-snug opacity-85 [overflow-wrap:anywhere]">
-                      {s.due ? <span>{capFirst(longDay(s.due))}. </span> : null}
+                      {s.due ? <span>{longDay(s.due)} · </span> : null}
                       {t(s.detail, s.detailVars)}
                     </p>
                     <div className="mt-4 flex gap-2">
@@ -2134,17 +2301,85 @@ export function CreatorSpace({
                 );
               })()}
 
+              {/* 2. Combien je vais toucher (net) · 3. Qui m'attend */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setTab("gains")}
+                  className="flex min-h-[88px] flex-col justify-center rounded-[20px] bg-surface p-4 text-left shadow-sm transition-transform duration-200 ease-out active:scale-[0.98]"
+                >
+                  <span className="text-[13px] font-medium text-muted-foreground">{t("Tu vas toucher")}</span>
+                  <span className="mt-0.5 flex items-baseline justify-between gap-2">
+                    <span className="truncate text-[28px] font-bold leading-tight tracking-[-0.02em] tabular-nums text-foreground">{formatEuro(net.coming)}</span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
+                  </span>
+                  <span className="mt-0.5 truncate text-[13px] text-muted-foreground">
+                    {net.last ? t("Dernier versement : {amount} · {brand}", { amount: formatEuro(net.last.amount), brand: net.last.party }) : t("Pas encore de versement.")}
+                  </span>
+                </button>
+                {(() => {
+                  type Wait = { id: string; icon: typeof Mail; text: string; run: () => void };
+                  const waits: Wait[] = [];
+                  for (const m of missions) {
+                    if (m.done) continue;
+                    const a = missionAction(m);
+                    if (a?.key === "brief") waits.push({ id: `b-${m.id}`, icon: FileText, text: t("Brief {brand} à lire", { brand: m.brand }), run: () => goMission(m) });
+                    else if (a?.key === "feedback") waits.push({ id: `f-${m.id}`, icon: MessageSquare, text: t("{brand} attend ta validation", { brand: m.brand }), run: () => goMission(m) });
+                  }
+                  for (const td of todos) {
+                    if (!td.done && agencyAwaits(td.progress)) waits.push({ id: `t-${td.id}`, icon: MessageSquare, text: t("Ton agence t'a écrit : {task}", { task: td.text }), run: () => setTab("todo") });
+                  }
+                  if (mailsOn && mailBadge > 0) {
+                    waits.push({ id: "mail", icon: Mail, text: plural(mailBadge, "{n} message de marque", "{n} messages de marque"), run: () => setTab("mails") });
+                  }
+                  return (
+                    <section aria-label={t("On t'attend")} className="flex flex-col rounded-[20px] bg-surface p-4 shadow-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <h2 className="text-[13px] font-medium text-muted-foreground">{t("On t'attend")}</h2>
+                        {waits.length > 3 && (
+                          <button type="button" onClick={() => setTab("aujourdhui")} className="-my-3 px-1 py-3 text-[13px] font-medium text-primary">
+                            {t("Tout voir")}
+                          </button>
+                        )}
+                      </div>
+                      {waits.length === 0 ? (
+                        <p className="mt-1.5 text-[15px] font-medium text-foreground">{t("Personne ne t'attend. Profite !")}</p>
+                      ) : (
+                        <ul className="mt-1 flex flex-col">
+                          {waits.slice(0, 3).map((w) => (
+                            <li key={w.id}>
+                              <button
+                                type="button"
+                                onClick={w.run}
+                                className="flex min-h-11 w-full items-center gap-2.5 rounded-[12px] text-left transition-colors duration-200 ease-out active:bg-rowhover"
+                              >
+                                <w.icon className="h-4 w-4 shrink-0 text-primary" />
+                                <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-foreground">{w.text}</span>
+                                <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  );
+                })()}
+              </div>
+
+              {/* Notifications : au second plan, sous les 3 questions. */}
+              <PushCard mails={mailsOn} />
+
               {/* Favoris : accès direct aux rubriques préférées (ajoutées depuis Profil ou le menu). */}
               <section aria-label={t("Tes favoris")} className="flex flex-col gap-2">
                 <div className="flex items-center justify-between px-1">
                   <h2 className="text-[17px] font-semibold text-foreground">{t("Tes favoris")}</h2>
-                  <button type="button" onClick={() => setTab("profil")} className="-my-2 px-1 py-2 text-[14px] font-medium text-primary">
-                    {favs.length ? t("Modifier") : t("Choisir")}
+                  <button type="button" onClick={() => setTab("profil")} className="-my-3 px-1 py-3 text-[14px] font-medium text-primary">
+                    {t("Modifier")}
                   </button>
                 </div>
-                {favs.length ? (
+                {shownFavs.length ? (
                   <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {favs.map((id) => {
+                    {shownFavs.filter((id) => id !== "accueil" && id !== "mails").map((id) => {
                       const it = navTabs.find((x) => x.id === id);
                       if (!it) return null;
                       return (
@@ -2172,7 +2407,7 @@ export function CreatorSpace({
                     <h2 className="flex items-baseline gap-2 text-[20px] font-bold tracking-[-0.02em]">
                       {t("À faire")} <span className="text-[16px] font-semibold tabular-nums text-muted-foreground">{steps.length - 1}</span>
                     </h2>
-                    <button type="button" onClick={() => setTab("aujourdhui")} className="-my-2 px-1 py-2 text-[14px] font-medium text-primary">
+                    <button type="button" onClick={() => setTab("aujourdhui")} className="-my-3 px-1 py-3 text-[14px] font-medium text-primary">
                       {t("Tout voir")}
                     </button>
                   </div>
@@ -2199,25 +2434,6 @@ export function CreatorSpace({
                 </section>
               )}
 
-              {/* Gains en un coup d'œil (Gains) */}
-              <button
-                type="button"
-                onClick={() => setTab("gains")}
-                className="flex w-full items-center gap-2 rounded-[20px] border border-border bg-surface p-4 text-left shadow-sm transition-colors hover:bg-rowhover md:p-5"
-              >
-                <span className="grid min-w-0 flex-1 grid-cols-2 divide-x divide-border">
-                  <span className="min-w-0 pr-3">
-                    <span className="block text-[13px] text-muted-foreground">{t("À recevoir")}</span>
-                    <span className="mt-1 block truncate text-[24px] font-bold leading-none tracking-tight tabular-nums text-foreground">{formatEuro(gains.toReceive)}</span>
-                  </span>
-                  <span className="min-w-0 pl-3">
-                    <span className="block text-[13px] text-muted-foreground">{t("Encaissé")}</span>
-                    <span className={cn("mt-1 block truncate text-[24px] font-bold leading-none tracking-tight tabular-nums", TONE_TEXT.ok)}>{formatEuro(gains.cashed)}</span>
-                  </span>
-                </span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
-              </button>
-
               {/* Mes missions : collabs et briefs en cours (carrousel au téléphone) */}
               {missions.some((m) => !m.done) && (
                 <section>
@@ -2241,34 +2457,14 @@ export function CreatorSpace({
                         </div>
                         <div className="mt-2 line-clamp-2 min-h-[2.5em] text-[13px] leading-snug text-muted-foreground">{m.title ?? t("Livrables à préciser")}</div>
                         <div className="mt-2 truncate text-[12px] font-medium text-foreground">{missionLine(m)}</div>
-                        {m.step != null && (
-                          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-field">
-                            <div className="h-full rounded-full bg-primary" style={{ width: `${(m.step / STEP_COUNT) * 100}%` }} />
-                          </div>
-                        )}
+                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-field">
+                          <div className="h-full rounded-full bg-primary" style={{ width: `${((creatorStage(m) + 1) / CREATOR_STAGES.length) * 100}%` }} />
+                        </div>
                       </button>
                     ))}
                   </div>
                 </section>
               )}
-
-              {/* Raccourcis (mobile uniquement, comme l'Aperçu agence) */}
-              <div className="grid grid-cols-3 gap-2 md:hidden">
-                {([
-                  { id: "todo", label: t("À faire"), Icon: ListChecks },
-                  { id: "ideas", label: t("Idées"), Icon: Lightbulb },
-                  { id: "planning", label: t("Planning"), Icon: CalendarDays },
-                ] as const).map(({ id, label, Icon }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setTab(id as Tab)}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-3 py-3 text-xs font-semibold text-foreground transition-colors hover:bg-rowhover"
-                  >
-                    <Icon className="h-4 w-4 text-muted-foreground" /> {label}
-                  </button>
-                ))}
-              </div>
 
               {/* Chiffres clés (bandeau à filets) */}
               <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border lg:grid-cols-4">
@@ -2425,7 +2621,7 @@ export function CreatorSpace({
                   <div className="px-5 py-5">
                     <DashSectionTitle
                       icon={ListChecks}
-                      right={openTodos.length > 0 ? <button type="button" onClick={() => setTab("todo")} className="text-[12px] text-muted-foreground transition-colors hover:text-foreground">{t("Voir tout")}</button> : undefined}
+                      right={openTodos.length > 0 ? <button type="button" onClick={() => setTab("todo")} className="-my-3 px-1 py-3 text-[13px] text-muted-foreground transition-colors hover:text-foreground">{t("Voir tout")}</button> : undefined}
                     >
                       {t("Mes tâches")}
                     </DashSectionTitle>
@@ -2445,7 +2641,7 @@ export function CreatorSpace({
                   <div className="px-5 py-5">
                     <DashSectionTitle
                       icon={FileText}
-                      right={briefs.length > 0 ? <button type="button" onClick={() => setTab("missions")} className="text-[12px] text-muted-foreground transition-colors hover:text-foreground">{t("Voir tout")}</button> : undefined}
+                      right={briefs.length > 0 ? <button type="button" onClick={() => setTab("missions")} className="-my-3 px-1 py-3 text-[13px] text-muted-foreground transition-colors hover:text-foreground">{t("Voir tout")}</button> : undefined}
                     >
                       {t("Mes briefs")}
                     </DashSectionTitle>
@@ -2601,166 +2797,36 @@ export function CreatorSpace({
 
           {/* À faire */}
           {tab === "todo" && (
-            <>
-              {todos.length > 0 && (
-                <StatsBento
-                  className="mb-5"
-                  primary={{ eyebrow: t("À faire · en cours"), value: String(openTodos.length), caption: plural(todos.length, "sur {n} tâche au total.", "sur {n} tâches au total.") }}
-                  bars={{ label: t("Par statut"), value: t("{n} faites", { n: todos.filter((x) => x.done).length }), series: TODO_STATUS_OPTS.map((o) => todos.filter((x) => cStatus(x) === o.value).length) }}
-                  small={{ value: String(openTodos.filter((x) => x.priority === "haute").length), label: t("Prioritaires") }}
-                  accent={{ value: String(todos.filter((x) => x.done).length), label: t("Faites"), icon: Check }}
-                />
-              )}
-              <PageHeaderRow>
-                <div className="flex flex-wrap items-center gap-2">
-                  {todoView === "liste" && (
-                    <Tabs
-                      size="sm"
-                      label={t("Filtrer les tâches")}
-                      value={todoFilter}
-                      onValueChange={(v) => setTodoFilter(v as TodoFilter)}
-                      items={opts.todoFilters.map((f) => ({ value: f.id, label: f.label }))}
-                    />
-                  )}
-                  {/* Bascule Liste / Colonnes (mémorisée) */}
-                  <Tabs
-                    size="sm"
-                    label={t("Affichage des tâches")}
-                    value={todoView}
-                    onValueChange={(v) => setTodoView(v as "liste" | "colonnes")}
-                    items={[
-                      { value: "liste", label: t("Liste"), icon: <List className="h-3.5 w-3.5" />, hideLabel: "always" },
-                      { value: "colonnes", label: t("Colonnes par statut"), icon: <Columns3 className="h-3.5 w-3.5" />, hideLabel: "always" },
-                    ]}
-                  />
-                </div>
-                <AddButton navBar label={t("Tâche")} onClick={() => setTdOpen(true)} />
-              </PageHeaderRow>
-              <InlineForm open={tdOpen} title={t("Nouvelle tâche")} onClose={() => setTdOpen(false)} onSubmit={addTodo}>
-                <TextField label={t("Tâche")} value={tdText} onChange={setTdText} />
-                <AutoGrowTextField label={t("Description")} value={tdDesc} onChange={setTdDesc} placeholder={t("Détaille — le champ s'agrandit tout seul…")} className="min-w-full" />
-                <TextField label={t("Échéance")} type="date" value={tdDue} onChange={setTdDue} />
-                <SelectField label={t("Priorité")} value={tdPrio} onChange={setTdPrio} options={opts.prio} />
-              </InlineForm>
-              {todoView === "colonnes" ? (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  {opts.todo.map((col) => {
-                    const colRows = todos.filter((t) => cStatus(t) === col.value);
-                    return (
-                      <div key={col.value} className="flex flex-col gap-2.5 rounded-2xl border border-border bg-panel/40 p-2.5">
-                        <div className="flex items-center justify-between px-1.5 pt-1">
-                          <div className="flex items-center gap-2">
-                            <span className={"h-2 w-2 rounded-full " + col.dot} />
-                            <span className="text-[12px] font-medium text-muted-foreground">{col.label}</span>
-                          </div>
-                          <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-semibold text-faint">{colRows.length}</span>
-                        </div>
-                        {colRows.length === 0 ? (
-                          <div className="px-2 py-6 text-center text-[11px] text-faint">—</div>
-                        ) : (
-                          colRows.map((td) => (
-                            <div key={td.id} className="rounded-xl border border-border bg-surface p-3">
-                              <button type="button" onClick={() => setTaskView(td)} className="block w-full text-left">
-                                <span className={"block line-clamp-2 break-words text-[12.5px] font-medium leading-snug " + (td.done ? "text-muted-foreground line-through" : "text-foreground")}>{td.text}</span>
-                                {((td.subtasks?.length ?? 0) > 0 || (td.attachments?.length ?? 0) > 0 || !!sharedWithText(td, name, t)) && (
-                                  <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[10px] text-faint">
-                                    {(td.subtasks?.length ?? 0) > 0 && <span>{t("{done}/{total} sous-tâches", { done: (td.subtasks ?? []).filter((s) => s.done).length, total: td.subtasks!.length })}</span>}
-                                    {(td.attachments?.length ?? 0) > 0 && <span>📎 {td.attachments!.length}</span>}
-                                    {sharedWithText(td, name, t) && <span>{sharedWithText(td, name, t)}</span>}
-                                  </span>
-                                )}
-                              </button>
-                              <div className="mt-2 flex items-center justify-between gap-2">
-                                <AnimatedBadge status={prioBadge(td.priority)} size="sm">{t(titleCase(td.priority ?? "moyenne"))}</AnimatedBadge>
-                                <div className="w-[118px] shrink-0">
-                                  <StatusSelect value={cStatus(td)} options={opts.todo} onChange={(s) => setTodoStatus(td, s)} />
-                                </div>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-              <div className="flex flex-col gap-3">
-                {filteredTodos.length === 0 ? (
-                  <div className="rounded-2xl border border-border bg-surface p-6 text-[13px] text-muted-foreground">
-                    {todoFilter === "terminees" ? t("Aucune tâche faite.") : t("Aucune tâche.")}
-                  </div>
-                ) : (
-                  <AgentPlan
-                    tasks={filteredTodos.map((td): PlanTask => ({
-                      id: td.id,
-                      title: td.text,
-                      status: cStatus(td),
-                      done: td.done,
-                      accent: td.done ? undefined : prioAccent(td.priority),
-                      subtasks: td.subtasks ?? [],
-                      meta: (
-                        <>
-                          {td.due && td.due !== "—" && <span>{t("Échéance {date}", { date: frDate(td.due) })}</span>}
-                          {(td.attachments?.length ?? 0) > 0 && <span>📎 {td.attachments!.length}</span>}
-                          {/* Tâche partagée : les autres créateurs, discrètement. */}
-                          {sharedWithText(td, name, t) && <span>{sharedWithText(td, name, t)}</span>}
-                        </>
-                      ),
-                      right: (
-                        <>
-                          <span className={cn("hidden w-[70px] rounded-full py-0.5 text-center text-[11px] font-medium sm:inline-block", td.done ? "bg-muted text-faint" : prioPill(td.priority))}>
-                            {t(titleCase(td.priority ?? "moyenne"))}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => (tdEditId === td.id ? setTdEditId(null) : startEditTodo(td))}
-                            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-                            aria-label={t("Modifier la tâche")}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <ActionMenu
-                            items={[
-                              {
-                                key: "delete",
-                                label: t("Supprimer"),
-                                icon: Trash2,
-                                danger: true,
-                                onClick: () => void deleteTodo(td),
-                                confirm: { title: t("Supprimer la tâche"), message: t("Supprimer «\u00A0{name}\u00A0»\u00A0? Cette action est irréversible.", { name: td.text }) },
-                              },
-                            ]}
-                          />
-                        </>
-                      ),
-                      footer: tdEditId === td.id ? (
-                        <div className="px-5 pb-2">
-                          <InlineForm open title={t("Modifier la tâche")} onClose={() => setTdEditId(null)} onSubmit={saveEditTodo}>
-                            <TextField label={t("Tâche")} value={teText} onChange={setTeText} />
-                            <AutoGrowTextField label={t("Description")} value={teDesc} onChange={setTeDesc} className="min-w-full" />
-                            <SelectField label={t("Priorité")} value={tePrio} onChange={setTePrio} options={opts.prio} />
-                          </InlineForm>
-                        </div>
-                      ) : undefined,
-                    }))}
-                    onCycleStatus={(id) => {
-                      const t = todos.find((x) => x.id === id);
-                      if (!t) return;
-                      const order = ["À faire", "En cours", "Fait"];
-                      setTodoStatus(t, order[(order.indexOf(cStatus(t)) + 1) % order.length]);
-                    }}
-                    onSetStatus={(id, status) => { const t = todos.find((x) => x.id === id); if (t) setTodoStatus(t, status); }}
-                    onDeleteTask={(id) => { const t = todos.find((x) => x.id === id); if (t) void deleteTodo(t); }}
-                    deleteMessage={(task) => t("Supprimer « {name} » ? Cette action est irréversible.", { name: task.title })}
-                    onToggleSubtask={(taskId, subId) => { const t = todos.find((x) => x.id === taskId); if (t) toggleSubtask(t, subId); }}
-                    onAddSubtask={(taskId, text) => { patchTodo(taskId, (x) => ({ subtasks: [...(x.subtasks ?? []), { id: stid(), text, done: false }] })); }}
-                    onDelSubtask={(taskId, subId) => { const t = todos.find((x) => x.id === taskId); if (t) delSubtask(t, subId); }}
-                    onOpenTask={(id) => { const t = todos.find((x) => x.id === id); if (t) setTaskView(t); }}
-                  />
-                )}
-              </div>
-              )}
-            </>
+            <CreatorTodos
+              todos={todos}
+              progressOn={progressOn}
+              sharedWith={(td) => sharedWithText(td, name, t) || null}
+              form={
+                <>
+                  <InlineForm open={tdOpen} title={t("Nouvelle tâche")} onClose={() => setTdOpen(false)} onSubmit={addTodo}>
+                    <TextField label={t("Tâche")} value={tdText} onChange={setTdText} />
+                    <AutoGrowTextField label={t("Description")} value={tdDesc} onChange={setTdDesc} placeholder={t("Détaille — le champ s'agrandit tout seul…")} className="min-w-full" />
+                    <TextField label={t("Échéance")} type="date" value={tdDue} onChange={setTdDue} />
+                    <SelectField label={t("Priorité")} value={tdPrio} onChange={setTdPrio} options={opts.prio} />
+                  </InlineForm>
+                  <InlineForm open={!!tdEditId} title={t("Modifier la tâche")} onClose={() => setTdEditId(null)} onSubmit={saveEditTodo}>
+                    <TextField label={t("Tâche")} value={teText} onChange={setTeText} />
+                    <AutoGrowTextField label={t("Description")} value={teDesc} onChange={setTeDesc} className="min-w-full" />
+                    <SelectField label={t("Priorité")} value={tePrio} onChange={setTePrio} options={opts.prio} />
+                  </InlineForm>
+                </>
+              }
+              onAdd={() => setTdOpen(true)}
+              onEdit={(td) => startEditTodo(td)}
+              onSetStatus={(td, st) => void setTodoStatus(td, st)}
+              onToggleDone={(td) => void markTodo(td, !td.done)}
+              onDelete={(td) => void deleteTodo(td)}
+              onPatch={patchTodo}
+              onUpload={(td, files) => void uploadAttachments(td, files)}
+              uploading={attUploading}
+              onOpenAttachment={(a) => void openAttachment(a)}
+              onRemoveAttachment={(td, path) => void removeAttachment(td, path)}
+            />
           )}
 
           {/* Idées */}
@@ -2902,15 +2968,7 @@ export function CreatorSpace({
                               label: t("Supprimer"),
                               icon: Trash2,
                               danger: true,
-                              onClick: async () => {
-                                if (await dbDelete("contacts", c.id)) {
-                                  setContacts((prev) => prev.filter((y) => y.id !== c.id));
-                                  toast(t("Supprimé"));
-                                } else {
-                                  toast(t("Erreur — réessaie"));
-                                }
-                              },
-                              confirm: { title: t("Supprimer le contact"), message: t("Supprimer «\u00A0{name}\u00A0»\u00A0? Cette action est irréversible.", { name: c.brand }) },
+                              onClick: () => removeUndoable(setContacts, contacts, c, "contacts", t("Contact supprimé")),
                             },
                           ]}
                         />
@@ -2956,11 +3014,16 @@ export function CreatorSpace({
 
           {/* Missions : collabs (étape sur 11) + briefs, en liste ; un tap ouvre la fiche */}
           {tab === "missions" && !openMission && (
-            missions.length === 0 ? (
+            !(ready.collabs && ready.briefs) ? (
+              <SkeletonList count={3} action label={t("Chargement de tes missions")} />
+            ) : missions.length === 0 ? (
               <div className="rounded-[20px] border border-border bg-surface px-6 py-10 text-center shadow-sm">
                 <IconTile className="mx-auto"><SquareCheckBig /></IconTile>
-                <div className="mt-3 text-[15px] font-semibold text-foreground">{t("Aucune mission pour le moment.")}</div>
-                <p className="mt-1 text-[13px] text-muted-foreground">{t("Tes collabs et tes briefs apparaîtront ici.")}</p>
+                <div className="mt-3 text-[16px] font-semibold text-foreground">{t("Pas de mission en cours.")}</div>
+                <p className="mt-1 text-[15px] text-muted-foreground">{t("On te prévient dès qu'une marque dit oui.")}</p>
+                <button type="button" onClick={() => setTab("mediakit")} className="mt-4 h-11 rounded-full bg-field px-5 text-[15px] font-semibold text-foreground transition-transform duration-200 ease-out active:scale-[0.97]">
+                  {t("Voir mon media kit")}
+                </button>
               </div>
             ) : (
               <div className="flex flex-col gap-6">
@@ -2972,29 +3035,23 @@ export function CreatorSpace({
                     <h2 className="mb-2 flex items-baseline gap-2 px-1 text-[13px] font-semibold text-muted-foreground">
                       {g.label} <span className="tabular-nums text-faint">{g.rows.length}</span>
                     </h2>
-                    <div className="overflow-hidden rounded-[20px] border border-border bg-surface shadow-sm">
-                      {g.rows.map((m, i) => {
-                        const st = missionState(m, todayIso);
-                        return (
-                          <button
-                            key={m.id}
-                            type="button"
-                            onClick={() => goMission(m)}
-                            className={cn("flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-rowhover", i > 0 && "border-t border-border")}
-                          >
-                            <IconTile tone="info"><span className="text-[17px] font-bold">{brandInitial(m.brand)}</span></IconTile>
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-[16px] font-semibold text-foreground">{m.brand}</span>
-                              <span className="block truncate text-[13px] text-muted-foreground">{missionLine(m)}</span>
-                              {m.title && <span className="block truncate text-[13px] text-faint">{m.title}</span>}
-                            </span>
-                            <span className="flex shrink-0 flex-col items-end gap-1.5">
-                              <StatusPill tone={st.tone} size="xs">{t(st.label)}</StatusPill>
-                              {m.due && <span className="text-[12px] tabular-nums text-muted-foreground">{shortDay(m.due)}</span>}
-                            </span>
-                          </button>
-                        );
-                      })}
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {g.rows.map((m) => (
+                        <MissionCard
+                          key={m.id}
+                          m={m}
+                          dateText={m.due ? shortDay(m.due) : ""}
+                          whenText={m.due && !m.done ? whenText(daysBetweenIso(todayIso, m.due)) : null}
+                          late={!m.done && !!m.due && m.due < todayIso}
+                          onOpen={() => goMission(m)}
+                          onAction={(key) => {
+                            // Facture et contenu : le sélecteur de fichier s'ouvre dans le clic (sinon bloqué).
+                            if (key === "invoice") invFileRef.current?.click();
+                            else if (key === "content") pickContent(m);
+                            else goMission(m);
+                          }}
+                        />
+                      ))}
                     </div>
                   </section>
                 ))}
@@ -3006,7 +3063,6 @@ export function CreatorSpace({
           {tab === "missions" && openMission && (() => {
             const m = openMission;
             const b = m.brief;
-            const cur = m.step != null ? creatorPhaseIndex(m.step) : -1;
             const days = m.due ? daysBetweenIso(todayIso, m.due) : null;
             const contact = brandContact(m.brand);
             const st = missionState(m, todayIso);
@@ -3026,35 +3082,10 @@ export function CreatorSpace({
                   <StatusPill tone={st.tone} size="xs" className="self-start">{t(st.label)}</StatusPill>
                 </div>
 
-                {/* Les 5 phases vues par le créateur (les 11 étapes restent en dessous) */}
-                {m.step != null && (
-                  <div className="rounded-[20px] border border-border bg-surface px-2 py-4 shadow-sm">
-                    <ol className="grid grid-cols-5">
-                      {CREATOR_PHASES.map((p, i) => {
-                        const done = m.done || i < cur;
-                        const now = !m.done && i === cur;
-                        return (
-                          <li key={p.key} className="relative flex min-w-0 flex-col items-center gap-1.5">
-                            {i < CREATOR_PHASES.length - 1 && (
-                              <span aria-hidden className={cn("absolute left-1/2 top-[11px] h-0.5 w-full", m.done || i < cur ? "bg-primary" : "bg-border")} />
-                            )}
-                            <span
-                              className={cn(
-                                "relative z-10 grid h-6 w-6 place-items-center rounded-full",
-                                done ? "bg-primary text-primary-foreground" : now ? "border-2 border-primary bg-surface" : "bg-field",
-                              )}
-                            >
-                              {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : now ? <span className="h-2 w-2 rounded-full bg-primary" /> : null}
-                            </span>
-                            <span className={cn("max-w-full truncate px-0.5 text-[11px] sm:text-[12px]", now ? "font-bold text-foreground" : done ? "font-medium text-foreground" : "text-muted-foreground")}>
-                              {t(p.label)}
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  </div>
-                )}
+                {/* Où en est la mission : les 5 étapes créateur */}
+                <div className="rounded-[20px] border border-border bg-surface px-2 py-4 shadow-sm">
+                  <MissionStages stage={creatorStage(m)} />
+                </div>
 
                 {/* Prochaine échéance */}
                 {m.due && !m.done && (
@@ -3064,11 +3095,7 @@ export function CreatorSpace({
                     <div className="mt-1 text-[14px] text-muted-foreground first-letter:uppercase">
                       {longDay(m.due)}{m.deliverables ? ` · ${m.deliverables}` : ""}
                     </div>
-                    {m.step != null && (
-                      <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-field">
-                        <div className="h-full rounded-full bg-primary" style={{ width: `${(m.step / STEP_COUNT) * 100}%` }} />
-                      </div>
-                    )}
+
                   </div>
                 )}
 
@@ -3077,13 +3104,23 @@ export function CreatorSpace({
                   <div className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
                     <h2 className="text-[18px] font-bold tracking-[-0.01em]">{t("Le brief")}</h2>
                     {hasResume(b.resume) && (
-                      <div className="mt-3 rounded-[14px] bg-field p-4">
-                        <div className="mb-3 flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
-                          <Sparkles className="h-3.5 w-3.5 text-faint" /> {t("L'essentiel du brief")}
-                        </div>
-                        <BriefResumeView resume={b.resume} t={t} />
+                      <div className="mt-3">
+                        <BriefBlocks resume={b.resume} dateText={b.due ? shortDay(toISODate(b.due) || b.due) : ""} />
                       </div>
                     )}
+                    {/* Le brief complet de la marque (PDF déposé par l'agence) */}
+                    {(() => {
+                      const pdf = docs.find((d) => d.type === "brief" && d.path && d.name.toLowerCase().includes(m.brand.trim().toLowerCase()));
+                      return pdf ? (
+                        <button
+                          type="button"
+                          onClick={() => openDocFile(pdf)}
+                          className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-field px-4 text-[15px] font-semibold text-foreground transition-transform duration-200 ease-out active:scale-[0.98]"
+                        >
+                          <FileText className="h-4 w-4" /> {t("Brief complet")}
+                        </button>
+                      ) : null;
+                    })()}
                     <dl className="mt-3 flex flex-col gap-2.5 text-[14px]">
                       <div className="flex items-start justify-between gap-3">
                         <dt className="shrink-0 text-muted-foreground">{t("Livrables")}</dt>
@@ -3091,7 +3128,7 @@ export function CreatorSpace({
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <dt className="text-muted-foreground">{t("Échéance")}</dt>
-                        <dd className="font-medium tabular-nums text-foreground">{frDate(b.due)}</dd>
+                        <dd className="font-medium tabular-nums text-foreground">{toISODate(b.due) ? shortDay(toISODate(b.due)) : frDate(b.due)}</dd>
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <dt className="text-muted-foreground">{t("Statut")}</dt>
@@ -3159,34 +3196,16 @@ export function CreatorSpace({
                   </div>
                 )}
 
-                {/* Les 11 étapes de la collab (source unique : lib/collabs.ts) */}
-                {m.step != null && (
-                  <div className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
-                    <h2 className="text-[18px] font-bold tracking-[-0.01em]">{t("Les étapes")}</h2>
-                    <ol className="mt-3 flex flex-col">
-                      {STEPS.map((s, i) => {
-                        const done = m.done || s.n < (m.step as number);
-                        const now = !m.done && s.n === m.step;
-                        return (
-                          <li key={s.n} className="relative flex items-start gap-3 pb-3 last:pb-0">
-                            {i < STEPS.length - 1 && <span aria-hidden className={cn("absolute left-[11px] top-6 h-[calc(100%-1.25rem)] w-0.5", done ? "bg-primary" : "bg-border")} />}
-                            <span
-                              className={cn(
-                                "relative z-10 grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold tabular-nums",
-                                done ? "bg-primary text-primary-foreground" : now ? "border-2 border-primary bg-surface text-primary" : "bg-field text-muted-foreground",
-                              )}
-                            >
-                              {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : s.n}
-                            </span>
-                            <span className="min-w-0 flex-1 pt-0.5">
-                              <span className={cn("block text-[14px] leading-snug", now ? "font-bold text-foreground" : done ? "text-foreground" : "text-muted-foreground")}>{t(s.label)}</span>
-                              {now && <span className="mt-0.5 block text-[12px] font-medium text-primary">{t("Étape actuelle")}</span>}
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  </div>
+                {/* Envoyer mon contenu : tant que la mission n'est pas publiée */}
+                {!m.done && creatorStage(m) >= 0 && creatorStage(m) <= 2 && (
+                  <button
+                    type="button"
+                    onClick={() => pickContent(m)}
+                    disabled={!!contentUp && !contentUp.done}
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary px-5 text-[16px] font-semibold text-primary-foreground shadow-sm transition-transform duration-200 ease-out active:scale-[0.98] disabled:opacity-50"
+                  >
+                    <Upload className="h-5 w-5" /> {t("Envoyer mon contenu")}
+                  </button>
                 )}
 
                 {/* Contact de la marque (tes contacts) */}
@@ -3234,14 +3253,15 @@ export function CreatorSpace({
           {tab === "gifting" && (
             <div className="space-y-4">
               {/* Rappel mentions — visible en haut, c'est le point clé pour le créateur */}
-              <div className="flex items-start gap-2.5 rounded-2xl border border-border bg-foreground/[0.06] px-4 py-3 text-[12px] leading-relaxed text-amber">
-                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
+              <div className="flex items-center gap-2.5 rounded-2xl bg-surface px-4 py-3 text-[15px] text-foreground shadow-sm">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1">{rich(t("Tu le montres ? Écris {a}."), { a: <b>{t("« Produit offert »")}</b> })}</span>
+                <HelpTip title={t("Pourquoi le dire")} align="end">
                   {rich(t("Un cadeau reçu d'une marque est un partenariat\u00A0: dès que tu le montres, indique-le clairement («\u00A0{a}\u00A0» ou «\u00A0{b}\u00A0»). C'est une obligation légale (loi n°\u00A02023-451)."), {
                     a: <b>{t("Produit offert")}</b>,
                     b: <b>{t("Cadeau")}</b>,
                   })}
-                </span>
+                </HelpTip>
               </div>
 
               <PageHeaderRow>
@@ -3295,10 +3315,13 @@ export function CreatorSpace({
                         </div>
                       )}
 
-                      <div className="mt-2.5 flex items-start gap-1.5 rounded-lg border border-border bg-foreground/[0.06] px-3 py-2 text-[11px] leading-snug text-amber">
-                        <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        <span>{t(g.mentions || DEFAULT_MENTIONS)}</span>
-                      </div>
+                      {/* Mention propre à ce cadeau seulement (la règle générale est en haut, derrière « ? ») */}
+                      {g.mentions && g.mentions.trim() && g.mentions !== DEFAULT_MENTIONS && (
+                        <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-field px-3 py-2 text-[13px] leading-snug text-foreground">
+                          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <span>{g.mentions}</span>
+                        </div>
+                      )}
 
                       {g.contact_email && (
                         <a href={`mailto:${g.contact_email}`} className="mt-2.5 flex items-center gap-1.5 text-[12px] text-primary hover:underline">
@@ -3306,7 +3329,7 @@ export function CreatorSpace({
                           {g.contact_name ? `${g.contact_name} · ` : ""}{g.contact_email}
                         </a>
                       )}
-                      {g.received_on && <div className="mt-1.5 text-[11px] text-faint">{t("Reçu le {date}", { date: frDate(g.received_on) })}</div>}
+                      {g.received_on && <div className="mt-1.5 text-[13px] text-muted-foreground">{t("Reçu le {date}", { date: fmtDay(g.received_on, locale) })}</div>}
                       {g.note && <p className="mt-2 text-[12px] leading-relaxed text-faint">{g.note}</p>}
                     </div>
                   ))}
@@ -3319,18 +3342,18 @@ export function CreatorSpace({
           {tab === "planning" && (
             <EventCalendar
               events={[
-                ...(events.map((e) => ({ id: e.id, date: e.date ?? "", time: e.time ?? "—", title: e.title, type: e.type, who: e.who ?? name, description: e.description ?? null })) as CalEv[]),
+                ...(events.map((e) => ({ id: e.id, date: e.date ?? "", time: e.time && e.time !== "—" ? e.time : "", title: e.title, type: e.type, who: titleCase(e.who ?? name), description: e.description ?? null })) as CalEv[]),
                 // Échéances superposées en lecture seule, comme le Planning agence :
                 // SES briefs (date = due) et SES factures non payées (date = échéance).
                 ...briefs.flatMap((b): CalEv[] => {
                   const date = toISODate(b.due);
-                  return date ? [{ id: `brief:${b.id}`, date, time: "", title: (b.brand ?? "").trim() || t("Brief"), type: "deadline", who: name, kind: "brief" }] : [];
+                  return date ? [{ id: `brief:${b.id}`, date, time: "", title: (b.brand ?? "").trim() || t("Brief"), type: "deadline", who: titleCase(name), kind: "brief" }] : [];
                 }),
                 ...invoices.flatMap((iv, i): CalEv[] => {
                   const status = String(iv.status ?? "");
                   const date = toISODate(iv.date);
                   if (!date || status === "payee" || status === "brouillon") return [];
-                  return [{ id: `facture:${iv.ref}:${i}`, date, time: "", title: `${t("Facture {ref}", { ref: String(iv.ref ?? "").trim() })}${iv.party ? ` · ${iv.party}` : ""}`.trim(), type: "deadline", who: name, kind: "facture" }];
+                  return [{ id: `facture:${iv.ref}:${i}`, date, time: "", title: `${t("Facture {ref}", { ref: String(iv.ref ?? "").trim() })}${iv.party ? ` · ${iv.party}` : ""}`.trim(), type: "deadline", who: titleCase(name), kind: "facture" }];
                 }),
               ]}
               onNavigate={(kind) => setTab(kind === "brief" ? "briefs" : kind === "facture" ? "facturation" : "todo")}
@@ -3359,7 +3382,7 @@ export function CreatorSpace({
                   sort_order: events.length + 1,
                 });
                 if (!created) {
-                  toast(t("Erreur — réessaie"));
+                  toast(t("Ça n'a pas marché. Réessaie dans un instant."));
                   return false;
                 }
                 setEvents([{ id: String((created as { id: string }).id), date: dateVal, day, time: e.time || "—", title: e.title, type: e.type, who: name, description }, ...events]);
@@ -3381,7 +3404,7 @@ export function CreatorSpace({
                   toast(t("Événement modifié ✓"));
                   return true;
                 }
-                toast(t("Erreur — réessaie"));
+                toast(t("Ça n'a pas marché. Réessaie dans un instant."));
                 return false;
               }}
               onDelete={async (id) => {
@@ -3391,7 +3414,7 @@ export function CreatorSpace({
                   toast(t("Supprimé"));
                   return true;
                 }
-                toast(t("Erreur — réessaie"));
+                toast(t("Ça n'a pas marché. Réessaie dans un instant."));
                 return false;
               }}
             />
@@ -3536,7 +3559,8 @@ export function CreatorSpace({
                         type="button"
                         onClick={() => openDocFile(doc)}
                         title={t("Ouvrir")}
-                        className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
+                        aria-label={t("Ouvrir")}
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                       >
                         <ExternalLink className="h-4 w-4" />
                       </button>
@@ -3571,14 +3595,14 @@ export function CreatorSpace({
                   L'étoile met une rubrique en favori (tête du menu et Accueil). */}
               <section aria-label={t("Toutes tes rubriques")} className="flex flex-col gap-4">
                 {navGroups
-                  .map((g) => ({ ...g, items: g.id === "favoris" ? g.items : g.items.filter((i) => !isMainTab(i.id)) }))
+                  .map((g) => ({ ...g, items: (g.id === "favoris" ? g.items : g.items.filter((i) => !isMainTab(i.id))).filter((i) => i.id !== "profil" && i.id !== "accueil") }))
                   .filter((g) => g.items.length > 0)
                   .map((g) => (
                     <div key={g.id}>
                       <h2 className="mb-2 px-1 text-[13px] font-semibold uppercase tracking-[0.04em] text-muted-foreground">{g.label}</h2>
                       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
                         {g.items.map((it) => {
-                          const fav = favs.includes(it.id);
+                          const fav = shownFavs.includes(it.id);
                           return (
                             <div key={`${g.id}-${it.id}`} className="relative">
                               <button
@@ -3595,7 +3619,7 @@ export function CreatorSpace({
                                   onClick={() => toggleFav(it.id)}
                                   aria-pressed={fav}
                                   aria-label={fav ? t("Retirer des favoris") : t("Ajouter aux favoris")}
-                                  className={cn("absolute right-0.5 top-0.5 grid h-10 w-10 place-items-center", fav ? "text-primary" : "text-faint")}
+                                  className={cn("absolute right-0 top-0 grid h-11 w-11 place-items-center", fav ? "text-primary" : "text-faint")}
                                 >
                                   <TtpStar className="h-4 w-4" fill={fav ? "currentColor" : "none"} />
                                 </button>
@@ -3606,10 +3630,14 @@ export function CreatorSpace({
                       </div>
                     </div>
                   ))}
-                {!favs.length && <p className="px-1 text-[12.5px] text-faint">{t("Touche l'étoile d'une rubrique pour l'ajouter à tes favoris.")}</p>}
+
               </section>
 
-              {/* Mes infos (déplacée de l'Accueil) : toggle Statistiques / Coordonnées + chiffres animés */}
+              {/* Mes infos : repliées par défaut (le Menu reste court), ouvertes pour les voir ou les modifier */}
+              <IosGroup>
+                <IosRow icon={Contact} label={t("Mes infos")} detail={infosOpen || editing ? t("Masquer") : undefined} chevron={!(infosOpen || editing)} onClick={() => setInfosOpen((v) => !v)} />
+              </IosGroup>
+              {(infosOpen || editing) && (
               <Card index={0}>
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div className="text-sm font-semibold">{t("Mes infos")}</div>
@@ -3753,6 +3781,7 @@ export function CreatorSpace({
                   </>
                 )}
               </Card>
+              )}
 
               {/* Réseaux connectés : leurs stats arrivent toutes seules */}
               {(FEATURES.connect.instagram || !!creator?.ig?.link || FEATURES.connect.tiktok || !!creator?.tt?.link || FEATURES.connect.youtube || !!creator?.yt?.link) && (
@@ -3769,22 +3798,22 @@ export function CreatorSpace({
                   <div className="flex gap-1" role="group" aria-label={t("Langue de l'espace")}>
                     {(["fr", "en"] as const).map((l) => (
                       <button key={l} type="button" aria-pressed={lang === l} disabled={!creator} onClick={() => void setSpaceLang(l)}
-                        className={cn("h-8 rounded-full px-3.5 text-[14px] font-medium transition-colors disabled:opacity-50", lang === l ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+                        className={cn("h-11 rounded-full px-4 text-[15px] font-medium transition-colors disabled:opacity-50", lang === l ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
                         {l === "fr" ? "Français" : "English"}
                       </button>
                     ))}
                   </div>
                 </div>
-                {/* Thème (propre à cet appareil) : Clair, Verre, Noir ou Auto */}
+                {/* Thème (propre à cet appareil) : Clair, Sombre ou Auto (suit le téléphone, par défaut) */}
                 <div className="flex flex-col gap-2 px-3.5 py-3">
                   <span className="text-[16px] text-foreground">{t("Thème")}</span>
                   <Tabs
                     size="sm"
                     fullWidth
                     label={t("Thème")}
-                    value={themeCtx.theme}
+                    value={themeCtx.theme === "verre" ? "clair" : themeCtx.theme}
                     onValueChange={(v) => themeCtx.setTheme(v as ThemeChoice)}
-                    items={THEME_CHOICES.map((c) => ({ value: c.value, label: t(c.label) }))}
+                    items={THEME_CHOICES.filter((c) => c.value !== "verre").map((c) => ({ value: c.value, label: c.value === "noir" ? t("Sombre") : t(c.label) }))}
                   />
                 </div>
               </IosGroup>
@@ -3801,73 +3830,50 @@ export function CreatorSpace({
 
           {/* Gains (ex-Facturation) : à recevoir, encaissé, à venir, historique + dépôt de facture.
               Calculs purs : src/lib/creatorGains.ts (le rouge = argent en retard, seulement). */}
-          {tab === "gains" && (
+          {tab === "gains" && !ready.invoices && (
             <div className="flex flex-col gap-4">
-              {/* À recevoir */}
-              <div className="rounded-[22px] border border-border bg-surface p-5 shadow-sm md:p-6">
-                <div className="text-[14px] font-semibold text-muted-foreground">{t("À recevoir")}</div>
-                <div className="mt-1 truncate text-[40px] font-bold leading-tight tracking-[-0.03em] tabular-nums md:text-[48px]">{formatEuro(gains.toReceive)}</div>
-                {gains.late > 0 ? (
-                  <div className={cn("mt-3 flex items-start gap-2.5 rounded-[14px] px-3.5 py-3 text-[14px] leading-snug", TONE_SOFT.late)}>
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>
-                      {t("{brands} : paiement en retard de {amount}. Ton agence suit la relance, tu n'as rien à faire.", {
-                        brands: gains.lateParties.join(", ") || t("Une marque"),
-                        amount: formatEuro(gains.late),
-                      })}
-                    </span>
+              <SkeletonFigure label={t("Chargement de tes gains")} />
+              <SkeletonList count={3} label={t("Chargement de tes versements")} />
+            </div>
+          )}
+          {tab === "gains" && ready.invoices && (
+            <div className="flex flex-col gap-4">
+              {/* Ce qui arrive : montants NETS, ce qu'elle touche vraiment (src/lib/creatorGains.ts). */}
+              <div className="rounded-[22px] bg-surface p-5 shadow-sm md:p-6">
+                <div className="text-[14px] font-semibold text-muted-foreground">{t("Ce qui arrive")}</div>
+                <div className="mt-1 truncate text-[44px] font-bold leading-tight tracking-[-0.03em] tabular-nums md:text-[48px]">{formatEuro(net.coming)}</div>
+                <div className="mt-1 text-[14px] text-muted-foreground">
+                  {net.last ? t("Dernier versement : {amount} · {brand}", { amount: formatEuro(net.last.amount), brand: brandOnly(net.last.party) }) : t("Pas encore de versement.")}
+                </div>
+                {net.late > 0 && (
+                  <div className="mt-3 flex items-start gap-2.5 rounded-[14px] bg-field px-3.5 py-3 text-[14px] leading-snug text-foreground">
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span>{t("Une marque paie en retard. Ton agence s'en occupe.")}</span>
                   </div>
-                ) : gains.toReceive > 0 ? (
-                  <div className={cn("mt-3 flex items-start gap-2.5 rounded-[14px] px-3.5 py-3 text-[14px] leading-snug", TONE_SOFT.ok)}>
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>{t("Rien en retard pour le moment.")}</span>
-                  </div>
-                ) : null}
+                )}
               </div>
 
-              {/* Encaissé · En attente · À venir */}
-              <div className="grid grid-cols-3 gap-px overflow-hidden rounded-[20px] border border-border bg-border">
-                {[
-                  { label: t("Encaissé"), value: gains.cashed, cls: TONE_TEXT.ok },
-                  { label: t("En attente"), value: gains.pending, cls: "text-foreground" },
-                  { label: t("À venir"), value: gains.upcoming, cls: "text-muted-foreground" },
-                ].map((k) => (
-                  <div key={k.label} className="min-w-0 bg-surface px-3 py-4 sm:px-5">
-                    <div className="truncate text-[12px] text-muted-foreground sm:text-[13px]">{k.label}</div>
-                    <div className={cn("mt-1.5 truncate text-[17px] font-bold leading-none tracking-tight tabular-nums sm:text-[24px]", k.cls)}>{formatEuro(k.value)}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="-mt-2 px-1 text-[12px] text-muted-foreground">
-                {t("Total facturé")} : <span className="font-semibold tabular-nums text-foreground">{formatEuro(gains.billed)}</span>
-                {gains.upcoming > 0 ? ` · ${t("À venir = factures en préparation chez ton agence.")}` : ""}
+              <div className="flex items-center justify-between gap-3 rounded-[20px] bg-surface px-5 py-4 shadow-sm">
+                <span className="text-[15px] text-muted-foreground">{t("Déjà versé")}</span>
+                <span className={cn("text-[20px] font-bold tabular-nums", TONE_TEXT.ok)}>{formatEuro(net.paid)}</span>
               </div>
 
-              {/* Historique des paiements */}
+              {/* Les versements, un par collab, avec un statut simple */}
               <section>
-                <h2 className="mb-2 flex items-baseline justify-between gap-3 px-1">
-                  <span className="text-[20px] font-bold tracking-[-0.02em]">{t("Historique")}</span>
-                  <span className="text-[13px] text-muted-foreground">
-                    {t("Reçu")} : <span className="font-semibold tabular-nums text-foreground">{formatEuro(gains.cashed)}</span>
-                  </span>
-                </h2>
-                <div className="overflow-hidden rounded-[20px] border border-border bg-surface shadow-sm">
+                <h2 className="mb-2 px-1 text-[20px] font-bold tracking-[-0.02em]">{t("Tes versements")}</h2>
+                <div className="overflow-hidden rounded-[20px] bg-surface shadow-sm">
                   {invoices.length === 0 ? (
-                    <div className="p-5 text-[14px] text-muted-foreground">{t("Tes factures apparaîtront ici dès que ton agence les aura créées.")}</div>
+                    <div className="p-5 text-[15px] text-muted-foreground">{t("Rien pour l'instant. Tes versements arrivent ici.")}</div>
                   ) : (
                     invoices.map((inv, i) => {
-                      const st = invoiceTone(inv);
+                      const st = payoutStatus(inv);
+                      const brand = brandOnly(inv.party);
                       return (
-                        <div key={inv.ref + i} className={cn("flex items-center gap-3 px-4 py-3", i > 0 && "border-t border-border")}>
-                          <IconTile tone="info"><span className="text-[17px] font-bold">{brandInitial(inv.party)}</span></IconTile>
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-[15px] font-semibold text-foreground">{inv.party}</div>
-                            <div className="truncate text-[13px] text-muted-foreground">
-                              #{inv.ref}{inv.date ? <span className="tabular-nums"> · {frDate(inv.date)}</span> : null}
-                            </div>
-                          </div>
+                        <div key={inv.ref + i} className={cn("flex min-h-[60px] items-center gap-3 px-4 py-2.5", i > 0 && "border-t border-border")}>
+                          <IconTile tone="info"><span className="text-[17px] font-bold">{brandInitial(brand)}</span></IconTile>
+                          <div className="min-w-0 flex-1 truncate text-[16px] font-semibold text-foreground">{brand}</div>
                           <div className="flex shrink-0 flex-col items-end gap-1">
-                            <span className="whitespace-nowrap text-[15px] font-bold tracking-tight tabular-nums">{formatEuro(parseAmount(inv.amount))}</span>
+                            <span className="whitespace-nowrap text-[16px] font-bold tracking-tight tabular-nums">{formatEuro(netShare(parseAmount(inv.amount), rate))}</span>
                             <StatusPill tone={st.tone} size="xs">{t(st.label)}</StatusPill>
                           </div>
                         </div>
@@ -3875,6 +3881,7 @@ export function CreatorSpace({
                     })
                   )}
                 </div>
+                <p className="mt-2 px-1 text-[13px] text-muted-foreground">{t("Montants nets : ce que tu touches, commission déduite.")}</p>
               </section>
 
               {/* Dépôt de facture — filet de sécurité si l'agence oublie de la saisir */}
@@ -3935,6 +3942,7 @@ export function CreatorSpace({
       </div>
 
       <OfflineBanner />
+      <UndoBar />
       {iosPhone && <PullToRefresh scrollRef={mainRef} />}
       {iosPhone && (
         <IosTabBar
@@ -3942,7 +3950,7 @@ export function CreatorSpace({
             const tb = TABS.find((x) => x.id === id);
             return { id, label: tb ? t(tb.label) : id, icon: tb?.icon ?? LayoutDashboard, badge: id === "mails" && mailsOn ? mailBadge : null };
           })}
-          active={ownerTab(tab)}
+          active={ownerTab(tab) ?? ""}
           onSelect={(id) => setTab(id)}
           onReselect={(id) => {
             // Toucher l'onglet ouvert : retour à la liste (fiche mission, rubrique de Profil), sinon en haut.
@@ -3950,6 +3958,30 @@ export function CreatorSpace({
             else mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
           }}
         />
+      )}
+      {/* Envoi de contenu (pellicule) + bandeau d'avancement et coche de succès */}
+      <input ref={contentFileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={(e) => { const f = e.target.files; void sendContentFiles(f).finally(() => { e.target.value = ""; }); }} />
+      {contentUp && (
+        <div role="status" className="pointer-events-none fixed inset-x-0 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-[1302] flex justify-center px-4 md:bottom-6">
+          <div className="w-full max-w-[420px] rounded-[20px] bg-surface px-4 py-3.5 shadow-lg">
+            <div className="flex items-center gap-2.5">
+              {contentUp.done ? (
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-[var(--st-ok,#16a34a)] text-white"><Check className="h-4 w-4" strokeWidth={3} /></span>
+              ) : (
+                <Upload className="h-5 w-5 text-primary" />
+              )}
+              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-foreground">
+                {contentUp.done ? t("Contenu envoyé à ton agence") : t("Envoi pour {brand}…", { brand: contentUp.brand })}
+              </span>
+              {!contentUp.done && <span className="text-[14px] font-semibold tabular-nums text-muted-foreground">{Math.round(contentUp.pct * 100)} %</span>}
+            </div>
+            {!contentUp.done && (
+              <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-field">
+                <div className="h-full rounded-full bg-primary transition-[width] duration-200 ease-out" style={{ width: `${Math.round(contentUp.pct * 100)}%` }} />
+              </div>
+            )}
+          </div>
+        </div>
       )}
       {/* Envoi des stats : hors des onglets pour être ouvrable depuis l'Accueil ET le Guide */}
       <input ref={statsFileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => sendStatsFiles(e.target.files)} />
@@ -4126,7 +4158,7 @@ export function CreatorSpace({
                 onClick={() => {
                   const t = taskView;
                   setTaskView(null);
-                  setTodoView("liste"); // le formulaire d'édition n'existe qu'en vue liste
+                  setTab("todo"); // le formulaire de modification est dans « À faire »
                   startEditTodo(t);
                 }}
                 className="flex items-center gap-1.5 rounded-full bg-panel px-3 py-2 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"

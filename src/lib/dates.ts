@@ -88,3 +88,15 @@ export function fmtAgoSince(v: unknown, now: number = Date.now()): string {
   const d = asDate(v);
   return d ? fmtAgoDays((now - d.getTime()) / 86400000) : "";
 }
+
+/**
+ * Une date saisie sous n'importe quelle forme (« 2026-11-04 », horodatage ISO, « 04/11/2026 »)
+ * → « 4 nov. » ; un texte libre (« fin juin ») est rendu tel quel, une valeur vide donne "".
+ */
+export function fmtDayAny(v: unknown, locale = "fr-FR", now: Date = new Date()): string {
+  const t = String(v ?? "").trim();
+  if (!t || t === "—") return "";
+  if (/^\d{4}-\d{2}-\d{2}T/.test(t)) return fmtDay(t, locale, now) || t;
+  const iso = toISODate(t);
+  return (iso ? fmtDay(iso, locale, now) : "") || t;
+}

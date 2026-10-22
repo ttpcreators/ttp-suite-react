@@ -132,3 +132,46 @@ export function brandInitial(brand: string | null | undefined): string {
   const c = String(brand ?? "").trim().charAt(0);
   return c ? c.toUpperCase() : "?";
 }
+
+/**
+ * Les 5 étapes vues par le créateur (demande de Marc, 2026-10-22), sans termes internes :
+ * Brief reçu → Contenu envoyé → Validé → Publié → Payé.
+ */
+export const CREATOR_STAGES = ["Brief reçu", "Contenu envoyé", "Validé", "Publié", "Payé"] as const;
+
+/**
+ * Dernière étape créateur FRANCHIE (0 à 4), -1 si aucune. Étapes agence (src/lib/collabs.ts) :
+ * 1 Signature → aucune ; 2-3 Brief transmis, Concept validé → Brief reçu ; 4 Tournage →
+ * Contenu envoyé ; 5 Validation marque → Validé ; 6-9 Publication à Paiement marque → Publié ;
+ * 10-11 Créateur payé, Bilan → Payé. Brief seul : attente ou en cours → Brief reçu,
+ * à valider → Contenu envoyé, terminé → Validé.
+ */
+export function creatorStage(m: Pick<Mission, "step" | "brief" | "collab" | "done">): number {
+  if (m.collab) {
+    if (m.collab.status === "gagnee") return 4;
+    const s = m.step ?? 1;
+    return s >= 10 ? 4 : s >= 6 ? 3 : s >= 5 ? 2 : s >= 4 ? 1 : s >= 2 ? 0 : -1;
+  }
+  const k = briefKey(m.brief?.status ?? "attente");
+  return k === "terminé" ? 2 : k === "valider" ? 1 : 0;
+}
+
+export type MissionActionKey = "brief" | "content" | "feedback" | "invoice" | "open";
+
+/**
+ * LE bouton principal d'une mission selon où elle en est (null quand tout est fini).
+ * Libellé français (clé de traduction) : un verbe, deux ou trois mots.
+ */
+export function missionAction(m: Pick<Mission, "step" | "brief" | "collab" | "done">): { key: MissionActionKey; label: string } | null {
+  const stage = creatorStage(m);
+  if (stage >= 4) return null;
+  if (stage <= 0) {
+    const fresh = m.collab ? (m.step ?? 1) <= 2 : briefKey(m.brief?.status ?? "attente") === "attente";
+    if (m.brief && (stage < 0 || fresh)) return { key: "brief", label: "Lire le brief" };
+    return stage < 0 ? { key: "open", label: "Ouvrir" } : { key: "content", label: "Envoyer mon contenu" };
+  }
+  if (stage === 1) return { key: "feedback", label: "Voir les retours" };
+  if (m.collab && (m.step ?? 0) >= 8) return { key: "invoice", label: "Déposer ma facture" };
+  return { key: "open", label: "Ouvrir" };
+}
+

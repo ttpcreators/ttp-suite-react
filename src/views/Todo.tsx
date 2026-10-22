@@ -34,7 +34,7 @@ import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { insertMention, mentionAt, mentionSuggestions, parseQuickAdd } from "@/lib/todoQuickAdd";
 import { creatorsLabel, creatorsPatch, hasCreator, joinNames, todoCreators } from "@/lib/todoCreators";
 import { noteCreatorsColumn, todosHaveCreators } from "@/lib/todoCreatorsDb";
-import { appendPoint, latestPoint, parsePoints } from "@/lib/todoProgress";
+import { appendPoint, latestPoint, parsePoints, progressColumnMissing } from "@/lib/todoProgress";
 import { TONE_DOT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
 import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -51,6 +51,7 @@ import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3, UserRound,
 import { WeeklyRoutines } from "@/components/WeeklyRoutines";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { DoneCircle, InfoRow } from "@/components/todo-parts";
 import { Overlay } from "@/components/mobile/ios-sheet";
 
 type Priority = "haute" | "moyenne" | "basse";
@@ -79,6 +80,8 @@ type Row = {
   /** Traçabilité du « Fait » : quand et par qui (colonnes ajoutées par le SQL équipe). */
   done_at?: string | null;
   done_by?: string | null;
+  /** Points d'avancement, visibles du créateur (SQL 2026-10-22 ; avant : blob `itemNotes`). */
+  progress?: string | null;
 };
 
 let _stid = 0;
@@ -242,7 +245,8 @@ export function Todo() {
     setFormOpen(true);
   });
 
-  // Commentaires (agence) stockés dans le blob __app_state__, indexés par id de tâche.
+  // Points d'avancement : colonne `todos.progress` (le créateur les voit) ; avant le SQL
+  // 2026-10-22, ou pour une tâche pas encore reprise, l'ancien blob agence `itemNotes`.
   const { data: notesData } = useAppState<Record<string, string>>(
     (s: AppState) => (s["itemNotes"] as Record<string, string>) ?? {},
   );
@@ -250,8 +254,12 @@ export function Todo() {
   useEffect(() => {
     if (notesData) setNotes(notesData);
   }, [notesData]);
-  // Renvoie true si le commentaire est bien enregistré (les appelants affichent le toast).
-  const saveNote = async (id: string, value: string): Promise<boolean> => {
+  const noteOf = (id: string): string => {
+    const col = (rows ?? []).find((r) => r.id === id)?.progress;
+    return col && col.trim() ? col : notes[id] ?? "";
+  };
+  // Ancien rangement (blob) : avant le SQL, ou si la colonne manque.
+  const saveNoteBlob = async (id: string, value: string): Promise<boolean> => {
     try {
       // Relit la map FRAÎCHE avant d'écrire (jamais depuis l'état local : on
       // écraserait les commentaires posés depuis un autre poste / pas encore chargés).
@@ -271,12 +279,23 @@ export function Todo() {
       return false; // lecture du blob impossible (réseau…)
     }
   };
+  // Renvoie true si le commentaire est bien enregistré (les appelants affichent le toast).
+  const saveNote = async (id: string, value: string): Promise<boolean> => {
+    const v = value.trim();
+    if (v === noteOf(id).trim()) return true; // rien de changé
+    const { error } = await supabase.from("todos").update({ progress: v || null }).eq("id", id);
+    if (error) return progressColumnMissing(error) ? saveNoteBlob(id, v) : false;
+    setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, progress: v || null } : r)));
+    // L'ancien point du blob ne doit pas revenir (ex. avancement vidé) : retiré, sans bloquer.
+    if (notes[id]) void saveNoteBlob(id, "");
+    return true;
+  };
   // Édition du commentaire d'avancement (dans la fiche).
   const [noteEditId, setNoteEditId] = useState<string | null>(null);
   const [noteEditText, setNoteEditText] = useState("");
   const startNote = (id: string) => {
     setNoteEditId(id);
-    setNoteEditText(notes[id] ?? "");
+    setNoteEditText(noteOf(id));
   };
   // « Points d'avancement » : un nouveau point s'ajoute à la suite du commentaire.
   const [pointInput, setPointInput] = useState("");
@@ -293,7 +312,7 @@ export function Todo() {
     const t = pointInput.trim();
     if (!t) return;
     // Point daté (« 21/10/2026 · … ») ajouté à la suite des précédents.
-    if (await saveNote(row.id, appendPoint(notes[row.id], t))) {
+    if (await saveNote(row.id, appendPoint(noteOf(row.id), t, new Date(), "Agence"))) {
       setPointInput("");
       toast("Point d'avancement ajouté ✓");
     } else {
@@ -447,7 +466,7 @@ export function Todo() {
   const openEdit = (row: Row) => {
     setEditText(row.text);
     setEditDescr(row.descr ?? "");
-    setEditNote(notes[row.id] ?? "");
+    setEditNote(noteOf(row.id));
     setEditDue(toISODate(row.due));
     setEditPriority(row.priority);
     setEditCreators(todoCreators(row));
@@ -830,7 +849,7 @@ export function Todo() {
                     · <Paperclip className="h-3 w-3" /> {atts}
                   </span>
                 )}
-                {notes[row.id] && <MessageSquarePlus className="h-3 w-3" aria-label="Point d'avancement" />}
+                {noteOf(row.id) && <MessageSquarePlus className="h-3 w-3" aria-label="Point d'avancement" />}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
@@ -910,8 +929,8 @@ export function Todo() {
     const created = row.created_at ? new Date(row.created_at) : null;
     const paneKind = pane?.id === row.id ? pane.kind : null;
     const who = whoOf(row);
-    const points = parsePoints(notes[row.id]);
-    const last = latestPoint(notes[row.id]);
+    const points = parsePoints(noteOf(row.id));
+    const last = latestPoint(noteOf(row.id));
     const closeBtn = inSheet && (
       <button
         type="button"
@@ -971,7 +990,7 @@ export function Todo() {
           >
             <span className="flex items-baseline justify-between gap-2">
               <span className="text-[12px] font-semibold text-muted-foreground">Où j'en suis</span>
-              {last?.date && <span className="text-[11px] tabular-nums text-faint">le {last.date}</span>}
+              {last?.date && <span className="text-[11px] tabular-nums text-faint">{last.who === "Créateur" ? "Le créateur, " : ""}le {last.date}</span>}
             </span>
             {last ? (
               <span className="line-clamp-3 whitespace-pre-wrap text-[13px] leading-snug text-foreground [overflow-wrap:anywhere]">{last.text}</span>
@@ -1148,7 +1167,11 @@ export function Todo() {
                 <ol className="flex flex-col gap-1.5">
                   {points.map((p, i) => (
                     <li key={i} className="flex flex-col">
-                      {p.date && <span className="text-[11px] tabular-nums text-faint">{p.date}</span>}
+                      {(p.date || p.who) && (
+                        <span className="text-[11px] tabular-nums text-faint">
+                          {[p.date, p.who === "Créateur" ? "Le créateur" : p.who === "Agence" ? "L'agence" : null].filter(Boolean).join(" · ")}
+                        </span>
+                      )}
                       <span className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground [overflow-wrap:anywhere]">{p.text}</span>
                     </li>
                   ))}
@@ -1707,41 +1730,6 @@ export function Todo() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-/** Rond à cocher d'une tâche : contour orange si priorité haute, gris sinon ; plein si faite. */
-function DoneCircle({ done, high, onToggle, size = "md" }: { done: boolean; high: boolean; onToggle: () => void; size?: "md" | "lg" }) {
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle();
-      }}
-      aria-label={done ? "Rouvrir la tâche" : "Marquer comme faite"}
-      title={done ? "Rouvrir la tâche" : "Marquer comme faite"}
-      className={cn(
-        "group/c grid shrink-0 place-items-center rounded-full transition-[transform,background-color,border-color] active:scale-90",
-        size === "lg" ? "h-7 w-7" : "h-6 w-6",
-        done ? "bg-primary text-primary-foreground" : cn("border-2 text-muted-foreground hover:bg-rowhover", high ? "border-priority" : "border-faint"),
-      )}
-    >
-      <Check
-        className={cn(size === "lg" ? "h-4 w-4" : "h-3.5 w-3.5", !done && "opacity-0 transition-opacity group-hover/c:opacity-60")}
-        strokeWidth={3}
-      />
-    </button>
-  );
-}
-
-/** Ligne de la carte d'infos de la fiche : libellé à gauche, valeur à droite. */
-function InfoRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex min-h-11 items-center justify-between gap-3 px-3.5 py-2">
-      <dt className="shrink-0 text-[13px] text-muted-foreground">{label}</dt>
-      <dd className="flex min-w-0 items-center justify-end gap-2 text-right text-[13px] text-foreground">{children}</dd>
     </div>
   );
 }

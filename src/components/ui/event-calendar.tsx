@@ -1,13 +1,14 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, X, Trash2 } from "@/components/icons";
-import { Field, TextField, TextAreaField, SelectField } from "@/components/ui/form";
+import { AddButton, Field, TextField, TextAreaField, SelectField } from "@/components/ui/form";
 import { CreatorPicker } from "@/components/ui/creator-picker";
 import { ConfirmDialog } from "@/components/ui/action-menu";
-import { cn } from "@/lib/utils";
+import { cn, titleCase } from "@/lib/utils";
+import { fmtDay } from "@/lib/dates";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
-import { isPhoneNow } from "@/lib/iosUi";
+import { isPhoneNow, useIsPhone } from "@/lib/iosUi";
 import { useLang, useT, type Lang } from "@/lib/i18n";
 
 type T = (fr: string, vars?: Record<string, string | number>) => string;
@@ -160,22 +161,22 @@ const MONTHS_FR = [
   "Décembre",
 ];
 const DAYS_FR = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-const DAYS_FR_LONG = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 // Espace créateur en anglais (LangProvider) : mêmes tableaux, en anglais.
 const MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const DAYS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const DAYS_EN_LONG = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const monthsOf = (lang: Lang) => (lang === "en" ? MONTHS_EN : MONTHS_FR);
 const daysOf = (lang: Lang) => (lang === "en" ? DAYS_EN : DAYS_FR);
 
 function monthTitle(d: Date, lang: Lang) {
   return `${monthsOf(lang)[d.getMonth()]} ${d.getFullYear()}`;
 }
+/** Séparateur de jour de la liste : « Mer. 4 nov. » (format commun des dates + jour de semaine). */
 function formatListDay(key: string, lang: Lang) {
   const [y, m, dd] = key.split("-").map(Number);
   const d = new Date(y, (m ?? 1) - 1, dd ?? 1);
-  const long = lang === "en" ? DAYS_EN_LONG : DAYS_FR_LONG;
-  return `${long[mondayIndex(d)]} ${dd} ${monthsOf(lang)[(m ?? 1) - 1]} ${y}`;
+  const locale = lang === "en" ? "en-GB" : "fr-FR";
+  const wd = d.toLocaleDateString(locale, { weekday: "short" });
+  return `${wd.charAt(0).toUpperCase()}${wd.slice(1)} ${fmtDay(d, locale)}`;
 }
 
 // ─── Composant ───────────────────────────────────────────────────────────────
@@ -208,6 +209,7 @@ export function EventCalendar({
   creators = [],
   isReadOnly,
   fixedWho,
+  navAdd = false,
 }: {
   events: Ev[];
   /** Peuvent renvoyer false (ou Promise<false>) en cas d'échec : la modale reste ouverte. */
@@ -221,8 +223,11 @@ export function EventCalendar({
   /** Clic sur une échéance brief/to-do/facture (lecture seule) → navigation vers sa page. */
   onNavigate?: (kind: "brief" | "todo" | "facture" | "post", ev: Ev) => void;
   creators?: { name: string; photo_url?: string | null }[];
+  /** Téléphone : « + » dans la barre de titre pour créer un événement (Planning agence). */
+  navAdd?: boolean;
 }) {
   const t = useT();
+  const phone = useIsPhone();
   const lang = useLang();
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
@@ -425,6 +430,7 @@ export function EventCalendar({
         ))}
       </div>
 
+      {navAdd && phone && <AddButton navBar label={t("Événement")} onClick={() => openCreate(tKey)} />}
       {view === "month" && (
         <MonthView cursor={cursor} byDay={byDay} tKey={tKey} onCellClick={openCreate} onEventClick={handleEventClick} />
       )}
@@ -652,7 +658,7 @@ function WeekView({
                       {e.time && <span className="tabular-nums">{e.time}</span>}
                       {e.time && " · "}
                       <span className={chipText(e)}>{chipLabel(e, t)}</span>
-                      {e.who && ` · ${e.who}`}
+                      {e.who && ` · ${titleCase(e.who)}`}
                     </span>
                   </span>
                 </button>
@@ -731,7 +737,7 @@ function ListView({ events, onEventClick }: { events: Ev[]; onEventClick: (e: Ev
                   <span className="block truncate text-sm font-medium text-foreground">{e.title}</span>
                   <span className="block truncate text-[11px] text-muted-foreground">
                     <span className={chipText(e)}>{chipLabel(e, t)}</span>
-                    {e.who && ` · ${e.who}`}
+                    {e.who && ` · ${titleCase(e.who)}`}
                   </span>
                 </span>
               </button>

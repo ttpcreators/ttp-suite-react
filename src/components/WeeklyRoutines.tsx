@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { ActionMenu } from "@/components/ui/action-menu";
+import { HelpTip } from "@/components/ui/help-tip";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { useLiveKey } from "@/lib/useLive";
@@ -144,6 +145,9 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
             </span>
             <ChevronRight className={cn("h-4 w-4 shrink-0 text-faint transition-transform", open && "rotate-90")} />
           </button>
+          <HelpTip title="Routines de la semaine" align="end">
+            Ce que tu refais chaque semaine, sans le réécrire. Chaque tâche revient toute seule le jour choisi.
+          </HelpTip>
           {!missing && (
             <button
               type="button"
@@ -190,7 +194,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                 )}
                 {list.length === 0 && !adding ? (
                   <p className="px-1 pb-1 text-[12px] text-muted-foreground">
-                    Ajoute ici ce que tu refais chaque semaine, sans avoir à le réécrire. Chaque tâche revient toute seule chaque semaine, le jour choisi.
+                    Aucune routine.
                   </p>
                 ) : (
                   <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">

@@ -14,7 +14,7 @@ import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useLiveKey } from "@/lib/useLive";
-import { frDate, EMPTY, fmtDayTime } from "@/lib/dates";
+import { EMPTY, fmtDayAny, fmtDayTime } from "@/lib/dates";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { AgentEditor, type AgentDraft, type AgentRow } from "@/components/AgentEditor";
 import { AgentAvatar } from "@/components/agent-avatar";
@@ -572,7 +572,7 @@ export function AgentView() {
         {dernierCockpit ? (
           <div>
             {!cockpitJour && (
-              <div className="mb-2 text-[11px] text-amber">Pas encore de cockpit aujourd'hui, voici le dernier ({frDate(dernierCockpit.jour)}).</div>
+              <div className="mb-2 text-[11px] text-amber">Pas encore de cockpit aujourd'hui, voici le dernier ({fmtDayAny(dernierCockpit.jour)}).</div>
             )}
             <div className="whitespace-pre-wrap rounded-xl bg-panel px-4 py-3 text-[13px] leading-relaxed text-foreground">{dernierCockpit.contenu}</div>
           </div>
@@ -680,7 +680,7 @@ export function AgentView() {
         {dernierCockpit ? (
           <div>
             {!cockpitJour && (
-              <div className="mb-2 text-[11px] text-amber">Pas encore de cockpit aujourd'hui, voici le dernier ({frDate(dernierCockpit.jour)}).</div>
+              <div className="mb-2 text-[11px] text-amber">Pas encore de cockpit aujourd'hui, voici le dernier ({fmtDayAny(dernierCockpit.jour)}).</div>
             )}
             <div className="whitespace-pre-wrap rounded-xl bg-panel px-4 py-3 text-[13px] leading-relaxed text-foreground">{dernierCockpit.contenu}</div>
           </div>
@@ -700,7 +700,7 @@ export function AgentView() {
                 <div className="flex items-center gap-2">
                   <span className="text-[13px] font-semibold text-foreground">{p.marque}</span>
                   {p.canal && <span className="rounded-full bg-rowhover px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{p.canal}</span>}
-                  {p.signal_date && <span className="ml-auto text-[10px] text-faint">{frDate(p.signal_date)}</span>}
+                  {p.signal_date && <span className="ml-auto text-[10px] text-faint">{fmtDayAny(p.signal_date)}</span>}
                 </div>
                 {p.signal && <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">{p.signal}</p>}
                 <div className="mt-2 flex flex-col gap-1 text-[11px] text-muted-foreground">
@@ -743,7 +743,7 @@ export function AgentView() {
                   {p.creatrice && <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{p.creatrice}</span>}
                   {p.prochaine_relance && (
                     <span className={cn("flex items-center gap-1 text-[10px]", relanceDepassee(p.prochaine_relance) ? "font-semibold text-amber" : "text-faint")}>
-                      <AlarmClock className="h-3 w-3" /> Relance {frDate(p.prochaine_relance)}
+                      <AlarmClock className="h-3 w-3" /> Relance {fmtDayAny(p.prochaine_relance)}
                     </span>
                   )}
                   <div className="ml-auto">
@@ -783,7 +783,7 @@ export function AgentView() {
                 {c.entreprise && <span className="text-[11px] text-muted-foreground">{c.entreprise}</span>}
                 {c.type && <span className="rounded-full bg-rowhover px-2 py-0.5 text-[9px] font-semibold text-muted-foreground">{CERCLE_TYPES[c.type] ?? c.type}</span>}
                 {c.frequence && <span className="text-[10px] text-faint">Fréquence : {c.frequence}</span>}
-                {c.dernier_contact && <span className="text-[10px] text-faint">Dernier contact : {frDate(c.dernier_contact)}</span>}
+                {c.dernier_contact && <span className="text-[10px] text-faint">Dernier contact : {fmtDayAny(c.dernier_contact)}</span>}
                 {c.prochain_pretexte && <span className="text-[11px] text-muted-foreground">Prétexte : {c.prochain_pretexte}</span>}
               </div>
             ))}
@@ -819,7 +819,7 @@ export function AgentView() {
                   <div className="min-w-0 flex-1">
                     <div className="text-[12px] leading-relaxed text-foreground">{e.info}</div>
                     <div className="mt-0.5 text-[10px] text-faint">
-                      {e.date ? frDate(e.date) : frDate(e.cree_le)}{e.source ? ` · ${e.source}` : ""}
+                      {e.date ? fmtDayAny(e.date) : fmtDayAny(e.cree_le)}{e.source ? ` · ${e.source}` : ""}
                     </div>
                   </div>
                   <DeleteButton

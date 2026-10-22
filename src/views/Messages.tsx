@@ -298,7 +298,7 @@ function Kpi({ icon: Icon, n, label }: { icon: typeof Mail; n: number; label: st
       <span className="hidden h-8 w-8 shrink-0 place-items-center rounded-full bg-panel text-muted-foreground sm:grid"><Icon className="h-4 w-4" /></span>
       <div className="min-w-0">
         <div className="text-[18px] font-bold leading-none tabular-nums text-foreground">{n}</div>
-        <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{label}</div>
+        <div className="mt-0.5 text-[11px] leading-tight text-muted-foreground">{label}</div>
       </div>
     </div>
   );

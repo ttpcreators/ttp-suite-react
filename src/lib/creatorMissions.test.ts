@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { brandInitial, briefKey, buildMissions, creatorPhaseIndex, missionState, stepLine, type MissionBrief, type MissionCollab } from "./creatorMissions";
+import { brandInitial, briefKey, buildMissions, creatorPhaseIndex, creatorStage, missionAction, missionState, stepLine, type MissionBrief, type MissionCollab } from "./creatorMissions";
 
 const brief = (over: Partial<MissionBrief>): MissionBrief => ({ id: "b1", brand: "Fitaya", deliverables: "1 reel", due: null, status: "cours", consignes: null, ...over });
 const collab = (over: Partial<MissionCollab>): MissionCollab => ({ id: "c1", brand: "Fitaya", title: null, deliverables: null, step: 4, status: "active", brief_id: null, ...over });
@@ -47,3 +47,27 @@ describe("missions du créateur", () => {
     expect(brandInitial("")).toBe("?");
   });
 });
+
+describe("étapes vues par le créateur", () => {
+  const withStep = (step: number, status = "active", hasBrief = true) => buildMissions([collab({ step, status, brief_id: "b1" })], hasBrief ? [brief({ id: "b1" })] : [])[0];
+  it("les 11 étapes agence deviennent 5 étapes créateur", () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((n) => creatorStage(withStep(n)))).toEqual([-1, 0, 0, 1, 2, 3, 3, 3, 3, 4, 4]);
+    expect(creatorStage(withStep(3, "gagnee"))).toBe(4);
+  });
+  it("brief seul : selon son statut", () => {
+    expect(creatorStage(buildMissions([], [brief({ status: "attente" })])[0])).toBe(0);
+    expect(creatorStage(buildMissions([], [brief({ status: "valider" })])[0])).toBe(1);
+    expect(creatorStage(buildMissions([], [brief({ status: "terminé" })])[0])).toBe(2);
+  });
+  it("un seul bouton principal, selon l'étape", () => {
+    expect(missionAction(withStep(2))?.label).toBe("Lire le brief");
+    expect(missionAction(withStep(3))?.label).toBe("Envoyer mon contenu");
+    expect(missionAction(withStep(4))?.label).toBe("Voir les retours");
+    expect(missionAction(withStep(6))?.label).toBe("Ouvrir");
+    expect(missionAction(withStep(8))?.label).toBe("Déposer ma facture");
+    expect(missionAction(withStep(10))).toBeNull();
+    expect(missionAction(withStep(1, "active", false))?.label).toBe("Ouvrir");
+    expect(missionAction(buildMissions([], [brief({ status: "cours" })])[0])?.label).toBe("Envoyer mon contenu");
+  });
+});
+

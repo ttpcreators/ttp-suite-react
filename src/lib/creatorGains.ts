@@ -1,6 +1,7 @@
 import type { StatusTone } from "./statusTone";
 import { parseAmount } from "./money";
 import { isOverdueInvoice } from "./relance";
+import { totalsOf } from "./invoice";
 
 /**
  * Gains de l'espace créateur (logique PURE, testable sous Node), à partir des
@@ -57,4 +58,54 @@ export function gainsSummary(invoices: GainInvoice[], now: Date = new Date()): G
   }
   s.toReceive = s.pending + s.late;
   return s;
+}
+
+// ── Ce que la créatrice touche VRAIMENT (net) ───────────────────────────────
+/*
+ * Le montant d'une facture est le brut HT facturé à la marque. La part du créateur =
+ * ce montant moins la commission de l'agence (taux de SA fiche, rien sous le seuil du
+ * contrat) : exactement le calcul de Reversements pour une facture simple (`totalsOf`).
+ * Le détail d'une facture avec TVA vit dans le blob agence, illisible ici : pour elle,
+ * c'est la même estimation (le montant est supposé HT).
+ */
+
+/** Part nette du créateur sur un montant facturé. */
+export function netShare(amount: number, ratePct: number): number {
+  return Math.round(totalsOf([{ id: "x", label: "", qty: 1, unit: amount }], true, 0, ratePct).reversal);
+}
+
+/** Statut d'un versement, en mots de créatrice : à venir (en préparation), en cours (la marque paie), versé. */
+export type PayoutKey = "avenir" | "encours" | "verse";
+export function payoutStatus(inv: Pick<GainInvoice, "status">): { key: PayoutKey; label: string; tone: StatusTone } {
+  if (inv.status === "payee") return { key: "verse", label: "Versé", tone: "ok" };
+  if (inv.status === "attente" || inv.status === "retard") return { key: "encours", label: "En cours", tone: "progress" };
+  return { key: "avenir", label: "À venir", tone: "closed" };
+}
+
+export type NetGains = {
+  /** Ce qui arrive : tout ce qui n'est pas encore versé (en cours + à venir), net. */
+  coming: number;
+  /** Déjà versé, net. */
+  paid: number;
+  /** Une marque paie en retard (l'agence relance) : net concerné. */
+  late: number;
+  /** Dernier versement (la facture payée la plus récente de la liste). */
+  last: { amount: number; party: string } | null;
+};
+
+/** Gains nets à partir des factures (plus récentes d'abord, comme l'espace les lit). */
+export function netGains(invoices: GainInvoice[], ratePct: number, now: Date = new Date()): NetGains {
+  const g: NetGains = { coming: 0, paid: 0, late: 0, last: null };
+  for (const inv of invoices) {
+    const net = netShare(parseAmount(inv.amount), ratePct);
+    const { key } = payoutStatus(inv);
+    if (key === "verse") {
+      g.paid += net;
+      if (!g.last) g.last = { amount: net, party: (inv.party ?? "").trim() };
+    } else {
+      g.coming += net;
+      if (invoiceTone(inv, now).tone === "late") g.late += net;
+    }
+  }
+  return g;
 }

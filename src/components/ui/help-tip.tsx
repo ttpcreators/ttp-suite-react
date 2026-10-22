@@ -20,7 +20,7 @@ export function HelpTip({ title, children, className, align = "start" }: {
           aria-label={`Aide : ${title}`}
           onClick={(e) => e.stopPropagation()}
           className={cn(
-            "inline-grid h-4 w-4 shrink-0 place-items-center rounded-full border border-border bg-surface text-[10px] font-semibold leading-none text-muted-foreground transition-colors hover:border-primary hover:text-primary",
+            "help-tip relative inline-grid h-4 w-4 shrink-0 place-items-center rounded-full border border-border bg-surface text-[10px] font-semibold leading-none text-muted-foreground transition-colors hover:border-primary hover:text-primary",
             className,
           )}
         >
