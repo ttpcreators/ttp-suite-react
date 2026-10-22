@@ -7,7 +7,7 @@
  *    TTP Creators » (`&project=<id>`, vérifié : projet sélectionné + texte présent).
  *  - Autres comptes (Gianni…) : le projet de Marc ne leur est pas accessible ; nouvelle
  *    conversation sur LEUR Claude, avec la même fiche.
- * Lien `claude://claude.ai/…` (schéma déclaré par l'app Claude du Mac), site en secours.
+ * Compte de Marc : site claude.ai (l'app ignore le projet) ; autres : app Claude (`claude://`).
  */
 const PERSONAL_PROJECTS: Record<string, string> = {
   "marcbouraoui@gmail.com": "019f77a8-6eef-7680-9b95-532e9cc66f6e",
@@ -27,8 +27,16 @@ function target(scheme: "claude" | "https", text: string, project: string | null
   return `${scheme}://claude.ai/new${params.length ? `?${params.join("&")}` : ""}`;
 }
 
-/** Ouvre Claude dans l'app (site en secours au bout d'1,5 s si l'app ne répond pas). */
+/**
+ * Ouvre Claude. Avec un projet : sur le SITE claude.ai, car l'app du Mac ignore `project=`
+ * (essai de Marc 2026-10-22 : fiche présente mais hors projet). Sans projet : dans l'app
+ * (site en secours au bout d'1,5 s si l'app ne répond pas).
+ */
 export function openClaude(project: string | null, text: string): void {
+  if (project) {
+    window.open(target("https", text, project), "_blank", "noopener");
+    return;
+  }
   let left = false;
   const away = () => {
     left = true;
