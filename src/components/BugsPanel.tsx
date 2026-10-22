@@ -1,3 +1,4 @@
+import { fmtDayTime } from "@/lib/dates";
 import { useStickyState } from "@/lib/useStickyState";
 import { useCallback, useEffect, useState } from "react";
 import { Bug, Check, ChevronDown, ChevronUp, Copy, RefreshCw } from "@/components/icons";
@@ -19,7 +20,7 @@ type Row = {
 };
 type Group = { message: string; rows: Row[]; last: Row; first: Row; resolved: boolean };
 
-const fmt = (iso: string) => new Date(iso).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const fmt = (iso: string) => fmtDayTime(iso);
 const device = (ua: string | null) =>
   !ua ? "" : /iPhone|iPad/.test(ua) ? "iPhone/iPad" : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : "Navigateur";
 

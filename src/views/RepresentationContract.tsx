@@ -17,7 +17,7 @@ import {
   representationHTML,
 } from "@/lib/representationContract";
 import { Overlay } from "@/components/mobile/ios-sheet";
-import { todayISO } from "@/lib/dates";
+import { fmtDay, todayISO } from "@/lib/dates";
 import { CasesBar, ContractDocument, FoldSection, HistoryPanel, PanelSection, SettingsPanel, SwitchRow, docBtn, docIconBtn, docPrimaryBtn } from "@/components/contracts/contract-ui";
 
 type Cfg = Record<string, string>;
@@ -547,7 +547,7 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13px] font-semibold text-foreground">{e.title}</div>
                 <div className="truncate text-[12px] text-muted-foreground">
-                  {e.creator ? titleCase(e.creator) : "Externe"} · {new Date(e.createdAt).toLocaleDateString("fr-FR")}
+                  {e.creator ? titleCase(e.creator) : "Externe"} · {fmtDay(e.createdAt)}
                 </div>
               </div>
               <div className="flex items-center gap-1">

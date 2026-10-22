@@ -180,8 +180,7 @@ export const EN_SHARED: Record<string, string> = {
   "à l'instant": "just now",
   "il y a {n} min": "{n} min ago",
   "il y a {n} h": "{n} h ago",
-  "il y a {n} jour": "{n} day ago",
-  "il y a {n} jours": "{n} days ago",
+  "il y a {n} j": "{n} d ago",
 
   // ── Écrans d'erreur ────────────────────────────────────────────────────────
   "L'app n'a pas pu se mettre à jour": "The app couldn't update",

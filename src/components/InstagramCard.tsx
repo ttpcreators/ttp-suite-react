@@ -1,3 +1,4 @@
+import { EMPTY, fmtAgoSince } from "@/lib/dates";
 import { useState } from "react";
 import { Spin } from "@/components/ui/loader";
 import { ExternalLink, Link2, RefreshCw, Unlink } from "@/components/icons";
@@ -77,7 +78,7 @@ export function InstagramCard({ creatorId, name, ig, onChange, className }: {
             {cell("Abonnés", fmtCompact(ig.followers), delta ? `${delta > 0 ? "+" : "−"}${fmtCompact(Math.abs(delta))} en 30 j` : undefined)}
             {cell("Engagement public", fmtEr(ig.er), "12 derniers posts")}
             {cell("Rythme", fmtPerWeek(ig.perWeek))}
-            {cell("Dernier post", fmtAgo(ig.lastPost))}
+            {cell("Dernier post", fmtAgoSince(ig.lastPost) || EMPTY)}
           </div>
           <div className="mt-2 text-[10px] text-faint">
             Donné par Meta {fmtAgo(ig.ok)}{ig.username ? ` · @${ig.username}` : ""}{ig.why ? ` · dernier essai : ${igWhyText(ig.why)}` : ""}

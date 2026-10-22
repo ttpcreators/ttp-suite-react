@@ -9,7 +9,7 @@ import { cn, titleCase } from "@/lib/utils";
 import { useIosPhone } from "@/components/mobile/ios-sheet";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { FolderTabs, type FolderTabItem } from "@/components/ui/folder-tabs";
-import { frDate, toISODate, todayISO } from "@/lib/dates";
+import { fmtDay, frDate, todayISO, toISODate } from "@/lib/dates";
 import { isMainPlatform } from "@/lib/platform";
 import { dbUpdate } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
@@ -31,7 +31,7 @@ function daysUntil(d: Date): number {
   return Math.round((d.getTime() - new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime()) / 86400000);
 }
 function frDateShort(d: Date): string {
-  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return fmtDay(d);
 }
 const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());

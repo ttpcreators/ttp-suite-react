@@ -28,7 +28,7 @@ import { writeTodoStatus } from "@/lib/todoStatus";
 import { useIntent } from "@/lib/openIntent";
 import { useLiveKey } from "@/lib/useLive";
 import { useIsPhone } from "@/lib/iosUi";
-import { toISODate, todayISO } from "@/lib/dates";
+import { fmtDay, fmtDayTime, toISODate, todayISO } from "@/lib/dates";
 import { useStickyState } from "@/lib/useStickyState";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { insertMention, mentionAt, mentionSuggestions, parseQuickAdd } from "@/lib/todoQuickAdd";
@@ -130,22 +130,12 @@ function lateDays(r: Row): number {
   if (!iso || iso >= today) return 0;
   return Math.round((localDay(today).getTime() - localDay(iso).getTime()) / 86400000);
 }
-/** « 13.10 » (ligne de la liste). */
-const shortDay = (iso: string | null | undefined): string | null => {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}`;
-};
-/** « 13 oct. 2026 » (année omise si `year` est faux). */
-const longDay = (d: Date, year = true) =>
-  d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", ...(year ? { year: "numeric" as const } : {}) });
+/** « 13 oct. » (ligne de la liste), null si aucune date. */
+const shortDay = (iso: string | null | undefined): string | null => fmtDay(iso) || null;
 /** Échéance lisible : « 14 oct. », texte libre gardé tel quel (« fin juin »), null si aucune. */
 function dueLabel(due: string | null): string | null {
   const iso = toISODate(due);
-  if (iso) {
-    const d = localDay(iso);
-    return longDay(d, d.getFullYear() !== new Date().getFullYear());
-  }
+  if (iso) return fmtDay(iso);
   const t = (due ?? "").trim();
   return t && t !== "—" ? t : null;
 }
@@ -156,10 +146,10 @@ const postponeBase = (r: Row): string => {
   return iso && iso > today ? iso : today;
 };
 
-/** « le 03/10/2026 à 14:32 · Marc » : quand et par qui une tâche a été faite. */
+/** « le 3 oct. à 14:32 · Marc » : quand et par qui une tâche a été faite. */
 const formatDone = (r: Pick<Row, "done_at" | "done_by">): string | null =>
   r.done_at
-    ? `le ${new Date(r.done_at).toLocaleDateString("fr-FR")} à ${new Date(r.done_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}${r.done_by ? ` · ${r.done_by}` : ""}`
+    ? `le ${fmtDayTime(r.done_at)}${r.done_by ? ` · ${r.done_by}` : ""}`
     : null;
 
 // Écran large (≥ 1024 px) : liste + fiche à droite. En dessous, la fiche s'ouvre en feuille.
@@ -823,15 +813,15 @@ export function Todo() {
               <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-muted-foreground">
                 <CreatorStack names={who.names} photoOf={photoOf} size="xs" />
                 <span className="font-medium text-foreground/80" title={who.full}>{who.short}</span>
-                {/* La date (déjà dans la fiche) laisse la place au titre sur téléphone. */}
-                {row.source === "creator" ? (
-                  <span>
-                    · demandée par le créateur{day && <span className="max-sm:hidden"> · {day}</span>}
-                  </span>
+                {/* Trois infos au plus : qui · une date · pièces jointes. La date (déjà dans la fiche)
+                    laisse la place au titre sur téléphone. */}
+                {row.done && row.done_at ? (
+                  <span className={TONE_TEXT.ok}>· faite le {shortDay(row.done_at)}</span>
+                ) : row.source === "creator" ? (
+                  <span>· demandée{day && <span className="max-sm:hidden"> le {day}</span>}</span>
                 ) : (
                   day && <span className="max-sm:hidden">· créée le {day}</span>
                 )}
-                {row.done && row.done_at && <span className={TONE_TEXT.ok}>· faite le {shortDay(row.done_at)}</span>}
                 {atts > 0 && (
                   <span className="inline-flex items-center gap-0.5" title={`${atts} pièce${atts > 1 ? "s" : ""} jointe${atts > 1 ? "s" : ""}`}>
                     · <Paperclip className="h-3 w-3" /> {atts}
@@ -1014,7 +1004,7 @@ export function Todo() {
                 {late > 0 ? ` · ${late} j de retard` : ""}
               </span>
             </InfoRow>
-            {created && !Number.isNaN(created.getTime()) && <InfoRow label="Créée le">{longDay(created)}</InfoRow>}
+            {created && !Number.isNaN(created.getTime()) && <InfoRow label="Créée le">{fmtDay(created)}</InfoRow>}
             <InfoRow label="Demandée par">{row.source === "creator" ? "Le créateur" : "L'agence"}</InfoRow>
             {row.done && formatDone(row) && <InfoRow label="Faite">{formatDone(row)}</InfoRow>}
           </dl>
@@ -1386,9 +1376,80 @@ export function Todo() {
     );
   }
 
+  // Filtres : un simple bouton à côté de « Liste / Colonnes » (en-tête de page).
+  const filterButton =
+    rows !== null && rows.length > 0
+      ? (() => {
+          const activeCount =
+            (creatorFilter != null ? 1 : 0) +
+            (priorityFilter != null ? 1 : 0) +
+            // Le filtre de statut n'existe (et ne s'applique) qu'en vue liste.
+            (viewMode === "liste" && todoFilter !== "encours" ? 1 : 0);
+          const groups: FilterGroup[] = [
+            ...(viewMode === "liste"
+              ? [{
+                  id: "statut",
+                  label: "Statut",
+                  value: todoFilter,
+                  onChange: (v: string) => setTodoFilter(v as TodoFilter),
+                  options: TODO_FILTERS.map((f) => ({
+                    value: f.id,
+                    label: f.label,
+                    count: filteredBase.filter((r) => matchTodoFilter(f.id, r)).length,
+                  })),
+                }]
+              : []),
+            {
+              id: "priorite",
+              label: "Priorité",
+              value: priorityFilter ?? "__all__",
+              onChange: (v: string) => setPriorityFilter(v === "__all__" ? null : (v as Priority)),
+              options: priorityPills.map((p) => ({ value: p.value ?? "__all__", label: p.label })),
+            },
+          ];
+          return (
+            <FilterPanel
+              activeCount={activeCount}
+              groups={groups}
+              onClear={() => { setCreatorFilter(null); setPriorityFilter(null); setTodoFilter("encours"); }}
+              extra={
+                <div className="flex flex-col gap-2">
+                  <span className="text-[12px] font-medium text-muted-foreground">Périmètre</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Tabs
+                      size="sm"
+                      label="Périmètre"
+                      items={[
+                        { value: "__all__", label: "Tous" },
+                        { value: "__agency__", label: "Agence" },
+                      ]}
+                      value={creatorFilter ?? "__all__"}
+                      onValueChange={(v) => setCreatorFilter(v === "__all__" ? null : "__agency__")}
+                    />
+                    <Select value={creatorSelectValue} onValueChange={onCreatorSelect}>
+                      <SelectTrigger className="h-9 w-auto min-w-[170px] rounded-full bg-surface" placeholder="Un créateur…" />
+                      <SelectContent>
+                        <SelectItem index={0} value={ALL}>Tous</SelectItem>
+                        <SelectItem index={1} value="__agency__">Agence</SelectItem>
+                        {creators.map((c, i) => (
+                          <SelectItem key={c.id} index={i + 2} value={c.name} img={c.photo_url}>
+                            {titleCase(c.name)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              }
+            />
+          );
+        })()
+      : null;
+
   return (
     <div>
       <PageHeaderRow>
+        {filterButton}
         <Tabs
           size="sm"
           label="Affichage"
@@ -1499,73 +1560,6 @@ export function Todo() {
           {/* Tâches qui reviennent chaque semaine (date et auteur de chaque « Fait ») */}
           <WeeklyRoutines addSignal={routineAdd} />
 
-          {/* Panneau de filtres */}
-          {rows !== null && rows.length > 0 && (() => {
-            const activeCount =
-              (creatorFilter != null ? 1 : 0) +
-              (priorityFilter != null ? 1 : 0) +
-              // Le filtre de statut n'existe (et ne s'applique) qu'en vue liste.
-              (viewMode === "liste" && todoFilter !== "encours" ? 1 : 0);
-            const groups: FilterGroup[] = [
-              ...(viewMode === "liste"
-                ? [{
-                    id: "statut",
-                    label: "Statut",
-                    value: todoFilter,
-                    onChange: (v: string) => setTodoFilter(v as TodoFilter),
-                    options: TODO_FILTERS.map((f) => ({
-                      value: f.id,
-                      label: f.label,
-                      count: filteredBase.filter((r) => matchTodoFilter(f.id, r)).length,
-                    })),
-                  }]
-                : []),
-              {
-                id: "priorite",
-                label: "Priorité",
-                value: priorityFilter ?? "__all__",
-                onChange: (v: string) => setPriorityFilter(v === "__all__" ? null : (v as Priority)),
-                options: priorityPills.map((p) => ({ value: p.value ?? "__all__", label: p.label })),
-              },
-            ];
-            return (
-              <FilterPanel
-                className="mb-4"
-                activeCount={activeCount}
-                groups={groups}
-                onClear={() => { setCreatorFilter(null); setPriorityFilter(null); setTodoFilter("encours"); }}
-                extra={
-                  <div className="flex flex-col gap-2">
-                    <span className="text-[12px] font-medium text-muted-foreground">Périmètre</span>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Tabs
-                        size="sm"
-                        label="Périmètre"
-                        items={[
-                          { value: "__all__", label: "Tous" },
-                          { value: "__agency__", label: "Agence" },
-                        ]}
-                        value={creatorFilter ?? "__all__"}
-                        onValueChange={(v) => setCreatorFilter(v === "__all__" ? null : "__agency__")}
-                      />
-                      <Select value={creatorSelectValue} onValueChange={onCreatorSelect}>
-                        <SelectTrigger className="h-9 w-auto min-w-[170px] rounded-full bg-surface" placeholder="Un créateur…" />
-                        <SelectContent>
-                          <SelectItem index={0} value={ALL}>Tous</SelectItem>
-                          <SelectItem index={1} value="__agency__">Agence</SelectItem>
-                          {creators.map((c, i) => (
-                            <SelectItem key={c.id} index={i + 2} value={c.name} img={c.photo_url}>
-                              {titleCase(c.name)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                }
-              />
-            );
-          })()}
 
           {/* Ajout rapide, en haut de la liste (à sa place, ne flotte plus par-dessus les cartes).
               « N » y amène le curseur. Pendant l'envoi le champ passe en lecture seule (pas

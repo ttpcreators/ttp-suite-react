@@ -128,7 +128,7 @@ const pendingOv = new Map<string, Override>();
 /** Délai après lequel une liste du serveur fait foi, même si elle contredit l'app (nouveau message…). */
 const OV_TRUST_MS = 90_000;
 
-/** Date façon Gmail : « 14:32 » aujourd'hui, « 3 oct. » cette année, « 03/10/2025 » avant. */
+/** Date façon Gmail : « 14:32 » aujourd'hui, sinon la date commune (« 3 oct. », « 3 oct. 2025 »). */
 function fmtDate(d: string): string {
   const t = new Date(d).getTime();
   return Number.isNaN(t) ? "" : fmtWhen(t);

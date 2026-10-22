@@ -86,28 +86,32 @@ describe("détail du score", () => {
   it("verdicts Instagram lus sur les seuils du calcul", () => {
     const b = instagramBreakdown(IG[1], NOW);
     const by = Object.fromEntries(b.factors.map((f) => [f.key, f]));
-    expect(by.er.verdict).toBe("Excellent"); // 6,1 % pour 24k : au-delà du plafond de 40 points
+    expect(by.er.verdict).toBe("Fort"); // 6,1 % pour 24k : au-delà du plafond de 40 points
     expect(by.er.tone).toBe("ok");
-    expect(by.email.verdict).toBe("Trouvé");
-    expect(by.agency.verdict).toBe("Sans agence");
-    expect(by.active.verdict).toBe("Récente");
+    expect(by.email.verdict).toBe("Fort");
+    expect(by.agency.verdict).toBe("Fort");
+    expect(by.active.verdict).toBe("Fort");
     const low = Object.fromEntries(instagramBreakdown(IG[2], NOW).factors.map((f) => [f.key, f]));
-    expect(low.er.verdict).toBe("Très bas");
-    expect(low.email.verdict).toBe("Absent");
+    expect(low.er.verdict).toBe("Faible");
+    expect(low.email.verdict).toBe("Aucun");
     expect(low.email.tone).toBe("closed");
-    expect(low.agency.tone).toBe("wait");
-    expect(low.active.verdict).toBe("Pas récente");
+    expect(low.agency).toMatchObject({ verdict: "Faible", tone: "wait" });
+    expect(low.active.verdict).toBe("Faible");
     expect(instagramBreakdown(IG[2], NOW).flags).toHaveLength(3);
   });
-  it("chiffre inconnu : verdict « Inconnu », zéro point", () => {
+  it("un seul vocabulaire pour tous les facteurs", () => {
+    const words = new Set([...IG, ...YT, {}].flatMap((d) => scoreBreakdown(d as ScoreInput, NOW).factors.map((f) => f.verdict)));
+    for (const w of words) expect(["Fort", "Moyen", "Faible", "Aucun"]).toContain(w);
+  });
+  it("chiffre inconnu : verdict « Aucun », zéro point", () => {
     const by = Object.fromEntries(instagramBreakdown({}, NOW).factors.map((f) => [f.key, f]));
-    expect(by.er).toMatchObject({ verdict: "Inconnu", points: 0 });
-    expect(by.rhythm).toMatchObject({ verdict: "Inconnu", points: 0 });
-    expect(by.active).toMatchObject({ verdict: "Inconnue", points: 0 });
+    expect(by.er).toMatchObject({ verdict: "Aucun", points: 0, tone: "closed" });
+    expect(by.rhythm).toMatchObject({ verdict: "Aucun", points: 0 });
+    expect(by.active).toMatchObject({ verdict: "Aucun", points: 0 });
   });
   it("YouTube : abonnés masqués jugés sur les vues seules", () => {
     const views = youtubeBreakdown(YT[3], NOW).factors.find((f) => f.key === "views");
-    expect(views).toMatchObject({ points: 15, verdict: "Abonnés masqués", tone: "wait" });
+    expect(views).toMatchObject({ points: 15, verdict: "Moyen", tone: "wait" });
   });
 });
 

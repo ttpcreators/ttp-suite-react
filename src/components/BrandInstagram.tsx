@@ -1,3 +1,4 @@
+import { EMPTY, fmtAgoSince } from "@/lib/dates";
 import { useState } from "react";
 import { Spin } from "@/components/ui/loader";
 import { ExternalLink, RefreshCw } from "@/components/icons";
@@ -52,7 +53,7 @@ export function BrandIgPanel({ contactId, ig, onChange }: { contactId: string; i
             {cell("Abonnés", fmtCompact(ig.followers))}
             {cell("Rythme", fmtPerWeek(ig.perWeek))}
             {cell("Engagement", fmtEr(ig.er))}
-            {cell("Dernier post", fmtAgo(ig.lastPost?.at))}
+            {cell("Dernier post", fmtAgoSince(ig.lastPost?.at) || EMPTY)}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-faint">
             <span>Donné par Meta {fmtAgo(ig.ok)}</span>

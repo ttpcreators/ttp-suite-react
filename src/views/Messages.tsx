@@ -1,3 +1,4 @@
+import { EMPTY } from "@/lib/dates";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Loader, Spin } from "@/components/ui/loader";
 import { AlertTriangle, ArrowLeft, AtSign, Check, Contact, Copy, EyeOff, Inbox, Mail, MessagesSquare, RefreshCw, Search, Send, X } from "@/components/icons";
@@ -191,7 +192,7 @@ export function Messages() {
     <>
       <PageHeaderRow>
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          {state?.at ? `Mis à jour ${fmtAgo(state.at)}` : "Jamais actualisé"}
+          {state?.at ? `Mis à jour ${fmtAgo(state.at)}` : EMPTY}
           <HelpTip title="Comment ça marche ?" align="end">
             <p>Toutes les heures, l'app lit les conversations du compte Instagram de TTP (les 20 derniers messages de chacune : c'est la limite de Meta).</p>
             <p><span className="font-medium text-foreground">Fiches contact</span> : si le @ correspond à une fiche, l'email donné en message y est ajouté s'il manque, et chaque échange est noté dans son suivi de prospection (canal Instagram).</p>

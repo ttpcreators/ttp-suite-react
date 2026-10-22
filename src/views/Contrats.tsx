@@ -1,3 +1,4 @@
+import { fmtDay } from "@/lib/dates";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Copy, Check, Plus, Trash2, FileText, FileDown, Eye, X, Maximize2 } from "@/components/icons";
 import { cn, titleCase } from "@/lib/utils";
@@ -904,7 +905,7 @@ function ContractGenerator({ initial }: { initial: EditRequest | null }) {
                     <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{TYPE_META[h.ctType]?.chip ?? h.ctType}</span>
                   </div>
                   <div className="mt-0.5 truncate text-[12px] text-muted-foreground">
-                    {titleCase(h.ctName)}{h.brand ? ` × ${h.brand}` : ""} · {h.ref} · {new Date(h.ts).toLocaleDateString("fr-FR")}
+                    {titleCase(h.ctName)}{h.brand ? ` × ${h.brand}` : ""} · {h.ref} · {fmtDay(h.ts)}
                   </div>
                 </div>
                 <button type="button" onClick={() => setPreview({ html: h.html, hist: true })} title="Ouvrir" aria-label="Ouvrir" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">

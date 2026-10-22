@@ -1,3 +1,4 @@
+import { EMPTY, fmtDay } from "@/lib/dates";
 import { useEffect, useRef, useState } from "react";
 import { Upload, FileText, ExternalLink, Trash2, Image as ImageIcon, Link2, Mail, X, Send, Pencil, Plus, Check } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
@@ -443,7 +444,7 @@ function MediakitFiles() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] font-semibold text-foreground">{titleCase(row.creator ?? "—")}</div>
                   <div className="mt-0.5 text-[11px] text-faint">
-                    {row.created_at ? new Date(row.created_at).toLocaleDateString("fr-FR") : "—"}
+                    {fmtDay(row.created_at) || EMPTY}
                     {row.size ? ` · ${row.size}` : ""}
                   </div>
                 </div>

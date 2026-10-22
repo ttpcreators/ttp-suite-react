@@ -1,3 +1,4 @@
+import { fmtDayTime } from "@/lib/dates";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SIGNATURE_KEY, scribble, validSig, type SignatureData } from "@/lib/agencySignature";
 import { SignaturePad } from "@/components/signature-pad";
@@ -770,7 +771,7 @@ const TOOL_LABELS: Record<string, string> = {
   ajouter_contact: "Contact ajouté", noter_echange_contact: "Échange noté", ajouter_au_scouting: "Ajout au scouting",
   changer_statut_scouting: "Statut de scouting", avancer_collab: "Étape de collab",
 };
-const fmtWhen = (iso: string) => new Date(iso).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const fmtWhen = (iso: string) => fmtDayTime(iso);
 
 function ClaudePane() {
   const [grants, setGrants] = useState<Grant[] | null>(null);

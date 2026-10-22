@@ -1,3 +1,4 @@
+import { fmtDay } from "@/lib/dates";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { TtpBrief, TtpCollabs, TtpContract, TtpInvoice, TtpMail, TtpPhone, TtpPlanning, TtpSpark, TtpStats, TtpTodo } from "@/components/icons/ttp-icons";
 import { createPortal } from "react-dom";
@@ -111,8 +112,8 @@ function readSnooze(): SnoozeMap {
   }
 }
 
-const longDate = (d: Date) => d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
-const shortDate = (d: Date) => d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+const longDate = (d: Date) => fmtDay(d);
+const shortDate = (d: Date) => fmtDay(d);
 const isoToDate = (iso: string) => {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, m - 1, d);

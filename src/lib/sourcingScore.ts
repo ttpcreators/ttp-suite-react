@@ -12,9 +12,10 @@
  *               rythme (15), déjà sponsorisé (15), email (10), pas d'agence (10),
  *               actif ce mois-ci (10).
  *
- * Les mots (« Excellent », « Faible »…) ne changent rien à la note : ils lisent les
- * mêmes seuils que le calcul (repère d'engagement selon la taille, plafond des points,
- * seuil d'alerte).
+ * Les mots ne changent rien à la note : un seul vocabulaire pour tous les facteurs,
+ * « Fort » (vert), « Moyen » et « Faible » (orange), « Aucun » (gris : rien trouvé ou
+ * chiffre inconnu). Ils lisent les mêmes seuils que le calcul (repère d'engagement selon
+ * la taille, plafond des points).
  */
 import type { StatusTone } from "@/lib/statusTone";
 
@@ -33,7 +34,7 @@ export type ScoreInput = {
   sponsored?: number;
 };
 
-/** Ton d'un verdict : vert (bon), orange (à surveiller), gris (absent ou nul). */
+/** Ton d'un verdict : vert (Fort), orange (Moyen, Faible), gris (Aucun). */
 export type FactorTone = Extract<StatusTone, "ok" | "wait" | "closed">;
 export type ScoreFactor = { key: string; label: string; points: number; max: number; verdict: string; tone: FactorTone };
 export type ScoreBreakdown = { score: number; factors: ScoreFactor[]; flags: string[]; penalty: number };
@@ -52,8 +53,8 @@ const quietDays = (lastPost: string | null | undefined, now: number) => (lastPos
 
 /** Verdict d'un facteur « à paliers » (rythme) d'après la part des points obtenus. */
 function byShare(points: number, max: number, known: boolean): Pick<ScoreFactor, "verdict" | "tone"> {
-  if (!known) return { verdict: "Inconnu", tone: "closed" };
-  if (points >= max) return { verdict: "Excellent", tone: "ok" };
+  if (!known) return { verdict: "Aucun", tone: "closed" };
+  if (points >= max) return { verdict: "Fort", tone: "ok" };
   if (points >= max / 2) return { verdict: "Moyen", tone: "wait" };
   if (points > 0) return { verdict: "Faible", tone: "wait" };
   return { verdict: "Aucun", tone: "closed" };
@@ -62,15 +63,15 @@ function byShare(points: number, max: number, known: boolean): Pick<ScoreFactor,
 /** Facteurs communs aux deux réseaux : partenariats, email, agence, activité. */
 function common(d: ScoreInput, paid: boolean, quiet: number, activeDays: number): ScoreFactor[] {
   return [
-    { key: "deals", label: "Partenariats", points: paid ? 15 : 0, max: 15, verdict: paid ? "Déjà payé" : "Aucun repéré", tone: paid ? "ok" : "closed" },
-    { key: "email", label: "Email", points: d.email ? 10 : 0, max: 10, verdict: d.email ? "Trouvé" : "Absent", tone: d.email ? "ok" : "closed" },
-    { key: "agency", label: "Agence", points: d.agency ? 0 : 10, max: 10, verdict: d.agency ? "En agence ?" : "Sans agence", tone: d.agency ? "wait" : "ok" },
+    { key: "deals", label: "Partenariats", points: paid ? 15 : 0, max: 15, verdict: paid ? "Fort" : "Aucun", tone: paid ? "ok" : "closed" },
+    { key: "email", label: "Email", points: d.email ? 10 : 0, max: 10, verdict: d.email ? "Fort" : "Aucun", tone: d.email ? "ok" : "closed" },
+    { key: "agency", label: "Agence", points: d.agency ? 0 : 10, max: 10, verdict: d.agency ? "Faible" : "Fort", tone: d.agency ? "wait" : "ok" },
     {
       key: "active",
       label: "Activité",
       points: quiet < activeDays ? 10 : 0,
       max: 10,
-      ...(quiet < activeDays ? { verdict: "Récente", tone: "ok" as const } : quiet >= 999 ? { verdict: "Inconnue", tone: "closed" as const } : { verdict: "Pas récente", tone: "wait" as const }),
+      ...(quiet < activeDays ? { verdict: "Fort", tone: "ok" as const } : quiet >= 999 ? { verdict: "Aucun", tone: "closed" as const } : { verdict: "Faible", tone: "wait" as const }),
     },
   ];
 }
@@ -94,14 +95,12 @@ export function instagramBreakdown(d: ScoreInput, now = Date.now()): ScoreBreakd
     points: erPts,
     max: 40,
     ...(ratio == null
-      ? { verdict: "Inconnu", tone: "closed" as const }
-      : erPts >= 40
-        ? { verdict: "Excellent", tone: "ok" as const }
-        : ratio >= 1
-          ? { verdict: "Bon", tone: "ok" as const }
-          : ratio >= 0.25
-            ? { verdict: "Faible", tone: "wait" as const }
-            : { verdict: "Très bas", tone: "closed" as const }),
+      ? { verdict: "Aucun", tone: "closed" as const }
+      : ratio >= 1
+        ? { verdict: "Fort", tone: "ok" as const }
+        : ratio >= 0.5
+          ? { verdict: "Moyen", tone: "wait" as const }
+          : { verdict: "Faible", tone: "wait" as const }),
   };
   const rhythmPts = Math.min(15, (d.perWeek ?? 0) * 5);
   const rhythm: ScoreFactor = { key: "rhythm", label: "Rythme", points: rhythmPts, max: 15, ...byShare(rhythmPts, 15, d.perWeek != null) };
@@ -123,17 +122,16 @@ export function youtubeBreakdown(d: ScoreInput, now = Date.now()): ScoreBreakdow
     label: "Vues",
     points: viewsPts,
     max: 30,
+    // Abonnés masqués : la moitié des points, jugés sur les vues seules (« Moyen »).
     ...(vr == null
       ? d.avgViews
-        ? { verdict: "Abonnés masqués", tone: "wait" as const }
-        : { verdict: "Inconnu", tone: "closed" as const }
-      : viewsPts >= 30
-        ? { verdict: "Excellent", tone: "ok" as const }
-        : vr >= 0.25
-          ? { verdict: "Bon", tone: "ok" as const }
-          : vr >= 0.02
-            ? { verdict: "Faible", tone: "wait" as const }
-            : { verdict: "Très bas", tone: "closed" as const }),
+        ? { verdict: "Moyen", tone: "wait" as const }
+        : { verdict: "Aucun", tone: "closed" as const }
+      : vr >= 0.25
+        ? { verdict: "Fort", tone: "ok" as const }
+        : vr >= 0.1
+          ? { verdict: "Moyen", tone: "wait" as const }
+          : { verdict: "Faible", tone: "wait" as const }),
   };
   const erPts = d.er != null ? Math.min(10, (d.er / 4) * 8) : 0;
   const engagement: ScoreFactor = { key: "er", label: "Engagement", points: erPts, max: 10, ...byShare(erPts, 10, d.er != null) };

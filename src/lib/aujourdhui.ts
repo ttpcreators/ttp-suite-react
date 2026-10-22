@@ -1,6 +1,6 @@
 import type { StatusTone } from "./statusTone";
 import { overdueInvoices, type RelanceInvoice, type Reminders } from "./relance";
-import { toISODate } from "./dates";
+import { fmtDay, toISODate } from "./dates";
 import { formatEuro, parseAmount } from "./money";
 import { totalsOf, type LineItem } from "./invoice";
 import { DEFAULT_COMMISSION } from "./commission";
@@ -108,11 +108,9 @@ export function daysBetween(a: string, b: string): number {
   return Math.round((Date.UTC(yb, mb - 1, db) - Date.UTC(ya, ma - 1, da)) / 86400000);
 }
 
-/** « mer. 21 oct. » → « Mer. 21 oct. » */
+/** « 21 oct. » (format commun de dates.ts). */
 export function shortDayLabel(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const s = new Date(y, m - 1, d).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  return fmtDay(iso);
 }
 
 /** Date d'un évènement : `date`, sinon jour du mois courant (`day`, ancien format), sinon null. */
@@ -412,10 +410,9 @@ export function buildToday(input: TodayInput): TodayResult {
   return { items, done };
 }
 
-/** « 23 oct. » */
+/** « 23 oct. » (format commun de dates.ts). */
 export function dayMonth(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  return fmtDay(iso);
 }
 /** Fenêtre de dates : « 23 au 28 oct. », ou « 29 oct. au 20 nov. » à cheval sur deux mois. */
 export function rangeLabel(from: string, to: string): string {

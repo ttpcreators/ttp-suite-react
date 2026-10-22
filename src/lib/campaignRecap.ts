@@ -4,6 +4,7 @@
  * pré-remplissent le bilan pour la marque, avec une proposition de renouvellement.
  * Fonctions pures (testées) : la page n'a plus qu'à les afficher.
  */
+import { fmtDay } from "./dates";
 import { totalsOf, emptyStat, fmtCompact, fmtPct, reliableEr, GOOD_ER_REACH, GOOD_ER_FOLLOWERS, type EngPlatform, type PostStat } from "./engagement";
 import { parseAmountStrict } from "./money";
 
@@ -37,7 +38,7 @@ export function readyForRecap(pub: string | null, now = Date.now()): boolean {
 export function collabStats(c: CollabForRecap): { stats: PostStat[]; labels: Map<string, string> } {
   const stats: PostStat[] = [];
   const labels = new Map<string, string>();
-  const day = (at?: string) => (at ? new Date(at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "");
+  const day = (at?: string) => fmtDay(at);
   for (const p of c.ig?.posts ?? []) {
     const id = `ig-${p.id}`;
     stats.push({ ...emptyStat(id, igKind(p)), reach: n(p.reach), likes: n(p.likes), comments: n(p.comments), saves: n(p.saves), shares: n(p.shares), views: n(p.views) });

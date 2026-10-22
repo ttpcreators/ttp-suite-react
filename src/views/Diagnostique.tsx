@@ -1,3 +1,4 @@
+import { fmtDayTime } from "@/lib/dates";
 import { useEffect, useRef, useState } from "react";
 import { HeartPulse, CheckCircle2, AlertTriangle, XCircle, RefreshCw, ChevronDown, ChevronUp, Clock } from "@/components/icons";
 import { useAppState, type AppState } from "@/lib/appState";
@@ -19,7 +20,7 @@ const META: Record<DiagStatus, { label: string; cls: string; dot: string; Icon: 
 };
 const barCls: Record<DiagStatus, string> = { ok: "bg-signal", warn: "bg-amber", down: "bg-danger" };
 
-const fmtWhen = (ts: number) => new Date(ts).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const fmtWhen = (ts: number) => fmtDayTime(ts);
 
 /** Barre d'uptime d'un check : ses N derniers statuts (ancien → récent). */
 function UptimeBar({ history, checkKey }: { history: DiagSnapshot[]; checkKey: string }) {

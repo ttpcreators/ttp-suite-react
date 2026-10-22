@@ -6,6 +6,7 @@
  * Lecture TOLÉRANTE : tant que la migration SQL (2026-10-13-instagram-api) n'est
  * pas passée, la colonne n'existe pas → on ne montre rien, sans casser la vue.
  */
+import { EMPTY, fmtAgoSince } from "./dates";
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import { useLiveKey } from "./useLive";
@@ -184,16 +185,10 @@ const frNum = (n: number) => String(n).replace(".", ",");
 export const fmtEr = (er?: number | null) => (er == null ? "—" : `${frNum(er)} %`);
 export const fmtPerWeek = (n?: number | null) => (n == null ? "—" : `${frNum(n)} / sem.`);
 /** « aujourd'hui », « hier », « il y a 5 j », « il y a 3 sem. », « il y a 2 mois ». */
+/** « il y a 23 j » en milieu de phrase (durée au format commun de dates.ts) ; « — » si inconnue. */
 export function fmtAgo(iso?: string | null): string {
-  if (!iso) return "—";
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return "—";
-  const d = Math.floor((Date.now() - t) / 86400000);
-  if (d <= 0) return "aujourd'hui";
-  if (d === 1) return "hier";
-  if (d < 14) return `il y a ${d} j`;
-  if (d < 60) return `il y a ${Math.round(d / 7)} sem.`;
-  return `il y a ${Math.round(d / 30)} mois`;
+  const ago = fmtAgoSince(iso);
+  return ago ? `il y a ${ago}` : EMPTY;
 }
 /** Évolution des abonnés sur ~`days` jours (relevé quotidien de ig-sync). */
 export function followersDelta(hist: IgCreator["history"], days = 30): number | null {

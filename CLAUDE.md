@@ -165,8 +165,23 @@ Plusieurs audits adversariaux menés (identité et privilège, OWASP). Détail d
   (accent).
 - **Garder** les boutons bleus et la police Inter (`--font-app` dans `src/index.css`). Une
   maquette sert pour la mise en page, pas pour changer ces deux choix.
-- **Une phrase d'aide** sous le titre de chaque page (`src/lib/viewHints.ts`, `TAB_HINTS` côté
-  créateur), en mots simples.
+- **Une phrase d'aide par page** (`src/lib/viewHints.ts`, `TAB_HINTS` côté créateur), en mots
+  simples, derrière le « ? » à côté du titre (`PageFrame`), jamais affichée en permanence.
+- **Règles d'écriture de l'interface** (Marc, 2026-10-22), à respecter partout :
+  - un bouton : un verbe, deux mots maximum (« Écrire », « Copier l'email ») ; une même
+    action porte le même nom partout ; seul le style (plein ou gris) dit si c'est urgent ;
+  - un titre de ligne : 45 caractères maximum, ce qui dépasse va dans le détail ;
+  - les métadonnées sous un titre : trois éléments maximum, séparés par « · » ;
+  - les dates : « 21 oct. » pour une date (`fmtDay`), « 23 j » ou « 4 mois » pour une durée
+    (`fmtAgoDays`, `fmtAgoSince`), tous dans `src/lib/dates.ts` ; l'heure seulement là où elle
+    est l'information (`fmtDayTime`) ; jamais de format maison dans une page (les documents
+    PDF et factures gardent leur date longue ou `frDate`) ;
+  - les états vides : un seul mot, « Aucun », ou un tiret « — » (`EMPTY`), seule exception à
+    la règle du tiret ci-dessus ;
+  - les explications : jamais affichées en permanence, toujours derrière un « ? »
+    (`src/components/ui/help-tip.tsx`) ;
+  - pas de doublon : une info ou un filtre n'apparaît qu'une fois par page ; les filtres
+    d'une page = un bouton « Filtres » (`FilterPanel`), pas une carte.
 
 ## Conventions de code
 

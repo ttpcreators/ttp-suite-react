@@ -1,11 +1,13 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { supabase } from "@/lib/supabase";
-import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, MapPin, MessageCircle, AtSign, Phone, BriefcaseBusiness, Check, Plus, ChevronDown, ClipboardList, NotebookPen, type LucideIcon } from "@/components/icons";
+import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, MapPin, MessageCircle, AtSign, Phone, BriefcaseBusiness, Check, Plus, ChevronDown, NotebookPen, type LucideIcon } from "@/components/icons";
 import {
   parseTouches, sortTouches, lastTouch, needsRelance, nextKind, waLink, waHref, touchId, buildTouchesPatch, typeHandle,
   CANAL_LABELS, KIND_LABELS, RELANCE_DAYS, type Touch, type TouchCanal, type TouchKind, type WaMode, type ProspectSettings,
 } from "@/lib/touches";
-import { relanceInfo, agoLabel, agoShort, relanceCountdown } from "@/lib/contactRelance";
+import { relanceInfo, relanceCountdown } from "@/lib/contactRelance";
+import { EMPTY, fmtAgoDays, fmtDay } from "@/lib/dates";
+import { HelpTip } from "@/components/ui/help-tip";
 import { TONE_DOT, TONE_SOFT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
 import { updateTouches, applyTouchChange, type TouchChange } from "@/lib/touchesDb";
 import { useAppState, type AppState } from "@/lib/appState";
@@ -80,19 +82,26 @@ function useIsDesktop(): boolean {
   );
 }
 
-/** « Personne · rôle » sans les champs vides ni le tiret de remplissage. */
-function personRole(r: { person?: string | null; role?: string | null }): string {
-  return [r.person, r.role].map((x) => (x ?? "").trim()).filter((x) => x && x !== "—").join(" · ");
+const clean = (x?: string | null) => {
+  const v = (x ?? "").trim();
+  return v === "—" ? "" : v;
+};
+/** Pas de société : marque vide ou simple statut (« Freelance », « Indépendant »). */
+const NO_COMPANY = /^(freelance|ind[ée]pendante?|auto[- ]?entrepreneu[rs]e?)$/i;
+/**
+ * Titre et ligne du dessous d'un contact : « Marque » puis « Personne · rôle » ;
+ * sans société, la personne passe en titre : « Camille Tilak » puis « Freelance · rôle ».
+ */
+function contactTitle(r: { brand?: string | null; person?: string | null; role?: string | null }): { title: string; sub: string } {
+  const brand = clean(r.brand);
+  const person = clean(r.person);
+  const role = clean(r.role);
+  if (person && (!brand || NO_COMPANY.test(brand))) return { title: person, sub: [brand, role].filter(Boolean).join(" · ") };
+  return { title: brand || person, sub: [person, role].filter(Boolean).join(" · ") };
 }
-/** Prénom pour « Écrire à … » (prénom saisi, sinon 1er mot de la personne, sinon la marque). */
-function firstNameOf(r: { first_name?: string | null; person?: string | null; brand?: string | null }): string {
-  const p = (r.person ?? "").trim();
-  const b = (r.brand ?? "").trim();
-  return (r.first_name ?? "").trim() || (p && p !== "—" ? p.split(" ")[0] : "") || (b !== "—" ? b : "");
-}
-/** Initiales de la tuile : la marque d'abord, sinon la personne. */
-function tileInitials(r: { brand?: string | null; person?: string | null }): string {
-  return initials(r.brand && r.brand !== "—" ? r.brand : r.person) || "?";
+/** Initiales de la tuile : celles du titre. */
+function tileInitials(r: { brand?: string | null; person?: string | null; role?: string | null }): string {
+  return initials(contactTitle(r).title) || "?";
 }
 
 // Couleur d'un échange dans la frise : envoyé (contact, relance) ou réponse reçue.
@@ -158,11 +167,8 @@ function PillMenu({ label, icon, value, options, onChange, ariaLabel, active }: 
 /** Un message Gmail de l'historique avec un contact. */
 type MailMsg = { id: string; from: string; to?: string; subject: string; date: string; snippet: string; direction: "in" | "out" };
 
-/** En-tête Date Gmail (RFC 2822) → "06 juil." (ou "" si illisible). */
-function fmtMailDate(d: string): string {
-  const t = new Date(d);
-  return Number.isNaN(t.getTime()) ? "" : t.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
-}
+/** En-tête Date Gmail (RFC 2822) → « 6 juil. » (ou "" si illisible). */
+const fmtMailDate = (d: string) => fmtDay(d);
 
 /** Pièce jointe d'un email (contenu en base64). */
 type Att = { filename: string; mimeType: string; contentBase64: string; size: number };
@@ -319,7 +325,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between gap-3 rounded-[12px] bg-panel px-3 py-2">
       <div className="min-w-0">
         <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
-        <div className={cn("truncate text-[13px]", v ? "text-foreground" : "text-faint")}>{v || "Non renseigné"}</div>
+        <div className={cn("truncate text-[13px]", v ? "text-foreground" : "text-faint")}>{v || EMPTY}</div>
       </div>
       {v && (
         <button
@@ -961,25 +967,37 @@ export function Contacts() {
     } else toast("Erreur, réessaie");
   };
   const copyCard = (r: Row) => {
-    const text = [r.brand, personRole(r), r.email, r.phone].filter((s) => s && s.trim() && s.trim() !== "—").join("\n");
-    navigator.clipboard?.writeText(text);
-    toast("Fiche copiée ✓");
+    void navigator.clipboard?.writeText(contactCard(r)).then(
+      () => toast("Fiche copiée ✓"),
+      () => toast("Copie impossible"),
+    );
   };
   const copyEmail = (r: Row) => {
     navigator.clipboard?.writeText(r.email);
     toast("Email copié ✓");
   };
+  /**
+   * « Écrire » à un contact (ligne et fiche) : un mail, sinon WhatsApp. Seul le style dit
+   * l'urgence : bouton plein quand le contact est à relancer (le mail part alors du modèle de relance).
+   */
+  const writeAction = (row: Row, due: boolean) =>
+    row.email
+      ? due
+        ? { label: "Écrire", title: "Mail de relance pré-rempli (noté à l'envoi)", run: () => writeTo(row, true), urgent: true }
+        : { label: "Écrire", title: "Écrire un email à ce contact", run: () => openMail(row), urgent: false }
+      : waLink(row.phone)
+        ? { label: "Écrire", title: "Ouvre WhatsApp et note le contact", run: () => openWhatsApp(row), urgent: due }
+        : null;
   // Menu ⋯ : toutes les actions d'un contact (ligne et fiche).
-  const rowActions = (row: Row, withCard = false) => [
-    ...(waLink(row.phone) ? [{ key: "wa", label: "WhatsApp (note le contact)", icon: MessageCircle, onClick: () => openWhatsApp(row) }] : []),
+  const rowActions = (row: Row) => [
+    ...(waLink(row.phone) ? [{ key: "wa", label: "Ouvrir WhatsApp", icon: MessageCircle, onClick: () => openWhatsApp(row) }] : []),
     ...(row.email
       ? [
-          { key: "email", label: "Envoyer un email", icon: Mail, onClick: () => openMail(row) },
-          { key: "spark", label: "Mail pré-rempli dans Spark", icon: Send, onClick: () => openSpark(row) },
+          { key: "email", label: "Écrire", icon: Mail, onClick: () => openMail(row) },
+          { key: "spark", label: "Ouvrir Spark", icon: Send, onClick: () => openSpark(row) },
           { key: "copy", label: "Copier l'email", icon: Copy, onClick: () => copyEmail(row) },
         ]
       : []),
-    ...(withCard ? [{ key: "card", label: "Copier la fiche", icon: ClipboardList, onClick: () => copyCard(row) }] : []),
     { key: "edit", label: "Modifier", icon: Pencil, onClick: () => editRow(row) },
     {
       key: "delete",
@@ -987,7 +1005,7 @@ export function Contacts() {
       icon: Trash2,
       danger: true,
       onClick: () => void trashRow(row),
-      confirm: { title: "Supprimer le contact", message: `Supprimer « ${row.brand} » ? Tu pourras le restaurer depuis la corbeille.` },
+      confirm: { title: "Supprimer le contact", message: `Supprimer « ${contactTitle(row).title} » ? Tu pourras le restaurer depuis la corbeille.` },
     },
   ];
 
@@ -1004,23 +1022,16 @@ export function Contacts() {
   const renderRow = (row: Row) => {
     const info = relanceInfo(parseTouches(row.touches), row.last_contacted, relanceDays);
     const on = showInspector && inspected?.id === row.id;
-    const sub = personRole(row);
-    const wa = waLink(row.phone);
-    // Action de la ligne : « Relancer » quand le cycle est écoulé, sinon « Écrire » ; WhatsApp sans email.
-    const act = row.email
-      ? info.due
-        ? { label: "Relancer", title: "Ouvre un mail de relance pré-rempli (noté à l'envoi)", run: () => writeTo(row, true), filled: true }
-        : { label: "Écrire", title: "Écrire un email à ce contact", run: () => openMail(row), filled: on }
-      : wa
-        ? { label: info.due ? "Relancer" : "WhatsApp", title: "Ouvre WhatsApp et note le contact", run: () => openWhatsApp(row), filled: info.due || on }
-        : null;
+    const { title, sub } = contactTitle(row);
+    const act = writeAction(row, info.due);
+    // Dernier échange : « 23 j », « 4 mois » ou « — » ; l'orange dit « à relancer ».
     const last =
       info.days == null ? (
-        <span className="text-muted-foreground">{info.contacted ? "Contacté" : "Jamais contacté"}</span>
-      ) : info.due ? (
-        <span className={cn("font-semibold", TONE_TEXT.wait)}>{agoShort(info.days)} · à relancer</span>
+        <span className="text-faint">{EMPTY}</span>
       ) : (
-        <span className="font-semibold text-foreground">{agoLabel(info.days)}</span>
+        <span className={cn("font-semibold tabular-nums", info.due ? TONE_TEXT.wait : "text-foreground")} title={info.due ? "À relancer" : undefined}>
+          {fmtAgoDays(info.days)}
+        </span>
       );
     return (
       <li key={row.id}>
@@ -1054,7 +1065,7 @@ export function Contacts() {
 
           {/* Marque + personne · rôle */}
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[14px] font-semibold text-foreground">{row.brand}</div>
+            <div className="truncate text-[14px] font-semibold text-foreground" title={title}>{title}</div>
             {sub && <div className="mt-0.5 truncate text-[12px] text-muted-foreground">{sub}</div>}
             <BrandIgInline ig={row.ig} className="mt-0.5 block truncate text-[11px] text-faint" />
             {/* Colonne étroite : dernier échange et catégorie passent sous le nom */}
@@ -1075,7 +1086,7 @@ export function Contacts() {
           )}
 
           {/* Dernier échange */}
-          <div className="hidden shrink-0 whitespace-nowrap text-right text-[12px] @lg:block">{last}</div>
+          <div className="hidden w-14 shrink-0 whitespace-nowrap text-right text-[12px] @lg:block">{last}</div>
 
           {/* Catégorie */}
           {row.tag && (
@@ -1084,7 +1095,7 @@ export function Contacts() {
             </span>
           )}
 
-          {/* Écrire / Relancer */}
+          {/* Écrire (plein = à relancer) */}
           {act && (
             <button
               type="button"
@@ -1095,7 +1106,7 @@ export function Contacts() {
               }}
               className={cn(
                 "hidden h-8 shrink-0 items-center rounded-full px-3.5 text-[12px] font-semibold transition-colors @lg:inline-flex",
-                act.filled ? "bg-primary text-primary-foreground hover:opacity-90" : "bg-field text-foreground hover:bg-rowhover",
+                act.urgent || on ? "bg-primary text-primary-foreground hover:opacity-90" : "bg-field text-foreground hover:bg-rowhover",
               )}
             >
               {act.label}
@@ -1117,8 +1128,7 @@ export function Contacts() {
     const info = relanceInfo(list, row.last_contacted, relanceDays);
     const kindNext = nextKind(list, row.last_contacted);
     const last = lastTouch(list);
-    const sub = personRole(row);
-    const fn = firstNameOf(row);
+    const { title, sub } = contactTitle(row);
     const wa = waLink(row.phone);
     const CANAL_BTNS: { canal: TouchCanal; icon: LucideIcon }[] = [
       { canal: "whatsapp", icon: MessageCircle },
@@ -1128,12 +1138,11 @@ export function Contacts() {
     ];
     const infoRow = "flex min-h-11 items-center justify-between gap-3 px-3.5 py-2";
     const chip = "flex h-8 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium transition-colors";
-    // Action principale : écrire un mail, sinon WhatsApp, sinon compléter la fiche.
-    const primary = row.email
-      ? { label: fn ? `Écrire à ${fn}` : "Écrire un mail", icon: Mail, run: () => openMail(row) }
-      : wa
-        ? { label: fn ? `WhatsApp à ${fn}` : "WhatsApp", icon: MessageCircle, run: () => openWhatsApp(row) }
-        : { label: "Ajouter un email", icon: Pencil, run: () => editRow(row) };
+    // Action principale : « Écrire » (mail, sinon WhatsApp), pleine seulement si le contact est à relancer.
+    const write = writeAction(row, info.due);
+    const primary = write
+      ? { label: write.label, title: write.title, icon: row.email ? Mail : MessageCircle, run: write.run, urgent: write.urgent }
+      : { label: "Ajouter l'email", title: "Compléter la fiche", icon: Pencil, run: () => editRow(row), urgent: true };
     return (
       <>
         <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-1 [&>*]:shrink-0">
@@ -1149,12 +1158,12 @@ export function Contacts() {
               fallbackClassName="bg-field text-[18px] font-bold text-foreground"
             />
             <div className="min-w-0 flex-1 pt-0.5">
-              <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-foreground [overflow-wrap:anywhere]">{row.brand}</h2>
+              <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-foreground [overflow-wrap:anywhere]">{title}</h2>
               {sub && <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{sub}</p>}
               <BrandIgInline ig={row.ig} className="mt-0.5 block truncate text-[12px] text-faint" />
             </div>
             <div className="-mr-1.5 -mt-1 flex shrink-0 items-center">
-              <ActionMenu items={rowActions(row, true)} />
+              <ActionMenu items={rowActions(row)} />
               {inSheet && (
                 <button
                   type="button"
@@ -1173,29 +1182,30 @@ export function Contacts() {
             <div className={infoRow}>
               <span className="text-muted-foreground">Email</span>
               {row.email ? (
-                <span className="flex min-w-0 items-center gap-2">
-                  <span className="truncate font-medium text-foreground" title={row.email}>Disponible</span>
+                <span className="flex min-w-0 items-center gap-1">
+                  <span className="truncate font-medium text-foreground" title={row.email}>{row.email}</span>
                   <button
                     type="button"
                     onClick={() => copyEmail(row)}
-                    title={`Copier ${row.email}`}
-                    className="h-7 shrink-0 rounded-full bg-field px-2.5 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover"
+                    aria-label="Copier l'email"
+                    title="Copier l'email"
+                    className="-mr-1.5 grid h-7 w-7 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                   >
-                    Copier
+                    <Copy className="h-3.5 w-3.5" />
                   </button>
                 </span>
               ) : (
-                <span className="text-faint">Non renseigné</span>
+                <span className="text-faint">{EMPTY}</span>
               )}
             </div>
             <div className={infoRow}>
               <span className="text-muted-foreground">Catégorie</span>
-              <span className="truncate font-medium text-foreground">{row.tag || "Aucune"}</span>
+              <span className="truncate font-medium text-foreground">{row.tag || EMPTY}</span>
             </div>
             <div className={infoRow}>
               <span className="text-muted-foreground">Dernier échange</span>
-              <span className={cn("truncate font-medium", info.due ? TONE_TEXT.wait : "text-foreground")}>
-                {info.days == null ? (info.contacted ? "Contacté" : "Jamais contacté") : agoLabel(info.days)}
+              <span className={cn("truncate font-medium tabular-nums", info.days == null ? "text-faint" : info.due ? TONE_TEXT.wait : "text-foreground")}>
+                {info.days == null ? EMPTY : fmtAgoDays(info.days)}
               </span>
             </div>
             {row.creator && (
@@ -1209,9 +1219,15 @@ export function Contacts() {
           {/* Prochaine relance : avancement du cycle de recontact */}
           <section>
             <div className="flex items-baseline justify-between gap-3">
-              <h3 className="text-[13px] font-semibold text-foreground">Prochaine relance</h3>
-              <span className={cn("text-right text-[13px] font-semibold", info.due ? TONE_TEXT.wait : info.daysLeft == null ? "text-muted-foreground" : "text-foreground")}>
-                {info.daysLeft == null ? "Après le premier contact" : info.due ? "À relancer" : relanceCountdown(info.daysLeft)}
+              <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+                Prochaine relance
+                <HelpTip title="Prochaine relance">
+                  <p>Le contact passe dans « À relancer » après {relanceDays} jours sans échange (réglable dans Paramètres).</p>
+                  <p>La barre se remplit depuis le dernier échange. Avant {Math.min(RECENT_DAYS, relanceDays)} jours, évite de relancer trop vite.</p>
+                </HelpTip>
+              </h3>
+              <span className={cn("text-right text-[13px] font-semibold", info.due ? TONE_TEXT.wait : info.daysLeft == null ? "text-faint" : "text-foreground")}>
+                {info.daysLeft == null ? EMPTY : info.due ? "À relancer" : relanceCountdown(info.daysLeft)}
               </span>
             </div>
             <div
@@ -1227,12 +1243,6 @@ export function Contacts() {
                 style={{ width: `${Math.round(info.progress * 100)}%` }}
               />
             </div>
-            <p className="mt-2 text-[12px] leading-snug text-muted-foreground">
-              Le contact passe dans « À relancer » après {relanceDays} jours sans échange.
-            </p>
-            {info.days != null && !info.due && info.days < Math.min(RECENT_DAYS, relanceDays) && (
-              <p className={cn("mt-1 text-[12px] font-medium", TONE_TEXT.wait)}>Échange récent : évite de relancer trop vite.</p>
-            )}
           </section>
 
           {/* Échanges : journal multi-canal, du plus récent au plus ancien */}
@@ -1394,7 +1404,11 @@ export function Contacts() {
           <button
             type="button"
             onClick={primary.run}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+            title={primary.title}
+            className={cn(
+              "flex h-11 w-full items-center justify-center gap-2 rounded-full px-4 text-[14px] font-semibold transition-colors",
+              primary.urgent ? "bg-primary text-primary-foreground hover:opacity-90" : "bg-field text-foreground hover:bg-rowhover",
+            )}
           >
             <primary.icon className="h-4 w-4 shrink-0" />
             <span className="truncate">{primary.label}</span>
@@ -1402,12 +1416,7 @@ export function Contacts() {
           {/* Copie nom, rôle, marque, email et téléphone d'un coup. */}
           <button
             type="button"
-            onClick={() => {
-              void navigator.clipboard?.writeText(contactCard(row)).then(
-                () => toast("Fiche copiée ✓"),
-                () => toast("Copie impossible"),
-              );
-            }}
+            onClick={() => copyCard(row)}
             className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-field px-4 text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover"
             title="Copie le nom, le rôle, la marque, l'email et le téléphone"
           >
@@ -1422,7 +1431,7 @@ export function Contacts() {
               logOpen ? "bg-primary/[0.08] text-primary" : "bg-field text-foreground hover:bg-rowhover",
             )}
           >
-            <NotebookPen className="h-4 w-4 shrink-0" /> Noter un échange
+            <NotebookPen className="h-4 w-4 shrink-0" /> Noter l'échange
           </button>
         </div>
       </>
@@ -1437,10 +1446,13 @@ export function Contacts() {
   return (
     <>
       <PageHeaderRow>
+        {/* Le total est dans « Répertoire » : ici, seulement le nombre affiché quand un filtre est actif. */}
         <div className="text-sm text-muted-foreground">
-          {filtered.length} contact{filtered.length > 1 ? "s" : ""}
-          {(tagFilter !== ALL_TAGS || contactFilter !== "all" || cityFilter || query.trim()) && (
-            <span className="text-faint"> / {currentRows.length}</span>
+          {(tagFilter !== ALL_TAGS || contactFilter !== "all" || cityFilter || query.trim() || pageQ.trim()) && (
+            <>
+              {filtered.length} affiché{filtered.length > 1 ? "s" : ""}
+              <span className="text-faint"> / {currentRows.length}</span>
+            </>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -1461,7 +1473,7 @@ export function Contacts() {
             title="Écrire un email (choisir les destinataires)"
           >
             <Mail className="h-4 w-4" />
-            <span>Écrire un mail</span>
+            <span>Écrire</span>
           </button>
           {/* Importer / Exporter (CSV) */}
           <ActionMenu
@@ -1529,7 +1541,7 @@ export function Contacts() {
                   aria-pressed={contactFilter === "relancer"}
                   className="self-start text-[12px] font-semibold underline-offset-2 hover:underline"
                 >
-                  {contactFilter === "relancer" ? "Tout afficher" : "Voir la liste"}
+                  {contactFilter === "relancer" ? "Tout afficher" : "Afficher"}
                 </button>
               </div>
               <div className={kpiCell}>

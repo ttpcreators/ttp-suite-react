@@ -14,7 +14,7 @@ import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { useLiveKey } from "@/lib/useLive";
-import { frDate } from "@/lib/dates";
+import { frDate, EMPTY, fmtDayTime } from "@/lib/dates";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { AgentEditor, type AgentDraft, type AgentRow } from "@/components/AgentEditor";
 import { AgentAvatar } from "@/components/agent-avatar";
@@ -121,10 +121,7 @@ const CERCLE_TYPES: Record<string, string> = {
 };
 
 function fmtDT(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) +
-    " " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  return fmtDayTime(iso);
 }
 // Date LOCALE (toISOString = UTC → la veille entre minuit et 2 h en France).
 const todayISO = () => {
@@ -503,7 +500,7 @@ export function AgentView() {
             </div>
             {a.role && <p className="line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">{a.role}</p>}
             <div className="mt-auto flex items-center gap-3 text-[11px] text-faint">
-              <span>{last ? `Dernière activité : ${fmtDT(last)}` : "Pas encore d'activité"}</span>
+              <span>{last ? `Dernière activité : ${fmtDT(last)}` : `Dernière activité : ${EMPTY}`}</span>
               {n > 0 && <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 font-semibold text-primary">{n} à valider</span>}
             </div>
           </button>

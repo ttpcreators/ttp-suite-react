@@ -1,3 +1,4 @@
+import { EMPTY, fmtDay } from "@/lib/dates";
 import { useEffect, useRef, useState } from "react";
 import { Trash2, RefreshCw, Copy, X, Crown, KeyRound, Pencil } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
@@ -123,7 +124,7 @@ function AgencyAccountsPanel({ onReset }: { onReset: (email: string) => void }) 
   }, []);
   if (!list?.length) return null;
   const when = (iso: string | null) =>
-    iso ? `connecté le ${new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}` : "jamais connecté";
+    (fmtDay(iso) ? `connecté le ${fmtDay(iso)}` : EMPTY);
   return (
     <div className="mb-4 rounded-2xl border border-border bg-surface shadow-sm">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">

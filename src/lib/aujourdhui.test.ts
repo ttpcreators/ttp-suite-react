@@ -166,7 +166,7 @@ describe("estimation, filtres, sections", () => {
     const s = sectionsOf(r.items, NOW);
     expect(s.map((x) => x.id)).toEqual(["argent", "today", "tomorrow"]);
     expect(s[0].right.replace(/\s/g, " ")).toBe("700 €");
-    expect(s[2].right).toMatch(/^Mer\. 21 oct\.?$/);
+    expect(s[2].right).toMatch(/^21 oct\.?( 2026)?$/);
     expect(sectionsOf([], NOW)).toEqual([]);
   });
 });

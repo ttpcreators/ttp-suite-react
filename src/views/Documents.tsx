@@ -1,3 +1,4 @@
+import { fmtDay } from "@/lib/dates";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { useSearch, matchQuery, matchWords } from "@/lib/search";
@@ -318,9 +319,7 @@ export function Documents() {
   };
 
   const formatDate = (value: string) => {
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return value;
-    return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+    return fmtDay(value) || value;
   };
 
   // Horodatage sûr : un created_at illisible ne doit pas casser le tri (→ 0, en fin de liste).

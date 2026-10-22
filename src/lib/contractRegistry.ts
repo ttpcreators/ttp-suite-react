@@ -1,3 +1,4 @@
+import { EMPTY, fmtDay } from "./dates";
 import { titleCase } from "@/lib/utils";
 
 /*
@@ -198,10 +199,9 @@ export function relanceDraft(r: ContractRow, firstName?: string | null): { subje
   };
 }
 
-/** 10 oct. 2026 */
+/** « 10 oct. » (format commun de dates.ts) ; « — » sans date. */
 export function fmtDate(ts: number): string {
-  if (!ts) return "date inconnue";
-  return new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+  return (ts && fmtDay(ts)) || EMPTY;
 }
 
 export const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;

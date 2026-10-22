@@ -1,3 +1,4 @@
+import { fmtDay } from "@/lib/dates";
 import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { BadgeCheck, ChevronDown, ChevronUp, Eye, EyeOff, Plus, RotateCcw } from "@/components/icons";
@@ -36,7 +37,7 @@ const SRC = [
   { value: "hors", label: "Hors agence" },
 ];
 const chUrl = (p: Post) => (p.h ? `https://www.youtube.com/@${p.h}` : `https://www.youtube.com/channel/${p.ch}`);
-const frDay = (iso: string) => (iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "");
+const frDay = (iso: string) => fmtDay(iso);
 
 export function YouTubeRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
   const [rows, setRows] = useState<Row[] | null>(null);

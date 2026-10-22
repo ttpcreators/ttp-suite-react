@@ -22,7 +22,7 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
-import { frDate } from "@/lib/dates";
+import { frDate, fmtDay } from "@/lib/dates";
 import { getCache, setCache } from "@/lib/viewCache";
 import { STEPS, STEP_COUNT, PHASES, stepDef, phaseOf, isDone, type PhaseKey } from "@/lib/collabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
@@ -67,16 +67,9 @@ const PHASE_DOT: Record<PhaseKey, string> = {
   cloture: "bg-signal",
 };
 
-/** « Aujourd'hui, 14:32 », « Hier, 18:02 », sinon « 4 oct. ». */
+/** « 4 oct. » (format commun de dates.ts). */
 function whenLabel(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const diff = Math.round((day(new Date()) - day(d)) / 86400000);
-  const hm = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  if (diff === 0) return `Aujourd'hui, ${hm}`;
-  if (diff === 1) return `Hier, ${hm}`;
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  return fmtDay(iso);
 }
 
 /** Nombre de publications attendues d'après les livrables (« 3 posts · 1 reel » → 4 ; stories exclues). */

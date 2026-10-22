@@ -1,3 +1,4 @@
+import { EMPTY, fmtDay } from "@/lib/dates";
 import { useEffect, useRef, useState } from "react";
 import { RotateCcw, Trash2, Clock } from "@/components/icons";
 import { useAppState, type AppState } from "@/lib/appState";
@@ -76,8 +77,7 @@ export function Corbeille() {
   };
 
   const fmtDate = (iso: string) => {
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+    return fmtDay(iso) || EMPTY;
   };
 
   return (

@@ -5,6 +5,7 @@
  * Toute la logique réseau vit dans `@/lib/googleCalendar` (aucun secret côté front).
  */
 
+import { EMPTY, fmtDayTime } from "@/lib/dates";
 import { useCallback, useEffect, useState } from "react";
 import { Spin } from "@/components/ui/loader";
 import { CheckCircle2, AlertTriangle, RefreshCw, Unlink } from "@/components/icons";
@@ -26,10 +27,7 @@ function GoogleLogo({ className }: { className?: string }) {
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(d);
+  return fmtDayTime(iso) || EMPTY;
 }
 
 const primaryBtn = "flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60";

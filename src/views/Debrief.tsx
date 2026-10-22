@@ -30,7 +30,7 @@ import { Tabs } from "@/components/ui/animated-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { buildRecap, publicationDate, readyForRecap, type CollabForRecap, type StepRow } from "@/lib/campaignRecap";
 import { dbUpdate } from "@/lib/db";
-import { todayISO } from "@/lib/dates";
+import { EMPTY, fmtDay, todayISO } from "@/lib/dates";
 
 /** Une petite statistique de campagne (label / valeur). */
 type Kpi = { l: string; v: string };
@@ -758,7 +758,7 @@ export function Debrief() {
                     <div className="min-w-0">
                       <div className="truncate text-[13px] font-semibold text-foreground">{c.brand} × {titleCase(c.creator ?? "")}</div>
                       <div className="truncate text-[11px] text-faint">
-                        Publiée le {c.pub ? new Date(c.pub).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : "?"} · {posts ? `${posts} contenu${posts > 1 ? "s" : ""} repéré${posts > 1 ? "s" : ""}` : "aucun contenu repéré (chiffres à saisir)"}
+                        Publiée le {fmtDay(c.pub) || EMPTY} · {posts ? `${posts} contenu${posts > 1 ? "s" : ""} repéré${posts > 1 ? "s" : ""}` : "aucun contenu repéré (chiffres à saisir)"}
                       </div>
                     </div>
                     <button type="button" onClick={() => void prepareFromCollab(c)}

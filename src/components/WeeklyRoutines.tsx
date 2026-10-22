@@ -13,6 +13,7 @@ import { myDisplayName } from "@/lib/team";
 import { doneThisWeek, weekStart, type Routine } from "@/lib/routines";
 import { TONE_SOFT, TONE_TEXT } from "@/lib/statusTone";
 import { useStickyState } from "@/lib/useStickyState";
+import { EMPTY, fmtDay as fmtDayShared, fmtDayTime } from "@/lib/dates";
 
 /*
  * To-do « Routines de la semaine » : les tâches qui reviennent toutes les semaines.
@@ -21,12 +22,9 @@ import { useStickyState } from "@/lib/useStickyState";
  */
 
 const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
-const fmtDone = (iso: string) => {
-  const d = new Date(iso);
-  return `${d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} à ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
-};
-/** « dim. 4 oct. » : jour du dernier « Fait » (l'heure reste dans l'historique). */
-const fmtDay = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+const fmtDone = (iso: string) => fmtDayTime(iso);
+/** « 4 oct. » : jour du dernier « Fait » (l'heure reste dans l'historique). */
+const fmtDay = (iso: string) => fmtDayShared(iso);
 /** Jour de la semaine d'aujourd'hui : 1 = lundi … 7 = dimanche. */
 const todayIndex = () => ((new Date().getDay() + 6) % 7) + 1;
 
@@ -261,7 +259,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                                     {last.by ? ` · ${last.by}` : ""}
                                   </>
                                 ) : (
-                                  "Jamais faite pour l'instant"
+                                  EMPTY
                                 )}
                               </p>
                               {history === r.id && (

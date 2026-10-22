@@ -1,3 +1,4 @@
+import { fmtDay } from "@/lib/dates";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ContextMessage } from "@/lib/mailThreadContext";
 import { createPortal } from "react-dom";
@@ -648,7 +649,7 @@ function ForwardPanel({
             className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
           />
           <div className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-[12px] text-muted-foreground">
-            Message transféré : <span className="font-medium text-foreground">{message.from}</span>, {new Date(message.ts).toLocaleDateString("fr-FR")}
+            Message transféré : <span className="font-medium text-foreground">{message.from}</span>, {fmtDay(message.ts)}
             {canKeep ? (
               <label className="mt-1.5 flex cursor-pointer select-none items-center gap-1.5">
                 <input type="checkbox" checked={keepOriginal} onChange={(e) => setKeepOriginal(e.target.checked)} className="h-3.5 w-3.5 accent-[var(--color-primary)]" />

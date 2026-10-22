@@ -1,3 +1,4 @@
+import { fmtDay as fmtDayShared, fmtDayTime } from "@/lib/dates";
 import { useStickyState } from "@/lib/useStickyState";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TONE_SOLID, TONE_TILE } from "@/lib/statusTone";
@@ -122,10 +123,8 @@ const CHOICES: { value: MailChoice; label: string; hint: string; icon: LucideIco
 ];
 const choiceMeta = (c: MailChoice) => CHOICES.find((x) => x.value === c) ?? CHOICES[0];
 
-const fmtDay = (iso: string | null, locale: string) =>
-  iso ? new Date(iso).toLocaleDateString(locale, { day: "numeric", month: "short" }) : "";
-const fmtStamp = (ts: number, locale: string) =>
-  new Date(ts).toLocaleString(locale, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const fmtDay = (iso: string | null, locale: string) => fmtDayShared(iso, locale);
+const fmtStamp = (ts: number, locale: string) => fmtDayTime(ts, locale);
 
 /** Auteur d'un choix, vu par la personne qui regarde (« toi », « ton agence », « Chloé », « l'agence »). */
 const authorName = (by: "creator" | "agency", mode: Mode, creatorName: string, t: T) =>

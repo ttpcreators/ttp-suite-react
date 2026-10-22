@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactN
 import { useReducedMotion } from "motion/react";
 import { Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import { ArrowUpRight, Binoculars, Bookmark, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Info, Mail, PhoneOutgoing, Plus, Radar, Search, Send, SlidersHorizontal, Trophy, Users, Wallet, EyeOff, RotateCcw, X } from "@/components/icons";
+import { ArrowUpRight, Binoculars, Bookmark, BookOpen, Check, ChevronDown, ChevronUp, ExternalLink, Flame, Globe, Info, Keyboard, Mail, PhoneOutgoing, Plus, Radar, Search, Send, SlidersHorizontal, Trophy, Users, Wallet, EyeOff, RotateCcw, X } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -27,7 +27,8 @@ import { TONE_DOT, TONE_SOFT, TONE_TEXT } from "@/lib/statusTone";
 import { PEPITE, scoreBreakdown, scoreOf, scoreTone, type ScoreBreakdown } from "@/lib/sourcingScore";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { fmtCompact } from "@/lib/timeSeries";
-import { fmtAgo, fmtEr, igWhyText, noteQuota } from "@/lib/instagram";
+import { EMPTY, fmtDay } from "@/lib/dates";
+import { fmtEr, igWhyText, noteQuota } from "@/lib/instagram";
 import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
 import { OutreachComposer } from "@/components/OutreachComposer";
 import { SourcingGuide, type GuideTool } from "@/components/SourcingGuide";
@@ -144,7 +145,7 @@ function Metric({ label, value, unit, title }: { label: string; value: string | 
     <div className="min-w-0" title={title}>
       <div className="truncate text-[11px] text-muted-foreground">{label}</div>
       <div className="truncate whitespace-nowrap text-[14px] font-semibold tabular-nums text-foreground @2xl:text-[16px]">
-        {value ?? "—"}
+        {value ?? EMPTY}
         {value != null && unit ? <span className="ml-0.5 text-[11px] font-medium text-muted-foreground">{unit}</span> : null}
       </div>
     </div>
@@ -218,7 +219,7 @@ function MenuPill({ label, icon, value, options, onChange, ariaLabel, disabled }
  * Pastille de filtre : active = fond doux de l'accent et « × » pour l'enlever ;
  * inactive = simple contour. Un clic ouvre son réglage (`children`), ou bascule (`onToggle`).
  */
-function FilterChip({ label, active, onClear, onToggle, children }: { label: string; active: boolean; onClear?: () => void; onToggle?: () => void; children?: ReactNode }) {
+function FilterChip({ label, title, active, onClear, onToggle, children }: { label: string; title?: string; active: boolean; onClear?: () => void; onToggle?: () => void; children?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const pill = cn("flex h-8 max-w-full items-center rounded-full border text-[12px] font-medium transition-colors", active ? "border-primary/40 bg-primary/[0.08] text-primary" : "border-border text-foreground hover:bg-rowhover");
   const body = (
@@ -228,7 +229,7 @@ function FilterChip({ label, active, onClear, onToggle, children }: { label: str
     </button>
   );
   return (
-    <span className={pill}>
+    <span className={pill} title={title}>
       {children ? (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>{body}</PopoverTrigger>
@@ -251,15 +252,12 @@ function FilterChip({ label, active, onClear, onToggle, children }: { label: str
 const TOOLS = [
   {
     v: "createurs" as const, icon: Users, title: "Trouver des créateurs", short: "Créateurs", goal: "Pour recruter",
-    text: "Des profils à recruter, avec leurs chiffres, un score et leur email.",
   },
   {
     v: "radar" as const, icon: Radar, title: "Radar à marques", short: "Marques", goal: "Pour trouver des clients",
-    text: "Les marques qui paient des créateurs : tes futurs clients.",
   },
   {
     v: "concurrents" as const, icon: Binoculars, title: "Agences concurrentes", short: "Agences", goal: "Pour garder une longueur d'avance",
-    text: "Leur croissance, leurs créateurs, leurs marques.",
   },
 ];
 type ToolId = (typeof TOOLS)[number]["v"];
@@ -293,7 +291,7 @@ export function Sourcing() {
       /* stockage indisponible */
     }
   };
-  // « ? » rouvre le mode d'emploi (sauf pendant une saisie).
+  // « ? » rouvre le mode d'emploi (sauf pendant une saisie, ou quand la liste de « Trouver des créateurs » s'en sert pour ses raccourcis).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented || isTyping(e.target)) return;
@@ -312,12 +310,6 @@ export function Sourcing() {
       /* stockage indisponible */
     }
   };
-  // Haut de chaque outil : à quoi il sert (les outils eux-mêmes sont les onglets « dossier »).
-  const intro = (t: (typeof TOOLS)[number]) => (
-    <p className="mb-5 text-[13px] leading-snug text-muted-foreground">
-      <span className="font-semibold text-foreground">Instagram, TikTok et YouTube.</span> {t.text}
-    </p>
-  );
   // Un outil ouvert une fois reste monté (masqué) : recherche et saisies gardées au retour.
   const visited = useVisitedTabs(tab);
   return (
@@ -343,18 +335,16 @@ export function Sourcing() {
         {visited.includes("createurs") && (
           <div hidden={tab !== "createurs"}>
             {/* Raccourcis clavier (j, k, s, c, x) coupés quand l'outil est masqué. */}
-            <CreatorFinder top={intro(TOOLS[0])} paused={guide || tab !== "createurs"} onGuide={() => setGuide(true)} />
+            <CreatorFinder paused={guide || tab !== "createurs"} />
           </div>
         )}
         {visited.includes("radar") && (
           <div hidden={tab !== "radar"}>
-            {intro(TOOLS[1])}
             <RadarTool />
           </div>
         )}
         {visited.includes("concurrents") && (
           <div hidden={tab !== "concurrents"}>
-            {intro(TOOLS[2])}
             <RivalWatch />
           </div>
         )}
@@ -398,7 +388,7 @@ type ScoutStatus = "observation" | "contacter" | "discussion" | "signe" | "ecart
 type PoolTracking = Record<string, { status?: ScoutStatus } & Record<string, unknown>>;
 type Rejects = Record<string, { at: string; name?: string }>;
 type Section = "trier" | "scouting" | "contacter" | "pas" | "roster";
-const SCOUT_LABEL: Record<ScoutStatus, string> = { observation: "En observation", contacter: "À contacter", discussion: "En discussion", signe: "Signé", ecarte: "Pas intéressé" };
+const SCOUT_LABEL: Record<ScoutStatus, string> = { observation: "En observation", contacter: "À contacter", discussion: "En discussion", signe: "Signé", ecarte: "Écarté" };
 
 const firstName = (d: Prof | null, user: string) => (d?.name?.trim().split(/\s+/)[0] ?? "") || user;
 const REGIONS = [["FR", "France"], ["BE", "Belgique"], ["CH", "Suisse"], ["CA", "Canada"], ["GB", "Royaume-Uni"], ["US", "États-Unis"]] as const;
@@ -412,7 +402,7 @@ const ytErr = (e?: string) =>
 const poolKey = (handle: string) => (/youtube\.com|youtu\.be/i.test(handle) ? `yt:${(/@([\w.-]+)/.exec(handle)?.[1] ?? handle).toLowerCase()}` : cleanUser(handle));
 
 /** Trouver des créateurs : colonne principale (recherche, filtres, liste) + panneau « Profil sélectionné ». */
-function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boolean; onGuide: () => void }) {
+function CreatorFinder({ paused }: { paused: boolean }) {
   const [source, setSource] = useStickyState("sourcing:depart", ["marque", "similaire", "liste"] as const, "marque");
   const [brandIn, setBrandIn] = useState("");
   const [creatorIn, setCreatorIn] = useState("");
@@ -707,7 +697,7 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
       }
     }
     setAdding(null);
-    const dest = to === "scouting" ? "Scouting" : to === "contacter" ? "À contacter" : "Pas intéressés";
+    const dest = to === "scouting" ? "Scouting" : to === "contacter" ? "À contacter" : "Écartés";
     toast(ok ? `${who} → ${dest}${added ? `, ajouté au ${KIND_LIST[added]}` : ""} ✓` : "Erreur, réessaie");
   };
   /** Remet un compte écarté (hors Scouting) dans « À trier ». */
@@ -753,7 +743,6 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
   const reduced = useReducedMotion();
   const [selKey, setSelKey] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false); // téléphone / tablette : fiche en feuille du bas
-  const [moreFilters, setMoreFilters] = useState(false);
   const selIdx = useRef(0);
   const rowEls = useRef(new Map<string, HTMLElement>());
   // Grand écran : un compte est toujours sélectionné ; s'il quitte la section (trié), on passe au suivant.
@@ -791,11 +780,15 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
     setSheet(false);
     void triage(x.c, what);
   };
+  // Barre des raccourcis : cachée, « ? » l'affiche ou la cache, Échap la ferme.
+  const [keysOpen, setKeysOpen] = useState(false);
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   keyRef.current = (e) => {
     if (paused || contact || askKind || !wide || !last) return;
     const k = e.key.toLowerCase();
-    if (k === "j") move(1);
+    if (e.key === "?") setKeysOpen((o) => !o);
+    else if (e.key === "Escape" && keysOpen) setKeysOpen(false);
+    else if (k === "j") move(1);
     else if (k === "k") move(-1);
     else if (selected && k === "s") act(selected, "scouting");
     else if (selected && k === "c") act(selected, "ecrire");
@@ -842,9 +835,6 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
       : []),
   ];
   const followersLabel = minF.trim() && maxF.trim() ? `${minF.trim()} à ${maxF.trim()} abonnés` : minF.trim() ? `${minF.trim()} abonnés et plus` : maxF.trim() ? `Jusqu'à ${maxF.trim()} abonnés` : "Abonnés";
-  const pepites = shown.filter((x) => x.p.score >= PEPITE).length;
-  const withEmail = shown.filter((x) => x.c.data?.email).length;
-  const noAgency = shown.filter((x) => !x.c.data?.agency).length;
   const plural = (n: number, w: string) => `${n} ${w}${n > 1 ? "s" : ""}`;
 
   /** Menu ⋯ d'un compte : toutes les actions existantes (ouvrir, écrire, ranger, copier l'email). */
@@ -855,10 +845,10 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
     const href = yt ? c.data?.url : igLink(c.username);
     return [
       ...(href ? [{ key: "open", label: "Ouvrir le profil", icon: ExternalLink, onClick: () => window.open(href, "_blank", "noopener,noreferrer") }] : []),
-      ...(canWrite(sec) ? [{ key: "write", label: "Écrire (mail ou Instagram)", icon: Send, onClick: () => setContact(c) }] : []),
+      ...(canWrite(sec) ? [{ key: "write", label: "Écrire", icon: Send, onClick: () => setContact(c) }] : []),
       ...(canScout(sec) ? [{ key: "scout", label: "Ajouter au Scouting", icon: Bookmark, onClick: () => act({ c }, "scouting") }] : []),
-      ...(sec !== "contacter" && sec !== "roster" ? [{ key: "tocontact", label: "Ranger dans « À contacter »", icon: PhoneOutgoing, onClick: () => act({ c }, "contacter") }] : []),
-      ...(canPass(sec) ? [{ key: "pass", label: "Pas intéressé", icon: X, onClick: () => act({ c }, "pas") }] : []),
+      ...(sec !== "contacter" && sec !== "roster" ? [{ key: "tocontact", label: "Ranger « À contacter »", icon: PhoneOutgoing, onClick: () => act({ c }, "contacter") }] : []),
+      ...(canPass(sec) ? [{ key: "pass", label: "Écarter", icon: X, onClick: () => act({ c }, "pas") }] : []),
       ...(sec === "pas" && !inPool ? [{ key: "back", label: "Remettre à trier", icon: RotateCcw, onClick: () => void untriage(c) }] : []),
       ...(c.data?.email ? [{ key: "mail", label: "Copier l'email", icon: Mail, onClick: () => { void navigator.clipboard?.writeText(c.data?.email ?? ""); toast("Email copié ✓"); } }] : []),
     ];
@@ -917,11 +907,11 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
               {ok && x.p.score >= PEPITE && <StatusPill tone="ok" size="xs">Pépite</StatusPill>}
               {sec !== "trier" && (
                 <StatusPill tone={sec === "pas" ? "closed" : sec === "contacter" ? "progress" : sec === "roster" ? "info" : "ok"} size="xs">
-                  {sec === "roster" ? "Au roster" : scoutSt ? SCOUT_LABEL[scoutSt] : "Pas intéressé"}
+                  {sec === "roster" ? "Au roster" : scoutSt ? SCOUT_LABEL[scoutSt] : "Écarté"}
                 </StatusPill>
               )}
               {inPool && <span className="inline-flex h-5 items-center rounded-full bg-field px-2 text-[11px] font-medium text-muted-foreground" title={`Dans le ${KIND_LIST[inPool.kind]}`}>{KIND_ONE[inPool.kind]}</span>}
-              {inPool?.last_contacted && <span className="inline-flex h-5 items-center rounded-full bg-field px-2 text-[11px] font-medium text-muted-foreground">Contacté {fmtAgo(inPool.last_contacted)}</span>}
+              {inPool?.last_contacted && <span className="inline-flex h-5 items-center rounded-full bg-field px-2 text-[11px] font-medium text-muted-foreground">Contacté le {fmtDay(inPool.last_contacted)}</span>}
             </div>
             {d?.email && (
               <button type="button" onClick={() => { void navigator.clipboard?.writeText(d.email ?? ""); toast("Email copié ✓"); }} title={d.emailFrom === "lien" ? "Trouvé sur son lien en bio · copier" : "Trouvé dans sa bio · copier"} className="mt-2 flex max-w-full items-center gap-1.5 rounded-full bg-field px-3 py-1 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
@@ -938,7 +928,7 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
                 [yt ? "vidéos / sem." : "posts / sem.", perWeekParts(d.perWeek), undefined],
               ].map(([label, value, title]) => (
                 <div key={label} className="min-w-0 px-2" title={title ?? undefined}>
-                  <div className="truncate text-[18px] font-semibold tabular-nums text-foreground">{value ?? "—"}</div>
+                  <div className="truncate text-[18px] font-semibold tabular-nums text-foreground">{value ?? EMPTY}</div>
                   <div className="truncate text-[11px] text-muted-foreground">{label}</div>
                 </div>
               ))}
@@ -947,10 +937,9 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
 
           {b && (
             <div className="mt-5">
-              <div className="mb-2.5 flex items-baseline justify-between gap-2">
-                <span className="text-[15px] font-bold text-foreground">Pourquoi {b.score} / 100</span>
-                <span className="flex items-center gap-1 text-[12px] text-muted-foreground">
-                  Score Potentiel
+              <div className="mb-2.5 flex items-center gap-1.5">
+                <span className="text-[15px] font-bold text-foreground">Potentiel {b.score}/100</span>
+                <span className="flex items-center text-muted-foreground">
                   <HelpTip title="Le score « Potentiel »" align="end">
                     {yt ? (
                       <p>Une note sur 100 pour trier vite : vues moyennes par rapport aux abonnés (30), engagement des vidéos (10), rythme (15), déjà sponsorisé (15), email (10), pas d'agence (10), actif ce mois-ci (10).</p>
@@ -975,7 +964,7 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
                   <div className="grid grid-cols-[92px_minmax(0,1fr)_auto] items-center gap-3">
                     <span className="truncate text-[13px] text-foreground">Alertes</span>
                     <span className="truncate text-[12px] text-muted-foreground">{plural(b.flags.length, "signal")}</span>
-                    <span className={cn("text-right text-[12px] font-semibold", TONE_TEXT.wait)}>moins {b.penalty}</span>
+                    <span className={cn("text-right text-[12px] font-semibold", TONE_TEXT.wait)}>−{b.penalty}</span>
                   </div>
                 )}
               </div>
@@ -1011,19 +1000,19 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
               </button>
             ) : (
               <button type="button" onClick={() => act(x, "contacter")} disabled={busyRow} className="flex h-11 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
-                {busyRow ? <Spin size={14} /> : <PhoneOutgoing className="h-4 w-4" />} Ranger dans « À contacter »
+                {busyRow ? <Spin size={14} /> : <PhoneOutgoing className="h-4 w-4" />} Ranger « À contacter »
               </button>
             )}
             <div className="grid grid-cols-2 gap-2">
               {canWrite(sec) ? (
-                <button type="button" onClick={() => act(x, "ecrire")} className={btn2}><Send className="h-3.5 w-3.5" /> Contacter</button>
+                <button type="button" onClick={() => act(x, "ecrire")} title="Écrire par mail ou sur Instagram" className={btn2}><Send className="h-3.5 w-3.5" /> Écrire</button>
               ) : !inPool ? (
-                <button type="button" onClick={() => void untriage(c)} className={btn2}><RotateCcw className="h-3.5 w-3.5" /> Remettre à trier</button>
+                <button type="button" onClick={() => void untriage(c)} title="Remettre dans « À trier »" className={btn2}><RotateCcw className="h-3.5 w-3.5" /> Remettre</button>
               ) : (
-                <button type="button" onClick={() => act(x, "contacter")} disabled={busyRow} className={btn2}><PhoneOutgoing className="h-3.5 w-3.5" /> À contacter</button>
+                <button type="button" onClick={() => act(x, "contacter")} disabled={busyRow} title="Ranger dans « À contacter »" className={btn2}><PhoneOutgoing className="h-3.5 w-3.5" /> Ranger</button>
               )}
               {canPass(sec) ? (
-                <button type="button" onClick={() => act(x, "pas")} disabled={busyRow} className={btn2}><X className="h-3.5 w-3.5" /> Pas intéressé</button>
+                <button type="button" onClick={() => act(x, "pas")} disabled={busyRow} className={btn2}><X className="h-3.5 w-3.5" /> Écarter</button>
               ) : (
                 <button type="button" disabled className={btn2}><Check className="h-3.5 w-3.5" /> Écarté</button>
               )}
@@ -1038,8 +1027,6 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
   return (
     <div className={cn("grid items-start gap-5", hasInspector && "lg:grid-cols-[minmax(0,1fr)_340px]")}>
       <div className="@container min-w-0">
-        {top}
-
         {/* Barre de recherche : réseau, point de départ, le @ (ou le thème), « Trouver » */}
         <form onSubmit={(e) => { e.preventDefault(); run(); }} className="grid grid-cols-2 gap-1.5 rounded-[16px] bg-field p-1.5 @xl:flex @xl:items-center">
           <MenuPill
@@ -1158,47 +1145,25 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
               <FilterChip label={`Trier : ${sortOpts.find((o) => o.value === sort)?.label ?? "Potentiel"}`} active onClear={sort !== "score" ? () => setSort("score") : undefined}>
                 <OptionList value={sort} onPick={(v) => setSort(v as typeof sort)} options={sortOpts} />
               </FilterChip>
-              <FilterChip label="Comptes perso et marques" active={showOthers} onToggle={() => setShowOthers(!showOthers)} onClear={() => setShowOthers(false)} />
-              <button type="button" onClick={() => setMoreFilters((o) => !o)} aria-expanded={moreFilters} className="ml-1 flex items-center gap-1 text-[12px] font-medium text-primary hover:underline">
-                <SlidersHorizontal className="h-3.5 w-3.5" /> {moreFilters ? "Moins de filtres" : "Plus de filtres"}
-              </button>
+              <FilterChip
+                label="Comptes perso, marques, introuvables"
+                title="Cachés par défaut : les comptes perso (Meta ne donne pas leurs chiffres), les marques citées et les @ introuvables. Clique pour les voir."
+                active={showOthers}
+                onToggle={() => setShowOthers(!showOthers)}
+                onClear={() => setShowOthers(false)}
+              />
             </div>
-
-            {/* Tous les filtres d'un coup, avec leurs explications */}
-            {moreFilters && (
-              <div className="mt-2 flex flex-wrap items-end gap-2 rounded-[16px] bg-surface p-3">
-                <Field label="Abonnés min" help={<p>Tu peux écrire 10k, 10 000 ou 1,2M.</p>}><input aria-label="Abonnés minimum" value={minF} onChange={(e) => setMinF(e.target.value)} placeholder="10k" className={cn(IN, "w-24")} /></Field>
-                <Field label="Abonnés max"><input aria-label="Abonnés maximum" value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="50k" className={cn(IN, "w-24")} /></Field>
-                <Field label="Engagement min (%)" help={<><p>Likes + commentaires moyens de ses 12 derniers posts, divisés par ses abonnés.</p><p>Repère : de 1 à 3 % c'est la moyenne, au-dessus de 3 % c'est bon. Les petits comptes ont souvent un taux plus haut.</p></>}><input aria-label="Engagement minimum" value={minEr} onChange={(e) => setMinEr(e.target.value)} placeholder="2" inputMode="decimal" className={cn(IN, "w-24")} /></Field>
-                <Field label="Mot dans la bio" className="min-w-[140px] flex-1" help={<p>Pour cibler une ville (Lyon), une niche (running, maman, vegan) ou une langue. L'app cherche le mot dans la bio et le nom.</p>}><input aria-label="Mot dans la bio" value={bioWord} onChange={(e) => setBioWord(e.target.value)} placeholder="Lyon, running, maman…" className={IN} /></Field>
-                <Field label="Email" help={<p>L'app cherche un email dans la bio, puis sur le lien du créateur (Linktree, son site). « Avec email » : tu peux lui écrire tout de suite depuis l'app.</p>}>
-                  <Picker size="sm" ariaLabel="Email" className="w-36" value={emailF} onChange={(v) => setEmailF(v as typeof emailF)}
-                    options={[{ value: "tous", label: "Tous" }, { value: "avec", label: "Avec email" }, { value: "sans", label: "Sans email" }]} />
-                </Field>
-                <Field label="Agence" help={<><p>L'app cherche dans la bio et sur le lien des indices comme « management », « agence », « représentée par », « booking », ou un email d'agence.</p><p>C'est un indice, pas une certitude : vérifie avant d'écrire.</p></>}>
-                  <Picker size="sm" ariaLabel="Agence" className="w-40" value={agencyF} onChange={(v) => setAgencyF(v as typeof agencyF)}
-                    options={[{ value: "toutes", label: "Toutes" }, { value: "sans", label: "Sans agence" }, { value: "avec", label: "Déjà en agence" }]} />
-                </Field>
-                <Field label="Trier par">
-                  <Picker size="sm" ariaLabel="Trier par" className="w-44" value={sort} onChange={(v) => setSort(v as typeof sort)} options={sortOpts.map((o) => ({ value: o.value, label: o.label }))} />
-                </Field>
-                <div className="pb-2 text-[12px] text-muted-foreground">
-                  <Check2 label="Comptes perso, marques, introuvables" checked={showOthers} onChange={setShowOthers} help={<p>Cachés par défaut : les comptes perso (Meta ne donne pas leurs chiffres), les marques citées, et les @ introuvables. Coche pour les voir.</p>} />
-                </div>
-              </div>
-            )}
 
             {/* En-tête des résultats : d'où ils viennent, combien, et les sections du tri */}
             <div className="mb-3 mt-6 flex flex-wrap items-end justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-[20px] font-bold leading-tight tracking-tight text-foreground">{last.label.replace(/^Créatrices citées/, "Créateurs cités")}</h2>
                 <p className="mt-1 flex flex-wrap items-center gap-x-1 text-[13px] text-muted-foreground">
-                  <span>
+                  {/* Trois infos au plus : profils, masqués, date de la recherche. */}
+                  <span title={last.mode === "similaire" && last.brands?.length ? `Via ${last.brands.slice(0, 4).map((m) => `@${m}`).join(", ")}` : undefined}>
                     {plural(shown.length, "profil")}
-                    {shown.length > 0 && <> · {plural(pepites, "pépite")} · {withEmail} avec email · {noAgency} sans agence</>}
                     {hidden > 0 && <> · {hidden} masqué{hidden > 1 ? "s" : ""}</>}
-                    {" "}· {fmtAgo(last.at)}
-                    {last.mode === "similaire" && !!last.brands?.length && <> · via {last.brands.slice(0, 4).map((m) => `@${m}`).join(", ")}</>}
+                    {" "}· {fmtDay(last.at)}
                   </span>
                   <HelpTip title="Le score « Potentiel »">
                     <p>Une note sur 100 pour trier vite : engagement par rapport à sa taille (40), rythme de publication (15), déjà payé par des marques (15), email trouvé (10), pas d'agence (10), actif ces 2 dernières semaines (10).</p>
@@ -1207,6 +1172,18 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
                   </HelpTip>
                 </p>
               </div>
+              {shown.length > 0 && wide && (
+                <button
+                  type="button"
+                  onClick={() => setKeysOpen((o) => !o)}
+                  aria-pressed={keysOpen}
+                  title="Raccourcis clavier (touche ?)"
+                  aria-label="Raccourcis clavier"
+                  className={cn("order-last ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors", keysOpen ? "bg-primary/[0.08] text-primary" : "text-faint hover:bg-rowhover hover:text-foreground")}
+                >
+                  <Keyboard className="h-4 w-4" />
+                </button>
+              )}
               {shown.length > 0 && (
                 <Tabs
                   size="sm"
@@ -1278,27 +1255,44 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
                         <div className="flex min-w-0 items-baseline gap-2">
                           <span className="flex min-w-0 items-center gap-1 truncate text-[14px] font-bold text-foreground">
                             {yt && <PlatformIcon platform="youtube" className="h-3.5 w-3.5 shrink-0" />}
-                            <span className="truncate">{yt ? d?.name || `@${c.username}` : `@${c.username}`}</span>
+                            <span className="max-w-[45ch] truncate" title={yt ? d?.name || `@${c.username}` : `@${c.username}`}>{yt ? d?.name || `@${c.username}` : `@${c.username}`}</span>
                           </span>
                           {d?.name && <span className="min-w-0 truncate text-[13px] text-muted-foreground">{yt ? `@${d.handle || c.username}` : d.name}</span>}
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-1">
-                          {c.count && last.mode !== "yt-search" ? (
-                            <span className="inline-flex h-5 items-center rounded-full bg-field px-2 text-[11px] font-medium text-muted-foreground">
-                              {last.mode === "similaire" ? `${c.count} marque${c.count > 1 ? "s" : ""} en commun` : last.mode === "yt-brand" ? `${c.count} vidéo${c.count > 1 ? "s" : ""} sur la marque` : `cité ${c.count}×`}
-                            </span>
-                          ) : null}
-                          {ok && p.score >= PEPITE && <StatusPill tone="ok" size="xs">Pépite</StatusPill>}
-                          {d?.agency && <StatusPill tone="wait" size="xs" title={`Indice : « ${d.agency} »`}>En agence ?</StatusPill>}
-                          {p.flags.map((f) => <StatusPill key={f} tone="wait" size="xs">{f}</StatusPill>)}
-                          {d?.email && <span title={d.email} className="inline-flex h-5 items-center gap-1 rounded-full bg-field px-2 text-[11px] font-medium text-muted-foreground"><Mail className="h-3 w-3" /> Email</span>}
-                          {sec !== "trier" && sec !== "roster" && (
-                            <StatusPill tone={sec === "pas" ? "closed" : sec === "contacter" ? "progress" : "ok"} size="xs">{scoutSt ? SCOUT_LABEL[scoutSt] : "Pas intéressé"}</StatusPill>
-                          )}
-                          {inPool && <span title={`Dans le ${KIND_LIST[inPool.kind]}`} className="inline-flex h-5 items-center rounded-full border border-border px-2 text-[11px] font-medium text-muted-foreground">{KIND_ONE[inPool.kind]}</span>}
-                          {inPool?.last_contacted && <span className="text-[11px] text-muted-foreground">Contacté {fmtAgo(inPool.last_contacted)}</span>}
-                          {c.why && <span className="text-[11px] text-muted-foreground">{igWhyText(c.why)}</span>}
-                        </div>
+                        {/* Trois infos au plus sous le nom, par ordre d'importance ; le reste au survol de « +N ». */}
+                        {(() => {
+                          const chip = "inline-flex h-5 items-center rounded-full bg-field px-2 text-[11px] font-medium text-muted-foreground";
+                          const metas: { key: string; text: string; node: ReactNode }[] = [];
+                          if (c.why) metas.push({ key: "why", text: igWhyText(c.why), node: <span className="text-[11px] text-muted-foreground">{igWhyText(c.why)}</span> });
+                          if (sec !== "trier" && sec !== "roster") {
+                            const st = scoutSt ? SCOUT_LABEL[scoutSt] : "Écarté";
+                            metas.push({ key: "st", text: st, node: <StatusPill tone={sec === "pas" ? "closed" : sec === "contacter" ? "progress" : "ok"} size="xs">{st}</StatusPill> });
+                          }
+                          if (p.flags.length) {
+                            const t = p.flags.length === 1 ? p.flags[0] : `${p.flags.length} alertes`;
+                            metas.push({ key: "flags", text: p.flags.join(", "), node: <StatusPill tone="wait" size="xs" title={p.flags.join(" · ")}>{t}</StatusPill> });
+                          }
+                          if (ok && p.score >= PEPITE) metas.push({ key: "pep", text: "Pépite", node: <StatusPill tone="ok" size="xs">Pépite</StatusPill> });
+                          if (d?.agency) metas.push({ key: "ag", text: "En agence ?", node: <StatusPill tone="wait" size="xs" title={`Indice : « ${d.agency} »`}>En agence ?</StatusPill> });
+                          if (c.count && last.mode !== "yt-search") {
+                            const t = last.mode === "similaire" ? `${c.count} marque${c.count > 1 ? "s" : ""} en commun` : last.mode === "yt-brand" ? `${c.count} vidéo${c.count > 1 ? "s" : ""} sur la marque` : `cité ${c.count}×`;
+                            metas.push({ key: "count", text: t, node: <span className={chip}>{t}</span> });
+                          }
+                          if (d?.email) metas.push({ key: "mail", text: d.email, node: <span title={d.email} className={chip}><Mail className="mr-1 h-3 w-3" /> Email</span> });
+                          if (inPool) metas.push({ key: "pool", text: KIND_ONE[inPool.kind], node: <span title={`Dans le ${KIND_LIST[inPool.kind]}`} className="inline-flex h-5 items-center rounded-full border border-border px-2 text-[11px] font-medium text-muted-foreground">{KIND_ONE[inPool.kind]}</span> });
+                          if (inPool?.last_contacted) {
+                            const t = `Contacté le ${fmtDay(inPool.last_contacted)}`;
+                            metas.push({ key: "contact", text: t, node: <span className="text-[11px] text-muted-foreground">{t}</span> });
+                          }
+                          if (!metas.length) return null;
+                          const rest = metas.slice(3);
+                          return (
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              {metas.slice(0, 3).map((m) => <span key={m.key} className="contents">{m.node}</span>)}
+                              {rest.length > 0 && <span title={rest.map((m) => m.text).join(" · ")} className="text-[11px] text-faint">+{rest.length}</span>}
+                            </div>
+                          );
+                        })()}
                       </div>
                       {/* Téléphone : chiffres et actions passent sur une 2e ligne */}
                       <div className="order-3 grid min-w-0 flex-1 grid-cols-3 gap-2 @2xl:order-none @2xl:w-[228px] @2xl:flex-none">
@@ -1333,15 +1327,15 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
               </div>
             )}
 
-            {/* Raccourcis clavier (grand écran) */}
-            {wide && visible.length > 0 && (
+            {/* Raccourcis clavier (grand écran) : seulement après « ? », pour ne pas couvrir la liste. */}
+            {wide && keysOpen && visible.length > 0 && (
               <div className="sticky bottom-0 z-10 mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border bg-background/90 px-1 py-3 text-[12px] text-muted-foreground backdrop-blur">
                 <span className="flex items-center gap-1.5"><Kbd>J</Kbd> Suivant</span>
                 <span className="flex items-center gap-1.5"><Kbd>K</Kbd> Précédent</span>
                 <span className="flex items-center gap-1.5"><Kbd>S</Kbd> Scouting</span>
-                <span className="flex items-center gap-1.5"><Kbd>C</Kbd> Contacter</span>
+                <span className="flex items-center gap-1.5"><Kbd>C</Kbd> Écrire</span>
                 <span className="flex items-center gap-1.5"><Kbd>X</Kbd> Écarter</span>
-                <button type="button" onClick={onGuide} className="ml-auto flex items-center gap-1.5 hover:text-foreground"><Kbd>?</Kbd> Mode d'emploi</button>
+                <button type="button" onClick={() => setKeysOpen(false)} className="ml-auto flex items-center gap-1.5 hover:text-foreground"><Kbd>Échap</Kbd> Fermer</button>
               </div>
             )}
           </>
@@ -1351,7 +1345,7 @@ function CreatorFinder({ top, paused, onGuide }: { top: ReactNode; paused: boole
             {[
               ["1", "Choisis un point de départ", "Une marque de ta niche, un créateur que tu aimes, ou une liste de @."],
               ["2", "Filtre", "Abonnés, engagement, ville dans la bio, avec email, sans agence. Tri par score « Potentiel »."],
-              ["3", "Trie et contacte", "Range chaque compte : Scouting, À contacter ou Pas intéressé. Écris-lui depuis ta boîte Gmail ou Instagram."],
+              ["3", "Trie et contacte", "Range chaque compte : Scouting, À contacter ou Écartés. Écris-lui depuis ta boîte Gmail ou Instagram."],
             ].map(([n, t, dsc]) => (
               <div key={n} className="rounded-[20px] bg-surface p-5">
                 <span className="grid h-6 w-6 place-items-center rounded-full bg-foreground text-[12px] font-bold text-background">{n}</span>
@@ -1835,7 +1829,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
             <p>Double intérêt : de nouvelles marques à démarcher, et de nouveaux créateurs à recruter (bouton « + Scouting » sur leurs posts).</p>
           </HelpTip>
           <button type="button" onClick={() => setFiltersOpen((o) => !o)} className={cn("flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors", filtersOpen || activeFilters ? "border-primary/40 bg-primary/[0.08] text-primary" : "border-border text-foreground hover:bg-rowhover")}>
-            <SlidersHorizontal className="h-3.5 w-3.5" /> Plus de filtres{activeFilters ? ` · ${activeFilters}` : ""}
+            <SlidersHorizontal className="h-3.5 w-3.5" /> Filtres{activeFilters ? ` · ${activeFilters}` : ""}
           </button>
         </>
       }
@@ -1869,15 +1863,17 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
         <div className="mb-3 flex flex-col gap-3 rounded-[22px] bg-surface p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline justify-between gap-3 text-[13px]">
-              <span className="font-semibold text-foreground">Vérification des marques</span>
+              <span className="flex items-center gap-1 font-semibold text-foreground">
+                Vérification des marques
+                <HelpTip title="Vérification des marques">
+                  <p>L'app vérifie auprès de Meta que chaque nom trouvé dans les posts est bien une marque. Ça avance tout seul toutes les 2 heures (Meta limite les demandes par heure).</p>
+                </HelpTip>
+              </span>
               <span className="tabular-nums text-muted-foreground"><span className="font-semibold text-foreground">{prog.verified}</span> sur {prog.total}</span>
             </div>
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-field">
               <div className="h-full rounded-full bg-primary transition-all motion-reduce:transition-none" style={{ width: `${Math.max(2, Math.round((prog.verified / Math.max(1, prog.total)) * 100))}%` }} />
             </div>
-            <p className="mt-2 text-[12px] leading-snug text-muted-foreground">
-              L'app vérifie auprès de Meta que chaque nom trouvé dans les posts est bien une marque. Ça avance tout seul toutes les 2 heures (Meta limite les demandes par heure).
-            </p>
           </div>
           <button type="button" onClick={() => void runVerify()} disabled={verifying} className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-3.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
             {verifying ? <Spin size={14} /> : <Check className="h-3.5 w-3.5" />} {verifying ? "Vérification…" : "Vérifier la suite"}
@@ -1927,13 +1923,13 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
                       </div>
                       <div className="mt-1 text-[11px] text-faint">
                         {summary && <span className="font-medium text-muted-foreground">{summary}</span>}
-                        {summary && " · "}vue chez {creators.slice(0, 3).map((c) => `@${c}`).join(", ")}{creators.length > 3 ? ` +${creators.length - 3}` : ""} · {fmtAgo(lastAt)}
+                        {summary && " · "}vue chez {creators.slice(0, 3).map((c) => `@${c}`).join(", ")}{creators.length > 3 ? ` +${creators.length - 3}` : ""} · {fmtDay(lastAt)}
                       </div>
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2 pl-[54px] lg:pl-0">
                     <button type="button" onClick={() => toggleRow(row.brand)} className="flex items-center gap-1 rounded-full bg-field px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover" aria-expanded={open}>
-                      {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />} {open ? "Masquer les preuves" : `Voir les preuves (${list.length})`}
+                      {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />} {open ? "Masquer" : `Voir ${list.length} post${list.length > 1 ? "s" : ""}`}
                     </button>
                     {row.status !== "pipeline" ? (
                       <button type="button" onClick={() => void toPipeline(row)} className="flex items-center gap-1 rounded-full bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
@@ -1943,15 +1939,15 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
                       <span className={cn("flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-medium", TONE_SOFT.ok)}><Check className="h-3.5 w-3.5" /> Au Pipeline</span>
                     )}
                     <button type="button" onClick={() => setMailFor({ row, post: posts.find((p) => p.roster && postType(p) === "spontane") ?? posts[0] })} className="flex items-center gap-1 rounded-full bg-field px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover">
-                      <Send className="h-3.5 w-3.5" /> Contacter
+                      <Send className="h-3.5 w-3.5" /> Écrire
                     </button>
                     {row.status === "nouveau" ? (
                       <button type="button" onClick={() => void setRowStatus(row.brand, "ignore").then(() => toast("Retirée · retrouve-la dans « Pas pertinentes »"))} className="flex items-center gap-1 rounded-full px-2 py-1.5 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground">
-                        <EyeOff className="h-3.5 w-3.5" /> Pas pertinent
+                        <EyeOff className="h-3.5 w-3.5" /> Écarter
                       </button>
                     ) : (
                       <button type="button" onClick={() => void setRowStatus(row.brand, "nouveau")} className="flex items-center gap-1 rounded-full px-2 py-1.5 text-[11px] font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground">
-                        <RotateCcw className="h-3.5 w-3.5" /> Remettre à traiter
+                        <RotateCcw className="h-3.5 w-3.5" /> Remettre
                       </button>
                     )}
                   </div>
@@ -1967,7 +1963,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
                             <a href={igLink(p.c)} target="_blank" rel="noreferrer" className="font-semibold text-foreground hover:underline">@{p.c}</a>
                             <span className={cn("rounded px-1.5 text-[9px] font-semibold tracking-wide", src.c)}>{src.t}</span>
                             {profiles[p.c]?.followers != null && <span className="text-faint">{fmtCompact(profiles[p.c]?.followers ?? 0)}</span>}
-                            <span className="text-faint">{fmtAgo(p.at)}{p.n > 1 ? ` · ${p.n} posts pareils` : ""}</span>
+                            <span className="text-faint">{fmtDay(p.at)}{p.n > 1 ? ` · ${p.n} posts pareils` : ""}</span>
                             {srcOf(p) === "hors" && (
                               <button type="button" onClick={() => void addCreator(p.c, row.brand)} disabled={adding === p.c} className="flex items-center gap-0.5 rounded-full border border-border bg-surface px-1.5 py-0.5 text-[10px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
                                 {adding === p.c ? <Spin size={12} /> : <Plus className="h-3 w-3" />} Scouting
@@ -1993,11 +1989,11 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
         <div className="mt-3 text-center text-[12px] text-faint">
           {showUnsure || showKnown ? (
             <button type="button" onClick={() => { setShowUnsure(false); setShowKnown(false); }} className="font-medium text-primary hover:underline">
-              Masquer les comptes douteux et les marques déjà en contact
+              Masquer ces comptes
             </button>
           ) : (
-            <button type="button" onClick={() => { setShowUnsure(true); setShowKnown(true); }} className="hover:text-foreground">
-              {hid.notBrand + hid.known} autre{hid.notBrand + hid.known > 1 ? "s" : ""} masquée{hid.notBrand + hid.known > 1 ? "s" : ""} (pas sûres d'être des marques, ou déjà en contact) · <span className="font-medium text-primary">Afficher</span>
+            <button type="button" onClick={() => { setShowUnsure(true); setShowKnown(true); }} title="Pas sûres d'être des marques, ou déjà en contact" className="hover:text-foreground">
+              {hid.notBrand + hid.known} autre{hid.notBrand + hid.known > 1 ? "s" : ""} masquée{hid.notBrand + hid.known > 1 ? "s" : ""} · <span className="font-medium text-primary">Afficher</span>
             </button>
           )}
           {hid.filters > 0 && <span> · {hid.filters} hors de tes filtres</span>}

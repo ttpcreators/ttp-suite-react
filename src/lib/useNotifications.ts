@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import { getAppState, invalidateAppState, saveAppStateKey } from "./appState";
 import { useLiveKey } from "./useLive";
-import { todayISO } from "./dates";
+import { EMPTY, fmtAgoSince, todayISO } from "./dates";
 import { titleCase } from "./utils";
 import { toast } from "@/components/ui/toast";
 import type { NotificationItem } from "@/components/ui/notifications";
@@ -19,15 +19,9 @@ function ctDaysLeft(d: Date): number {
   const t = new Date();
   return Math.round((d.getTime() - new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime()) / 86400000);
 }
-/** "il y a X j" / "hier" / "aujourd'hui" à partir d'un created_at. */
+/** Durée depuis un created_at, format commun : « 23 j », « 4 mois » ; « — » sans date. */
 function agoLabel(iso: string | null): string {
-  if (!iso) return "récemment";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "récemment";
-  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-  if (days <= 0) return "aujourd'hui";
-  if (days === 1) return "hier";
-  return `il y a ${days} j`;
+  return fmtAgoSince(iso) || EMPTY;
 }
 
 // File d'attente d'effacements (module-level) : sérialise les écritures du blob

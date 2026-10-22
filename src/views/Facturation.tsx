@@ -1,3 +1,4 @@
+import { fmtDay, toISODate } from "@/lib/dates";
 import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -233,6 +234,8 @@ function frDate(iso: string): string {
   if (m) return `${m[3]}/${m[2]}/${m[1]}`; // ISO "AAAA-MM-JJ" → "JJ/MM/AAAA"
   return t; // déjà lisible : on ne réinterprète pas (pas de new Date qui inverse jour/mois)
 }
+/** Date affichée dans l'écran (pas dans la facture) : format commun « 21 oct. ». */
+const uiDate = (s: string) => fmtDay(toISODate(s)) || frDate(s);
 
 /** Année + mois d'une date facture (ISO « AAAA-MM-JJ » ou fr « JJ/MM/AAAA »). */
 function ymOf(iso: string): { y: number; m: number } | null {
@@ -1337,7 +1340,7 @@ export function Facturation() {
                     <span className="block text-[11px] text-muted-foreground">{fin.commission === 0 && fin.ht > 0 && fin.ht < 100 ? "sous 100 € HT" : `${fmtRate(rate)} %`}</span>
                   </span>
                   <span className="text-right text-[12px] tabular-nums text-muted-foreground">{euro2(fin.ttc)}</span>
-                  <span className="text-center text-[11px] font-medium text-muted-foreground">{frDate(r.date)}</span>
+                  <span className="text-center text-[11px] font-medium text-muted-foreground">{uiDate(r.date)}</span>
                   <span className="flex items-center justify-end gap-2">
                     <AnimatedBadge status={meta.badge} size="sm">{meta.label}</AnimatedBadge>
                     <span onClick={(e) => e.stopPropagation()}>
@@ -1365,7 +1368,7 @@ export function Facturation() {
                     {margeChip}
                   </div>
                   <div className="mt-0.5 flex items-center justify-between border-t border-border pt-2.5">
-                    <span className="text-[11px] font-medium text-muted-foreground">Échéance · {frDate(r.date)}</span>
+                    <span className="text-[11px] font-medium text-muted-foreground">Échéance · {uiDate(r.date)}</span>
                     <span onClick={(e) => e.stopPropagation()}>
                       <ActionMenu items={menuItems} />
                     </span>
@@ -1406,7 +1409,7 @@ export function Facturation() {
           >
             <div className="mb-3 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
               <AnimatedBadge status={shownMetaOf(r).badge} size="sm">{shownMetaOf(r).label}</AnimatedBadge>
-              <span>Échéance {frDate(r.date)}</span>
+              <span>Échéance {uiDate(r.date)}</span>
               {r.creator && <span>· {r.creator}</span>}
             </div>
             <div className="divide-y divide-border rounded-xl border border-border px-4">

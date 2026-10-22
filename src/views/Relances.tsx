@@ -1,3 +1,4 @@
+import { fmtDay } from "@/lib/dates";
 import { useEffect, useMemo, useState } from "react";
 import { Copy, Mail, BellRing, Check } from "@/components/icons";
 import { useAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";
@@ -17,7 +18,7 @@ import { toast } from "@/components/ui/toast";
 type Inv = RelanceInvoice;
 
 function frDate(d: Date): string {
-  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return fmtDay(d);
 }
 
 export function Relances() {

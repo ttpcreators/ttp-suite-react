@@ -1,3 +1,4 @@
+import { fmtDay } from "@/lib/dates";
 import { useMemo, useState } from "react";
 import { Pencil, CalendarClock, RefreshCw } from "@/components/icons";
 import { useAppState, listAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
@@ -56,7 +57,7 @@ function daysLeft(d: Date): number {
   return Math.round((d.getTime() - today.getTime()) / 86400000);
 }
 function frDate(d: Date): string {
-  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return fmtDay(d);
 }
 /** "16/09/2026" ou "2026-09-16" → "2026-09-16" (ou "" si non reconnu). */
 function toISOloose(s: string | null | undefined): string {

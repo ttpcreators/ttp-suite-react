@@ -1,3 +1,4 @@
+import { fmtDay, fmtDayTime } from "@/lib/dates";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { Check, ChevronDown, ChevronUp, Copy, Paperclip, type LucideIcon } from "@/components/icons";
@@ -13,19 +14,17 @@ import { mailDocument, hasQuote, mailSnippet, fmtSize, downloadAttachment, type 
  * ou déplié façon Gmail (historique cité masqué, pièces jointes en cartes).
  */
 
-/** Date d'une ligne de liste, comme Gmail : « 14:32 » aujourd'hui, « 3 oct. » cette année, « 03/10/2025 » avant.
+/** Date d'une ligne de liste, comme Gmail : « 14:32 » aujourd'hui, sinon la date commune (« 3 oct. », « 3 oct. 2025 »).
  *  `locale` : celle de useLocale() dans l'espace créateur (français par défaut). */
 export const fmtWhen = (ts: number, locale = "fr-FR") => {
   if (!ts) return "";
   const d = new Date(ts);
   const now = new Date();
   if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
-  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString(locale, { day: "numeric", month: "short" });
-  return d.toLocaleDateString(locale, { day: "2-digit", month: "2-digit", year: "numeric" });
+  return fmtDay(d, locale, now);
 };
-export const fmtFull = (ts: number, locale = "fr-FR") =>
-  ts ? new Date(ts).toLocaleString(locale, { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-/** « il y a 15 min », « il y a 3 h », « il y a 2 jours » ; rien au-delà d'une semaine. */
+export const fmtFull = (ts: number, locale = "fr-FR") => (ts ? fmtDayTime(ts, locale) : "");
+/** « il y a 15 min », « il y a 3 h », « il y a 2 j » ; rien au-delà d'une semaine. */
 export const fmtAgo = (ts: number, lang: Lang = "fr") => {
   if (!ts) return "";
   const min = Math.round((Date.now() - ts) / 60_000);
@@ -34,7 +33,7 @@ export const fmtAgo = (ts: number, lang: Lang = "fr") => {
   const h = Math.round(min / 60);
   if (h < 24) return translate(lang, "il y a {n} h", { n: h });
   const d = Math.round(h / 24);
-  return d < 7 ? translate(lang, d > 1 ? "il y a {n} jours" : "il y a {n} jour", { n: d }) : "";
+  return d < 7 ? translate(lang, "il y a {n} j", { n: d }) : "";
 };
 
 /** Photo de profil (marque ou expéditeur), comme dans Gmail. L'agence = logo TTP. */

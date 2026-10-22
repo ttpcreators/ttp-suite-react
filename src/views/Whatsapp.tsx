@@ -1,3 +1,4 @@
+import { fmtAgoSince, fmtDay } from "@/lib/dates";
 import { useStickyState } from "@/lib/useStickyState";
 import { supabase } from "@/lib/supabase";
 import { cn, initials, titleCase } from "@/lib/utils";
@@ -57,11 +58,7 @@ const TONE_CLS: Record<DerivedTone, string> = {
 };
 
 function daysAgoLabel(ms: number): string {
-  const d = Math.floor((Date.now() - ms) / 86400000);
-  if (d <= 0) return "aujourd'hui";
-  if (d === 1) return "hier";
-  if (d < 30) return `il y a ${d} j`;
-  return `il y a ${Math.round(d / 30)} mois`;
+  return fmtAgoSince(ms);
 }
 
 export function WhatsappView() {
@@ -308,7 +305,7 @@ export function WhatsappView() {
       {pool.length > 0 && view === "all" && (
         <StatsBento
           className="mb-5"
-          primary={{ eyebrow: "À relancer", value: String(aRelancer.length), caption: `Sans échange depuis ${relanceDays} jours (réglable dans Paramètres).` }}
+          primary={{ eyebrow: "À relancer", value: String(aRelancer.length), caption: `${relanceDays} j sans échange` }}
           bars={{ label: "Prises de contact cette semaine", value: String(faitsSemaine), series: parCanal }}
           small={{ value: String(reponsesMois), label: "Réponses (30 j)" }}
           accent={{ value: String(jamais.length), label: "Jamais contactés", icon: UserRound }}
@@ -415,7 +412,7 @@ export function WhatsappView() {
               journal.map(({ t, r }) => (
                 <div key={t.id} className="flex items-baseline gap-2.5 rounded-md px-2 py-1.5 text-[11px] hover:bg-rowhover">
                   <span className="shrink-0 tabular-nums text-faint">
-                    {new Date(t.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}
+                    {fmtDay(t.date)}
                   </span>
                   <span className={cn("shrink-0 font-semibold", t.kind === "reponse" ? "text-signaltext" : "text-foreground")}>{KIND_LABELS[t.kind]}</span>
                   <span className="shrink-0 text-muted-foreground">{CANAL_LABELS[t.canal]}</span>

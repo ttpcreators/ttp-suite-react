@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { InPageHeaderContext } from "@/lib/navAction";
+import { HelpTip } from "@/components/ui/help-tip";
 
 /**
  * En-tête de page dans le langage de l'Aperçu : le titre à gauche, les actions
@@ -24,9 +25,15 @@ export function PageFrame({ title, hint, children }: { title: ReactNode; hint?: 
     <>
       <div className="mb-7 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
-          <h1 className="page-title text-[28px] font-bold leading-tight tracking-[-0.025em] md:text-title">{title}</h1>
-          {/* À quoi sert la page, en une phrase (src/lib/viewHints.ts). */}
-          {hint && <p className="page-hint mt-1 max-w-[46rem] text-[13px] leading-snug text-muted-foreground md:mt-1.5 md:text-[15px]">{hint}</p>}
+          <div className="flex items-center gap-2.5">
+            <h1 className="page-title min-w-0 text-[28px] font-bold leading-tight tracking-[-0.025em] md:text-title">{title}</h1>
+            {/* À quoi sert la page (src/lib/viewHints.ts) : derrière un « ? », jamais affiché en permanence. */}
+            {hint && (
+              <HelpTip title="À quoi sert cette page" className="page-hint h-5 w-5 text-[11px]">
+                {hint}
+              </HelpTip>
+            )}
+          </div>
         </div>
         {/* Mobile : pleine largeur sous le titre, compteur à gauche / actions à
             droite, et les groupes d'actions passent à la ligne au lieu de déborder.

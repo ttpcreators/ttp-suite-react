@@ -1,3 +1,4 @@
+import { fmtDay } from "@/lib/dates";
 import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronUp, EyeOff, ExternalLink, Hourglass, Plus, RotateCcw } from "@/components/icons";
@@ -28,7 +29,7 @@ const PERIODS = [
   { value: "365", label: "1 an" },
 ];
 const ttLink = (u: string) => `https://www.tiktok.com/@${u}`;
-const frDay = (d: string) => (d ? new Date(`${d}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "");
+const frDay = (d: string) => fmtDay(d);
 
 function stateText(s: State | null): string {
   if (!s) return "";

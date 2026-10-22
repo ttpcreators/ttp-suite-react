@@ -31,7 +31,7 @@ import { SCOUT_SORTS, SCOUT_STEPS, SCOUT_TONE, engagementBarPct, engagementTone,
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { DateInput } from "@/components/ui/date-range-picker";
-import { todayISO } from "@/lib/dates";
+import { fmtDay, todayISO } from "@/lib/dates";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
 import { CREATOR_NICHES, SPORTS, guessNiche } from "@/lib/niche";
@@ -226,10 +226,7 @@ const IG_V = 5; // 5 : légendes des posts lues pour deviner la niche
 type Tracking = Record<string, Track>;
 
 /** ISO « 2026-08-12 » → « 12 août ». */
-const frShort = (iso: string) => {
-  const d = new Date(iso + "T00:00:00");
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-};
+const frShort = (iso: string) => fmtDay(iso) || iso;
 /** Lit un nombre d'abonnés saisi à la main : « 225 909 », « 226K », « 1,2M ». */
 const parseFol = (s: string) => {
   const t = s.trim().toLowerCase().replace(/\s/g, "").replace(",", ".");
@@ -749,7 +746,7 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
               </div>
             )}
             {r.last_contacted && (
-              <div className="mt-1.5 px-1.5 text-[12px] text-muted-foreground">Dernier contact : {new Date(r.last_contacted).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</div>
+              <div className="mt-1.5 px-1.5 text-[12px] text-muted-foreground">Dernier contact : {fmtDay(r.last_contacted)}</div>
             )}
           </div>
 

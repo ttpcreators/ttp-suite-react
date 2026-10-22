@@ -1,3 +1,4 @@
+import { EMPTY, fmtDayTime } from "@/lib/dates";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
@@ -35,8 +36,7 @@ const STATUS_CLS: Record<PlanStatus, string> = {
   erreur: "bg-danger/10 text-dangertext",
 };
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-const fmtWhen = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "Pas de date";
+const fmtWhen = (iso: string | null) => fmtDayTime(iso) || EMPTY;
 
 type Account = { username: string; name: string; picture: string; followers: number; posts: number };
 type Recent = { id: string; caption: string; type: string; product: string; image: string; url: string; at: string };
@@ -429,7 +429,7 @@ function FeedPreview({ planned, recent, account, onOpen }: { planned: Planned[];
               <button key={c.r.id} type="button" onClick={() => onOpen(c.r)} className="relative aspect-[3/4] overflow-hidden outline outline-2 -outline-offset-2 outline-primary">
                 <Thumb m={c.r.media[0]} className="h-full w-full" />
                 <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1 pb-1 pt-4 text-left text-[9px] font-semibold leading-tight text-white">
-                  {c.r.scheduled_at ? new Date(c.r.scheduled_at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}
+                  {fmtDayTime(c.r.scheduled_at)}
                 </span>
               </button>
             ) : (
@@ -880,7 +880,7 @@ function PlanEditor({ initial, account, onClose, onSaved }: { initial: Planned |
                 </p>
               )}
             </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">{fromLocalInput(d.when) ? `Prévu : ${fmtWhen(fromLocalInput(d.when))}` : "Pas encore de date"}</p>
+            <p className="mt-2 text-[11px] text-muted-foreground">{fromLocalInput(d.when) ? `Prévu : ${fmtWhen(fromLocalInput(d.when))}` : `Prévu : ${EMPTY}`}</p>
           </div>
         </div>
 
