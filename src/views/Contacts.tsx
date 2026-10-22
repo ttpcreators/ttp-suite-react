@@ -1106,7 +1106,7 @@ export function Contacts() {
               }}
               className={cn(
                 "hidden h-8 shrink-0 items-center rounded-full px-3.5 text-[12px] font-semibold transition-colors @lg:inline-flex",
-                act.urgent || on ? "bg-primary text-primary-foreground hover:opacity-90" : "bg-field text-foreground hover:bg-rowhover",
+                act.urgent ? "bg-primary text-primary-foreground hover:opacity-90" : "bg-field text-foreground hover:bg-rowhover",
               )}
             >
               {act.label}

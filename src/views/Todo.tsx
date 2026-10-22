@@ -130,6 +130,8 @@ function lateDays(r: Row): number {
   if (!iso || iso >= today) return 0;
   return Math.round((localDay(today).getTime() - localDay(iso).getTime()) / 86400000);
 }
+/** Titre de ligne : 45 caractères au plus, le texte entier reste dans la fiche et au survol. */
+const clip45 = (t: string) => (t.length > 45 ? `${t.slice(0, 44).trimEnd()}…` : t);
 /** « 13 oct. » (ligne de la liste), null si aucune date. */
 const shortDay = (iso: string | null | undefined): string | null => fmtDay(iso) || null;
 /** Échéance lisible : « 14 oct. », texte libre gardé tel quel (« fin juin »), null si aucune. */
@@ -807,8 +809,9 @@ export function Todo() {
                   "text-[15px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere] max-md:line-clamp-2 md:truncate",
                   row.done && "text-muted-foreground line-through decoration-faint",
                 )}
+                title={row.text.length > 45 ? row.text : undefined}
               >
-                {row.text}
+                {clip45(row.text)}
               </div>
               <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-muted-foreground">
                 <CreatorStack names={who.names} photoOf={photoOf} size="xs" />
@@ -1237,7 +1240,7 @@ export function Todo() {
             className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
           >
             {row.done ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" strokeWidth={2.5} />}
-            {row.done ? "Rouvrir la tâche" : "Marquer comme faite"}
+            {row.done ? "Rouvrir" : "Terminer"}
           </button>
           <div className="grid grid-cols-2 gap-2">
             {[
