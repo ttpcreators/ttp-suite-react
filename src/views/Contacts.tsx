@@ -653,14 +653,14 @@ export function Contacts() {
   };
 
   // « Écrire » / « Relancer » sur un contact : la même fenêtre que la page Mails
-  // (signature des Réglages Mails, @nom pour mettre en copie), pré-remplie avec
-  // « Bonjour Prénom, » ou le modèle de relance. La prise de contact est notée à l'envoi.
+  // (signature des Réglages Mails, @nom pour mettre en copie). « Écrire » ouvre un message
+  // VIDE (demande de Marc 2026-10-22 : pas de « Bonjour Prénom » d'office) ; « Relancer »
+  // reprend le modèle de relance. La prise de contact est notée à l'envoi.
   const writeTo = (row: Row, template: boolean) => {
     const email = row.email?.trim().toLowerCase() ?? "";
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast("Pas d'email pour ce contact");
-    const fn = row.first_name || (row.person && row.person !== "—" ? row.person.split(" ")[0] : "");
     let subject = "";
-    let body = `Bonjour${fn ? " " + fn : ""},\n\n`;
+    let body = "";
     if (template) {
       const contacted = parseTouches(row.touches).length > 0 || Boolean(row.last_contacted);
       const tpls = Array.isArray(storedTemplates) && storedTemplates.length > 0 ? storedTemplates : DEFAULT_TEMPLATES;
