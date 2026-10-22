@@ -634,6 +634,8 @@ export const EN_CREATORSPACE: Record<string, string> = {
   "Tes versements": "Your payouts",
   "Rien pour l'instant. Tes versements arrivent ici.": "Nothing yet. Your payouts will show up here.",
   "Montants nets : ce que tu touches, commission déduite.": "Net amounts: what you receive, after commission.",
+  "Ton agence te vire bientôt": "Your agency is sending it soon",
+  "Versement": "Payment",
   "Ta facture manque ?": "Missing an invoice?",
   "Dépose-la ici. Ton agence la reçoit aussitôt.": "Drop it here. Your agency gets it right away.",
   "Contenu envoyé à ton agence": "Content sent to your agency",

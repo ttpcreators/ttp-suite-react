@@ -109,3 +109,78 @@ export function netGains(invoices: GainInvoice[], ratePct: number, now: Date = n
   }
   return g;
 }
+
+// ── Vrais versements (fonction serveur `creator-report`) ────────────────────
+/*
+ * `creator-report` renvoie, filtrés sur la créatrice : ses factures (avec id), le détail
+ * des factures saisies en détail (lignes, TVA, taux de la facture) et les virements que
+ * l'agence lui a vraiment faits (blob `creatorPayouts`, page Reversements). Même calcul
+ * que Reversements :
+ *   - dû = part nette des factures que la marque a payées ;
+ *   - versé = somme des virements de l'agence ;
+ *   - en cours = dû moins versé (la marque a payé, l'agence vire bientôt) ;
+ *   - à venir = part nette des factures pas encore payées par la marque.
+ */
+
+export type ReportInvoice = GainInvoice & { id: string };
+export type ReportDetail = { items?: { id: string; label: string; qty: number; unit: number }[]; franchise?: boolean; vatRate?: number; commissionRate?: number };
+export type RealPayout = { id?: string; date: string; amount: number; note?: string };
+
+/** Part nette d'une facture : détail exact s'il existe, sinon le taux de sa fiche. */
+export function invoiceNet(inv: ReportInvoice, details: Record<string, ReportDetail>, ratePct: number): number {
+  const d = details[inv.id];
+  if (d && Array.isArray(d.items) && d.items.length) {
+    return Math.round(totalsOf(d.items, d.franchise !== false, Number(d.vatRate) || 0, d.commissionRate != null ? Number(d.commissionRate) : ratePct).reversal);
+  }
+  return netShare(parseAmount(inv.amount), ratePct);
+}
+
+export type GainLine = { key: string; label: string; amount: number; status: PayoutKey; date: string | null };
+
+export type RealGains = NetGains & {
+  /** La marque a payé, l'agence n'a pas encore viré. */
+  owed: number;
+  /** Lignes de « Tes versements » : en cours, à venir (une par facture), puis versés. */
+  lines: GainLine[];
+};
+
+export function realGains(
+  invoices: ReportInvoice[],
+  details: Record<string, ReportDetail>,
+  payouts: RealPayout[],
+  ratePct: number,
+  now: Date = new Date(),
+): RealGains {
+  let due = 0;
+  let upcoming = 0;
+  let late = 0;
+  const lines: GainLine[] = [];
+  for (const inv of invoices) {
+    const net = invoiceNet(inv, details, ratePct);
+    if (inv.status === "payee") {
+      due += net;
+      continue;
+    }
+    upcoming += net;
+    if (invoiceTone(inv, now).tone === "late") late += net;
+    lines.push({ key: `inv:${inv.id}`, label: (inv.party ?? "").trim(), amount: net, status: "avenir", date: inv.date });
+  }
+  const done = [...payouts]
+    .filter((p) => Number(p.amount) > 0)
+    .sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
+  const paid = Math.round(done.reduce((s, p) => s + Number(p.amount), 0));
+  const owed = Math.max(0, Math.round(due) - paid);
+  if (owed > 0) lines.unshift({ key: "owed", label: "", amount: owed, status: "encours", date: null });
+  for (const [i, p] of done.entries()) {
+    lines.push({ key: `pay:${p.id ?? i}`, label: (p.note ?? "").trim(), amount: Math.round(Number(p.amount)), status: "verse", date: p.date });
+  }
+  const last = done[0] ? { amount: Math.round(Number(done[0].amount)), party: (done[0].note ?? "").trim() } : null;
+  return { coming: owed + upcoming, paid, late, last, owed, lines };
+}
+
+/** Libellé et couleur d'un statut de versement (mêmes mots que `payoutStatus`). */
+export const PAYOUT_LABEL: Record<PayoutKey, { label: string; tone: StatusTone }> = {
+  avenir: { label: "À venir", tone: "closed" },
+  encours: { label: "En cours", tone: "progress" },
+  verse: { label: "Versé", tone: "ok" },
+};

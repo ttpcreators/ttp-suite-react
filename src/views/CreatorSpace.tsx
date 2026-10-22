@@ -65,7 +65,7 @@ import { sharedWithText } from "@/lib/todoCreators";
 import { selectTodosFor } from "@/lib/todoCreatorsDb";
 import { agencyAwaits, progressColumnMissing } from "@/lib/todoProgress";
 import { CreatorTodos } from "@/components/CreatorTodos";
-import { invoiceTone, netGains, netShare, payoutStatus } from "@/lib/creatorGains";
+import { invoiceTone, netGains, netShare, PAYOUT_LABEL, payoutStatus, realGains, type RealPayout, type ReportDetail, type ReportInvoice } from "@/lib/creatorGains";
 import { DEFAULT_COMMISSION, parseCommissionPct } from "@/lib/commission";
 import { daysBetween as daysBetweenIso } from "@/lib/aujourdhui";
 import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
@@ -639,6 +639,9 @@ export function CreatorSpace({
   const [events, setEvents] = useState<Ev[]>([]);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  // Vrais versements et net exact : fonction serveur `creator-report` (filtrée sur la créatrice).
+  // Absente ou en erreur : la page Gains garde l'estimation faite à partir des factures.
+  const [money, setMoney] = useState<{ invoices: ReportInvoice[]; details: Record<string, ReportDetail>; payouts: RealPayout[] } | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   // Collabs du créateur (lecture seule : RLS `collabs_scoped`, écriture réservée à l'agence).
   const [collabs, setCollabs] = useState<MissionCollab[]>([]);
@@ -762,6 +765,14 @@ export function CreatorSpace({
       if (alive) markReady("invoices");
       if (apply(error)) setInvoices((data as Invoice[]) ?? []);
     });
+    supabase.functions
+      .invoke("creator-report", { body: { creator: name } })
+      .then(({ data, error }) => {
+        const d = data as { money?: boolean; invoices?: ReportInvoice[]; details?: Record<string, ReportDetail>; payouts?: RealPayout[] } | null;
+        if (!alive || error || !d?.money || !Array.isArray(d.invoices)) return;
+        setMoney({ invoices: d.invoices, details: d.details ?? {}, payouts: Array.isArray(d.payouts) ? d.payouts : [] });
+      })
+      .catch(() => undefined);
     // Contacts propres au créateur (RLS : il ne voit QUE ses lignes, jamais celles de l'agence).
     supabase.from("contacts").select("id,brand,person,role,email,phone,sort_order").eq("creator", name).order("sort_order").then(({ data, error }) => apply(error) && setContacts((data as Contact[]) ?? []));
     // Missions : étape de chaque collab (sans le cachet ni la note interne de l'agence).
@@ -1903,7 +1914,8 @@ export function CreatorSpace({
   );
   // Ce qu'elle touche vraiment : brut moins la commission de SA fiche (src/lib/creatorGains.ts).
   const rate = parseCommissionPct(creator?.commission) ?? DEFAULT_COMMISSION;
-  const net = useMemo(() => netGains(invoices, rate), [invoices, rate]);
+  const real = useMemo(() => (money ? realGains(money.invoices, money.details, money.payouts, rate) : null), [money, rate]);
+  const net = useMemo(() => real ?? netGains(invoices, rate), [real, invoices, rate]);
   const themeCtx = useTheme();
   // Mode sombre automatique : une créatrice qui n'a rien choisi suit le réglage du téléphone.
   useEffect(() => {
@@ -3862,7 +3874,30 @@ export function CreatorSpace({
               <section>
                 <h2 className="mb-2 px-1 text-[20px] font-bold tracking-[-0.02em]">{t("Tes versements")}</h2>
                 <div className="overflow-hidden rounded-[20px] bg-surface shadow-sm">
-                  {invoices.length === 0 ? (
+                  {real ? (
+                    real.lines.length === 0 ? (
+                      <div className="p-5 text-[15px] text-muted-foreground">{t("Rien pour l'instant. Tes versements arrivent ici.")}</div>
+                    ) : (
+                      real.lines.map((l, i) => {
+                        const st = PAYOUT_LABEL[l.status];
+                        const title = l.status === "encours" ? t("Ton agence te vire bientôt") : l.status === "verse" ? l.label || t("Versement") : brandOnly(l.label);
+                        const when = l.date ? fmtDay(toISODate(l.date) || l.date, locale) : "";
+                        return (
+                          <div key={l.key} className={cn("flex min-h-[60px] items-center gap-3 px-4 py-2.5", i > 0 && "border-t border-border")}>
+                            <IconTile tone="info"><span className="text-[17px] font-bold">{l.status === "encours" ? "→" : brandInitial(title)}</span></IconTile>
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-[16px] font-semibold text-foreground">{title}</div>
+                              {when && <div className="text-[13px] text-muted-foreground">{when}</div>}
+                            </div>
+                            <div className="flex shrink-0 flex-col items-end gap-1">
+                              <span className="whitespace-nowrap text-[16px] font-bold tracking-tight tabular-nums">{formatEuro(l.amount)}</span>
+                              <StatusPill tone={st.tone} size="xs">{t(st.label)}</StatusPill>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )
+                  ) : invoices.length === 0 ? (
                     <div className="p-5 text-[15px] text-muted-foreground">{t("Rien pour l'instant. Tes versements arrivent ici.")}</div>
                   ) : (
                     invoices.map((inv, i) => {
