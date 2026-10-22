@@ -102,7 +102,9 @@ export function linkifyHtml(html: string): string {
 
 export function buildHtml(text: string, opts: { signature?: string; quoted?: string } = {}): string {
   // Liens écrits en clair (media kit…) : cliquables chez la marque.
-  const body = `<div style="font-family:system-ui,Arial,sans-serif;font-size:14px;line-height:1.6;white-space:pre-line">${linkifyHtml(esc(text.trim()))}</div>`;
+  // Retours à la ligne en <br> : Gmail et Spark ignorent « white-space:pre-line » (tout en un bloc).
+  const lines = linkifyHtml(esc(text.trim().replace(/\r\n?/g, "\n"))).replace(/\n/g, "<br>");
+  const body = `<div style="font-family:system-ui,Arial,sans-serif;font-size:14px;line-height:1.6">${lines}</div>`;
   const sig = opts.signature ? `<br><div class="ttp-signature">${opts.signature}</div>` : "";
   const quoted = opts.quoted ? `<br><div class="gmail_quote">${opts.quoted}</div>` : "";
   return body + sig + quoted;

@@ -45,6 +45,14 @@ describe("mailSend", () => {
     expect(buildHtml("x")).not.toContain("ttp-signature");
   });
 
+  it("garde les paragraphes avec des <br> (Gmail et Spark ignorent white-space)", () => {
+    const html = buildHtml("Bonjour,\r\n\r\nVoici le kit :\nhttps://ttpcreators.pro/mediakit/lena/\nMerci");
+    expect(html).toContain('Bonjour,<br><br>Voici le kit :<br><a href="https://ttpcreators.pro/mediakit/lena/"');
+    expect(html).toContain("</a><br>Merci");
+    expect(html).not.toContain("white-space");
+    expect(html).not.toContain("\n");
+  });
+
   it("réglages : valeurs par défaut et délai borné", () => {
     expect(readMailSettings({})).toEqual({ signatureHtml: "", signatureOn: true, delaySec: 10 });
     expect(readMailSettings({ mailSettings: { delaySec: 7, signatureOn: false } }).delaySec).toBe(10);
