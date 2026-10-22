@@ -4,6 +4,27 @@
  * à coller (Cmd+V) dans la conversation.
  */
 export const CLAUDE_MAIL_PROJECT_URL = "https://claude.ai/project/019f77a8-6eef-7680-9b95-532e9cc66f6e";
+/** Même projet dans l'app Claude pour ordinateur (lien `claude://claude.ai/…`, géré par l'app). */
+export const CLAUDE_MAIL_PROJECT_APP = "claude://claude.ai/project/019f77a8-6eef-7680-9b95-532e9cc66f6e";
+
+/**
+ * Ouvre le projet dans l'app Claude. Si l'app n'est pas là (autre ordinateur, téléphone),
+ * la page garde la main : on ouvre alors le site claude.ai au bout d'un court instant.
+ */
+export function openClaudeProject(): void {
+  let left = false;
+  const away = () => {
+    left = true;
+  };
+  window.addEventListener("blur", away, { once: true });
+  document.addEventListener("visibilitychange", away, { once: true });
+  window.location.href = CLAUDE_MAIL_PROJECT_APP;
+  window.setTimeout(() => {
+    window.removeEventListener("blur", away);
+    document.removeEventListener("visibilitychange", away);
+    if (!left && document.visibilityState === "visible") window.open(CLAUDE_MAIL_PROJECT_URL, "_blank", "noopener");
+  }, 1500);
+}
 
 type Line = string | null | undefined | false;
 const clean = (v?: string | null) => (v && v.trim() && v.trim() !== "—" ? v.trim() : "");

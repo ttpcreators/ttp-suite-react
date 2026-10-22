@@ -38,7 +38,7 @@ import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { NewMailDialog } from "@/components/mail-tools";
 import { ClaudeLogo } from "@/components/icons/claude-logo";
-import { CLAUDE_MAIL_PROJECT_URL, contactBrief } from "@/lib/claudeProject";
+import { contactBrief, openClaudeProject } from "@/lib/claudeProject";
 import { DEFAULT_TEMPLATES, mailtoHref, readProspectTemplates, suggestedMail, type MailTemplate } from "@/lib/mailTemplates";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1407,11 +1407,11 @@ export function Contacts() {
               const text = contactBrief({ ...row, touches: sortTouches(parseTouches(row.touches)), mails: history ?? [] });
               // Copie lancée pendant le clic (sinon le navigateur la refuse), puis ouverture du projet.
               const copied = navigator.clipboard?.writeText(text).then(() => true, () => false) ?? Promise.resolve(false);
-              window.open(CLAUDE_MAIL_PROJECT_URL, "_blank", "noopener");
+              openClaudeProject();
               void copied.then((ok) => toast(ok ? "Fiche copiée : colle-la dans Claude (Cmd+V) puis écris ta demande" : "Projet Claude ouvert"));
             }}
             className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-field px-4 text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover"
-            title="Ouvre le projet Claude « Assistant mail/message » et copie les infos de ce contact"
+            title="Ouvre le projet « Assistant mail/message » dans l'app Claude et copie les infos de ce contact"
           >
             <ClaudeLogo className="h-[18px] w-[18px] shrink-0" /> Demander à Claude
           </button>
