@@ -136,3 +136,19 @@ describe("mailSend", () => {
     off();
   });
 });
+
+import { linkifyHtml } from "./mailSend";
+describe("liens cliquables", () => {
+  it("rend cliquables les liens écrits en clair, sans la ponctuation", () => {
+    expect(linkifyHtml("Voir https://ttpcreators.pro/mediakit/ana/.")).toBe('Voir <a href="https://ttpcreators.pro/mediakit/ana/" target="_blank" rel="noopener noreferrer">https://ttpcreators.pro/mediakit/ana/</a>.');
+    expect(linkifyHtml("(www.hoka.com)")).toBe('(<a href="https://www.hoka.com" target="_blank" rel="noopener noreferrer">www.hoka.com</a>)');
+  });
+  it("ne touche ni aux liens existants ni aux balises", () => {
+    const html = '<a href="https://a.fr">https://a.fr</a> <img src="https://b.fr/x.png"> https://c.fr';
+    expect(linkifyHtml(html)).toBe('<a href="https://a.fr">https://a.fr</a> <img src="https://b.fr/x.png"> <a href="https://c.fr" target="_blank" rel="noopener noreferrer">https://c.fr</a>');
+    expect(linkifyHtml("<style>a{background:url(https://x.fr)}</style>")).toBe("<style>a{background:url(https://x.fr)}</style>");
+  });
+  it("garde les &amp; des adresses", () => {
+    expect(linkifyHtml("https://x.fr/?a=1&amp;b=2")).toContain('href="https://x.fr/?a=1&amp;b=2"');
+  });
+});

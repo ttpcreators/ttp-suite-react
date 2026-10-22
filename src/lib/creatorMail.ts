@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import DOMPurify from "dompurify";
 import { supabase } from "@/lib/supabase";
+import { linkifyHtml } from "@/lib/mailSend";
 
 /*
  * Client de la section « Mails » de l'Espace Créateur.
@@ -504,12 +505,13 @@ export function mailDocument(html: string, text: string, showQuoted: boolean, op
   const marked = html.startsWith(NO_REMOTE_IMAGES);
   const src = marked ? html.slice(NO_REMOTE_IMAGES.length) : html;
   const remote = opts.remoteImages !== false && !marked;
+  // Liens écrits en clair (https://…, www.…) : cliquables, comme dans Gmail.
   const body = src
-    ? DOMPurify.sanitize(src, {
+    ? linkifyHtml(DOMPurify.sanitize(src, {
         FORBID_TAGS: ["script", "style", "form", "input", "button", "textarea", "select", "iframe", "object", "embed", "link", "meta", "base", "svg", "math"],
         FORBID_ATTR: ["srcset", "action", "formaction", "background", "ping"],
-      })
-    : `<pre>${text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c)}</pre>`;
+      }))
+    : `<pre>${linkifyHtml(text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c))}</pre>`;
   const quotes = showQuoted ? "" : ".gmail_quote,.gmail_extra,.gmail_attr,blockquote{display:none!important}";
   // Images distantes bloquées : masquées (sinon leur texte de remplacement s'écrase lettre par lettre).
   const hideRemote = remote ? "" : 'img[src^="http"],img[src^="//"]{display:none!important}';

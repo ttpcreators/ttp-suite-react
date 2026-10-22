@@ -59,7 +59,15 @@ function scrollerOf(el: HTMLElement | null): HTMLElement | null {
   return (document.scrollingElement as HTMLElement | null) ?? null;
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-const isAuto = (s: MailStatus) => s === "nouvelle" || s === "negociation";
+// Statuts calculés depuis Gmail (avant : « demarchee » manquait, et un rafraîchissement
+// transformait un démarchage en « Nouvelle demande », compté « À traiter »).
+const isAuto = (s: MailStatus) => s === "nouvelle" || s === "demarchee" || s === "negociation";
+/**
+ * Mail envoyé par l'agence (créateur en Cc ou Cci) sans réponse de la marque : c'est du
+ * démarchage, il ne va que dans « Envoyés » (ni « Reçus », ni « À traiter »). Dès que la
+ * marque répond, il passe « En négociation » et arrive dans « Reçus ».
+ */
+const sentOnly = (t: Pick<MailThreadLite, "status">) => t.status === "demarchee";
 
 /** Statut discret (pastille + texte) pour les lignes de la liste, avec l'auteur du choix. */
 function StatusDot({ status, by }: { status: string; by?: string }) {
@@ -75,8 +83,8 @@ function StatusDot({ status, by }: { status: string; by?: string }) {
 }
 
 const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse" | "demarchage" | "envoyes"; label: string; short: string; icon: LucideIcon; dot?: string; match: (t: MailThreadLite) => boolean }[] = [
-  { key: "tous", label: "Tous les échanges", short: "Tous", icon: Inbox, match: () => true },
-  { key: "encours", label: "En cours", short: "En cours", icon: Hourglass, dot: "bg-progress", match: (t) => t.status === "nouvelle" || t.status === "demarchee" || t.status === "negociation" },
+  { key: "tous", label: "Tous les échanges", short: "Tous", icon: Inbox, match: (t) => !sentOnly(t) },
+  { key: "encours", label: "En cours", short: "En cours", icon: Hourglass, dot: "bg-progress", match: (t) => t.status === "nouvelle" || t.status === "negociation" },
   { key: "atraiter", label: "À vérifier / valider", short: "À traiter", icon: SearchCheck, dot: "bg-wait", match: (t) => t.status === "a_verifier" || t.status === "a_valider" },
   { key: "valide", label: "Validés", short: "Validés", icon: Check, dot: "bg-ok", match: (t) => t.status === "valide" },
   { key: "refuse", label: "Refusés", short: "Refusés", icon: X, dot: "bg-closed", match: (t) => t.status === "refuse" },
@@ -813,6 +821,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     for (const f of FILTERS) c[f.key] = (threads ?? []).filter(matchOf(f)).length;
     return c;
   }, [threads, matchOf]);
+  // Pastille « Reçus » (créateur) : échanges reçus pas encore vus, sans les démarchages envoyés.
+  const unseenReceived = useMemo(() => (threads ?? []).filter((t) => unseen.has(t.id) && !sentOnly(t)).length, [threads, unseen]);
   const cur = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
   const q = query.trim().toLowerCase();
   const pitch = useMemo(() => prospectStats(threads ?? []), [threads]);
@@ -967,7 +977,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   // ── Barre d'icônes (ordinateur) : les cinq rangements, avec leur nombre ──
   const rail = (
     <nav aria-label={t("Ranger les échanges")} className="hidden min-h-0 flex-col items-center gap-1 border-r border-border py-3 lg:flex">
-      <RailButton label={t("Boîte de réception")} caption={t("Reçus")} active={filter !== "envoyes"} badge={(mode === "creator" ? unseen.size : counts.atraiter) || null} onClick={() => setFilter("tous")}>
+      <RailButton label={t("Boîte de réception")} caption={t("Reçus")} active={filter !== "envoyes"} badge={(mode === "creator" ? unseenReceived : counts.atraiter) || null} onClick={() => setFilter("tous")}>
         <Inbox className="h-[18px] w-[18px]" />
       </RailButton>
       <RailButton label={t("Mails envoyés par l'agence")} caption={t("Envoyés")} active={filter === "envoyes"} onClick={() => setFilter("envoyes")}>

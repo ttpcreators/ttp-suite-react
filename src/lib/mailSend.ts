@@ -61,8 +61,48 @@ export async function saveMailSettings(v: MailSettings): Promise<boolean> {
 const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c);
 
 /** Corps HTML final : texte saisi + signature éventuelle + contenu cité (transfert). */
+/** Lien écrit en clair (https://…, www.…), sans la ponctuation qui le suit. */
+const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+function linkOf(raw: string): { url: string; tail: string } {
+  let url = raw;
+  let tail = "";
+  for (;;) {
+    const m = /[.,;:!?»…]$|\)$/.exec(url);
+    if (!m || (m[0] === ")" && url.includes("("))) break;
+    tail = m[0] + tail;
+    url = url.slice(0, -1);
+  }
+  return { url, tail };
+}
+
+/**
+ * Rend cliquables les liens écrits en clair dans du HTML : seulement dans le texte, jamais
+ * dans une balise ni dans un lien existant (<a>), un <style> ou un <script>.
+ */
+export function linkifyHtml(html: string): string {
+  let inside = 0; // profondeur dans <a>, <style>, <script>
+  return html
+    .split(/(<[^>]*>)/)
+    .map((part) => {
+      const tag = /^<\s*(\/)?\s*(a|style|script)\b/i.exec(part);
+      if (tag) {
+        if (!/\/>$/.test(part)) inside = Math.max(0, inside + (tag[1] ? -1 : 1));
+        return part;
+      }
+      if (part.startsWith("<") || inside > 0) return part;
+      return part.replace(URL_RE, (raw) => {
+        const { url, tail } = linkOf(raw);
+        if (url.length < 5) return raw;
+        const href = /^www\./i.test(url) ? `https://${url}` : url;
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${url}</a>${tail}`;
+      });
+    })
+    .join("");
+}
+
 export function buildHtml(text: string, opts: { signature?: string; quoted?: string } = {}): string {
-  const body = `<div style="font-family:system-ui,Arial,sans-serif;font-size:14px;line-height:1.6;white-space:pre-line">${esc(text.trim())}</div>`;
+  // Liens écrits en clair (media kit…) : cliquables chez la marque.
+  const body = `<div style="font-family:system-ui,Arial,sans-serif;font-size:14px;line-height:1.6;white-space:pre-line">${linkifyHtml(esc(text.trim()))}</div>`;
   const sig = opts.signature ? `<br><div class="ttp-signature">${opts.signature}</div>` : "";
   const quoted = opts.quoted ? `<br><div class="gmail_quote">${opts.quoted}</div>` : "";
   return body + sig + quoted;
