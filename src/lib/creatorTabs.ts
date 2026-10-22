@@ -1,10 +1,10 @@
 /**
  * Onglets de l'espace créateur (logique PURE, testable sous Node).
  *
- * Mobile d'abord : 4 onglets dans la barre du bas (Accueil, Missions, Gains,
- * Mail ; demande de Marc, 2026-10-22). Toutes les autres rubriques (À faire,
- * Idées, documents, profil, réglages…) sont dans le Menu, ouvert par l'avatar en
- * haut à droite (id « profil »), et dans le menu ordinateur. L'onglet choisi est mémorisé (`ttp:cs-tab`) ; les
+ * Mobile d'abord : barre du bas Accueil, Missions, À faire, Mail, Plus (demande de
+ * Marc, 2026-10-23 : « À faire » en bas et un bouton vers les autres pages). « Plus »
+ * (id « profil ») ouvre le Menu : Gains, Idées, documents, profil, réglages… ; l'avatar
+ * en haut à droite l'ouvre aussi. Sur ordinateur, tout est dans le menu de gauche. L'onglet choisi est mémorisé (`ttp:cs-tab`) ; les
  * anciennes valeurs (« briefs », « facturation »…) sont ramenées vers le nouvel
  * onglet qui les contient, pour que personne n'atterrisse sur un onglet cassé.
  */
@@ -15,19 +15,22 @@ export type CsTab =
   | "aujourdhui" | "todo" | "ideas" | "gifting" | "planning"
   | "mediakit" | "documents" | "contacts";
 
-/** Les 4 onglets de la barre du bas. */
-export const CS_MAIN_TABS = ["accueil", "missions", "gains", "mails"] as const satisfies readonly CsTab[];
+/** Les rubriques principales de la barre du bas (suivies de « Plus », le Menu). */
+export const CS_MAIN_TABS = ["accueil", "missions", "todo", "mails"] as const satisfies readonly CsTab[];
 export type CsMainTab = (typeof CS_MAIN_TABS)[number];
 
-/** Le Menu (avatar en haut à droite) : profil, réglages et toutes les autres rubriques. */
+/** Le Menu (« Plus » en bas, avatar en haut à droite) : profil, réglages et toutes les autres rubriques. */
 export const CS_MENU_TAB = "profil" as const satisfies CsTab;
+
+/** Barre du bas du téléphone : les rubriques principales, puis « Plus ». */
+export const CS_BAR_TABS: readonly CsTab[] = [...CS_MAIN_TABS, CS_MENU_TAB];
 
 /** Toutes les rubriques (principales d'abord, puis le Menu et celles qu'il ouvre). */
 export const CS_ALL_TABS: readonly CsTab[] = [
   ...CS_MAIN_TABS,
   CS_MENU_TAB,
   "guide", "evolution", "rapport", "debrief", "roadmap",
-  "aujourdhui", "todo", "ideas", "gifting", "planning",
+  "aujourdhui", "gains", "ideas", "gifting", "planning",
   "mediakit", "documents", "contacts",
 ];
 
@@ -51,9 +54,9 @@ export function normalizeCsTab(saved: string | null | undefined): CsTab {
   return (CS_ALL_TABS as readonly string[]).includes(v) ? (v as CsTab) : "accueil";
 }
 
-/** Onglet du bas allumé pour une rubrique : elle-même si principale, sinon aucun (rubrique du Menu). */
-export function ownerTab(tab: CsTab): CsMainTab | null {
-  return (CS_MAIN_TABS as readonly string[]).includes(tab) ? (tab as CsMainTab) : null;
+/** Onglet du bas allumé pour une rubrique : elle-même si principale, sinon « Plus » (rubrique du Menu). */
+export function ownerTab(tab: CsTab): CsMainTab | typeof CS_MENU_TAB {
+  return (CS_MAIN_TABS as readonly string[]).includes(tab) ? (tab as CsMainTab) : CS_MENU_TAB;
 }
 
 export function isMainTab(tab: CsTab): tab is CsMainTab {
@@ -65,7 +68,7 @@ export function isMainTab(tab: CsTab): tab is CsMainTab {
  * Favoris d'office de CHAQUE créateur (demande de Marc, 2026-10-22) : toujours en tête,
  * on ne peut pas les retirer. Les favoris choisis par le créateur viennent après.
  */
-export const CS_FIXED_FAVORITES: readonly CsTab[] = ["accueil", "todo", "ideas", "mails"];
+export const CS_FIXED_FAVORITES: readonly CsTab[] = ["aujourdhui", "accueil", "todo", "ideas", "mails"];
 
 /** Rubriques qu'on peut ajouter ou retirer des favoris (ni Plus, ni les favoris d'office). */
 export const CS_FAVORABLE: readonly CsTab[] = CS_ALL_TABS.filter((t) => t !== "profil" && !CS_FIXED_FAVORITES.includes(t));

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { CS_ALL_TABS, CS_MAIN_TABS, csFavoritesShown, normalizeCsTab, ownerTab, parseCsFavorites, toggleCsFavorite } from "./creatorTabs";
+import { CS_ALL_TABS, CS_BAR_TABS, csFavoritesShown, normalizeCsTab, ownerTab, parseCsFavorites, toggleCsFavorite } from "./creatorTabs";
 
 describe("onglets de l'espace créateur", () => {
-  it("4 onglets en bas : Accueil, Missions, Gains, Mail", () => {
-    expect([...CS_MAIN_TABS]).toEqual(["accueil", "missions", "gains", "mails"]);
+  it("barre du bas : Accueil, Missions, À faire, Mail, Plus", () => {
+    expect([...CS_BAR_TABS]).toEqual(["accueil", "missions", "todo", "mails", "profil"]);
+    expect(new Set(CS_ALL_TABS).size).toBe(CS_ALL_TABS.length);
+    expect(CS_ALL_TABS).toContain("gains");
     expect(CS_ALL_TABS).toContain("profil"); // le Menu (avatar)
   });
 
@@ -23,9 +25,10 @@ describe("onglets de l'espace créateur", () => {
   });
 
   it("une rubrique du Menu n'allume aucun onglet du bas", () => {
-    expect(ownerTab("guide")).toBe(null);
-    expect(ownerTab("profil")).toBe(null);
-    expect(ownerTab("gains")).toBe("gains");
+    expect(ownerTab("guide")).toBe("profil");
+    expect(ownerTab("profil")).toBe("profil");
+    expect(ownerTab("gains")).toBe("profil");
+    expect(ownerTab("todo")).toBe("todo");
   });
 });
 
@@ -37,8 +40,8 @@ describe("favoris du créateur", () => {
     expect(parseCsFavorites('["todo","mediakit"]')).toEqual(["mediakit"]); // ancienne liste : « todo » est d'office
   });
   it("Accueil, À faire, Idées et Mail sont toujours en tête, puis les favoris choisis", () => {
-    expect(csFavoritesShown([])).toEqual(["accueil", "todo", "ideas", "mails"]);
-    expect(csFavoritesShown(["mediakit", "todo"])).toEqual(["accueil", "todo", "ideas", "mails", "mediakit"]);
+    expect(csFavoritesShown([])).toEqual(["aujourdhui", "accueil", "todo", "ideas", "mails"]);
+    expect(csFavoritesShown(["mediakit", "todo"])).toEqual(["aujourdhui", "accueil", "todo", "ideas", "mails", "mediakit"]);
     expect(toggleCsFavorite(["mediakit"], "ideas")).toEqual(["mediakit"]); // d'office : ne se retire pas
   });
   it("ajoute puis retire", () => {

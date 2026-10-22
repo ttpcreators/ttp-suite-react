@@ -54,7 +54,7 @@ import { IconTile } from "@/components/ui/icon-tile";
 import { TONE_TEXT, type StatusTone } from "@/lib/statusTone";
 import { useTheme } from "@/lib/theme";
 import { THEME_CHOICES, type ThemeChoice } from "@/lib/accent";
-import { CS_FAVORABLE, CS_MAIN_TABS, csFavoritesShown, isMainTab, normalizeCsTab, ownerTab, parseCsFavorites, toggleCsFavorite, type CsTab } from "@/lib/creatorTabs";
+import { CS_BAR_TABS, CS_FAVORABLE, csFavoritesShown, isMainTab, normalizeCsTab, ownerTab, parseCsFavorites, toggleCsFavorite, type CsTab } from "@/lib/creatorTabs";
 import { hasResume, parseResume, type BriefResume } from "@/lib/briefResume";
 import { brandInitial, briefKey, buildMissions, CREATOR_STAGES, creatorStage, missionAction, missionState, type Mission, type MissionCollab } from "@/lib/creatorMissions";
 import { BriefBlocks, MissionCard, MissionStages } from "@/components/creator-missions";
@@ -3981,11 +3981,13 @@ export function CreatorSpace({
       {iosPhone && <PullToRefresh scrollRef={mainRef} />}
       {iosPhone && (
         <IosTabBar
-          items={CS_MAIN_TABS.map((id) => {
+          items={CS_BAR_TABS.map((id) => {
             const tb = TABS.find((x) => x.id === id);
-            return { id, label: tb ? t(tb.label) : id, icon: tb?.icon ?? LayoutDashboard, badge: id === "mails" && mailsOn ? mailBadge : null };
+            // « Plus » ouvre le Menu : toutes les autres rubriques (Gains, Idées, documents…).
+            const label = id === "profil" ? t("Plus") : tb ? t(tb.label) : id;
+            return { id, label, icon: tb?.icon ?? LayoutDashboard, badge: id === "mails" && mailsOn ? mailBadge : null };
           })}
-          active={ownerTab(tab) ?? ""}
+          active={ownerTab(tab)}
           onSelect={(id) => setTab(id)}
           onReselect={(id) => {
             // Toucher l'onglet ouvert : retour à la liste (fiche mission, rubrique de Profil), sinon en haut.
