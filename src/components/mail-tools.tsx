@@ -20,6 +20,7 @@ import { Overlay, useIosPhone } from "@/components/mobile/ios-sheet";
 import { ClaudeConsigne, ClaudeReadyBanner, ClaudeReplyButton, useClaudeReply } from "@/components/mail-claude";
 import { MeetButton, MeetDialog, meetReplyText } from "@/components/meet-invite";
 import { ModelPicker } from "@/components/mail-models";
+import { AddressInput } from "@/components/mail-address-input";
 import { brandFromEmail, insertModel, type ModelVars } from "@/lib/mailModels";
 import { composerPrefill, deleteGmailDraft, gmailDraftLocalKey, type GmailDraftRow, type ReplyDraft } from "@/lib/mailDrafts";
 
@@ -411,13 +412,13 @@ export function ReplyBox({
         {ccOpen && (
           <div className={line}>
             <span className="w-8 shrink-0 text-[12px] text-muted-foreground">Cc</span>
-            <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="adresse@exemple.com, autre@exemple.com" className={addr} inputMode="email" aria-label="Copie" />
+            <AddressInput value={cc} onChange={setCc} placeholder="adresse@exemple.com ou @prénom d'un créateur" className={addr} inputMode="email" aria-label="Copie" />
           </div>
         )}
         {bccOpen && (
           <div className={line}>
             <span className="w-8 shrink-0 text-[12px] text-muted-foreground">Cci</span>
-            <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="Invisible pour les autres : adresse@exemple.com" className={addr} autoFocus inputMode="email" aria-label="Copie cachée" />
+            <AddressInput value={bcc} onChange={setBcc} placeholder="Invisible pour les autres : adresse@exemple.com" className={addr} autoFocus inputMode="email" aria-label="Copie cachée" />
           </div>
         )}
         {ai.ready && <ClaudeReadyBanner onInsert={ai.insert} onDismiss={ai.dismiss} />}
@@ -465,10 +466,10 @@ export function ReplyBox({
   return (
     <div className="flex flex-col gap-2">
       {ccOpen && (
-        <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="Cc : adresse@exemple.com, autre@exemple.com" className={field} autoFocus inputMode="email" />
+        <AddressInput value={cc} onChange={setCc} placeholder="Cc : adresse@exemple.com ou @prénom d'un créateur" className={field} autoFocus inputMode="email" />
       )}
       {bccOpen && (
-        <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="Cci (invisible pour les autres) : adresse@exemple.com" className={field} autoFocus inputMode="email" />
+        <AddressInput value={bcc} onChange={setBcc} placeholder="Cci (invisible pour les autres) : adresse@exemple.com" className={field} autoFocus inputMode="email" />
       )}
       <AttachChips files={att.files} onRemove={att.remove} />
       <div className="flex items-end gap-2 rounded-xl border border-border bg-surface p-1.5 pl-3.5 focus-within:border-primary">
@@ -630,10 +631,10 @@ function ForwardPanel({
           </button>
         </div>
         <div className="flex-1 space-y-2.5 overflow-y-auto px-5 py-4">
-          <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="À : adresse@exemple.com" className={field} autoFocus inputMode="email" aria-label="Destinataire" />
+          <AddressInput value={to} onChange={setTo} placeholder="À : adresse@exemple.com ou @prénom" className={field} autoFocus inputMode="email" aria-label="Destinataire" />
           <div className="grid gap-2.5 sm:grid-cols-2">
-            <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="Cc (facultatif)" className={field} inputMode="email" aria-label="Copie" />
-            <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="Cci (facultatif)" className={field} inputMode="email" aria-label="Copie cachée" />
+            <AddressInput value={cc} onChange={setCc} placeholder="Cc (facultatif) : @prénom pour un créateur" className={field} inputMode="email" aria-label="Copie" />
+            <AddressInput value={bcc} onChange={setBcc} placeholder="Cci (facultatif)" className={field} inputMode="email" aria-label="Copie cachée" />
           </div>
           <textarea
             value={note}
@@ -871,7 +872,7 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
               {gmailNote}
               <div className={row}>
                 <span aria-hidden className="w-10 shrink-0 text-[12.5px] text-muted-foreground">À</span>
-                <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="adresse@exemple.com" className={bare} autoFocus inputMode="email" aria-label="Destinataire" />
+                <AddressInput value={to} onChange={setTo} placeholder="adresse@exemple.com ou @prénom" className={bare} autoFocus inputMode="email" aria-label="Destinataire" />
                 <button type="button" onClick={() => setCopyOpen((v) => !v)} aria-expanded={copyOpen}
                   className={cn("shrink-0 rounded px-1 text-[12px] font-medium hover:text-foreground", copyOpen ? "text-foreground" : "text-muted-foreground")}>
                   Cc · Cci
@@ -881,11 +882,11 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
                 <>
                   <label className={row}>
                     <span className="w-10 shrink-0 text-[12.5px] text-muted-foreground">Cc</span>
-                    <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="Facultatif" className={bare} inputMode="email" aria-label="Copie" />
+                    <AddressInput value={cc} onChange={setCc} placeholder="Facultatif, @prénom pour un créateur" className={bare} inputMode="email" aria-label="Copie" />
                   </label>
                   <label className={row}>
                     <span className="w-10 shrink-0 text-[12.5px] text-muted-foreground">Cci</span>
-                    <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="Facultatif, invisible pour les autres" className={bare} inputMode="email" aria-label="Copie cachée" />
+                    <AddressInput value={bcc} onChange={setBcc} placeholder="Facultatif, invisible pour les autres" className={bare} inputMode="email" aria-label="Copie cachée" />
                   </label>
                 </>
               )}
@@ -941,10 +942,10 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
             <span>Envoyer depuis</span>
             <BoxPicker value={box} onChange={setBox} />
           </div>
-          <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="À : adresse@exemple.com" className={field} autoFocus inputMode="email" aria-label="Destinataire" />
+          <AddressInput value={to} onChange={setTo} placeholder="À : adresse@exemple.com ou @prénom" className={field} autoFocus inputMode="email" aria-label="Destinataire" />
           <div className="grid gap-2.5 sm:grid-cols-2">
-            <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="Cc (facultatif)" className={field} inputMode="email" aria-label="Copie" />
-            <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="Cci (facultatif)" className={field} inputMode="email" aria-label="Copie cachée" />
+            <AddressInput value={cc} onChange={setCc} placeholder="Cc (facultatif) : @prénom pour un créateur" className={field} inputMode="email" aria-label="Copie" />
+            <AddressInput value={bcc} onChange={setBcc} placeholder="Cci (facultatif)" className={field} inputMode="email" aria-label="Copie cachée" />
           </div>
           <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Objet" className={cn(field, "font-medium")} aria-label="Objet" />
           <textarea
