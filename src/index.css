@@ -506,10 +506,13 @@ body {
     overscroll-behavior: none;
   }
   /* Champs en 16 px : taille de lecture iOS, et iOS ne zoome jamais dessus. */
+  /* !important : les tailles de texte réduites des pages (.text-[12.5px]…) ne doivent
+     jamais repasser un champ sous 16 px. */
   .ios-ui input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   .ios-ui textarea,
-  .ios-ui select {
-    font-size: 16px;
+  .ios-ui select,
+  .ios-ui [contenteditable="true"] {
+    font-size: 16px !important;
   }
   /* Retour au toucher façon iOS : l'élément pâlit pendant l'appui. */
   .ios-ui :is(button, a, [role="button"], [role="tab"], [role="radio"], summary) {
@@ -656,16 +659,27 @@ body {
    Les sélecteurs segmentés grandissent ; les petits boutons-icônes et les liens texte
    gardent leur dessin mais reçoivent une zone de toucher invisible autour d'eux. */
 @media (max-width: 767px) {
+  /* Sélecteurs segmentés, champs, menus et boutons de 36 à 42 px : 44 px pleins. */
   .ios-ui :is(main, .ios-sheet) [role="tab"] {
-    min-height: 36px;
+    min-height: 44px;
   }
-  .ios-ui :is(main, .ios-sheet) :is(button, a[href], [role="button"]):is(.h-5, .h-6, .h-7, .h-8, .size-5, .size-6, .size-7, .size-8, .w-6, .w-7, .w-8):not(.absolute):not(.fixed):not(.sticky) {
-    position: relative;
+  /* Onglet réduit à son icône sur téléphone (libellé en aria-label) : 44 px de large.
+     Pas de min-width sur les autres : il écraserait la largeur de leur texte. */
+  .ios-ui :is(main, .ios-sheet) [role="tab"][aria-label] {
+    min-width: 44px;
   }
-  .ios-ui :is(main, .ios-sheet) :is(button, a[href], [role="button"]):is(.h-5, .h-6, .h-7, .h-8, .size-5, .size-6, .size-7, .size-8, .w-6, .w-7, .w-8)::after {
-    content: "";
-    position: absolute;
-    inset: -8px;
+  .ios-ui :is(main, .ios-sheet) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select) {
+    min-height: 44px;
+  }
+  .ios-ui :is(main, .ios-sheet) :is(button, a[href], [role="button"]):is(.h-9, .h-10, .size-9, .size-10, [class*="h-[36px]"], [class*="h-[38px]"], [class*="h-[40px]"], [class*="h-[42px]"]):not(.absolute):not(.fixed):not(.sticky) {
+    min-height: 44px;
+  }
+  .ios-ui :is(main, .ios-sheet) :is(button, a[href], [role="button"]):is(.size-9, .size-10, .w-9, .w-10):not(.absolute):not(.fixed):not(.sticky) {
+    min-width: 44px;
+  }
+  /* Boutons fins sans hauteur fixée mais avec un padding vertical (py-1.5, py-2) : 44 px. */
+  .ios-ui :is(main, .ios-sheet) :is(button, [role="button"]):is([class*="py-1.5"], [class*="py-2"]):not([class*="h-"]):not(.absolute):not(.fixed):not(.sticky):not([role="tab"]) {
+    min-height: 44px;
   }
   /* Pastilles et liens fins (filtres de légende, « Marquer à jour », @compte, statut) :
      même zone invisible, surtout en hauteur, pour ne pas déborder sur leurs voisins. */
@@ -677,11 +691,44 @@ body {
   .ios-ui :is(main, .ios-sheet) a[href]:not([class^="p-"]):not([class*=" p-"]):not([class*="py-"])::after {
     content: "";
     position: absolute;
-    inset: -10px -4px;
+    inset: -13px -7px;
   }
   /* Liens et boutons texte sans hauteur fixée (« Voir tout », « Ouvrir ») : un peu d'air. */
   .ios-ui :is(main, .ios-sheet) button:not([class^="h-"]):not([class*=" h-"]):not([class*="py-"]):not([class^="p-"]):not([class*=" p-"]):not([role="tab"]):not([role="switch"]) {
     padding-block: 10px;
+    min-height: 44px;
+  }
+  /* Mot court (« Voir ») : zone invisible sur les côtés plutôt qu'une largeur minimale,
+     qui écraserait les boutons texte d'une rangée. */
+  .ios-ui :is(main, .ios-sheet) button:not([class^="h-"]):not([class*=" h-"]):not([class*="py-"]):not([class^="p-"]):not([class*=" p-"]):not([role="tab"]):not([role="switch"]):not(.absolute):not(.fixed):not(.sticky):not([class*="after:"]) {
+    position: relative;
+  }
+  .ios-ui :is(main, .ios-sheet) button:not([class^="h-"]):not([class*=" h-"]):not([class*="py-"]):not([class^="p-"]):not([class*=" p-"]):not([role="tab"]):not([role="switch"]):not([class*="after:"])::after {
+    content: "";
+    position: absolute;
+    inset: 0 -10px;
+  }
+  .ios-ui :is(main, .ios-sheet) summary {
+    min-height: 44px;
+  }
+  /* Petits boutons-icônes (16 à 32 px) : le dessin ne change pas, la zone de toucher
+     invisible les porte à 44 px au moins (prioritaire sur la zone des pastilles). */
+  .ios-ui :is(main, .ios-sheet) :is(button, a[href], [role="button"]):is(.h-4, .h-5, .h-6, .h-7, .h-8, .size-4, .size-5, .size-6, .size-7, .size-8, .w-4, .w-6, .w-7, .w-8):not(.absolute):not(.fixed):not(.sticky):not([role="tab"]) {
+    position: relative;
+  }
+  .ios-ui :is(main, .ios-sheet) :is(button, a[href], [role="button"]):is(.h-4, .h-5, .h-6, .h-7, .h-8, .size-4, .size-5, .size-6, .size-7, .size-8, .w-4, .w-6, .w-7, .w-8):not([role="tab"])::after {
+    content: "";
+    position: absolute;
+    inset: -14px !important;
+  }
+  .ios-ui :is(main, .ios-sheet) :is(button, a[href], [role="button"]):is(.h-7, .h-8, .size-7, .size-8, .w-7, .w-8):not([role="tab"])::after {
+    inset: -8px !important;
+  }
+  /* « ? » d'aide (16 à 20 px) : zone de toucher de 44 px. */
+  .ios-ui .help-tip::after {
+    content: "";
+    position: absolute;
+    inset: -14px !important;
   }
 }
 @media (max-width: 767px) {

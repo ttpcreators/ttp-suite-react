@@ -2244,6 +2244,11 @@ update public.todos
  where cardinality(creators) = 0
    and nullif(btrim(creator), '') is not null;
 
+-- Points d'avancement d'une tâche, visibles du créateur (2026-10-22,
+-- sql/2026-10-22-taches-points-avancement.sql : reprise des anciens points du blob
+-- `itemNotes`). Un point par ligne : « 22/10/2026 · Agence : texte ».
+alter table public.todos add column if not exists progress text;
+
 -- ════════════════════════════════════════════════════════════════════════════
 -- Sauvegarde mensuelle (2026-10-21, sql/2026-10-21-sauvegarde-mensuelle.sql) : bucket
 -- privé « backups » (aucune politique, serveur seulement). Le cron est dans le fichier daté.

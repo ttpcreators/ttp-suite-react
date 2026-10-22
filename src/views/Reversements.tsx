@@ -14,7 +14,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
 import { DateInput } from "@/components/ui/date-range-picker";
-import { frDate } from "@/lib/dates";
+import { fmtDayAny } from "@/lib/dates";
 
 /**
  * Suivi des reversements créateurs : combien l'agence doit à chaque créateur
@@ -281,7 +281,7 @@ export function Reversements() {
                     <div key={p.id} className="flex items-center gap-2 rounded-lg bg-panel px-3 py-2 text-xs">
                       <Check className="h-3.5 w-3.5 shrink-0 text-signaltext" />
                       <span className="font-semibold text-foreground">{formatEuro(p.amount)}</span>
-                      <span className="text-faint">{frDate(p.date)}</span>
+                      <span className="text-faint">{fmtDayAny(p.date)}</span>
                       {p.note && <span className="truncate text-muted-foreground">· {p.note}</span>}
                       <button
                         type="button"

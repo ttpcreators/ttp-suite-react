@@ -428,7 +428,7 @@ export function Acces() {
 
   const form = (
     <InlineForm open={formOpen} title="Nouvel accès" onClose={() => setFormOpen(false)} onSubmit={submit}>
-      <TextField label="Email" value={email} onChange={setEmail} placeholder="prenom@exemple.com" />
+      <TextField label="Email" type="email" value={email} onChange={setEmail} placeholder="prenom@exemple.com" />
       <div className="flex items-end gap-2">
         <TextField label="Mot de passe" value={pwd} onChange={setPwd} />
         <button

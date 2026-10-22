@@ -344,7 +344,7 @@ export function Checklist() {
                       {!ck.collab && <DeleteButton onClick={() => askRemove(ck)} />}
                     </div>
                   </div>
-                  <button type="button" onClick={() => setSelectedId(ck.id)} aria-label={`Ouvrir ${ck.name}`}>
+                  <button type="button" onClick={() => setSelectedId(ck.id)} aria-label={`Ouvrir ${ck.name}`} className="-my-2 py-2">
                     <Progress value={pct} className="h-2" />
                   </button>
                 </div>

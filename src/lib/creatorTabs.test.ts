@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { CS_ALL_TABS, CS_MAIN_TABS, normalizeCsTab, ownerTab, parseCsFavorites, toggleCsFavorite } from "./creatorTabs";
+import { CS_ALL_TABS, CS_MAIN_TABS, csFavoritesShown, normalizeCsTab, ownerTab, parseCsFavorites, toggleCsFavorite } from "./creatorTabs";
 
 describe("onglets de l'espace créateur", () => {
-  it("5 onglets en bas, dans l'ordre de la maquette", () => {
-    expect([...CS_MAIN_TABS]).toEqual(["accueil", "missions", "mails", "gains", "profil"]);
+  it("4 onglets en bas : Accueil, Missions, Gains, Messages", () => {
+    expect([...CS_MAIN_TABS]).toEqual(["accueil", "missions", "gains", "mails"]);
+    expect(CS_ALL_TABS).toContain("profil"); // le Menu (avatar)
   });
 
   it("les anciennes valeurs mémorisées retombent sur un onglet valide", () => {
@@ -21,8 +22,9 @@ describe("onglets de l'espace créateur", () => {
     for (const v of old) expect(CS_ALL_TABS).toContain(normalizeCsTab(v));
   });
 
-  it("une rubrique secondaire allume l'onglet Profil", () => {
-    expect(ownerTab("guide")).toBe("profil");
+  it("une rubrique du Menu n'allume aucun onglet du bas", () => {
+    expect(ownerTab("guide")).toBe(null);
+    expect(ownerTab("profil")).toBe(null);
     expect(ownerTab("gains")).toBe("gains");
   });
 });
@@ -31,8 +33,13 @@ describe("favoris du créateur", () => {
   it("garde seulement les rubriques valides, sans doublon", () => {
     expect(parseCsFavorites('["planning","planning","accueil","inconnu","briefs"]')).toEqual(["planning", "missions"]);
     expect(parseCsFavorites("{oups")).toEqual([]);
-    expect(parseCsFavorites(null)).toEqual(["todo", "mediakit"]); // premier passage : favoris d'office
-    expect(parseCsFavorites("[]")).toEqual([]); // tout retiré par le créateur : reste vide
+    expect(parseCsFavorites(null)).toEqual([]); // premier passage : seulement les favoris d'office
+    expect(parseCsFavorites('["todo","mediakit"]')).toEqual(["mediakit"]); // ancienne liste : « todo » est d'office
+  });
+  it("Accueil, À faire, Idées et Mail sont toujours en tête, puis les favoris choisis", () => {
+    expect(csFavoritesShown([])).toEqual(["accueil", "todo", "ideas", "mails"]);
+    expect(csFavoritesShown(["mediakit", "todo"])).toEqual(["accueil", "todo", "ideas", "mails", "mediakit"]);
+    expect(toggleCsFavorite(["mediakit"], "ideas")).toEqual(["mediakit"]); // d'office : ne se retire pas
   });
   it("ajoute puis retire", () => {
     const a = toggleCsFavorite([], "mediakit");

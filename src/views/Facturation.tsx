@@ -45,7 +45,8 @@ import { printHtml } from "@/lib/printPdf";
 import { docHead, pdfFileTitle, ttpLogoImg } from "@/lib/pdfDoc";
 import { notifyCreator } from "@/lib/push";
 import { PageHeaderRow } from "@/components/ui/page-header";
-import { Overlay } from "@/components/mobile/ios-sheet";
+import { IosSheet, Overlay } from "@/components/mobile/ios-sheet";
+import { useIsPhone } from "@/lib/iosUi";
 import { CreatorPicker } from "@/components/ui/creator-picker";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -211,6 +212,12 @@ function nextRefFrom(refs: string[]): string {
 const EURO2_FMT = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true });
 function euro2(n: number): string {
   return EURO2_FMT.format(Number.isFinite(n) ? n : 0).replace(/[\u202f\s]/g, "\u00a0") + "\u00a0€";
+}
+/** À l'écran : « 922 € » quand le montant est rond, « 184,40 € » sinon. Les documents
+ *  (HTML, PDF, mail) et le montant enregistré gardent euro2 (toujours deux décimales). */
+function euroUi(n: number): string {
+  const v = Number.isFinite(n) ? n : 0;
+  return Math.round(v * 100) % 100 === 0 ? euro2(v).replace(/,00(?=\u00a0€$)/, "") : euro2(v);
 }
 function fmtRate(n: number): string {
   return String(n).replace(".", ",");
@@ -507,6 +514,7 @@ export function Facturation() {
   const [mobilePreview, setMobilePreview] = useState(false);
   const editorTop = useRef<HTMLDivElement>(null);
   const editing = draft !== null || editorLoading;
+  const phone = useIsPhone();
   // Ouvrir l'éditeur (ou revenir à la liste) remonte en haut de la page (pas à l'arrivée sur la page).
   const editingSeen = useRef(editing);
   useEffect(() => {
@@ -1112,7 +1120,7 @@ export function Facturation() {
                         className={cn(cellCls, "text-right tabular-nums")}
                       />
                       <span className="flex h-10 min-w-0 items-center justify-end truncate rounded-lg bg-muted px-3 text-sm tabular-nums text-muted-foreground">
-                        {euro2((it.qty || 0) * (it.unit || 0))}
+                        {euroUi((it.qty || 0) * (it.unit || 0))}
                       </span>
                       <button
                         type="button"
@@ -1159,13 +1167,13 @@ export function Facturation() {
               <div className="mt-5 flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-start sm:justify-between">
                 <dl className="order-2 min-w-0 sm:order-1 sm:max-w-[240px]">
                   <div className="text-[12px] font-medium text-muted-foreground">Interne, non imprimé</div>
-                  {sumRow(`Commission TTP · ${fmtRate(draft.commissionRate)} %`, euro2(draftTotals.commission), "[&_dd]:font-medium [&_dd]:text-signaltext")}
-                  {draft.creator && sumRow(`Reversé à ${firstName(draft.creator)}`, euro2(draftTotals.reversal))}
+                  {sumRow(`Commission TTP · ${fmtRate(draft.commissionRate)} %`, euroUi(draftTotals.commission), "[&_dd]:font-medium [&_dd]:text-signaltext")}
+                  {draft.creator && sumRow(`Reversé à ${firstName(draft.creator)}`, euroUi(draftTotals.reversal))}
                 </dl>
                 <dl className="order-1 w-full sm:order-2 sm:max-w-[300px]">
-                  {sumRow("Sous-total HT", euro2(draftTotals.ht))}
-                  {sumRow(draft.franchise ? "TVA non applicable" : `TVA ${fmtRate(draft.vatRate)} %`, euro2(draftTotals.tva))}
-                  {sumRow("Total TTC", euro2(draftTotals.ttc), "mt-1 border-t border-border pt-2.5 text-[15px] [&_dd]:font-semibold [&_dt]:font-semibold [&_dt]:text-foreground")}
+                  {sumRow("Sous-total HT", euroUi(draftTotals.ht))}
+                  {sumRow(draft.franchise ? "TVA non applicable" : `TVA ${fmtRate(draft.vatRate)} %`, euroUi(draftTotals.tva))}
+                  {sumRow("Total TTC", euroUi(draftTotals.ttc), "mt-1 border-t border-border pt-2.5 text-[15px] [&_dd]:font-semibold [&_dt]:font-semibold [&_dt]:text-foreground")}
                 </dl>
               </div>
             </EditorSection>
@@ -1214,7 +1222,13 @@ export function Facturation() {
   return (
     <>
       <div ref={editorTop} className="scroll-mt-4" />
-      {editing ? renderEditor() : (<>
+      {/* Téléphone : la facture s'ouvre en feuille (comme les autres « + »), pas dans la page. */}
+      {editing && phone ? (
+        <IosSheet onClose={() => closeEditor()} label={draft?.id ? `Facture ${draft.ref}` : "Nouvelle facture"}>
+          <div className="max-h-[92dvh] overflow-y-auto overscroll-contain rounded-t-[22px] bg-background px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-7">{renderEditor()}</div>
+        </IosSheet>
+      ) : null}
+      {editing && !phone ? renderEditor() : (<>
       {/* En-tête */}
       <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
@@ -1267,10 +1281,10 @@ export function Facturation() {
       {billed.length > 0 && (
         <div className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border lg:grid-cols-4">
           {[
-            { label: "Facturé HT", value: euro2(finBilled.ht), foot: `${euro2(finBilled.ttc)} TTC · TVA ${euro2(finBilled.tva)}` },
-            { label: "Commission TTP (HT)", value: euro2(finBilled.commission), foot: `${fmtRate(Math.round(margePct * 10) / 10)} % du HT en moyenne`, strong: true },
-            { label: "Commission encaissée", value: euro2(finPaid.commission), foot: `sur ${euro2(finPaid.ht)} HT payés` },
-            { label: "Part créateurs", value: euro2(finBilled.reversal), foot: "HT moins la commission" },
+            { label: "Facturé HT", value: euroUi(finBilled.ht), foot: `${euroUi(finBilled.ttc)} TTC · TVA ${euroUi(finBilled.tva)}` },
+            { label: "Commission TTP (HT)", value: euroUi(finBilled.commission), foot: `${fmtRate(Math.round(margePct * 10) / 10)} % du HT en moyenne`, strong: true },
+            { label: "Commission encaissée", value: euroUi(finPaid.commission), foot: `sur ${euroUi(finPaid.ht)} HT payés` },
+            { label: "Part créateurs", value: euroUi(finBilled.reversal), foot: "HT moins la commission" },
           ].map((k) => (
             <div key={k.label} className="flex min-w-0 flex-col bg-surface px-4 py-4 sm:px-5">
               <span className="line-clamp-2 min-h-[2lh] text-[12px] leading-snug text-muted-foreground sm:text-[13px] lg:min-h-0">{k.label}</span>
@@ -1341,7 +1355,7 @@ export function Facturation() {
             ];
             const margeChip = (
               <span className="inline-block whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                Commission {euro2(fin.commission)} · {fmtRate(rate)} %
+                Commission {euroUi(fin.commission)} · {fmtRate(rate)} %
               </span>
             );
             return (
@@ -1353,12 +1367,12 @@ export function Facturation() {
                 >
                   <span className="text-[11px] font-medium text-faint">#{r.ref}</span>
                   <span className="truncate text-sm font-medium text-foreground">{r.party}</span>
-                  <span className="text-right text-[13px] font-medium tabular-nums text-foreground">{euro2(fin.ht)}</span>
+                  <span className="text-right text-[13px] font-medium tabular-nums text-foreground">{euroUi(fin.ht)}</span>
                   <span className="text-right tabular-nums">
-                    <span className="block text-[13px] font-medium text-signaltext">{euro2(fin.commission)}</span>
+                    <span className="block text-[13px] font-medium text-signaltext">{euroUi(fin.commission)}</span>
                     <span className="block text-[11px] text-muted-foreground">{fin.commission === 0 && fin.ht > 0 && fin.ht < 100 ? "sous 100 € HT" : `${fmtRate(rate)} %`}</span>
                   </span>
-                  <span className="text-right text-[12px] tabular-nums text-muted-foreground">{euro2(fin.ttc)}</span>
+                  <span className="text-right text-[12px] tabular-nums text-muted-foreground">{euroUi(fin.ttc)}</span>
                   <span className="text-center text-[11px] font-medium text-muted-foreground">{uiDate(r.date)}</span>
                   <span className="flex items-center justify-end gap-2">
                     <AnimatedBadge status={meta.badge} size="sm">{meta.label}</AnimatedBadge>
@@ -1381,8 +1395,8 @@ export function Facturation() {
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="flex flex-col">
-                      <span className="text-lg font-bold tracking-tight text-foreground">{euro2(fin.ht)} <span className="text-[11px] font-medium text-muted-foreground">HT</span></span>
-                      {fin.tva > 0 && <span className="text-[11px] text-muted-foreground">{euro2(fin.ttc)} TTC</span>}
+                      <span className="text-lg font-bold tracking-tight text-foreground">{euroUi(fin.ht)} <span className="text-[11px] font-medium text-muted-foreground">HT</span></span>
+                      {fin.tva > 0 && <span className="text-[11px] text-muted-foreground">{euroUi(fin.ttc)} TTC</span>}
                     </span>
                     {margeChip}
                   </div>
@@ -1432,13 +1446,13 @@ export function Facturation() {
               {r.creator && <span>· {r.creator}</span>}
             </div>
             <div className="divide-y divide-border rounded-xl border border-border px-4">
-              {line("Montant HT", euro2(f.ht))}
-              {line(f.tva > 0 ? `TVA ${fmtRate(d?.vatRate ?? 0)} %` : "TVA", f.tva > 0 ? euro2(f.tva) : "Non applicable", { muted: true })}
-              {line("Total TTC (payé par la marque)", euro2(f.ttc), { muted: true })}
+              {line("Montant HT", euroUi(f.ht))}
+              {line(f.tva > 0 ? `TVA ${fmtRate(d?.vatRate ?? 0)} %` : "TVA", f.tva > 0 ? euroUi(f.tva) : "Non applicable", { muted: true })}
+              {line("Total TTC (payé par la marque)", euroUi(f.ttc), { muted: true })}
             </div>
             <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-muted/40 px-4">
-              {line(`Commission TTP · ${fmtRate(f.rate)} % du HT`, euro2(f.commission), { strong: true, accent: true })}
-              {line("Part créateur (HT − commission)", euro2(f.reversal))}
+              {line(`Commission TTP · ${fmtRate(f.rate)} % du HT`, euroUi(f.commission), { strong: true, accent: true })}
+              {line("Part créateur (HT − commission)", euroUi(f.reversal))}
             </div>
             <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
               {underFloor

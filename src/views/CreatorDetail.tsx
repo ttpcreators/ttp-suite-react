@@ -9,7 +9,7 @@ import { cn, titleCase } from "@/lib/utils";
 import { useIosPhone } from "@/components/mobile/ios-sheet";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { FolderTabs, type FolderTabItem } from "@/components/ui/folder-tabs";
-import { fmtDay, frDate, todayISO, toISODate } from "@/lib/dates";
+import { fmtDay, fmtDayAny, frDate, todayISO, toISODate } from "@/lib/dates";
 import { isMainPlatform } from "@/lib/platform";
 import { dbUpdate } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
@@ -721,7 +721,7 @@ export function CreatorDetail({
                   {copyRow("TikTok", form.tiktok ?? "")}
                   {copyRow("Adresse", form.address ?? "")}
                   {copyRow("SIREN", form.siren ?? "")}
-                  {copyRow("Naissance", frDate(form.birth))}
+                  {copyRow("Naissance", fmtDayAny(form.birth) || "—")}
                 </div>
                 <button
                   type="button"
@@ -907,7 +907,7 @@ export function CreatorDetail({
                 <span className="h-2 w-2 shrink-0 rounded-full bg-foreground/40" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xs font-medium">{b.brand}</div>
-                  <div className="truncate text-[10px] text-faint">{b.deliverables} · {frDate(b.due)}</div>
+                  <div className="truncate text-[10px] text-faint">{b.deliverables} · {fmtDayAny(b.due) || "—"}</div>
                 </div>
               </div>
             ))

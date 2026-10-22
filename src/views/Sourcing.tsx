@@ -262,8 +262,6 @@ const TOOLS = [
 ];
 type ToolId = (typeof TOOLS)[number]["v"];
 const toolOf = (v: string | null): ToolId => (v === "radar" || v === "concurrents" ? v : "createurs");
-/** Mode d'emploi déjà vu, ou « Ne plus l'ouvrir automatiquement » coché (sur cet appareil). */
-const GUIDE_KEY = "ttp:sourcing-guide-v1";
 
 export function Sourcing() {
   const [tab, setTab] = useState<ToolId>(() => {
@@ -273,24 +271,10 @@ export function Sourcing() {
       return "createurs";
     }
   });
-  // Mode d'emploi : ouvert tout seul à la première visite (sur cet appareil), tant que
-  // « Ne plus l'ouvrir automatiquement » n'est pas coché.
-  const [guide, setGuide] = useState(() => {
-    try {
-      return !localStorage.getItem(GUIDE_KEY);
-    } catch {
-      return false;
-    }
-  });
-  const closeGuide = (noAuto: boolean) => {
-    setGuide(false);
-    try {
-      if (noAuto) localStorage.setItem(GUIDE_KEY, "1");
-      else localStorage.removeItem(GUIDE_KEY);
-    } catch {
-      /* stockage indisponible */
-    }
-  };
+  // Mode d'emploi : seulement à la demande (bouton « Mode d'emploi » ou touche « ? »),
+  // jamais tout seul : il cachait la page à la première visite.
+  const [guide, setGuide] = useState(false);
+  const closeGuide = () => setGuide(false);
   // « ? » rouvre le mode d'emploi (sauf pendant une saisie, ou quand la liste de « Trouver des créateurs » s'en sert pour ses raccourcis).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

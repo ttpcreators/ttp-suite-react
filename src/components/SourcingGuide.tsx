@@ -9,9 +9,8 @@ import { useIsPhone } from "@/lib/iosUi";
 
 /**
  * Mode d'emploi du Sourcing : le déroulé de chaque outil en 3 étapes, le
- * vocabulaire, et comment travailler à plusieurs, en onglets. S'ouvre tout seul à la
- * première visite (Sourcing.tsx) tant que « Ne plus l'ouvrir automatiquement » n'est
- * pas coché, puis via le bouton « Mode d'emploi » ou la touche « ? ».
+ * vocabulaire, et comment travailler à plusieurs, en onglets. S'ouvre seulement à la
+ * demande : bouton « Mode d'emploi » ou touche « ? » (Sourcing.tsx).
  */
 export type GuideTool = "createurs" | "radar" | "concurrents";
 type GuideTab = GuideTool | "vocabulaire" | "equipe";
@@ -86,12 +85,10 @@ function WordCard({ w }: { w: Word }) {
   );
 }
 
-export function SourcingGuide({ onClose, initial = "createurs" }: { onClose: (noAuto: boolean) => void; initial?: GuideTool }) {
+export function SourcingGuide({ onClose, initial = "createurs" }: { onClose: () => void; initial?: GuideTool }) {
   const [tab, setTab] = useState<GuideTab>(initial);
   const phone = useIsPhone();
-  // Coché par défaut : comme avant, le guide ne s'ouvre tout seul qu'une fois.
-  const [noAuto, setNoAuto] = useState(true);
-  const close = () => onClose(noAuto);
+  const close = () => onClose();
   const idx = TABS.findIndex((t) => t.value === tab);
   const next = TABS[idx + 1];
   const tool = tab === "createurs" || tab === "radar" || tab === "concurrents" ? TOOLS[tab] : null;
@@ -170,10 +167,6 @@ export function SourcingGuide({ onClose, initial = "createurs" }: { onClose: (no
         </div>
 
         <div className="mt-7 flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center">
-          <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
-            <input type="checkbox" checked={noAuto} onChange={(e) => setNoAuto(e.target.checked)} className="h-4 w-4 accent-primary" />
-            Ne plus l'ouvrir automatiquement
-          </label>
           <span className="hidden items-center gap-1.5 text-[13px] text-muted-foreground md:flex">
             Rouvrir avec <Kbd>?</Kbd>
           </span>

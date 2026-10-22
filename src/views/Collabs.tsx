@@ -22,7 +22,7 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
-import { frDate, fmtDay } from "@/lib/dates";
+import { fmtDay, fmtDayAny } from "@/lib/dates";
 import { getCache, setCache } from "@/lib/viewCache";
 import { STEPS, STEP_COUNT, PHASES, stepDef, phaseOf, isDone, type PhaseKey } from "@/lib/collabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
@@ -275,7 +275,7 @@ export function Collabs() {
             {posts.map((p) => (
               <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg bg-surface px-2 py-1.5 text-[11px] transition-colors hover:bg-rowhover">
                 <span className="shrink-0 font-semibold text-foreground">{postKind(p)}</span>
-                <span className="shrink-0 text-faint">{frDate(p.at)}</span>
+                <span className="shrink-0 text-faint">{fmtDayAny(p.at)}</span>
                 <span className="ml-auto flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
                   {p.likes != null && <span className="flex items-center gap-0.5"><Heart className="h-3 w-3" />{fmtCompact(p.likes)}</span>}
                   <span className="flex items-center gap-0.5"><MessageCircle className="h-3 w-3" />{fmtCompact(p.comments)}</span>
@@ -287,7 +287,7 @@ export function Collabs() {
             {ttPosts.map((p) => (
               <a key={`tt${p.id}`} href={p.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg bg-surface px-2 py-1.5 text-[11px] transition-colors hover:bg-rowhover">
                 <span className="flex shrink-0 items-center gap-1 font-semibold text-foreground"><PlatformIcon platform="tiktok" className="h-3 w-3" />TikTok</span>
-                <span className="shrink-0 text-faint">{frDate(p.at)}</span>
+                <span className="shrink-0 text-faint">{fmtDayAny(p.at)}</span>
                 <span className="ml-auto flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
                   {p.views != null && <span title="Vues">{fmtCompact(p.views)} vues</span>}
                   {p.likes != null && <span className="flex items-center gap-0.5"><Heart className="h-3 w-3" />{fmtCompact(p.likes)}</span>}
@@ -299,7 +299,7 @@ export function Collabs() {
             {ytPosts.map((p) => (
               <a key={`yt${p.id}`} href={p.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg bg-surface px-2 py-1.5 text-[11px] transition-colors hover:bg-rowhover">
                 <span className="flex shrink-0 items-center gap-1 font-semibold text-foreground"><PlatformIcon platform="youtube" className="h-3 w-3" />{p.short ? "Short" : "YouTube"}</span>
-                <span className="shrink-0 text-faint">{frDate(p.at)}</span>
+                <span className="shrink-0 text-faint">{fmtDayAny(p.at)}</span>
                 <span className="ml-auto flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
                   {p.views != null && <span title="Vues">{fmtCompact(p.views)} vues</span>}
                   {p.likes != null && <span className="flex items-center gap-0.5"><Heart className="h-3 w-3" />{fmtCompact(p.likes)}</span>}
@@ -548,7 +548,7 @@ export function Collabs() {
                   <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-border" />
                 )}
                 <span className="flex-1 truncate">{s.n}. {s.label}</span>
-                {d && <span className="shrink-0 tabular-nums text-faint">{frDate(d)}</span>}
+                {d && <span className="shrink-0 tabular-nums text-faint">{fmtDayAny(d)}</span>}
               </button>
             </li>
           );
@@ -675,7 +675,7 @@ export function Collabs() {
           {/* progression segmentée (11 segments, remplis jusqu'à l'étape courante) */}
           <div className="mt-2">{progressFor(row)}</div>
           {reached && (
-            <div className="mt-1.5 text-[10px] text-faint">Depuis le {frDate(reached)}</div>
+            <div className="mt-1.5 text-[10px] text-faint">Depuis le {fmtDayAny(reached)}</div>
           )}
         </div>
 
@@ -770,7 +770,7 @@ export function Collabs() {
               )}
             </div>
             <div className="mt-1.5">{progressFor(row)}</div>
-            {reached && <div className="mt-1 text-[10px] text-faint">Depuis le {frDate(reached)}</div>}
+            {reached && <div className="mt-1 text-[10px] text-faint">Depuis le {fmtDayAny(reached)}</div>}
             {(igCollabs[row.id]?.posts?.length ?? 0) > 0 && (
               <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-signaltext">
                 <PlatformIcon platform="instagram" className="h-3 w-3" /> {igCollabs[row.id]?.posts?.length} publication{(igCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""} repérée{(igCollabs[row.id]?.posts?.length ?? 0) > 1 ? "s" : ""}
@@ -940,7 +940,7 @@ export function Collabs() {
                 </StatusPill>
               )}
             </div>
-            {reached && <p className="-mt-2 text-[12px] text-muted-foreground">Depuis le {frDate(reached)}</p>}
+            {reached && <p className="-mt-2 text-[12px] text-muted-foreground">Depuis le {fmtDayAny(reached)}</p>}
             {facts.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 {facts.map((f) => (

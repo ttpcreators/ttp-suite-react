@@ -16,8 +16,6 @@ import {
   Contact as ContactIcon,
   Share2,
   Check,
-  ChevronRight,
-  Monitor,
   type LucideIcon,
 } from "@/components/icons";
 import { DashPanel, DashSectionTitle } from "@/components/ui/dash";
@@ -84,7 +82,7 @@ export function CreatorGuide({
     <div className="flex flex-col gap-4">
       {/* Chapeau (le titre « Guide » est déjà l'en-tête de page) */}
       <p className="-mt-2 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-        <Rich text={firstName ? t("Bienvenue {name}. Tout se fait ici, **sur mobile comme sur ordinateur**\u00A0: 2 minutes de lecture et tu es autonome.", { name: firstName }) : t("Bienvenue. Tout se fait ici, **sur mobile comme sur ordinateur**\u00A0: 2 minutes de lecture et tu es autonome.")} />
+        <Rich text={firstName ? t("Bienvenue {name}. Tout se fait ici, en **2 minutes** de lecture.", { name: firstName }) : t("Bienvenue. Tout se fait ici, en **2 minutes** de lecture.")} />
       </p>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
@@ -95,7 +93,7 @@ export function CreatorGuide({
             <DashSectionTitle icon={ListChecks}>{t("Le réflexe le plus important")}</DashSectionTitle>
             <div className="text-[20px] font-semibold leading-tight tracking-tight text-foreground">{t("Note tout dans «\u00A0À faire\u00A0»")}</div>
             <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-              <Rich text={t("Dès que tu as **besoin de quelque chose de l'agence** (une facture, un contrat, une question, un contenu à valider, une info), **ajoute-le dans «\u00A0À faire\u00A0»** plutôt que par message.")} />
+              <Rich text={t("Besoin de l'agence ? **Ajoute-le dans «\u00A0À faire\u00A0»**, pas par message.")} />
             </p>
             <ul className="mt-4 divide-y divide-border border-y border-border text-[13px] text-foreground">
               {["On le voit en direct, rien ne se perd.", "Tu suis l'avancement\u00A0: À faire, En cours, Fait.", "Tu peux découper en sous-tâches et joindre le contexte."].map((line) => (
@@ -134,13 +132,13 @@ export function CreatorGuide({
             <DashSectionTitle icon={Smartphone}>{t("Installe l'app")}</DashSectionTitle>
             <div className="-mt-2 divide-y divide-border">
               <InfoRow icon={Smartphone} title="iPhone (Safari)">
-                <Rich text={t("Bouton **Partager**, puis **Ajouter à l'écran d'accueil**. Ouvre-la ensuite depuis son icône\u00A0: **indispensable pour recevoir les notifications**.")} />
+                <Rich text={t("**Partager**, puis **Ajouter à l'écran d'accueil**. Ouvre-la depuis l'icône.")} />
               </InfoRow>
               <InfoRow icon={Smartphone} title="Android (Chrome)">
-                <Rich text={t("Menu **trois points** en haut à droite, puis **Installer l'application**. Elle s'ajoute comme une vraie app.")} />
+                <Rich text={t("Menu **trois points**, puis **Installer l'application**.")} />
               </InfoRow>
               <InfoRow icon={Laptop} title={t("Ordinateur")}>
-                <Rich text={t("Va sur **app.ttpcreators.pro** et mets-la en favori. Le menu est à gauche, avec plus de place pour les graphiques.")} />
+                <Rich text={t("Va sur **app.ttpcreators.pro** et mets-la en favori.")} />
               </InfoRow>
             </div>
           </DashPanel>
@@ -168,32 +166,13 @@ export function CreatorGuide({
           <DashPanel className="p-5">
             <DashSectionTitle icon={Bell}>{t("Active les notifications")}</DashSectionTitle>
             <p className="-mt-1 text-[12px] leading-relaxed text-muted-foreground">
-              <Rich text={t("Sur ton téléphone, ouvre l'app depuis son icône puis touche la **cloche** en haut, puis **Activer sur ce téléphone**. Tu es prévenue dès qu'un brief, un document ou un débrief arrive.")} />
+              <Rich text={t("Sur l'Accueil, touche **Activer**. Tu sauras quand un brief arrive.")} />
             </p>
           </DashPanel>
 
-          <DashPanel className="px-5 pt-5">
-            <DashSectionTitle icon={Monitor}>{t("Mobile ou ordinateur\u00A0?")}</DashSectionTitle>
-            <div className="-mt-2 divide-y divide-border">
-              <InfoRow icon={Smartphone} title={t("Sur mobile")}>
-                <Rich text={t("Le menu est **en bas**. Parfait au quotidien\u00A0: envoyer une stat, cocher une tâche, lire un brief.")} />
-              </InfoRow>
-              <InfoRow icon={Laptop} title={t("Sur ordinateur")}>
-                <Rich text={t("Le menu est **à gauche**. Idéal pour voir les graphiques en grand et gérer plusieurs choses.")} />
-              </InfoRow>
-            </div>
-          </DashPanel>
         </div>
       </div>
 
-      {/* Rappel final */}
-      <button type="button" onClick={() => onGoto("todo")} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface px-5 py-4 text-left transition-colors hover:bg-rowhover">
-        <div>
-          <div className="text-[13px] font-semibold text-foreground">{t("Une question\u00A0? Une demande\u00A0?")}</div>
-          <div className="mt-0.5 text-[12px] text-muted-foreground">{t("Note-la dans «\u00A0À faire\u00A0»\u00A0: c'est le plus sûr pour qu'on te réponde vite.")}</div>
-        </div>
-        <ChevronRight className="h-5 w-5 shrink-0 text-faint" />
-      </button>
     </div>
   );
 }

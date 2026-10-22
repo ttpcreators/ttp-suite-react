@@ -198,7 +198,7 @@ function StatusPanel({
         <div className={cn("mb-2.5 flex items-start gap-2 rounded-lg border px-2.5 py-2 text-[12px]", agencyStatus.tile)}>
           <agencyStatus.icon className="mt-px h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0">
-            <b>{t("Statut de l'agence : {label}", { label: t(agencyStatus.label) })}</b>{when ? ` · ${when.replace(/\.$/, "")}` : ""}
+            <b>{forCreator ? t("Ton agence : {label}", { label: t(agencyStatus.label) }) : t("Statut de l'agence : {label}", { label: t(agencyStatus.label) })}</b>{when ? ` · ${when.replace(/\.$/, "")}` : ""}
             <span className="opacity-90"> · {t(AGENCY_STATUS_HINT[agencyStatus.value] ?? "")}</span>
           </span>
         </div>
@@ -442,12 +442,14 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const [query, setQuery] = useState(""); // recherche dans la liste (marque, objet, extrait)
   // « Non lus » (créateur) : échanges pas encore vus, plus ceux qui l'étaient à l'activation.
   const [unreadOnly, setUnreadOnly] = useState<Set<string> | null>(null);
-  // Aide « comment ça marche » : affichée tant qu'elle n'a pas été fermée sur cet appareil.
+  // Aide « comment ça marche » : côté agence, affichée tant qu'elle n'a pas été fermée sur
+  // cet appareil ; côté créateur, jamais en permanence (bouton « Aide » seulement).
   const [help, setHelpState] = useState(() => {
     try {
-      return localStorage.getItem("ttp:cmail-help") !== "0";
+      const v = localStorage.getItem("ttp:cmail-help");
+      return mode === "creator" ? v === "1" : v !== "0";
     } catch {
-      return true;
+      return mode !== "creator";
     }
   });
   const setHelp = (v: boolean) => {
@@ -964,7 +966,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
       <span className="min-w-0 flex-1">
         {asAgency
           ? t("Ouvre un échange et range-le avec le grand sélecteur : En cours, À vérifier, À valider, Validé ou Refusé. « Ajouter une remarque » lui écrit un mot sur cet échange. {name} voit tout dans son espace et donne son avis ; chaque changement (qui, quand, son mot) est gardé dans le suivi.", { name: creatorName })
-          : t("Ouvre un échange : le « Statut de l'agence » te dit où il en est, et « Ton avis » (En cours, Validé ou Refusé) lui donne ta réponse. Avec « Ajouter une remarque », écris à ton manager quand tu veux. Il est prévenu ; ses remarques et tout l'historique sont dans le suivi de l'échange.")}
+          : t("Ouvre un échange pour voir où il en est. Donne ton avis : En cours, Validé ou Refusé. Écris à ton manager avec « Ajouter une remarque ».")}
       </span>
       <button type="button" onClick={() => setHelp(false)} aria-label={t("Masquer l'aide")}
         className="-mr-1 -mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground">

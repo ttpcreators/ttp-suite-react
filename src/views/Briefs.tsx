@@ -20,7 +20,8 @@ import { useCreators } from "@/lib/useCreators";
 import { BriefResumeView, ResumeClaudeButton, useBriefResumeClaude } from "@/components/brief-resume";
 import { hasResume, listToText, parseResume, RESUME_BLOCKS, textToList, type BriefResume, type ResumeKey } from "@/lib/briefResume";
 import { useLiveKey } from "@/lib/useLive";
-import { toISODate, frDate } from "@/lib/dates";
+import { toISODate, frDate, fmtDayAny } from "@/lib/dates";
+import { HelpTip } from "@/components/ui/help-tip";
 import { getCache, setCache } from "@/lib/viewCache";
 import { openLater } from "@/lib/openLater";
 import { notifyCreator } from "@/lib/push";
@@ -457,13 +458,18 @@ export function Briefs() {
 
         <div className="mt-2 rounded-xl bg-panel px-3 py-2.5">
           <div className="mb-1.5 flex items-center justify-between gap-2">
-            <span className="truncate text-[11px] font-medium text-muted-foreground">Pour le créateur</span>
+            <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+              <span className="truncate">Pour le créateur</span>
+              <HelpTip title="Résumé pour le créateur">
+                <p>À faire, à ne pas faire, livrables et mentions : Claude lit le brief et le PDF de la marque, puis le résumé arrive ici tout seul.</p>
+              </HelpTip>
+            </span>
             <ResumeClaudeButton has={hasResume(row.resume)} waiting={claude.waitingId === row.id} onClick={() => claude.ask(row)} onCancel={claude.cancel} />
           </div>
           {hasResume(row.resume) ? (
             <BriefResumeView resume={row.resume} dense />
           ) : (
-            <p className="text-[12px] leading-snug text-faint">À faire, à ne pas faire, livrables, mentions : Claude lit le brief et le PDF de la marque.</p>
+            <p className="text-[12px] leading-snug text-faint">Aucun résumé</p>
           )}
         </div>
 
@@ -485,7 +491,7 @@ export function Briefs() {
 
         <div className="mt-3 flex items-center gap-1.5 border-t border-border pt-2.5 text-[11px] text-muted-foreground">
           <CalendarClock className="h-3.5 w-3.5 shrink-0 text-faint" />
-          <span className="truncate">Échéance {frDate(row.due)}</span>
+          <span className="truncate">Échéance {fmtDayAny(row.due) || "—"}</span>
         </div>
       </div>
     );

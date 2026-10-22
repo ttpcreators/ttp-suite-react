@@ -1,6 +1,7 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Gift, Mail, Package, CalendarClock, Pencil, Trash2, LayoutGrid, List as ListIcon, ShieldCheck, Info, Eye, X } from "@/components/icons";
+import { Gift, Mail, Package, CalendarClock, Pencil, Trash2, LayoutGrid, List as ListIcon, ShieldCheck, Eye, X } from "@/components/icons";
+import { HelpTip } from "@/components/ui/help-tip";
 import { supabase } from "@/lib/supabase";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
@@ -13,7 +14,7 @@ import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { notifyCreator } from "@/lib/push";
-import { toISODate, frDate } from "@/lib/dates";
+import { toISODate, fmtDayAny } from "@/lib/dates";
 import { cn, titleCase } from "@/lib/utils";
 import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, giftStatusMeta, type Gift as GiftRow } from "@/lib/gifting";
 import { PeriodFilter, periodsFrom, inPeriod } from "@/components/ui/period-filter";
@@ -220,6 +221,10 @@ export function Gifting() {
             <>
               <span className="font-semibold text-foreground">{shown.length}</span>
               <span>{shown.length > 1 ? "cadeaux suivis" : "cadeau suivi"}</span>
+              <HelpTip title="Mention obligatoire">
+                <p>Un cadeau reste une contrepartie : dès qu'il est mis en avant, le créateur doit le signaler comme communication commerciale (« Produit offert » ou « Cadeau »).</p>
+                <p>C'est la loi n° 2023-451 sur l'influence commerciale.</p>
+              </HelpTip>
               {attente > 0 && (
                 <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[10px] font-semibold text-amber">
                   {attente} contenu{attente > 1 ? "s" : ""} en attente
@@ -337,7 +342,7 @@ export function Gifting() {
                 <ContentChip expected={g.content_expected} />
                 {g.received_on && (
                   <span className="inline-flex items-center gap-1 text-[11px] text-faint">
-                    <CalendarClock className="h-3.5 w-3.5" /> {frDate(g.received_on)}
+                    <CalendarClock className="h-3.5 w-3.5" /> {fmtDayAny(g.received_on)}
                   </span>
                 )}
               </div>
@@ -387,7 +392,7 @@ export function Gifting() {
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-faint">
                   {g.product && g.brand && <span className="truncate">{g.product}</span>}
                   {g.value && <span>{g.value}</span>}
-                  {g.received_on && <span>{frDate(g.received_on)}</span>}
+                  {g.received_on && <span>{fmtDayAny(g.received_on)}</span>}
                   {g.content_expected && <span className="text-amber">contenu attendu</span>}
                   {g.contact_email && (
                     <a href={`mailto:${g.contact_email}`} onClick={(e) => e.stopPropagation()} className="text-primary hover:underline">{g.contact_email}</a>
@@ -403,16 +408,6 @@ export function Gifting() {
         </div>
       )}
 
-      {/* Rappel légal discret */}
-      {list.length > 0 && (
-        <div className="flex items-start gap-2 rounded-xl border border-border bg-panel px-4 py-3 text-[11px] leading-relaxed text-faint">
-          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>
-            Un cadeau reste une contrepartie : dès qu'il est mis en avant, le créateur doit le signaler comme communication commerciale
-            (« Produit offert » / « Cadeau »), conformément à la loi n° 2023-451 encadrant l'influence commerciale.
-          </span>
-        </div>
-      )}
 
       {/* Fiche détail (clic sur une carte/ligne) */}
       {viewG && (
@@ -438,7 +433,7 @@ function GiftDetail({ g, onClose, onEdit }: { g: GiftRow; onClose: () => void; o
     ["Marque / expéditeur", g.brand || "—"],
     ["Produit", g.product || "—"],
     ["Valeur estimée", g.value || "—"],
-    ["Reçu le", g.received_on ? frDate(g.received_on) : "—"],
+    ["Reçu le", fmtDayAny(g.received_on) || "—"],
     ["Interlocuteur", g.contact_name || "—"],
     [
       "Email",

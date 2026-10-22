@@ -265,6 +265,7 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
               )
         }
         creators={creators}
+        navAdd
       />
     </div>
   );

@@ -1,4 +1,5 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { HelpTip } from "@/components/ui/help-tip";
 import { fmtCompact } from "@/lib/timeSeries";
 import { Spin } from "@/components/ui/loader";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
@@ -704,8 +705,13 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
             ))}
           </div>
           {t && t.igEr !== undefined && (
-            <p className="mt-1.5 px-1 text-[11px] leading-relaxed text-faint">
-              Rythme {fmtPerWeek(t.igPw)} · engagement public : likes + commentaires moyens des 12 derniers posts ÷ abonnés{t.igPosts ? ` · ${t.igPosts.toLocaleString("fr-FR")} posts au total` : ""}{t.igAt ? ` · relevé le ${frShort(t.igAt)}` : ""}.
+            <p className="mt-1.5 flex items-center gap-1.5 px-1 text-[11px] leading-relaxed text-faint">
+              <span className="min-w-0">
+                Rythme {fmtPerWeek(t.igPw)}{t.igPosts ? ` · ${t.igPosts.toLocaleString("fr-FR")} posts` : ""}{t.igAt ? ` · relevé le ${frShort(t.igAt)}` : ""}
+              </span>
+              <HelpTip title="Engagement public">
+                <p>Likes et commentaires moyens des 12 derniers posts, divisés par les abonnés.</p>
+              </HelpTip>
             </p>
           )}
 
@@ -994,7 +1000,8 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
                         {/* Petit écran : la catégorie reste dans la fiche */}
                         <span className="hidden min-w-0 @md:contents">{tagPill(r)}</span>
                       </div>
-                      <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">
+                      {/* Passe à la ligne au lieu d'écraser le @ (petit écran) */}
+                      <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-muted-foreground">
                         {r.handle ? (
                           igUrl(r.handle) ? (
                             <a href={igUrl(r.handle)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Ouvrir le profil" className="min-w-0 truncate hover:text-foreground hover:underline">@{igName(r.handle)}</a>
