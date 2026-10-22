@@ -74,7 +74,7 @@ function StatusDot({ status, by }: { status: string; by?: string }) {
   );
 }
 
-const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse" | "demarchage"; label: string; short: string; icon: LucideIcon; dot?: string; match: (t: MailThreadLite) => boolean }[] = [
+const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse" | "demarchage" | "envoyes"; label: string; short: string; icon: LucideIcon; dot?: string; match: (t: MailThreadLite) => boolean }[] = [
   { key: "tous", label: "Tous les échanges", short: "Tous", icon: Inbox, match: () => true },
   { key: "encours", label: "En cours", short: "En cours", icon: Hourglass, dot: "bg-progress", match: (t) => t.status === "nouvelle" || t.status === "demarchee" || t.status === "negociation" },
   { key: "atraiter", label: "À vérifier / valider", short: "À traiter", icon: SearchCheck, dot: "bg-wait", match: (t) => t.status === "a_verifier" || t.status === "a_valider" },
@@ -82,6 +82,8 @@ const FILTERS: { key: "tous" | "encours" | "atraiter" | "valide" | "refuse" | "d
   { key: "refuse", label: "Refusés", short: "Refusés", icon: X, dot: "bg-closed", match: (t) => t.status === "refuse" },
   // Démarchage : fils lancés par l'agence (alias du créateur en copie), quel que soit leur statut.
   { key: "demarchage", label: "Démarchés par l'agence", short: "Démarchage", icon: Megaphone, dot: "bg-progress", match: (t) => !!t.prospect },
+  // Envoyés : échanges où l'agence a écrit (démarchage, réponses aux marques).
+  { key: "envoyes", label: "Envoyés par l'agence", short: "Envoyés", icon: Send, match: (t) => t.sent ?? !!t.prospect },
 ];
 
 /**
@@ -965,8 +967,11 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   // ── Barre d'icônes (ordinateur) : les cinq rangements, avec leur nombre ──
   const rail = (
     <nav aria-label={t("Ranger les échanges")} className="hidden min-h-0 flex-col items-center gap-1 border-r border-border py-3 lg:flex">
-      <RailButton label={t("Boîte de réception")} caption={t("Reçus")} active badge={(mode === "creator" ? unseen.size : counts.atraiter) || null} onClick={() => setFilter("tous")}>
+      <RailButton label={t("Boîte de réception")} caption={t("Reçus")} active={filter !== "envoyes"} badge={(mode === "creator" ? unseen.size : counts.atraiter) || null} onClick={() => setFilter("tous")}>
         <Inbox className="h-[18px] w-[18px]" />
+      </RailButton>
+      <RailButton label={t("Mails envoyés par l'agence")} caption={t("Envoyés")} active={filter === "envoyes"} onClick={() => setFilter("envoyes")}>
+        <Send className="h-[18px] w-[18px]" />
       </RailButton>
       <span className="flex-1" />
       <RailButton label={help ? t("Masquer l'aide") : t("Comment ça marche")} caption={t("Aide")} active={help} bar={false} onClick={() => setHelp(!help)}>
@@ -1003,7 +1008,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
       <div className="shrink-0 px-3 pb-2.5 pt-3 sm:px-4">
         <div className="flex items-center gap-1">
           <h2 className="min-w-0 flex-1 truncate pl-1 text-[17px] font-semibold tracking-tight text-foreground">
-            {t("Boîte de réception")}
+            {filter === "envoyes" ? t("Envoyés") : t("Boîte de réception")}
           </h2>
           <ToolButton icon={RefreshCw} label={t("Actualiser")} spin={loading} disabled={loading} onClick={retry} className="h-8 w-8" />
         </div>
@@ -1038,6 +1043,11 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
             </ul>
           </div>
         )}
+        {filter === "envoyes" ? (
+          <p className="mt-1 pl-1 text-[12.5px] text-muted-foreground">
+            {asAgency ? t("Les échanges où l'agence a écrit pour {name}.", { name: creatorName.split(" ")[0] }) : t("Les mails que ton agence envoie pour toi : démarchages et réponses aux marques.")}
+          </p>
+        ) : (
         <Tabs
           className="mt-2 max-lg:hidden"
           size="sm"
@@ -1045,10 +1055,11 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           label={t("Rangement affiché")}
           value={filter}
           onValueChange={(v) => setFilter(v as typeof filter)}
-          items={FILTERS.filter((f) => f.key !== "demarchage").map((f) => ({ value: f.key, label: t(f.short) }))}
+          items={FILTERS.filter((f) => f.key !== "demarchage" && f.key !== "envoyes").map((f) => ({ value: f.key, label: t(f.short) }))}
         />
+        )}
         {/* Preuve du démarchage : marques contactées par l'agence ce mois-ci (alias en copie). */}
-        {pitch.pitched > 0 && (
+        {pitch.pitched > 0 && filter !== "envoyes" && (
           <button type="button" onClick={() => setFilter(filter === "demarchage" ? "tous" : "demarchage")} aria-pressed={filter === "demarchage"}
             className={cn("mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[12px] transition-colors",
               filter === "demarchage" ? "bg-primary text-primary-foreground" : "bg-primary/[0.07] text-foreground hover:bg-primary/[0.12]")}>
@@ -1193,7 +1204,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
             <div className="mt-3 flex flex-col divide-y divide-border">
               {thread.messages.map((m, i) => {
-                const blocked = blockImages && !remoteImagesAllowed(m.id);
+                // Les mails de l'agence (signature, logos) s'affichent toujours en entier.
+                const blocked = blockImages && !m.fromAgency && !remoteImagesAllowed(m.id);
                 return (
                   <div key={m.id} className="flex flex-col">
                     {blocked && remoteImgIds.has(m.id) && expanded.has(m.id) && (

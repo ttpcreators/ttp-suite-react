@@ -33,6 +33,8 @@ export type MailThreadLite = Decision & {
   prospect?: boolean;
   replied?: boolean;
   startedTs?: number;
+  /** L'agence a écrit dans l'échange (page « Envoyés ») ; absent avec une ancienne version du serveur. */
+  sent?: boolean;
 };
 
 /** Démarchage du mois en cours : marques contactées par l'agence pour ce créateur, et réponses. */
@@ -509,6 +511,8 @@ export function mailDocument(html: string, text: string, showQuoted: boolean, op
       })
     : `<pre>${text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c)}</pre>`;
   const quotes = showQuoted ? "" : ".gmail_quote,.gmail_extra,.gmail_attr,blockquote{display:none!important}";
+  // Images distantes bloquées : masquées (sinon leur texte de remplacement s'écrase lettre par lettre).
+  const hideRemote = remote ? "" : 'img[src^="http"],img[src^="//"]{display:none!important}';
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${remote ? "https: data: cid:" : "data: cid:"}; style-src 'unsafe-inline'; font-src data:;">
 <base target="_blank">
@@ -517,7 +521,7 @@ export function mailDocument(html: string, text: string, showQuoted: boolean, op
   body>*:first-child{margin-top:0} body>*:last-child{margin-bottom:0}
   img{max-width:100%;height:auto} table{max-width:100%} pre{white-space:pre-wrap;font:inherit;margin:0}
   a{color:#2563eb} blockquote{margin:8px 0;padding-left:12px;border-left:2px solid #e4e4e7;color:#71717a}
-  ${quotes}
+  ${quotes}${hideRemote}
 </style></head><body>${body}</body></html>`;
 }
 

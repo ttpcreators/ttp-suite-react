@@ -36,6 +36,7 @@ import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
+import { NewMailDialog } from "@/components/mail-tools";
 import { DEFAULT_TEMPLATES, mailtoHref, readProspectTemplates, suggestedMail, type MailTemplate } from "@/lib/mailTemplates";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -376,6 +377,9 @@ export function Contacts() {
 
   // Composeur d'email (envoi direct via la fonction serveur Resend `send-email`).
   const [mailOpen, setMailOpen] = useState(false);
+  // « Écrire » / « Relancer » d'un contact : fenêtre de la page Mails (voir writeTo).
+  const [contactMail, setContactMail] = useState<{ key: string; to: string; subject: string; body: string; n: number } | null>(null);
+  const lastMail = useRef<{ key: string; to: string; subject: string; body: string; n: number } | null>(null);
   const [mailRecipients, setMailRecipients] = useState<string[]>([]);
   const [mailSubject, setMailSubject] = useState("");
   const [mailBody, setMailBody] = useState("");
@@ -648,13 +652,37 @@ export function Contacts() {
     setFormOpen(true);
   };
 
-  // Ouvre le composeur. Avec un contact → destinataire + « Bonjour Prénom » pré-remplis ;
-  // sans contact (bouton global) → composeur vierge pour choisir librement les destinataires.
+  // « Écrire » / « Relancer » sur un contact : la même fenêtre que la page Mails
+  // (signature des Réglages Mails, @nom pour mettre en copie), pré-remplie avec
+  // « Bonjour Prénom, » ou le modèle de relance. La prise de contact est notée à l'envoi.
+  const writeTo = (row: Row, template: boolean) => {
+    const email = row.email?.trim().toLowerCase() ?? "";
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast("Pas d'email pour ce contact");
+    const fn = row.first_name || (row.person && row.person !== "—" ? row.person.split(" ")[0] : "");
+    let subject = "";
+    let body = `Bonjour${fn ? " " + fn : ""},\n\n`;
+    if (template) {
+      const contacted = parseTouches(row.touches).length > 0 || Boolean(row.last_contacted);
+      const tpls = Array.isArray(storedTemplates) && storedTemplates.length > 0 ? storedTemplates : DEFAULT_TEMPLATES;
+      ({ subject, body } = suggestedMail(tpls, { brand: row.brand === "—" ? "" : row.brand, person: row.person, first_name: row.first_name }, contacted));
+    }
+    const m = { key: email, to: email, subject, body, n: Date.now() };
+    lastMail.current = m;
+    setContactMail(m);
+    setSheetOpen(false); // la feuille (téléphone) laisse place à la fenêtre
+  };
+  const mailSent = ({ to, cc }: { to: string; cc: string[] }) => {
+    const sent = new Set([to, ...cc].map((e) => e.toLowerCase()));
+    for (const r of rows ?? []) if (r.email && sent.has(r.email.trim().toLowerCase())) logTouch(r, "email");
+  };
+
+  // Ouvre un mail. Avec un contact → fenêtre de la page Mails (writeTo) ; sans contact
+  // (bouton global) → composeur d'envoi groupé, destinataires choisis librement.
   const openMail = (r?: Row) => {
-    const fn = r?.first_name || (r?.person && r.person !== "—" ? r.person.split(" ")[0] : "");
-    setMailRecipients(r?.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email) ? [r.email.toLowerCase()] : []);
+    if (r) return writeTo(r, false);
+    setMailRecipients([]);
     setMailSubject("");
-    setMailBody(`Bonjour${fn ? " " + fn : ""},\n\n`);
+    setMailBody("Bonjour,\n\n");
     setMailSig(null);
     setAttachments([]);
     setMailSeed((n) => n + 1);
@@ -980,7 +1008,7 @@ export function Contacts() {
     // Action de la ligne : « Relancer » quand le cycle est écoulé, sinon « Écrire » ; WhatsApp sans email.
     const act = row.email
       ? info.due
-        ? { label: "Relancer", title: "Ouvre un mail de relance pré-rempli dans Spark et note la relance", run: () => openSpark(row), filled: true }
+        ? { label: "Relancer", title: "Ouvre un mail de relance pré-rempli (noté à l'envoi)", run: () => writeTo(row, true), filled: true }
         : { label: "Écrire", title: "Écrire un email à ce contact", run: () => openMail(row), filled: on }
       : wa
         ? { label: info.due ? "Relancer" : "WhatsApp", title: "Ouvre WhatsApp et note le contact", run: () => openWhatsApp(row), filled: info.due || on }
@@ -1655,6 +1683,16 @@ export function Contacts() {
       )}
 
       {/* Composeur d'email (envoi direct via Resend) */}
+      <NewMailDialog
+        open={!!contactMail}
+        floating
+        expandKey={contactMail?.n}
+        defaultBox="partnerships"
+        prefill={contactMail}
+        onClose={() => setContactMail(null)}
+        onReopen={() => lastMail.current && setContactMail({ ...lastMail.current, n: Date.now() })}
+        onSent={mailSent}
+      />
       {mailOpen && (
         <Overlay className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClose={() => !sending && setMailOpen(false)}>
           <div

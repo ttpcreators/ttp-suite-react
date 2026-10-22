@@ -431,6 +431,8 @@ async function listThreads(sb: Sb, token: string, s: Settings, fresh: boolean) {
         prospect: fromAgency(msgs[0]),
         replied: fromAgency(msgs[0]) && msgs.slice(1).some((m) => !fromAgency(m)),
         startedTs: Number(msgs[0].internalDate ?? 0),
+        // « Envoyés » de l'espace créateur : l'agence a écrit dans l'échange (messages qu'il voit).
+        sent: shown.some(fromAgency),
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)

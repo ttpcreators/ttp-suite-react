@@ -412,7 +412,7 @@ export function ReplyBox({
         {ccOpen && (
           <div className={line}>
             <span className="w-8 shrink-0 text-[12px] text-muted-foreground">Cc</span>
-            <AddressInput value={cc} onChange={setCc} placeholder="adresse@exemple.com ou @prénom d'un créateur" className={addr} inputMode="email" aria-label="Copie" />
+            <AddressInput value={cc} onChange={setCc} placeholder="adresse@exemple.com ou @nom" className={addr} inputMode="email" aria-label="Copie" />
           </div>
         )}
         {bccOpen && (
@@ -466,7 +466,7 @@ export function ReplyBox({
   return (
     <div className="flex flex-col gap-2">
       {ccOpen && (
-        <AddressInput value={cc} onChange={setCc} placeholder="Cc : adresse@exemple.com ou @prénom d'un créateur" className={field} autoFocus inputMode="email" />
+        <AddressInput value={cc} onChange={setCc} placeholder="Cc : adresse@exemple.com ou @nom" className={field} autoFocus inputMode="email" />
       )}
       {bccOpen && (
         <AddressInput value={bcc} onChange={setBcc} placeholder="Cci (invisible pour les autres) : adresse@exemple.com" className={field} autoFocus inputMode="email" />
@@ -631,9 +631,9 @@ function ForwardPanel({
           </button>
         </div>
         <div className="flex-1 space-y-2.5 overflow-y-auto px-5 py-4">
-          <AddressInput value={to} onChange={setTo} placeholder="À : adresse@exemple.com ou @prénom" className={field} autoFocus inputMode="email" aria-label="Destinataire" />
+          <AddressInput value={to} onChange={setTo} placeholder="À : adresse@exemple.com ou @nom" className={field} autoFocus inputMode="email" aria-label="Destinataire" />
           <div className="grid gap-2.5 sm:grid-cols-2">
-            <AddressInput value={cc} onChange={setCc} placeholder="Cc (facultatif) : @prénom pour un créateur" className={field} inputMode="email" aria-label="Copie" />
+            <AddressInput value={cc} onChange={setCc} placeholder="Cc (facultatif) : @nom pour chercher" className={field} inputMode="email" aria-label="Copie" />
             <AddressInput value={bcc} onChange={setBcc} placeholder="Cci (facultatif)" className={field} inputMode="email" aria-label="Copie cachée" />
           </div>
           <textarea
@@ -679,9 +679,11 @@ function ForwardPanel({
 
 // ── Nouveau mail libre (n'importe quelle adresse, boîte au choix) ────────────
 export function NewMailDialog({
-  open, defaultBox, onClose, onSent, onReopen, floating, expandKey, gmailDraft, onGmailDraftDone,
+  open, defaultBox, onClose, onSent, onReopen, floating, expandKey, gmailDraft, onGmailDraftDone, prefill,
 }: {
-  open: boolean; defaultBox: MailBox; onClose: () => void; onSent?: () => void;
+  open: boolean; defaultBox: MailBox; onClose: () => void;
+  /** Envoyé : destinataire et adresses en copie (ex. noter la prise de contact). */
+  onSent?: (p: { to: string; cc: string[] }) => void;
   /**
    * Brouillon Gmail repris (dossier « Brouillons ») : la fenêtre est pré-remplie, ses
    * modifications sont gardées sur cet appareil, et le brouillon est supprimé de Gmail
@@ -699,29 +701,55 @@ export function NewMailDialog({
   floating?: boolean;
   /** Fenêtre flottante : change à chaque demande d'ouverture (la ré-agrandit si elle est réduite). */
   expandKey?: number;
+  /**
+   * Mail pré-rempli (page Contacts : « Écrire », « Relancer »). `key` : un brouillon par
+   * contact, gardé sur l'appareil s'il est modifié puis fermé.
+   */
+  prefill?: { key: string; to: string; subject?: string; body?: string } | null;
 }) {
   if (!open) return null;
-  const key = gmailDraft ? gmailDraftLocalKey(gmailDraft) : NEW_KEY;
+  const key = gmailDraft ? gmailDraftLocalKey(gmailDraft) : prefill ? `contact:${prefill.key}` : NEW_KEY;
   return (
-    <NewMailPanel key={key} draftKey={key} gmailDraft={gmailDraft ?? null} onGmailDraftDone={onGmailDraftDone}
+    <NewMailPanel key={key} draftKey={key} gmailDraft={gmailDraft ?? null} onGmailDraftDone={onGmailDraftDone} prefill={prefill ?? null}
       defaultBox={defaultBox} onClose={onClose} onSent={onSent} onReopen={onReopen} floating={floating} expandKey={expandKey} />
   );
 }
 
 const NEW_KEY = "new";
 
+/** Boîte du dernier mail envoyé depuis « Nouveau mail » (cet appareil) : proposée d'office la fois suivante. */
+const LAST_BOX_KEY = "ttp:mail-last-box";
+function lastBox(): MailBox | null {
+  try {
+    const v = localStorage.getItem(LAST_BOX_KEY);
+    return v === "partnerships" || v === "talent" ? v : null;
+  } catch {
+    return null;
+  }
+}
+function rememberBox(b: MailBox) {
+  try {
+    localStorage.setItem(LAST_BOX_KEY, b);
+  } catch {
+    /* stockage indisponible : on garde la boîte par défaut */
+  }
+}
+
 /** Brouillon Gmail → contenu de la fenêtre (avant toute modification sur l'appareil). */
 function gmailSeed(g: GmailDraftRow): Omit<NewDraft, "sig" | "at"> {
   return { ...composerPrefill(g), box: g.box };
 }
 
-function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox, onClose, onSent, onReopen, floating, expandKey }: {
+function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox, onClose, onSent, onReopen, floating, expandKey, prefill }: {
   draftKey: string; gmailDraft: GmailDraftRow | null; onGmailDraftDone?: (d: GmailDraftRow, deleted: boolean) => void;
-  defaultBox: MailBox; onClose: () => void; onSent?: () => void; onReopen?: () => void; floating?: boolean; expandKey?: number;
+  defaultBox: MailBox; onClose: () => void; onSent?: (p: { to: string; cc: string[] }) => void; onReopen?: () => void; floating?: boolean; expandKey?: number;
+  prefill: { key: string; to: string; subject?: string; body?: string } | null;
 }) {
   const settings = useMailSettings();
-  // Brouillon Gmail : la copie modifiée sur cet appareil d'abord, sinon le brouillon tel quel.
-  const [seed] = useState(() => (gmailDraft ? gmailSeed(gmailDraft) : null));
+  // Brouillon Gmail ou mail pré-rempli : la copie modifiée sur cet appareil d'abord, sinon tel quel.
+  const [seed] = useState(() =>
+    gmailDraft ? gmailSeed(gmailDraft) : prefill ? { to: prefill.to, cc: "", bcc: "", subject: prefill.subject ?? "", body: prefill.body ?? "", box: lastBox() ?? defaultBox } : null,
+  );
   const [local] = useState(() => readDraft<NewDraft>(dkey));
   const d: Partial<NewDraft> | null = local ?? seed;
   const [to, setTo] = useState(d?.to ?? "");
@@ -729,7 +757,7 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
   const [bcc, setBcc] = useState(d?.bcc ?? "");
   const [subject, setSubject] = useState(d?.subject ?? "");
   const [body, setBody] = useState(d?.body ?? "");
-  const [box, setBox] = useState<MailBox>(d?.box ?? defaultBox);
+  const [box, setBox] = useState<MailBox>(() => d?.box ?? lastBox() ?? defaultBox);
   const sig = settings.signatureOn; // celle des Réglages Mails, d'office
   const [ask, setAsk] = useState(false);
   const att = useAttachments();
@@ -756,7 +784,8 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
   const [min, setMin] = useState(false);
   const [copyOpen, setCopyOpen] = useState(!!(d?.cc || d?.bcc));
   const requestClose = () => {
-    if (!hasContent) {
+    // Vide, ou pré-rempli et pas retouché : rien à garder.
+    if (!hasContent || (prefill && !changed)) {
       writeDraft(dkey, null);
       return onClose();
     }
@@ -793,6 +822,7 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
     writeDraft(dkey, { to, cc, bcc, subject, body, box, sig, at: Date.now() } satisfies NewDraft);
     setDraftFiles(dkey, att.files);
     markDraftSending(dkey);
+    rememberBox(box);
     const label = `Mail à ${dest.ok[0]}`;
     const reopen = () => {
       restoreDraft(dkey);
@@ -805,7 +835,7 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
         return reopen();
       }
       clearSentDraft(dkey);
-      onSent?.();
+      onSent?.({ to: params.to, cc: params.cc });
       if (!gmailDraft) return toast(`Mail envoyé depuis ${BOX_LABEL[box]} ✓`);
       // Envoyé : le brouillon Gmail part de Brouillons (un échec ne touche pas au mail envoyé).
       const del = await deleteGmailDraft({ id: gmailDraft.draftId, box: gmailDraft.box });
@@ -872,7 +902,7 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
               {gmailNote}
               <div className={row}>
                 <span aria-hidden className="w-10 shrink-0 text-[12.5px] text-muted-foreground">À</span>
-                <AddressInput value={to} onChange={setTo} placeholder="adresse@exemple.com ou @prénom" className={bare} autoFocus inputMode="email" aria-label="Destinataire" />
+                <AddressInput value={to} onChange={setTo} placeholder="adresse@exemple.com ou @nom" className={bare} autoFocus={!prefill} inputMode="email" aria-label="Destinataire" />
                 <button type="button" onClick={() => setCopyOpen((v) => !v)} aria-expanded={copyOpen}
                   className={cn("shrink-0 rounded px-1 text-[12px] font-medium hover:text-foreground", copyOpen ? "text-foreground" : "text-muted-foreground")}>
                   Cc · Cci
@@ -882,7 +912,7 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
                 <>
                   <label className={row}>
                     <span className="w-10 shrink-0 text-[12.5px] text-muted-foreground">Cc</span>
-                    <AddressInput value={cc} onChange={setCc} placeholder="Facultatif, @prénom pour un créateur" className={bare} inputMode="email" aria-label="Copie" />
+                    <AddressInput value={cc} onChange={setCc} placeholder="Facultatif, @nom pour chercher" className={bare} inputMode="email" aria-label="Copie" />
                   </label>
                   <label className={row}>
                     <span className="w-10 shrink-0 text-[12.5px] text-muted-foreground">Cci</span>
@@ -892,7 +922,7 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
               )}
               <label className={row}>
                 <span className="w-10 shrink-0 text-[12.5px] text-muted-foreground">Objet</span>
-                <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Objet du mail" className={cn(bare, "font-medium")} aria-label="Objet" />
+                <input value={subject} onChange={(e) => setSubject(e.target.value)} autoFocus={!!prefill && !prefill.subject} placeholder="Objet du mail" className={cn(bare, "font-medium")} aria-label="Objet" />
               </label>
               <textarea
                 value={body}
@@ -900,6 +930,11 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
                 }}
+                onFocus={(e) => {
+                  // Mail pré-rempli : curseur après « Bonjour Prénom, ».
+                  if (prefill) e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length);
+                }}
+                autoFocus={!!prefill?.subject}
                 placeholder="Ton message…"
                 aria-label="Message"
                 className="block min-h-[220px] w-full flex-1 resize-none bg-transparent px-4 py-3 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-faint"
@@ -942,18 +977,22 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
             <span>Envoyer depuis</span>
             <BoxPicker value={box} onChange={setBox} />
           </div>
-          <AddressInput value={to} onChange={setTo} placeholder="À : adresse@exemple.com ou @prénom" className={field} autoFocus inputMode="email" aria-label="Destinataire" />
+          <AddressInput value={to} onChange={setTo} placeholder="À : adresse@exemple.com ou @nom" className={field} autoFocus={!prefill} inputMode="email" aria-label="Destinataire" />
           <div className="grid gap-2.5 sm:grid-cols-2">
-            <AddressInput value={cc} onChange={setCc} placeholder="Cc (facultatif) : @prénom pour un créateur" className={field} inputMode="email" aria-label="Copie" />
+            <AddressInput value={cc} onChange={setCc} placeholder="Cc (facultatif) : @nom pour chercher" className={field} inputMode="email" aria-label="Copie" />
             <AddressInput value={bcc} onChange={setBcc} placeholder="Cci (facultatif)" className={field} inputMode="email" aria-label="Copie cachée" />
           </div>
-          <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Objet" className={cn(field, "font-medium")} aria-label="Objet" />
+          <input value={subject} onChange={(e) => setSubject(e.target.value)} autoFocus={!!prefill && !prefill.subject} placeholder="Objet" className={cn(field, "font-medium")} aria-label="Objet" />
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
             }}
+            onFocus={(e) => {
+              if (prefill) e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length);
+            }}
+            autoFocus={!!prefill?.subject}
             rows={10}
             placeholder="Ton message…"
             aria-label="Message"

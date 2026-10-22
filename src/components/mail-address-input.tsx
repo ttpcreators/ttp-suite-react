@@ -1,18 +1,18 @@
 import { useEffect, useLayoutEffect, useRef, useState, type InputHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
-import { getCreatorRecipients, insertRecipient, matchRecipients, recipientToken, type CreatorRecipient, type RecipientOption } from "@/lib/creatorRecipients";
+import { getRecipients, insertRecipient, matchRecipients, recipientToken, type Recipient, type RecipientOption } from "@/lib/mailRecipients";
 
 /**
- * Champ d'adresses (À, Cc, Cci) : taper « @lena » (ou « lena ») propose les adresses du
- * créateur ; Entrée, Tab ou un clic l'insère, suivie de « , » pour enchaîner. La liste est
+ * Champ d'adresses (À, Cc, Cci) : taper « @lena » (ou « lena ») propose les adresses des
+ * créateurs et des contacts ; Entrée, Tab ou un clic l'insère, suivie de « , » pour enchaîner. La liste est
  * posée sur la page (portail) : elle n'est jamais coupée par le cadre de la réponse.
  */
 export function AddressInput({
   value, onChange, className, ...rest
 }: { value: string; onChange: (v: string) => void } & Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">) {
   const ref = useRef<HTMLInputElement>(null);
-  const [list, setList] = useState<CreatorRecipient[]>([]);
+  const [list, setList] = useState<Recipient[]>([]);
   const [caret, setCaret] = useState<number | null>(null); // null : liste fermée
   const [active, setActive] = useState(0);
   const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null);
@@ -22,7 +22,7 @@ export function AddressInput({
   const open = options.length > 0;
 
   useEffect(() => {
-    if (query !== null && !list.length) void getCreatorRecipients().then(setList);
+    if (query !== null && !list.length) void getRecipients().then(setList);
   }, [query, list.length]);
   useEffect(() => setActive(0), [query]);
   useLayoutEffect(() => {
@@ -97,7 +97,7 @@ export function AddressInput({
         createPortal(
           <div
             role="listbox"
-            aria-label="Adresses des créateurs"
+            aria-label="Adresses proposées"
             style={{ left: pos.left, top: pos.top, width: pos.width }}
             className="fixed z-[1300] overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-lg shadow-black/10"
           >
@@ -119,7 +119,7 @@ export function AddressInput({
                 )}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-medium text-foreground">{o.name}</span>
-                  <span className="block truncate text-[12px] text-muted-foreground">{o.email}</span>
+                  <span className="block truncate text-[12px] text-muted-foreground">{o.hint ? `${o.hint} · ${o.email}` : o.email}</span>
                 </span>
               </button>
             ))}
