@@ -541,7 +541,7 @@ const creerEvenement: Tool = {
 const brouillonMail: Tool = {
   name: "creer_brouillon_mail",
   title: "Préparer un brouillon de mail",
-  description: "Prépare un BROUILLON dans Gmail (partnerships@ ou talent@), en nouveau mail ou en réponse dans un fil existant. Rien n'est envoyé : Marc relit et envoie depuis Gmail ou l'app.",
+  description: "Prépare un BROUILLON dans Gmail (partnerships@ ou talent@), en nouveau mail ou en réponse dans un fil existant. Rien n'est envoyé : Marc relit et envoie depuis Gmail ou l'app. Un seul brouillon par destinataire et par objet : rappeler l'outil avec le même destinataire et le même objet MET À JOUR le brouillon existant (jamais de doublon).",
   write: true,
   inputSchema: {
     type: "object",
@@ -562,8 +562,11 @@ const brouillonMail: Tool = {
     if (!/[^@\s]+@[^@\s]+\.[^@\s]+/.test(to)) return fail("Adresse du destinataire invalide.");
     const fil = str(a.fil, 40);
     try {
-      await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined);
-      return ok(`Brouillon prêt dans ${box}@ pour ${to} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail ou l'app (Mails, dossier Brouillons).`);
+      const r = await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined);
+      const how = r.replaced
+        ? `Brouillon MIS À JOUR dans ${box}@ (il remplace celui déjà préparé pour ${to}, aucun doublon${r.removed ? `, ${r.removed} ancien${r.removed > 1 ? "s" : ""} doublon${r.removed > 1 ? "s" : ""} supprimé${r.removed > 1 ? "s" : ""}` : ""})`
+        : `Brouillon prêt dans ${box}@ pour ${to}`;
+      return ok(`${how} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail ou l'app (Mails, dossier Brouillons).`);
     } catch (e) {
       return fail(`Brouillon non créé : ${(e as Error).message}`);
     }

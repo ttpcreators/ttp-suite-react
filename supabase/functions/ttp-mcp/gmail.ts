@@ -145,7 +145,48 @@ const encWord = (s: string) => (/^[\x20-\x7e]*$/.test(s) ? s : `=?UTF-8?B?${b64U
 const clean = (s: string) => s.replace(/[\r\n]+/g, " ").trim();
 
 /** Brouillon Gmail (nouveau mail, ou réponse dans un fil existant). Rien n'est envoyé. */
-export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, subject: string, message: string, threadId?: string): Promise<{ id: string }> {
+/** Adresses e-mail d'un en-tête, en minuscules et triées (pour comparer deux « À »). */
+function addrKey(v: string): string {
+  return [...new Set((v.match(/[^\s<>,;"']+@[^\s<>,;"']+\.[^\s<>,;"']+/g) ?? []).map((a) => a.toLowerCase()))].sort().join(",");
+}
+/** Objet comparable : sans « Re: », espaces et casse normalisés. */
+const subjKey = (s: string) => s.replace(/^\s*(re|tr|fwd?)\s*:\s*/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+
+type DraftRes = { id: string; message?: Msg };
+
+/**
+ * Brouillons DÉJÀ préparés par Claude pour la même personne, avec le même objet (et dans
+ * le même fil pour une réponse), du plus récent au plus ancien. Sert à remplacer au lieu
+ * d'empiler : une conversation relancée plusieurs fois ne crée plus de doublons.
+ */
+async function claudeTwins(token: string, to: string, subject: string, threadId?: string): Promise<DraftRes[]> {
+  const first = addrKey(to).split(",")[0];
+  if (!first) return [];
+  const list = await gjson(token, `${GMAIL}/drafts?maxResults=50&q=${encodeURIComponent(`to:${first}`)}`);
+  const ids = ((list.drafts as { id: string }[] | undefined) ?? []).map((d) => d.id).slice(0, 30);
+  const wantTo = addrKey(to);
+  const wantSubj = subjKey(subject);
+  const found = await mapPool(ids, 6, async (id) => {
+    try {
+      const d = (await gjson(token, `${GMAIL}/drafts/${encodeURIComponent(id)}?format=metadata`)) as DraftRes;
+      const h = d.message?.payload?.headers;
+      if (header(h, "x-ttp-source").toLowerCase() !== "claude") return null; // jamais toucher à un brouillon écrit à la main
+      if (addrKey(header(h, "to")) !== wantTo || subjKey(header(h, "subject")) !== wantSubj) return null;
+      if (threadId && d.message?.threadId !== threadId) return null;
+      return d;
+    } catch {
+      return null;
+    }
+  });
+  return found.filter((d): d is DraftRes => !!d).sort((a, b) => Number(b.message?.internalDate ?? 0) - Number(a.message?.internalDate ?? 0));
+}
+
+/**
+ * Prépare un brouillon Gmail (jamais envoyé). Si Claude a déjà préparé un brouillon pour
+ * la même personne et le même objet, il est MIS À JOUR au lieu d'en créer un nouveau, et
+ * ses éventuels doublons plus anciens (copies du même brouillon) sont supprimés.
+ */
+export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, subject: string, message: string, threadId?: string): Promise<{ id: string; replaced: boolean; removed: number }> {
   const token = await tokenFor(sb, box, "modify");
   // X-TTP-Source : la page Mails de l'app affiche « par Claude » sur ce brouillon.
   const headers: string[] = [`To: ${clean(to)}`, `Subject: ${encWord(clean(subject))}`, "X-TTP-Source: claude", "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64"];
@@ -159,12 +200,40 @@ export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, 
     if (mid) headers.push(`In-Reply-To: ${clean(mid)}`, `References: ${clean(`${refs} ${mid}`).slice(0, 1900)}`);
   }
   const raw = `${headers.join("\r\n")}\r\n\r\n${b64Utf8(message).replace(/.{76}/g, "$&\r\n")}`;
+  const msg = { raw: b64urlUtf8(raw), ...(threadId ? { threadId } : {}) };
+
+  // Recherche des jumeaux : si elle échoue, on crée simplement le brouillon (comme avant).
+  let twins: DraftRes[] = [];
+  try {
+    twins = await claudeTwins(token, to, subject, threadId);
+  } catch {
+    twins = [];
+  }
+  if (twins.length) {
+    const keep = twins[0];
+    const res = await gjson(token, `${GMAIL}/drafts/${encodeURIComponent(keep.id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: keep.id, message: msg }),
+    });
+    let removed = 0;
+    for (const d of twins.slice(1)) {
+      try {
+        // Même suppression que le bouton « Supprimer » d'un brouillon dans l'app (gmail-thread).
+        const r = await gfetch(`${GMAIL}/drafts/${encodeURIComponent(d.id)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }, { timeoutMs: 12_000 });
+        if (r.ok || r.status === 404) removed++;
+      } catch {
+        /* doublon laissé en place : il sera retiré au prochain passage */
+      }
+    }
+    return { id: String(res.id ?? keep.id), replaced: true, removed };
+  }
   const res = await gjson(token, `${GMAIL}/drafts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: { raw: b64urlUtf8(raw), ...(threadId ? { threadId } : {}) } }),
+    body: JSON.stringify({ message: msg }),
   });
-  return { id: String(res.id ?? "") };
+  return { id: String(res.id ?? ""), replaced: false, removed: 0 };
 }
 
 /** Non lus de la boîte de réception (léger, pour le point du jour). */
