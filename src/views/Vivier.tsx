@@ -14,7 +14,9 @@ import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { AddButton, InlineForm, TextField, AutoGrowTextField } from "@/components/ui/form";
-import { ActionMenu } from "@/components/ui/action-menu";
+import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
+import { useCreators, invalidateCreators } from "@/lib/useCreators";
+import { inRoster, rosterRow } from "@/lib/scoutToRoster";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
@@ -333,6 +335,10 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
 
   // Sollicitation email
   const [mailRow, setMailRow] = useState<Row | null>(null);
+  // Scouting → roster : un profil signé passe dans le roster avec ses stats (après confirmation).
+  const roster = useCreators();
+  const [rosterAdded, setRosterAdded] = useState<string[]>([]);
+  const [toRoster, setToRoster] = useState<Row | null>(null);
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -843,9 +849,13 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
             <button type="button" onClick={() => void setStatus(r.id, next)} className="flex h-11 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
               Passer à « {statusMeta(next).step} »
             </button>
+          ) : !athletes && !rosterAdded.includes(r.id) && !inRoster(roster, r) ? (
+            <button type="button" onClick={() => setToRoster(r)} className="flex h-11 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90" title="Signé : l'ajoute au roster avec ses stats">
+              <Plus className="h-4 w-4" /> Ajouter au roster
+            </button>
           ) : (
             <button type="button" disabled className="flex h-11 items-center justify-center gap-1.5 rounded-full bg-ok-soft px-4 text-[14px] font-semibold text-ok">
-              <Check className="h-4 w-4" /> Signé
+              <Check className="h-4 w-4" /> {athletes ? "Signé" : "Dans le roster"}
             </button>
           )}
           <div className="grid grid-cols-2 gap-2">
@@ -861,8 +871,32 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
     );
   };
 
+  const addToRoster = async (r: Row) => {
+    const { data: last } = await supabase.from("creators").select("sort_order").order("sort_order", { ascending: false }).limit(1);
+    const order = ((last?.[0] as { sort_order?: number } | undefined)?.sort_order ?? 0) + 1;
+    const t = tracking[r.id];
+    const created = await dbInsert("creators", rosterRow({ name: r.name, handle: r.handle, email: r.email, tag: effTag(r) }, { followers: latestFollowers(r.id), er: t?.igEr ?? null, niche: autoTag(r) }, order));
+    if (!created) return toast("Erreur, réessaie");
+    invalidateCreators();
+    setRosterAdded((ids) => [...ids, r.id]);
+    toast(`${r.name} ajouté au roster ✓`);
+  };
+
   return (
     <>
+      {toRoster && (
+        <ConfirmDialog
+          title="Ajouter au roster"
+          message={`Ajouter ${toRoster.name} au roster avec ses chiffres du scouting ? Aucun accès n'est créé : tu le donnes ensuite depuis la page Accès.`}
+          confirmLabel="Ajouter"
+          onCancel={() => setToRoster(null)}
+          onConfirm={() => {
+            const r = toRoster;
+            setToRoster(null);
+            void addToRoster(r);
+          }}
+        />
+      )}
       {header(true)}
       {FEATURES.hashtagSearch && hashOpen && <HashtagSearch onClose={() => setHashOpen(false)} />}
 

@@ -40,6 +40,13 @@ import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { NewMailDialog } from "@/components/mail-tools";
 import { contactCard } from "@/lib/contactCard";
+import { brandRecord, mergeMailHistory, sameBrand, type BrandMail } from "@/lib/brandRecord";
+import { loadBrandData, loadEmailActivity, type BrandData } from "@/lib/brandRecordDb";
+import { loadProspects } from "@/lib/prospectsDb";
+import type { ProspectLite } from "@/lib/prospectProposal";
+import { openCollab } from "@/lib/collabLinksDb";
+import { stepDef } from "@/lib/collabs";
+import { formatEuro } from "@/lib/money";
 import { DEFAULT_TEMPLATES, mailtoHref, readProspectTemplates, suggestedMail, type MailTemplate } from "@/lib/mailTemplates";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -514,14 +521,23 @@ export function Contacts() {
   const selected = inspected ?? sheetRow;
 
   const [history, setHistory] = useState<MailMsg[] | null>(null);
+  // Fiche marque : collabs, CA, gifts et propositions de la marque (lus une fois par visite),
+  // plus le journal `email_activity` du contact (fusionné à l'historique Gmail, sans doublon).
+  const [brandData, setBrandData] = useState<BrandData | null>(null);
+  const [prospects, setProspects] = useState<ProspectLite[]>([]);
+  const [activity, setActivity] = useState<Awaited<ReturnType<typeof loadEmailActivity>>>([]);
+  const [brandOpen, setBrandOpen] = useState(false);
   const [historyBusy, setHistoryBusy] = useState(false);
   useEffect(() => {
     setHistory(null);
     setHistoryBusy(false);
+    setActivity([]);
+    setBrandOpen(false);
     const email = selected?.email?.trim().toLowerCase();
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
     let alive = true;
     setHistoryBusy(true);
+    void loadEmailActivity(email).then((rows) => alive && setActivity(rows));
     (async () => {
       const { data, error } = await supabase.functions.invoke("gmail-history", { body: { contact: email, box: "all" } }); // partnerships@ + talent@
       let res = data as { ok?: boolean; messages?: MailMsg[] } | null;
@@ -544,6 +560,18 @@ export function Contacts() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, selected?.email]);
+
+  useEffect(() => {
+    let alive = true;
+    void Promise.all([loadBrandData(), loadProspects()]).then(([d, p]) => {
+      if (!alive) return;
+      setBrandData(d);
+      setProspects(p);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [live]);
 
   useEffect(() => {
     let active = true;
@@ -1177,6 +1205,92 @@ export function Contacts() {
             </div>
           </div>
 
+          {/* Avec cette marque : « on a déjà bossé avec eux ? » en un coup d'œil */}
+          {brandData && row.brand?.trim() && row.brand.trim() !== "—" && !NO_COMPANY.test(row.brand.trim()) && (() => {
+            const rec = brandRecord(row.brand, brandData);
+            const props = prospects.filter((p) => p.contact_id === row.id || sameBrand(p.brand, row.brand));
+            const empty = !rec.collabs.length && !rec.gifts.length && !props.length && !rec.revenue;
+            const stat = "flex min-w-0 flex-col gap-0.5 px-3 py-2.5";
+            return (
+              <section className="overflow-hidden rounded-[16px] bg-panel">
+                <button
+                  type="button"
+                  onClick={() => setBrandOpen((v) => !v)}
+                  aria-expanded={brandOpen}
+                  disabled={empty}
+                  className="flex min-h-11 w-full items-center justify-between gap-3 px-3.5 py-2 text-left disabled:cursor-default"
+                >
+                  <span className="truncate text-[13px] font-semibold text-foreground">Avec {row.brand.trim()}</span>
+                  {empty ? (
+                    <span className="text-[12px] text-muted-foreground">Aucune collab</span>
+                  ) : (
+                    <ChevronDown className={cn("h-4 w-4 shrink-0 text-faint transition-transform", brandOpen && "rotate-180")} />
+                  )}
+                </button>
+                {!empty && (
+                  <div className={cn("grid border-t border-border", rec.revenue != null ? "grid-cols-3" : "grid-cols-2")}>
+                    <div className={stat}>
+                      <span className="text-[11px] text-muted-foreground">Collabs</span>
+                      <span className="text-[17px] font-bold tabular-nums text-foreground">{rec.collabs.length}</span>
+                    </div>
+                    {rec.revenue != null && (
+                      <div className={cn(stat, "border-l border-border")}>
+                        <span className="text-[11px] text-muted-foreground">Encaissé</span>
+                        <span className="truncate text-[17px] font-bold tabular-nums text-foreground">{formatEuro(rec.revenue)}</span>
+                      </div>
+                    )}
+                    <div className={cn(stat, "border-l border-border")}>
+                      <span className="text-[11px] text-muted-foreground">Gifts</span>
+                      <span className="text-[17px] font-bold tabular-nums text-foreground">{rec.gifts.length}</span>
+                    </div>
+                  </div>
+                )}
+                {brandOpen && !empty && (
+                  <div className="flex flex-col gap-3 border-t border-border px-3.5 py-3 text-[12px]">
+                    {rec.collabs.length > 0 && (
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium text-muted-foreground">Collabs</span>
+                        {rec.collabs.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => void openCollab(c.id)}
+                            className="flex min-h-9 items-center justify-between gap-2 rounded-[10px] px-2 text-left transition-colors hover:bg-rowhover"
+                          >
+                            <span className="min-w-0 truncate font-medium text-foreground">{titleCase(c.creator ?? "") || "Collab"}</span>
+                            <span className="shrink-0 text-muted-foreground">{c.status === "active" ? stepDef(c.step).short : c.status === "gagnee" ? "Gagnée" : c.status === "perdue" ? "Perdue" : "Archivée"}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {props.length > 0 && (
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium text-muted-foreground">Propositions</span>
+                        {props.map((p) => (
+                          <div key={p.id} className="flex items-center justify-between gap-2 px-2">
+                            <span className="min-w-0 truncate text-foreground">{[p.creator ? titleCase(p.creator) : "", p.deliverables ?? ""].filter(Boolean).join(" · ") || "Proposition"}</span>
+                            <span className="shrink-0 font-medium tabular-nums text-foreground">{p.value && p.value !== "—" ? p.value : EMPTY}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {rec.gifts.length > 0 && (
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium text-muted-foreground">Gifts</span>
+                        {rec.gifts.map((g) => (
+                          <div key={g.id} className="flex items-center justify-between gap-2 px-2">
+                            <span className="min-w-0 truncate text-foreground">{[g.product, g.creator ? titleCase(g.creator) : ""].filter(Boolean).join(" · ") || "Cadeau"}</span>
+                            <span className="shrink-0 text-muted-foreground">{fmtDay(g.received_on) || EMPTY}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+            );
+          })()}
+
           {/* L'essentiel */}
           <div className="divide-y divide-border rounded-[16px] bg-panel text-[13px]">
             <div className={infoRow}>
@@ -1296,11 +1410,11 @@ export function Contacts() {
               <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-foreground">Historique email</h3>
               {historyBusy ? (
                 <p className="text-[12px] text-muted-foreground">Chargement des mails…</p>
-              ) : !history ? null : history.length === 0 ? (
-                <p className="text-[12px] text-muted-foreground">Aucun échange trouvé dans Gmail.</p>
+              ) : !history ? null : mergeMailHistory(history as BrandMail[], activity).length === 0 ? (
+                <p className="text-[12px] text-muted-foreground">Aucun échange trouvé.</p>
               ) : (
                 <div className="flex max-h-52 flex-col gap-1.5 overflow-y-auto pr-1">
-                  {history.map((m) => (
+                  {mergeMailHistory(history as BrandMail[], activity).map((m) => (
                     <div key={m.id} className="rounded-[12px] bg-panel px-3 py-2">
                       <div className="flex items-center justify-between gap-2">
                         <span className={cn("inline-flex items-center gap-1 text-[11px] font-semibold", m.direction === "in" ? "text-signaltext" : "text-primary")}>

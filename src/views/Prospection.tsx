@@ -12,7 +12,14 @@ import {
   SelectField,
 } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { ArrowRight, Pencil, Trash2 } from "@/components/icons";
+import { ArrowRight, Handshake, Pencil, Trash2 } from "@/components/icons";
+import { CreatorPickerField } from "@/components/ui/creator-picker";
+import { useCreators } from "@/lib/useCreators";
+import { cachetOf, collabFromProspect, type Proposal } from "@/lib/prospectProposal";
+import { markProspectSigned, proposalColumnsReady } from "@/lib/prospectsDb";
+import { openCollab } from "@/lib/collabLinksDb";
+import { fmtDay } from "@/lib/dates";
+import { titleCase } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -29,6 +36,12 @@ type Row = {
   stage: string | null;
   tone: "success" | "warning" | "danger" | "neutral" | "info" | null;
   sort_order: number | null;
+  // Colonnes du SQL 2026-10-23-prospects-proposition.sql (absentes avant lui).
+  creator?: string | null;
+  deliverables?: string | null;
+  proposal?: Proposal | null;
+  contact_id?: string | null;
+  collab_id?: string | null;
 };
 
 // Ordre de colonnes fidèle à l'original (app.js : stages).
@@ -71,11 +84,38 @@ export function Prospection() {
   // Chiffres Instagram de la marque (fiche contact du même nom, mis à jour par ig-sync).
   const [igByBrand] = useIgColumn<IgBrand>("contacts", "brand");
 
+  // « Transformer en collab » : créateur, livrables et cachet repris de la proposition.
+  const creators = useCreators();
+  const [convert, setConvert] = useState<Row | null>(null);
+  const [cvCreator, setCvCreator] = useState("");
+  const [cvDeliv, setCvDeliv] = useState("");
+  const [cvCachet, setCvCachet] = useState("");
+  const startConvert = (r: Row) => {
+    setConvert(r);
+    setCvCreator(r.creator ?? r.proposal?.creator ?? "");
+    setCvDeliv(r.deliverables ?? r.proposal?.deliverables ?? "");
+    setCvCachet(cachetOf(r));
+  };
+  const submitConvert = async () => {
+    const r = convert;
+    if (!r) return;
+    const { data: last } = await supabase.from("collabs").select("sort_order").order("sort_order", { ascending: false }).limit(1);
+    const order = ((last?.[0] as { sort_order?: number } | undefined)?.sort_order ?? 0) + 1;
+    const created = await dbInsert("collabs", collabFromProspect(r, { creator: cvCreator, deliverables: cvDeliv, cachet: cvCachet }, order));
+    if (!created) return toast("Erreur, réessaie");
+    const collabId = (created as { id: string }).id;
+    const ok = await markProspectSigned(r.id, collabId);
+    setRows((rs) => (rs ?? []).map((x) => (x.id === r.id ? { ...x, stage: "Signé", ...(ok ? { collab_id: collabId } : {}) } : x)));
+    setConvert(null);
+    toast("Collab créée ✓");
+    void openCollab(collabId);
+  };
+
   useEffect(() => {
     let active = true;
-    supabase
+    void proposalColumnsReady().then((full) => supabase
       .from("prospects")
-      .select("id, brand, contact, value, stage, tone, sort_order")
+      .select(full ? "id, brand, contact, value, stage, tone, sort_order, creator, deliverables, proposal, contact_id, collab_id" : "id, brand, contact, value, stage, tone, sort_order")
       .order("sort_order")
       .then(({ data, error }) => {
         if (!active) return;
@@ -85,11 +125,11 @@ export function Prospection() {
           setRows((r) => r ?? []);
           return;
         }
-        const list = (data as Row[]) ?? [];
+        const list = (data as unknown as Row[]) ?? [];
         setCache("prospects", list);
         setRows(list);
         setError(false); // un chargement réussi efface l'erreur précédente
-      });
+      }));
     return () => {
       active = false;
     };
@@ -167,6 +207,20 @@ export function Prospection() {
     </PageHeaderRow>
   );
 
+  const convertForm = (
+    <InlineForm
+      open={!!convert}
+      title={convert ? `Collab ${convert.brand}` : "Collab"}
+      onClose={() => setConvert(null)}
+      onSubmit={submitConvert}
+      submitLabel="Créer"
+    >
+      <CreatorPickerField label="Créateur" value={cvCreator} onChange={setCvCreator} creators={creators} />
+      <TextField label="Livrables" value={cvDeliv} onChange={setCvDeliv} placeholder="ex. 2 reels Instagram" />
+      <TextField label="Cachet" value={cvCachet} onChange={setCvCachet} placeholder="ex. 950 €" />
+    </InlineForm>
+  );
+
   const form = (
     <InlineForm
       open={formOpen}
@@ -197,6 +251,7 @@ export function Prospection() {
       <div>
         {header}
         {form}
+        {convertForm}
         <div className="flex items-center gap-2">
           <AnimatedBadge status="loading" size="sm">
             Chargement…
@@ -211,6 +266,7 @@ export function Prospection() {
       <div>
         {header}
         {form}
+        {convertForm}
         <div className="rounded-2xl border border-border bg-surface shadow-sm px-4 py-10 text-center">
           <p className="text-sm font-medium text-foreground">{showError ? "Chargement impossible" : "Pipeline vide"}</p>
           <p className="text-xs text-muted-foreground mt-1.5">
@@ -255,6 +311,7 @@ export function Prospection() {
       <div>
         {header}
         {form}
+        {convertForm}
         {stageBar}
         <div className="rounded-2xl border border-border bg-surface shadow-sm">
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -285,6 +342,7 @@ export function Prospection() {
     <div>
       {header}
       {form}
+      {convertForm}
       {stageBar}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5 items-start">
         {stages.map((stage) => {
@@ -327,6 +385,9 @@ export function Prospection() {
                             icon: Pencil,
                             onClick: () => startEdit(card),
                           },
+                          card.collab_id
+                            ? { key: "collab", label: "Ouvrir la collab", icon: Handshake, onClick: () => void openCollab(card.collab_id as string) }
+                            : { key: "collab", label: "Signer", icon: Handshake, onClick: () => startConvert(card) },
                           // Changement d'étape direct depuis le menu de la carte.
                           ...STAGE_ORDER.filter((s) => s !== card.stage).map((s) => ({
                             key: `stage-${s}`,
@@ -356,6 +417,21 @@ export function Prospection() {
                     <p className="mt-2 pl-[15px] text-[13px] font-semibold text-foreground">
                       {card.value ?? "—"}
                     </p>
+                    {(card.creator || card.deliverables) && (
+                      <p className="mt-1 truncate pl-[15px] text-[11px] text-muted-foreground" title={[card.creator ? titleCase(card.creator) : "", card.deliverables ?? ""].filter(Boolean).join(" · ")}>
+                        {[card.creator ? titleCase(card.creator) : "", card.deliverables ?? "", card.proposal?.at ? fmtDay(card.proposal.at) : ""].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
+                    {!card.collab_id && (card.stage === "Négociation" || card.stage === "Signé") && (
+                      <button
+                        type="button"
+                        title="La marque a dit oui : crée la collab avec la proposition"
+                        onClick={() => startConvert(card)}
+                        className="mt-2.5 ml-[15px] inline-flex h-8 items-center gap-1.5 rounded-full bg-field px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover"
+                      >
+                        <Handshake className="h-3.5 w-3.5" /> Signer
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

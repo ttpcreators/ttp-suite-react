@@ -774,6 +774,14 @@ create index if not exists todos_collab_idx    on public.todos (collab_id);
 create index if not exists events_collab_idx   on public.events (collab_id);
 create index if not exists briefs_collab_idx   on public.briefs (collab_id);
 create index if not exists gifting_collab_idx  on public.gifting (collab_id);
+-- Prospects : proposition venue de Tarifs + lien contact / collab (sql/2026-10-23-prospects-proposition.sql).
+alter table public.prospects add column if not exists creator      text;
+alter table public.prospects add column if not exists deliverables text;
+alter table public.prospects add column if not exists proposal     jsonb;
+alter table public.prospects add column if not exists contact_id   uuid references public.contacts(id) on delete set null;
+alter table public.prospects add column if not exists collab_id    uuid references public.collabs(id) on delete set null;
+create index if not exists prospects_contact_idx on public.prospects (contact_id);
+create index if not exists prospects_collab_idx  on public.prospects (collab_id);
 
 -- 2) Garde : hors agence, collab_id doit être vide ou une collab du créateur connecté.
 create or replace function public.collab_link_guard() returns trigger

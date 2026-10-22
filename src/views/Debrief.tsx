@@ -28,6 +28,7 @@ import { campaignCosts } from "@/lib/pricing";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { useIntent } from "@/lib/openIntent";
 import { buildRecap, publicationDate, readyForRecap, type CollabForRecap, type StepRow } from "@/lib/campaignRecap";
 import { dbUpdate } from "@/lib/db";
 import { EMPTY, fmtDay, todayISO } from "@/lib/dates";
@@ -304,6 +305,18 @@ export function Debrief() {
       setRecapCollabs(list.map((c) => ({ ...c, pub: publicationDate(c, steps) })).filter((c) => readyForRecap(c.pub)));
     })();
   }, []);
+  // « Préparer le bilan » depuis la fiche collab (étape 11) : bilan prérempli, même s'il
+  // n'est pas encore dans la liste des bilans prêts (publication de moins de 7 jours…).
+  useIntent("collab:recap", (id) => {
+    if (!id) return;
+    void (async () => {
+      const { data: c } = await supabase.from("collabs").select("id, brand, creator, deliverables, cachet, step, created_at, ig, tt, yt").eq("id", id).maybeSingle();
+      if (!c) return toast("Collab introuvable");
+      const { data: st } = await supabase.from("collab_steps").select("collab_id, step, reached_at").eq("collab_id", id).gte("step", 6);
+      const col = c as CollabForRecap;
+      void prepareFromCollab({ ...col, pub: publicationDate(col, (st as StepRow[] | null) ?? []) });
+    })();
+  });
   // Partage à la marque (email)
   const [shareD, setShareD] = useState<Debrief | null>(null);
   const [shareTo, setShareTo] = useState("");

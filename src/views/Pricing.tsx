@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Copy, Users, Sparkles, SlidersHorizontal, RotateCcw, Minus, Search, Check, FileText, Handshake, ChevronDown, PenLine } from "@/components/icons";
+import { Plus, Trash2, Copy, Users, Sparkles, SlidersHorizontal, RotateCcw, Minus, Search, Check, FileText, Handshake, ChevronDown, PenLine, Send, X } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { useCreators, type CreatorLite } from "@/lib/useCreators";
 import { formatEuro, getAppState, invalidateAppState, saveAppStateKey, useAppState } from "@/lib/appState";
@@ -21,6 +21,8 @@ import {
 } from "@/lib/pricing";
 import { deliverablesText, missingAudienceText, priceRange, quoteInvoiceLines, ugcDeliverablesText } from "@/lib/pricingForm";
 import { putInvoicePrefill } from "@/lib/invoicePrefill";
+import { saveProposal } from "@/lib/prospectsDb";
+import { Overlay } from "@/components/mobile/ios-sheet";
 import { fmtCompact } from "@/lib/timeSeries";
 
 /** Créateur choisi : aucun (recherche), saisie libre, ou l'id d'un créateur du roster. */
@@ -88,6 +90,8 @@ export function Pricing() {
   const [collabs, setCollabs] = useState<CollabPick[] | null>(null);
   const [collabOpen, setCollabOpen] = useState(false);
   const [pendingCollab, setPendingCollab] = useState<CollabPick | null>(null);
+  // « Proposer » : la proposition va sur le prospect de la marque (Prospection).
+  const [proposeOpen, setProposeOpen] = useState(false);
 
   // Charge le créateur → audience par plateforme (vraies données d'abord) + niche.
   useEffect(() => {
@@ -279,6 +283,19 @@ export function Pricing() {
     const mine = all.filter((c) => fold(c.creator) === fold(selName) || fold(c.creator).split(" ")[0] === fold(selName).split(" ")[0]);
     return mine.length ? mine : all;
   }, [collabs, selName]);
+  const propose = async (brand: string, contact: string) => {
+    const r = await saveProposal(
+      { mode, creator: selName ?? null, deliverables: collabDeliverables, min: result.min, max: result.max, target: result.mid, at: new Date().toISOString() },
+      brand,
+      contact.trim() || null,
+    );
+    if (!r) {
+      toast("Erreur, réessaie");
+      return false;
+    }
+    toast(r.created ? `Prospect ${brand.trim()} créé ✓` : `Proposition ajoutée à ${brand.trim()} ✓`);
+    return true;
+  };
   const writeCollab = async (c: CollabPick) => {
     const ok = await dbUpdate("collabs", c.id, { cachet: collabCachet, deliverables: collabDeliverables || null });
     toast(ok ? "Collab mise à jour ✓" : "Erreur, réessaie");
@@ -517,6 +534,7 @@ export function Pricing() {
             disabled={!hasResult}
             onCopy={copyQuote}
             onQuote={createQuote}
+            onPropose={() => setProposeOpen(true)}
             collabOpen={collabOpen}
             onCollabOpen={(v) => {
               setCollabOpen(v);
@@ -548,6 +566,7 @@ export function Pricing() {
             disabled={!hasResult}
             onCopy={copyQuote}
             onQuote={createQuote}
+            onPropose={() => setProposeOpen(true)}
             collabOpen={collabOpen}
             onCollabOpen={(v) => {
               setCollabOpen(v);
@@ -561,6 +580,16 @@ export function Pricing() {
           />
         </section>
       </div>
+
+      {proposeOpen && (
+        <ProposeDialog
+          price={priceRange(result.min, result.max)}
+          onClose={() => setProposeOpen(false)}
+          onSave={async (brand, contact) => {
+            if (await propose(brand, contact)) setProposeOpen(false);
+          }}
+        />
+      )}
 
       {pendingCollab && (
         <ConfirmDialog
@@ -736,10 +765,11 @@ function ResultDetail({ mode, lines, majorations, result, remisePct, onRemise }:
 }
 
 /** Actions du résultat : copier la proposition, créer le devis, l'écrire dans une collab. */
-function Actions({ disabled, onCopy, onQuote, collabOpen, onCollabOpen, collabs, onPickCollab }: {
+function Actions({ disabled, onCopy, onQuote, onPropose, collabOpen, onCollabOpen, collabs, onPickCollab }: {
   disabled: boolean;
   onCopy: () => void;
   onQuote: () => void;
+  onPropose: () => void;
   collabOpen: boolean;
   onCollabOpen: (v: boolean) => void;
   collabs: CollabPick[] | null;
@@ -753,6 +783,9 @@ function Actions({ disabled, onCopy, onQuote, collabOpen, onCollabOpen, collabs,
       </button>
       <button type="button" disabled={disabled} onClick={onQuote} className={cn(btn, "bg-primary text-primary-foreground hover:opacity-90")} title="Nouvelle facture en brouillon dans Facturation, lignes remplies">
         <FileText className="h-4 w-4" /> Créer le devis
+      </button>
+      <button type="button" disabled={disabled} onClick={onPropose} className={cn(btn, "bg-field text-foreground hover:bg-rowhover")} title="Enregistre ce prix comme proposition sur le prospect de la marque (Prospection)">
+        <Send className="h-4 w-4" /> Proposer
       </button>
       <Popover open={collabOpen} onOpenChange={onCollabOpen}>
         <PopoverTrigger asChild>
@@ -915,5 +948,48 @@ function Line({ l, v }: { l: string; v: string }) {
       <span className="min-w-0 truncate text-muted-foreground">{l}</span>
       <span className="shrink-0 font-medium tabular-nums text-foreground">{v}</span>
     </div>
+  );
+}
+
+/** « Proposer » : marque (et contact) du prospect qui reçoit la proposition. */
+function ProposeDialog({ price, onClose, onSave }: { price: string; onClose: () => void; onSave: (brand: string, contact: string) => Promise<void> }) {
+  const [brand, setBrand] = useState("");
+  const [contact, setContact] = useState("");
+  const [busy, setBusy] = useState(false);
+  const field = "h-11 w-full rounded-[12px] border border-border bg-surface px-3.5 text-[16px] text-foreground outline-none transition-colors placeholder:text-faint focus:border-primary sm:text-[14px]";
+  return (
+    <Overlay className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClose={onClose} label="Proposer">
+      <form
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!brand.trim() || busy) return;
+          setBusy(true);
+          void onSave(brand, contact).finally(() => setBusy(false));
+        }}
+        className="flex w-full flex-col gap-4 rounded-t-[22px] bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:max-w-[420px] sm:rounded-[22px]"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[16px] font-semibold text-foreground">Proposer {price}</div>
+            <div className="text-[13px] text-muted-foreground">Va sur le prospect de la marque.</div>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fermer" className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-medium text-muted-foreground">Marque</span>
+          <input autoFocus value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Nike" className={field} />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-medium text-muted-foreground">Contact</span>
+          <input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="Prénom, email…" className={field} />
+        </label>
+        <button type="submit" disabled={!brand.trim() || busy} className="flex h-11 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+          <Send className="h-4 w-4" /> Proposer
+        </button>
+      </form>
+    </Overlay>
   );
 }
