@@ -1,28 +1,34 @@
 /**
- * Projet Claude « Assistant mail/message - TTP Creators » (claude.ai, compte de Marc).
- * Le bouton Claude de la fiche contact ouvre ce projet et copie le contexte du contact,
- * à coller (Cmd+V) dans la conversation.
+ * Bouton « Demander à Claude » de la fiche contact : ouvre la conversation Claude de Marc
+ * avec le contexte du contact.
  */
-export const CLAUDE_MAIL_PROJECT_URL = "https://claude.ai/project/019f77a8-6eef-7680-9b95-532e9cc66f6e";
-/** Même projet dans l'app Claude pour ordinateur (lien `claude://claude.ai/…`, géré par l'app). */
-export const CLAUDE_MAIL_PROJECT_APP = "claude://claude.ai/project/019f77a8-6eef-7680-9b95-532e9cc66f6e";
-
 /**
- * Ouvre le projet dans l'app Claude. Si l'app n'est pas là (autre ordinateur, téléphone),
- * la page garde la main : on ouvre alors le site claude.ai au bout d'un court instant.
+ * Conversation Claude choisie par Marc (2026-10-22) pour les demandes depuis une fiche contact.
+ * Ouverte dans l'app Claude du Mac (`claude://claude.ai/…`, schéma déclaré par l'app), sinon
+ * sur le site. Le contexte du contact est copié dans le presse-papiers et passé aussi en `?q=`
+ * (pris en compte si Claude le permet pour une conversation existante ; sinon Cmd+V).
  */
-export function openClaudeProject(): void {
+const CLAUDE_CHAT_PATH = "claude.ai/chat/fc5ff6e6-5ee9-4a82-9c6b-0ada019bac5f";
+
+function withText(base: string, text?: string): string {
+  if (!text) return base;
+  const q = encodeURIComponent(text);
+  return q.length <= 6000 ? `${base}?q=${q}` : base;
+}
+
+/** Ouvre la conversation dans l'app Claude ; si l'app ne répond pas, le site au bout d'1,5 s. */
+export function openClaudeProject(text?: string): void {
   let left = false;
   const away = () => {
     left = true;
   };
   window.addEventListener("blur", away, { once: true });
   document.addEventListener("visibilitychange", away, { once: true });
-  window.location.href = CLAUDE_MAIL_PROJECT_APP;
+  window.location.href = withText(`claude://${CLAUDE_CHAT_PATH}`, text);
   window.setTimeout(() => {
     window.removeEventListener("blur", away);
     document.removeEventListener("visibilitychange", away);
-    if (!left && document.visibilityState === "visible") window.open(CLAUDE_MAIL_PROJECT_URL, "_blank", "noopener");
+    if (!left && document.visibilityState === "visible") window.open(withText(`https://${CLAUDE_CHAT_PATH}`, text), "_blank", "noopener");
   }, 1500);
 }
 

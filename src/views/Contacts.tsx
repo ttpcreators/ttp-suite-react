@@ -1400,18 +1400,18 @@ export function Contacts() {
             <primary.icon className="h-4 w-4 shrink-0" />
             <span className="truncate">{primary.label}</span>
           </button>
-          {/* Claude : ouvre le projet « Assistant mail/message - TTP Creators » et copie la fiche. */}
+          {/* Claude : ouvre la conversation Claude de Marc avec le contexte du contact (copié aussi). */}
           <button
             type="button"
             onClick={() => {
               const text = contactBrief({ ...row, touches: sortTouches(parseTouches(row.touches)), mails: history ?? [] });
               // Copie lancée pendant le clic (sinon le navigateur la refuse), puis ouverture du projet.
               const copied = navigator.clipboard?.writeText(text).then(() => true, () => false) ?? Promise.resolve(false);
-              openClaudeProject();
+              openClaudeProject(text);
               void copied.then((ok) => toast(ok ? "Fiche copiée : colle-la dans Claude (Cmd+V) puis écris ta demande" : "Projet Claude ouvert"));
             }}
             className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-field px-4 text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover"
-            title="Ouvre le projet « Assistant mail/message » dans l'app Claude et copie les infos de ce contact"
+            title="Ouvre ta conversation Claude avec les infos de ce contact"
           >
             <ClaudeLogo className="h-[18px] w-[18px] shrink-0" /> Demander à Claude
           </button>
