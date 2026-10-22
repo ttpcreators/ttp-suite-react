@@ -1,11 +1,12 @@
 /*
- * « Créer le devis » (page Tarifs) : la page Facturation s'ouvre sur une nouvelle facture
+ * « Créer le devis » (page Tarifs) ou « Créer la facture » (fiche collab) : la page Facturation s'ouvre sur une nouvelle facture
  * en brouillon, lignes déjà remplies. Le passage se fait par le stockage de l'onglet
  * (lu une fois, puis effacé).
  */
 import type { QuoteLine } from "./pricingForm";
 
-export type InvoicePrefill = { creator: string; brand: string; lines: QuoteLine[] };
+/** `collabId` : facture créée depuis une collab (reliée à l'enregistrement). */
+export type InvoicePrefill = { creator: string; brand: string; lines: QuoteLine[]; collabId?: string };
 
 const KEY = "ttp:invoice-prefill";
 

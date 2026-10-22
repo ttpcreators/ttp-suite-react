@@ -27,6 +27,8 @@ import { openLater } from "@/lib/openLater";
 import { notifyCreator } from "@/lib/push";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
+import { CollabField, ObjectCollabLink } from "@/components/collab-links";
+import { setCollabLink } from "@/lib/collabLinksDb";
 
 type Row = {
   id: string;
@@ -162,6 +164,7 @@ export function Briefs() {
     };
   }, [live]);
 
+  const [collabId, setCollabId] = useState(""); // formulaire : collab à relier (après le SQL collab_id)
   const submit = async () => {
     if (!brand.trim()) {
       toast("Renseigne la marque");
@@ -186,6 +189,8 @@ export function Briefs() {
       return;
     }
     setRows([created as unknown as Row, ...(rows ?? [])]);
+    if (collabId) void setCollabLink("briefs", (created as { id: string }).id, collabId);
+    setCollabId("");
     if (creator) notifyCreator("brief", creator, brand.trim()); // push au créateur (s'il a activé les notifs)
     toast("Brief ajouté ✓");
     setFormOpen(false);
@@ -374,6 +379,7 @@ export function Briefs() {
             <TextField label="Objectif" value={editObjectif} onChange={setEditObjectif} />
             <TextField label="Budget" value={editBudget} onChange={setEditBudget} />
             <CreatorPickerField label="Créateur" value={editCreator} onChange={setEditCreator} creators={creators} />
+            <ObjectCollabLink table="briefs" id={row.id} creator={editCreator || row.creator} withLabel />
             <AutoGrowTextField
               label="Script"
               value={editScript}
@@ -616,6 +622,7 @@ export function Briefs() {
       <InlineForm open={formOpen} title="Nouveau brief" onClose={() => setFormOpen(false)} onSubmit={submit}>
         <TextField label="Marque" value={brand} onChange={setBrand} />
         <CreatorPickerField label="Créateur" value={creator} onChange={setCreator} creators={creators} />
+        <CollabField value={collabId} onChange={setCollabId} creator={creator} />
         <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />
         <TextField label="Échéance" type="date" value={due} onChange={setDue} />
         <TextField label="Budget" value={budget} onChange={setBudget} />

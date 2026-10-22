@@ -33,6 +33,8 @@ import { useStickyState } from "@/lib/useStickyState";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { insertMention, mentionAt, mentionSuggestions, parseQuickAdd } from "@/lib/todoQuickAdd";
 import { creatorsLabel, creatorsPatch, hasCreator, joinNames, todoCreators } from "@/lib/todoCreators";
+import { CollabField, ObjectCollabLink } from "@/components/collab-links";
+import { setCollabLink } from "@/lib/collabLinksDb";
 import { noteCreatorsColumn, todosHaveCreators } from "@/lib/todoCreatorsDb";
 import { appendPoint, latestPoint, parsePoints, progressColumnMissing } from "@/lib/todoProgress";
 import { TONE_DOT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
@@ -236,6 +238,7 @@ export function Todo() {
   const [due, setDue] = useState("");
   const [priority, setPriority] = useState<Priority>("moyenne");
   const [creatorList, setCreatorList] = useState<string[]>([]);
+  const [collabId, setCollabId] = useState(""); // formulaire : collab à relier (après le SQL collab_id)
   // Bouton dédié « Tâche agence » : ouvre le formulaire verrouillé sur l'agence
   // (aucun créateur) et masque le champ « Pour qui » → tâche interne, sans créateur.
   const [forceAgency, setForceAgency] = useState(false);
@@ -581,7 +584,10 @@ export function Todo() {
       toast("Renseigne la tâche");
       return;
     }
-    if (!(await createTodo({ text, descr, note, due, priority, creators: forceAgency ? [] : creatorList }))) return;
+    const created = await createTodo({ text, descr, note, due, priority, creators: forceAgency ? [] : creatorList });
+    if (!created) return;
+    if (collabId) void setCollabLink("todos", created.id, collabId);
+    setCollabId("");
     setFormOpen(false);
     setForceAgency(false);
     setText("");
@@ -1028,6 +1034,7 @@ export function Todo() {
             </InfoRow>
             {created && !Number.isNaN(created.getTime()) && <InfoRow label="Créée le">{fmtDay(created)}</InfoRow>}
             <InfoRow label="Demandée par">{row.source === "creator" ? "Le créateur" : "L'agence"}</InfoRow>
+            <ObjectCollabLink table="todos" id={row.id} creator={row.creator} asRow />
             {row.done && formatDone(row) && <InfoRow label="Faite">{formatDone(row)}</InfoRow>}
           </dl>
 
@@ -1581,6 +1588,7 @@ export function Todo() {
                 <CreatorMultiPicker ariaLabel="Pour qui" value={creatorList} onChange={setCreatorList} creators={creators} agencyLabel="L'agence (tâche interne)" />
               </Field>
             )}
+            <CollabField value={collabId} onChange={setCollabId} creator={forceAgency ? null : creatorList[0] ?? null} />
           </InlineForm>
 
           {/* Tâches qui reviennent chaque semaine (date et auteur de chaque « Fait ») */}

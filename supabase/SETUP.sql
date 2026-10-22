@@ -760,6 +760,47 @@ create trigger collabs_log_step_ins after insert on public.collabs
 drop trigger if exists collabs_log_step_upd on public.collabs;
 create trigger collabs_log_step_upd after update on public.collabs
   for each row execute function public.collabs_log_step();
+
+-- Collab au centre (sql/2026-10-23-collab-id.sql) : collab_id sur factures, tâches,
+-- rendez-vous, briefs, gifting ; un créateur ne relie qu'à SES collabs.
+-- 1) Colonne collab_id + index
+alter table public.invoices add column if not exists collab_id uuid references public.collabs(id) on delete set null;
+alter table public.todos    add column if not exists collab_id uuid references public.collabs(id) on delete set null;
+alter table public.events   add column if not exists collab_id uuid references public.collabs(id) on delete set null;
+alter table public.briefs   add column if not exists collab_id uuid references public.collabs(id) on delete set null;
+alter table public.gifting  add column if not exists collab_id uuid references public.collabs(id) on delete set null;
+create index if not exists invoices_collab_idx on public.invoices (collab_id);
+create index if not exists todos_collab_idx    on public.todos (collab_id);
+create index if not exists events_collab_idx   on public.events (collab_id);
+create index if not exists briefs_collab_idx   on public.briefs (collab_id);
+create index if not exists gifting_collab_idx  on public.gifting (collab_id);
+
+-- 2) Garde : hors agence, collab_id doit être vide ou une collab du créateur connecté.
+create or replace function public.collab_link_guard() returns trigger
+  language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if new.collab_id is null or public.is_agency() then return new; end if;
+  if tg_op = 'UPDATE' and new.collab_id is not distinct from old.collab_id then return new; end if;
+  if not exists (select 1 from public.collabs c where c.id = new.collab_id and c.creator = public.my_creator()) then
+    raise exception 'collab_id interdit' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists todos_collab_link_guard on public.todos;
+create trigger todos_collab_link_guard before insert or update of collab_id on public.todos
+  for each row execute function public.collab_link_guard();
+drop trigger if exists events_collab_link_guard on public.events;
+create trigger events_collab_link_guard before insert or update of collab_id on public.events
+  for each row execute function public.collab_link_guard();
+drop trigger if exists gifting_collab_link_guard on public.gifting;
+create trigger gifting_collab_link_guard before insert or update of collab_id on public.gifting
+  for each row execute function public.collab_link_guard();
+drop trigger if exists briefs_collab_link_guard on public.briefs;
+create trigger briefs_collab_link_guard before insert or update of collab_id on public.briefs
+  for each row execute function public.collab_link_guard();
+drop trigger if exists invoices_collab_link_guard on public.invoices;
+create trigger invoices_collab_link_guard before insert or update of collab_id on public.invoices
+  for each row execute function public.collab_link_guard();
 -- events : un événement peut concerner plusieurs créateurs (who = "Nom A, Nom B").
 -- Le créateur le voit si son nom figure dans la liste.
 -- LECTURE : le créateur voit tout évènement où son nom figure (liste "Nom A, Nom B").

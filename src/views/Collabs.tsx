@@ -33,6 +33,10 @@ import { igRefresh, igWhyText, postKind, useIgColumn, type IgCollab } from "@/li
 import type { TtCollab } from "@/lib/tiktok";
 import type { YtCollab } from "@/lib/youtube";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
+import { CollabLinkedPanel, useCollabAutoTasks } from "@/components/collab-links";
+import { createStepTask } from "@/lib/collabLinksDb";
+import { autoTaskFor, cachetAmount } from "@/lib/collabLinks";
+import { putInvoicePrefill } from "@/lib/invoicePrefill";
 
 type Row = {
   id: string;
@@ -427,6 +431,21 @@ export function Collabs() {
     setEditId(null);
   };
 
+  // Tâche créée à chaque étape franchie (réglage d'équipe, activé par défaut).
+  const [autoTasks] = useCollabAutoTasks();
+  // « Créer la facture » : Facturation s'ouvre sur un brouillon prérempli (marque, cachet, créateur).
+  const createInvoice = (row: Row) => {
+    const amount = cachetAmount(row.cachet);
+    const ok = putInvoicePrefill({
+      creator: row.creator ?? "",
+      brand: row.brand,
+      lines: [{ label: row.deliverables?.trim() || row.title?.trim() || `Collab ${row.brand}`, unit: amount }],
+      collabId: row.id,
+    });
+    if (!ok) return toast("Impossible de préparer la facture");
+    window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "facturation" }));
+  };
+
   // Faire avancer / positionner l'étape (le trigger côté base date le changement).
   const setStep = async (row: Row, next: number) => {
     const clamped = Math.min(STEP_COUNT, Math.max(1, next));
@@ -439,7 +458,15 @@ export function Collabs() {
     }
     // Reflète le changement dans l'historique local (pour les dates, sans re-fetch).
     setSteps((m) => ({ ...m, [row.id]: [...(m[row.id] ?? []), { collab_id: row.id, step: clamped, reached_at: new Date().toISOString() }] }));
-    if (clamped > prev) toast(`Étape ${clamped} · ${stepDef(clamped).short} ✓`);
+    if (clamped > prev) {
+      toast(`Étape ${clamped} · ${stepDef(clamped).short} ✓`);
+      if (autoTasks && autoTaskFor(clamped, row)) {
+        void createStepTask({ id: row.id, brand: row.brand, creator: row.creator, step: clamped, status: row.status }, clamped).then((r) => {
+          if (r === "created") toast(`Tâche ajoutée : ${autoTaskFor(clamped, row)?.text ?? ""}`);
+          else if (r === "error") toast("Tâche de l'étape non créée");
+        });
+      }
+    }
   };
 
   const setStatus = async (row: Row, status: string) => {
@@ -982,6 +1009,11 @@ export function Collabs() {
             )}
           </div>
         </div>
+
+        <CollabLinkedPanel
+          collab={{ id: row.id, brand: row.brand, creator: row.creator, step: row.step, status: row.status, cachet: row.cachet }}
+          onCreateInvoice={() => createInvoice(row)}
+        />
       </div>
     );
   };
