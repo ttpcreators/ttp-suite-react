@@ -2,7 +2,7 @@
  * Onglets de l'espace créateur (logique PURE, testable sous Node).
  *
  * Mobile d'abord : 4 onglets dans la barre du bas (Accueil, Missions, Gains,
- * Messages ; demande de Marc, 2026-10-22). Toutes les autres rubriques (À faire,
+ * Mail ; demande de Marc, 2026-10-22). Toutes les autres rubriques (À faire,
  * Idées, documents, profil, réglages…) sont dans le Menu, ouvert par l'avatar en
  * haut à droite (id « profil »), et dans le menu ordinateur. L'onglet choisi est mémorisé (`ttp:cs-tab`) ; les
  * anciennes valeurs (« briefs », « facturation »…) sont ramenées vers le nouvel

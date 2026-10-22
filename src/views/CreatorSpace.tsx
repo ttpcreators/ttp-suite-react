@@ -148,7 +148,7 @@ const CREATOR_GROUPS: {
       { id: "missions", label: "Missions", icon: TtpMission },
       { id: "gains", label: "Gains", icon: TtpGains },
       // Messages (boîte mail) : section activée par l'agence (sinon un message l'explique).
-      { id: "mails", label: "Messages", icon: TtpMail },
+      { id: "mails", label: "Mail", icon: TtpMail },
       // Le Menu : ouvert par l'avatar en haut à droite au téléphone.
       { id: "profil", label: "Menu", icon: TtpMore },
     ],

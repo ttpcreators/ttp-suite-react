@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CS_ALL_TABS, CS_MAIN_TABS, csFavoritesShown, normalizeCsTab, ownerTab, parseCsFavorites, toggleCsFavorite } from "./creatorTabs";
 
 describe("onglets de l'espace créateur", () => {
-  it("4 onglets en bas : Accueil, Missions, Gains, Messages", () => {
+  it("4 onglets en bas : Accueil, Missions, Gains, Mail", () => {
     expect([...CS_MAIN_TABS]).toEqual(["accueil", "missions", "gains", "mails"]);
     expect(CS_ALL_TABS).toContain("profil"); // le Menu (avatar)
   });
