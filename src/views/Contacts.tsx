@@ -38,7 +38,7 @@ import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { NewMailDialog } from "@/components/mail-tools";
 import { ClaudeLogo } from "@/components/icons/claude-logo";
-import { contactBrief, openClaudeProject } from "@/lib/claudeProject";
+import { contactBrief, openClaude, personalChat } from "@/lib/claudeProject";
 import { DEFAULT_TEMPLATES, mailtoHref, readProspectTemplates, suggestedMail, type MailTemplate } from "@/lib/mailTemplates";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -509,6 +509,15 @@ export function Contacts() {
   const selected = inspected ?? sheetRow;
 
   const [history, setHistory] = useState<MailMsg[] | null>(null);
+  // Compte connecté : « Demander à Claude » ouvre la conversation personnelle de Marc, sinon un nouveau Claude.
+  const [myEmail, setMyEmail] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void supabase.auth.getSession().then(({ data }) => alive && setMyEmail(data.session?.user.email ?? null));
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [historyBusy, setHistoryBusy] = useState(false);
   useEffect(() => {
     setHistory(null);
@@ -1407,11 +1416,12 @@ export function Contacts() {
               const text = contactBrief({ ...row, touches: sortTouches(parseTouches(row.touches)), mails: history ?? [] });
               // Copie lancée pendant le clic (sinon le navigateur la refuse), puis ouverture du projet.
               const copied = navigator.clipboard?.writeText(text).then(() => true, () => false) ?? Promise.resolve(false);
-              openClaudeProject(text);
-              void copied.then((ok) => toast(ok ? "Fiche copiée : colle-la dans Claude (Cmd+V) puis écris ta demande" : "Projet Claude ouvert"));
+              const chat = personalChat(myEmail);
+              openClaude(chat, text);
+              void copied.then((ok) => toast(chat ? (ok ? "Fiche copiée : colle-la dans ta conversation (Cmd+V)" : "Conversation Claude ouverte") : "Claude ouvert avec la fiche du contact"));
             }}
             className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-field px-4 text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover"
-            title="Ouvre ta conversation Claude avec les infos de ce contact"
+            title="Ouvre Claude avec les infos de ce contact"
           >
             <ClaudeLogo className="h-[18px] w-[18px] shrink-0" /> Demander à Claude
           </button>
