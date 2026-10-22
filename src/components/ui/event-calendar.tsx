@@ -1,3 +1,4 @@
+import { CollabField, ObjectCollabLink } from "@/components/collab-links";
 import { useStickyState } from "@/lib/useStickyState";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, X, Trash2 } from "@/components/icons";
@@ -21,6 +22,8 @@ export type Ev = {
   type: string;
   who: string | null;
   description?: string | null;
+  /** Création seulement : collab à relier (agence, après le SQL collab_id). Jamais écrit dans `events` tel quel. */
+  collabId?: string;
   /** Catégorie de la puce. Par défaut "event" (vrai rendez-vous, modifiable).
    *  "brief" / "todo" / "facture" = échéances superposées en LECTURE SEULE (clic = navigation). */
   kind?: "event" | "brief" | "todo" | "facture" | "post";
@@ -189,6 +192,8 @@ type Draft = {
   type: string;
   who: string;
   description: string;
+  /** Nouvel événement : collab à relier (Planning agence). */
+  collabId?: string;
   /** Lecture seule (ex. évènement partagé que l'utilisateur ne peut pas modifier). */
   readOnly?: boolean;
 };
@@ -210,6 +215,7 @@ export function EventCalendar({
   isReadOnly,
   fixedWho,
   navAdd = false,
+  collabLinks = false,
 }: {
   events: Ev[];
   /** Peuvent renvoyer false (ou Promise<false>) en cas d'échec : la modale reste ouverte. */
@@ -225,6 +231,8 @@ export function EventCalendar({
   creators?: { name: string; photo_url?: string | null }[];
   /** Téléphone : « + » dans la barre de titre pour créer un événement (Planning agence). */
   navAdd?: boolean;
+  /** Champ « Collab » (Planning agence seulement, jamais l'espace créateur). */
+  collabLinks?: boolean;
 }) {
   const t = useT();
   const phone = useIsPhone();
@@ -324,7 +332,7 @@ export function EventCalendar({
     };
     setBusy(true);
     try {
-      const ok = draft.id ? await onUpdate(draft.id, payload) : await onCreate(payload);
+      const ok = draft.id ? await onUpdate(draft.id, payload) : await onCreate(collabLinks && draft.collabId ? { ...payload, collabId: draft.collabId } : payload);
       if (ok !== false) setDraft(null);
     } finally {
       setBusy(false);
@@ -446,6 +454,7 @@ export function EventCalendar({
           creators={creators}
           whoExtra={whoExtra}
           hideWho={fixedWho !== undefined}
+          collabLinks={collabLinks}
           busy={busy}
           onSubmit={submit}
           onDelete={remove}
@@ -758,6 +767,7 @@ function EventModal({
   creators,
   whoExtra,
   hideWho = false,
+  collabLinks = false,
   busy = false,
   onSubmit,
   onDelete,
@@ -768,6 +778,7 @@ function EventModal({
   creators: { name: string; photo_url?: string | null }[];
   whoExtra: string[];
   hideWho?: boolean;
+  collabLinks?: boolean;
   busy?: boolean;
   onSubmit: () => void;
   onDelete: () => void;
@@ -849,6 +860,13 @@ function EventModal({
                   extraNames={whoExtra}
                 />
               </Field>
+            )}
+            {collabLinks && !draft.readOnly && (
+              draft.id ? (
+                <ObjectCollabLink table="events" id={draft.id} creator={(draft.who ?? "").split(",")[0]?.trim() || null} withLabel />
+              ) : (
+                <CollabField value={draft.collabId ?? ""} onChange={(v) => setDraft({ ...draft, collabId: v || undefined })} creator={(draft.who ?? "").split(",")[0]?.trim() || null} />
+              )
             )}
           </div>
           <TextAreaField

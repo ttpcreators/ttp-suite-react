@@ -1,4 +1,6 @@
 import { takeInvoicePrefill } from "@/lib/invoicePrefill";
+import { setCollabLink } from "@/lib/collabLinksDb";
+import { CollabField, ObjectCollabLink } from "@/components/collab-links";
 import { fmtDay, toISODate } from "@/lib/dates";
 import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -103,6 +105,8 @@ type Draft = Details & {
   brand: string;
   creator: string;
   status: InvoiceStatus;
+  /** Nouvelle facture : collab à relier à l'enregistrement (« Créer la facture » d'une collab, champ « Collab »). */
+  collabId?: string;
   /** Saisie brute des champs numériques (clé « id:qty », « id:unit », « commission ») :
    *  garde « 1250, » tel quel pendant la frappe, sinon la virgule disparaît. */
   raw?: Record<string, string>;
@@ -559,7 +563,7 @@ export function Facturation() {
     if (!p) return;
     const blank = blankDraft(rows.map((r) => r.ref), ((appData.invoiceBankAccounts as BankAccount[]) ?? [])[0]?.id ?? "");
     const lines = p.lines.map((l) => ({ id: uid(), label: l.label, qty: 1, unit: l.unit }));
-    setDraft({ ...blank, creator: p.creator, brand: p.brand, items: lines.length ? lines : blank.items });
+    setDraft({ ...blank, creator: p.creator, brand: p.brand, items: lines.length ? lines : blank.items, ...(p.collabId ? { collabId: p.collabId } : {}) });
     setBaseline(draftSnapshot(blank));
     setConfirmLeave(false);
   }, [rows, appData]);
@@ -770,6 +774,8 @@ export function Facturation() {
       const createdId = id;
       setDraft((d) => (d ? { ...d, id: createdId, ref: summary.ref } : d));
     }
+    // Facture créée depuis une collab (ou champ « Collab ») : lien enregistré à part, jamais bloquant.
+    if (draft.collabId && id) void setCollabLink("invoices", id, draft.collabId);
     // Prévient le créateur (si notifs activées) quand SA facture passe à « Payée ».
     if (!wasPaid && draft.status === "payee" && draft.creator) {
       notifyCreator("invoice", draft.creator, `Ta facture ${draft.ref} a été réglée 💸`);
@@ -1054,6 +1060,11 @@ export function Facturation() {
                     }
                   />
                 </Field>
+                {draft.id ? (
+                  <ObjectCollabLink table="invoices" id={draft.id} creator={draft.creator} withLabel />
+                ) : (
+                  <CollabField value={draft.collabId ?? ""} onChange={(v) => setDraft({ ...draft, collabId: v || undefined })} creator={draft.creator} />
+                )}
                 <TextField label="Client (nom ou société)" value={draft.clientName} onChange={(v) => setDraft({ ...draft, clientName: v })} />
                 <TextField label="Email du client" type="email" value={draft.clientEmail} onChange={(v) => setDraft({ ...draft, clientEmail: v })} placeholder="compta@marque.com" />
                 <TextField label="Adresse de facturation" value={draft.clientAddress} onChange={(v) => setDraft({ ...draft, clientAddress: v })} className="sm:col-span-2" />

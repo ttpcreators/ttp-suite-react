@@ -22,6 +22,8 @@ import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
+import { CollabField, ObjectCollabLink } from "@/components/collab-links";
+import { setCollabLink } from "@/lib/collabLinksDb";
 
 type GView = "cards" | "list";
 
@@ -126,6 +128,7 @@ export function Gifting() {
     setFormOpen(true);
   }
 
+  const [collabId, setCollabId] = useState(""); // formulaire : collab à relier (après le SQL collab_id)
   async function save() {
     const b = brand.trim();
     const p = product.trim();
@@ -161,10 +164,12 @@ export function Gifting() {
       const created = await dbInsert("gifting", { ...patch, source: "agency", sort_order: nextOrder(list) });
       if (!created) return toast("Erreur — réessaie");
       setRows((prev) => [created as unknown as GiftRow, ...(prev ?? [])]);
+      if (collabId) void setCollabLink("gifting", (created as { id: string }).id, collabId);
       if (patch.creator) notifyCreator("gift", patch.creator, b || p);
       toast("Gifting ajouté ✓");
     }
     resetForm();
+    setCollabId("");
     setFormOpen(false);
   }
 
@@ -266,6 +271,11 @@ export function Gifting() {
         submitLabel={editId ? "Enregistrer" : "Ajouter"}
       >
         <CreatorPickerField label="Créateur" value={creator} onChange={setCreator} creators={creators} className="sm:min-w-[170px] flex-1" />
+        {editId ? (
+          <ObjectCollabLink table="gifting" id={editId} creator={creator} withLabel className="sm:min-w-[170px] flex-1" />
+        ) : (
+          <CollabField value={collabId} onChange={setCollabId} creator={creator} className="sm:min-w-[170px] flex-1" />
+        )}
         <TextField label="Marque / expéditeur" value={brand} onChange={setBrand} placeholder="ex Sézane" className="sm:min-w-[170px] flex-1" />
         <TextField label="Produit / cadeau" value={product} onChange={setProduct} placeholder="ex Sac cuir + foulard" className="sm:min-w-[200px] flex-[2]" />
         <TextField label="Valeur estimée" value={value} onChange={setValue} placeholder="ex ≈ 220 €" className="sm:min-w-[120px] flex-1" />
