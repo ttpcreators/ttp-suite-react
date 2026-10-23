@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState, useRef, 
 import { lazyImport } from "@/lib/appUpdate";
 import { SIGNATURE_KEY, setCurrentSignature, validSig } from "@/lib/agencySignature";
 import { Loader } from "@/components/ui/loader";
-import { Moon, Sun, X, Columns2, SquareArrowRight, Plus, LogOut, Star, StarOff, Trash2 } from "@/components/icons";
+import { Moon, Sun, X, Columns2, SquareArrowRight, Plus, LogOut, Star, StarOff, Trash2, Eye } from "@/components/icons";
 import { cn, titleCase } from "@/lib/utils";
 import { restoreTabs, navigateTab, addTab, closeTab as closeTabState } from "@/lib/tabs";
 import type { Session } from "@supabase/supabase-js";
@@ -38,7 +38,7 @@ import { ThemeContext } from "@/lib/theme";
 import { AgencyAvatar, MyName } from "@/components/ui/agency-avatar";
 import { useIsPhone } from "@/lib/iosUi";
 import { NavActionSlotContext } from "@/lib/navAction";
-import { IosBackButton, IosBarIcon, IosNavBar, IosTabBar, type IosTab } from "@/components/mobile/ios-shell";
+import { IosBackButton, IosBarIcon, IosGroup, IosNavBar, IosRow, IosTabBar, type IosTab } from "@/components/mobile/ios-shell";
 import { MoreScreen } from "@/components/mobile/more-screen";
 import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
 import { OfflineBanner } from "@/components/mobile/offline-banner";
@@ -1021,6 +1021,11 @@ export default function App() {
                             onToggleTheme={toggleTheme}
                             onExit={logout}
                             badges={navBadges}
+                            before={
+                              <IosGroup>
+                                <IosRow icon={Eye} label="Espace créateurs" detail="Aperçu" onClick={() => changeSpace("portal")} />
+                              </IosGroup>
+                            }
                           />
                         </PageFrame>
                       ) : iosPhone && phoneScreen === "search" ? (

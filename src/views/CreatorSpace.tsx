@@ -22,7 +22,8 @@ import { openLater } from "@/lib/openLater";
 import { consumeIgReturn, igConnect, igDisconnect, type IgCreator } from "@/lib/instagram";
 import { consumeTtReturn, ttConnect, ttDisconnect, type TtCreator } from "@/lib/tiktok";
 import { consumeYtReturn, ytConnect, ytDisconnect, type YtCreator } from "@/lib/youtube";
-import { AddButton, InlineForm, TextField, SelectField, AutoGrowTextField, Picker } from "@/components/ui/form";
+import { AddButton, InlineForm, TextField, SelectField, AutoGrowTextField } from "@/components/ui/form";
+import { CreatorPicker } from "@/components/ui/creator-picker";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
@@ -371,7 +372,7 @@ export function CreatorSpace({
    * on rend le VRAI espace créateur (mêmes onglets/données, via RLS agence) avec une
    * bannière de sortie + un sélecteur de créateur. Absent = espace créateur normal.
    */
-  preview?: { onExit: () => void; onPick: (n: string) => void; creators: { id: string; name: string }[] };
+  preview?: { onExit: () => void; onPick: (n: string) => void; creators: { id: string; name: string; photo_url?: string | null }[] };
 }) {
   // En preview, les boutons « déconnexion » du menu deviennent « revenir à l'agence ».
   const exitAction = preview ? preview.onExit : onLogout;
@@ -2171,20 +2172,50 @@ export function CreatorSpace({
     {/* Retour au toucher (espace créateur) : chaque bouton s'enfonce un instant, 200 ms, ease-out. */}
     <style>{`@media (prefers-reduced-motion: no-preference){.cs-press button{transition:transform .2s ease-out,background-color .2s ease-out,color .2s ease-out,opacity .2s ease-out}.cs-press button:not(:disabled):active{transform:scale(.97)}}`}</style>
     <div className={iosPhone ? "cs-press app-frame flex h-[100dvh] flex-col bg-background" : "cs-press app-frame flex h-[100dvh] flex-col bg-background p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-[14px] md:pt-[14px] md:pb-[14px]"}>
-      {preview && (
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-primary/30 bg-primary/[0.06] px-3 py-2">
-          <div className="flex items-center gap-2 text-[12px] font-semibold text-primary">
-            <Eye className="h-4 w-4" /> Mode agence · tu visualises l'espace de {firstName}
-          </div>
-          <div className="flex items-center gap-2">
-            <Picker size="sm" ariaLabel="Changer de créateur" className="min-w-[170px]" value={name} onChange={preview.onPick}
-              options={preview.creators.map((cr) => ({ value: cr.name, label: titleCase(cr.name) }))} />
+      {/* Aperçu par l'agence : barre sobre en haut (ordinateur), pastille flottante au-dessus
+          de la barre d'onglets (téléphone) ; choix de la créatrice avec photos, retour à l'agence. */}
+      {preview && !iosPhone && (
+        <div className="mb-2 flex items-center gap-3 rounded-[16px] border border-border bg-surface px-3 py-2 shadow-sm shadow-black/[0.03]">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+            <Eye className="h-4 w-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Aperçu agence</span>
+            <span className="block truncate text-[14px] font-semibold text-foreground">Espace de {firstName}</span>
+          </span>
+          <CreatorPicker
+            value={name}
+            onChange={(n) => n && preview.onPick(n)}
+            creators={preview.creators}
+            ariaLabel="Changer de créateur"
+            className="w-[220px] shrink-0"
+          />
+          <button
+            type="button"
+            onClick={preview.onExit}
+            className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            <ArrowLeft className="h-4 w-4" /> Espace agence
+          </button>
+        </div>
+      )}
+      {preview && iosPhone && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-[60] flex justify-center px-4">
+          <div className="pointer-events-auto flex max-w-full items-center gap-2 rounded-full border border-border bg-surface/95 py-1.5 pl-3 pr-1.5 shadow-lg backdrop-blur">
+            <Eye className="h-4 w-4 shrink-0 text-primary" />
+            <CreatorPicker
+              value={name}
+              onChange={(n) => n && preview.onPick(n)}
+              creators={preview.creators}
+              ariaLabel="Changer de créateur"
+              className="w-[170px]"
+            />
             <button
               type="button"
               onClick={preview.onExit}
-              className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-primary px-3.5 text-[14px] font-semibold text-primary-foreground"
             >
-              <ArrowLeft className="h-3.5 w-3.5" /> Espace agence
+              <ArrowLeft className="h-4 w-4" /> Agence
             </button>
           </div>
         </div>
@@ -2270,7 +2301,7 @@ export function CreatorSpace({
         <main
           ref={mainRef}
           onScroll={iosPhone ? (e) => { lastScroll.current = e.currentTarget.scrollTop; } : undefined}
-          className={cn("flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-clip px-4 pb-4 [&>*]:shrink-0 md:px-6 md:pb-8 md:pt-6", iosPhone ? "pt-0" : "pt-4")}
+          className={cn("flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-clip px-4 pb-4 [&>*]:shrink-0 md:px-6 md:pb-8 md:pt-6", iosPhone ? "pt-0" : "pt-4", preview && iosPhone && "pb-20")}
         >
           {iosPhone && (
             <IosNavBar
