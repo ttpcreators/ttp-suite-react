@@ -19,7 +19,8 @@ import { HelpTip } from "@/components/ui/help-tip";
 
 const PageSlotContext = createContext<HTMLElement | null>(null);
 
-export function PageFrame({ title, hint, children }: { title: ReactNode; hint?: string; children: ReactNode }) {
+/** `hideHead` : masque le titre sans démonter la page (ex. un échange ouvert en plein écran). */
+export function PageFrame({ title, hint, hideHead, children }: { title: ReactNode; hint?: string; hideHead?: boolean; children: ReactNode }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   // Emplacement vide à l'écran (téléphone : ses actions sont montées dans la barre de titre) :
   // plus d'écart sous le titre, la page remonte.
@@ -32,7 +33,7 @@ export function PageFrame({ title, hint, children }: { title: ReactNode; hint?: 
   }, [slot]);
   return (
     <>
-      <div className={`mb-4 flex flex-wrap items-center justify-between gap-x-4 md:mb-7 ${slotEmpty ? "gap-y-0" : "gap-y-3"}`}>
+      <div className={hideHead ? "hidden" : `mb-4 flex flex-wrap items-center justify-between gap-x-4 md:mb-7 ${slotEmpty ? "gap-y-0" : "gap-y-3"}`}>
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
             <h1 className="page-title min-w-0 text-[28px] font-bold leading-tight tracking-[-0.025em] md:text-title">{title}</h1>

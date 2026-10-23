@@ -40,6 +40,7 @@ import sanitizeHtml from "npm:sanitize-html@2.13.0";
 import { getServiceClient, getAccessToken, corsHeaders } from "../_shared/google.ts";
 import { serviceAccountToken, talentAddress } from "../_shared/gmailBox.ts";
 import { gfetch, classifyGmail, mapPool, charsetOf, decodeGmailBody, type GfetchOptions } from "../_shared/gfetch.ts";
+import { REACTION_MIME, parseReactionJson } from "../_shared/emailReaction.ts";
 import {
   addressList, aliasQuery, aliasRefused, brandAddressOf, brandOf, cleanComment, concernedMessages, displayName, header, isVisibleMessage,
   maskAgencyAddresses, normEmail, parseChoice, threadMatches,
@@ -172,6 +173,8 @@ type Inline = { cid: string; mimeType: string; size: number; attachmentId?: stri
 function extract(payload: GPart | undefined, messageId: string) {
   let html = "";
   let text = "";
+  // Réaction emoji au format Gmail (partie dédiée) : l'app l'affiche en pastille, pas en mail.
+  let reaction: string | null = null;
   const attachments: { messageId: string; attachmentId: string; filename: string; mimeType: string; size: number }[] = [];
   // Images intégrées au corps (logos de signature…) : référencées par « cid: » dans le HTML.
   const inline: Inline[] = [];
@@ -188,10 +191,11 @@ function extract(payload: GPart | undefined, messageId: string) {
       });
     } else if (p.mimeType === "text/html" && p.body?.data && !html) html = decodeGmailBody(p.body.data, charsetOf(p.headers));
     else if (p.mimeType === "text/plain" && p.body?.data && !text) text = decodeGmailBody(p.body.data, charsetOf(p.headers));
+    else if (p.mimeType === REACTION_MIME && p.body?.data && !reaction) reaction = parseReactionJson(decodeGmailBody(p.body.data, charsetOf(p.headers)));
     for (const c of p.parts ?? []) walk(c);
   };
   walk(payload);
-  return { html, text, attachments, inline };
+  return { html, text, attachments, inline, reaction };
 }
 
 const INLINE_MAX_BYTES = 600 * 1024; // par image
@@ -472,6 +476,7 @@ async function threadView(sb: Sb, token: string, s: Settings, threadId: string) 
       text: html ? "" : text,
       attachments,
       ...(seen && !seen.has(m.id) ? { hiddenFromCreator: true } : {}),
+      ...(ex.reaction ? { reaction: ex.reaction } : {}),
     });
   }
   const [{ data: row }, { data: notes }] = await Promise.all([

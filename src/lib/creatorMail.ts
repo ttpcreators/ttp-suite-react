@@ -54,6 +54,8 @@ export type MailMessage = {
   ts: number; html: string; text: string; attachments: MailAttachment[];
   /** Vue agence : réponse envoyée sans l'adresse du créateur, il ne la voit pas dans son espace. */
   hiddenFromCreator?: boolean;
+  /** Emoji si ce message EST une réaction (creator-mail, 2026-10-24). */
+  reaction?: string;
 };
 export type MailNote = {
   id: string; body: string; created_at: string; agency_read_at: string | null;
@@ -503,7 +505,7 @@ export function allowRemoteImages(messageId: string) {
  * masqué tant que `showQuoted` est faux. `remoteImages: false` (ou la marque
  * NO_REMOTE_IMAGES) : seules les images intégrées au mail (data:, cid:) s'affichent.
  */
-export function mailDocument(html: string, text: string, showQuoted: boolean, opts: { remoteImages?: boolean } = {}): string {
+export function mailDocument(html: string, text: string, showQuoted: boolean, opts: { remoteImages?: boolean; fontPx?: number } = {}): string {
   const marked = html.startsWith(NO_REMOTE_IMAGES);
   const src = marked ? html.slice(NO_REMOTE_IMAGES.length) : html;
   const remote = opts.remoteImages !== false && !marked;
@@ -521,7 +523,7 @@ export function mailDocument(html: string, text: string, showQuoted: boolean, op
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${remote ? "https: data: cid:" : "data: cid:"}; style-src 'unsafe-inline'; font-src data:;">
 <base target="_blank">
 <style>
-  html,body{margin:0;padding:0;background:#fff;color:#18181b;font:14px/1.6 Inter,-apple-system,system-ui,sans-serif;word-wrap:break-word;overflow-wrap:anywhere}
+  html,body{margin:0;padding:0;background:#fff;color:#18181b;font:${opts.fontPx ?? 14}px/1.6 Inter,-apple-system,system-ui,sans-serif;word-wrap:break-word;overflow-wrap:anywhere}
   body>*:first-child{margin-top:0} body>*:last-child{margin-bottom:0}
   img{max-width:100%;height:auto} table{max-width:100%} pre{white-space:pre-wrap;font:inherit;margin:0}
   a{color:#2563eb} blockquote{margin:8px 0;padding-left:12px;border-left:2px solid #e4e4e7;color:#71717a}

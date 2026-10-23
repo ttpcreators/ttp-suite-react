@@ -63,11 +63,11 @@ function FileBadge({ name }: { name: string }) {
 }
 
 /** Corps d'un mail : iframe isolée (aucun script), hauteur suivie en continu. */
-export function MailBody({ m, showQuoted }: { m: MailMessage; showQuoted: boolean }) {
+export function MailBody({ m, showQuoted, fontPx }: { m: MailMessage; showQuoted: boolean; fontPx?: number }) {
   const t = useT();
   const ref = useRef<HTMLIFrameElement>(null);
   const [h, setH] = useState(80);
-  const doc = useMemo(() => mailDocument(m.html, m.text, showQuoted), [m.html, m.text, showQuoted]);
+  const doc = useMemo(() => mailDocument(m.html, m.text, showQuoted, fontPx ? { fontPx } : {}), [m.html, m.text, showQuoted, fontPx]);
   const obs = useRef<ResizeObserver | null>(null);
   const onLoad = useCallback(() => {
     const d = ref.current?.contentDocument;
@@ -253,8 +253,9 @@ export function MailItem({
   actions?: MailAction[]; footer?: ReactNode; index?: number;
   /** Sous le corps du message, avant le pied (ex. réactions emoji). */
   extra?: ReactNode;
-  /** « plain » : sans cadre, façon client mail (page Mails agence). */
-  variant?: "card" | "plain";
+  /** « plain » : sans cadre, façon client mail (page Mails agence).
+   *  « conversation » : bulles arrondies façon app Mail iOS, texte en 16 px (espace créateur). */
+  variant?: "card" | "plain" | "conversation";
 }) {
   const [showQuoted, setShowQuoted] = useState(false);
   const snippet = useMemo(() => mailSnippet(m.html, m.text), [m.html, m.text]);
@@ -269,6 +270,70 @@ export function MailItem({
     const run = onDownload ? Promise.resolve(onDownload(a)) : threadId ? downloadAttachment(threadId, a, creator) : null;
     return run?.catch((e) => toast((e as Error).message));
   };
+
+  if (variant === "conversation") {
+    if (!open) {
+      return (
+        <motion.button
+          {...enter}
+          type="button"
+          onClick={onToggle}
+          className="flex w-full items-center gap-3 rounded-2xl bg-surface px-3.5 py-3 text-left transition-colors hover:bg-rowhover"
+        >
+          <Initial name={m.from} email={m.fromEmail} agency={m.fromAgency} size="sm" />
+          <span className="min-w-0 flex-1">
+            <span className="flex min-w-0 items-baseline gap-2">
+              <span className="min-w-0 truncate text-[15px] font-semibold text-foreground">{name}</span>
+              <span className="ml-auto shrink-0 text-[13px] tabular-nums text-faint">{fmtWhen(m.ts, locale)}</span>
+            </span>
+            <span className="block truncate text-[14px] text-muted-foreground">{snippet}</span>
+          </span>
+        </motion.button>
+      );
+    }
+    return (
+      <motion.article {...enter} className="flex flex-col rounded-2xl bg-surface p-3.5 sm:p-4">
+        <div className="flex cursor-pointer items-start gap-3" onClick={headClick(onToggle)}>
+          <Initial name={m.from} email={m.fromEmail} agency={m.fromAgency} size="md" />
+          <span className="min-w-0 flex-1">
+            <span className="flex min-w-0 items-baseline gap-2">
+              <span data-sel className="min-w-0 cursor-text select-text truncate text-[15px] font-semibold text-foreground">{name}</span>
+              <span className="ml-auto shrink-0 text-[13px] tabular-nums text-faint">{fmtWhen(m.ts, locale)}</span>
+            </span>
+            <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] text-faint">
+              {!m.fromAgency && m.fromEmail && <CopyAddress email={m.fromEmail} className="text-[13px] text-muted-foreground" />}
+              <Recipients m={m} className="" />
+            </span>
+          </span>
+        </div>
+        <div className="mt-3 overflow-hidden rounded-xl bg-white dark:p-3">
+          <MailBody m={m} showQuoted={showQuoted} fontPx={16} />
+        </div>
+        {hasQuote(m.html) && <QuoteToggle shown={showQuoted} onClick={() => setShowQuoted((v) => !v)} />}
+        {files.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {files.map((a) => (
+              <button
+                key={a.attachmentId}
+                type="button"
+                onClick={() => void download(a)}
+                title={t("Télécharger {name}", { name: a.filename })}
+                className="flex min-h-11 max-w-full items-center gap-2.5 rounded-full bg-field py-1.5 pl-1.5 pr-3.5 text-left transition-colors hover:bg-rowhover"
+              >
+                <FileBadge name={a.filename} />
+                <span className="min-w-0">
+                  <span className="block truncate text-[14px] font-medium text-foreground">{a.filename}</span>
+                  <span className="block text-[12px] text-muted-foreground">{fmtSize(a.size)}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+        {extra}
+        {footer && <div className="mt-4">{footer}</div>}
+      </motion.article>
+    );
+  }
 
   if (variant === "plain") {
     if (!open) {
