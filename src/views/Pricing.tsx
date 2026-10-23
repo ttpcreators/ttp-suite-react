@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Copy, Users, Sparkles, SlidersHorizontal, RotateCcw, Minus, Search, Check, FileText, Handshake, ChevronDown, PenLine, Send, X } from "@/components/icons";
+import { Plus, Trash2, Copy, Users, Sparkles, SlidersHorizontal, RotateCcw, Minus, Search, Check, FileText, Handshake, ChevronDown, PenLine, Send, X, Image as ImageIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { useCreators, type CreatorLite } from "@/lib/useCreators";
 import { formatEuro, getAppState, invalidateAppState, saveAppStateKey, useAppState } from "@/lib/appState";
@@ -24,6 +24,10 @@ import { putInvoicePrefill } from "@/lib/invoicePrefill";
 import { saveProposal } from "@/lib/prospectsDb";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { fmtCompact } from "@/lib/timeSeries";
+import { audienceForAll, creatorAudience, NO_AUD, VIDEO_FORMATS, viewsFor, type Aud, type AudienceRow } from "@/lib/creatorAudience";
+import { mergeRates, ratesForItems, type KitRate, type RatesMerge } from "@/lib/mediakitRates";
+import { readKit, writeKitRates } from "@/lib/mediakitRatesDb";
+import { KitRatesDialog } from "@/components/kit-rates-dialog";
 
 /** Créateur choisi : aucun (recherche), saisie libre, ou l'id d'un créateur du roster. */
 const NONE = "";
@@ -39,9 +43,6 @@ const BLOCK_TITLE = "mb-3 text-[14px] font-semibold text-foreground";
 type Mode = "influence" | "ugc";
 /** Un livrable d'influence : plateforme, format, quantité. L'audience vit par plateforme. */
 type InfRow = { id: string; platform: PlatKey; format: string; qty: number };
-/** Audience d'une plateforme (saisie une fois, ou reprise de la fiche du créateur). */
-type Aud = { followers: string; er: string; views: string; storyViews: string; shortViews?: string; src: string; erBase: "views" | "followers" };
-const NO_AUD: Aud = { followers: "", er: "", views: "", storyViews: "", src: "", erBase: "followers" };
 const SRC_LABEL: Record<string, string> = {
   tiktok: "Vues mesurées sur TikTok (12 dernières vidéos)",
   youtube: "Vues mesurées sur YouTube (dernières vidéos, Shorts à part)",
@@ -51,20 +52,11 @@ const SRC_LABEL: Record<string, string> = {
   fiche: "Chiffres de la fiche",
   saisie: "Vues saisies à la main",
 };
-/** Formats dont les vues moyennes de la plateforme mesurent un contenu. */
-const VIDEO_FORMATS = ["reel", "video", "integration", "dedicated"];
 type UgcRow = { id: string; type: string; qty: number };
 type CollabPick = { id: string; brand: string | null; creator: string | null; cachet: string | null; deliverables: string | null };
 
 const platLabel = (k: PlatKey) => INF_PLATFORMS.find((p) => p.key === k)?.label ?? k;
 const fold = (s: string | null | undefined) => (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-
-/** Vues attendues d'un livrable : celles de la plateforme pour le format qu'elles mesurent, sinon vide (estimées). */
-function viewsFor(r: InfRow, a: Aud): string {
-  if (r.format === "story") return a.storyViews;
-  if (r.format === "short") return a.shortViews ?? a.views;
-  return VIDEO_FORMATS.includes(r.format) ? a.views : "";
-}
 
 export function Pricing() {
   const creators = useCreators();
@@ -92,6 +84,9 @@ export function Pricing() {
   const [pendingCollab, setPendingCollab] = useState<CollabPick | null>(null);
   // « Proposer » : la proposition va sur le prospect de la marque (Prospection).
   const [proposeOpen, setProposeOpen] = useState(false);
+  // « Mettre au kit » : prix d'un contenu de chaque livrable → grille du media kit du créateur.
+  const [kitPlan, setKitPlan] = useState<{ computed: KitRate[]; merge: RatesMerge; hideRates: boolean } | null>(null);
+  const [kitBusy, setKitBusy] = useState(false);
 
   // Charge le créateur → audience par plateforme (vraies données d'abord) + niche.
   useEffect(() => {
@@ -104,52 +99,13 @@ export function Pricing() {
     let alive = true;
     supabase.from("creators").select("*").eq("id", creatorId).limit(1).then(({ data }) => {
       if (!alive) return;
-      type Kit = { key?: string; followers?: string; er?: string; avgViews?: string; avgStoryViews?: string };
-      const row = data?.[0] as {
-        followers?: string; er?: string; niche?: string; mediakit?: { platforms?: Kit[] };
-        ig?: { followers?: number; er?: number | null; link?: unknown; insights?: { reelViews?: number | null } | null } | null;
-        tt?: { followers?: number | null; avgViews?: number | null; er?: number | null; link?: unknown } | null;
-        yt?: { subscribers?: number | null; avgViews?: number | null; avgShortViews?: number | null; er?: number | null; link?: unknown } | null;
-      } | undefined;
+      const row = data?.[0] as AudienceRow | undefined;
       if (!row) return;
-      const map: Record<string, Aud> = {};
-      for (const p of row.mediakit?.platforms ?? []) {
-        if (!p.key) continue;
-        // ER des media kits = calculateur d'engagement (sur les vues des 30 derniers jours).
-        map[p.key] = { followers: String(p.followers ?? ""), er: String(p.er ?? ""), views: String(p.avgViews ?? ""), storyViews: String(p.avgStoryViews ?? ""), src: p.avgViews ? "kit" : "fiche", erBase: "views" };
-      }
-      // Instagram du jour (Meta) : abonnés et engagement public (sur les abonnés).
-      if (row.ig?.followers) {
-        const k = map.instagram ?? NO_AUD;
-        const rv = row.ig.link ? row.ig.insights?.reelViews : null;
-        map.instagram = {
-          ...k, followers: String(row.ig.followers), er: row.ig.er != null ? String(row.ig.er) : k.er, erBase: row.ig.er != null ? "followers" : k.erBase,
-          views: rv ? String(rv) : k.views, src: rv ? "igreels" : k.views ? "kit" : "instagram",
-        };
-      }
-      // TikTok connecté : vraies vues moyennes et engagement sur les vues.
-      if (row.tt?.link && row.tt.followers) {
-        map.tiktok = { ...(map.tiktok ?? NO_AUD), followers: String(row.tt.followers), views: row.tt.avgViews ? String(row.tt.avgViews) : "", er: row.tt.er != null ? String(row.tt.er) : "", erBase: "views", src: row.tt.avgViews ? "tiktok" : "fiche" };
-      }
-      // YouTube connecté : vraies vues moyennes (vidéos longues pour les intégrations, Shorts à part).
-      if (row.yt?.link && (row.yt.subscribers || row.yt.avgViews || row.yt.avgShortViews)) {
-        const k = map.youtube ?? NO_AUD;
-        const real = !!(row.yt.avgViews || row.yt.avgShortViews);
-        map.youtube = {
-          ...k, followers: row.yt.subscribers ? String(row.yt.subscribers) : k.followers,
-          views: row.yt.avgViews ? String(row.yt.avgViews) : k.views, shortViews: row.yt.avgShortViews ? String(row.yt.avgShortViews) : "",
-          er: row.yt.er != null ? String(row.yt.er) : k.er, erBase: "views", src: real ? "youtube" : k.src || "fiche",
-        };
-      }
-      // Plateformes sans chiffres dédiés : ceux de la fiche (abonnés, engagement).
-      const fb: Aud = { ...NO_AUD, followers: String(row.followers ?? ""), er: String(row.er ?? ""), src: "fiche", erBase: "views" };
-      const full: Record<string, Aud> = {};
-      for (const p of INF_PLATFORMS) full[p.key] = map[p.key] ?? fb;
-      setAud(full);
-      // Niche du créateur, sinon Lifestyle (×1) : jamais celle du créateur précédent.
-      const n = (row.niche ?? "").toLowerCase().trim();
-      const match = n ? NICHES.find((x) => x.label.toLowerCase().includes(n) || n.includes(x.value)) : undefined;
-      setNiche(match?.value ?? "lifestyle");
+      // Plateformes sans chiffres dédiés : ceux de la fiche ; niche de la fiche, sinon Lifestyle
+      // (jamais celle du créateur précédent). Logique partagée : src/lib/creatorAudience.ts.
+      const a = creatorAudience(row);
+      setAud(audienceForAll(a));
+      setNiche(a.niche);
     });
     return () => { alive = false; };
   }, [creatorId]);
@@ -159,7 +115,7 @@ export function Pricing() {
 
   const infItems: InfItem[] = infRows.map((r) => {
     const a = audOf(r.platform);
-    return { platform: r.platform, format: r.format, qty: r.qty, followers: parseFollowers(a.followers), er: parseEr(a.er), views: parseFollowers(viewsFor(r, a)), erBase: a.erBase };
+    return { platform: r.platform, format: r.format, qty: r.qty, followers: parseFollowers(a.followers), er: parseEr(a.er), views: parseFollowers(viewsFor(r.format, a)), erBase: a.erBase };
   });
   const inf = useMemo(() => computeInfluence(infItems, nicheMult(niche), infOpts, rates ?? {}), [infItems, niche, infOpts, rates]);
   const ugcItems: UgcItem[] = ugcRows.map((r) => ({ type: r.type, qty: r.qty }));
@@ -296,6 +252,30 @@ export function Pricing() {
     toast(r.created ? `Prospect ${brand.trim()} créé ✓` : `Proposition ajoutée à ${brand.trim()} ✓`);
     return true;
   };
+  // Seulement pour un créateur du roster, en influence (le kit liste des prix par contenu).
+  const kitCreatorId = mode === "influence" && selName ? creatorId : null;
+  const prepareKit = async () => {
+    if (!kitCreatorId || kitBusy) return;
+    const computed = ratesForItems(infRows.map((r) => ({ platform: r.platform, format: r.format, aud: audOf(r.platform) })), niche, rates ?? {});
+    if (!computed.length) return toast("Rien à mettre au kit : il manque l'audience");
+    setKitBusy(true);
+    const kit = await readKit(kitCreatorId);
+    setKitBusy(false);
+    if (!kit) return toast("Media kit illisible, réessaie");
+    const merge = mergeRates(Array.isArray(kit.rates) ? kit.rates : [], computed);
+    if (!merge.added.length && !merge.replaced.length) return toast(`Le media kit de ${who} a déjà ces tarifs`);
+    setKitPlan({ computed, merge, hideRates: !!kit.hideRates });
+  };
+  const applyKit = async () => {
+    if (!kitPlan || !kitCreatorId || kitBusy) return;
+    setKitBusy(true);
+    const done = await writeKitRates(kitCreatorId, kitPlan.computed);
+    setKitBusy(false);
+    if (!done) return toast("Erreur, réessaie");
+    setKitPlan(null);
+    toast(`Tarifs ajoutés au media kit de ${who}. En ligne au prochain passage du site.`);
+  };
+
   const writeCollab = async (c: CollabPick) => {
     const ok = await dbUpdate("collabs", c.id, { cachet: collabCachet, deliverables: collabDeliverables || null });
     toast(ok ? "Collab mise à jour ✓" : "Erreur, réessaie");
@@ -535,6 +515,7 @@ export function Pricing() {
             onCopy={copyQuote}
             onQuote={createQuote}
             onPropose={() => setProposeOpen(true)}
+            onKit={kitCreatorId ? () => void prepareKit() : undefined}
             collabOpen={collabOpen}
             onCollabOpen={(v) => {
               setCollabOpen(v);
@@ -567,6 +548,7 @@ export function Pricing() {
             onCopy={copyQuote}
             onQuote={createQuote}
             onPropose={() => setProposeOpen(true)}
+            onKit={kitCreatorId ? () => void prepareKit() : undefined}
             collabOpen={collabOpen}
             onCollabOpen={(v) => {
               setCollabOpen(v);
@@ -591,6 +573,17 @@ export function Pricing() {
         />
       )}
 
+      {kitPlan && (
+        <KitRatesDialog
+          title={`Media kit de ${who}`}
+          merge={kitPlan.merge}
+          hideRates={kitPlan.hideRates}
+          confirmLabel="Mettre au kit"
+          busy={kitBusy}
+          onConfirm={() => void applyKit()}
+          onClose={() => setKitPlan(null)}
+        />
+      )}
       {pendingCollab && (
         <ConfirmDialog
           title="Ajouter à la collab"
@@ -765,11 +758,13 @@ function ResultDetail({ mode, lines, majorations, result, remisePct, onRemise }:
 }
 
 /** Actions du résultat : copier la proposition, créer le devis, l'écrire dans une collab. */
-function Actions({ disabled, onCopy, onQuote, onPropose, collabOpen, onCollabOpen, collabs, onPickCollab }: {
+function Actions({ disabled, onCopy, onQuote, onPropose, onKit, collabOpen, onCollabOpen, collabs, onPickCollab }: {
   disabled: boolean;
   onCopy: () => void;
   onQuote: () => void;
   onPropose: () => void;
+  /** Créateur du roster choisi : écrire les prix dans son media kit. */
+  onKit?: () => void;
   collabOpen: boolean;
   onCollabOpen: (v: boolean) => void;
   collabs: CollabPick[] | null;
@@ -787,6 +782,11 @@ function Actions({ disabled, onCopy, onQuote, onPropose, collabOpen, onCollabOpe
       <button type="button" disabled={disabled} onClick={onPropose} className={cn(btn, "bg-field text-foreground hover:bg-rowhover")} title="Enregistre ce prix comme proposition sur le prospect de la marque (Prospection)">
         <Send className="h-4 w-4" /> Proposer
       </button>
+      {onKit && (
+        <button type="button" disabled={disabled} onClick={onKit} className={cn(btn, "bg-field text-foreground hover:bg-rowhover")} title="Écrit le prix d'un contenu de chaque livrable dans la grille de tarifs de son media kit">
+          <ImageIcon className="h-4 w-4" /> Mettre au kit
+        </button>
+      )}
       <Popover open={collabOpen} onOpenChange={onCollabOpen}>
         <PopoverTrigger asChild>
           <button type="button" disabled={disabled} className={cn(btn, "bg-field text-foreground hover:bg-rowhover")} title="Écrit le cachet et les livrables dans une collab en cours">
