@@ -27,6 +27,7 @@ import {
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
 import { BarButton, RailButton, SearchField, ToolButton, UnreadToggle, mailCardBtnCls, mailCardCls, mailCardListCls, pillCls } from "@/components/mail-shell";
 import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
+import { useEdgeSwipeBack } from "@/lib/useEdgeSwipeBack";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { useLocale, useT, type Vars } from "@/lib/i18n";
 
@@ -388,6 +389,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const locale = useLocale();
   const asAgency = mode !== "creator";
   const forCreator = asAgency ? creator : undefined;
+  // Espace créateur (et son aperçu par l'agence) : mise en page simple, façon app Mail.
+  const simple: boolean = mode !== "agency";
   const creatorName = prettyName(titleCase(creator));
   const [threads, setThreads] = useState<MailThreadLite[] | null>(null);
   const [configured, setConfigured] = useState(true);
@@ -894,6 +897,10 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     };
   }, [mode, creator, feedEl, unreadSig, threadIdForRead]);
 
+  // Lecture d'un échange (espace créateur) : retour par glissement depuis le bord gauche.
+  const viewRef = useRef<HTMLElement>(null);
+  useEdgeSwipeBack(viewRef, openId ? () => setOpenId(null) : null, simple);
+
   // Images distantes masquées côté créateur (et dans l'aperçu agence) tant qu'on ne les demande pas.
   const blockImages = mode !== "agency";
   const remoteImgIds = useMemo(
@@ -998,7 +1005,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   );
 
   // ── Même barre, en ligne (téléphone, tablette) ; masquée pendant la lecture ──
-  const pills = (
+  const pills = simple ? null : (
     <nav aria-label={t("Ranger les échanges")} className={cn("flex gap-1.5 overflow-x-auto border-b border-border p-2 [scrollbar-width:none] lg:hidden", openId && "max-lg:hidden")}>
       {FILTERS.map((f) => {
         const on = filter === f.key;
@@ -1020,8 +1027,68 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
   // ── Liste ────────────────────────────────────────────────────────────────
   const listBroken = !!err && threads.length === 0; // rien à montrer : l'erreur prend la place
+  // Espace créateur : pastilles fines, « À traiter » d'abord s'il y en a.
+  const simpleOrder = [
+    ...(counts.atraiter > 0 ? (["atraiter"] as const) : []),
+    "tous", "encours", "valide", "refuse",
+    ...(counts.atraiter > 0 ? [] : (["atraiter"] as const)),
+    "envoyes",
+  ] as const;
+  const simpleHead = (
+    <div className={cn("shrink-0 px-4 pb-2 pt-1 lg:pt-3", openId && "max-lg:hidden")}>
+      {/* Son adresse, discrète, copiable d'un tap */}
+      {shownAddresses.length > 0 && (
+        <div className="flex min-w-0 flex-col gap-0.5">
+          {shownAddresses.map((a) => (
+            <button key={a} type="button" onClick={() => void copyAddress(a)} aria-label={t("Copier {address}", { address: a })}
+              className="flex min-h-11 min-w-0 items-center gap-2 text-left text-[15px] text-muted-foreground transition-colors hover:text-foreground">
+              <AtSign className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 truncate">{a}</span>
+              <span className="shrink-0 font-semibold text-primary">{t("Copier")}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="mt-1 flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <SearchField size="sm" value={query} onChange={setQuery} placeholder={t("Rechercher une marque, un objet…")} />
+        </div>
+        {mode === "creator" && unseen.size > 0 && (
+          <UnreadToggle label={t("Non lus")} on={!!unreadOnly} count={unseen.size} onToggle={() => setUnreadOnly((c) => (c ? null : new Set(unseen)))} />
+        )}
+        <ToolButton icon={RefreshCw} label={t("Actualiser")} spin={loading} disabled={loading} onClick={retry} className="h-11 w-11 max-lg:hidden" />
+      </div>
+      <nav aria-label={t("Ranger les échanges")} className="-mx-4 mt-2 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none]">
+        {simpleOrder.map((key) => {
+          const f = FILTERS.find((x) => x.key === key)!;
+          const on = filter === key;
+          return (
+            <button key={key} type="button" onClick={() => setFilter(key)} aria-pressed={on}
+              className={cn("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[14px] font-medium transition-colors",
+                on ? "bg-foreground text-background" : "bg-field text-muted-foreground hover:text-foreground")}>
+              {t(f.short)}
+              {key !== "envoyes" && <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{counts[key]}</span>}
+            </button>
+          );
+        })}
+      </nav>
+      {/* Démarchage de l'agence : une ligne compacte, un tap filtre ces échanges */}
+      {pitch.pitched > 0 && filter !== "envoyes" && (
+        <button type="button" onClick={() => setFilter(filter === "demarchage" ? "tous" : "demarchage")} aria-pressed={filter === "demarchage"}
+          className="mt-2 flex min-h-11 w-full items-center gap-2 text-left text-[14px] text-muted-foreground transition-colors hover:text-foreground">
+          <Megaphone className="h-4 w-4 shrink-0 text-primary" />
+          <span className="min-w-0 flex-1 leading-snug">
+            {t(pitch.pitched > 1 ? "Ton agence a démarché {n} marques ce mois-ci" : "Ton agence a démarché {n} marque ce mois-ci", { n: pitch.pitched })}
+            {pitch.replied > 0 && t(pitch.replied > 1 ? " · {n} ont répondu" : " · {n} a répondu", { n: pitch.replied })}
+          </span>
+          <span className="shrink-0 font-semibold text-primary">{filter === "demarchage" ? t("Tout voir") : t("Voir")}</span>
+        </button>
+      )}
+    </div>
+  );
   const list = (
-    <section className={cn("flex min-h-0 min-w-0 flex-col bg-panel lg:border-r lg:border-border", openId && "max-lg:hidden")}>
+    <section className={cn("flex min-h-0 min-w-0 flex-col lg:border-r lg:border-border", simple ? "lg:bg-panel" : "bg-panel", openId && "max-lg:hidden")}>
+      {simple ? simpleHead : (
       <div className="shrink-0 px-3 pb-2.5 pt-3 sm:px-4">
         <div className="flex items-center gap-1">
           <h2 className="min-w-0 flex-1 truncate pl-1 text-[17px] font-semibold tracking-tight text-foreground">
@@ -1104,7 +1171,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           {mode === "creator" && unseen.size > 0 && <span className="font-medium text-foreground">{t("· {n} à voir", { n: unseen.size })}</span>}
         </p>
       </div>
-      {help && <div className="px-4 pb-3 sm:px-5 lg:hidden">{helpBanner}</div>}
+      )}
+      {help && !simple && <div className="px-4 pb-3 sm:px-5 lg:hidden">{helpBanner}</div>}
       {err && !listBroken && (
         <div className="flex items-center gap-2 border-t border-border px-4 py-2.5 text-[12px] text-dangertext sm:px-5">
           <CircleAlert className="h-3.5 w-3.5 shrink-0" />
@@ -1119,11 +1187,45 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           <button type="button" onClick={retry} disabled={loading} className="shrink-0 font-semibold text-foreground underline-offset-2 hover:underline disabled:opacity-50">{t("Réessayer")}</button>
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto border-t border-border" aria-busy={loading}>
+      <div className={cn("min-h-0 flex-1 overflow-y-auto border-t border-border", simple && "max-lg:border-t-0")} aria-busy={loading}>
         {listBroken ? (
           <StatePanel icon={CircleAlert} text={unavailable} action={{ label: t("Réessayer"), busy: loading, onClick: retry }} />
         ) : shown.length === 0 ? (
           <StatePanel icon={Mail} text={emptyText} />
+        ) : simple ? (
+          <ul className="flex flex-col">
+            {shown.map((th) => {
+              const on = openId === th.id;
+              const fresh = unseen.has(th.id) || activity.keys.has(`mail:${th.id}`);
+              return (
+                <li key={th.id} className="border-b border-border/70 last:border-b-0">
+                  <button type="button" aria-current={on || undefined} onClick={() => openFromList(th.id)}
+                    className={cn("flex w-full min-w-0 items-start gap-3 px-4 py-3 text-left transition-colors", on ? "bg-primary/[0.07]" : "hover:bg-rowhover")}>
+                    <span className="relative shrink-0 pt-0.5">
+                      <Initial name={prettyName(th.brand)} email={th.brandEmail} size="md" />
+                      {fresh && <span aria-label={t("Nouveau")} className="absolute -left-2.5 top-1/2 size-2 -translate-y-1/2 rounded-full bg-primary" />}
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="flex min-w-0 items-baseline gap-2">
+                        <span className={cn("min-w-0 flex-1 truncate text-[16px] text-foreground", fresh ? "font-bold" : "font-semibold")}>{prettyName(th.brand) || t("Marque")}</span>
+                        <span className={cn("shrink-0 text-[13px] tabular-nums", fresh ? "font-semibold text-primary" : "text-faint")}>{fmtWhen(th.ts, locale)}</span>
+                      </span>
+                      <span className={cn("min-w-0 truncate text-[14px]", fresh ? "font-semibold text-foreground" : "text-foreground/85")}>{th.subject || t("(sans objet)")}</span>
+                      <span className="line-clamp-2 text-[14px] leading-snug text-muted-foreground">{th.excerpt}</span>
+                      <span className="mt-1 flex min-w-0 items-center gap-3">
+                        <StatusDot status={th.status} by={th.decidedBy ? authorName(th.decidedBy, mode, creatorName, t) : undefined} />
+                        {th.notes > 0 && (
+                          <span className="flex shrink-0 items-center gap-1 text-[12px] text-muted-foreground" title={t("Remarques")}>
+                            <MessageSquare className="h-3 w-3" />{th.notes}
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         ) : (
           <ul className={mailCardListCls}>
             {shown.map((th) => {
@@ -1170,7 +1272,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
   // ── Lecture d'un échange ─────────────────────────────────────────────────
   const view = openId ? (
-    <section className="flex min-h-0 min-w-0 flex-col">
+    <section ref={viewRef} className="flex min-h-0 min-w-0 flex-col">
       <div className="flex h-14 shrink-0 items-center gap-0.5 border-b border-border px-2 sm:px-3">
         <ToolButton icon={ArrowLeft} label={t("Retour à la liste")} onClick={() => setOpenId(null)} />
         <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5">
@@ -1328,7 +1430,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
   // Messagerie en un seul panneau : barre d'icônes, liste, lecture (hauteur fixe sur ordinateur).
   return (
-    <div ref={rootRef} className="flex min-w-0 scroll-mt-[calc(env(safe-area-inset-top)+3.5rem)] flex-col overflow-hidden rounded-2xl border border-border bg-surface lg:grid lg:h-[min(900px,calc(100dvh-150px))] lg:min-h-[560px] lg:grid-cols-[72px_minmax(300px,340px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[72px_minmax(330px,400px)_minmax(0,1fr)]">
+    <div ref={rootRef} className={cn("flex min-w-0 scroll-mt-[calc(env(safe-area-inset-top)+3.5rem)] flex-col overflow-hidden rounded-2xl border border-border bg-surface", simple && "max-lg:-mx-4 max-lg:rounded-none max-lg:border-x-0 max-lg:border-t-0 max-lg:border-b-0 max-lg:bg-transparent", "lg:grid lg:h-[min(900px,calc(100dvh-150px))] lg:min-h-[560px] lg:grid-cols-[72px_minmax(300px,340px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[72px_minmax(330px,400px)_minmax(0,1fr)]")}>
       {rail}
       {pills}
       {list}

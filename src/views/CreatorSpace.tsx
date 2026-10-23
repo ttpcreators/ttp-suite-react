@@ -198,6 +198,18 @@ const CREATOR_GROUPS: {
 ];
 const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = CREATOR_GROUPS.flatMap((g) => g.items);
 
+/**
+ * Plus (Menu, téléphone) : le reste de l'espace rangé par usage, en lignes. Pas les onglets de
+ * la barre du bas (Accueil, Collabs, To-do, Mail), ni Mes informations (carte du haut).
+ */
+const MENU_GROUPS: { id: string; title: string; items: Tab[] }[] = [
+  { id: "argent", title: "Mon argent", items: ["gains"] },
+  { id: "travail", title: "Mon travail", items: ["aujourdhui", "ideas", "gifting", "planning"] },
+  { id: "chiffres", title: "Mes chiffres", items: ["evolution", "rapport", "debrief", "roadmap"] },
+  { id: "documents", title: "Mes documents", items: ["mediakit", "documents", "contacts"] },
+  { id: "aide", title: "Aide", items: ["guide"] },
+];
+
 /** Carte animée (identique à l'Aperçu agence : entrée douce + délai décalé). */
 function Card({ children, className = "", index = 0, onClick }: { children: ReactNode; className?: string; index?: number; onClick?: () => void }) {
   return (
@@ -441,6 +453,7 @@ export function CreatorSpace({
       return next;
     });
   const isFavorable = (id: string) => (CS_FAVORABLE as readonly string[]).includes(id);
+  const [favEdit, setFavEdit] = useState(false); // Plus : étoiles visibles seulement en modification
   // Affichés : Accueil, À faire, Idées et Mail d'office (pour tous les créateurs), puis ceux choisis.
   const shownFavs = useMemo(() => csFavoritesShown(favs), [favs]);
   // Mission ouverte (fiche) dans l'onglet Missions ; null = la liste.
@@ -3747,46 +3760,44 @@ export function CreatorSpace({
                 </button>
               </div>
 
-              {/* Toutes les rubriques en tuiles, juste sous le profil : tout l'espace en un geste.
-                  L'étoile met une rubrique en favori (tête du menu et Accueil). */}
-              <section aria-label={t("Toutes tes rubriques")} className="flex flex-col gap-4">
-                {navGroups
-                  .map((g) => ({ ...g, items: (g.id === "favoris" ? g.items : g.items.filter((i) => !isMainTab(i.id))).filter((i) => i.id !== "profil" && i.id !== "accueil") }))
-                  .filter((g) => g.items.length > 0)
-                  .map((g) => (
-                    <div key={g.id}>
-                      <h2 className="mb-2 px-1 text-[13px] font-semibold uppercase tracking-[0.04em] text-muted-foreground">{g.label}</h2>
-                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-                        {g.items.map((it) => {
-                          const fav = shownFavs.includes(it.id);
-                          return (
-                            <div key={`${g.id}-${it.id}`} className="relative">
-                              <button
-                                type="button"
-                                onClick={() => setTab(it.id)}
-                                className="flex min-h-[76px] w-full flex-col items-start justify-between gap-2 rounded-[16px] bg-surface p-3 text-left shadow-sm transition-transform active:scale-[0.97]"
-                              >
-                                <it.icon className="h-[22px] w-[22px] text-primary" />
-                                <span className="w-full text-[13px] font-medium leading-tight text-foreground [overflow-wrap:anywhere]">{it.label}</span>
-                              </button>
-                              {isFavorable(it.id) && (
-                                <button
-                                  type="button"
-                                  onClick={() => toggleFav(it.id)}
-                                  aria-pressed={fav}
-                                  aria-label={fav ? t("Retirer des favoris") : t("Ajouter aux favoris")}
-                                  className={cn("absolute right-0 top-0 grid h-11 w-11 place-items-center", fav ? "text-primary" : "text-faint")}
-                                >
-                                  <TtpStar className="h-4 w-4" fill={fav ? "currentColor" : "none"} />
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+              {/* Le reste de l'espace, rangé par usage, en lignes façon Réglages iOS. Les onglets de la
+                  barre du bas (Accueil, Collabs, To-do, Mail) n'y sont pas répétés. */}
+              {MENU_GROUPS.map((g) => (
+                <IosGroup key={g.id} title={t(g.title)}>
+                  {g.items.map((id) => {
+                    const it = navTabs.find((x) => x.id === id);
+                    if (!it) return null;
+                    const fav = shownFavs.includes(it.id);
+                    const badge = "badge" in it && it.badge ? (
+                      <span className="grid h-6 min-w-6 shrink-0 place-items-center rounded-full bg-primary px-1.5 text-[12px] font-semibold tabular-nums text-primary-foreground">{it.badge}</span>
+                    ) : null;
+                    const star = favEdit && isFavorable(it.id) ? (
+                      <button
+                        type="button"
+                        onClick={() => toggleFav(it.id)}
+                        aria-pressed={fav}
+                        aria-label={fav ? t("Retirer des favoris") : t("Ajouter aux favoris")}
+                        className={cn("grid h-11 w-11 shrink-0 place-items-center", fav ? "text-primary" : "text-faint")}
+                      >
+                        <TtpStar className="h-5 w-5" fill={fav ? "currentColor" : "none"} />
+                      </button>
+                    ) : null;
+                    return <IosRow key={it.id} icon={it.icon} label={it.label} onClick={() => setTab(it.id)} right={star ?? badge ?? undefined} chevron={!star} />;
+                  })}
+                  {g.id === "chiffres" && <IosRow icon={BarChart3} label={t("Envoyer mes stats")} onClick={() => setStatsModalOpen(true)} />}
+                </IosGroup>
+              ))}
+              {/* Favoris (menu de l'ordinateur et Accueil) : les étoiles n'apparaissent qu'en modification */}
+              <div className="-mt-3 flex flex-col px-4">
+                <button type="button" onClick={() => setFavEdit((v) => !v)} className="flex min-h-11 items-center self-start text-[15px] font-medium text-primary">
+                  {favEdit ? t("Terminé") : t("Modifier les favoris")}
+                </button>
+                {favEdit && <p className="text-[13px] leading-snug text-muted-foreground">{t("Tes favoris s'affichent sur l'Accueil.")}</p>}
+              </div>
 
+              <section className="flex flex-col gap-2">
+                <h2 className="px-4 text-[0.8125rem] uppercase tracking-[0.02em] text-muted-foreground">{t("Réglages")}</h2>
+                <PushCard mails={mailsOn} />
               </section>
 
 
@@ -3798,7 +3809,7 @@ export function CreatorSpace({
                 </section>
               )}
 
-              <IosGroup title={t("Préférences")}>
+              <IosGroup>
                 {/* Langue de l'espace : pour un créateur anglophone (l'agence le règle aussi sur sa fiche). */}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-3.5 py-3">
                   <span className="text-[16px] text-foreground">{t("Langue de l'espace")}</span>
@@ -3825,9 +3836,6 @@ export function CreatorSpace({
                 </div>
               </IosGroup>
 
-              <IosGroup>
-                <IosRow icon={BarChart3} label={t("Envoyer mes stats")} onClick={() => setStatsModalOpen(true)} />
-              </IosGroup>
 
               <IosGroup>
                 <IosRow icon={preview ? ArrowLeft : LogOut} label={exitTitle} destructive chevron={false} onClick={exitAction} />

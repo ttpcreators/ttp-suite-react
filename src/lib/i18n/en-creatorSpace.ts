@@ -1,5 +1,12 @@
 /** Traductions anglaises (clé = texte français exact affiché dans l'app). */
 export const EN_CREATORSPACE: Record<string, string> = {
+  "Mon argent": "My money",
+  "Mes chiffres": "My numbers",
+  "Mes documents": "My documents",
+  "Aide": "Help",
+  "Réglages": "Settings",
+  "Modifier les favoris": "Edit favorites",
+  "Tes favoris s'affichent sur l'Accueil.": "Your favorites show on Home.",
   "Tout ce que l'agence a sur toi": "Everything your agency has on you",
   "Chargement de tes collabs": "Loading your collabs",
   "Pas de collab en cours.": "No collab in progress.",
