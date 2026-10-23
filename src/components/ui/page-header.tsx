@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { InPageHeaderContext } from "@/lib/navAction";
 import { HelpTip } from "@/components/ui/help-tip";
@@ -21,9 +21,18 @@ const PageSlotContext = createContext<HTMLElement | null>(null);
 
 export function PageFrame({ title, hint, children }: { title: ReactNode; hint?: string; children: ReactNode }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
+  // Emplacement vide à l'écran (téléphone : ses actions sont montées dans la barre de titre) :
+  // plus d'écart sous le titre, la page remonte.
+  const [slotEmpty, setSlotEmpty] = useState(false);
+  useEffect(() => {
+    if (!slot || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setSlotEmpty(slot.offsetHeight === 0));
+    ro.observe(slot);
+    return () => ro.disconnect();
+  }, [slot]);
   return (
     <>
-      <div className="mb-7 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+      <div className={`mb-4 flex flex-wrap items-center justify-between gap-x-4 md:mb-7 ${slotEmpty ? "gap-y-0" : "gap-y-3"}`}>
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
             <h1 className="page-title min-w-0 text-[28px] font-bold leading-tight tracking-[-0.025em] md:text-title">{title}</h1>

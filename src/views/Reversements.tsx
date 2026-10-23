@@ -227,7 +227,7 @@ export function Reversements() {
       {rows.length > 0 && (() => {
         const nbAPayer = rows.filter((r) => r.reste > 0.5).length;
         return (
-          <StatsBento
+          <StatsBento phoneStrip
             primary={{
               eyebrow: "Reste à reverser",
               value: formatEuro(totalReste),

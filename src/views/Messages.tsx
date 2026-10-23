@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { cn, initials } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { PhoneMenu } from "@/components/ui/phone-bar";
 import { HelpTip } from "@/components/ui/help-tip";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useLiveKey } from "@/lib/useLive";
@@ -199,7 +200,8 @@ export function Messages() {
             <p><span className="font-medium text-foreground">Radar à marques</span> : les marques avec qui tu as déjà une conversation sont mises de côté.</p>
           </HelpTip>
         </div>
-        <button type="button" onClick={() => void sync()} disabled={syncing} className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
+        <PhoneMenu items={[{ key: "sync", label: syncing ? "Actualisation…" : "Actualiser", icon: RefreshCw, onClick: () => { if (!syncing) void sync(); } }]} />
+        <button type="button" onClick={() => void sync()} disabled={syncing} className="ios-phone-hide flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
           <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} /> Actualiser
         </button>
       </PageHeaderRow>
@@ -230,7 +232,8 @@ export function Messages() {
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher un nom, un @, un mot, un email…" className="w-full rounded-md border border-border bg-surface py-2 pl-8 pr-8 text-[13px] outline-none focus:border-primary" />
               {q && <button type="button" onClick={() => setQ("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-faint hover:text-foreground" aria-label="Effacer"><X className="h-3.5 w-3.5" /></button>}
             </div>
-            <div className="flex flex-wrap gap-1">
+            {/* Téléphone : une seule rangée qui défile (pas deux lignes de pastilles). */}
+            <div className="flex flex-wrap gap-1 max-md:-mx-1 max-md:flex-nowrap max-md:overflow-x-auto max-md:px-1 max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden">
               {FILTERS.map((f) => (
                 <button key={f.v} type="button" onClick={() => setFilter(f.v)} className={cn("shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors", filter === f.v ? "bg-foreground text-background" : "bg-panel text-muted-foreground hover:text-foreground")}>
                   {f.label}

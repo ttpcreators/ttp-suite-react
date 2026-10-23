@@ -285,7 +285,7 @@ export function Idees() {
         const cnt = (s: string) => rows.filter((r) => (r.status ?? "À faire") === s).length;
         const explorer = cnt("À explorer"), aFaire = cnt("À faire"), enCours = cnt("En cours"), publiee = cnt("Publiée");
         return (
-          <StatsBento
+          <StatsBento phoneStrip
             className="mb-5"
             primary={{ eyebrow: "Idées publiées", value: String(publiee), caption: `sur ${rows.length} idée${rows.length > 1 ? "s" : ""} au total.` }}
             bars={{ label: "Par statut", value: `${enCours} en cours`, series: [explorer, aFaire, enCours, publiee] }}

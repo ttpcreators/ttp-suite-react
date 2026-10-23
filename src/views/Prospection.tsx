@@ -394,7 +394,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
   const bento = embedded ? (() => {
     const c = negotiationCounts(rows);
     return (
-      <StatsBento
+      <StatsBento phoneStrip
         className="mb-5"
         primary={{ eyebrow: "Négociations en cours", value: String(c.open), caption: `sur ${rows.length} marque${rows.length > 1 ? "s" : ""} au total.` }}
         bars={{ label: "En négociation", value: String(c.negotiating), series: STAGE_ORDER.map((st) => rows.filter((r) => r.stage === st).length) }}

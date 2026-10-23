@@ -11,6 +11,9 @@ import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { PhoneMenu, PhonePills } from "@/components/ui/phone-bar";
+import { FilterPanel } from "@/components/ui/filter-panel";
+import { useIosPhone } from "@/components/mobile/ios-sheet";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { useSearch, matchQuery } from "@/lib/search";
@@ -62,6 +65,7 @@ function daysAgoLabel(ms: number): string {
 }
 
 export function WhatsappView() {
+  const iosPhone = useIosPhone();
   const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("contacts"));
   const [error, setError] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
@@ -290,20 +294,21 @@ export function WhatsappView() {
         <div className="text-sm text-muted-foreground">
           {pool.length} contact{pool.length > 1 ? "s" : ""}
         </div>
+        <PhoneMenu items={[{ key: "modeles", label: "Modèles de mails", onClick: () => { setComposeFor(null); setComposerOpen(true); } }]} />
         <button
           type="button"
           onClick={() => {
             setComposeFor(null);
             setComposerOpen(true);
           }}
-          className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+          className="ios-phone-hide shrink-0 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
         >
           Modèles de mails
         </button>
       </PageHeaderRow>
 
       {pool.length > 0 && view === "all" && (
-        <StatsBento
+        <StatsBento phoneStrip
           className="mb-5"
           primary={{ eyebrow: "À relancer", value: String(aRelancer.length), caption: `${relanceDays} j sans échange` }}
           bars={{ label: "Prises de contact cette semaine", value: String(faitsSemaine), series: parCanal }}
@@ -313,7 +318,29 @@ export function WhatsappView() {
       )}
 
       {/* Filtres : quelle file afficher + quel type de contact */}
-      <div className="mb-4 space-y-2">
+      {/* Téléphone : UNE rangée de files qui défile ; la catégorie passe dans « Filtres ». */}
+      {iosPhone && (
+        <PhonePills
+          className="mb-4"
+          label="Choisir la file à afficher"
+          value={view}
+          onChange={(v) => setView(v as "all" | "relance" | "jamais" | "encours")}
+          options={[
+            { value: "all", label: "Tous", count: shownCount },
+            { value: "relance", label: "À relancer", count: aRelancer.length },
+            { value: "jamais", label: "Jamais contactés", count: jamais.length },
+            { value: "encours", label: "En cours", count: enCours.length },
+          ]}
+          after={tagList.length > 0 ? (
+            <FilterPanel
+              activeCount={tagFilter !== "__all__" ? 1 : 0}
+              onClear={() => setTagFilter("__all__")}
+              groups={[{ id: "cat", label: "Catégorie", value: tagFilter, onChange: setTagFilter, options: [{ value: "__all__", label: "Toutes" }, ...tagList.map((t) => ({ value: t, label: t }))] }]}
+            />
+          ) : undefined}
+        />
+      )}
+      <div className={iosPhone ? "hidden" : "mb-4 space-y-2"}>
         <Tabs
           size="md"
           label="Choisir la file à afficher"

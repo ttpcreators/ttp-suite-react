@@ -574,7 +574,7 @@ export function Briefs() {
         const cnt = (k: string) => rows.filter((r) => colKey(r.status) === k).length;
         const attente = cnt("attente"), valider = cnt("valider"), cours = cnt("cours"), termine = cnt("terminé");
         return (
-          <StatsBento
+          <StatsBento phoneStrip
             className="mb-5"
             primary={{ eyebrow: "À valider", value: String(valider), caption: `sur ${rows.length} brief${rows.length > 1 ? "s" : ""} au total.` }}
             bars={{ label: "Par statut", value: `${cours} en cours`, series: [attente, valider, cours, termine] }}

@@ -7,6 +7,7 @@ import { cn, titleCase } from "@/lib/utils";
 import { DashPanel } from "@/components/ui/dash";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { PhoneMenu } from "@/components/ui/phone-bar";
 import { useLiveKey } from "@/lib/useLive";
 import { letterColor } from "@/lib/mailAvatar";
 import { teamNames, type AgencyActivity } from "@/lib/team";
@@ -96,8 +97,9 @@ export function Activite() {
   return (
     <div>
       <PageHeaderRow>
+        <PhoneMenu items={[{ key: "load", label: "Actualiser", icon: RefreshCw, onClick: () => { if (!busy) void load(); } }]} />
         <button type="button" onClick={() => void load()} disabled={busy}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover disabled:opacity-60">
+          className="ios-phone-hide inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[13px] font-semibold text-foreground shadow-sm shadow-black/[0.03] transition-colors hover:bg-rowhover disabled:opacity-60">
           <RefreshCw className={cn("h-3.5 w-3.5", busy && "animate-spin")} /> Actualiser
         </button>
       </PageHeaderRow>

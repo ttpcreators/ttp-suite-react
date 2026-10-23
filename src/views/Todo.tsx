@@ -56,6 +56,7 @@ import { X, Pencil, Trash2, MessageSquarePlus, Check, List, Columns3, UserRound,
 import { WeeklyRoutines } from "@/components/WeeklyRoutines";
 import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { PhoneStrip } from "@/components/ui/phone-bar";
 import { DoneCircle, InfoRow } from "@/components/todo-parts";
 import { Overlay } from "@/components/mobile/ios-sheet";
 
@@ -1550,8 +1551,14 @@ export function Todo() {
       <div className={cn(showInspector && "grid grid-cols-[minmax(0,1fr)_340px] items-start gap-5")}>
         {/* Colonne principale */}
         <div className="min-w-0">
-          {/* Tuiles : chacune filtre la liste */}
-          {rows !== null && rows.length > 0 && (
+          {/* Tuiles : chacune filtre la liste (téléphone : bande compacte qui défile). */}
+          {rows !== null && rows.length > 0 && isPhone && (
+            <PhoneStrip
+              className="mb-3"
+              items={KPIS.map((k) => ({ label: k.label, value: String(kpiCounts[k.id]), active: activeKpi === k.id, onClick: () => pickKpi(k.id) }))}
+            />
+          )}
+          {rows !== null && rows.length > 0 && !isPhone && (
             <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
               {KPIS.map((k) => {
                 const on = activeKpi === k.id;

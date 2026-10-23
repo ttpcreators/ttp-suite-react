@@ -1111,7 +1111,7 @@ export function Collabs() {
         const won = (rows ?? []).filter((r) => r.status === "gagnee" || (r.status === "active" && isDone(r.step))).length;
         const prod = activeRows.filter((r) => phaseOf(r.step) === "production").length;
         return (
-          <StatsBento
+          <StatsBento phoneStrip
             className="mb-5"
             primary={{ eyebrow: "Collabs en cours", value: String(activeRows.length), caption: `sur ${rows.length} collab${rows.length > 1 ? "s" : ""} au total.` }}
             bars={{ label: "En production", value: String(prod), series: byPhase }}
