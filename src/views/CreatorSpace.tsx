@@ -317,8 +317,9 @@ const TAB_HINTS: Partial<Record<Tab, string>> = {
 };
 
 /** Titre de page des onglets (hors accueil) : même en-tête que côté agence. */
-function TabFrame({ title, hint, children }: { title: string | null; hint?: string; children: ReactNode }) {
-  return title ? <PageFrame title={title} hint={hint}>{children}</PageFrame> : <>{children}</>;
+function TabFrame({ title, hint, hideHead, children }: { title: string | null; hint?: string; hideHead?: boolean; children: ReactNode }) {
+  // `hideHead` garde le même arbre (pas de remontage de la page) et cache seulement le titre.
+  return title ? <PageFrame title={title} hint={hint} hideHead={hideHead}>{children}</PageFrame> : <>{children}</>;
 }
 
 /** Debrief (lecture seule côté créateur). */
@@ -593,6 +594,7 @@ export function CreatorSpace({
 
   // ── Affichage iPhone (téléphone) : 4 onglets en bas (Accueil, Missions, Gains, Messages), Menu sous l'avatar ──
   const iosPhone = useIsPhone();
+  const [mailThreadOpen, setMailThreadOpen] = useState(false); // Mail : un échange est ouvert
   const [navSlot, setNavSlot] = useState<HTMLElement | null>(null); // « + » de l'onglet dans la barre de titre
   const mainRef = useRef<HTMLElement>(null);
   // Chaque onglet (et chaque fiche mission) garde sa position de défilement (comme une app iOS).
@@ -1845,6 +1847,8 @@ export function CreatorSpace({
     return x ? t(x.label) : "";
   };
   const tabHint = TAB_HINTS[tab];
+  // Téléphone : un échange ouvert dans Mail prend toute la page (pas de grand titre « Mail »).
+  const mailThreadFull = iosPhone && tab === "mails" && mailThreadOpen;
 
   // Réseaux connectés (Instagram, TikTok, YouTube) : mêmes blocs dans « Envoyer mes
   // stats » et dans Profil.
@@ -2378,7 +2382,11 @@ export function CreatorSpace({
           {/* Contenu des onglets — barrière d'erreur : un onglet qui plante
               n'emporte pas la navigation (la sidebar reste cliquable). */}
           <ErrorBoundary variant="inline" label="Cette page" resetKey={tab}>
-          <TabFrame title={tab === "accueil" || openMission ? null : tabLabel(tab) || null} hint={openMission ? undefined : tabHint ? t(tabHint) : undefined}>
+          <TabFrame
+            title={tab === "accueil" || openMission ? null : tabLabel(tab) || null}
+            hint={openMission ? undefined : tabHint ? t(tabHint) : undefined}
+            hideHead={mailThreadFull}
+          >
           {/* Guide — comment utiliser l'app (mobile + ordi) + réflexe À faire */}
           {tab === "guide" && (
             <CreatorGuide firstName={firstName} onGoto={(t) => setTab(t as Tab)} onSendStats={() => setStatsModalOpen(true)} />
@@ -3593,7 +3601,7 @@ export function CreatorSpace({
           {tab === "mails" && (
             mailsOn ? (
               <Suspense fallback={null}>
-                <CreatorMailbox key={mailOpen.n} creator={name} mode={preview ? "preview" : "creator"} alias={mailAlias} aliases={mailAliases} initialThreadId={mailOpen.thread} />
+                <CreatorMailbox key={mailOpen.n} creator={name} mode={preview ? "preview" : "creator"} alias={mailAlias} aliases={mailAliases} initialThreadId={mailOpen.thread} onThreadOpen={setMailThreadOpen} />
               </Suspense>
             ) : (
               <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">

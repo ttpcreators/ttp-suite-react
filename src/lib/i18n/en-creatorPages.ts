@@ -1,6 +1,20 @@
 /** Traductions anglaises (clé = texte français exact affiché dans l'app). */
 /* Pages annexes de l'espace créateur : boîte mail, guide, feuille de route, évolution, statistiques, rapport mensuel. */
 export const EN_CREATORPAGES: Record<string, string> = {
+  "Ton avis sur cet échange": "Your take on this thread",
+  "Choix actuel": "Current choice",
+  "Confirmer « {label} »": "Confirm “{label}”",
+  "Aperçu : ce choix est noté au nom de l'agence.": "Preview: this choice is saved as the agency.",
+  "Un mot pour ton agence (facultatif)": "A note for your agency (optional)",
+  "Ton agence reçoit une notification.": "Your agency gets a notification.",
+  "Écrire à ton agence": "Write to your agency",
+  "Écris à ton agence…": "Write to your agency…",
+  "Écris à {name}…": "Write to {name}…",
+  "Suivi avec ton agence": "With your agency",
+  "Une question ? Écris à ton agence en bas.": "A question? Write to your agency below.",
+  "Aucun échange avec {name} pour l'instant.": "Nothing with {name} yet.",
+  "{name} ne voit pas ce message (pas en copie).": "{name} can't see this message (not in copy).",
+  "{label} · par {who}": "{label} · by {who}",
   // Boîte mail créateur (interface seulement, jamais le contenu des mails)
   "· par {who}": "· by {who}",
   "par {who}": "by {who}",

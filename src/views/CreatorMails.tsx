@@ -25,9 +25,13 @@ import {
   type Decision, type FeedItem, type MailChoice, type MailNote, type MailStatus, type MailStatusEvent, type MailThread,
   type MailThreadLite, type MailSettings, prospectStats } from "@/lib/creatorMail";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
-import { BarButton, RailButton, SearchField, ToolButton, UnreadToggle, mailCardBtnCls, mailCardCls, mailCardListCls, pillCls } from "@/components/mail-shell";
+import { RailButton, SearchField, ToolButton, UnreadToggle, mailCardBtnCls, mailCardCls, mailCardListCls, pillCls } from "@/components/mail-shell";
 import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
 import { useEdgeSwipeBack } from "@/lib/useEdgeSwipeBack";
+import { ActionMenu } from "@/components/ui/action-menu";
+import { HelpTip } from "@/components/ui/help-tip";
+import { Overlay } from "@/components/mobile/ios-sheet";
+import { reactionOf, splitThreadReactions } from "@/lib/mailThreadReactions";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { useLocale, useT, type Vars } from "@/lib/i18n";
 
@@ -155,13 +159,10 @@ const AGENCY_STATUS_HINT: Partial<Record<MailChoice, string>> = {
  * facultatif, puis le choix est enregistré et noté dans le suivi.
  */
 function StatusPanel({
-  thread, mode, creatorName, creatorSees, busy, feedCount, onChoose, onShowFeed, onWriteNote,
+  thread, mode, creatorName, creatorSees, busy, onChoose,
 }: {
-  thread: MailThread; mode: Mode; creatorName: string; creatorSees: boolean; busy: boolean; feedCount: number;
+  thread: MailThread; mode: Mode; creatorName: string; creatorSees: boolean; busy: boolean;
   onChoose: (choice: MailChoice, comment: string) => Promise<boolean>;
-  onShowFeed: () => void;
-  /** Descend jusqu'au champ « Écrire une remarque » (sous les mails) et le sélectionne. */
-  onWriteNote: () => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -169,120 +170,123 @@ function StatusPanel({
   const forCreator = mode === "creator";
   const tiles = forCreator ? CHOICES.filter((c) => !c.agencyOnly) : CHOICES;
   // Créateur : un statut posé par l'agence (À vérifier, À valider, ou Validé / Refusé
-  // décidé par elle) s'affiche à part ; ses cases ne montrent que SON avis.
+  // décidé par elle) s'affiche à part ; ses choix ne montrent que SON avis.
   const agencyStatus = forCreator && (!!choiceMeta(real).agencyOnly || (real !== "encours" && thread.decidedBy === "agency"))
     ? choiceMeta(real) : null;
   const current: MailChoice | null = agencyStatus ? null : real;
+  const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<MailChoice | null>(null);
   const [comment, setComment] = useState("");
   const pick = pending ? choiceMeta(pending) : null;
   const when = fmtDay(thread.decidedAt, locale);
+  const shownMeta = current ? choiceMeta(current) : null;
+  const who = thread.decidedBy ? authorName(thread.decidedBy, mode, creatorName, t) : null;
 
-  const hintFor = (c: (typeof CHOICES)[number]) => {
-    if (c.value !== current) return t(c.hint);
-    // Case active : « Nouvelle demande » / « En négociation », ou qui a tranché et quand.
-    if (c.value === "encours") return t(statusMeta(thread.status).label);
-    return thread.decidedBy ? t("par {who}", { who: authorName(thread.decidedBy, mode, creatorName, t) }) + (when ? `, ${when}` : "") : t(c.hint);
+  const close = () => {
+    setOpen(false);
+    setPending(null);
+    setComment("");
   };
-
   const confirm = async () => {
     if (!pending || busy) return;
-    if (await onChoose(pending, comment)) {
-      setPending(null);
-      setComment("");
-    }
+    if (await onChoose(pending, comment)) close();
   };
+  const label = forCreator ? t("Ton avis") : t("Statut");
 
-  const activeMeta = current ? choiceMeta(current) : null;
   return (
-    <div className="border-y border-border py-3">
-      {agencyStatus && (
-        <div className={cn("mb-2.5 flex items-start gap-2 rounded-lg border px-2.5 py-2 text-[12px]", agencyStatus.tile)}>
-          <agencyStatus.icon className="mt-px h-3.5 w-3.5 shrink-0" />
-          <span className="min-w-0">
-            <b>{forCreator ? t("Ton agence : {label}", { label: t(agencyStatus.label) }) : t("Statut de l'agence : {label}", { label: t(agencyStatus.label) })}</b>{when ? ` · ${when.replace(/\.$/, "")}` : ""}
-            <span className="opacity-90"> · {t(AGENCY_STATUS_HINT[agencyStatus.value] ?? "")}</span>
-          </span>
-        </div>
-      )}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-        <span className="pr-1 text-[12px] font-semibold text-muted-foreground">{forCreator ? t("Ton avis") : t("Statut")}</span>
-        <div role="radiogroup" aria-label={forCreator ? t("Ton avis") : t("Statut de l'échange")} className="flex flex-wrap gap-1.5">
-          {tiles.map((c) => {
-            const active = c.value === current;
-            const picked = c.value === pending;
-            const Icon = c.icon;
-            return (
-              <button
-                key={c.value}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                disabled={busy}
-                title={hintFor(c)}
-                onClick={() => setPending(active ? null : c.value)}
-                className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-foreground/20 disabled:opacity-60",
-                  active ? cn(c.tile, "cursor-default")
-                    : picked ? "border-foreground/40 bg-rowhover text-foreground"
-                    : "border-border bg-surface text-muted-foreground hover:bg-rowhover hover:text-foreground",
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" /> {t(c.label)}
-              </button>
-            );
-          })}
-        </div>
+    <div className="flex flex-col gap-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        disabled={busy}
+        className="flex min-h-12 w-full items-center gap-3 rounded-2xl bg-surface px-4 py-2 text-left transition-colors hover:bg-rowhover disabled:opacity-60"
+      >
+        <span className="text-[15px] font-medium text-foreground">{label}</span>
         <span className="flex-1" />
-        {feedCount > 0 && (
-          <button type="button" onClick={onShowFeed}
-            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-            <History className="h-3.5 w-3.5" /> {t("Suivi ({n})", { n: feedCount })}
-          </button>
+        {shownMeta ? (
+          <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[13px] font-semibold", shownMeta.tile)}>
+            <shownMeta.icon className="h-3.5 w-3.5" /> {t(shownMeta.label)}
+          </span>
+        ) : (
+          <span className="text-[14px] text-muted-foreground">{t("Choisir")}</span>
         )}
-        <button type="button" onClick={onWriteNote}
-          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-          <MessageSquarePlus className="h-3.5 w-3.5" /> {t("Remarque")}
-        </button>
-      </div>
-      {activeMeta && !pick && (
-        <p className="mt-1.5 text-[11.5px] text-muted-foreground">{t("{label} : {hint}", { label: t(activeMeta.label), hint: hintFor(activeMeta) })}</p>
+        <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
+      </button>
+      {agencyStatus && (
+        <p className="px-1 text-[13px] leading-snug text-muted-foreground">
+          <span className="font-semibold text-foreground">{t("Ton agence : {label}", { label: t(agencyStatus.label) })}</span>
+          {when ? ` · ${when.replace(/\.$/, "")}` : ""} · {t(AGENCY_STATUS_HINT[agencyStatus.value] ?? "")}
+        </p>
       )}
 
-      {pick && (
-        <div className="mt-3 rounded-xl border border-border bg-surface p-3">
-          <p className="text-[13px] font-medium text-foreground">
-            {forCreator ? t("Ton avis : « {label} » ?", { label: t(pick.label) }) : t("Passer cet échange en « {label} » ?", { label: t(pick.label) })}
-          </p>
-          <textarea
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void confirm();
-              if (e.key === "Escape") setPending(null);
-            }}
-            maxLength={1000}
-            rows={2}
-            placeholder={forCreator ? t("Un mot pour ton manager (facultatif) : pourquoi, tes conditions…") : t("Un mot pour {name} (facultatif)", { name: creatorName })}
-            className="mt-2 max-h-40 min-h-[60px] w-full resize-none rounded-md border border-border bg-transparent px-3 py-2 text-[13px] text-foreground outline-none [field-sizing:content] placeholder:text-faint focus:border-primary"
-          />
-          <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-            <span className="mr-auto w-full text-[11px] text-faint sm:w-auto">
-              {forCreator ? t("Ton manager reçoit une notification.") : creatorSees ? t("{name} reçoit une notification.", { name: creatorName }) : t("Sa section Mails n'est pas encore activée : pas de notification.")}
-            </span>
-            <button type="button" onClick={() => setPending(null)} className="h-9 rounded-lg px-3 text-[13px] text-muted-foreground transition-colors hover:text-foreground">
-              {t("Annuler")}
-            </button>
-            <button type="button" onClick={() => void confirm()} disabled={busy}
-              className={cn("inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50", pick.confirm)}>
-              {busy ? <Spin size={16} /> : <Check className="h-4 w-4" />} {t("Confirmer")}
-            </button>
+      {open && (
+        <Overlay className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClose={close} label={label}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-[440px] rounded-t-[22px] bg-surface p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:rounded-[22px] sm:shadow-xl">
+            <div className="mb-3 flex items-start justify-between gap-3 px-1">
+              <div className="min-w-0">
+                <h2 className="text-[17px] font-semibold text-foreground">{forCreator ? t("Ton avis sur cet échange") : t("Statut de l'échange")}</h2>
+                {shownMeta && who && (
+                  <p className="mt-0.5 text-[13px] text-muted-foreground">{t("{label} · par {who}", { label: t(shownMeta.label), who })}{when ? `, ${when}` : ""}</p>
+                )}
+              </div>
+              <button type="button" onClick={close} aria-label={t("Fermer")} className="-mr-1 -mt-1 grid h-11 w-11 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-rowhover">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div role="radiogroup" aria-label={label} className="flex flex-col gap-1.5">
+              {tiles.map((c) => {
+                const active = c.value === current;
+                const picked = c.value === pending;
+                const Icon = c.icon;
+                return (
+                  <button
+                    key={c.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active || picked}
+                    disabled={busy || active}
+                    onClick={() => setPending(c.value)}
+                    className={cn(
+                      "flex min-h-14 items-center gap-3 rounded-2xl border px-3 py-2 text-left transition-colors",
+                      picked ? "border-foreground/50 bg-rowhover" : active ? cn(c.tile, "cursor-default") : "border-border hover:bg-rowhover",
+                    )}
+                  >
+                    <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full", c.disc)}><Icon className="h-4 w-4" /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[16px] font-semibold text-foreground">{t(c.label)}</span>
+                      <span className="block text-[13px] text-muted-foreground">{active ? t("Choix actuel") : t(c.hint)}</span>
+                    </span>
+                    {(active || picked) && <Check className="h-5 w-5 shrink-0 text-foreground" />}
+                  </button>
+                );
+              })}
+            </div>
+            {pick && (
+              <div className="mt-3 flex flex-col gap-2">
+                <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void confirm();
+                  }}
+                  maxLength={1000}
+                  rows={2}
+                  placeholder={forCreator ? t("Un mot pour ton agence (facultatif)") : t("Un mot pour {name} (facultatif)", { name: creatorName })}
+                  className="max-h-40 min-h-[72px] w-full resize-none rounded-2xl border border-border bg-transparent px-3.5 py-2.5 text-[16px] text-foreground outline-none [field-sizing:content] placeholder:text-faint focus:border-primary"
+                />
+                <p className="px-1 text-[12.5px] text-faint">
+                  {mode === "preview"
+                    ? t("Aperçu : ce choix est noté au nom de l'agence.")
+                    : forCreator ? t("Ton agence reçoit une notification.") : creatorSees ? t("{name} reçoit une notification.", { name: creatorName }) : t("Sa section Mails n'est pas encore activée : pas de notification.")}
+                </p>
+                <button type="button" onClick={() => void confirm()} disabled={busy}
+                  className={cn("flex h-12 w-full items-center justify-center gap-2 rounded-full text-[16px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50", pick.confirm)}>
+                  {busy ? <Spin size={16} /> : <Check className="h-4 w-4" />} {t("Confirmer « {label} »", { label: t(pick.label) })}
+                </button>
+              </div>
+            )}
           </div>
-        </div>
-      )}
-
-      {mode === "preview" && !pick && (
-        <p className="mt-2 text-[11px] text-muted-foreground">{t("Aperçu de ce que voit {name}. Un choix fait ici est noté au nom de l'agence.", { name: creatorName })}</p>
+        </Overlay>
       )}
     </div>
   );
@@ -373,7 +377,7 @@ function StatePanel({ icon: Icon, text, action }: { icon: LucideIcon; text: stri
   );
 }
 
-export function CreatorMailbox({ creator, mode, creatorSees = true, initialThreadId, initialFilter, alias, aliases }: {
+export function CreatorMailbox({ creator, mode, creatorSees = true, initialThreadId, initialFilter, alias, aliases, onThreadOpen }: {
   initialFilter?: "atraiter";
   creator: string; mode: Mode;
   /** Le créateur a-t-il accès à sa section Mails ? (sinon pas de notification pour lui) */
@@ -384,6 +388,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   alias?: string | null;
   /** Ses adresses en plus (réglage), idem. */
   aliases?: string[] | null;
+  /** Un échange est ouvert / refermé (l'espace créateur masque alors le grand titre au téléphone). */
+  onThreadOpen?: (open: boolean) => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -448,6 +454,9 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   useEffect(() => {
     if (openId && mode !== "preview") void markActivityRead("mail", openId);
   }, [openId, mode]);
+  useEffect(() => {
+    onThreadOpen?.(!!openId);
+  }, [openId, onThreadOpen]);
   const [query, setQuery] = useState(""); // recherche dans la liste (marque, objet, extrait)
   // « Non lus » (créateur) : échanges pas encore vus, plus ceux qui l'étaient à l'activation.
   const [unreadOnly, setUnreadOnly] = useState<Set<string> | null>(null);
@@ -608,7 +617,9 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           if (added.length) setExpanded((s) => new Set([...s, ...added]));
         } else {
           // Dernier message déplié, les précédents repliés (comme Gmail).
-          setExpanded(new Set(t.messages.length ? [t.messages[t.messages.length - 1].id] : []));
+          const real = t.messages.filter((m) => !reactionOf(m));
+          const last = real[real.length - 1] ?? t.messages[t.messages.length - 1];
+          setExpanded(new Set(last ? [last.id] : []));
         }
         setThread(t);
         fetchedTs.current.set(t.id, threadsRef.current?.find((x) => x.id === t.id)?.ts ?? 0);
@@ -1271,64 +1282,85 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   );
 
   // ── Lecture d'un échange ─────────────────────────────────────────────────
+  const split = thread ? splitThreadReactions(thread.messages) : null;
+  const realCount = split ? split.shown.length : 0;
+  const threadLite = thread ? threads?.find((x) => x.id === thread.id) : undefined;
+  // Champ « Écris à ton agence » collé en bas, au-dessus de la barre d'onglets (et de la
+  // pastille d'aperçu de l'agence) au téléphone ; en bas du panneau sur ordinateur.
+  // Le bloc va jusqu'en bas de l'écran (fond plein derrière la barre d'onglets) : rien ne dépasse dessous.
+  const composerBottom = mode === "preview" ? "max-lg:pb-[calc(env(safe-area-inset-bottom)+9.75rem)]" : "max-lg:pb-[calc(env(safe-area-inset-bottom)+5.75rem)]";
   const view = openId ? (
     <section ref={viewRef} className="flex min-h-0 min-w-0 flex-col">
-      <div className="flex h-14 shrink-0 items-center gap-0.5 border-b border-border px-2 sm:px-3">
-        <ToolButton icon={ArrowLeft} label={t("Retour à la liste")} onClick={() => setOpenId(null)} />
-        <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5">
-          {navIdx >= 0 && shown.length > 1 && (
-            <>
-              <ToolButton icon={ChevronLeft} label={t("Échange précédent")} className="h-8 w-8" disabled={navIdx <= 0} onClick={() => setOpenId(shown[navIdx - 1].id)} />
-              <span className="whitespace-nowrap px-1 text-[12.5px] tabular-nums text-muted-foreground">{t("{a} sur {b}", { a: navIdx + 1, b: shown.length })}</span>
-              <ToolButton icon={ChevronRight} label={t("Échange suivant")} className="h-8 w-8" disabled={navIdx >= shown.length - 1} onClick={() => setOpenId(shown[navIdx + 1].id)} />
-            </>
-          )}
-        </div>
-        {thread && <ToolButton icon={History} label={t("Voir le suivi ({n})", { n: feed.length })} onClick={showFeed} />}
-        {thread && <ToolButton icon={MessageSquarePlus} label={t("Ajouter une remarque")} onClick={writeNote} />}
+      <div className="flex h-12 shrink-0 items-center gap-0.5 px-1 lg:h-14 lg:border-b lg:border-border lg:px-3">
+        <button type="button" onClick={() => setOpenId(null)} className="flex h-11 items-center gap-0.5 rounded-full pl-0.5 pr-2.5 text-[17px] text-primary transition-opacity hover:opacity-80 lg:hidden">
+          <ChevronLeft className="h-6 w-6" /> {t("Mail")}
+        </button>
+        <ToolButton icon={ArrowLeft} label={t("Retour à la liste")} onClick={() => setOpenId(null)} className="max-lg:hidden" />
+        <span className="flex-1" />
+        {navIdx >= 0 && shown.length > 1 && (
+          <>
+            <span className="whitespace-nowrap px-1 text-[12.5px] tabular-nums text-muted-foreground max-lg:hidden">{t("{a} sur {b}", { a: navIdx + 1, b: shown.length })}</span>
+            <ToolButton icon={ChevronLeft} label={t("Échange précédent")} className="h-11 w-11" disabled={navIdx <= 0} onClick={() => setOpenId(shown[navIdx - 1].id)} />
+            <ToolButton icon={ChevronRight} label={t("Échange suivant")} className="h-11 w-11" disabled={navIdx >= shown.length - 1} onClick={() => setOpenId(shown[navIdx + 1].id)} />
+          </>
+        )}
+        {thread && (
+          <ActionMenu
+            buttonClassName="h-11 w-11"
+            items={[
+              { key: "suivi", label: t("Voir le suivi ({n})", { n: feed.length }), icon: History, onClick: showFeed },
+              { key: "note", label: asAgency ? t("Écrire une remarque") : t("Écrire à ton agence"), icon: MessageSquarePlus, onClick: writeNote },
+            ]}
+          />
+        )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 lg:overflow-y-auto">
         {threadErr ? (
           <div className="p-4 sm:p-6">
             <div className="rounded-xl border border-border bg-panel/60">
               <StatePanel icon={CircleAlert} text={t(threadErr)} action={{ label: t("Réessayer"), onClick: () => setThreadRetry((n) => n + 1) }} />
             </div>
           </div>
-        ) : !thread ? (
-          <div className="flex items-center justify-center gap-2 px-5 py-16 text-[13px] text-muted-foreground"><Spin size={16} /> {t("Ouverture…")}</div>
+        ) : !thread || !split ? (
+          <div className="flex items-center justify-center gap-2 px-5 py-16 text-[14px] text-muted-foreground"><Spin size={16} /> {t("Ouverture…")}</div>
         ) : (
-          <div className="px-4 py-6 sm:px-8">
-            {help && <div className="mb-6 max-lg:hidden">{helpBanner}</div>}
-            <h1 className="text-[18px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere] [text-wrap:balance] sm:text-[20px]">{thread.subject}</h1>
-            <p className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
-              <span>{thread.brand ? `${prettyName(thread.brand)} · ` : ""}{thread.messages.length > 1 ? t("{n} messages", { n: thread.messages.length }) : t("{n} message", { n: thread.messages.length })}</span>
-              <StatusDot status={thread.status} by={thread.decidedBy ? authorName(thread.decidedBy, mode, creatorName, t) : undefined} />
-            </p>
+          <div className="flex flex-col gap-3 px-4 pb-4 pt-1 sm:px-6 lg:pt-5">
+            {help && <div className="max-lg:hidden">{helpBanner}</div>}
 
-            <div className="mt-5">
-              <StatusPanel
-                key={thread.id}
-                thread={thread}
-                mode={mode}
-                creatorName={creatorName}
-                creatorSees={creatorSees}
-                busy={deciding}
-                feedCount={feed.length}
-                onChoose={(c, w) => choose(thread.id, c, w)}
-                onShowFeed={showFeed}
-                onWriteNote={writeNote}
-              />
+            {/* En-tête : la marque en grand, l'objet, puis une seule ligne d'infos */}
+            <div className="flex items-start gap-3 px-0.5">
+              <Initial name={prettyName(thread.brand) || thread.subject} email={threadLite?.brandEmail} size="lg" />
+              <div className="min-w-0 flex-1">
+                <h1 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-foreground [overflow-wrap:anywhere] [text-wrap:balance]">{prettyName(thread.brand) || thread.subject || t("(sans objet)")}</h1>
+                {thread.brand && thread.subject && <p className="mt-0.5 text-[15px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{thread.subject}</p>}
+                <p className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
+                  <span>{realCount > 1 ? t("{n} messages", { n: realCount }) : t("{n} message", { n: realCount })}</span>
+                  <span aria-hidden>·</span>
+                  <StatusDot status={thread.status} />
+                </p>
+              </div>
             </div>
 
-            <div className="mt-3 flex flex-col divide-y divide-border">
-              {thread.messages.map((m, i) => {
+            <StatusPanel
+              key={thread.id}
+              thread={thread}
+              mode={mode}
+              creatorName={creatorName}
+              creatorSees={creatorSees}
+              busy={deciding}
+              onChoose={(c, w) => choose(thread.id, c, w)}
+            />
+
+            <div className="flex flex-col gap-2">
+              {split.shown.map((m, i) => {
                 // Les mails de l'agence (signature, logos) s'affichent toujours en entier.
                 const blocked = blockImages && !m.fromAgency && !remoteImagesAllowed(m.id);
+                const pills = split.pills.get(m.id) ?? [];
                 return (
-                  <div key={m.id} className="flex flex-col">
+                  <div key={m.id} className="flex flex-col gap-1.5">
                     {blocked && remoteImgIds.has(m.id) && expanded.has(m.id) && (
-                      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg bg-muted/60 px-3 py-2 text-[12px] text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl bg-muted/60 px-3 py-2 text-[13px] text-muted-foreground">
                         <ImageOff className="h-3.5 w-3.5 shrink-0" />
                         <span className="min-w-0 flex-1">{t("Images masquées pour ta confidentialité")}</span>
                         <button type="button"
@@ -1336,86 +1368,94 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
                             allowRemoteImages(m.id);
                             setImagesTick((n) => n + 1);
                           }}
-                          className="shrink-0 font-semibold text-foreground underline-offset-2 hover:underline">
+                          className="min-h-11 shrink-0 font-semibold text-foreground underline-offset-2 hover:underline">
                           {t("Afficher les images")}
                         </button>
                       </div>
                     )}
-                    {asAgency && m.hiddenFromCreator && (
-                      <p className="mt-3 flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                        <EyeOff className="h-3.5 w-3.5 shrink-0" />
-                        {creatorName.split(" ")[0]} ne voit pas ce message : son adresse n'était pas en copie.
-                      </p>
-                    )}
                     <MailItem
-                      variant="plain"
+                      variant="conversation"
                       m={blocked ? { ...m, html: withoutRemoteImages(m.html) } : m}
                       index={i}
                       open={expanded.has(m.id)}
-                      onToggle={() => setExpanded((s) => {
-                        const n = new Set(s);
+                      onToggle={() => setExpanded((st) => {
+                        const n = new Set(st);
                         if (n.has(m.id)) n.delete(m.id); else n.add(m.id);
                         return n;
                       })}
                       threadId={thread.id}
                       creator={forCreator}
                     />
+                    {pills.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 px-2">
+                        {pills.map((p) => (
+                          <span key={p.emoji} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-surface px-2.5 text-[13px] text-muted-foreground shadow-sm shadow-black/[0.04]">
+                            <span className="text-[16px] leading-none">{p.emoji}</span>
+                            {p.count > 1 && <span className="tabular-nums text-foreground">{p.count}</span>}
+                            {p.who && <span className="max-w-[160px] truncate">{p.who}</span>}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {asAgency && m.hiddenFromCreator && (
+                      <p className="flex items-center gap-1.5 px-2 text-[12.5px] text-faint">
+                        <EyeOff className="h-3.5 w-3.5 shrink-0" />
+                        {t("{name} ne voit pas ce message (pas en copie).", { name: creatorName.split(" ")[0] })}
+                      </p>
+                    )}
                   </div>
                 );
               })}
             </div>
 
-            {/* Suivi interne avec le manager : avis, questions, changements de statut (jamais envoyés à la marque) */}
-            <div ref={setFeedNode} className="mt-6 scroll-mt-4 rounded-xl border border-border bg-panel/60 p-4 sm:p-5">
-              <div className="mb-1 flex items-center gap-2">
-                <History className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="text-[13px] font-semibold text-foreground">{asAgency ? t("Suivi avec {name}", { name: creatorName }) : t("Suivi avec ton manager")}</span>
+            {/* Suivi interne avec l'agence : avis, questions, changements de statut (jamais envoyés à la marque) */}
+            <div ref={setFeedNode} className="mt-2 flex scroll-mt-4 flex-col gap-2">
+              <div className="flex items-center gap-1.5 px-1">
+                <span className="text-[13px] font-semibold uppercase tracking-[0.04em] text-muted-foreground">{asAgency ? t("Suivi avec {name}", { name: creatorName }) : t("Suivi avec ton agence")}</span>
+                <HelpTip title={asAgency ? t("Suivi avec {name}", { name: creatorName }) : t("Suivi avec ton agence")}>
+                  {asAgency
+                    ? t("Ses avis, ses questions, tes remarques et chaque changement de statut, avec la date. {name} voit tout ce suivi ; la marque, jamais.", { name: creatorName })
+                    : t("Tes avis, tes questions, les remarques et les choix de ton agence. La marque ne voit jamais rien de tout ça.")}
+                </HelpTip>
               </div>
-              <p className="mb-3 pl-6 text-[12px] text-muted-foreground">
-                {asAgency
-                  ? t("Ses avis, ses questions, tes remarques et chaque changement de statut, avec la date. {name} voit tout ce suivi ; la marque, jamais.", { name: creatorName })
-                  : t("Tes avis, tes questions, les remarques et les choix de ton agence. La marque ne voit jamais rien de tout ça.")}
-              </p>
-              {feed.length > 0 ? <Feed items={feed} mode={mode} creatorName={creatorName} /> : null}
-              <div className="overflow-hidden rounded-xl border border-border bg-surface transition-colors focus-within:border-primary">
-                <textarea
-                  ref={noteRef}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value.slice(0, 4000))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submitNote();
-                  }}
-                  rows={2}
-                  placeholder={asAgency ? t("Écrire une remarque à {name}…", { name: creatorName }) : t("Écrire une remarque à mon manager…")}
-                  className="block max-h-60 min-h-[72px] w-full resize-none bg-transparent px-4 py-3 text-[13px] leading-relaxed text-foreground outline-none [field-sizing:content] placeholder:text-faint"
-                />
-                <div className="flex items-center gap-3 border-t border-border px-3.5 py-2 text-[12px]">
-                  <span className="min-w-0 flex-1 truncate text-faint">
-                    {mode === "preview"
-                      ? t("Aperçu : envoyée à ton nom (agence), pas au nom de {name}", { name: creatorName })
-                      : asAgency ? (creatorSees ? t("{name} la voit dans son espace", { name: creatorName }) : t("Sa section Mails n'est pas encore activée")) : t("Ton manager est prévenu ; la marque ne la voit jamais")}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => void submitNote()}
-                    disabled={!note.trim() || sending}
-                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-35"
-                  >
-                    {sending ? <Spin size={14} /> : <Send className="h-3.5 w-3.5" />} {t("Envoyer")}
-                  </button>
-                </div>
-              </div>
+              {feed.length > 0 ? <Feed items={feed} mode={mode} creatorName={creatorName} /> : (
+                <p className="px-1 text-[14px] text-faint">{asAgency ? t("Aucun échange avec {name} pour l'instant.", { name: creatorName }) : t("Une question ? Écris à ton agence en bas.")}</p>
+              )}
             </div>
           </div>
         )}
       </div>
 
       {thread && (
-        <div className="flex h-14 shrink-0 items-center gap-1 border-t border-border px-2 max-sm:hidden sm:px-3">
-          <BarButton icon={MessageSquarePlus} label={t("Ajouter une remarque")} onClick={writeNote} />
-          <BarButton icon={History} label={t("Voir le suivi ({n})", { n: feed.length })} onClick={showFeed} />
-          <span className="flex-1" />
-          <span className="px-3"><StatusDot status={thread.status} by={thread.decidedBy ? authorName(thread.decidedBy, mode, creatorName, t) : undefined} /></span>
+        <div className={cn("z-10 shrink-0 border-t border-border bg-panel px-3 py-2 max-lg:sticky max-lg:bottom-0 max-lg:-mb-4", composerBottom)}>
+          <div className="flex items-end gap-2">
+            <textarea
+              ref={noteRef}
+              value={note}
+              onChange={(e) => setNote(e.target.value.slice(0, 4000))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submitNote();
+              }}
+              rows={1}
+              aria-label={asAgency ? t("Écrire une remarque") : t("Écrire à ton agence")}
+              placeholder={asAgency ? t("Écris à {name}…", { name: creatorName.split(" ")[0] }) : t("Écris à ton agence…")}
+              className="max-h-40 min-h-11 min-w-0 flex-1 resize-none rounded-[22px] border border-border bg-surface px-4 py-2.5 text-[16px] leading-snug text-foreground outline-none [field-sizing:content] placeholder:text-faint focus:border-primary"
+            />
+            <button
+              type="button"
+              onClick={() => void submitNote()}
+              disabled={!note.trim() || sending}
+              aria-label={t("Envoyer")}
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-35"
+            >
+              {sending ? <Spin size={16} /> : <Send className="h-[18px] w-[18px]" />}
+            </button>
+          </div>
+          {(mode === "preview" || (asAgency && !creatorSees)) && (
+            <p className="mt-1 px-2 text-[12px] text-faint">
+              {mode === "preview" ? t("Aperçu : envoyée à ton nom (agence), pas au nom de {name}", { name: creatorName }) : t("Sa section Mails n'est pas encore activée")}
+            </p>
+          )}
         </div>
       )}
     </section>
@@ -1430,7 +1470,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
   // Messagerie en un seul panneau : barre d'icônes, liste, lecture (hauteur fixe sur ordinateur).
   return (
-    <div ref={rootRef} className={cn("flex min-w-0 scroll-mt-[calc(env(safe-area-inset-top)+3.5rem)] flex-col overflow-hidden rounded-2xl border border-border bg-surface", simple && "max-lg:-mx-4 max-lg:rounded-none max-lg:border-x-0 max-lg:border-t-0 max-lg:border-b-0 max-lg:bg-transparent", "lg:grid lg:h-[min(900px,calc(100dvh-150px))] lg:min-h-[560px] lg:grid-cols-[72px_minmax(300px,340px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[72px_minmax(330px,400px)_minmax(0,1fr)]")}>
+    <div ref={rootRef} className={cn("flex min-w-0 scroll-mt-[calc(env(safe-area-inset-top)+3.5rem)] flex-col overflow-hidden rounded-2xl border border-border bg-surface", simple && "max-lg:-mx-4 max-lg:overflow-visible max-lg:rounded-none max-lg:border-x-0 max-lg:border-t-0 max-lg:border-b-0 max-lg:bg-transparent", "lg:grid lg:h-[min(900px,calc(100dvh-150px))] lg:min-h-[560px] lg:grid-cols-[72px_minmax(300px,340px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[72px_minmax(330px,400px)_minmax(0,1fr)]")}>
       {rail}
       {pills}
       {list}
