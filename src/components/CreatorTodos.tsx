@@ -12,6 +12,10 @@ import { FileCard, fileFormatOf } from "@/components/ui/file-card-collections";
 import { SwipeRow } from "@/components/mobile/swipe-row";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { DoneCircle, InfoRow } from "@/components/todo-parts";
+import { NewDot } from "@/components/ui/new-dot";
+import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
+import { notifyAgencyChange } from "@/lib/push";
+import { useIntent } from "@/lib/openIntent";
 import { cn } from "@/lib/utils";
 import { EMPTY, fmtDay, toISODate, todayISO } from "@/lib/dates";
 import { useLocale, useT } from "@/lib/i18n";
@@ -65,6 +69,10 @@ type Props = {
   uploading: boolean;
   onOpenAttachment: (a: Attachment) => void;
   onRemoveAttachment: (td: CreatorTodo, path: string) => void;
+  /** Créateur connecté (prévient l'agence quand il écrit sur une tâche). */
+  me?: string;
+  /** Vue agence de l'espace : ni repère « nouveau », ni notification. */
+  preview?: boolean;
 };
 
 const STATUS: { value: string; label: string; dot: string }[] = [
@@ -140,9 +148,22 @@ export function CreatorTodos(p: Props) {
     setPointInput("");
   }, [selId]);
 
+  // Repères « nouveau » : tâches sur lesquelles l'agence a écrit (activity_events).
+  const activity = useActivityEvents("creator", !p.preview);
   const pick = (id: string) => {
     setSelId(id);
     if (!isLg || view === "colonnes") setSheetOpen(true);
+    if (!p.preview) void markActivityRead("todo", id);
+  };
+  // Notification « du nouveau sur une tâche » : ouvre la fiche de la tâche.
+  const pickRef = useRef(pick);
+  pickRef.current = pick;
+  useIntent("cs-todo:open", (id) => {
+    if (id) pickRef.current(id);
+  });
+  /** Prévient l'agence (push, 1 fois par tâche et par changement toutes les 10 min). */
+  const tellAgency = (td: CreatorTodo, what: "progress" | "subtask") => {
+    if (!p.preview && p.me) notifyAgencyChange("todo", p.me, what, td.text, td.id);
   };
   const closeSheet = () => setSheetOpen(false);
 
@@ -176,13 +197,18 @@ export function CreatorTodos(p: Props) {
   const addPoint = async (td: CreatorTodo) => {
     const text = pointInput.trim();
     if (!text) return;
-    if (await p.onPatch(td.id, (x) => ({ progress: appendPoint(x.progress, text, new Date(), "Créateur") }))) setPointInput("");
+    if (await p.onPatch(td.id, (x) => ({ progress: appendPoint(x.progress, text, new Date(), "Créateur") }))) {
+      setPointInput("");
+      tellAgency(td, "progress");
+    }
   };
   const addSubtask = (td: CreatorTodo) => {
     const text = subInput.trim();
     if (!text) return;
     setSubInput("");
-    void p.onPatch(td.id, (x) => ({ subtasks: [...(x.subtasks ?? []), { id: `st${Date.now().toString(36)}`, text, done: false }] }));
+    void p.onPatch(td.id, (x) => ({ subtasks: [...(x.subtasks ?? []), { id: `st${Date.now().toString(36)}`, text, done: false }] })).then(
+      (ok) => ok && tellAgency(td, "subtask"),
+    );
   };
   const toggleSubtask = (td: CreatorTodo, sid: string) =>
     void p.onPatch(td.id, (x) => ({ subtasks: (x.subtasks ?? []).map((s) => (s.id === sid ? { ...s, done: !s.done } : s)) }));
@@ -241,6 +267,7 @@ export function CreatorTodos(p: Props) {
                 className={cn("truncate text-[15px] font-semibold leading-snug text-foreground", td.done && "text-muted-foreground line-through decoration-faint")}
                 title={td.text.length > 45 ? td.text : undefined}
               >
+                {activity.keys.has(`todo:${td.id}`) && <NewDot label={t("Du nouveau de ton agence")} className="mr-1.5 align-middle" />}
                 {clip45(td.text)}
               </div>
               {(meta.length > 0 || awaits) && (

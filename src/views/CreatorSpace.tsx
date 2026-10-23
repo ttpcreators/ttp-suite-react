@@ -13,7 +13,7 @@ import { useEdgeSwipeBack } from "@/lib/useEdgeSwipeBack";
 import { UndoBar, undoable } from "@/components/creator-undo";
 import { HelpTip } from "@/components/ui/help-tip";
 import { fmtDay, frDate, todayISO, toISODate } from "@/lib/dates";
-import { notifyAgency, notifyCreator } from "@/lib/push";
+import { notifyAgency, notifyAgencyChange, notifyCreator } from "@/lib/push";
 import { PushCard } from "@/components/ui/push-card";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
@@ -74,6 +74,9 @@ import { Delta, DashPanel, DashSectionTitle, DashWideLink } from "@/components/u
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { FEATURES } from "@/lib/features";
 import { onDeepLink, setCurrentPlace, takeDeepLink } from "@/lib/deepLink";
+import { requestIntent } from "@/lib/openIntent";
+import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
+import { NewDot } from "@/components/ui/new-dot";
 import { useAppBadge, useCloseMailNotifications } from "@/lib/appBadge";
 
 
@@ -438,6 +441,9 @@ export function CreatorSpace({
   const attFileRef = useRef<HTMLInputElement>(null);
   const [attUploading, setAttUploading] = useState(false);
   const live = useLiveKey();
+  // Repères « nouveau » : ce que l'agence a écrit (tâches, idées, briefs, mails), avec
+  // un compteur par onglet. Pas dans la vue agence de l'espace (preview).
+  const activity = useActivityEvents("creator", !preview);
   // Section « Mails » : affichée seulement si l'agence l'a activée et liée à un alias/libellé.
   const [mailsOn, setMailsOn] = useState(false);
   const [mailAlias, setMailAlias] = useState<string | null>(null);
@@ -505,8 +511,18 @@ export function CreatorSpace({
   useEffect(() => {
     if (preview) return;
     const run = () => {
-      const l = takeDeepLink((x) => x.open === "cs-mails");
+      const l = takeDeepLink((x) => x.open === "cs-mails" || x.open === "cs-tab");
       if (!l) return;
+      // Du nouveau sur une tâche, une idée, un brief… : l'onglet, sur l'objet si possible.
+      if (l.open === "cs-tab") {
+        const next = normalizeCsTab(l.tab);
+        setTabState(next);
+        setMissionId(null);
+        lsSet("ttp:cs-tab", next);
+        if (next === "todo" && l.item) requestIntent("cs-todo:open", l.item);
+        return;
+      }
+      if (l.open !== "cs-mails") return;
       setTabState("mails");
       setMissionId(null);
       lsSet("ttp:cs-tab", "mails");
@@ -521,7 +537,11 @@ export function CreatorSpace({
     const base = CREATOR_GROUPS.map((g) => ({
       ...g,
       label: t(g.label),
-      items: g.items.map((i) => ({ ...i, label: t(i.label), ...(i.id === "mails" && mailsOn ? { badge: mailBadge || undefined } : {}) })),
+      // Pastille : échanges qui ont bougé (Mail) + objets avec du nouveau de l'agence.
+      items: g.items.map((i) => {
+        const n = (i.id === "mails" && mailsOn ? mailBadge : 0) + (activity.counts[i.id] ?? 0);
+        return { ...i, label: t(i.label), ...(n ? { badge: n } : {}) };
+      }),
     }));
     const all = base.flatMap((g) => g.items);
     const favItems = shownFavs.map((id) => all.find((i) => i.id === id)).filter((i): i is (typeof all)[number] => !!i);
@@ -530,7 +550,7 @@ export function CreatorSpace({
     const moved = new Set(favItems.map((i) => i.id));
     const rest = base.map((g) => ({ ...g, items: g.items.filter((i) => !moved.has(i.id)) })).filter((g) => g.items.length > 0);
     return [{ id: "favoris", label: t("Favoris"), icon: TtpStar, fixed: true, items: favItems }, ...rest];
-  }, [mailsOn, mailBadge, t, shownFavs]);
+  }, [mailsOn, mailBadge, t, shownFavs, activity.counts]);
   const navTabs = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
 
   // ── Affichage iPhone (téléphone) : 4 onglets en bas (Accueil, Missions, Gains, Messages), Menu sous l'avatar ──
@@ -1250,6 +1270,9 @@ export function CreatorSpace({
       // Retour arrière seulement si rien n'a changé depuis (pas d'écrasement d'un clic plus récent).
       setIdeas((list) => list.map((y) => (y.id === id && y.subtasks === subtasks ? { ...y, subtasks: prev } : y)));
       toast(t("Ça n'a pas marché. Réessaie dans un instant."));
+    } else if (!preview && subtasks.length > (prev?.length ?? 0)) {
+      // Une sous-tâche ajoutée (pas une coche) : l'agence est prévenue.
+      notifyAgencyChange("idea", name, "subtask", ideas.find((y) => y.id === id)?.text ?? "", id);
     }
   };
 
@@ -1265,7 +1288,10 @@ export function CreatorSpace({
     if (!(await dbUpdate("ideas", id, { text: txt }))) {
       setIdeas((list) => list.map((x) => (x.id === id ? { ...x, text: prev } : x)));
       toast(t("Ça n'a pas marché. Réessaie dans un instant."));
-    } else toast(t("Idée modifiée ✓"));
+    } else {
+      toast(t("Idée modifiée ✓"));
+      if (!preview && txt !== prev) notifyAgencyChange("idea", name, "text", txt, id);
+    }
   };
 
   /** Carte d'une idée (mode lecture ou édition) — partagée par les vues Liste et Colonnes. */
@@ -1300,9 +1326,17 @@ export function CreatorSpace({
         </div>
       </div>
     ) : (
-      <div key={x.id} className="relative overflow-hidden rounded-2xl border border-border bg-surface p-4 pl-5 shadow-sm">
+      <div
+        key={x.id}
+        // Un toucher sur l'idée efface son repère « nouveau ».
+        onClickCapture={() => activity.keys.has(`idea:${x.id}`) && void markActivityRead("idea", x.id)}
+        className="relative overflow-hidden rounded-2xl border border-border bg-surface p-4 pl-5 shadow-sm"
+      >
         <span className={cn("absolute left-0 top-0 h-full w-1", ideaAccent(x.status))} />
-        <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-foreground">{x.text}</div>
+        <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-foreground">
+          {activity.keys.has(`idea:${x.id}`) && <NewDot label={t("Du nouveau de ton agence")} className="mr-1.5 align-middle" />}
+          {x.text}
+        </div>
         <div className="mt-2.5 flex items-center justify-between gap-2">
           <div className="w-[150px] max-w-[60%]">
             <StatusSelect value={x.status ?? "À faire"} options={opts.idea} onChange={(s) => setIdeaStatus(x, s)} />
@@ -1908,6 +1942,11 @@ export function CreatorSpace({
   const todayIso = todayISO();
   const missions = useMemo(() => buildMissions(collabs, briefs), [collabs, briefs]);
   const openMission = missionId ? missions.find((m) => m.id === missionId) ?? null : null;
+  // Ouvrir une mission efface le repère « nouveau » de son brief.
+  const openBriefId = openMission?.brief?.id;
+  useEffect(() => {
+    if (!preview && openBriefId) void markActivityRead("brief", openBriefId);
+  }, [preview, openBriefId]);
   const steps = useMemo(
     () => creatorSteps({ briefs, collabs, todos, events, invoices, statsStale, now: new Date() }),
     [briefs, collabs, todos, events, invoices, statsStale],
@@ -2812,6 +2851,8 @@ export function CreatorSpace({
             <CreatorTodos
               todos={todos}
               progressOn={progressOn}
+              me={name}
+              preview={!!preview}
               sharedWith={(td) => sharedWithText(td, name, t) || null}
               form={
                 <>
@@ -3052,6 +3093,7 @@ export function CreatorSpace({
                         <MissionCard
                           key={m.id}
                           m={m}
+                          isNew={!!m.brief && activity.keys.has(`brief:${m.brief.id}`)}
                           dateText={m.due ? shortDay(m.due) : ""}
                           whenText={m.due && !m.done ? whenText(daysBetweenIso(todayIso, m.due)) : null}
                           late={!m.done && !!m.due && m.due < todayIso}
@@ -3985,7 +4027,12 @@ export function CreatorSpace({
             const tb = TABS.find((x) => x.id === id);
             // « Plus » ouvre le Menu : toutes les autres rubriques (Gains, Idées, documents…).
             const label = id === "profil" ? t("Plus") : tb ? t(tb.label) : id;
-            return { id, label, icon: tb?.icon ?? LayoutDashboard, badge: id === "mails" && mailsOn ? mailBadge : null };
+            // Pastille : du nouveau de l'agence ; « Plus » compte les rubriques hors de la barre (Idées…).
+            const act = id === "profil"
+              ? Object.entries(activity.counts).reduce((s, [k, n]) => (CS_BAR_TABS.includes(k as CsTab) ? s : s + n), 0)
+              : activity.counts[id] ?? 0;
+            const n = (id === "mails" && mailsOn ? mailBadge : 0) + act;
+            return { id, label, icon: tb?.icon ?? LayoutDashboard, badge: n || null };
           })}
           active={ownerTab(tab)}
           onSelect={(id) => setTab(id)}

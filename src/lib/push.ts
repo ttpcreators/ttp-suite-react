@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { changeText, throttlePush, type ActivityWhat } from "@/lib/activityEvents";
 
 /** Clé publique VAPID — sûre à exposer côté client (la privée est un secret Supabase). */
 export const VAPID_PUBLIC_KEY =
@@ -15,11 +16,17 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 /** Signale à l'agence (push immédiat) qu'un créateur a ajouté quelque chose.
- *  Best-effort : ne bloque jamais l'action du créateur en cas d'échec. */
-export function notifyAgency(kind: "tache" | "idee" | "evenement" | "contact" | "gift" | "facture" | "stats" | "mail" | "contenu", creator: string, text: string) {
+ *  Best-effort : ne bloque jamais l'action du créateur en cas d'échec.
+ *  `item` : id de l'objet, pour que la notification l'ouvre directement. */
+export function notifyAgency(
+  kind: "tache" | "idee" | "evenement" | "contact" | "gift" | "facture" | "stats" | "mail" | "contenu" | "tache-maj" | "idee-maj" | "brief-maj",
+  creator: string,
+  text: string,
+  item?: string,
+) {
   try {
     supabase.functions
-      .invoke("daily-digest", { body: { event: "creator_activity", kind, creator, text: text.slice(0, 140) } })
+      .invoke("daily-digest", { body: { event: "creator_activity", kind, creator, text: text.slice(0, 140), ...(item ? { item } : {}) } })
       .catch(() => {});
   } catch {
     /* jamais bloquant */
@@ -29,19 +36,63 @@ export function notifyAgency(kind: "tache" | "idee" | "evenement" | "contact" | 
 /** Notifie UN créateur (push immédiat sur ses appareils) quand l'agence lui
  *  ajoute quelque chose (tâche, document…). Best-effort : jamais bloquant. */
 export function notifyCreator(
-  kind: "task" | "task-done" | "document" | "brief" | "debrief" | "event" | "mediakit" | "gift" | "idea" | "invoice" | "roadmap" | "mail",
+  kind: "task" | "task-done" | "document" | "brief" | "debrief" | "event" | "mediakit" | "gift" | "idea" | "invoice" | "roadmap" | "mail" | "task-update" | "idea-update" | "brief-update",
   creator: string,
   text: string,
+  item?: string,
 ) {
   const who = creator.trim();
   if (!who) return;
   try {
     supabase.functions
-      .invoke("daily-digest", { body: { event: "agency_activity", kind, creator: who, text: text.slice(0, 140) } })
+      .invoke("daily-digest", { body: { event: "agency_activity", kind, creator: who, text: text.slice(0, 140), ...(item ? { item } : {}) } })
       .catch(() => {});
   } catch {
     /* jamais bloquant */
   }
+}
+
+// ── Du nouveau sur un objet partagé (texte, sous-tâche, avancement…) ─────────
+// Le repère « nouveau » dans l'app est écrit par la base (activity_events) ; ici, le
+// push sur le téléphone, une seule fois par objet et par changement toutes les 10 min.
+const THROTTLE_KEY = "ttp:push-throttle";
+let throttleMem: Record<string, number> = {};
+function allowPush(key: string): boolean {
+  let last = throttleMem;
+  try {
+    last = { ...JSON.parse(localStorage.getItem(THROTTLE_KEY) || "{}"), ...throttleMem };
+  } catch {
+    /* stockage indisponible : mémoire de la session */
+  }
+  const next = throttlePush(last, key, Date.now());
+  if (!next) return false;
+  throttleMem = next;
+  try {
+    localStorage.setItem(THROTTLE_KEY, JSON.stringify(next));
+  } catch {
+    /* sans gravité */
+  }
+  return true;
+}
+const CREATOR_KIND = { todo: "task-update", idea: "idea-update", brief: "brief-update" } as const;
+const AGENCY_KIND = { todo: "tache-maj", idea: "idee-maj", brief: "brief-maj" } as const;
+
+/** L'agence a écrit du nouveau sur un objet partagé : push aux créateurs concernés. */
+export function notifyCreatorsChange(object: "todo" | "idea" | "brief", creators: readonly string[], what: ActivityWhat, title: string, item: string) {
+  for (const name of creators) {
+    if (!name.trim() || !allowPush(`c:${name}:${object}:${item}:${what}`)) continue;
+    // `change` + `title` : le serveur recompose le texte dans la langue du créateur.
+    supabase.functions
+      .invoke("daily-digest", {
+        body: { event: "agency_activity", kind: CREATOR_KIND[object], creator: name.trim(), text: changeText(what, title), item, change: what, title: title.slice(0, 60) },
+      })
+      .catch(() => {});
+  }
+}
+
+/** Un créateur a écrit du nouveau sur un objet partagé : push à l'agence. */
+export function notifyAgencyChange(object: "todo" | "idea" | "brief", creator: string, what: ActivityWhat, title: string, item: string) {
+  if (creator.trim() && allowPush(`a:${creator}:${object}:${item}:${what}`)) notifyAgency(AGENCY_KIND[object], creator, changeText(what, title), item);
 }
 
 export function pushSupported(): boolean {

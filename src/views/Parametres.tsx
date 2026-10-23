@@ -37,6 +37,7 @@ import { bestHit, entriesOfTab, entryAnchor, groupHits, pagesVisibility, searchS
  */
 export type NotifPrefs = {
   pushCreatorActivity?: boolean; // push immédiat quand un créateur ajoute qqch
+  pushCreatorUpdates?: boolean; // push quand un créateur écrit sur une tâche / idée existante
   bellCreatorActivity?: boolean; // activité créateurs dans la cloche
   digestEvents?: boolean; // résumé matin : évènements du jour
   digestTasks?: boolean; // résumé matin : tâches & briefs à échéance
@@ -1251,6 +1252,7 @@ export function Parametres() {
             </Card>
             <Card title="Activité des créateurs" hint="Quand un créateur ajoute une tâche, une idée ou un évènement depuis son espace.">
               <PrefRow label="Notification immédiate sur le téléphone" hint="Un push dès qu'un créateur ajoute quelque chose." checked={on(prefs.pushCreatorActivity)} onChange={(v) => setPref("pushCreatorActivity", v)} />
+              <PrefRow label="Aussi quand il écrit sur une tâche ou une idée" hint="Sous-tâche, description, message d'avancement : un push par tâche toutes les 10 minutes au plus." checked={on(prefs.pushCreatorUpdates)} onChange={(v) => setPref("pushCreatorUpdates", v)} />
               <PrefRow label="Afficher dans la cloche" hint="L'activité des 7 derniers jours en haut des notifications de l'app." checked={on(prefs.bellCreatorActivity)} onChange={(v) => setPref("bellCreatorActivity", v)} />
             </Card>
             <Card title="Emails" hint="Quand un email arrive sur la boîte de l'agence (Gmail connecté).">

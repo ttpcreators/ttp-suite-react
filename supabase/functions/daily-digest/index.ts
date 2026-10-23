@@ -181,7 +181,7 @@ Deno.serve(async (req: Request) => {
   const sb = getServiceClient();
   const today = parisToday();
 
-  let body: { test?: boolean; event?: string; kind?: string; creator?: string; text?: string } = {};
+  let body: { test?: boolean; event?: string; kind?: string; creator?: string; text?: string; item?: string } = {};
   try {
     body = await req.json();
   } catch {
@@ -193,6 +193,9 @@ Deno.serve(async (req: Request) => {
   if (body?.event === "creator_activity") {
     const prefs = await loadPrefs(sb);
     if (!prefOn(prefs, "pushCreatorActivity")) return jsonRes({ ok: true, skipped: "pref_off" });
+    // Du nouveau sur une tâche / idée / brief existants (« -maj ») : réglage à part.
+    const update = String(body.kind ?? "").endsWith("-maj");
+    if (update && !prefOn(prefs, "pushCreatorUpdates")) return jsonRes({ ok: true, skipped: "pref_off_updates" });
     // Anti-usurpation : pour un JWT créateur, le nom vient de SON profil (pas du corps de requête).
     const rawWho = caller.role === "creator" ? (caller.creatorName || "Un créateur") : String(body.creator ?? "Un créateur");
     const who = rawWho.slice(0, 60).replace(/\p{L}[\p{L}'’-]*/gu, (w) => w.charAt(0).toUpperCase() + w.slice(1));
@@ -209,11 +212,18 @@ Deno.serve(async (req: Request) => {
       stats: "{createur} · stats envoyées",
       mail: "{createur} · message sur un mail",
       contenu: "{createur} · contenu envoyé",
+      "tache-maj": "{createur} · du nouveau sur une tâche",
+      "idee-maj": "{createur} · du nouveau sur une idée",
+      "brief-maj": "{createur} · du nouveau sur un brief",
     };
     const KEYA: Record<string, string> = {
       tache: "a_task", idee: "a_idea", contact: "a_contact", evenement: "a_event",
       gift: "a_gift", facture: "a_facture", stats: "a_stats", mail: "a_mail", contenu: "a_contenu",
+      "tache-maj": "a_task_update", "idee-maj": "a_idea_update", "brief-maj": "a_brief_update",
     };
+    // Page qui s'ouvre au toucher, sur l'objet quand il est connu.
+    const VIEW: Record<string, string> = { tache: "todo", "tache-maj": "todo", idee: "ideas", "idee-maj": "ideas", "brief-maj": "briefs", evenement: "planning" };
+    const item = String(body.item ?? "");
     const aKind = String(body.kind ?? "tache");
     const activityTitle = customText(texts, KEYA[aKind] ?? "a_task", DEFA[aKind] ?? "{createur} · nouvelle activité")
       .replace(/\{createur\}/g, who)
@@ -225,6 +235,7 @@ Deno.serve(async (req: Request) => {
       title: activityTitle,
       body: what,
       tag: `ttp-creator-${who}`,
+      ...(VIEW[aKind] ? { url: deepLinkUrl({ open: "view", view: VIEW[aKind], ...(item ? { item } : {}) }) } : {}),
     }, "all", "creator-activity");
     return jsonRes({ ok: true, creatorActivity: true, ...r });
   }
@@ -270,11 +281,15 @@ Deno.serve(async (req: Request) => {
       invoice: "Facture mise à jour",
       roadmap: "Feuille de route mise à jour",
       mail: "Un échange a changé de statut",
+      "task-update": "Du nouveau sur une tâche",
+      "idea-update": "Du nouveau sur une idée",
+      "brief-update": "Ton brief a été mis à jour",
     };
     const KEY: Record<string, string> = {
       document: "c_document", brief: "c_brief", debrief: "c_debrief", event: "c_event",
       mediakit: "c_mediakit", "task-done": "c_taskdone", idea: "c_idea", gift: "c_gift",
       invoice: "c_invoice", roadmap: "c_roadmap", mail: "c_mail",
+      "task-update": "c_task_update", "idea-update": "c_idea_update", "brief-update": "c_brief_update",
     };
     // Créateur à l'espace en anglais : titres par défaut en anglais (un titre
     // personnalisé dans Paramètres reste tel quel).
@@ -290,16 +305,32 @@ Deno.serve(async (req: Request) => {
       invoice: "Invoice updated",
       roadmap: "Roadmap updated",
       mail: "An email thread changed status",
+      "task-update": "Something new on a task",
+      "idea-update": "Something new on an idea",
+      "brief-update": "Your brief was updated",
     };
     const kind = String(body.kind ?? "");
     const lang = await creatorLang(sb, creator);
     const en = lang === "en";
     const title = customText(texts, KEY[kind] ?? "c_task", (en ? DEF_EN[kind] : DEF[kind]) ?? (en ? "New task" : "Nouvelle tâche"));
+    // Du nouveau sur un objet : le texte est recomposé ici dans la langue du créateur
+    // (`change` = ce qui a changé, `title` = l'objet), sinon le texte envoyé tel quel.
+    const CHANGE_FR: Record<string, string> = { new: "Nouveau", text: "Texte modifié", description: "Description modifiée", subtask: "Nouvelle sous-tâche", progress: "Nouveau message", update: "Mis à jour" };
+    const CHANGE_EN: Record<string, string> = { new: "New", text: "Text changed", description: "Description changed", subtask: "New subtask", progress: "New message", update: "Updated" };
+    const change = String((body as { change?: string }).change ?? "");
+    const objTitle = String((body as { title?: string }).title ?? "").slice(0, 60);
+    const label = (en ? CHANGE_EN : CHANGE_FR)[change];
+    const text = label ? (objTitle ? `${label} · « ${objTitle} »` : label) : what;
+    // Onglet ouvert au toucher (sur l'objet quand il est connu) ; statut de mail : onglet Mail.
+    const TAB: Record<string, string> = { task: "todo", "task-update": "todo", "task-done": "todo", idea: "ideas", "idea-update": "ideas", brief: "missions", "brief-update": "missions", event: "planning", document: "documents", gift: "gifting", invoice: "gains", mediakit: "mediakit" };
+    const item = String(body.item ?? "");
+    const url = kind === "mail"
+      ? deepLinkUrl({ open: "cs-mails" })
+      : TAB[kind] ? deepLinkUrl({ open: "cs-tab", tab: TAB[kind], ...(item ? { item } : {}) }) : "/";
     const r = await pushToCreator(sb, creator, {
       title,
-      body: what || (en ? "Tap to see the details." : "Touche pour voir le détail."),
-      // Statut d'un échange : ouvre directement l'onglet Mail du créateur.
-      url: kind === "mail" ? deepLinkUrl({ open: "cs-mails" }) : "/",
+      body: text || (en ? "Tap to see the details." : "Touche pour voir le détail."),
+      url,
       tag: `ttp-agency-${Date.now()}`,
     }, lang);
     return jsonRes({ ok: true, agencyActivity: true, ...r });

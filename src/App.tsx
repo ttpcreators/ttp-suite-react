@@ -17,6 +17,7 @@ import { UndoSendBar } from "@/components/ui/undo-send";
 import { Notifications } from "@/components/ui/notifications";
 import { useNotifications } from "@/lib/useNotifications";
 import { useNavBadges } from "@/lib/useNavBadges";
+import { useActivityEvents } from "@/lib/useActivityEvents";
 import { markNavSeen } from "@/lib/navSeen";
 import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
@@ -629,7 +630,15 @@ export default function App() {
   // en la quittant et quand l'app passe en arrière-plan).
   const seenUid = session?.user.id;
   const viewing = useMemo(() => [active, splitShown].filter((x): x is ViewId => !!x), [active, splitShown]);
-  const navBadges = useNavBadges(seenUid, notifs, viewing);
+  const navBadgesBase = useNavBadges(seenUid, notifs, viewing);
+  // + objets sur lesquels un créateur a écrit (tâches, idées, briefs, mails) : repères
+  // « nouveau » écrits par la base (activity_events), effacés à l'ouverture de l'objet.
+  const activity = useActivityEvents("agency", profile?.role === "agency");
+  const navBadges = useMemo(() => {
+    const out: Record<string, number> = { ...navBadgesBase };
+    for (const [page, n] of Object.entries(activity.counts)) out[page] = (out[page] ?? 0) + n;
+    return out;
+  }, [navBadgesBase, activity.counts]);
   const viewingKey = viewing.join("|");
   useEffect(() => {
     if (!seenUid) return;
@@ -699,10 +708,16 @@ export default function App() {
   useEffect(() => {
     if (!isAgency) return;
     const run = () => {
-      const l = takeDeepLink((x) => x.open === "mails");
-      if (!l || l.open !== "mails") return;
-      requestIntent("mail:open", JSON.stringify({ thread: l.thread, box: l.box }));
-      navigateCurrentTab("mails");
+      const l = takeDeepLink((x) => x.open === "mails" || (x.open === "view" && isNavView(x.view)));
+      if (!l || (l.open !== "mails" && l.open !== "view")) return;
+      if (l.open === "view") {
+        // Du nouveau d'un créateur (tâche, idée, brief) : la page, sur l'objet si possible.
+        if (l.view === "todo" && l.item) requestIntent("todo:open", l.item);
+        navigateCurrentTab(l.view as ViewId);
+      } else {
+        requestIntent("mail:open", JSON.stringify({ thread: l.thread, box: l.box }));
+        navigateCurrentTab("mails");
+      }
       setSub(null);
       setDetailCreator(null);
       setSpace("agency");

@@ -67,6 +67,18 @@ describe("liens d'ouverture (serveur ↔ app)", () => {
     expect(parseDeepLink("/")).toBeNull();
   });
 
+  it("pages agence et onglets créateur, avec l'objet visé", () => {
+    const v = deepLinkUrl({ open: "view", view: "todo", item: "6f1c2b3a-0000-4000-8000-000000000001" });
+    expect(v).toBe("/?open=view&view=todo&item=6f1c2b3a-0000-4000-8000-000000000001");
+    expect(parseDeepLink(v)).toEqual({ open: "view", view: "todo", item: "6f1c2b3a-0000-4000-8000-000000000001" });
+    expect(buildDeepLink({ open: "view", view: "todo", item: "6f1c2b3a-0000-4000-8000-000000000001" })).toBe(v);
+    const c = deepLinkUrl({ open: "cs-tab", tab: "ideas" });
+    expect(parseDeepLink(c)).toEqual({ open: "cs-tab", tab: "ideas" });
+    expect(deepLinkUrl({ open: "view", view: "<x>" })).toBe("/");
+    expect(parseDeepLink("?open=view&view=TODO")).toBeNull();
+    expect(stripDeepLink("https://app.ttpcreators.pro/?open=cs-tab&tab=todo&item=a")).toBe("/");
+  });
+
   it("retire seulement les paramètres du lien", () => {
     expect(stripDeepLink("https://app.ttpcreators.pro/?open=mails&thread=abc&box=talent")).toBe("/");
     expect(stripDeepLink("https://app.ttpcreators.pro/?x=1&open=cs-mails#h")).toBe("/?x=1#h");

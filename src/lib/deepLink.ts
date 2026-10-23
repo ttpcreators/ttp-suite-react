@@ -13,10 +13,21 @@
  */
 
 export type MailBoxName = "partnerships" | "talent";
-export type DeepLink = { open: "mails"; thread?: string; box?: MailBoxName } | { open: "cs-mails"; thread?: string };
+/**
+ * Aussi (2026-10-23, repères « nouveau ») :
+ *   • `/?open=view&view=<page>&item=<id>` : une page de l'agence (todo, ideas, briefs…),
+ *     sur l'objet visé quand la page sait l'ouvrir ;
+ *   • `/?open=cs-tab&tab=<onglet>&item=<id>` : un onglet de l'espace créateur.
+ */
+export type DeepLink =
+  | { open: "mails"; thread?: string; box?: MailBoxName }
+  | { open: "cs-mails"; thread?: string }
+  | { open: "view"; view: string; item?: string }
+  | { open: "cs-tab"; tab: string; item?: string };
 
 const THREAD_RE = /^[A-Za-z0-9_-]{1,64}$/;
-const PARAMS = ["open", "thread", "box"];
+const PAGE_RE = /^[a-z][a-z-]{1,24}$/;
+const PARAMS = ["open", "thread", "box", "view", "tab", "item"];
 
 /** Lit un lien (adresse complète, chemin ou simple « ?… »). null si ce n'en est pas un. */
 export function parseDeepLink(input: string): DeepLink | null {
@@ -37,12 +48,27 @@ export function parseDeepLink(input: string): DeepLink | null {
     return { open, ...(thread ? { thread } : {}), ...(thread && box ? { box } : {}) };
   }
   if (open === "cs-mails") return { open, ...(thread ? { thread } : {}) };
+  const it = q.get("item") ?? "";
+  const item = THREAD_RE.test(it) ? it : undefined;
+  if (open === "view") {
+    const view = q.get("view") ?? "";
+    return PAGE_RE.test(view) ? { open, view, ...(item ? { item } : {}) } : null;
+  }
+  if (open === "cs-tab") {
+    const tab = q.get("tab") ?? "";
+    return PAGE_RE.test(tab) ? { open, tab, ...(item ? { item } : {}) } : null;
+  }
   return null;
 }
 
 /** Adresse d'un lien (même forme que le serveur). */
 export function buildDeepLink(l: DeepLink): string {
   const q = new URLSearchParams({ open: l.open });
+  if (l.open === "view" || l.open === "cs-tab") {
+    q.set(l.open === "view" ? "view" : "tab", l.open === "view" ? l.view : l.tab);
+    if (l.item && THREAD_RE.test(l.item)) q.set("item", l.item);
+    return `/?${q.toString()}`;
+  }
   if (l.thread && THREAD_RE.test(l.thread)) q.set("thread", l.thread);
   if (l.open === "mails" && l.thread && l.box) q.set("box", l.box);
   return `/?${q.toString()}`;

@@ -23,7 +23,10 @@ import { Kbd } from "@/components/ui/kbd";
 import { CreatorMultiPicker, CreatorStack } from "@/components/ui/creator-multi-picker";
 import { SwipeRow } from "@/components/mobile/swipe-row";
 import { useCreators } from "@/lib/useCreators";
-import { notifyCreator } from "@/lib/push";
+import { notifyCreator, notifyCreatorsChange } from "@/lib/push";
+import type { ActivityWhat } from "@/lib/activityEvents";
+import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
+import { NewDot } from "@/components/ui/new-dot";
 import { writeTodoStatus } from "@/lib/todoStatus";
 import { useIntent } from "@/lib/openIntent";
 import { useLiveKey } from "@/lib/useLive";
@@ -247,6 +250,13 @@ export function Todo() {
     setForceAgency(false);
     setFormOpen(true);
   });
+  // Repères « nouveau » : tâches sur lesquelles un créateur a écrit (activity_events).
+  const activity = useActivityEvents("agency");
+  // Notification « du nouveau sur une tâche » : ouvre la fiche de la tâche.
+  const pickRef = useRef<(id: string) => void>(() => {});
+  useIntent("todo:open", (id) => {
+    if (id) pickRef.current(id);
+  });
 
   // Points d'avancement : colonne `todos.progress` (le créateur les voit) ; avant le SQL
   // 2026-10-22, ou pour une tâche pas encore reprise, l'ancien blob agence `itemNotes`.
@@ -318,6 +328,7 @@ export function Todo() {
     if (await saveNote(row.id, appendPoint(noteOf(row.id), t, new Date(), "Agence"))) {
       setPointInput("");
       toast("Point d'avancement ajouté ✓");
+      notifyCreatorsChange("todo", todoCreators(row), "progress", row.text, row.id);
     } else {
       toast("Avancement non enregistré, réessaie");
     }
@@ -379,6 +390,7 @@ export function Todo() {
     if (!t) return;
     setSubInput("");
     patchTodo(todo.id, (r) => ({ subtasks: [...(r.subtasks ?? []), { id: stid(), text: t, done: false }] }));
+    notifyCreatorsChange("todo", todoCreators(todo), "subtask", todo.text, todo.id);
   };
   const toggleSubtask = (todo: Row, sid: string) =>
     patchTodo(todo.id, (r) => ({ subtasks: (r.subtasks ?? []).map((s) => (s.id === sid ? { ...s, done: !s.done } : s)) }));
@@ -507,6 +519,10 @@ export function Todo() {
       )
     );
     const noteOk = await saveNote(row.id, editNote);
+    // Du nouveau pour les créateurs de la tâche (texte ou description).
+    const changed: ActivityWhat | null =
+      (patch.descr ?? "") !== (row.descr ?? "") && patch.descr ? "description" : patch.text !== row.text ? "text" : null;
+    if (changed) notifyCreatorsChange("todo", editCreators, changed, patch.text, row.id);
     setEditingId(null);
     toast(noteOk ? "Tâche modifiée ✓" : "Tâche modifiée, avancement non enregistré : réessaie");
   };
@@ -769,7 +785,9 @@ export function Todo() {
     }
     setSelId(id);
     if (!isDesktop || viewMode === "colonnes") setSheetOpen(true);
+    void markActivityRead("todo", id);
   };
+  pickRef.current = pick;
   const closeSheet = () => {
     setSheetOpen(false);
     setEditingId(null);
@@ -836,6 +854,7 @@ export function Todo() {
                 )}
                 title={row.text.length > 45 ? row.text : undefined}
               >
+                {activity.keys.has(`todo:${row.id}`) && <NewDot label="Du nouveau d'un créateur" className="mr-1.5 align-middle" />}
                 {clip45(row.text)}
               </div>
               <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-muted-foreground">
