@@ -191,11 +191,11 @@ describe("collabs bloquées", () => {
     expect(collabStaleDays(collab("v", 2, "gagnee"), undefined, NOW)).toBeNull();
   });
 
-  it("ligne « Débloquer » dans la semaine, la plus ancienne en tête", () => {
+  it("ligne « Faire avancer » dans la semaine, la plus ancienne en tête", () => {
     const items = buildAnticipation({ ...base, collabs: [collab("x", 4), collab("z", 2), collab("y", 4)], collabSteps: steps });
     expect(items.map((i) => i.id)).toEqual(["collab:z", "collab:x"]);
-    expect(items[1].title).toBe("Débloquer : Nike × Léna Pasquale");
-    expect(items[1].sub).toBe("Bloquée depuis 9 j à Tournage");
+    expect(items[1].title).toBe("Faire avancer : Nike × Léna Pasquale");
+    expect(items[1].sub).toBe("Rien n'a bougé depuis 9 j · étape Tournage");
     expect(items[1].section).toBe("week");
   });
 });

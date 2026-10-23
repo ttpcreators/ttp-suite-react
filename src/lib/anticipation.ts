@@ -317,7 +317,7 @@ export function buildAnticipation(input: AnticipationInput): TodayItem[] {
     });
   }
 
-  // Collabs bloquées depuis 7 jours ou plus : à débloquer cette semaine.
+  // Collabs sans changement d'étape depuis 7 jours ou plus : à faire avancer cette semaine.
   for (const c of input.collabs ?? []) {
     const stale = collabStaleDays(c, input.collabSteps[c.id], now);
     const id = `collab:${c.id}`;
@@ -327,10 +327,10 @@ export function buildAnticipation(input: AnticipationInput): TodayItem[] {
       id,
       kind: "collab",
       section: "week",
-      title: `Débloquer : ${collabTitle(c)}`,
-      sub: `Bloquée depuis ${stale} j à ${stepLabel}`,
+      title: `Faire avancer : ${collabTitle(c)}`,
+      sub: `Rien n'a bougé depuis ${stale} j · étape ${stepLabel}`,
       meta: `${stale} j`,
-      metaSub: "bloquée",
+      metaSub: "sans bouger",
       metaTone: "wait",
       tone: "wait",
       verb: "Ouvrir",

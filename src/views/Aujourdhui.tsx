@@ -58,6 +58,7 @@ import {
   type TodayItem,
 } from "@/lib/aujourdhui";
 import { anticipationLine, buildAnticipation, collapseItems, contractTypeLabel, groupSteps, inDays } from "@/lib/anticipation";
+import { explainItem } from "@/lib/todayExplain";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { IconTile } from "@/components/ui/icon-tile";
@@ -249,6 +250,8 @@ function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onP
   // Le brouillon de relance ne concerne que l'argent en retard (pas une échéance à venir).
   const mail = iv && it.kind === "relance" ? relanceEmail(iv, reminders[iv.id]?.count ?? 0) : null;
 
+  // Ce que veut dire la ligne et quoi faire, en deux phrases (src/lib/todayExplain.ts).
+  const explain = explainItem(it);
   let eyebrow = "";
   let rows: [string, ReactNode][] = [];
   let pill: ReactNode = null;
@@ -277,14 +280,14 @@ function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onP
     pill = <StatusPill tone="wait" size="md">{(it.daysLeft ?? 0) < 0 ? `Expiré depuis ${-(it.daysLeft ?? 0)} j` : `Expire ${inDays(it.daysLeft ?? 0)}`}</StatusPill>;
   } else if (it.collab) {
     const c = it.collab;
-    eyebrow = "Collab bloquée";
+    eyebrow = "Collab à faire avancer";
     rows = [
       ...(c.brand ? [["Marque", c.brand] as [string, ReactNode]] : []),
       ...(c.creator ? [["Créateur", titleCase(c.creator)] as [string, ReactNode]] : []),
       ["Étape", c.stepLabel],
       ["Sur cette étape depuis", `${c.staleDays} j`],
     ];
-    pill = <StatusPill tone="wait" size="md">Bloquée depuis {c.staleDays} j</StatusPill>;
+    pill = <StatusPill tone="wait" size="md">Sans changement depuis {c.staleDays} j</StatusPill>;
   } else if (it.kind === "stats") {
     const names = it.staleCreators ?? [];
     eyebrow = "Stats du mois";
@@ -351,6 +354,18 @@ function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onP
         <h2 className="mt-3 text-[22px] font-bold leading-tight tracking-[-0.01em] text-foreground [overflow-wrap:anywhere]">{it.title}</h2>
         {it.amount != null && <div className="mt-1 text-[38px] font-bold leading-none tracking-[-0.02em] tabular-nums text-foreground">{formatEuro(it.amount)}</div>}
         {pill && <div className="mt-3">{pill}</div>}
+        {explain && (
+          <div className="mt-4 space-y-3 rounded-[16px] bg-field p-4 text-[14px] leading-relaxed">
+            <div>
+              <div className="text-[12.5px] font-semibold text-muted-foreground">Ce que ça veut dire</div>
+              <p className="mt-0.5 text-foreground">{explain.meaning}</p>
+            </div>
+            <div>
+              <div className="text-[12.5px] font-semibold text-muted-foreground">À faire</div>
+              <p className="mt-0.5 text-foreground">{explain.action}</p>
+            </div>
+          </div>
+        )}
         {rows.length > 0 && <div className="mt-5"><InfoRows rows={rows} /></div>}
 
         {mail && (
